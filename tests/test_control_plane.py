@@ -2,6 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import timedelta
+from http import HTTPStatus
 from io import BytesIO
 from tempfile import TemporaryDirectory
 from http.client import HTTPConnection
@@ -11,6 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import hashlib
 from pathlib import Path
+import sqlite3
 import tarfile
 from urllib import error, request
 import unittest
@@ -521,6 +523,99 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(payload["job"]["state"], "running")
         self.assertEqual(payload["job"]["sequence"], 2)
 
+    def test_request_bound_lifecycle_requires_managed_parkable_spec(self) -> None:
+        with _temporary_root() as root:
+            route_file = root / "routes.sqlite"
+            routing = RoutingStore(route_file)
+            cases: list[tuple[str, SandboxRoute]] = []
+            for action in ("park", "wake"):
+                for parkable in (False, True):
+                    sandbox_id = f"{action}-{'parkable' if parkable else 'ordinary'}"
+                    spec: dict[str, object] = {
+                        "id": sandbox_id,
+                        "image": "busybox",
+                        "cpus": 1,
+                        "memory_mb": 1024,
+                    }
+                    if parkable:
+                        spec.update({"parkable": True, "disk_mb": 4096})
+                    route = routing.upsert_sandbox(
+                        _sandbox_route(
+                            sandbox_id=sandbox_id,
+                            node_id="node-1",
+                            job_id="job-1",
+                            node_url="http://node.invalid",
+                            spec=spec,
+                            state=("running" if action == "park" else "parked"),
+                        )
+                    )
+                    cases.append((action, route))
+
+            gateway = _gateway_server(root, routing_file=route_file)
+            proxied = Event()
+
+            def fail_proxy(*_args, **_kwargs):
+                proxied.set()
+                raise AssertionError("invalid managed lifecycle reached a worker")
+
+            gateway.RequestHandlerClass._proxy_request = fail_proxy
+            with _running_server(gateway) as gateway_url:
+                for action, route in cases:
+                    with self.subTest(action=action, sandbox_id=route.sandbox_id):
+                        response = self._json_request(
+                            (f"{gateway_url}/v1/sandboxes/{route.sandbox_id}/{action}"),
+                            method="POST",
+                            payload={
+                                "generation": route.generation,
+                                "operation_id": "relay-lifecycle:request-1",
+                                "request_id": "request-1",
+                                "rollout_id": "rollout-1",
+                            },
+                            allow_error=True,
+                        )
+                        self.assertEqual(response["status"], 409)
+                        self.assertFalse(response["body"]["retryable"])
+                        self.assertIn(
+                            "parkable managed_process",
+                            response["body"]["error"],
+                        )
+
+            self.assertFalse(proxied.is_set())
+            self.assertEqual(RoutingStore(route_file).program_requests_readonly(), [])
+
+    def test_non_routable_worker_record_cannot_replace_route_state(self) -> None:
+        spec = SandboxSpec.from_dict(
+            SandboxSpec(
+                id="sandbox-1",
+                image="busybox",
+                cpus=1.0,
+                memory_mb=1024,
+            ).to_dict()
+        )
+        route = _sandbox_route(
+            sandbox_id=spec.id,
+            node_id="node-1",
+            job_id="job-1",
+            node_url="http://node.invalid",
+            resources=spec.requested_resources(),
+            spec=spec.to_dict(),
+            state="running",
+            spec_hash=sandbox_spec_fingerprint(spec),
+        )
+        for state in ("recovery-required", "unavailable", "future-node-state"):
+            with self.subTest(state=state):
+                with self.assertRaisesRegex(ValueError, "not routable"):
+                    control_plane._route_with_sandbox_record(  # noqa: SLF001
+                        route,
+                        {
+                            "spec": spec.to_dict(),
+                            "state": state,
+                            "generation": route.generation,
+                            "operation_id": route.create_operation_id,
+                            "spec_hash": route.spec_hash,
+                        },
+                    )
+
     def test_relay_lifecycle_persists_program_request_transitions(self) -> None:
         with _temporary_root() as root:
             route_file = root / "routes.sqlite"
@@ -538,7 +633,18 @@ class ControlPlaneTests(unittest.TestCase):
                         memory_mb=1024,
                         disk_mb=4096,
                     ),
+                    spec={
+                        "id": "sandbox-1",
+                        "image": "busybox",
+                        "cpus": 1,
+                        "memory_mb": 1024,
+                        "disk_mb": 4096,
+                        "parkable": True,
+                        "managed_process": True,
+                    },
                     state="running",
+                    node_epoch="boot-1",
+                    activity_epoch=10,
                 )
             )
             ControlStateStore(heartbeat_file).upsert_heartbeat(
@@ -552,6 +658,8 @@ class ControlPlaneTests(unittest.TestCase):
                         memory_mb=16_384,
                         disk_mb=100_000,
                     ),
+                    node_epoch="boot-1",
+                    activity_epoch=10,
                     inventory_complete=True,
                 )
             )
@@ -563,13 +671,48 @@ class ControlPlaneTests(unittest.TestCase):
             )
 
             proxied_bodies = []
+            lifecycle_activity = 10
+            explicit_wake_race_states: list[str] = []
 
             def fake_proxy_request(_handler, *_args, **kwargs):
-                proxied_bodies.append(json.loads(kwargs["body"]))
+                nonlocal lifecycle_activity
+                proxied_body = json.loads(kwargs["body"])
+                proxied_bodies.append(proxied_body)
+                if "generation" in proxied_body and lifecycle_activity == 11:
+                    racing_store = RoutingStore(route_file)
+                    racing_store.reconcile_sandboxes_for_node(
+                        route.node_url,
+                        [
+                            SandboxInventoryEntry(
+                                sandbox_id=route.sandbox_id,
+                                generation=route.generation,
+                                operation_id=route.create_operation_id,
+                                spec_hash=route.spec_hash,
+                                state="parked",
+                                resources=route.resources,
+                            )
+                        ],
+                        node_id=route.node_id,
+                        job_id=route.job_id,
+                        reported_sandbox_ids={route.sandbox_id},
+                        observed_at=utc_now().isoformat(),
+                        node_epoch="boot-1",
+                        activity_epoch=11,
+                    )
+                    raced = racing_store.get_sandbox_readonly(route.sandbox_id)
+                    assert raced is not None
+                    explicit_wake_race_states.append(raced.state)
+                lifecycle_activity += 1
                 return control_plane.ProxiedResponse(
                     200,
                     {"Content-Type": "application/json"},
-                    b'{"ok":true}',
+                    json.dumps(
+                        {
+                            "ok": True,
+                            "node_epoch": "boot-1",
+                            "activity_epoch": lifecycle_activity,
+                        }
+                    ).encode(),
                 )
 
             gateway.RequestHandlerClass._proxy_request = fake_proxy_request
@@ -607,6 +750,7 @@ class ControlPlaneTests(unittest.TestCase):
                 )
 
         self.assertEqual(len(records), 1)
+        self.assertEqual(explicit_wake_race_states, ["parked"])
         self.assertEqual(
             proxied_bodies,
             [
@@ -653,6 +797,15 @@ class ControlPlaneTests(unittest.TestCase):
                     job_id="job-1",
                     node_url="http://node.invalid",
                     resources=ResourceQuantity(vcpu=1, memory_mb=1024, disk_mb=4096),
+                    spec={
+                        "id": "sandbox-1",
+                        "image": "busybox",
+                        "cpus": 1,
+                        "memory_mb": 1024,
+                        "disk_mb": 4096,
+                        "parkable": True,
+                        "managed_process": True,
+                    },
                     state="parked",
                 )
             )
@@ -750,6 +903,8 @@ class ControlPlaneTests(unittest.TestCase):
                     snapshot_repository=snapshot.publication.repository,
                     snapshot_tag=snapshot.publication.tag,
                     storage_snapshot=snapshot.to_dict(),
+                    node_epoch="boot-1",
+                    activity_epoch=10,
                 )
             )
             ControlStateStore(heartbeat_file).upsert_heartbeat(
@@ -764,6 +919,8 @@ class ControlPlaneTests(unittest.TestCase):
                         memory_mb=16_384,
                         disk_mb=100_000,
                     ),
+                    node_epoch="boot-1",
+                    activity_epoch=10,
                     inventory_complete=True,
                 )
             )
@@ -773,7 +930,39 @@ class ControlPlaneTests(unittest.TestCase):
                 routing_file=route_file,
             )
 
-            def successful_exec(_handler, *_args, **_kwargs):
+            proxied_paths: list[str] = []
+            wake_race_states: list[str] = []
+
+            def successful_exec(_handler, _node_url, path, **_kwargs):
+                proxied_paths.append(path)
+                if path.endswith("/wake"):
+                    stale_parked = SandboxInventoryEntry(
+                        sandbox_id=route.sandbox_id,
+                        generation=route.generation,
+                        operation_id=route.create_operation_id,
+                        spec_hash=route.spec_hash,
+                        state="parked",
+                        resources=route.resources,
+                    )
+                    racing_store = RoutingStore(route_file)
+                    racing_store.reconcile_sandboxes_for_node(
+                        route.node_url,
+                        [stale_parked],
+                        node_id=route.node_id,
+                        job_id=route.job_id,
+                        reported_sandbox_ids={route.sandbox_id},
+                        observed_at=utc_now().isoformat(),
+                        node_epoch="boot-1",
+                        activity_epoch=10,
+                    )
+                    raced = racing_store.get_sandbox_readonly(route.sandbox_id)
+                    assert raced is not None
+                    wake_race_states.append(raced.state)
+                    return control_plane.ProxiedResponse(
+                        200,
+                        {"Content-Type": "application/json"},
+                        b'{"node_epoch":"boot-1","activity_epoch":11}',
+                    )
                 return control_plane.ProxiedResponse(
                     201,
                     {"Content-Type": "application/json"},
@@ -796,6 +985,14 @@ class ControlPlaneTests(unittest.TestCase):
                 stored = RoutingStore(route_file).get_sandbox_readonly(route.sandbox_id)
 
         self.assertEqual(response["session"]["id"], "exec-implicit-wake")
+        self.assertEqual(wake_race_states, ["parked"])
+        self.assertEqual(
+            proxied_paths,
+            [
+                f"/v1/sandboxes/{route.sandbox_id}/wake",
+                f"/v1/sandboxes/{route.sandbox_id}/exec",
+            ],
+        )
         self.assertIsNotNone(stored)
         assert stored is not None
         self.assertEqual(stored.state, "running")
@@ -804,6 +1001,474 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(stored.snapshot_repository, "")
         self.assertEqual(stored.snapshot_tag, "")
         self.assertEqual(stored.storage_snapshot, {})
+        self.assertEqual(stored.node_epoch, "boot-1")
+        self.assertEqual(stored.activity_epoch, 11)
+
+    def test_legacy_worker_lifecycle_without_activity_proof_fails_closed(
+        self,
+    ) -> None:
+        for endpoint in ("park", "wake", "exec"):
+            with self.subTest(endpoint=endpoint), _temporary_root() as root:
+                route_file = root / "routes.sqlite"
+                heartbeat_file = root / "control-state.sqlite"
+                snapshot = _portable_snapshot(f"legacy-{endpoint}")
+                spec = snapshot.manifest.spec.to_dict()
+                spec["managed_process"] = True
+                parked = endpoint != "park"
+                snapshot_fields = (
+                    {
+                        "storage_schema": "storage-native-v1",
+                        "snapshot_manifest_digest": (
+                            snapshot.publication.manifest_digest
+                        ),
+                        "snapshot_repository": snapshot.publication.repository,
+                        "snapshot_tag": snapshot.publication.tag,
+                        "storage_snapshot": snapshot.to_dict(),
+                    }
+                    if parked
+                    else {}
+                )
+                route = RoutingStore(route_file).upsert_sandbox(
+                    _sandbox_route(
+                        sandbox_id=snapshot.manifest.sandbox_id,
+                        node_id="legacy-node",
+                        job_id="legacy-job",
+                        node_url="http://legacy-node.invalid",
+                        resources=SandboxSpec.from_dict(spec).requested_resources(),
+                        spec=spec,
+                        state="parked" if parked else "running",
+                        node_epoch="boot-1",
+                        activity_epoch=10,
+                        **snapshot_fields,
+                    )
+                )
+                ControlStateStore(heartbeat_file).upsert_heartbeat(
+                    build_heartbeat(
+                        job_id=route.job_id,
+                        node_id=route.node_id,
+                        node_url=route.node_url,
+                        capabilities=(
+                            "sandbox",
+                            "disk-quota",
+                            "hibernate-local-v1",
+                        ),
+                        total_resources=ResourceQuantity(
+                            vcpu=8,
+                            memory_mb=16_384,
+                            disk_mb=100_000,
+                        ),
+                        node_epoch=route.node_epoch,
+                        activity_epoch=route.activity_epoch,
+                        inventory_complete=True,
+                    )
+                )
+                gateway = _gateway_server(
+                    root,
+                    heartbeat_file=heartbeat_file,
+                    routing_file=route_file,
+                )
+                proxied_paths: list[str] = []
+
+                def legacy_response(_handler, _node_url, path, **_kwargs):
+                    proxied_paths.append(path)
+                    return control_plane.ProxiedResponse(
+                        200,
+                        {"Content-Type": "application/json"},
+                        b"{}",
+                    )
+
+                gateway.RequestHandlerClass._proxy_request = legacy_response
+                with _running_server(gateway) as base:
+                    if endpoint in {"park", "wake"}:
+                        payload = {
+                            "generation": route.generation,
+                            "operation_id": f"{endpoint}:legacy-worker",
+                        }
+                    else:
+                        payload = {
+                            "command": ["true"],
+                            "env": {},
+                            "working_dir": None,
+                            "stdin": False,
+                            "tty": False,
+                        }
+                    response = self._json_request(
+                        f"{base}/v1/sandboxes/{route.sandbox_id}/{endpoint}",
+                        method="POST",
+                        payload=payload,
+                        allow_error=True,
+                    )
+                stored = RoutingStore(route_file).get_sandbox_readonly(route.sandbox_id)
+
+            self.assertEqual(response["status"], HTTPStatus.BAD_GATEWAY)
+            self.assertIn("node_epoch is required", response["body"]["error"])
+            self.assertEqual(
+                proxied_paths,
+                [
+                    f"/v1/sandboxes/{route.sandbox_id}/"
+                    f"{'wake' if endpoint == 'exec' else endpoint}"
+                ],
+            )
+            self.assertIsNotNone(stored)
+            assert stored is not None
+            self.assertEqual(stored.state, "waking" if parked else "running")
+            self.assertEqual(
+                stored.snapshot_manifest_digest,
+                snapshot.publication.manifest_digest if parked else "",
+            )
+            self.assertEqual(stored.activity_epoch, route.activity_epoch)
+
+    def test_heartbeat_snapshot_reference_survives_ambiguous_reconcile(
+        self,
+    ) -> None:
+        for durable_snapshot in (True, False):
+            with self.subTest(durable_snapshot=durable_snapshot):
+                with _temporary_root() as root:
+                    routing = RoutingStore(root / "routes.sqlite")
+                    snapshot = _portable_snapshot("sandbox-heartbeat")
+                    route = routing.upsert_sandbox(
+                        _sandbox_route(
+                            sandbox_id=snapshot.manifest.sandbox_id,
+                            node_id="node-1",
+                            job_id="job-1",
+                            node_url="http://node-1:8090",
+                            resources=snapshot.manifest.spec.requested_resources(),
+                            spec=snapshot.manifest.spec.to_dict(),
+                            state="running",
+                            node_epoch="boot-1",
+                        )
+                    )
+                    observation = SandboxInventoryEntry(
+                        sandbox_id=route.sandbox_id,
+                        generation=route.generation,
+                        operation_id=route.create_operation_id,
+                        spec_hash=route.spec_hash,
+                        state="parked",
+                        resources=route.resources,
+                        storage_schema="storage-native-v1",
+                        snapshot_manifest_digest=(snapshot.publication.manifest_digest),
+                        snapshot_repository=snapshot.publication.repository,
+                        snapshot_tag=snapshot.publication.tag,
+                        storage_snapshot=snapshot.to_dict(),
+                    )
+                    candidate = control_plane.route_with_inventory_snapshot(
+                        route,
+                        observation,
+                    )
+                    usage_store = RegistryUsageStore(root / "registry-usage.sqlite")
+                    handler = object.__new__(control_plane.ControlPlaneHandler)
+                    handler.routing_store = routing
+                    handler.registry_usage_store = usage_store
+                    handler.deployment_id = "test-deployment"
+                    handler._ensure_registry_snapshot_reference(
+                        candidate,
+                        repository=snapshot.publication.repository,
+                        tag=snapshot.publication.tag,
+                        digest=snapshot.publication.manifest_digest,
+                    )
+                    heartbeat = build_heartbeat(
+                        job_id=route.job_id,
+                        node_id=route.node_id,
+                        node_url=route.node_url,
+                        node_epoch="boot-1",
+                        active_sandboxes=0,
+                        inventory=(observation,),
+                        inventory_complete=True,
+                    )
+                    real_reconcile = routing.reconcile_sandboxes_for_node
+
+                    def ambiguous_reconcile(*args, **kwargs):
+                        if durable_snapshot:
+                            real_reconcile(*args, **kwargs)
+                        raise RuntimeError("reconcile commit acknowledgement lost")
+
+                    routing.reconcile_sandboxes_for_node = (  # type: ignore[method-assign]
+                        ambiguous_reconcile
+                    )
+                    with self.assertRaisesRegex(
+                        RuntimeError,
+                        "reconcile commit acknowledgement lost",
+                    ):
+                        handler._reconcile_heartbeat_inventory(
+                            heartbeat,
+                            [observation],
+                            [candidate],
+                        )
+                    current = routing.get_sandbox_readonly(route.sandbox_id)
+                    leases = usage_store.snapshot().leases
+
+                assert current is not None
+                if durable_snapshot:
+                    self.assertEqual(
+                        current.snapshot_manifest_digest,
+                        snapshot.publication.manifest_digest,
+                    )
+                    self.assertEqual(len(leases), 1)
+                else:
+                    self.assertEqual(current.snapshot_manifest_digest, "")
+                    self.assertEqual(leases, {})
+
+    def test_lifecycle_snapshot_references_follow_ambiguous_route_commit(
+        self,
+    ) -> None:
+        for action in ("park", "wake"):
+            for durable_transition in (False, True):
+                with self.subTest(
+                    action=action,
+                    durable_transition=durable_transition,
+                ):
+                    with _temporary_root() as root:
+                        route_file = root / "routes.sqlite"
+                        heartbeat_file = root / "control-state.sqlite"
+                        usage_file = root / "registry-usage.sqlite"
+                        snapshot = _portable_snapshot(f"ambiguous-{action}")
+                        routing = RoutingStore(route_file)
+                        route_kwargs = {
+                            "sandbox_id": snapshot.manifest.sandbox_id,
+                            "node_id": "node-1",
+                            "job_id": "job-1",
+                            "node_url": "http://node.invalid",
+                            "resources": snapshot.manifest.spec.requested_resources(),
+                            "spec": snapshot.manifest.spec.to_dict(),
+                            "state": "running" if action == "park" else "parked",
+                            "generation": snapshot.manifest.sandbox_generation,
+                            "create_operation_id": (
+                                snapshot.manifest.create_operation_id
+                            ),
+                            "spec_hash": snapshot.manifest.spec_sha256,
+                            "node_epoch": "boot-1",
+                            "activity_epoch": 10,
+                        }
+                        if action == "wake":
+                            route_kwargs.update(
+                                {
+                                    "storage_schema": "storage-native-v1",
+                                    "snapshot_manifest_digest": (
+                                        snapshot.publication.manifest_digest
+                                    ),
+                                    "snapshot_repository": (
+                                        snapshot.publication.repository
+                                    ),
+                                    "snapshot_tag": snapshot.publication.tag,
+                                    "storage_snapshot": snapshot.to_dict(),
+                                }
+                            )
+                        route = routing.upsert_sandbox(_sandbox_route(**route_kwargs))
+                        ControlStateStore(heartbeat_file).upsert_heartbeat(
+                            build_heartbeat(
+                                job_id=route.job_id,
+                                node_id=route.node_id,
+                                node_url=route.node_url,
+                                node_epoch=route.node_epoch,
+                                activity_epoch=route.activity_epoch,
+                                capabilities=("sandbox", "disk-quota"),
+                                total_resources=ResourceQuantity(
+                                    vcpu=8,
+                                    memory_mb=16_384,
+                                    disk_mb=100_000,
+                                ),
+                            )
+                        )
+                        usage_store = RegistryUsageStore(usage_file)
+                        if action == "wake":
+                            usage_store.acquire_reference(
+                                snapshot.publication.repository,
+                                snapshot.publication.tag,
+                                control_plane._registry_snapshot_reference_owner(  # noqa: SLF001
+                                    route,
+                                    deployment_id="test-deployment",
+                                ),
+                                digest=snapshot.publication.manifest_digest,
+                            )
+                        gateway = _gateway_server(
+                            root,
+                            heartbeat_file=heartbeat_file,
+                            routing_file=route_file,
+                            registry_usage_file=usage_file,
+                        )
+                        response_payload: dict[str, object] = {
+                            "node_epoch": "boot-1",
+                            "activity_epoch": 11,
+                        }
+                        if action == "park":
+                            response_payload.update(
+                                {
+                                    "storage_schema": "storage-native-v1",
+                                    "snapshot_sha256": snapshot.sha256,
+                                    "snapshot_manifest_digest": (
+                                        snapshot.publication.manifest_digest
+                                    ),
+                                    "snapshot_repository": (
+                                        snapshot.publication.repository
+                                    ),
+                                    "snapshot_tag": snapshot.publication.tag,
+                                    "storage_snapshot": snapshot.to_dict(),
+                                }
+                            )
+
+                        def lifecycle_response(_handler, *_args, **_kwargs):
+                            return control_plane.ProxiedResponse(
+                                200,
+                                {"Content-Type": "application/json"},
+                                json.dumps(response_payload).encode(),
+                            )
+
+                        gateway.RequestHandlerClass._proxy_request = lifecycle_response
+                        gateway_routing = gateway.RequestHandlerClass.routing_store
+                        real_commit = gateway_routing.set_sandbox_state_if_current
+
+                        def ambiguous_commit(*args, **kwargs):
+                            if kwargs.get("node_epoch") is None:
+                                return real_commit(*args, **kwargs)
+                            if durable_transition:
+                                real_commit(*args, **kwargs)
+                            raise sqlite3.OperationalError(
+                                "lifecycle commit acknowledgement lost"
+                            )
+
+                        gateway_routing.set_sandbox_state_if_current = (  # type: ignore[method-assign]
+                            ambiguous_commit
+                        )
+                        with _running_server(gateway) as base:
+                            payload = {"operation_id": f"{action}:ambiguous"}
+                            if action == "wake":
+                                payload["generation"] = route.generation
+                            response = self._json_request(
+                                f"{base}/v1/sandboxes/{route.sandbox_id}/{action}",
+                                method="POST",
+                                payload=payload,
+                                allow_error=True,
+                            )
+                        current = RoutingStore(route_file).get_sandbox_readonly(
+                            route.sandbox_id
+                        )
+                        leases = RegistryUsageStore(usage_file).snapshot().leases
+
+                    self.assertEqual(response["status"], 503)
+                    self.assertIsNotNone(current)
+                    assert current is not None
+                    transition_owns_snapshot = (
+                        action == "park" and durable_transition
+                    ) or (action == "wake" and not durable_transition)
+                    self.assertEqual(
+                        bool(current.snapshot_manifest_digest),
+                        transition_owns_snapshot,
+                    )
+                    self.assertEqual(bool(leases), transition_owns_snapshot)
+
+    def test_implicit_wake_snapshot_reference_follows_commit_readback(self) -> None:
+        for outcome in ("error_before_commit", "error_after_commit", "conflict"):
+            with self.subTest(outcome=outcome), _temporary_root() as root:
+                route_file = root / "routes.sqlite"
+                heartbeat_file = root / "control-state.sqlite"
+                usage_file = root / "registry-usage.sqlite"
+                snapshot = _portable_snapshot(f"implicit-{outcome}")
+                route = RoutingStore(route_file).upsert_sandbox(
+                    _sandbox_route(
+                        sandbox_id=snapshot.manifest.sandbox_id,
+                        node_id="node-1",
+                        job_id="job-1",
+                        node_url="http://node.invalid",
+                        resources=snapshot.manifest.spec.requested_resources(),
+                        spec=snapshot.manifest.spec.to_dict(),
+                        state="parked",
+                        generation=snapshot.manifest.sandbox_generation,
+                        create_operation_id=(snapshot.manifest.create_operation_id),
+                        spec_hash=snapshot.manifest.spec_sha256,
+                        storage_schema="storage-native-v1",
+                        snapshot_manifest_digest=(snapshot.publication.manifest_digest),
+                        snapshot_repository=snapshot.publication.repository,
+                        snapshot_tag=snapshot.publication.tag,
+                        storage_snapshot=snapshot.to_dict(),
+                        node_epoch="boot-1",
+                        activity_epoch=10,
+                    )
+                )
+                ControlStateStore(heartbeat_file).upsert_heartbeat(
+                    build_heartbeat(
+                        job_id=route.job_id,
+                        node_id=route.node_id,
+                        node_url=route.node_url,
+                        node_epoch=route.node_epoch,
+                        activity_epoch=route.activity_epoch,
+                        capabilities=("sandbox", "disk-quota"),
+                        total_resources=ResourceQuantity(
+                            vcpu=8,
+                            memory_mb=16_384,
+                            disk_mb=100_000,
+                        ),
+                    )
+                )
+                usage_store = RegistryUsageStore(usage_file)
+                usage_store.acquire_reference(
+                    snapshot.publication.repository,
+                    snapshot.publication.tag,
+                    control_plane._registry_snapshot_reference_owner(  # noqa: SLF001
+                        route,
+                        deployment_id="test-deployment",
+                    ),
+                    digest=snapshot.publication.manifest_digest,
+                )
+                gateway = _gateway_server(
+                    root,
+                    heartbeat_file=heartbeat_file,
+                    routing_file=route_file,
+                    registry_usage_file=usage_file,
+                )
+
+                def lifecycle_response(_handler, *_args, **_kwargs):
+                    return control_plane.ProxiedResponse(
+                        200,
+                        {"Content-Type": "application/json"},
+                        b'{"node_epoch":"boot-1","activity_epoch":11}',
+                    )
+
+                gateway.RequestHandlerClass._proxy_request = lifecycle_response
+                gateway_routing = gateway.RequestHandlerClass.routing_store
+                real_commit = gateway_routing.set_sandbox_state_if_current
+
+                def ambiguous_commit(*args, **kwargs):
+                    if kwargs.get("node_epoch") is None:
+                        return real_commit(*args, **kwargs)
+                    if outcome == "error_after_commit":
+                        real_commit(*args, **kwargs)
+                    if outcome == "conflict":
+                        return None
+                    raise sqlite3.OperationalError(
+                        "implicit wake commit acknowledgement lost"
+                    )
+
+                gateway_routing.set_sandbox_state_if_current = (  # type: ignore[method-assign]
+                    ambiguous_commit
+                )
+                with _running_server(gateway) as base:
+                    response = self._json_request(
+                        f"{base}/v1/sandboxes/{route.sandbox_id}/exec",
+                        method="POST",
+                        payload={
+                            "command": ["true"],
+                            "env": {},
+                            "working_dir": None,
+                            "stdin": False,
+                            "tty": False,
+                        },
+                        allow_error=True,
+                    )
+                current = RoutingStore(route_file).get_sandbox_readonly(
+                    route.sandbox_id
+                )
+                leases = RegistryUsageStore(usage_file).snapshot().leases
+
+            self.assertEqual(response["status"], HTTPStatus.SERVICE_UNAVAILABLE)
+            self.assertIsNotNone(current)
+            assert current is not None
+            wake_committed = outcome == "error_after_commit"
+            self.assertEqual(current.state, "running" if wake_committed else "waking")
+            self.assertEqual(
+                bool(current.snapshot_manifest_digest),
+                not wake_committed,
+            )
+            self.assertEqual(bool(leases), not wake_committed)
 
     def test_worker_detach_retries_ambiguous_eviction_and_commits_once(self) -> None:
         with _temporary_root() as root:
@@ -901,6 +1566,13 @@ class ControlPlaneTests(unittest.TestCase):
             handler._write_json = lambda payload, *, status=200, **_kwargs: (
                 writes.append((payload, status))
             )
+            released_snapshots: list[tuple[SandboxRoute, SandboxRoute | None]] = []
+            handler._ensure_registry_snapshot_reference = lambda *_args, **_kwargs: None
+            handler._release_registry_snapshot_reference = (
+                lambda released, *, keep_route=None: released_snapshots.append(
+                    (released, keep_route)
+                )
+            )
             responses = iter(
                 (
                     control_plane.ProxiedResponse(
@@ -958,6 +1630,11 @@ class ControlPlaneTests(unittest.TestCase):
             },
         )
         self.assertEqual(writes[0][1], 200)
+        self.assertEqual(len(released_snapshots), 1)
+        released_route, retained_route = released_snapshots[0]
+        self.assertEqual(released_route, route)
+        assert retained_route is not None
+        self.assertEqual(retained_route.snapshot_tag, snapshot.publication.tag)
         self.assertEqual(
             calls[1][1],
             {
@@ -988,38 +1665,37 @@ class ControlPlaneTests(unittest.TestCase):
                 )
             )
             heartbeats = ControlStateStore(root / "control.sqlite")
-            heartbeats.upsert_heartbeat(
-                NodeHeartbeat(
-                    node_id="destination-node",
-                    job_id="destination-job",
-                    deployment_id="test-deployment",
-                    updated_at=utc_now(),
-                    active_sandboxes=0,
-                    node_url="http://destination:8090",
-                    agent_version=package_version(),
-                    capabilities=(
-                        "sandbox",
-                        "disk-quota",
-                        "storage-native-v1",
-                        "sandbox-migrate-storage-native-v1",
-                    ),
-                    total_resources=ResourceQuantity(
-                        vcpu=8,
-                        memory_mb=16_384,
-                        disk_mb=100_000,
-                    ),
-                    resources_known=True,
-                    runtime_metrics=NodeRuntimeMetrics(
-                        collected_at=utc_now(),
-                        cpu_percent=0.0,
-                        cpu_count=8,
-                        memory_total_mb=16_384,
-                        memory_available_mb=16_384,
-                        storage_hard_capacity_mb=100_000,
-                    ),
-                    inventory_complete=True,
-                )
+            legacy_destination = NodeHeartbeat(
+                node_id="destination-node",
+                job_id="destination-job",
+                deployment_id="test-deployment",
+                updated_at=utc_now(),
+                active_sandboxes=0,
+                node_url="http://destination:8090",
+                agent_version=package_version(),
+                capabilities=(
+                    "sandbox",
+                    "disk-quota",
+                    "storage-native-v1",
+                    "sandbox-migrate-storage-native-v1",
+                ),
+                total_resources=ResourceQuantity(
+                    vcpu=8,
+                    memory_mb=16_384,
+                    disk_mb=100_000,
+                ),
+                resources_known=True,
+                runtime_metrics=NodeRuntimeMetrics(
+                    collected_at=utc_now(),
+                    cpu_percent=0.0,
+                    cpu_count=8,
+                    memory_total_mb=16_384,
+                    memory_available_mb=16_384,
+                    storage_hard_capacity_mb=100_000,
+                ),
+                inventory_complete=True,
             )
+            heartbeats.upsert_heartbeat(legacy_destination)
             handler = object.__new__(control_plane.ControlPlaneHandler)
             handler.routing_store = routing
             handler.store = heartbeats
@@ -1031,6 +1707,24 @@ class ControlPlaneTests(unittest.TestCase):
             handler._write_json = lambda *_args, **_kwargs: None
             handler._prepare_migration_destination_image = lambda *_args: True
             paths: list[str] = []
+
+            self.assertIsNone(
+                handler._select_migration_destination(
+                    route,
+                    requested_node_id="",
+                    require_active_resources=True,
+                )
+            )
+            heartbeats.upsert_heartbeat(
+                replace(
+                    legacy_destination,
+                    updated_at=utc_now(),
+                    capabilities=(
+                        *legacy_destination.capabilities,
+                        control_plane.HIBERNATE_LOCAL_CAPABILITY,
+                    ),
+                )
+            )
 
             def proxy(_node_url, path, **_kwargs):
                 paths.append(path)
@@ -1070,6 +1764,88 @@ class ControlPlaneTests(unittest.TestCase):
                 "/v1/sandboxes/sandbox-1/migration/activate",
             ],
         )
+
+    def test_ambiguous_migration_commit_reconciles_registry_references(self) -> None:
+        for durable_destination in (True, False):
+            with self.subTest(durable_destination=durable_destination):
+                with _temporary_root() as root:
+                    routing = RoutingStore(root / "routes.sqlite")
+                    snapshot = _portable_snapshot("sandbox-1")
+                    source = routing.upsert_sandbox(
+                        _sandbox_route(
+                            sandbox_id="sandbox-1",
+                            node_id="source-node",
+                            job_id="source-job",
+                            node_url="http://source:8090",
+                            resources=snapshot.manifest.spec.requested_resources(),
+                            spec=snapshot.manifest.spec.to_dict(),
+                            state="parked",
+                            worker_state="detached",
+                            storage_schema="storage-native-v1",
+                            snapshot_manifest_digest=(
+                                snapshot.publication.manifest_digest
+                            ),
+                            snapshot_repository=snapshot.publication.repository,
+                            snapshot_tag=snapshot.publication.tag,
+                            storage_snapshot=snapshot.to_dict(),
+                        )
+                    )
+                    migration = routing.begin_sandbox_migration(
+                        source,
+                        migration_id="migration-1",
+                        destination_node_id="destination-node",
+                        destination_job_id="destination-job",
+                        destination_node_url="http://destination:8090",
+                    )
+                    migration = routing.advance_sandbox_migration(
+                        migration.migration_id,
+                        expected_phases={"planned"},
+                        phase="staged",
+                        storage_schema="storage-native-v1",
+                        snapshot_sha256=snapshot.sha256,
+                        storage_snapshot=snapshot.to_dict(),
+                        source_fenced=False,
+                    )
+                    assert migration is not None
+                    real_route_migration = routing.route_sandbox_migration
+
+                    def ambiguous_route_commit(migration_id: str):
+                        if durable_destination:
+                            assert real_route_migration(migration_id) is not None
+                        else:
+                            routing.delete_sandbox(source.sandbox_id)
+                        raise RuntimeError("migration commit acknowledgement lost")
+
+                    routing.route_sandbox_migration = (  # type: ignore[method-assign]
+                        ambiguous_route_commit
+                    )
+                    handler = object.__new__(control_plane.ControlPlaneHandler)
+                    handler.routing_store = routing
+                    ensured: list[SandboxRoute] = []
+                    released: list[tuple[SandboxRoute, SandboxRoute | None]] = []
+                    handler._ensure_registry_route_reference = lambda route, *, touch: (
+                        ensured.append(route)
+                    )
+                    handler._release_registry_route_reference = (
+                        lambda route, *, keep_route=None: released.append(
+                            (route, keep_route)
+                        )
+                    )
+
+                    with self.assertRaisesRegex(
+                        RuntimeError,
+                        "migration commit acknowledgement lost",
+                    ):
+                        handler._advance_sandbox_migration(migration)
+                    current = routing.get_sandbox_readonly(source.sandbox_id)
+
+                self.assertEqual(len(ensured), 1)
+                self.assertEqual(released, [(ensured[0], current)])
+                if durable_destination:
+                    assert current is not None
+                    self.assertEqual(current.node_id, "destination-node")
+                else:
+                    self.assertIsNone(current)
 
     def test_attached_park_never_uses_registry_failover_without_source_proof(
         self,
@@ -1232,19 +2008,25 @@ class ControlPlaneTests(unittest.TestCase):
         class CachedHandler(control_plane.ControlPlaneHandler):
             pass
 
-        CachedHandler.image_inventory_cache = None
-        CachedHandler.image_inventory_cache_at = 0.0
-        CachedHandler.image_inventory_cache_lock = Lock()
+        CachedHandler.image_inventory_cache = control_plane.ImageInventoryCache(
+            ttl_seconds=5.0,
+            clock=lambda: 0.0,
+        )
         handler = object.__new__(CachedHandler)
+        handler.registry_url = ""
+        handler.registry_worker_url = ""
         loads = 0
         payloads: list[dict[str, object]] = []
 
-        def load_images() -> list[dict[str, object]]:
+        def load_images() -> control_plane.ImageInventorySnapshot:
             nonlocal loads
             loads += 1
-            return [{"id": "image-one", "tag": "busybox:latest"}]
+            return control_plane.ImageInventorySnapshot.from_records(
+                [{"id": "image-one", "tag": "busybox:latest"}],
+                complete=True,
+            )
 
-        handler._image_records_across_nodes = load_images
+        handler._load_raw_image_inventory_across_nodes = load_images
         handler._write_json = lambda payload: payloads.append(payload)
 
         handler._list_images_across_nodes()
@@ -1252,6 +2034,374 @@ class ControlPlaneTests(unittest.TestCase):
 
         self.assertEqual(loads, 1)
         self.assertEqual(payloads[0], payloads[1])
+        self.assertTrue(payloads[0]["complete"])
+
+        handler._invalidate_image_inventory_cache()
+        handler._list_images_across_nodes()
+
+        self.assertEqual(loads, 2)
+        self.assertEqual(payloads[1], payloads[2])
+
+    def test_image_id_resolution_and_listing_share_inventory_snapshot(self) -> None:
+        class CachedHandler(control_plane.ControlPlaneHandler):
+            pass
+
+        CachedHandler.image_inventory_cache = control_plane.ImageInventoryCache(
+            ttl_seconds=5.0,
+            clock=lambda: 0.0,
+        )
+        handler = object.__new__(CachedHandler)
+        handler.registry_url = ""
+        handler.registry_worker_url = ""
+        loads = 0
+        payloads: list[dict[str, object]] = []
+
+        def load_images() -> control_plane.ImageInventorySnapshot:
+            nonlocal loads
+            loads += 1
+            return control_plane.ImageInventorySnapshot.from_records(
+                [
+                    {
+                        "id": "image-one",
+                        "tag": "busybox:latest",
+                        "source": "registry",
+                        "state": "available",
+                    }
+                ],
+                complete=True,
+            )
+
+        handler._load_raw_image_inventory_across_nodes = load_images
+        handler._write_json = lambda payload: payloads.append(payload)
+
+        resolved, resolution_error = handler._resolve_sandbox_image_reference(
+            "image-one"
+        )
+        handler._list_images_across_nodes()
+
+        self.assertEqual(resolved, "busybox:latest")
+        self.assertIsNone(resolution_error)
+        self.assertEqual(loads, 1)
+        self.assertEqual(payloads[0]["images"][0]["id"], "image-one")
+
+    def test_incomplete_image_inventory_miss_is_retryable_then_recovers(self) -> None:
+        class CachedHandler(control_plane.ControlPlaneHandler):
+            pass
+
+        class EmptyImageManager:
+            @staticmethod
+            def list() -> list[ImageRecord]:
+                return []
+
+        now = [0.0]
+        CachedHandler.image_inventory_cache = control_plane.ImageInventoryCache(
+            ttl_seconds=5.0,
+            clock=lambda: now[0],
+        )
+        handler = object.__new__(CachedHandler)
+        handler.image_manager = EmptyImageManager()
+        handler.registry_url = ""
+        handler.registry_worker_url = ""
+        heartbeat = build_heartbeat(
+            node_id="node-one",
+            job_id="job-one",
+            node_url="http://node-one:8090",
+            cached_images=("image-one",),
+        )
+        handler._ready_heartbeats = lambda: [heartbeat]
+        responses = iter(
+            (
+                control_plane.ProxiedResponse(503, {}, b'{"error":"offline"}'),
+                control_plane.ProxiedResponse(200, {}, b'{"images":"invalid"}'),
+                control_plane.ProxiedResponse(
+                    200,
+                    {},
+                    json.dumps(
+                        {
+                            "images": [
+                                {
+                                    "id": "image-one",
+                                    "tag": "busybox:latest",
+                                    "source": "registry",
+                                    "state": "available",
+                                }
+                            ]
+                        }
+                    ).encode("utf-8"),
+                ),
+            )
+        )
+        handler._proxy_request = lambda *_args, **_kwargs: next(responses)
+
+        unresolved, unavailable = handler._resolve_sandbox_image_reference(
+            "image-one",
+            reference_kind="name",
+        )
+
+        self.assertEqual(unresolved, "image-one")
+        self.assertIsNotNone(unavailable)
+        assert unavailable is not None
+        self.assertEqual(unavailable["error_code"], "image_inventory_incomplete")
+        self.assertTrue(unavailable["retryable"])
+
+        written: list[tuple[dict[str, object], dict[str, object]]] = []
+        handler._write_json = lambda payload, **kwargs: written.append(
+            (payload, kwargs)
+        )
+        handler._list_images_across_nodes()
+        self.assertFalse(written[0][0]["complete"])
+
+        plain_tag, plain_tag_error = handler._resolve_sandbox_image_reference(
+            "busybox",
+            reference_kind="registry",
+        )
+        self.assertEqual(plain_tag, "busybox")
+        self.assertIsNone(plain_tag_error)
+
+        explicit_digest = "busybox@sha256:" + "a" * 64
+        pinned, pinned_error = handler._resolve_sandbox_image_reference(
+            explicit_digest,
+            reference_kind="registry",
+        )
+        self.assertEqual(pinned, explicit_digest)
+        self.assertIsNone(pinned_error)
+
+        handler._write_image_resolution_error(unavailable)
+        self.assertEqual(written[1][1]["status"], HTTPStatus.SERVICE_UNAVAILABLE)
+        self.assertEqual(
+            written[1][1]["headers"],
+            {"Retry-After": "1", "X-UCloud-Sandbox-Retryable": "true"},
+        )
+
+        now[0] += 0.501
+        _unresolved, malformed = handler._resolve_sandbox_image_reference(
+            "image-one",
+            reference_kind="name",
+        )
+        self.assertIsNotNone(malformed)
+        assert malformed is not None
+        self.assertEqual(malformed["error_code"], "image_inventory_incomplete")
+
+        now[0] += 0.501
+        resolved, recovered_error = handler._resolve_sandbox_image_reference(
+            "image-one",
+            reference_kind="name",
+        )
+        self.assertEqual(resolved, "busybox:latest")
+        self.assertIsNone(recovered_error)
+
+    def test_image_reference_kind_header_controls_bare_resolution(self) -> None:
+        handler = object.__new__(control_plane.ControlPlaneHandler)
+        handler.registry_url = ""
+        handler.registry_worker_url = ""
+        cache_reads = 0
+
+        def complete_empty_inventory() -> control_plane.ImageInventorySnapshot:
+            nonlocal cache_reads
+            cache_reads += 1
+            return control_plane.ImageInventorySnapshot.from_records(
+                [],
+                complete=True,
+            )
+
+        handler._cached_raw_image_inventory_across_nodes = complete_empty_inventory
+
+        handler.headers = {
+            control_plane.IMAGE_REFERENCE_KIND_HEADER: "registry",
+        }
+        registry_ref, registry_error = handler._resolve_request_image_reference(
+            "busybox"
+        )
+        self.assertEqual(registry_ref, "busybox")
+        self.assertIsNone(registry_error)
+        self.assertEqual(cache_reads, 0)
+
+        for explicit_auto in (False, True):
+            with self.subTest(explicit_auto=explicit_auto):
+                handler.headers = (
+                    {control_plane.IMAGE_REFERENCE_KIND_HEADER: "auto"}
+                    if explicit_auto
+                    else {}
+                )
+                auto_ref, auto_error = handler._resolve_request_image_reference(
+                    "busybox"
+                )
+                self.assertEqual(auto_ref, "busybox")
+                self.assertIsNone(auto_error)
+
+        handler.headers = {control_plane.IMAGE_REFERENCE_KIND_HEADER: "name"}
+        name_ref, name_error = handler._resolve_request_image_reference("busybox")
+        self.assertEqual(name_ref, "busybox")
+        self.assertIsNotNone(name_error)
+        assert name_error is not None
+        self.assertEqual(name_error["error_code"], "image_id_not_found")
+        self.assertFalse(name_error["retryable"])
+
+        handler.headers = {control_plane.IMAGE_REFERENCE_KIND_HEADER: "invalid"}
+        _invalid_ref, invalid_error = handler._resolve_request_image_reference(
+            "busybox"
+        )
+        self.assertIsNotNone(invalid_error)
+        assert invalid_error is not None
+        self.assertEqual(invalid_error["error_code"], "invalid_image_reference_kind")
+        self.assertFalse(invalid_error["retryable"])
+
+    def test_managed_registry_digest_protection_failures_have_transient_code(
+        self,
+    ) -> None:
+        handler = object.__new__(control_plane.ControlPlaneHandler)
+        handler.registry_url = "http://registry.example"
+        handler.registry_worker_url = ""
+        handler._managed_registry_manifest_digest = lambda _image: ""
+        handler._cached_raw_image_inventory_across_nodes = lambda: (
+            control_plane.ImageInventorySnapshot.from_records(
+                [
+                    {
+                        "id": "gateway-image",
+                        "tag": "registry.example/team/image:v1",
+                        "source": "registry",
+                        "state": "available",
+                    }
+                ],
+                complete=True,
+            )
+        )
+        handler._enrich_image_inventory_records = lambda records, *, image_id=None: [
+            dict(record)
+            for record in records
+            if image_id is None or record.get("id") == image_id
+        ]
+
+        digest_ref = "registry.example/team/image@sha256:" + "a" * 64
+        cases = (
+            handler._resolve_sandbox_image_reference(
+                digest_ref,
+                reference_kind="registry",
+            ),
+            handler._resolve_sandbox_image_reference(
+                "gateway-image",
+                reference_kind="name",
+            ),
+        )
+
+        for _resolved, resolution_error in cases:
+            self.assertIsNotNone(resolution_error)
+            assert resolution_error is not None
+            self.assertEqual(
+                resolution_error["error_code"],
+                control_plane.MANAGED_REGISTRY_DIGEST_PROTECTION_UNAVAILABLE_ERROR_CODE,
+            )
+            self.assertTrue(resolution_error["retryable"])
+
+    def test_managed_registry_digest_protection_failure_returns_retryable_503(
+        self,
+    ) -> None:
+        with _temporary_root() as root:
+            gateway = _gateway_server(
+                root,
+                registry_url="http://registry.example",
+            )
+            gateway.RequestHandlerClass._managed_registry_manifest_digest = (
+                lambda _self, _image: ""
+            )
+            digest_ref = "registry.example/team/image@sha256:" + "a" * 64
+            with _running_server(gateway) as base:
+                response = self._json_request(
+                    f"{base}/v1/images/pull",
+                    method="POST",
+                    payload={"image": digest_ref},
+                    headers={
+                        control_plane.IMAGE_REFERENCE_KIND_HEADER: "registry",
+                    },
+                    allow_error=True,
+                )
+
+        self.assertEqual(response["status"], HTTPStatus.SERVICE_UNAVAILABLE)
+        self.assertEqual(
+            response["body"]["error_code"],
+            control_plane.MANAGED_REGISTRY_DIGEST_PROTECTION_UNAVAILABLE_ERROR_CODE,
+        )
+        self.assertTrue(response["body"]["retryable"])
+        self.assertEqual(response["headers"]["Retry-After"], "1")
+        self.assertEqual(
+            response["headers"]["X-UCloud-Sandbox-Retryable"],
+            "true",
+        )
+
+    def test_image_id_resolution_enriches_only_matching_raw_records(self) -> None:
+        class CachedHandler(control_plane.ControlPlaneHandler):
+            pass
+
+        CachedHandler.image_inventory_cache = control_plane.ImageInventoryCache(
+            ttl_seconds=5.0,
+            clock=lambda: 0.0,
+        )
+        handler = object.__new__(CachedHandler)
+        handler.registry_url = ""
+        handler.registry_worker_url = ""
+        records = [
+            {
+                "id": f"nonmatching-{index}",
+                "tag": f"registry.example/images/nonmatching-{index}:latest",
+                "source": "registry",
+            }
+            for index in range(100)
+        ]
+        records.append(
+            {
+                "id": "image-target",
+                "tag": "registry.example/images/target:latest",
+                "source": "registry",
+            }
+        )
+        handler._load_raw_image_inventory_across_nodes = lambda: (
+            control_plane.ImageInventorySnapshot.from_records(records, complete=True)
+        )
+        handler._managed_registry_manifest_digest = lambda _image: ""
+        checked: list[str] = []
+        enriched: list[str] = []
+
+        def manifest_missing(record: dict[str, object]) -> bool:
+            checked.append(str(record["id"]))
+            return False
+
+        def enrich(record: dict[str, object]) -> dict[str, object]:
+            enriched.append(str(record["id"]))
+            return dict(record)
+
+        handler._image_record_missing_registry_manifest = manifest_missing
+        handler._image_record_with_registry_digest = enrich
+
+        resolved, resolution_error = handler._resolve_sandbox_image_reference(
+            "image-target",
+            reference_kind="name",
+        )
+
+        self.assertEqual(resolved, "registry.example/images/target:latest")
+        self.assertIsNone(resolution_error)
+        self.assertEqual(checked, ["image-target"])
+        self.assertEqual(enriched, ["image-target"])
+
+    def test_route_heartbeat_exact_miss_does_not_scan_inventories(self) -> None:
+        class ExactOnlyHeartbeatStore:
+            def __init__(self) -> None:
+                self.lookups: list[str] = []
+
+            def get_heartbeat(self, job_id: str) -> None:
+                self.lookups.append(job_id)
+                return None
+
+            def load_heartbeats(self) -> dict[str, NodeHeartbeat]:
+                raise AssertionError("exact route miss scanned all heartbeats")
+
+        store = ExactOnlyHeartbeatStore()
+        handler = object.__new__(control_plane.ControlPlaneHandler)
+        handler.store = store
+
+        heartbeat = handler._heartbeat_for_route(job_id="missing-job")
+
+        self.assertIsNone(heartbeat)
+        self.assertEqual(store.lookups, ["missing-job"])
 
     def test_managed_manifest_verification_and_protection_are_cached(self) -> None:
         digest = "sha256:" + "a" * 64
@@ -1259,8 +2409,8 @@ class ControlPlaneTests(unittest.TestCase):
         handler = object.__new__(control_plane.ControlPlaneHandler)
         handler.registry_url = "http://registry.example"
         handler.registry_worker_url = ""
-        handler.registry_manifest_cache = (
-            control_plane.RegistryManifestResolutionCache(max_entries=8)
+        handler.registry_manifest_cache = control_plane.RegistryManifestResolutionCache(
+            max_entries=8
         )
         record = {
             "id": "image-one",
@@ -1367,6 +2517,66 @@ class ControlPlaneTests(unittest.TestCase):
                 [],
             )
         )
+
+    def test_parkable_placement_requires_fenced_hibernate_capability(self) -> None:
+        resources = ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=100_000)
+        old_worker = build_heartbeat(
+            node_id="old-node",
+            job_id="old-job",
+            node_url="http://old-node:8090",
+            capabilities=("sandbox", "disk-quota", "hibernate-local-v1"),
+            total_resources=resources,
+            inventory_complete=True,
+        )
+        current_worker = build_heartbeat(
+            node_id="current-node",
+            job_id="current-job",
+            node_url="http://current-node:8090",
+            capabilities=(
+                "sandbox",
+                "disk-quota",
+                control_plane.HIBERNATE_LOCAL_CAPABILITY,
+            ),
+            total_resources=resources,
+            inventory_complete=True,
+        )
+        handler = object.__new__(control_plane.ControlPlaneHandler)
+        handler._placement_routes = lambda: []
+        handler._nodes_with_image = lambda *_args, **_kwargs: set()
+        handler.registry_layer_cache = None
+        handler.create_target_concurrency_per_node = 4
+        handler._ready_sandbox_heartbeats = lambda: [old_worker, current_worker]
+        requested = ResourceQuantity(vcpu=1, memory_mb=512)
+        parkable_capabilities = control_plane._sandbox_required_capabilities(  # noqa: SLF001
+            {"parkable": True}
+        )
+
+        selected = handler._select_node(
+            requested,
+            required_capabilities=parkable_capabilities,
+        )
+
+        self.assertEqual(control_plane.HIBERNATE_LOCAL_CAPABILITY, "hibernate-local-v2")
+        self.assertIsNotNone(selected)
+        assert selected is not None
+        self.assertEqual(selected.node_id, current_worker.node_id)
+
+        handler._ready_sandbox_heartbeats = lambda: [old_worker]
+        self.assertIsNone(
+            handler._select_node(
+                requested,
+                required_capabilities=parkable_capabilities,
+            )
+        )
+        ordinary = handler._select_node(
+            requested,
+            required_capabilities=control_plane._sandbox_required_capabilities(  # noqa: SLF001
+                {"parkable": False}
+            ),
+        )
+        self.assertIsNotNone(ordinary)
+        assert ordinary is not None
+        self.assertEqual(ordinary.node_id, old_worker.node_id)
 
     def test_ublk_device_limit_accounts_for_inflight_route_reservations(self) -> None:
         heartbeat = build_heartbeat(
@@ -1817,6 +3027,206 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(refreshed["sandboxes"][0]["spec"]["id"], "cached-one")
         self.assertEqual(malformed["sandboxes"], [])
         self.assertEqual(stored.state if stored is not None else None, "running")
+
+    def test_refresh_record_cannot_inherit_newer_lifecycle_revision(self) -> None:
+        with _temporary_root() as root:
+            route_file = root / "routes.sqlite"
+            heartbeat_file = root / "control-state.sqlite"
+            snapshot = _portable_snapshot("refresh-race")
+            routing = RoutingStore(route_file)
+            route = routing.upsert_sandbox(
+                _sandbox_route(
+                    sandbox_id=snapshot.manifest.sandbox_id,
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node.invalid",
+                    resources=snapshot.manifest.spec.requested_resources(),
+                    spec=snapshot.manifest.spec.to_dict(),
+                    state="running",
+                    generation=snapshot.manifest.sandbox_generation,
+                    create_operation_id=snapshot.manifest.create_operation_id,
+                    spec_hash=snapshot.manifest.spec_sha256,
+                    node_epoch="boot-1",
+                    activity_epoch=10,
+                )
+            )
+            ControlStateStore(heartbeat_file).upsert_heartbeat(
+                build_heartbeat(
+                    job_id=route.job_id,
+                    node_id=route.node_id,
+                    node_url=route.node_url,
+                    node_epoch=route.node_epoch,
+                    activity_epoch=route.activity_epoch,
+                    capabilities=("sandbox", "disk-quota"),
+                    total_resources=ResourceQuantity(
+                        vcpu=8,
+                        memory_mb=16_384,
+                        disk_mb=100_000,
+                    ),
+                )
+            )
+            gateway = _gateway_server(
+                root,
+                heartbeat_file=heartbeat_file,
+                routing_file=route_file,
+            )
+
+            def delayed_running_record(_handler, *_args, **_kwargs):
+                parked = routing.set_sandbox_state_if_current(
+                    route,
+                    expected_states={"running"},
+                    state="parked",
+                    node_epoch="boot-1",
+                    activity_epoch=11,
+                    storage_schema="storage-native-v1",
+                    snapshot_manifest_digest=snapshot.publication.manifest_digest,
+                    snapshot_repository=snapshot.publication.repository,
+                    snapshot_tag=snapshot.publication.tag,
+                    storage_snapshot=snapshot.to_dict(),
+                )
+                assert parked is not None
+                stale_record = {
+                    "spec": snapshot.manifest.spec.to_dict(),
+                    "state": "running",
+                    "generation": route.generation,
+                    "operation_id": route.create_operation_id,
+                    "spec_hash": route.spec_hash,
+                }
+                return control_plane.ProxiedResponse(
+                    200,
+                    {"Content-Type": "application/json"},
+                    json.dumps({"sandboxes": [stale_record]}).encode(),
+                )
+
+            gateway.RequestHandlerClass._proxy_request = delayed_running_record
+            with _running_server(gateway) as base:
+                self._json_request(f"{base}/v1/sandboxes?refresh=true")
+            stored = RoutingStore(route_file).get_sandbox_readonly(route.sandbox_id)
+
+        self.assertIsNotNone(stored)
+        assert stored is not None
+        self.assertEqual(stored.state, "parked")
+        self.assertEqual(stored.node_epoch, "boot-1")
+        self.assertEqual(stored.activity_epoch, 11)
+        self.assertEqual(
+            stored.snapshot_manifest_digest,
+            snapshot.publication.manifest_digest,
+        )
+
+    def test_refresh_snapshot_reference_follows_ambiguous_route_commit(self) -> None:
+        for durable_snapshot in (False, True):
+            with self.subTest(durable_snapshot=durable_snapshot):
+                with _temporary_root() as root:
+                    route_file = root / "routes.sqlite"
+                    heartbeat_file = root / "control-state.sqlite"
+                    usage_file = root / "registry-usage.sqlite"
+                    snapshot = _portable_snapshot("refresh-ambiguous")
+                    route = RoutingStore(route_file).upsert_sandbox(
+                        _sandbox_route(
+                            sandbox_id=snapshot.manifest.sandbox_id,
+                            node_id="node-1",
+                            job_id="job-1",
+                            node_url="http://node.invalid",
+                            resources=snapshot.manifest.spec.requested_resources(),
+                            spec=snapshot.manifest.spec.to_dict(),
+                            state="running",
+                            generation=snapshot.manifest.sandbox_generation,
+                            create_operation_id=(snapshot.manifest.create_operation_id),
+                            spec_hash=snapshot.manifest.spec_sha256,
+                            node_epoch="boot-1",
+                            activity_epoch=10,
+                        )
+                    )
+                    ControlStateStore(heartbeat_file).upsert_heartbeat(
+                        build_heartbeat(
+                            job_id=route.job_id,
+                            node_id=route.node_id,
+                            node_url=route.node_url,
+                            node_epoch=route.node_epoch,
+                            activity_epoch=route.activity_epoch,
+                            capabilities=("sandbox", "disk-quota"),
+                            total_resources=ResourceQuantity(
+                                vcpu=8,
+                                memory_mb=16_384,
+                                disk_mb=100_000,
+                            ),
+                        )
+                    )
+                    gateway = _gateway_server(
+                        root,
+                        heartbeat_file=heartbeat_file,
+                        routing_file=route_file,
+                        registry_usage_file=usage_file,
+                    )
+                    parked_record = {
+                        "spec": snapshot.manifest.spec.to_dict(),
+                        "state": "parked",
+                        "generation": route.generation,
+                        "operation_id": route.create_operation_id,
+                        "spec_hash": route.spec_hash,
+                        "storage_schema": "storage-native-v1",
+                        "snapshot_sha256": snapshot.sha256,
+                        "snapshot_manifest_digest": (
+                            snapshot.publication.manifest_digest
+                        ),
+                        "snapshot_repository": snapshot.publication.repository,
+                        "snapshot_tag": snapshot.publication.tag,
+                        "storage_snapshot": snapshot.to_dict(),
+                    }
+
+                    def parked_inventory(_handler, *_args, **_kwargs):
+                        return control_plane.ProxiedResponse(
+                            200,
+                            {"Content-Type": "application/json"},
+                            json.dumps({"sandboxes": [parked_record]}).encode(),
+                        )
+
+                    gateway.RequestHandlerClass._proxy_request = parked_inventory
+                    gateway_routing = gateway.RequestHandlerClass.routing_store
+                    real_upsert = gateway_routing.upsert_sandbox
+
+                    def ambiguous_upsert(*args, **kwargs):
+                        if durable_snapshot:
+                            real_upsert(*args, **kwargs)
+                        raise sqlite3.OperationalError(
+                            "refresh commit acknowledgement lost"
+                        )
+
+                    gateway_routing.upsert_sandbox = (  # type: ignore[method-assign]
+                        ambiguous_upsert
+                    )
+                    with _running_server(gateway) as base:
+                        response = self._json_request(
+                            f"{base}/v1/sandboxes?refresh=true",
+                            allow_error=True,
+                        )
+                    current = RoutingStore(route_file).get_sandbox_readonly(
+                        route.sandbox_id
+                    )
+                    leases = RegistryUsageStore(usage_file).snapshot().leases
+                    snapshot_key = control_plane._registry_snapshot_reference_key(  # noqa: SLF001
+                        replace(
+                            route,
+                            state="parked",
+                            storage_schema="storage-native-v1",
+                            snapshot_manifest_digest=(
+                                snapshot.publication.manifest_digest
+                            ),
+                            snapshot_repository=snapshot.publication.repository,
+                            snapshot_tag=snapshot.publication.tag,
+                            storage_snapshot=snapshot.to_dict(),
+                        ),
+                        deployment_id="test-deployment",
+                    )
+
+                self.assertEqual(response["status"], 503)
+                self.assertIsNotNone(current)
+                assert current is not None
+                self.assertEqual(
+                    bool(current.snapshot_manifest_digest),
+                    durable_snapshot,
+                )
+                self.assertEqual(snapshot_key in leases, durable_snapshot)
 
     def test_gateway_rejects_unavailable_registry_usage_state(self) -> None:
         with _temporary_root() as raw_path:
@@ -2705,13 +4115,29 @@ class ControlPlaneTests(unittest.TestCase):
 
         with _temporary_root() as raw_path:
             route_file = raw_path / "routes.sqlite"
+            image_file = raw_path / "images.json"
+            now = utc_now()
+            ImageStore(image_file).upsert(
+                ImageRecord(
+                    id="gateway-image",
+                    tag="busybox",
+                    source="registry",
+                    state="available",
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
             closed = ThreadingHTTPServer(("127.0.0.1", 0), ClosedNode)
             ready = ThreadingHTTPServer(("127.0.0.1", 0), ReadyNode)
             with (
                 _running_server(closed) as closed_url,
                 _running_server(ready) as ready_url,
             ):
-                gateway = _gateway_server(raw_path, routing_file=route_file)
+                gateway = _gateway_server(
+                    raw_path,
+                    routing_file=route_file,
+                    image_file=image_file,
+                )
                 with _running_server(gateway) as base:
                     for node_id, job_id, node_url in (
                         ("node-a", "job-a", closed_url),
@@ -2744,10 +4170,13 @@ class ControlPlaneTests(unittest.TestCase):
                         method="POST",
                         payload={
                             "id": "reselected",
-                            "image": "busybox",
+                            "image": "gateway-image",
                             "cpus": 1,
                             "memory_mb": 512,
                             "disk_mb": 1024,
+                        },
+                        headers={
+                            control_plane.IMAGE_REFERENCE_KIND_HEADER: "name",
                         },
                     )
                     route = RoutingStore(route_file).get_sandbox("reselected")
@@ -2917,8 +4346,17 @@ class ControlPlaneTests(unittest.TestCase):
                     raw_path / "routes.sqlite"
                 ).prepared_capacity()
 
-        self.assertEqual(prepared["status"], 400)
+        self.assertEqual(prepared["status"], HTTPStatus.SERVICE_UNAVAILABLE)
+        self.assertEqual(
+            prepared["body"]["error_code"],
+            control_plane.MANAGED_REGISTRY_DIGEST_PROTECTION_UNAVAILABLE_ERROR_CODE,
+        )
         self.assertTrue(prepared["body"]["retryable"])
+        self.assertEqual(prepared["headers"]["Retry-After"], "1")
+        self.assertEqual(
+            prepared["headers"]["X-UCloud-Sandbox-Retryable"],
+            "true",
+        )
         self.assertEqual(stored_prepared, [])
 
     def test_failed_sandbox_pull_persists_incarnation_demand_until_cancel(self) -> None:
@@ -3089,11 +4527,18 @@ class ControlPlaneTests(unittest.TestCase):
                         method="DELETE",
                         allow_error=True,
                     )
+                    blocked = self._json_request(
+                        f"{base}/v1/sandboxes/delete-one",
+                        allow_error=True,
+                    )
                     route = RoutingStore(route_file).get_sandbox("delete-one")
                     leases_after = RegistryUsageStore(usage_file).snapshot().leases
 
         self.assertEqual(response["status"], 400)
         self.assertEqual(retried["status"], 400)
+        self.assertEqual(blocked["status"], 409)
+        self.assertEqual(blocked["body"]["error_code"], "sandbox_delete_pending")
+        self.assertFalse(blocked["body"]["retryable"])
         self.assertIsNotNone(route)
         assert route is not None
         self.assertTrue(route.delete_operation_id.startswith("delete-"))
@@ -3357,6 +4802,73 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(leases, {})
         self.assertIsNone(route)
 
+    def test_registry_reference_transition_keeps_only_successor_owners(self) -> None:
+        with _temporary_root() as raw_path:
+            usage_store = RegistryUsageStore(raw_path / "registry-usage.sqlite")
+            source = _sandbox_route(
+                sandbox_id="moving",
+                node_id="source-node",
+                job_id="source-job",
+                node_url="http://source:8090",
+                spec={
+                    "id": "moving",
+                    "image": "registry.example.org/repo:v1",
+                },
+                state="parked",
+                snapshot_manifest_digest="sha256:" + "1" * 64,
+                snapshot_repository="snapshots",
+                snapshot_tag="source",
+            )
+            destination = replace(
+                source,
+                node_id="destination-node",
+                job_id="destination-job",
+                node_url="http://destination:8090",
+                snapshot_manifest_digest="sha256:" + "2" * 64,
+                snapshot_tag="destination",
+            )
+
+            def acquire(route: SandboxRoute) -> None:
+                for (
+                    repository,
+                    tag,
+                    owner,
+                ) in control_plane._registry_route_reference_keys(
+                    route,
+                    deployment_id="test-deployment",
+                ):
+                    digest = (
+                        route.snapshot_manifest_digest
+                        if repository == route.snapshot_repository
+                        else "sha256:" + "f" * 64
+                    )
+                    usage_store.acquire_reference(
+                        repository,
+                        tag,
+                        owner,
+                        digest=digest,
+                    )
+
+            acquire(source)
+            acquire(destination)
+            control_plane.release_registry_route_references(
+                usage_store,
+                source,
+                deployment_id="test-deployment",
+                keep_route=destination,
+            )
+            remaining = set(usage_store.snapshot().leases)
+
+        self.assertEqual(
+            remaining,
+            set(
+                control_plane._registry_route_reference_keys(
+                    destination,
+                    deployment_id="test-deployment",
+                )
+            ),
+        )
+
     def test_gateway_bounds_buffered_node_responses(self) -> None:
         read_sizes: list[int | None] = []
 
@@ -3475,12 +4987,7 @@ class ControlPlaneTests(unittest.TestCase):
         )
 
     def test_gateway_forwards_the_complete_file_upload_body(self) -> None:
-        body = (
-            b"# /// script\n"
-            b"# dependencies = ['requests']\n"
-            b"# ///\n"
-            b"print('visible')\n"
-        )
+        body = b"# /// script\n# dependencies = ['requests']\n# ///\nprint('visible')\n"
         forwarded_requests: list[request.Request] = []
         response_payload = json.dumps(
             {
@@ -3536,10 +5043,7 @@ class ControlPlaneTests(unittest.TestCase):
                     try:
                         conn.request(
                             "PUT",
-                            (
-                                "/v1/sandboxes/file-one/files"
-                                "?path=/workspace/harness.py"
-                            ),
+                            ("/v1/sandboxes/file-one/files?path=/workspace/harness.py"),
                             body=body,
                             headers={"Content-Type": "application/octet-stream"},
                         )
@@ -3627,6 +5131,7 @@ class ControlPlaneTests(unittest.TestCase):
                 build_payload = {
                     "id": "content-addressed",
                     "tag": "registry.example.org/content-addressed:latest",
+                    "push": True,
                     "context_path": ".",
                     "context_archive_digest": digest,
                     "context_archive_format": "tar.gz",
@@ -3638,6 +5143,10 @@ class ControlPlaneTests(unittest.TestCase):
                     payload=build_payload,
                     headers={"Authorization": "Bearer gateway-secret"},
                     allow_error=True,
+                )
+                images_before_build = self._json_request(
+                    f"{base}/v1/images",
+                    headers={"Authorization": "Bearer gateway-secret"},
                 )
                 self.assertTrue(
                     (
@@ -3664,6 +5173,10 @@ class ControlPlaneTests(unittest.TestCase):
                     payload=build_payload,
                     headers={"Authorization": "Bearer gateway-secret"},
                     allow_error=True,
+                )
+                images_after_build = self._json_request(
+                    f"{base}/v1/images",
+                    headers={"Authorization": "Bearer gateway-secret"},
                 )
                 builder_store = builder.RequestHandlerClass.build_context_store
                 original_put = builder_store.put_with_status
@@ -3719,9 +5232,14 @@ class ControlPlaneTests(unittest.TestCase):
                 {"deduplicated": True, "digest": digest, "size": len(archive)},
             )
             self.assertEqual(queued["status"], 503)
+            self.assertEqual(images_before_build["images"], [])
             self.assertEqual(heartbeat.status, 200)
             self.assertNotIn("status", built, built)
             self.assertEqual(built["image"]["id"], "content-addressed")
+            self.assertIn(
+                "content-addressed",
+                {record["id"] for record in images_after_build["images"]},
+            )
             self.assertEqual(
                 built_from_cached_context["image"]["id"],
                 "content-addressed-cached",

@@ -4,6 +4,7 @@ from dataclasses import replace
 
 from .base import (
     ComputeProvider,
+    DestructiveInstanceLoss,
     InstanceBootstrapAccess,
     InstanceCreateIntent,
     ProviderConfiguration,
@@ -38,6 +39,7 @@ def validate_provider_configuration(
 
 __all__ = [
     "ComputeProvider",
+    "DestructiveInstanceLoss",
     "InstanceBootstrapAccess",
     "InstanceCreateIntent",
     "ProviderConfiguration",

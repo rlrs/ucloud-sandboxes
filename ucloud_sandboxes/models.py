@@ -31,6 +31,37 @@ def parse_iso_datetime(value: object) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
+class SandboxLifecycleObservation(str, Enum):
+    """Closed worker-observation projection accepted as gateway route state.
+
+    Every other observation still proves presence to reconciliation, but its
+    vocabulary belongs to the node subsystem that owns that transition.
+    """
+
+    RUNNING = "running"
+    PARKED = "parked"
+
+    @classmethod
+    def parse(cls, value: object) -> "SandboxLifecycleObservation | None":
+        if not isinstance(value, str):
+            return None
+        try:
+            return cls(value.strip().lower())
+        except ValueError:
+            return None
+
+    @property
+    def route_state(self) -> str:
+        return self.value
+
+
+def sandbox_route_state_from_observation(value: object) -> str | None:
+    """Project a worker observation onto the gateway's routable states."""
+
+    observation = SandboxLifecycleObservation.parse(value)
+    return observation.route_state if observation is not None else None
+
+
 @dataclass(frozen=True)
 class ResourceQuantity:
     vcpu: float = 0.0
@@ -155,6 +186,10 @@ class SandboxInventoryEntry:
             raise ValueError("sandbox inventory snapshot descriptor has no identity")
         if all(snapshot_values) and not self.storage_snapshot:
             raise ValueError("sandbox inventory snapshot descriptor is required")
+
+    @property
+    def route_state(self) -> str | None:
+        return sandbox_route_state_from_observation(self.state)
 
     @classmethod
     def from_dict(cls, raw: object) -> "SandboxInventoryEntry | None":
@@ -637,6 +672,8 @@ class LiveScaleSignals:
     """
 
     window_seconds: int = 0
+    observation_samples: int = 0
+    latest_observation_age_seconds: int | None = None
     pressure_samples: int = 0
     latest_pressure_age_seconds: int | None = None
     cpu_utilization: float | None = None
@@ -656,6 +693,8 @@ class LiveScaleSignals:
     def to_dict(self) -> dict[str, float | int | None]:
         return {
             "window_seconds": self.window_seconds,
+            "observation_samples": self.observation_samples,
+            "latest_observation_age_seconds": (self.latest_observation_age_seconds),
             "pressure_samples": self.pressure_samples,
             "latest_pressure_age_seconds": self.latest_pressure_age_seconds,
             "cpu_utilization": self.cpu_utilization,

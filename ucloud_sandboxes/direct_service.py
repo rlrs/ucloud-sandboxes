@@ -41,6 +41,7 @@ from .sandbox import (
     SandboxOperation,
     SandboxRecord,
     SandboxSpec,
+    compose_activity_revision,
     validate_container_path,
 )
 from .telemetry import Telemetry
@@ -73,6 +74,20 @@ class DirectServiceInventorySnapshot:
     @property
     def records(self) -> tuple[SandboxRecord, ...]:
         return tuple(item.record for item in self.items)
+
+
+@dataclass(frozen=True)
+class DirectServiceActivitySnapshot:
+    """Transient work observed atomically for capacity and drain fencing."""
+
+    resource_reservations: dict[tuple[str, int], ResourceQuantity]
+    active_sandbox_creates: int
+    active_exec_operations: int
+    activity_revision: int
+
+    @property
+    def active_operations(self) -> int:
+        return self.active_sandbox_creates + self.active_exec_operations
 
 
 @dataclass
@@ -220,10 +235,11 @@ class DirectSandboxService:
             str, tuple[tuple[str, int], ResourceQuantity]
         ] = {}
         # Cover transient work that deliberately precedes a durable registry
-        # record, notably cold rootfs materialization. A per-process
-        # nanosecond seed prevents a restarted draining Warden from reusing a
-        # predecessor's drain proof by accident.
-        self._activity_epoch = time.time_ns()
+        # record, notably cold rootfs materialization. The system-wide
+        # monotonic clock shares the host boot identity's lifetime: it survives
+        # node-agent process restarts, cannot move backwards with wall-clock
+        # adjustment, and resets only when a new boot also changes node_epoch.
+        self._activity_epoch = time.monotonic_ns()
         self._capacity_guard = threading.Lock()
         self._locks: dict[tuple[str, int], _LifecycleLockEntry] = {}
         self._locks_guard = threading.Lock()
@@ -244,9 +260,7 @@ class DirectSandboxService:
         self._publication_threads: dict[tuple[str, int], threading.Thread] = {}
         self._publication_errors: dict[tuple[str, int], BaseException] = {}
         self._publication_guard = threading.Lock()
-        self._published_snapshots: dict[
-            tuple[str, int], StorageNativeMigration
-        ] = {}
+        self._published_snapshots: dict[tuple[str, int], StorageNativeMigration] = {}
         self._published_snapshots_guard = threading.Lock()
         self._snapshot_hydration_thread: threading.Thread | None = None
 
@@ -341,9 +355,7 @@ class DirectSandboxService:
                 continue
             try:
                 registration = self._require_registration(record.spec.id)
-                storage = self.warden._storage_record(
-                    registration.to_direct_sandbox()
-                )
+                storage = self.warden._storage_record(registration.to_direct_sandbox())
                 if storage.state.value != "published":
                     continue
                 self.describe_storage_native_snapshot(record.spec.id)
@@ -430,8 +442,7 @@ class DirectSandboxService:
             if failures:
                 first_id, first_error = failures[0]
                 _LOG.warning(
-                    "could not reconcile %d durable sandbox deletion(s); "
-                    "first=%s: %s",
+                    "could not reconcile %d durable sandbox deletion(s); first=%s: %s",
                     len(failures),
                     first_id,
                     first_error,
@@ -695,9 +706,7 @@ class DirectSandboxService:
                             registration.to_direct_sandbox(),
                             operation_id=operation_id,
                         )
-                        self.describe_storage_native_snapshot(
-                            registration.sandbox_id
-                        )
+                        self.describe_storage_native_snapshot(registration.sandbox_id)
                     except BaseException as exc:
                         with self._publication_guard:
                             self._publication_errors[key] = exc
@@ -889,9 +898,7 @@ class DirectSandboxService:
         if storage.state.value != "published":
             storage = self.warden.publish_storage_snapshot(
                 sandbox,
-                operation_id=(
-                    "snapshot:" f"{lifecycle.hibernation_generation}:publish"
-                ),
+                operation_id=(f"snapshot:{lifecycle.hibernation_generation}:publish"),
             )
         if storage.state.value != "published":
             raise DirectWardenError(
@@ -1408,9 +1415,9 @@ class DirectSandboxService:
         requested: ResourceQuantity,
     ):
         key = (sandbox_id, generation)
-        # Runtime sampling may briefly read /proc twice. Keep it outside the
-        # reservation guard so concurrent creates and wakes do not serialize on
-        # that I/O just as concurrent exec admission does not.
+        # Keep provider work outside the reservation guard. The production node
+        # provider single-flights adjacent /proc samples; explicitly configured
+        # service providers retain their own concurrency and freshness policy.
         with self._capacity_guard:
             metrics_provider = (
                 self._runtime_metrics_provider
@@ -1452,14 +1459,12 @@ class DirectSandboxService:
 
         registration = self._require_registration(sandbox_id)
         if registration.sandbox_generation != generation:
-            raise SandboxConflictError(
-                "exec generation does not own direct sandbox"
-            )
+            raise SandboxConflictError("exec generation does not own direct sandbox")
         token = f"exec:{uuid4().hex}"
         key = (sandbox_id, generation)
-        # Sampling host CPU currently spans a short /proc/stat interval. Do it
-        # outside the capacity guard so unrelated exec starts can sample in
-        # parallel instead of turning admission into a serialized hot path.
+        # Keep provider work outside the capacity guard. The production node
+        # provider single-flights adjacent /proc samples; explicitly configured
+        # service providers retain their own concurrency and freshness policy.
         with self._capacity_guard:
             metrics_provider = (
                 self._runtime_metrics_provider
@@ -1492,18 +1497,34 @@ class DirectSandboxService:
             if self._active_exec_reservations.pop(token, None) is not None:
                 self._activity_epoch += 1
 
-    def active_reservations_snapshot(
-        self,
-    ) -> tuple[dict[tuple[str, ...], ResourceQuantity], int]:
-        """Return admitted transient work and its drain-fencing epoch."""
+    def activity_snapshot(self) -> DirectServiceActivitySnapshot:
+        """Return one coherent view of transient node work.
+
+        Create and wake reservations carry resources. Exec leases deliberately
+        do not: they keep drain fencing conservative, but are not sandbox
+        creation work and must not consume the gateway's create-concurrency
+        budget.
+        """
 
         with self._capacity_guard:
-            reservations: dict[tuple[str, ...], ResourceQuantity] = dict(
-                self._active_reservations
+            return DirectServiceActivitySnapshot(
+                resource_reservations=dict(self._active_reservations),
+                active_sandbox_creates=len(self._active_reservations),
+                active_exec_operations=len(self._active_exec_reservations),
+                activity_revision=self._activity_epoch,
             )
-            for token, (key, resources) in self._active_exec_reservations.items():
-                reservations[(*key, token)] = resources
-            return reservations, self._activity_epoch
+
+    def advance_lifecycle_activity_revision(self) -> int:
+        """Publish one post-lifecycle revision in the heartbeat clock domain."""
+
+        with self._capacity_guard:
+            self._activity_epoch += 1
+            transient_revision = self._activity_epoch
+        durable_revision = self.provisioner.registry.snapshot().activity_revision
+        return compose_activity_revision(
+            durable_revision=durable_revision,
+            transient_revision=transient_revision,
+        )
 
     def _require_registration(
         self,

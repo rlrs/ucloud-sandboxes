@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+- Fenced node restarts with the host boot identity, immutable exec-session
+  ownership, and one provider-declared destructive-loss proof contract; UCloud
+  guest loss is terminal while recoverable Hetzner power states retain routes.
+- Unified route loss, deletion, portable detach, Registry reference cleanup,
+  lifecycle observation, and wake eligibility behind single authoritative
+  classifiers, including crash-safe migration and publication compensation.
+- Versioned fenced park/wake acknowledgements as `hibernate-local-v2`, so new
+  parkable placements avoid legacy workers while existing legacy routes fail
+  closed until their workers are drained and replaced.
+- Reduced gateway and worker hot-path work with exact heartbeat lookup, compact
+  JSON, shared short-lived runtime sampling, single-flight image inventory, and
+  buffered incremental exec output; the SDK now uses adaptive exec long polls.
+- Reported healthy as well as pressured runtime samples in autoscaling metrics,
+  separated exec drain leases from create concurrency, and aligned direct-node
+  disk admission with the sandbox's actual hard resource claim.
+
 ## 0.5.12 - 2026-08-29
 
 - Added an authenticated gateway signal endpoint for attached exec sessions,

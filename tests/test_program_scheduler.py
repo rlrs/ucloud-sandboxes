@@ -75,6 +75,48 @@ class ProgramSchedulerTests(unittest.TestCase):
         self.assertEqual(signals.ready_to_wake_sandboxes, 0)
         self.assertEqual(signals.effective_resources, ResourceQuantity())
 
+    def test_delete_intent_is_excluded_from_wake_and_scale_planning(self) -> None:
+        route = sandbox_route(
+            sandbox_id="sandbox-delete",
+            node_id="node-1",
+            job_id="job-1",
+            node_url="http://node-1:8090",
+            state="parked",
+            delete_operation_id="delete-sandbox",
+            resources=ResourceQuantity(vcpu=2, memory_mb=2048, disk_mb=8000),
+            storage_schema="storage-native-v1",
+            snapshot_manifest_digest="sha256:" + "d" * 64,
+            snapshot_repository="sandboxes/snapshots",
+            snapshot_tag="sandbox-delete-g1",
+            storage_snapshot={"published": True},
+        )
+        request = ProgramRequestState(
+            request_id="request-delete",
+            rollout_id="rollout-1",
+            sandbox_id=route.sandbox_id,
+            sandbox_generation=route.generation,
+            state="ready_to_wake",
+            resources=route.resources,
+        )
+        candidate = WakeNodeCandidate(
+            node_id="node-1",
+            job_id="job-1",
+            available=ResourceQuantity(vcpu=8, memory_mb=8192, disk_mb=100000),
+            total=ResourceQuantity(vcpu=8, memory_mb=8192, disk_mb=100000),
+        )
+
+        plan = plan_shadow_wake_queue([request], [route], [candidate])
+        signals = build_program_scale_signals(
+            [request],
+            [route],
+            ScalePolicy(program_aware_autoscaling_enabled=True),
+        )
+
+        self.assertEqual(plan["placed"], 0)
+        self.assertEqual(signals.ready_to_wake_requests, 1)
+        self.assertEqual(signals.ready_to_wake_sandboxes, 0)
+        self.assertEqual(signals.effective_resources, ResourceQuantity())
+
     def test_shadow_wake_queue_ages_first_and_prefers_local_hard_fit(self) -> None:
         now = utc_now()
         routes = [

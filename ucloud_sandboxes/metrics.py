@@ -888,6 +888,8 @@ def build_live_scale_signals(
 
     now = utc_now()
     pressure_cutoff = now.timestamp() - max(1, policy.live_pressure_window_seconds)
+    observation_samples = 0
+    latest_observation_epoch: float | None = None
     pressure_samples = 0
     latest_pressure_epoch: float | None = None
     latest_cpu: float | None = None
@@ -970,6 +972,17 @@ def build_live_scale_signals(
             if materialization_limit > 0
             else None
         )
+        observation_samples += 1
+        if (
+            latest_observation_epoch is None
+            or event_epoch >= latest_observation_epoch
+        ):
+            latest_observation_epoch = event_epoch
+            latest_cpu = cpu
+            latest_memory = memory
+            latest_psi = psi
+            latest_storage_queue = storage_queue
+            latest_image_materialization_queue = materialization_queue
         is_pressure = any(
             (
                 cpu is not None and cpu >= policy.target_cpu_utilization,
@@ -986,11 +999,6 @@ def build_live_scale_signals(
         pressure_samples += 1
         if latest_pressure_epoch is None or event_epoch >= latest_pressure_epoch:
             latest_pressure_epoch = event_epoch
-            latest_cpu = cpu
-            latest_memory = memory
-            latest_psi = psi
-            latest_storage_queue = storage_queue
-            latest_image_materialization_queue = materialization_queue
 
     lifecycle = _vm_lifecycle_summary(events)
     provisioning_values = sorted(
@@ -1008,6 +1016,12 @@ def build_live_scale_signals(
     )
     return LiveScaleSignals(
         window_seconds=max(1, policy.live_pressure_window_seconds),
+        observation_samples=observation_samples,
+        latest_observation_age_seconds=(
+            max(0, int(now.timestamp() - latest_observation_epoch))
+            if latest_observation_epoch is not None
+            else None
+        ),
         pressure_samples=pressure_samples,
         latest_pressure_age_seconds=(
             max(0, int(now.timestamp() - latest_pressure_epoch))

@@ -12,7 +12,10 @@ from urllib import error, request
 
 from ucloud_sandboxes.images import DockerImageRuntime
 from ucloud_sandboxes.models import ResourceQuantity
-from ucloud_sandboxes.node_agent import build_builder_node_agent_server
+from ucloud_sandboxes.node_agent import (
+    _host_boot_epoch,
+    build_builder_node_agent_server,
+)
 from ucloud_sandboxes.sandbox import (
     SandboxOperation,
     SandboxSpec,
@@ -49,6 +52,7 @@ class BuilderNodeAgentTests(unittest.TestCase):
             total_resources=ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=1024),
             image_runtime=DockerImageRuntime(dry_run=True),
             node_control_bearer_token=TOKEN,
+            node_epoch="builder-boot-1",
         )
         self.thread = Thread(
             target=self.server.serve_forever,
@@ -102,9 +106,24 @@ class BuilderNodeAgentTests(unittest.TestCase):
         self.assertEqual(heartbeat["capabilities"], ["image-cache", "image-build"])
         self.assertEqual(heartbeat["inventory"], [])
         self.assertEqual(heartbeat["deployment_id"], "deployment-a")
+        self.assertEqual(heartbeat["node_epoch"], "builder-boot-1")
         with self.assertRaises(error.HTTPError) as rejected:
             self._json("/v1/sandboxes")
         self.assertEqual(rejected.exception.code, 404)
+
+    def test_host_boot_epoch_is_stable_and_canonical(self) -> None:
+        root = Path(self.temporary.name)
+        boot_id_path = root / "boot_id"
+        boot_id_path.write_text(
+            "4F44F5A7-2504-4FC3-8C26-A14D8D47E81C\n",
+            encoding="utf-8",
+        )
+
+        first = _host_boot_epoch(boot_id_path)
+        second = _host_boot_epoch(boot_id_path)
+
+        self.assertEqual(first, "4f44f5a725044fc38c26a14d8d47e81c")
+        self.assertEqual(second, first)
 
     def test_drain_fences_image_build_admission(self) -> None:
         archive, digest = self._upload_context({"Dockerfile": b"FROM scratch\n"})

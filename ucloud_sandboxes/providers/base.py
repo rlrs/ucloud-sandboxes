@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from typing import Any, Literal, Protocol, Sequence
+from math import isfinite
+from typing import Any, Literal, Mapping, Protocol, Sequence
 
 from ..models import ProviderInstance
 
@@ -119,6 +120,125 @@ class InstanceBootstrapAccess:
     refresh_recommended: bool = False
 
 
+@dataclass(frozen=True)
+class DestructiveInstanceLoss:
+    """Provider-owned proof that one loss observation cannot recover."""
+
+    reason: str
+    evidence_kind: str
+    required_evidence_fields: tuple[str, ...]
+    evidence: tuple[tuple[str, str | int | float | bool | None], ...] = ()
+
+    def __post_init__(self) -> None:
+        reason = self.reason.strip()
+        evidence_kind = self.evidence_kind.strip()
+        fields = tuple(field.strip() for field in self.required_evidence_fields)
+        evidence: list[tuple[str, str | int | float | bool | None]] = []
+        evidence_keys: set[str] = set()
+        for item in self.evidence:
+            if not isinstance(item, tuple) or len(item) != 2:
+                raise ValueError("destructive instance loss evidence must be pairs")
+            raw_key, value = item
+            key = raw_key.strip() if isinstance(raw_key, str) else ""
+            if (
+                not key
+                or key in evidence_keys
+                or not isinstance(value, (str, int, float, bool, type(None)))
+                or (isinstance(value, float) and not isfinite(value))
+            ):
+                raise ValueError(
+                    "destructive instance loss evidence must be unique JSON scalars"
+                )
+            evidence_keys.add(key)
+            evidence.append((key, value))
+        if (
+            not reason
+            or not evidence_kind
+            or not fields
+            or any(not field for field in fields)
+            or len(fields) != len(set(fields))
+        ):
+            raise ValueError("destructive instance loss tags cannot be empty")
+        object.__setattr__(self, "reason", reason)
+        object.__setattr__(self, "evidence_kind", evidence_kind)
+        object.__setattr__(self, "required_evidence_fields", fields)
+        object.__setattr__(self, "evidence", tuple(evidence))
+
+    def evidence_payload(self) -> dict[str, str | int | float | bool | None]:
+        return dict(self.evidence)
+
+    @property
+    def has_complete_evidence(self) -> bool:
+        """Return whether every contract field has a concrete observation."""
+
+        evidence = self.evidence_payload()
+        return all(
+            field in evidence
+            and evidence[field] is not None
+            and (
+                not isinstance(evidence[field], str)
+                or bool(str(evidence[field]).strip())
+            )
+            for field in self.required_evidence_fields
+        )
+
+    def observe(
+        self,
+        evidence: Mapping[str, object],
+    ) -> "DestructiveInstanceLoss | None":
+        """Validate raw evidence against this provider-declared contract."""
+
+        try:
+            observed = replace(
+                self,
+                evidence=tuple(
+                    (field, evidence.get(field))
+                    for field in self.required_evidence_fields
+                ),
+            )
+        except ValueError:
+            return None
+        return observed if self.matches(observed) else None
+
+    def matches(self, observed: "DestructiveInstanceLoss") -> bool:
+        """Match an observation without permitting schema or scalar coercion."""
+
+        if (
+            self.reason != observed.reason
+            or self.evidence_kind != observed.evidence_kind
+            or self.required_evidence_fields != observed.required_evidence_fields
+            or not observed.has_complete_evidence
+        ):
+            return False
+        actual = observed.evidence_payload()
+        return all(
+            field in actual
+            and type(actual[field]) is type(expected)
+            and actual[field] == expected
+            for field, expected in self.evidence
+        )
+
+    def from_operation_request(
+        self,
+        request: Mapping[str, object],
+    ) -> "DestructiveInstanceLoss | None":
+        """Recover and validate this proof from its durable journal payload."""
+
+        nested = request.get("lossEvidence")
+        return self.observe(nested) if isinstance(nested, dict) else None
+
+    def operation_request_fields(self, provider_kind: str) -> dict[str, Any]:
+        """Serialize the canonical provider-neutral durable proof envelope."""
+
+        if not self.has_complete_evidence:
+            raise ValueError("destructive instance loss evidence is incomplete")
+        return {
+            "providerKind": provider_kind,
+            "lossEvidenceKind": self.evidence_kind,
+            "lossEvidence": self.evidence_payload(),
+        }
+
+
 class ComputeProvider(Protocol):
     """Small compute boundary required by the autoscaler.
 
@@ -129,7 +249,8 @@ class ComputeProvider(Protocol):
     kind: str
     scope_id: str
     requires_continuity_history: bool
-    unreachable_lease_expiry_is_permanent_loss: bool
+    destructive_instance_losses: tuple[DestructiveInstanceLoss, ...]
+    unreachable_lease_expiry_loss: DestructiveInstanceLoss | None
 
     def list_instances(self) -> list[ProviderInstance]: ...
 
@@ -148,6 +269,11 @@ class ComputeProvider(Protocol):
     ) -> InstanceBootstrapAccess: ...
 
     def instance_is_eligible(self, instance: ProviderInstance) -> bool: ...
+
+    def destructive_instance_loss(
+        self,
+        instance: ProviderInstance,
+    ) -> DestructiveInstanceLoss | None: ...
 
     def render_create_request(
         self,

@@ -50,7 +50,8 @@ store write.
 Each node heartbeat includes:
 
 - `node_epoch`, which changes when the host boots;
-- persisted `activity_epoch`, incremented for every sandbox mutation;
+- boot-scoped `activity_epoch`, monotonic across node-agent restarts and
+  advanced for durable or transient sandbox mutations;
 - `inventory_complete`, distinguishing an empty inventory from unavailable
   inventory;
 - an inventory entry for every live sandbox with its generation, operation ID,
@@ -58,15 +59,34 @@ Each node heartbeat includes:
 - separate live usage, create reservations, build reservations, and physical
   disk telemetry.
 
+Synchronous park and wake acknowledgements carry the worker's `node_epoch` and
+a post-transition `activity_epoch`. The gateway accepts that proof only for the
+exact routed worker and atomically commits the stable state with the newer
+revision. Ordinary activity against a parked route first performs this same
+fenced wake, so a heartbeat sampled before the transition cannot later restore
+the old lifecycle state. Direct workers advertise this contract as
+`hibernate-local-v2`; the scheduler does not place new parkable sandboxes on
+older workers. Routes already owned by a v1 worker remain fail-closed until
+that worker is drained and replaced.
+
 Inventory may confirm a matching operation, but absence alone does not cancel
 an in-flight request: the request might arrive after the snapshot. The control
 plane retries the same operation ID on the same node. It may place a new
 generation elsewhere only after one of these fences:
 
 - the old node durably acknowledges cancel/delete for the generation;
-- UCloud reports the old VM job final, so its runtime cannot execute; or
+- the active provider supplies a validated, journaled proof that the old
+  instance cannot recover (for example UCloud guest suspension or an expired
+  unreachable-guest lease); or
 - a node-specific recovery protocol proves the operation rejected and records
   a tombstone/high-water mark.
+
+Provider state that is merely unschedulable is not destructive proof. In
+particular, powered-off Hetzner servers retain their routes and local state.
+When a worker owner is proven lost, one route classifier decides the outcome:
+published portable parks become detached and remain wakeable, delete-intent
+routes terminate without replacement demand, and all other routes become
+replacement demand.
 
 ## Draining and scale-down
 

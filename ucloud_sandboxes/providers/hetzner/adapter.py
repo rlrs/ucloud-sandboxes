@@ -8,6 +8,7 @@ from typing import Any, Callable, Sequence
 
 from ...models import ProviderInstance
 from ..base import (
+    DestructiveInstanceLoss,
     InstanceBootstrapAccess,
     InstanceCreateIntent,
     ProviderError,
@@ -49,7 +50,8 @@ class HetznerProvider:
 
     kind = "hetzner"
     requires_continuity_history = False
-    unreachable_lease_expiry_is_permanent_loss = False
+    destructive_instance_losses: tuple[DestructiveInstanceLoss, ...] = ()
+    unreachable_lease_expiry_loss = None
 
     def __init__(
         self,
@@ -150,6 +152,15 @@ class HetznerProvider:
 
     def instance_is_eligible(self, instance: ProviderInstance) -> bool:
         return str(self._network_id) in instance.private_network_ids
+
+    def destructive_instance_loss(
+        self,
+        instance: ProviderInstance,
+    ) -> DestructiveInstanceLoss | None:
+        # Hetzner `off`/`stopping` servers retain their local disk and can be
+        # powered on again. They are unschedulable, but not proof of data loss.
+        del instance
+        return None
 
     def render_create_request(
         self,

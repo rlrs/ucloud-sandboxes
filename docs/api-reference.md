@@ -290,6 +290,17 @@ fields, and `sandbox_nodes_only` (default `true`). It pulls the image to up to
 `count` ready image-cache nodes and returns per-node cache hits, pulls, and
 failures.
 
+`POST /v1/sandboxes`, `POST /v1/capacity/prepare`, and
+`POST /v1/images/pull` accept the optional
+`X-UCloud-Image-Reference-Kind` request header. `registry` makes the supplied
+image an explicit registry reference and skips image-id lookup; `name` makes it
+an explicit gateway image id. An explicit name returns retryable `503` while
+the cross-node image inventory is incomplete and a non-retryable error when a
+complete inventory has no matching id. Omission or `auto` preserves the legacy
+best-effort behavior for raw and older clients. The Python SDK sends this header
+from `Image.from_registry(...)` and `Image.from_name(...)`; older gateways can
+safely ignore it.
+
 ## Sandbox creation
 
 `POST /v1/sandboxes` accepts:

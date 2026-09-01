@@ -260,7 +260,7 @@ class HetznerProviderTests(unittest.TestCase):
         self.assertEqual(instance.phase, InstancePhase.RUNNING)
         self.assertEqual(instance.hostname, "10.20.0.42")
         self.assertTrue(compute.instance_is_eligible(instance))
-        self.assertFalse(compute.unreachable_lease_expiry_is_permanent_loss)
+        self.assertIsNone(compute.unreachable_lease_expiry_loss)
         self.assertTrue(access.runnable)
         self.assertEqual(access.command, "ssh root@10.20.0.42")
 
@@ -272,6 +272,7 @@ class HetznerProviderTests(unittest.TestCase):
         )
 
         self.assertEqual(off.phase, InstancePhase.LOST)
+        self.assertIsNone(compute.destructive_instance_loss(off))
         access = compute.bootstrap_access(running_without_network)
         self.assertFalse(access.runnable)
         self.assertTrue(access.refresh_recommended)

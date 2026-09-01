@@ -4,11 +4,41 @@ import math
 import os
 from pathlib import Path
 import time
+from typing import Callable
 
 from .models import NodeRuntimeMetrics, utc_now
+from .singleflight_cache import GenerationFencedSingleFlightCache
 
 
 DEFAULT_CPU_SAMPLE_SECONDS = 0.05
+DEFAULT_RUNTIME_METRICS_FRESHNESS_SECONDS = 0.2
+
+
+class SingleFlightRuntimeMetricsSampler:
+    """Coalesce adjacent host samples without serving materially stale pressure.
+
+    The first caller after the freshness window invokes ``provider``. Concurrent
+    callers wait for that same sample instead of repeating its /proc interval.
+    ``None`` is cached just like a metrics value so an unavailable collector
+    remains fail-closed for the short freshness window. Exceptions are not
+    cached: waiters are woken and one of them, or the next caller, retries.
+    """
+
+    def __init__(
+        self,
+        provider: Callable[[], NodeRuntimeMetrics | None],
+        *,
+        freshness_seconds: float = DEFAULT_RUNTIME_METRICS_FRESHNESS_SECONDS,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._provider = provider
+        self._cache = GenerationFencedSingleFlightCache[NodeRuntimeMetrics | None](
+            ttl_seconds=freshness_seconds,
+            clock=clock,
+        )
+
+    def __call__(self) -> NodeRuntimeMetrics | None:
+        return self._cache.get_or_load(self._provider)
 
 
 def sample_node_runtime_metrics(
@@ -38,9 +68,7 @@ def sample_node_runtime_metrics(
     swap_used_mb = max(0, swap_total_mb - swap_free_mb)
     memory_pressure = read_proc_pressure(proc_path / "pressure" / "memory")
     memory_percent = (
-        (memory_used_mb / memory_total_mb) * 100.0
-        if memory_total_mb > 0
-        else None
+        (memory_used_mb / memory_total_mb) * 100.0 if memory_total_mb > 0 else None
     )
     return NodeRuntimeMetrics(
         collected_at=utc_now(),

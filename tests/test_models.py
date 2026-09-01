@@ -7,7 +7,9 @@ from ucloud_sandboxes.models import (
     NodeRuntimeMetrics,
     ResourceQuantity,
     SandboxInventoryEntry,
+    SandboxLifecycleObservation,
     parse_iso_datetime,
+    sandbox_route_state_from_observation,
     utc_now,
 )
 from ucloud_sandboxes.providers.ucloud.models import instance_from_payload
@@ -23,6 +25,30 @@ class TimestampParsingTests(unittest.TestCase):
 
     def test_rejects_invalid_high_precision_timestamp(self) -> None:
         self.assertIsNone(parse_iso_datetime("2026-08-27T13:05:18.123456789oops"))
+
+
+class SandboxLifecycleObservationTests(unittest.TestCase):
+    def test_only_stable_runtime_observations_project_to_routes(self) -> None:
+        self.assertEqual(
+            SandboxLifecycleObservation.parse("RUNNING"),
+            SandboxLifecycleObservation.RUNNING,
+        )
+        self.assertEqual(sandbox_route_state_from_observation("running"), "running")
+        self.assertEqual(sandbox_route_state_from_observation("parked"), "parked")
+        self.assertEqual(
+            {item.value for item in SandboxLifecycleObservation},
+            {"running", "parked"},
+        )
+
+        for state in (
+            "planned",
+            "restoring",
+            "recovery-required",
+            "unavailable",
+            "future-node-state",
+        ):
+            with self.subTest(state=state):
+                self.assertIsNone(sandbox_route_state_from_observation(state))
 
 
 class VmJobParsingTests(unittest.TestCase):

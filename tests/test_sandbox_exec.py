@@ -1,6 +1,7 @@
 import unittest
 from collections import deque
 from io import StringIO
+import sys
 from threading import Condition, Event, Thread
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -163,6 +164,63 @@ class SandboxExecProtocolTests(unittest.TestCase):
             any("cannot start stderr pump" in event.data for event in session.events)
         )
 
+    def test_flushed_short_output_is_visible_before_process_exit(self) -> None:
+        manager = ExecSessionManager(FakeSandboxManager())
+        session = manager.start(
+            SandboxExecSpec(
+                sandbox_id="sandbox-one",
+                command=(
+                    sys.executable,
+                    "-c",
+                    (
+                        "import sys; "
+                        "sys.stdout.write('early\\n'); sys.stdout.flush(); "
+                        "sys.stdin.read(1); "
+                        "sys.stdout.write('late\\n'); sys.stdout.flush()"
+                    ),
+                ),
+                stdin=True,
+            )
+        )
+
+        live_events = manager.events_after(
+            session.id,
+            after=1,
+            wait_seconds=1.0,
+        )
+
+        self.assertEqual(
+            "".join(event.data for event in live_events if event.stream == "stdout"),
+            "early\n",
+        )
+        self.assertEqual(session.status, "running")
+        manager.write_stdin(session.id, "x")
+        after = max(event.sequence for event in live_events)
+        while session.status == "running":
+            terminal_events = manager.events_after(
+                session.id,
+                after=after,
+                wait_seconds=1.0,
+            )
+            if terminal_events:
+                after = terminal_events[-1].sequence
+        self.assertEqual(session.exit_code, 0)
+
+    def test_output_decoder_preserves_split_utf8_code_points(self) -> None:
+        manager = ExecSessionManager(FakeSandboxManager())
+        session = _install_session(manager, BlockingStdin())
+        pipe = ChunkedBinaryPipe((b"price: \xe2", b"\x82", b"\xac", b""))
+
+        manager._pump_stream(session.id, "stdout", pipe)  # noqa: SLF001
+
+        self.assertTrue(pipe.closed)
+        self.assertEqual(
+            "".join(
+                event.data for event in session.events if event.stream == "stdout"
+            ),
+            "price: €",
+        )
+
     def test_exec_spec_rejects_nul_before_acquiring_runtime_state(self) -> None:
         for spec in (
             SandboxExecSpec("sandbox-one", ("bad\0command",)),
@@ -273,6 +331,22 @@ class FakeProcess:
 
     def send_signal(self, signal: int) -> None:
         self.signals.append(signal)
+
+
+class ChunkedBinaryPipe:
+    encoding = "utf-8"
+    errors = "replace"
+
+    def __init__(self, chunks: tuple[bytes, ...]) -> None:
+        self.buffer = self
+        self._chunks = iter(chunks)
+        self.closed = False
+
+    def read1(self, _size: int) -> bytes:
+        return next(self._chunks)
+
+    def close(self) -> None:
+        self.closed = True
 
 
 def _install_session(

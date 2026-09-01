@@ -4,6 +4,7 @@ from collections import defaultdict, OrderedDict
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
+from enum import Enum
 import json
 import os
 from pathlib import Path
@@ -39,19 +40,6 @@ EXEC_ROUTE_CACHE_MAX_ENTRIES = 65_536
 PROGRAM_TERMINAL_RETENTION_SECONDS = 7 * 24 * 60 * 60
 ROUTING_SCHEMA_VERSION = 3
 SANDBOX_WORKER_STATES = ("attached", "detaching", "detached")
-_SANDBOX_TRANSITIONAL_INVENTORY_STATES = {
-    "creating",
-    "planned",
-    "import_planned",
-    "quota_ready",
-    "importing",
-    "rootfs_ready",
-    "import_ready",
-    "moving_out",
-    "deleting",
-    "hibernating",
-    "restoring",
-}
 PROGRAM_REQUEST_STATES = (
     "model_wait",
     "ready_to_wake",
@@ -197,6 +185,24 @@ def is_portable_parked_route(route: SandboxRoute) -> bool:
     )
 
 
+class SandboxOwnerLossDisposition(str, Enum):
+    RECOVER_DETACHED = "recover_detached"
+    TERMINAL_REPLACE = "terminal_replace"
+    TERMINAL_DELETE = "terminal_delete"
+
+
+def sandbox_owner_loss_disposition(
+    route: SandboxRoute,
+) -> SandboxOwnerLossDisposition:
+    """Classify every route exactly once when its worker owner is lost."""
+
+    if route.delete_operation_id:
+        return SandboxOwnerLossDisposition.TERMINAL_DELETE
+    if is_portable_parked_route(route):
+        return SandboxOwnerLossDisposition.RECOVER_DETACHED
+    return SandboxOwnerLossDisposition.TERMINAL_REPLACE
+
+
 def route_with_inventory_snapshot(
     route: SandboxRoute,
     item: SandboxInventoryEntry,
@@ -225,8 +231,7 @@ def route_with_inventory_snapshot(
         or snapshot.manifest.sandbox_generation != route.generation
         or snapshot.manifest.create_operation_id != route.create_operation_id
         or snapshot.manifest.spec_sha256 != route.spec_hash
-        or snapshot.publication.manifest_digest
-        != item.snapshot_manifest_digest
+        or snapshot.publication.manifest_digest != item.snapshot_manifest_digest
         or snapshot.publication.repository != item.snapshot_repository
         or snapshot.publication.tag != item.snapshot_tag
     ):
@@ -305,6 +310,20 @@ class ExecRoute:
     node_url: str
     created_at: str = ""
     updated_at: str = ""
+
+    def __post_init__(self) -> None:
+        identity = (
+            self.session_id,
+            self.sandbox_id,
+            self.node_id,
+            self.job_id,
+            self.node_url,
+        )
+        if any(
+            not isinstance(value, str) or not value or value != value.strip()
+            for value in identity
+        ):
+            raise ValueError("exec route requires exact session and worker identity")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -971,37 +990,78 @@ class RoutingStore:
         *,
         expected_states: Iterable[str],
         state: str,
+        node_epoch: str | None = None,
+        activity_epoch: int | None = None,
         storage_schema: str | None = None,
         snapshot_manifest_digest: str | None = None,
         snapshot_repository: str | None = None,
         snapshot_tag: str | None = None,
         storage_snapshot: dict[str, Any] | None = None,
     ) -> SandboxRoute | None:
-        """Change only the state of the exact routed sandbox incarnation."""
+        """Change only the state of the exact routed sandbox incarnation.
+
+        A supplied node/activity pair is a worker lifecycle proof. It must
+        strictly postdate the caller's route and can never move the durable
+        route behind a heartbeat that has already been reconciled.
+        """
 
         expected = {str(item or "unknown").strip().lower() for item in expected_states}
         cleaned_state = str(state).strip()
         if not expected or not cleaned_state:
             raise ValueError("expected and destination sandbox states are required")
+        if (node_epoch is None) != (activity_epoch is None):
+            raise ValueError("node_epoch and activity_epoch must be supplied together")
+        lifecycle_node_epoch: str | None = None
+        lifecycle_activity_epoch: int | None = None
+        if node_epoch is not None:
+            lifecycle_node_epoch = node_epoch.strip()
+            if not lifecycle_node_epoch:
+                raise ValueError("lifecycle node_epoch must be nonempty")
+            if isinstance(activity_epoch, bool) or not isinstance(activity_epoch, int):
+                raise ValueError("lifecycle activity_epoch must be an integer")
+            if activity_epoch < 0:
+                raise ValueError("lifecycle activity_epoch must be non-negative")
+            lifecycle_activity_epoch = activity_epoch
         with self._lock:
             with self._transaction() as conn:
                 current = self._get_sandbox_unlocked(conn, route.sandbox_id)
                 if (
                     current is None
                     or (current.state or "unknown").lower() not in expected
-                    or current.generation != route.generation
-                    or current.create_operation_id != route.create_operation_id
-                    or current.spec_hash != route.spec_hash
-                    or current.node_id != route.node_id
-                    or current.job_id != route.job_id
-                    or current.node_url.rstrip("/") != route.node_url.rstrip("/")
+                    or not _same_sandbox_route_incarnation(current, route)
                     or current.worker_state != route.worker_state
                     or bool(current.delete_operation_id)
+                    or (
+                        lifecycle_node_epoch is not None
+                        and (
+                            lifecycle_activity_epoch is None
+                            or lifecycle_activity_epoch <= route.activity_epoch
+                            or bool(
+                                route.node_epoch
+                                and route.node_epoch != lifecycle_node_epoch
+                            )
+                            or bool(
+                                current.node_epoch
+                                and current.node_epoch != lifecycle_node_epoch
+                            )
+                            or current.activity_epoch > lifecycle_activity_epoch
+                        )
+                    )
                 ):
                     return None
                 stored = replace(
                     current,
                     state=cleaned_state,
+                    node_epoch=(
+                        current.node_epoch
+                        if lifecycle_node_epoch is None
+                        else lifecycle_node_epoch
+                    ),
+                    activity_epoch=(
+                        current.activity_epoch
+                        if lifecycle_activity_epoch is None
+                        else lifecycle_activity_epoch
+                    ),
                     storage_schema=(
                         current.storage_schema
                         if storage_schema is None
@@ -1085,23 +1145,27 @@ class RoutingStore:
                     or bool(current.delete_operation_id)
                 ):
                     return None
-                stored = replace(
+                stored = self._detach_owner_lost_route_unlocked(
+                    conn,
                     current,
-                    worker_state="detached",
-                    node_epoch="",
-                    activity_epoch=0,
                     updated_at=utc_now().isoformat(),
                 )
-                self._write_sandbox(conn, stored)
             return stored
 
-    def upsert_sandbox(self, route: SandboxRoute) -> SandboxRoute:
+    def upsert_sandbox(
+        self,
+        route: SandboxRoute,
+        *,
+        allow_node_epoch_adoption: bool = True,
+    ) -> SandboxRoute:
         with self._lock:
             now = utc_now().isoformat()
             with self._transaction() as conn:
                 existing = self._get_sandbox_unlocked(conn, route.sandbox_id)
                 if existing is not None and not _route_update_is_current(
-                    existing, route
+                    existing,
+                    route,
+                    allow_node_epoch_adoption=allow_node_epoch_adoption,
                 ):
                     return existing
                 activity_epoch = route.activity_epoch
@@ -1246,15 +1310,22 @@ class RoutingStore:
                 if existing is None:
                     return None
                 if existing.delete_operation_id:
-                    return existing
-                stored = SandboxRoute(
-                    **{
-                        **existing.__dict__,
-                        "delete_operation_id": f"delete-{uuid4().hex}",
-                        "updated_at": utc_now().isoformat(),
-                    }
+                    stored = existing
+                else:
+                    stored = SandboxRoute(
+                        **{
+                            **existing.__dict__,
+                            "delete_operation_id": f"delete-{uuid4().hex}",
+                            "updated_at": utc_now().isoformat(),
+                        }
+                    )
+                    self._write_sandbox(conn, stored)
+                self._terminalize_program_requests_unlocked(
+                    conn,
+                    sandbox_id,
+                    generation=stored.generation,
+                    last_error="sandbox deletion requested",
                 )
-                self._write_sandbox(conn, stored)
             return stored
 
     def begin_sandbox_migration(
@@ -1675,6 +1746,7 @@ class RoutingStore:
         node_epoch: str = "",
         activity_epoch: int = 0,
         inventory_complete: bool = True,
+        allow_node_epoch_adoption: bool = True,
     ) -> tuple[list[SandboxRoute], list[SandboxRoute]]:
         """Reconcile inventory and return removed routes and stale snapshots.
 
@@ -1705,15 +1777,14 @@ class RoutingStore:
                     existing = self._get_sandbox_unlocked(conn, item.sandbox_id)
                     if existing is None:
                         continue
-                    observed_state = item.state.lower()
+                    observed_state = item.route_state
                     # Heartbeats are sampled independently of synchronous
-                    # lifecycle requests. A transient sample can therefore
-                    # arrive after the gateway has committed the stable result
-                    # (for example RESTORING after wake returned RUNNING).
-                    # It still proves presence through ``reported_ids``, but it
-                    # must not regress durable routing state. The next stable
+                    # lifecycle requests. Registration, transition, recovery,
+                    # unavailable, and unrecognised samples still prove
+                    # presence through ``reported_ids``, but none may become
+                    # durable gateway routing state. The next stable
                     # RUNNING/PARKED observation remains authoritative.
-                    if observed_state in _SANDBOX_TRANSITIONAL_INVENTORY_STATES:
+                    if observed_state is None:
                         continue
                     parked = observed_state == "parked"
                     published_snapshot = bool(parked and item.storage_snapshot)
@@ -1739,7 +1810,7 @@ class RoutingStore:
                             if item.resources != ResourceQuantity()
                             else existing.resources
                         ),
-                        state=item.state,
+                        state=observed_state,
                         generation=item.generation,
                         create_operation_id=item.operation_id,
                         spec_hash=item.spec_hash,
@@ -1776,7 +1847,11 @@ class RoutingStore:
                     )
                     if candidate.generation != existing.generation:
                         continue
-                    if not _route_update_is_current(existing, candidate):
+                    if not _route_update_is_current(
+                        existing,
+                        candidate,
+                        allow_node_epoch_adoption=allow_node_epoch_adoption,
+                    ):
                         continue
                     if existing.snapshot_manifest_digest and (
                         existing.snapshot_manifest_digest
@@ -1801,17 +1876,35 @@ class RoutingStore:
                         continue
                     if not inventory_complete:
                         continue
-                    if (route.state or "unknown").lower() in {"creating", "unknown"}:
+                    replaced_boot = bool(
+                        route.node_epoch
+                        and node_epoch
+                        and route.node_epoch != node_epoch
+                    )
+                    if replaced_boot and not allow_node_epoch_adoption:
+                        # Refresh polling carries an already accepted heartbeat
+                        # fence. It may prove state only for that exact boot; a
+                        # delayed response from a retired boot cannot delete the
+                        # replacement boot's inventory.
+                        continue
+                    if (route.state or "unknown").lower() in {
+                        "creating",
+                        "unknown",
+                    } and not replaced_boot:
                         # An empty inventory does not distinguish "create never
                         # arrived" from "create is still in progress" with the
                         # current node protocol. Preserve the reservation until a
                         # later generation-aware reconciliation can prove absence.
+                        # A newly accepted boot epoch is that proof: the former
+                        # guest process namespace no longer exists.
                         continue
-                    if route.node_epoch and route.node_epoch != node_epoch:
-                        # Epoch identifiers are opaque. An observation from a
-                        # different incarnation cannot order or delete this route.
+                    if route.node_epoch and not node_epoch:
+                        # Do not let an unversioned/legacy observation erase a
+                        # route that is already fenced to a known guest boot.
                         continue
-                    if route.activity_epoch > max(0, activity_epoch):
+                    if not replaced_boot and route.activity_epoch > max(
+                        0, activity_epoch
+                    ):
                         continue
                     route_updated_at = parse_iso_datetime(
                         route.updated_at
@@ -1822,18 +1915,14 @@ class RoutingStore:
                         or route_updated_at <= observed_at_dt
                     ):
                         continue
-                    if is_portable_parked_route(route):
-                        detached = replace(
+                    if (
+                        sandbox_owner_loss_disposition(route)
+                        is SandboxOwnerLossDisposition.RECOVER_DETACHED
+                    ):
+                        self._detach_owner_lost_route_unlocked(
+                            conn,
                             route,
-                            worker_state="detached",
-                            node_epoch="",
-                            activity_epoch=0,
                             updated_at=observed_at,
-                        )
-                        self._write_sandbox(conn, detached)
-                        conn.execute(
-                            "DELETE FROM exec_sessions WHERE sandbox_id = ?",
-                            (sandbox_id,),
                         )
                         removed_sandbox_ids.append(sandbox_id)
                         continue
@@ -1895,24 +1984,18 @@ class RoutingStore:
                     for row in rows:
                         route = _sandbox_route_from_row(row)
                         if route is not None:
-                            if is_portable_parked_route(route):
+                            if (
+                                sandbox_owner_loss_disposition(route)
+                                is SandboxOwnerLossDisposition.RECOVER_DETACHED
+                            ):
                                 preserved.append(route)
                             else:
                                 removed.append(route)
                 for route in preserved:
-                    self._write_sandbox(
+                    self._detach_owner_lost_route_unlocked(
                         conn,
-                        replace(
-                            route,
-                            worker_state="detached",
-                            node_epoch="",
-                            activity_epoch=0,
-                            updated_at=utc_now().isoformat(),
-                        ),
-                    )
-                    conn.execute(
-                        "DELETE FROM exec_sessions WHERE sandbox_id = ?",
-                        (route.sandbox_id,),
+                        route,
+                        updated_at=utc_now().isoformat(),
                     )
                 for route in removed:
                     self._delete_sandbox_unlocked(
@@ -1937,6 +2020,7 @@ class RoutingStore:
         keep_nodes = {str(node_id) for node_id in active_node_ids if str(node_id)}
         with self._lock:
             removed: list[SandboxRoute] = []
+            preserved: list[SandboxRoute] = []
             with self._transaction() as conn:
                 rows = conn.execute(
                     """
@@ -1956,8 +2040,6 @@ class RoutingStore:
                     route = _sandbox_route_from_row(row)
                     if route is None:
                         continue
-                    if is_portable_parked_route(route):
-                        continue
                     if route.job_id in keep_jobs or route.node_id in keep_nodes:
                         continue
                     reference = parse_iso_datetime(
@@ -1965,14 +2047,50 @@ class RoutingStore:
                     ) or parse_iso_datetime(route.created_at)
                     if reference is None or reference > older_than:
                         continue
-                    removed.append(route)
+                    if (
+                        sandbox_owner_loss_disposition(route)
+                        is SandboxOwnerLossDisposition.RECOVER_DETACHED
+                    ):
+                        preserved.append(route)
+                    else:
+                        removed.append(route)
+                detached_at = utc_now().isoformat()
+                for route in preserved:
+                    self._detach_owner_lost_route_unlocked(
+                        conn,
+                        route,
+                        updated_at=detached_at,
+                    )
                 for route in removed:
                     self._delete_sandbox_unlocked(conn, route)
-            if not removed:
+            if not removed and not preserved:
                 return []
-            for route in removed:
+            for route in (*removed, *preserved):
                 self._drop_cached_exec_routes_for_sandbox_unlocked(route.sandbox_id)
             return removed
+
+    def _detach_owner_lost_route_unlocked(
+        self,
+        conn: sqlite3.Connection,
+        route: SandboxRoute,
+        *,
+        updated_at: str,
+    ) -> SandboxRoute:
+        """Project a lost worker owner without changing caller policy."""
+
+        detached = replace(
+            route,
+            worker_state="detached",
+            node_epoch="",
+            activity_epoch=0,
+            updated_at=updated_at,
+        )
+        self._write_sandbox(conn, detached)
+        conn.execute(
+            "DELETE FROM exec_sessions WHERE sandbox_id = ?",
+            (route.sandbox_id,),
+        )
+        return detached
 
     def _delete_sandbox_unlocked(
         self,
@@ -2078,6 +2196,15 @@ class RoutingStore:
             now = utc_now().isoformat()
             with self._transaction() as conn:
                 existing = self._get_exec_unlocked(conn, route.session_id)
+                if existing is not None and (
+                    existing.sandbox_id != route.sandbox_id
+                    or existing.node_id != route.node_id
+                    or existing.job_id != route.job_id
+                    or existing.node_url != route.node_url
+                ):
+                    raise SandboxRouteConflictError(
+                        "exec session id belongs to another sandbox or worker"
+                    )
                 stored = ExecRoute(
                     session_id=route.session_id,
                     sandbox_id=route.sandbox_id,
@@ -3769,28 +3896,19 @@ def _nonnegative_int(value: object) -> int:
         return 0
 
 
-def _route_update_is_current(existing: SandboxRoute, candidate: SandboxRoute) -> bool:
-    if candidate.generation != existing.generation:
-        return False
-    if (
-        existing.create_operation_id != candidate.create_operation_id
-        or existing.spec_hash != candidate.spec_hash
-        or candidate.node_url != existing.node_url
-    ):
-        return False
-    if (
-        existing.state.lower() not in _SANDBOX_TRANSITIONAL_INVENTORY_STATES
-        and candidate.state.lower() in _SANDBOX_TRANSITIONAL_INVENTORY_STATES
-    ):
-        # A synchronous lifecycle response is the stable commit point. A
-        # separately sampled list/heartbeat from the same worker may arrive
-        # later even though it observed an earlier transition.
+def _route_update_is_current(
+    existing: SandboxRoute,
+    candidate: SandboxRoute,
+    *,
+    allow_node_epoch_adoption: bool = True,
+) -> bool:
+    if not _same_sandbox_route_incarnation(existing, candidate):
         return False
     # Exact incarnation identity on the same assigned node proves that the
-    # sandbox survived a node-agent restart. Epoch counters cannot be compared
-    # across that boundary, so permit adoption of the new epoch.
+    # route belongs to the new guest boot. Activity counters are boot-scoped
+    # and cannot be compared across that boundary, so permit epoch adoption.
     if candidate.node_epoch and candidate.node_epoch != existing.node_epoch:
-        return True
+        return allow_node_epoch_adoption
     if (
         existing.node_epoch == candidate.node_epoch
         and candidate.activity_epoch < existing.activity_epoch
@@ -3804,13 +3922,19 @@ def _same_sandbox_route_incarnation(
     candidate: SandboxRoute,
 ) -> bool:
     return bool(
-        existing.generation == candidate.generation
+        existing.sandbox_id == candidate.sandbox_id
+        and existing.generation == candidate.generation
         and existing.create_operation_id == candidate.create_operation_id
         and existing.spec_hash == candidate.spec_hash
         and existing.node_id == candidate.node_id
         and existing.job_id == candidate.job_id
-        and existing.node_url.rstrip("/") == candidate.node_url.rstrip("/")
+        and _normalized_route_node_url(existing.node_url)
+        == _normalized_route_node_url(candidate.node_url)
     )
+
+
+def _normalized_route_node_url(node_url: str) -> str:
+    return node_url.strip().rstrip("/")
 
 
 def _object(value: object) -> dict[str, Any]:

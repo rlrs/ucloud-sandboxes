@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from urllib import request
 
+from ucloud_sandboxes.capabilities import HIBERNATE_LOCAL_CAPABILITY
 from ucloud_sandboxes.direct_oci import DirectOciConfigBuilder
 from ucloud_sandboxes.direct_provisioner import DirectSandboxProvisioner
 from ucloud_sandboxes.direct_registry import DirectSandboxRegistry
@@ -465,6 +466,38 @@ class DirectProvisionerTests(unittest.TestCase):
             ),
         )
 
+    def test_storage_quota_uses_the_same_hard_claim_as_placement(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, registry, _, _, _ = self.make(root)
+            ordinary = self.spec()
+            parkable = replace(ordinary, id="parkable", parkable=True)
+            ordinary_registration = registry.plan(
+                spec=ordinary,
+                sandbox_generation=1,
+                operation_id="create:ordinary:1",
+                runtime_compatibility_sha256=(provisioner.runtime_compatibility_sha256),
+            )
+            parkable_registration = registry.plan(
+                spec=parkable,
+                sandbox_generation=1,
+                operation_id="create:parkable:1",
+                runtime_compatibility_sha256=(provisioner.runtime_compatibility_sha256),
+            )
+
+            self.assertEqual(
+                provisioner._quota_total_mb(ordinary_registration),  # noqa: SLF001
+                ordinary.requested_resources().disk_mb,
+            )
+            self.assertEqual(
+                provisioner._quota_total_mb(parkable_registration),  # noqa: SLF001
+                parkable.requested_resources().disk_mb,
+            )
+            self.assertGreater(
+                parkable.requested_resources().disk_mb,
+                ordinary.requested_resources().disk_mb,
+            )
+
     @contextmanager
     def running_server(self, root: Path, service: DirectSandboxService):
         server = build_direct_node_agent_server(
@@ -518,9 +551,7 @@ class DirectProvisionerTests(unittest.TestCase):
                 spec=self.spec(),
                 sandbox_generation=7,
                 operation_id="create:7",
-                runtime_compatibility_sha256=(
-                    provisioner.runtime_compatibility_sha256
-                ),
+                runtime_compatibility_sha256=(provisioner.runtime_compatibility_sha256),
             )
             total_mb = provisioner._quota_total_mb(planned)
             quota.prepare_volume(
@@ -543,9 +574,7 @@ class DirectProvisionerTests(unittest.TestCase):
                 spec=self.spec(),
                 sandbox_generation=7,
                 operation_id="create:7",
-                runtime_compatibility_sha256=(
-                    provisioner.runtime_compatibility_sha256
-                ),
+                runtime_compatibility_sha256=(provisioner.runtime_compatibility_sha256),
             )
             total_mb = provisioner._quota_total_mb(planned)
             prepared = quota.prepare_volume(
@@ -1194,6 +1223,90 @@ class DirectProvisionerTests(unittest.TestCase):
             ):
                 self.create(service, self.spec())
 
+    def test_node_server_coalesces_host_metrics_and_keeps_storage_live(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, storage, _, _ = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            host_calls = 0
+            storage_reserved_bytes = [1024 * 1024]
+
+            def host_metrics() -> NodeRuntimeMetrics:
+                nonlocal host_calls
+                host_calls += 1
+                return NodeRuntimeMetrics(
+                    collected_at=utc_now(),
+                    cpu_percent=10.0,
+                    cpu_count=4,
+                    memory_total_mb=8192,
+                    memory_available_mb=8192,
+                )
+
+            storage.get_metrics = lambda: {
+                "hard_capacity_bytes": 100 * 1024 * 1024,
+                "hard_reserved_bytes": storage_reserved_bytes[0],
+            }
+            server = build_direct_node_agent_server(
+                "127.0.0.1",
+                0,
+                service=service,
+                image_file=root / "images.json",
+                job_id="job",
+                node_id="node",
+                total_resources=ResourceQuantity(vcpu=4, memory_mb=8192),
+                runtime_metrics_provider=host_metrics,
+            )
+            try:
+                self.create(service, self.spec())
+                first_heartbeat = server.RequestHandlerClass.runtime_metrics_provider()
+                storage_reserved_bytes[0] = 2 * 1024 * 1024
+                second_heartbeat = server.RequestHandlerClass.runtime_metrics_provider()
+            finally:
+                server.server_close()
+
+        self.assertEqual(host_calls, 1)
+        assert first_heartbeat is not None
+        assert second_heartbeat is not None
+        self.assertEqual(first_heartbeat.storage_hard_reserved_mb, 1)
+        self.assertEqual(second_heartbeat.storage_hard_reserved_mb, 2)
+        self.assertEqual(first_heartbeat.cpu_percent, second_heartbeat.cpu_percent)
+
+    def test_node_server_coalescing_preserves_pressure_admission(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, _ = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            server = build_direct_node_agent_server(
+                "127.0.0.1",
+                0,
+                service=service,
+                image_file=root / "images.json",
+                job_id="job",
+                node_id="node",
+                total_resources=ResourceQuantity(vcpu=4, memory_mb=8192),
+                runtime_metrics_provider=lambda: NodeRuntimeMetrics(
+                    collected_at=utc_now(),
+                    cpu_percent=95.0,
+                    cpu_count=4,
+                    memory_total_mb=8192,
+                    memory_available_mb=8192,
+                ),
+            )
+            try:
+                with self.assertRaisesRegex(
+                    SandboxCapacityUnavailableError,
+                    "CPU pressure",
+                ):
+                    self.create(service, self.spec())
+            finally:
+                server.server_close()
+
     def test_active_admission_fails_closed_without_metrics(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
@@ -1238,8 +1351,10 @@ class DirectProvisionerTests(unittest.TestCase):
 
             with service._reserve_active_capacity("first", 1, request):
                 with service._reserve_active_capacity("second", 1, request):
-                    reservations, _epoch = service.active_reservations_snapshot()
-                    self.assertEqual(len(reservations), 2)
+                    activity = service.activity_snapshot()
+                    self.assertEqual(len(activity.resource_reservations), 2)
+                    self.assertEqual(activity.active_sandbox_creates, 2)
+                    self.assertEqual(activity.active_exec_operations, 0)
 
             with self.assertRaisesRegex(
                 SandboxCapacityUnavailableError,
@@ -1297,15 +1412,14 @@ class DirectProvisionerTests(unittest.TestCase):
                 records[2].spec.id,
                 records[2].generation,
             )
-            reservations, _epoch = service.active_reservations_snapshot()
+            activity = service.activity_snapshot()
+            reservations = activity.resource_reservations
 
             self.assertEqual(len(service.list_snapshot()), 3)
-            self.assertEqual(len(reservations), 3)
-            self.assertEqual(sum(item.vcpu for item in reservations.values()), 0)
-            self.assertEqual(
-                sum(item.memory_mb for item in reservations.values()),
-                0,
-            )
+            self.assertEqual(reservations, {})
+            self.assertEqual(activity.active_sandbox_creates, 0)
+            self.assertEqual(activity.active_exec_operations, 3)
+            self.assertEqual(activity.active_operations, 3)
 
             runtime_metrics[0] = replace(runtime_metrics[0], cpu_percent=95.0)
             with self.assertRaisesRegex(
@@ -1334,7 +1448,9 @@ class DirectProvisionerTests(unittest.TestCase):
             service.release_exec_capacity(first)
             service.release_exec_capacity(second)
             service.release_exec_capacity(third)
-            self.assertEqual(service.active_reservations_snapshot()[0], {})
+            activity = service.activity_snapshot()
+            self.assertEqual(activity.resource_reservations, {})
+            self.assertEqual(activity.active_operations, 0)
 
     def test_exec_capacity_samples_live_pressure_in_parallel(self) -> None:
         with TemporaryDirectory() as raw:
@@ -1623,6 +1739,7 @@ class DirectProvisionerTests(unittest.TestCase):
             )
 
             self.assertEqual(active.activity.active_operations, 1)
+            self.assertEqual(active.activity.active_sandbox_creates, 1)
             self.assertEqual(active.activity.records, ())
             self.assertEqual(active.activity.reserved_resources.memory_mb, 1024)
             self.assertFalse(draining.ready)
@@ -1637,7 +1754,34 @@ class DirectProvisionerTests(unittest.TestCase):
             owned = manager.heartbeat_snapshot(active_build_count=lambda: 0)
             self.assertFalse(owned.ready)
             self.assertEqual(owned.activity.active_operations, 0)
+            self.assertEqual(owned.activity.active_sandbox_creates, 0)
             self.assertEqual(len(owned.activity.records), 1)
+
+    def test_exec_lease_is_not_reported_as_sandbox_create(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, _ = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            manager = DirectNodeRuntime(service)
+            created = self.create(service, self.spec())
+
+            token = service.acquire_exec_capacity(
+                created.spec.id,
+                created.generation,
+            )
+            active = manager.heartbeat_snapshot(active_build_count=lambda: 0)
+
+            self.assertEqual(active.activity.active_operations, 1)
+            self.assertEqual(active.activity.active_sandbox_creates, 0)
+            self.assertFalse(active.ready)
+
+            service.release_exec_capacity(token)
+            released = manager.heartbeat_snapshot(active_build_count=lambda: 0)
+            self.assertEqual(released.activity.active_operations, 0)
+            self.assertEqual(released.activity.active_sandbox_creates, 0)
 
     def test_drain_waits_for_an_inflight_heartbeat_empty_proof(self) -> None:
         with TemporaryDirectory() as raw:
@@ -1653,7 +1797,7 @@ class DirectProvisionerTests(unittest.TestCase):
             configure_done = Event()
             calls_guard = Lock()
             calls = 0
-            original_snapshot = service.active_reservations_snapshot
+            original_snapshot = service.activity_snapshot
 
             def block_first_snapshot():
                 nonlocal calls
@@ -1666,7 +1810,7 @@ class DirectProvisionerTests(unittest.TestCase):
                         raise AssertionError("test did not release heartbeat snapshot")
                 return original_snapshot()
 
-            service.active_reservations_snapshot = block_first_snapshot
+            service.activity_snapshot = block_first_snapshot
             heartbeat_results: list[object] = []
             drain_results: list[object] = []
             heartbeat_thread = Thread(
@@ -1894,6 +2038,13 @@ class DirectProvisionerTests(unittest.TestCase):
             )
             created = self.create(service, self.spec())
             with self.running_server(root, service) as base:
+                with request.urlopen(f"{base}/v1/heartbeat") as response:
+                    before = json.load(response)["heartbeat"]
+                self.assertIn(
+                    HIBERNATE_LOCAL_CAPABILITY,
+                    before["capabilities"],
+                )
+                self.assertNotIn("hibernate-local-v1", before["capabilities"])
                 park_request = request.Request(
                     f"{base}/v1/sandboxes/{created.spec.id}/park",
                     data=json.dumps({"operation_id": "park:test"}).encode("utf-8"),
@@ -1901,8 +2052,17 @@ class DirectProvisionerTests(unittest.TestCase):
                     method="POST",
                 )
                 with request.urlopen(park_request) as response:
-                    parked = json.load(response)["sandbox"]
+                    parked_payload = json.load(response)
+                parked = parked_payload["sandbox"]
                 self.assertEqual(parked["state"], HibernationState.PARKED.value)
+                self.assertEqual(
+                    parked_payload["node_epoch"],
+                    before["node_epoch"],
+                )
+                self.assertGreater(
+                    parked_payload["activity_epoch"],
+                    before["activity_epoch"],
+                )
                 with self.assertRaises(RuntimeError):
                     service.wake(
                         created.spec.id,
@@ -1922,8 +2082,17 @@ class DirectProvisionerTests(unittest.TestCase):
                     method="POST",
                 )
                 with request.urlopen(wake_request) as response:
-                    woken = json.load(response)["sandbox"]
+                    woken_payload = json.load(response)
+                woken = woken_payload["sandbox"]
                 self.assertEqual(woken["state"], HibernationState.RUNNING.value)
+                self.assertEqual(
+                    woken_payload["node_epoch"],
+                    parked_payload["node_epoch"],
+                )
+                self.assertGreater(
+                    woken_payload["activity_epoch"],
+                    parked_payload["activity_epoch"],
+                )
                 self.assertEqual(
                     service.get(created.spec.id).state,
                     HibernationState.RUNNING.value,

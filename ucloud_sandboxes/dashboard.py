@@ -5602,11 +5602,6 @@ function renderMetrics(snapshot) {
     "autoscalerSummary",
     autoscaler.timestamp ? `${actionText}, cycle ${formatTime(autoscaler.timestamp)}` : "No autoscaler cycle loaded"
   );
-  setText("autoscalerPressureValue", formatInteger(liveSignals.pressure_samples));
-  setText(
-    "autoscalerUtilizationValue",
-    `${formatPercentPoint(ratioToPercent(liveSignals.cpu_utilization))} / ${formatPercentPoint(ratioToPercent(liveSignals.memory_utilization))}`
-  );
   setText(
     "autoscalerProvisioningValue",
     nullableNumber(liveSignals.provisioning_p95_seconds) === null
@@ -5884,9 +5879,15 @@ function renderSchedulerPage(snapshot) {
   });
   const liveSignals = autoscaler.live_signals || {};
   const pressureParts = [
-    `${formatInteger(liveSignals.pressure_samples)} host`,
+    `${formatInteger(liveSignals.pressure_samples)} pressure of ${formatInteger(liveSignals.observation_samples)} observed`,
     `${formatInteger(liveSignals.create_pressure_samples)} create`,
   ];
+  if (nullableNumber(liveSignals.cpu_utilization) !== null) {
+    pressureParts.push(`CPU ${formatPercentPoint(ratioToPercent(liveSignals.cpu_utilization))}`);
+  }
+  if (nullableNumber(liveSignals.memory_utilization) !== null) {
+    pressureParts.push(`memory ${formatPercentPoint(ratioToPercent(liveSignals.memory_utilization))}`);
+  }
   if (nullableNumber(liveSignals.image_materialization_queue_utilization) !== null) {
     pressureParts.push(`${formatPercentPoint(ratioToPercent(liveSignals.image_materialization_queue_utilization))} image materialization`);
   }

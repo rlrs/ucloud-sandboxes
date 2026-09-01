@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
 from ...models import ProviderInstance
 from ...providers.base import (
+    DestructiveInstanceLoss,
     InstanceBootstrapAccess,
     InstanceCreateIntent,
     ProviderError,
@@ -47,7 +48,22 @@ class UCloudProvider:
     # A UCloud guest that disappears after reaching RUNNING cannot be recovered.
     # Once its heartbeat lease expires, retaining the provider job cannot preserve
     # its sandbox inventory and must not block replacement capacity.
-    unreachable_lease_expiry_is_permanent_loss = True
+    unreachable_lease_expiry_loss = DestructiveInstanceLoss(
+        reason="ucloud_unreachable_lease_expired",
+        evidence_kind="unreachable_lease_expired",
+        required_evidence_fields=(
+            "unreachableLeaseExpired",
+            "unreachableReference",
+        ),
+        evidence=(("unreachableLeaseExpired", True),),
+    )
+    _post_start_instance_loss = DestructiveInstanceLoss(
+        reason="post_start_suspension",
+        evidence_kind="post_start_suspension",
+        required_evidence_fields=("postStartSuspensionObserved",),
+        evidence=(("postStartSuspensionObserved", True),),
+    )
+    destructive_instance_losses = (_post_start_instance_loss,)
 
     def __init__(
         self,
@@ -123,6 +139,17 @@ class UCloudProvider:
         }
         return not private_network_ids or bool(
             private_network_ids.intersection(instance.private_network_ids)
+        )
+
+    def destructive_instance_loss(
+        self,
+        instance: ProviderInstance,
+    ) -> DestructiveInstanceLoss | None:
+        if not instance.is_lost:
+            return None
+        return replace(
+            self._post_start_instance_loss,
+            evidence=(("postStartSuspensionObserved", True),),
         )
 
     def render_create_request(

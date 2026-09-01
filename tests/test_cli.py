@@ -12,10 +12,11 @@ import unittest
 from urllib.error import HTTPError
 from unittest.mock import MagicMock, patch
 
-from ucloud_sandboxes import cli
+from ucloud_sandboxes import cli, control_plane
 from ucloud_sandboxes.agent import build_heartbeat
 from ucloud_sandboxes.autoscaler_state import (
     AutoscalerStateStore,
+    ProviderOperation,
 )
 from ucloud_sandboxes.cli import (
     find_ucloud_ssh_key,
@@ -26,7 +27,9 @@ from ucloud_sandboxes.control_state import ControlStateStore
 from ucloud_sandboxes.deployment import package_version
 from ucloud_sandboxes.managed_registry import RegistryTag, RegistryUsageStore
 from ucloud_sandboxes.models import (
+    InstancePhase,
     NodeHeartbeat,
+    ProviderInstance,
     ResourceQuantity,
     SandboxDemand,
     SandboxInventoryEntry,
@@ -37,8 +40,14 @@ from ucloud_sandboxes.routing import (
     RoutingStore,
     SandboxRoute,
 )
+from ucloud_sandboxes.providers import DestructiveInstanceLoss
 from ucloud_sandboxes.providers.ucloud.api import UCloudError
 from ucloud_sandboxes.providers.ucloud.config import UCloudSettings
+from ucloud_sandboxes.providers.ucloud import UCloudProvider
+from ucloud_sandboxes.providers.hetzner import (
+    HetznerCreateProfile,
+    HetznerProvider,
+)
 
 
 def ucloud_config(**values) -> DeploymentConfig:
@@ -619,7 +628,7 @@ class CliTests(unittest.TestCase):
                 encoding="utf-8",
             )
             route_file = root / "routes.sqlite"
-            RoutingStore(route_file).upsert_sandbox(
+            lost_route = RoutingStore(route_file).upsert_sandbox(
                 sandbox_route(
                     sandbox_id="lost-sandbox",
                     node_id="lost-node",
@@ -630,13 +639,26 @@ class CliTests(unittest.TestCase):
                         memory_mb=4096,
                         disk_mb=8192,
                     ),
-                    spec={"id": "lost-sandbox"},
+                    spec={
+                        "id": "lost-sandbox",
+                        "image": "registry.example.org/repo:v1",
+                    },
                     state="running",
                     generation=1,
                     create_operation_id="create-lost",
                     spec_hash="a" * 64,
                     delete_operation_id="delete-lost",
                 )
+            )
+            usage_store = RegistryUsageStore(root / "registry-usage.sqlite")
+            usage_store.acquire_reference(
+                "repo",
+                "v1",
+                control_plane._registry_route_reference_owner(
+                    lost_route,
+                    deployment_id="prod-a",
+                ),
+                digest="sha256:" + "f" * 64,
             )
             save_heartbeats(
                 root / "control-state.sqlite",
@@ -701,22 +723,297 @@ class CliTests(unittest.TestCase):
             delete_sandbox.assert_not_called()
             payload = json.loads(output.getvalue())
             routes = RoutingStore(route_file).sandbox_routes_readonly()
+            registry_leases = usage_store.snapshot().leases
 
         self.assertEqual(exit_code, 0)
-        self.assertEqual(len(submitted), 1)
+        self.assertEqual(submitted, [])
         self.assertEqual(terminated, [("lost-job",)])
         self.assertEqual(
             payload["unreachable_permanent_loss_job_ids"],
             ["lost-job"],
         )
         self.assertEqual(payload["destructive_node_loss_job_ids"], ["lost-job"])
+        self.assertEqual(payload["lost_sandbox_ids"], [])
         self.assertEqual(payload["unreachableReadyStopJobIds"], [])
         self.assertEqual(routes, [])
+        self.assertEqual(registry_leases, {})
         self.assertEqual(
             [item["sandbox_id"] for item in payload["removedRoutes"]],
             ["lost-sandbox"],
         )
         self.assertEqual(payload["persistedNodeLossDemand"], [])
+
+    @allow_fixture_mutations
+    def test_hetzner_off_instance_preserves_owned_route(self) -> None:
+        class NoMutationHetznerClient:
+            def create_server(self, _payload: dict) -> dict:
+                raise AssertionError("off server must not trigger replacement")
+
+            def delete_server(self, _server_id: str) -> dict:
+                raise AssertionError("recoverable off server must not be deleted")
+
+        profile = HetznerCreateProfile(
+            server_type="cx43",
+            image=9001,
+            location="hel1",
+            network_id=1001,
+        )
+        provider = HetznerProvider(
+            "hetzner-project",
+            client=NoMutationHetznerClient(),  # type: ignore[arg-type]
+            api_token_env="HETZNER_API_KEY",
+            api_base_url="https://api.hetzner.cloud/v1",
+            ssh_user="root",
+            sandbox_profile=profile,
+            builder_profile=profile,
+        )
+        with temporary_root() as root:
+            jobs_file = write_jobs(
+                root,
+                {
+                    "id": 42,
+                    "name": "sandbox-node-off",
+                    "status": "off",
+                    "created": "2026-08-29T10:00:00+00:00",
+                    "server_type": {
+                        "name": "cx43",
+                        "category": "shared",
+                        "cores": 8,
+                        "memory": 16,
+                        "disk": 160,
+                    },
+                    "primary_disk_size": 160,
+                    "image": {"id": 9001, "name": "sandbox-node-v2"},
+                    "private_net": [{"network": 1001, "ip": "10.20.0.42"}],
+                    "labels": {
+                        "ucloud-sandboxes/node": "true",
+                        "ucloud-sandboxes/deployment": "prod-a",
+                    },
+                },
+            )
+            route_file = root / "routes.sqlite"
+            RoutingStore(route_file).upsert_sandbox(
+                sandbox_route(
+                    sandbox_id="preserved",
+                    node_id="sandbox-node-off",
+                    job_id="42",
+                    node_url="http://sandbox-node-off:8090",
+                    state="running",
+                )
+            )
+            provider_state = AutoscalerStateStore(root / "autoscaler-state.sqlite")
+            invalid_stop = provider_state.prepare_operation(
+                intent_key="sandbox:42:invalid-destructive-loss",
+                kind="stop",
+                deployment_id="prod-a",
+                role="sandbox",
+                request={
+                    "type": "bulk",
+                    "items": [{"id": "42"}],
+                    "destructiveNodeLoss": True,
+                    "lossReason": "post_start_suspension",
+                    "routeCount": 1,
+                    "lastKnownActiveSandboxes": 1,
+                },
+                target_job_ids=("42",),
+            )
+            config_file = write_ucloud_config(root, deployment_id="prod-a")
+            output = io.StringIO()
+            with patch.object(
+                cli,
+                "compute_provider_from_args",
+                return_value=provider,
+            ):
+                with redirect_stdout(output):
+                    exit_code = cli.main(
+                        [
+                            "autoscaler",
+                            "--config",
+                            str(config_file),
+                            "--jobs-file",
+                            str(jobs_file),
+                            "--execute",
+                            "--once",
+                            "--output",
+                            "json",
+                        ]
+                    )
+            payload = json.loads(output.getvalue())
+            route = RoutingStore(route_file).get_sandbox("preserved")
+            invalid_after = provider_state.get_operation(invalid_stop.operation_id)
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(payload["destructive_node_loss_job_ids"], [])
+        self.assertEqual(payload["removedRoutes"], [])
+        self.assertIsNotNone(route)
+        self.assertIsNotNone(invalid_after)
+        assert invalid_after is not None
+        self.assertEqual(invalid_after.state, "prepared")
+
+    def test_external_provider_loss_evidence_is_serialized_generically(self) -> None:
+        prototype = DestructiveInstanceLoss(
+            reason="irrecoverable_guest_loss",
+            evidence_kind="external_guest_generation",
+            required_evidence_fields=(
+                "guestGeneration",
+                "lossObserved",
+                "recoverable",
+                "reference",
+            ),
+            evidence=(("lossObserved", True),),
+        )
+        disposition = replace(
+            prototype,
+            evidence=(
+                ("guestGeneration", 0),
+                ("lossObserved", True),
+                ("recoverable", False),
+                ("reference", "generation-0"),
+            ),
+        )
+        provider = SimpleNamespace(
+            kind="external",
+            destructive_instance_losses=(prototype,),
+            unreachable_lease_expiry_loss=None,
+            destructive_instance_loss=lambda _instance: disposition,
+        )
+        lost_instance = ProviderInstance(
+            id="external-lost",
+            name="external-lost",
+            application_name="sandbox-node",
+            application_version="1",
+            product_id="external",
+            product_category="compute",
+            state="gone",
+            phase=InstancePhase.LOST,
+        )
+
+        observed = cli._provider_destructive_instance_loss(  # type: ignore[arg-type]
+            provider,
+            lost_instance,
+        )
+        assert observed is not None
+        self.assertEqual(
+            cli._destructive_loss_request_fields(  # type: ignore[arg-type]
+                provider,
+                observed,
+            ),
+            {
+                "providerKind": "external",
+                "lossEvidenceKind": "external_guest_generation",
+                "lossEvidence": {
+                    "guestGeneration": 0,
+                    "lossObserved": True,
+                    "recoverable": False,
+                    "reference": "generation-0",
+                },
+            },
+        )
+        for invalid_reference in (None, " "):
+            provider.destructive_instance_loss = lambda _instance: replace(
+                disposition,
+                evidence=(
+                    ("guestGeneration", 0),
+                    ("lossObserved", True),
+                    ("recoverable", False),
+                    ("reference", invalid_reference),
+                ),
+            )
+            self.assertIsNone(
+                cli._provider_destructive_instance_loss(  # type: ignore[arg-type]
+                    provider,
+                    lost_instance,
+                )
+            )
+
+    def test_ucloud_fixed_loss_proof_requires_exact_boolean_type(self) -> None:
+        for invalid in (1, "false"):
+            with self.subTest(invalid=invalid):
+                operation = ProviderOperation(
+                    operation_id="operation-1",
+                    intent_key="sandbox:job-1:destructive-power-cycle",
+                    kind="stop",
+                    deployment_id="prod-a",
+                    role="sandbox",
+                    state="prepared",
+                    request={
+                        "destructiveNodeLoss": True,
+                        "lossReason": "post_start_suspension",
+                        "providerKind": "ucloud",
+                        "lossEvidenceKind": "post_start_suspension",
+                        "lossEvidence": {
+                            "postStartSuspensionObserved": invalid,
+                        },
+                    },
+                    response={},
+                    target_job_ids=("job-1",),
+                    created_at=utc_now(),
+                    updated_at=utc_now(),
+                )
+
+                self.assertIsNone(
+                    UCloudProvider._post_start_instance_loss.from_operation_request(
+                        operation.request
+                    )
+                )
+        numeric_prototype = DestructiveInstanceLoss(
+            reason="numeric_proof",
+            evidence_kind="numeric_proof",
+            required_evidence_fields=("sequence",),
+            evidence=(("sequence", 1),),
+        )
+        self.assertFalse(
+            numeric_prototype.matches(
+                replace(numeric_prototype, evidence=(("sequence", True),))
+            )
+        )
+
+    def test_unreachable_stop_proof_rejects_boolean_zero_counts(self) -> None:
+        with temporary_root() as root:
+            provider_state = AutoscalerStateStore(
+                root / "autoscaler-state.sqlite"
+            )
+            provider = SimpleNamespace(kind="external")
+            operation = ProviderOperation(
+                operation_id="operation-unreachable",
+                intent_key="sandbox:job-1:unreachable:reference-1",
+                kind="stop",
+                deployment_id="prod-a",
+                role="sandbox",
+                state="prepared",
+                request={
+                    "unreachableStaleReady": True,
+                    "unreachableReference": "2026-08-30T00:00:00+00:00",
+                    "routeCount": 0,
+                    "lastKnownActiveSandboxes": 0,
+                    "lastHeartbeatSafeToStop": True,
+                },
+                response={},
+                target_job_ids=("job-1",),
+                created_at=utc_now(),
+                updated_at=utc_now(),
+            )
+
+            self.assertTrue(
+                cli._stop_operation_has_safety_proof(  # type: ignore[arg-type]
+                    provider_state,
+                    provider,
+                    operation,
+                )
+            )
+            for field in ("routeCount", "lastKnownActiveSandboxes"):
+                with self.subTest(field=field):
+                    malformed = replace(
+                        operation,
+                        request={**operation.request, field: False},
+                    )
+                    self.assertFalse(
+                        cli._stop_operation_has_safety_proof(  # type: ignore[arg-type]
+                            provider_state,
+                            provider,
+                            malformed,
+                        )
+                    )
 
     def test_read_public_ssh_key_file_validates_single_openssh_key(self) -> None:
         with temporary_root() as root:
@@ -1643,6 +1940,14 @@ class CliTests(unittest.TestCase):
             stop_operation.request["lossReason"],
             "ucloud_unreachable_lease_expired",
         )
+        self.assertEqual(
+            stop_operation.request["lossEvidenceKind"],
+            "unreachable_lease_expired",
+        )
+        self.assertEqual(stop_operation.request["providerKind"], "ucloud")
+        loss_evidence = stop_operation.request["lossEvidence"]
+        self.assertEqual(loss_evidence["unreachableLeaseExpired"], True)
+        self.assertTrue(str(loss_evidence["unreachableReference"]).strip())
         self.assertEqual(stop_operation.request["routeCount"], 0)
         self.assertEqual(result["drainReadyStopJobIds"], [])
         self.assertEqual(result["drainIntents"], [])

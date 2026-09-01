@@ -1,10 +1,13 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from threading import Barrier, Event, Lock, Thread
 import unittest
 
 from hypothesis import given, settings, strategies as st
 
+from ucloud_sandboxes.models import NodeRuntimeMetrics, utc_now
 from ucloud_sandboxes.runtime_metrics import (
+    SingleFlightRuntimeMetricsSampler,
     cpu_percent_from_samples,
     read_proc_meminfo,
     read_proc_pressure,
@@ -14,6 +17,150 @@ from ucloud_sandboxes.runtime_metrics import (
 
 
 class RuntimeMetricsTests(unittest.TestCase):
+    def test_single_flight_rejects_invalid_freshness(self) -> None:
+        def provider() -> NodeRuntimeMetrics:
+            return NodeRuntimeMetrics(collected_at=utc_now())
+
+        for freshness in (-1.0, float("nan"), float("inf")):
+            with self.subTest(freshness=freshness), self.assertRaises(ValueError):
+                SingleFlightRuntimeMetricsSampler(
+                    provider,
+                    freshness_seconds=freshness,
+                )
+
+    def test_single_flight_coalesces_a_concurrent_sampling_burst(self) -> None:
+        worker_count = 8
+        start = Barrier(worker_count + 1)
+        sample_started = Event()
+        release_sample = Event()
+        guard = Lock()
+        calls = 0
+        results: list[NodeRuntimeMetrics | None] = []
+        errors: list[BaseException] = []
+        expected = NodeRuntimeMetrics(
+            collected_at=utc_now(),
+            cpu_percent=12.5,
+            cpu_count=32,
+        )
+
+        def provider() -> NodeRuntimeMetrics:
+            nonlocal calls
+            with guard:
+                calls += 1
+            sample_started.set()
+            release_sample.wait(timeout=2.0)
+            return expected
+
+        sampler = SingleFlightRuntimeMetricsSampler(provider, clock=lambda: 0.0)
+
+        def read() -> None:
+            start.wait()
+            try:
+                observed = sampler()
+            except BaseException as exc:
+                with guard:
+                    errors.append(exc)
+            else:
+                with guard:
+                    results.append(observed)
+
+        threads = [Thread(target=read) for _ in range(worker_count)]
+        for thread in threads:
+            thread.start()
+        start.wait()
+        self.assertTrue(sample_started.wait(timeout=1.0))
+        release_sample.set()
+        for thread in threads:
+            thread.join(timeout=2.0)
+
+        self.assertTrue(all(not thread.is_alive() for thread in threads))
+        self.assertEqual(errors, [])
+        self.assertEqual(calls, 1)
+        self.assertEqual(len(results), worker_count)
+        self.assertTrue(all(result is expected for result in results))
+
+    def test_single_flight_refreshes_after_freshness_window(self) -> None:
+        now = [10.0]
+        calls = 0
+
+        def provider() -> NodeRuntimeMetrics:
+            nonlocal calls
+            calls += 1
+            return NodeRuntimeMetrics(
+                collected_at=utc_now(),
+                cpu_percent=float(calls),
+                cpu_count=32,
+            )
+
+        sampler = SingleFlightRuntimeMetricsSampler(
+            provider,
+            freshness_seconds=0.2,
+            clock=lambda: now[0],
+        )
+
+        first = sampler()
+        self.assertIs(sampler(), first)
+        now[0] += 0.199
+        self.assertIs(sampler(), first)
+        self.assertEqual(calls, 1)
+
+        now[0] += 0.002
+        refreshed = sampler()
+        self.assertIsNot(refreshed, first)
+        self.assertEqual(calls, 2)
+
+    def test_single_flight_exception_wakes_waiter_and_is_retried(self) -> None:
+        start = Barrier(3)
+        first_started = Event()
+        release_failure = Event()
+        guard = Lock()
+        calls = 0
+        results: list[NodeRuntimeMetrics | None] = []
+        errors: list[BaseException] = []
+        recovered = NodeRuntimeMetrics(collected_at=utc_now(), cpu_percent=5.0)
+
+        def provider() -> NodeRuntimeMetrics:
+            nonlocal calls
+            with guard:
+                calls += 1
+                attempt = calls
+            if attempt == 1:
+                first_started.set()
+                release_failure.wait(timeout=2.0)
+                raise RuntimeError("sample failed")
+            return recovered
+
+        sampler = SingleFlightRuntimeMetricsSampler(provider, clock=lambda: 0.0)
+
+        def read() -> None:
+            start.wait()
+            try:
+                observed = sampler()
+            except BaseException as exc:
+                with guard:
+                    errors.append(exc)
+            else:
+                with guard:
+                    results.append(observed)
+
+        threads = [Thread(target=read) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        start.wait()
+        self.assertTrue(first_started.wait(timeout=1.0))
+        release_failure.set()
+        for thread in threads:
+            thread.join(timeout=2.0)
+
+        self.assertTrue(all(not thread.is_alive() for thread in threads))
+        self.assertEqual(calls, 2)
+        self.assertEqual(len(errors), 1)
+        self.assertIsInstance(errors[0], RuntimeError)
+        self.assertEqual(str(errors[0]), "sample failed")
+        self.assertEqual(results, [recovered])
+        self.assertIs(sampler(), recovered)
+        self.assertEqual(calls, 2)
+
     @settings(max_examples=100, deadline=None, derandomize=True)
     @given(
         total=st.integers(min_value=0, max_value=10**12),
@@ -72,7 +219,9 @@ class RuntimeMetricsTests(unittest.TestCase):
     def test_reads_proc_stat_cpu_and_meminfo(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
-            (root / "stat").write_text("cpu  100 0 100 800 0 0 0 0 0 0\n", encoding="utf-8")
+            (root / "stat").write_text(
+                "cpu  100 0 100 800 0 0 0 0 0 0\n", encoding="utf-8"
+            )
             (root / "meminfo").write_text(
                 "MemTotal:       1048576 kB\n"
                 "MemAvailable:    786432 kB\n"

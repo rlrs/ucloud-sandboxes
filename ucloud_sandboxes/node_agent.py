@@ -3,13 +3,14 @@ from __future__ import annotations
 import base64
 import hmac
 import shutil
+import sys
 import time
 from dataclasses import replace
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import parse_qs, unquote, urlparse
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from .agent import build_heartbeat
 from .build_context_store import (
@@ -46,7 +47,10 @@ from .managed_process import ManagedProcessError, ManagedProcessStart
 from .models import NodeRuntimeMetrics, ResourceQuantity, SandboxInventoryEntry, utc_now
 from .node_runtime import BuilderNodeRuntime, DirectNodeRuntime, NodeStateStore
 from .registry import heartbeat_to_dict
-from .runtime_metrics import sample_node_runtime_metrics
+from .runtime_metrics import (
+    SingleFlightRuntimeMetricsSampler,
+    sample_node_runtime_metrics,
+)
 from .sandbox import (
     SandboxAdmissionClosedError,
     SandboxBusyError,
@@ -72,6 +76,56 @@ DEFAULT_MAX_BUILD_CONTEXT_AGE_SECONDS = 24 * 60 * 60
 # Public node API headers for a generation-fenced DELETE operation.
 SANDBOX_GENERATION_HEADER = "X-UCloud-Sandbox-Generation"
 SANDBOX_OPERATION_ID_HEADER = "X-UCloud-Sandbox-Operation-Id"
+
+_HOST_BOOT_ID_PATH = Path("/proc/sys/kernel/random/boot_id")
+_PROCESS_NODE_EPOCH = uuid4().hex
+
+
+def _host_runtime_metrics_sampler(
+    provider: Callable[[], NodeRuntimeMetrics | None] | None,
+) -> SingleFlightRuntimeMetricsSampler:
+    """Return the one host sampler shared by node heartbeat and admission.
+
+    Explicit providers are treated as raw sampling sources and receive the same
+    production coalescing semantics. A pre-wrapped sampler is retained, which
+    lets tests and alternate collectors choose a different freshness window.
+    """
+
+    source = provider if provider is not None else sample_node_runtime_metrics
+    if isinstance(source, SingleFlightRuntimeMetricsSampler):
+        return source
+    return SingleFlightRuntimeMetricsSampler(source)
+
+
+def _host_boot_epoch(path: Path = _HOST_BOOT_ID_PATH) -> str:
+    """Return the stable identity of this guest boot.
+
+    Production workers are Linux guests, where ``boot_id`` is stable across
+    node-agent process restarts and changes only when the guest itself boots.
+    Failing closed on Linux is safer than silently reverting to a process UUID:
+    the latter can make a harmless service restart look like permanent UCloud
+    guest loss. The process fallback keeps non-Linux development usable.
+    """
+
+    try:
+        raw = path.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        if sys.platform.startswith("linux"):
+            raise RuntimeError("host boot identity is unavailable") from exc
+        return _PROCESS_NODE_EPOCH
+    try:
+        return UUID(raw).hex
+    except (AttributeError, ValueError) as exc:
+        raise RuntimeError("host boot identity is invalid") from exc
+
+
+def _resolve_node_epoch(node_epoch: str | None) -> str:
+    if node_epoch is None:
+        return _host_boot_epoch()
+    resolved = node_epoch.strip()
+    if not resolved:
+        raise ValueError("node_epoch cannot be empty")
+    return resolved
 
 
 class NodeAgentHandler(BuildContextHttpHandler):
@@ -133,7 +187,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
                             init_version=self.init_version,
                             active_sandboxes=activity.active_sandboxes,
                             active_image_builds=node_snapshot.active_image_builds,
-                            active_sandbox_creates=activity.active_operations,
+                            active_sandbox_creates=activity.active_sandbox_creates,
                             draining=node_snapshot.drain.draining,
                             capabilities=self.capabilities,
                             total_resources=self.total_resources,
@@ -630,7 +684,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
             background = raw.get("background", False)
             if type(background) is not bool:
                 raise ValueError("background must be a boolean")
-            record = self.manager.park(
+            record, activity_epoch = self.manager.park_with_activity_revision(
                 sandbox_id,
                 operation_id=operation_id,
                 background=background,
@@ -651,7 +705,11 @@ class NodeAgentHandler(BuildContextHttpHandler):
         except ValueError as exc:
             self._write_exception(exc)
             return
-        payload: dict[str, Any] = {"sandbox": record.to_dict()}
+        payload: dict[str, Any] = {
+            "sandbox": record.to_dict(),
+            "node_epoch": self.node_epoch,
+            "activity_epoch": activity_epoch,
+        }
         try:
             service = self.manager.service
             warden = service.warden
@@ -745,7 +803,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
             generation = generation_raw
             if generation <= 0:
                 raise ValueError("generation must be positive")
-            record = self.manager.wake(
+            record, activity_epoch = self.manager.wake_with_activity_revision(
                 sandbox_id,
                 generation=generation,
                 operation_id=operation_id,
@@ -781,7 +839,13 @@ class NodeAgentHandler(BuildContextHttpHandler):
         except ValueError as exc:
             self._write_exception(exc)
             return
-        self._write_json({"sandbox": record.to_dict()})
+        self._write_json(
+            {
+                "sandbox": record.to_dict(),
+                "node_epoch": self.node_epoch,
+                "activity_epoch": activity_epoch,
+            }
+        )
 
     def _prepare_migration(self, path: str) -> None:
         sandbox_id = _sandbox_id_from_path(path, suffix="/migration/prepare")
@@ -1426,6 +1490,7 @@ def build_builder_node_agent_server(
     max_concurrent_image_pulls: int = 8,
     physical_disk_path: Path | None = None,
     build_context_store_dir: Path | None = None,
+    node_epoch: str | None = None,
     telemetry: Telemetry | None = None,
 ) -> HighBacklogThreadingHTTPServer:
     token = node_control_bearer_token.strip()
@@ -1478,13 +1543,13 @@ def build_builder_node_agent_server(
     BuilderHandler.capabilities = ("image-cache", "image-build")
     BuilderHandler.image_builds_enabled = True
     BuilderHandler.sandboxes_enabled = False
-    BuilderHandler.node_epoch = uuid4().hex
+    BuilderHandler.node_epoch = _resolve_node_epoch(node_epoch)
     BuilderHandler.physical_disk_path = physical_disk_path or image_file.parent
     BuilderHandler.node_control_bearer_token = token
     BuilderHandler.max_json_body_bytes = max_json_body_bytes
     BuilderHandler.max_file_body_bytes = max_file_body_bytes
     BuilderHandler.runtime_metrics_provider = staticmethod(
-        runtime_metrics_provider or sample_node_runtime_metrics
+        _host_runtime_metrics_sampler(runtime_metrics_provider)
     )
     BuilderHandler.telemetry = resolved_telemetry
     return HighBacklogThreadingHTTPServer((host, port), BuilderHandler)
@@ -1509,6 +1574,7 @@ def build_direct_node_agent_server(
     max_file_body_bytes: int = DEFAULT_MAX_FILE_BODY_BYTES,
     runtime_metrics_provider: Callable[[], NodeRuntimeMetrics | None] | None = None,
     max_concurrent_image_pulls: int = 8,
+    node_epoch: str | None = None,
     telemetry: Telemetry | None = None,
 ) -> HighBacklogThreadingHTTPServer:
     """Serve a sandbox node with direct runsc and storage-native ownership."""
@@ -1522,7 +1588,7 @@ def build_direct_node_agent_server(
     configured_resources = total_resources or ResourceQuantity()
     if not configured_resources.is_valid:
         raise ValueError("total_resources cannot contain negative values")
-    host_runtime_metrics = runtime_metrics_provider or sample_node_runtime_metrics
+    host_runtime_metrics = _host_runtime_metrics_sampler(runtime_metrics_provider)
     resolved_telemetry = telemetry or Telemetry.disabled("ucloud-sandbox-node")
     if configured_resources.vcpu > 0 or configured_resources.memory_mb > 0:
         service.configure_active_capacity(
@@ -1580,7 +1646,7 @@ def build_direct_node_agent_server(
     DirectBoundHandler.capabilities = tuple(direct_capabilities)
     DirectBoundHandler.image_builds_enabled = False
     DirectBoundHandler.sandboxes_enabled = True
-    DirectBoundHandler.node_epoch = uuid4().hex
+    DirectBoundHandler.node_epoch = _resolve_node_epoch(node_epoch)
     DirectBoundHandler.physical_disk_path = service.provisioner.overlays.writable_root
     DirectBoundHandler.image_materializer = staticmethod(
         service.provisioner.image_store.warm

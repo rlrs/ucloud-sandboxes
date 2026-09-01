@@ -54,6 +54,7 @@ class _WakeService(_IdleService):
         self.wake_calls: list[tuple[str, int, str]] = []
         self.park_calls: list[str] = []
         self.publication_pending = False
+        self.activity_revision = 100
 
     def storage_native_publication_pending(self, _sandbox_id: str) -> bool:
         return self.publication_pending
@@ -65,6 +66,10 @@ class _WakeService(_IdleService):
     def park(self, sandbox_id: str, **_kwargs: object) -> object:
         self.park_calls.append(sandbox_id)
         return SimpleNamespace(state="parked")
+
+    def advance_lifecycle_activity_revision(self) -> int:
+        self.activity_revision += 1
+        return self.activity_revision
 
 
 class DirectNodeRuntimeTests(unittest.TestCase):
@@ -86,6 +91,7 @@ class DirectNodeRuntimeTests(unittest.TestCase):
             service.wake_calls,
             [("agent", 1, "relay-wake:request-1")],
         )
+        self.assertEqual(service.activity_revision, 101)
 
     def test_wake_joins_an_existing_transition_then_rechecks_state(self) -> None:
         service = _WakeService()

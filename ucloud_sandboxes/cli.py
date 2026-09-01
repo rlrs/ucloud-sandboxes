@@ -53,7 +53,7 @@ from .bootstrap import (
 )
 from .config import DeploymentConfig
 from .control_state import ControlStateStore
-from .control_plane import build_server
+from .control_plane import build_server, release_registry_route_references
 from .deployment import (
     AGENT_VERSION_LABEL,
     BUILDER_LABEL,
@@ -114,6 +114,7 @@ from .models import (
 )
 from .providers.base import (
     ComputeProvider,
+    DestructiveInstanceLoss,
     InstanceBootstrapAccess,
     InstanceCreateIntent,
     ProviderError,
@@ -156,10 +157,12 @@ from .registry import (
 from .routing import (
     ProgramRequestState,
     RoutingStore,
+    SandboxOwnerLossDisposition,
     SandboxRoute,
     is_portable_parked_route,
     is_worker_detachable_parked_route,
     sandbox_demand_from_routing_state,
+    sandbox_owner_loss_disposition,
 )
 from .telemetry import Telemetry, TelemetrySettings
 from .providers.ucloud.api import (
@@ -2143,6 +2146,11 @@ def cmd_autoscaler(args: argparse.Namespace) -> int:
         if execution_requested
         else None
     )
+    registry_usage_store = (
+        RegistryUsageStore(config.registry_usage_file())
+        if execution_requested
+        else None
+    )
     process_lock: AutoscalerProcessLock | None = (
         provider_state.process_lock() if provider_state is not None else None
     )
@@ -2290,6 +2298,13 @@ def cmd_autoscaler(args: argparse.Namespace) -> int:
                             - timedelta(seconds=stale_route_grace_seconds),
                         )
                     )
+                if registry_usage_store is not None:
+                    for removed_route in removed_routes:
+                        release_registry_route_references(
+                            registry_usage_store,
+                            removed_route,
+                            deployment_id=config.deployment_id,
+                        )
                 if controller_active and result.get(
                     "sandboxCapacityOperationSucceeded"
                 ):
@@ -2321,7 +2336,11 @@ def cmd_autoscaler(args: argparse.Namespace) -> int:
                     )
                 ):
                     for route in removed_routes:
-                        if route.job_id not in destructive_job_ids:
+                        if (
+                            route.job_id not in destructive_job_ids
+                            or sandbox_owner_loss_disposition(route)
+                            is not SandboxOwnerLossDisposition.TERMINAL_REPLACE
+                        ):
                             continue
                         demand_id = (
                             f"__node_loss__:{route.job_id}:{route.sandbox_id}:"
@@ -2540,53 +2559,108 @@ def _drain_intent_to_dict(intent: DrainIntent) -> dict[str, Any]:
 def _stop_operation_is_destructive_node_loss(
     operation: ProviderOperation,
 ) -> bool:
-    """Recognize the canonical loss proof and operations from older releases."""
-
     return bool(
         operation.kind == "stop"
-        and (
-            operation.request.get("destructiveNodeLoss") is True
-            or operation.request.get("destructivePowerCycle") is True
-        )
+        and operation.request.get("destructiveNodeLoss") is True
     )
+
+
+def _provider_destructive_loss_disposition(
+    provider: ComputeProvider,
+    operation: ProviderOperation,
+) -> DestructiveInstanceLoss | None:
+    """Validate durable loss evidence against the active provider contract."""
+
+    if not _stop_operation_is_destructive_node_loss(operation):
+        return None
+    request_payload = operation.request
+    provider_kind = str(request_payload.get("providerKind") or "").strip()
+    if provider_kind != provider.kind:
+        return None
+    reason = str(request_payload.get("lossReason") or "").strip()
+    evidence_kind = str(request_payload.get("lossEvidenceKind") or "").strip()
+    return next(
+        (
+            disposition
+            for disposition in _provider_destructive_loss_dispositions(provider)
+            if disposition.reason == reason
+            and disposition.evidence_kind == evidence_kind
+        ),
+        None,
+    )
+
+
+def _provider_destructive_loss_dispositions(
+    provider: ComputeProvider,
+) -> tuple[DestructiveInstanceLoss, ...]:
+    return (
+        *provider.destructive_instance_losses,
+        *(
+            (provider.unreachable_lease_expiry_loss,)
+            if provider.unreachable_lease_expiry_loss is not None
+            else ()
+        ),
+    )
+
+
+def _provider_destructive_instance_loss(
+    provider: ComputeProvider,
+    instance: ProviderInstance,
+) -> DestructiveInstanceLoss | None:
+    disposition = provider.destructive_instance_loss(instance)
+    if disposition is None:
+        return None
+    prototype = next(
+        (
+            candidate
+            for candidate in _provider_destructive_loss_dispositions(provider)
+            if candidate.reason == disposition.reason
+            and candidate.evidence_kind == disposition.evidence_kind
+        ),
+        None,
+    )
+    return (
+        disposition
+        if prototype is not None
+        and prototype.matches(disposition)
+        else None
+    )
+
+
+def _destructive_loss_request_fields(
+    provider: ComputeProvider,
+    disposition: DestructiveInstanceLoss,
+) -> dict[str, Any]:
+    """Serialize provider-declared proof without teaching core its schema."""
+
+    return disposition.operation_request_fields(provider.kind)
 
 
 def _stop_operation_has_safety_proof(
     provider_state: AutoscalerStateStore,
+    provider: ComputeProvider,
     operation: ProviderOperation,
 ) -> bool:
     if operation.kind != "stop" or len(operation.target_job_ids) != 1:
         return operation.kind != "stop"
-    if operation.request.get("destructiveNodeLoss") is True:
-        reason = operation.request.get("lossReason")
-        common_proof = bool(
-            isinstance(operation.request.get("routeCount"), int)
-            and int(operation.request["routeCount"]) >= 0
-        )
-        if reason == "post_start_suspension":
-            return bool(
-                common_proof
-                and operation.request.get("postStartSuspensionObserved") is True
-            )
-        if reason == "ucloud_unreachable_lease_expired":
-            return bool(
-                common_proof
-                and operation.request.get("providerKind") == "ucloud"
-                and operation.request.get("unreachableLeaseExpired") is True
-                and str(operation.request.get("unreachableReference") or "").strip()
-            )
-        return False
-    if operation.request.get("destructivePowerCycle") is True:
+    if _stop_operation_is_destructive_node_loss(operation):
+        disposition = _provider_destructive_loss_disposition(provider, operation)
+        route_count = operation.request.get("routeCount")
         return bool(
-            operation.request.get("postStartSuspensionObserved") is True
-            and isinstance(operation.request.get("routeCount"), int)
-            and int(operation.request["routeCount"]) >= 0
+            disposition is not None
+            and disposition.from_operation_request(operation.request) is not None
+            and type(route_count) is int
+            and route_count >= 0
         )
     if operation.request.get("unreachableStaleReady") is True:
+        route_count = operation.request.get("routeCount")
+        active_sandboxes = operation.request.get("lastKnownActiveSandboxes")
         return bool(
             str(operation.request.get("unreachableReference") or "").strip()
-            and operation.request.get("routeCount") == 0
-            and operation.request.get("lastKnownActiveSandboxes") == 0
+            and type(route_count) is int
+            and route_count == 0
+            and type(active_sandboxes) is int
+            and active_sandboxes == 0
             and operation.request.get("lastHeartbeatSafeToStop") is True
         )
     token = str(operation.request.get("drainToken") or "").strip()
@@ -2634,7 +2708,9 @@ def apply_prepared_provider_operations(
         # Autoscaler stops require a fresh drain proof or a conservative
         # unreachable-empty lease proof.
         if prepared.kind == "stop" and not _stop_operation_has_safety_proof(
-            provider_state, prepared
+            provider_state,
+            provider,
+            prepared,
         ):
             continue
         submitting = provider_state.begin_provider_call(prepared.operation_id)
@@ -2731,6 +2807,272 @@ def _builder_capacity_operation_succeeded(
     return count > 0 and existing_builders + count >= desired_builders
 
 
+def _reconcile_provider_operation_inventory(
+    *,
+    provider_state: AutoscalerStateStore | None,
+    provider: ComputeProvider,
+    jobs: list[ProviderInstance],
+    execution_authorized: bool,
+    execute: bool,
+    telemetry: Telemetry,
+) -> tuple[list[ProviderOperationOutcome], list[dict[str, Any]], set[str]]:
+    """Replay safe creates and fence creates not yet visible in inventory."""
+
+    if not execution_authorized or provider_state is None:
+        return [], [], set()
+    results = list(provider_state.reconcile_provider_inventory(jobs))
+    # Stops are replayed only after this cycle refreshes every active drain.
+    replay_results = apply_prepared_provider_operations(
+        provider_state,
+        provider,
+        source="prepared-replay",
+        allowed_kinds={"create"} if execute else set(),
+        allowed_stop_operation_ids=set(),
+        telemetry=telemetry,
+    )
+    results.extend(replay_results)
+    blocked_roles = {
+        operation.role
+        for operation in provider_state.list_operations(
+            kind="create",
+            states={"uncertain", "accepted"},
+        )
+    }
+    blocked_roles.update(
+        item.role
+        for item in replay_results
+        if item.kind == "create" and item.state == "accepted"
+    )
+    observed_job_ids = {job.id for job in jobs if job.id}
+    guards: list[dict[str, Any]] = []
+    for operation in provider_state.list_operations(
+        kind="create",
+        states={"accepted"},
+    ):
+        missing_job_ids = sorted(set(operation.target_job_ids) - observed_job_ids)
+        if not missing_job_ids:
+            continue
+        blocked_roles.add(operation.role)
+        guards.append(
+            {
+                "operationId": operation.operation_id,
+                "role": operation.role,
+                "state": operation.state,
+                "missingJobIds": missing_job_ids,
+            }
+        )
+    return results, guards, blocked_roles
+
+
+@dataclass(frozen=True)
+class _ProviderObservation:
+    jobs: list[ProviderInstance]
+    nodes: list[SandboxNode]
+    sandbox_nodes: list[SandboxNode]
+    builder_nodes: list[SandboxNode]
+    destructive_loss_dispositions: dict[str, DestructiveInstanceLoss]
+    destructive_loss_reasons: dict[str, str]
+    destructive_node_loss_job_ids: tuple[str, ...]
+    loss_latched_evidence: dict[str, dict[str, Any]]
+    unreachable_loss_evidence: dict[str, dict[str, Any]]
+    final_heartbeat_job_ids: tuple[str, ...]
+    fenced_heartbeat_job_ids: tuple[str, ...]
+    orphaned_stale_heartbeat_job_ids: tuple[str, ...]
+
+
+def _observe_provider_nodes(
+    *,
+    jobs: list[ProviderInstance],
+    provider: ComputeProvider,
+    provider_state: AutoscalerStateStore | None,
+    control_state: ControlStateStore,
+    policy: ScalePolicy,
+    deployment_id: str,
+    route_reservations: dict[str, tuple[SandboxRoute, ...]],
+    execution_authorized: bool,
+    retrieve_history: bool,
+) -> _ProviderObservation:
+    """Normalize provider continuity and heartbeat evidence into node state."""
+
+    heartbeats = control_state.load_heartbeats()
+    loss_latched_job_ids: set[str] = set()
+    loss_latched_dispositions: dict[str, DestructiveInstanceLoss] = {}
+    loss_latched_evidence: dict[str, dict[str, Any]] = {}
+    if provider_state is not None:
+        for operation in provider_state.list_operations(kind="stop"):
+            if not _stop_operation_is_destructive_node_loss(operation):
+                continue
+            prototype = _provider_destructive_loss_disposition(provider, operation)
+            if prototype is None or not _stop_operation_has_safety_proof(
+                provider_state,
+                provider,
+                operation,
+            ):
+                continue
+            disposition = prototype.from_operation_request(operation.request)
+            if disposition is None:
+                continue
+            loss_latched_job_ids.update(operation.target_job_ids)
+            for job_id in operation.target_job_ids:
+                loss_latched_dispositions[job_id] = disposition
+                loss_latched_evidence[job_id] = dict(operation.request)
+
+    jobs_by_id = {job.id: job for job in jobs}
+    if retrieve_history:
+        for job in tuple(jobs):
+            heartbeat = heartbeats.get(job.id)
+            owned_routes = route_reservations.get(job.id, ())
+            stale_heartbeat = bool(
+                heartbeat is not None
+                and not heartbeat.is_fresh(utc_now(), policy.heartbeat_ttl_seconds)
+            )
+            route_epoch_mismatch = bool(
+                heartbeat is not None
+                and heartbeat.node_epoch
+                and any(
+                    route.node_epoch and route.node_epoch != heartbeat.node_epoch
+                    for route in owned_routes
+                )
+            )
+            continuity_history_required = bool(
+                getattr(provider, "requires_continuity_history", False)
+                and is_managed_compute_instance(job, deployment_id)
+            )
+            should_retrieve_history = bool(
+                job.state == "RUNNING"
+                and not job.is_lost
+                and job.id not in loss_latched_job_ids
+                and (
+                    continuity_history_required
+                    or (owned_routes and (stale_heartbeat or route_epoch_mismatch))
+                )
+            )
+            if not should_retrieve_history:
+                continue
+            try:
+                jobs_by_id[job.id] = provider.retrieve_instance(
+                    job.id,
+                    include_updates=True,
+                )
+            except ProviderError:
+                continue
+        jobs = [jobs_by_id[job.id] for job in jobs]
+
+    provider_job_ids = {job.id for job in jobs}
+    orphaned_stale_heartbeat_job_ids = tuple(
+        sorted(
+            job_id
+            for job_id, heartbeat in heartbeats.items()
+            if job_id not in provider_job_ids
+            and not route_reservations.get(job_id)
+            and not heartbeat.is_fresh(utc_now(), policy.heartbeat_ttl_seconds)
+        )
+    )
+    if orphaned_stale_heartbeat_job_ids and execution_authorized:
+        control_state.remove_heartbeats(orphaned_stale_heartbeat_job_ids)
+        heartbeats = {
+            job_id: heartbeat
+            for job_id, heartbeat in heartbeats.items()
+            if job_id not in orphaned_stale_heartbeat_job_ids
+        }
+
+    destructive_loss_dispositions: dict[str, DestructiveInstanceLoss] = {}
+    for job in jobs:
+        if job.id in loss_latched_job_ids:
+            disposition = loss_latched_dispositions.get(job.id)
+            if disposition is not None:
+                destructive_loss_dispositions[job.id] = disposition
+            continue
+        if not job.is_lost:
+            continue
+        disposition = _provider_destructive_instance_loss(provider, job)
+        if disposition is not None:
+            destructive_loss_dispositions[job.id] = disposition
+
+    observed_nodes = merge_jobs_and_heartbeats(
+        jobs,
+        apply_route_reservations_to_heartbeats(heartbeats, route_reservations),
+        policy,
+    )
+    unreachable_loss_evidence: dict[str, dict[str, Any]] = {}
+    unreachable_lease_loss = getattr(provider, "unreachable_lease_expiry_loss", None)
+    if unreachable_lease_loss is not None:
+        for node in observed_nodes:
+            if (
+                not is_managed_compute_instance(node.job, deployment_id)
+                or node.job_id in destructive_loss_dispositions
+                or not unreachable_node_lease_expired(node, policy)
+            ):
+                continue
+            reference = unreachable_node_reference(node)
+            if reference is None:
+                continue
+            disposition = replace(
+                unreachable_lease_loss,
+                evidence=(
+                    ("unreachableLeaseExpired", True),
+                    ("unreachableReference", reference.isoformat()),
+                ),
+            )
+            if not unreachable_lease_loss.matches(disposition):
+                continue
+            destructive_loss_dispositions[node.job_id] = disposition
+            unreachable_loss_evidence[node.job_id] = {
+                "unreachableReference": reference.isoformat(),
+                "lastHeartbeatPresent": node.heartbeat is not None,
+                "lastKnownActiveSandboxes": node.active_sandboxes,
+            }
+
+    destructive_loss_reasons = {
+        job_id: disposition.reason
+        for job_id, disposition in destructive_loss_dispositions.items()
+    }
+    destructive_node_loss_job_ids = tuple(sorted(destructive_loss_reasons))
+    final_heartbeat_job_ids = tuple(
+        sorted(job.id for job in jobs if job.is_final and job.id in heartbeats)
+    )
+    fenced_heartbeat_job_ids = tuple(
+        sorted(
+            set(final_heartbeat_job_ids)
+            | (set(destructive_node_loss_job_ids) & set(heartbeats))
+        )
+    )
+    if fenced_heartbeat_job_ids and execution_authorized:
+        control_state.remove_heartbeats(fenced_heartbeat_job_ids)
+        heartbeats = {
+            job_id: heartbeat
+            for job_id, heartbeat in heartbeats.items()
+            if job_id not in fenced_heartbeat_job_ids
+        }
+    heartbeats = apply_route_reservations_to_heartbeats(
+        heartbeats,
+        route_reservations,
+    )
+    nodes = merge_jobs_and_heartbeats(jobs, heartbeats, policy)
+    destructive_job_ids = set(destructive_node_loss_job_ids)
+    nodes = [
+        replace(node, permanently_lost=True)
+        if node.job_id in destructive_job_ids
+        else node
+        for node in nodes
+    ]
+    nodes = apply_route_reservations_to_nodes(nodes, route_reservations)
+    return _ProviderObservation(
+        jobs=jobs,
+        nodes=nodes,
+        sandbox_nodes=sandbox_pool_nodes(nodes),
+        builder_nodes=builder_pool_nodes(nodes),
+        destructive_loss_dispositions=destructive_loss_dispositions,
+        destructive_loss_reasons=destructive_loss_reasons,
+        destructive_node_loss_job_ids=destructive_node_loss_job_ids,
+        loss_latched_evidence=loss_latched_evidence,
+        unreachable_loss_evidence=unreachable_loss_evidence,
+        final_heartbeat_job_ids=final_heartbeat_job_ids,
+        fenced_heartbeat_job_ids=fenced_heartbeat_job_ids,
+        orphaned_stale_heartbeat_job_ids=orphaned_stale_heartbeat_job_ids,
+    )
+
+
 def run_reconcile_cycle(
     config: DeploymentConfig,
     args: argparse.Namespace,
@@ -2775,222 +3117,46 @@ def run_reconcile_cycle(
     telemetry = telemetry or _DISABLED_AUTOSCALER_TELEMETRY
     jobs = load_instances_for_plan(config, provider, args, telemetry=telemetry)
     operation_deployment_id = config.deployment_id or provider.scope_id
-    provider_operation_results: list[ProviderOperationOutcome] = []
-    create_visibility_guards: list[dict[str, Any]] = []
-    blocked_create_roles: set[str] = set()
-    if execution_authorized and provider_state is not None:
-        provider_operation_results.extend(
-            provider_state.reconcile_provider_inventory(jobs)
-        )
-        observed_job_ids = {job.id for job in jobs if job.id}
-        allowed_kinds: set[str] = set()
-        if args.execute:
-            allowed_kinds.add("create")
-        # Stops are replayed only after this cycle has refreshed every active
-        # node drain intent below.
-        replay_results = apply_prepared_provider_operations(
-            provider_state,
-            provider,
-            source="prepared-replay",
-            allowed_kinds=allowed_kinds,
-            allowed_stop_operation_ids=set(),
-            telemetry=telemetry,
-        )
-        provider_operation_results.extend(replay_results)
-        for operation in provider_state.list_operations(
-            kind="create",
-            states={"uncertain", "accepted"},
-        ):
-            blocked_create_roles.add(operation.role)
-        # A replayed create is absent from the inventory used for this plan.
-        # Suppress another create for that role until the next exhaustive browse.
-        for item in replay_results:
-            if item.kind == "create" and item.state == "accepted":
-                blocked_create_roles.add(item.role)
-        for operation in provider_state.list_operations(
-            kind="create",
-            states={"accepted"},
-        ):
-            missing_job_ids = sorted(set(operation.target_job_ids) - observed_job_ids)
-            if not missing_job_ids:
-                continue
-            blocked_create_roles.add(operation.role)
-            create_visibility_guards.append(
-                {
-                    "operationId": operation.operation_id,
-                    "role": operation.role,
-                    "state": operation.state,
-                    "missingJobIds": missing_job_ids,
-                }
-            )
+    (
+        provider_operation_results,
+        create_visibility_guards,
+        blocked_create_roles,
+    ) = _reconcile_provider_operation_inventory(
+        provider_state=provider_state,
+        provider=provider,
+        jobs=jobs,
+        execution_authorized=execution_authorized,
+        execute=bool(args.execute),
+        telemetry=telemetry,
+    )
 
     control_state_file = config.control_state_file()
     control_state = ControlStateStore(control_state_file)
-    heartbeats = control_state.load_heartbeats()
     effective_policy = config.policy
-
-    # Provider inventory may omit update history. A powered-off instance may
-    # therefore appear running again after its ephemeral guest is replaced.
-    # Normalized lost state and our own destructive stop journal are durable hints.
-    # Providers whose current state cannot prove guest continuity require the full
-    # ordered history for every managed RUNNING instance. Other providers retain
-    # the narrower stale-heartbeat/route-epoch diagnostic probe.
-    loss_latched_job_ids: set[str] = set()
-    loss_latched_reasons: dict[str, str] = {}
-    loss_latched_evidence: dict[str, dict[str, Any]] = {}
-    if provider_state is not None:
-        for operation in provider_state.list_operations(kind="stop"):
-            if not _stop_operation_is_destructive_node_loss(operation):
-                continue
-            reason = str(operation.request.get("lossReason") or "post_start_suspension")
-            loss_latched_job_ids.update(operation.target_job_ids)
-            for job_id in operation.target_job_ids:
-                loss_latched_reasons[job_id] = reason
-                loss_latched_evidence[job_id] = dict(operation.request)
-    jobs_by_id = {job.id: job for job in jobs}
-    if not getattr(args, "jobs_file", None):
-        for job in tuple(jobs):
-            heartbeat = heartbeats.get(job.id)
-            owned_routes = (route_reservations or {}).get(job.id, ())
-            stale_heartbeat = bool(
-                heartbeat is not None
-                and not heartbeat.is_fresh(
-                    utc_now(), effective_policy.heartbeat_ttl_seconds
-                )
-            )
-            route_epoch_mismatch = bool(
-                heartbeat is not None
-                and heartbeat.node_epoch
-                and any(
-                    route.node_epoch and route.node_epoch != heartbeat.node_epoch
-                    for route in owned_routes
-                )
-            )
-            owns_routes = bool(owned_routes)
-            managed_instance = is_managed_compute_instance(
-                job,
-                config.deployment_id,
-            )
-            continuity_history_required = bool(
-                getattr(provider, "requires_continuity_history", False)
-                and managed_instance
-            )
-            should_retrieve_history = bool(
-                job.state == "RUNNING"
-                and not job.is_lost
-                and job.id not in loss_latched_job_ids
-                and (
-                    continuity_history_required
-                    or (owns_routes and (stale_heartbeat or route_epoch_mismatch))
-                )
-            )
-            if not should_retrieve_history:
-                continue
-            try:
-                retrieved = provider.retrieve_instance(
-                    job.id,
-                    include_updates=True,
-                )
-            except ProviderError:
-                continue
-            jobs_by_id[job.id] = retrieved
-        jobs = [jobs_by_id[job.id] for job in jobs]
-
-    provider_job_ids = {job.id for job in jobs}
-    orphaned_stale_heartbeat_job_ids = tuple(
-        sorted(
-            job_id
-            for job_id, heartbeat in heartbeats.items()
-            if job_id not in provider_job_ids
-            and not (route_reservations or {}).get(job_id)
-            and not heartbeat.is_fresh(
-                utc_now(), effective_policy.heartbeat_ttl_seconds
-            )
-        )
+    observation = _observe_provider_nodes(
+        jobs=jobs,
+        provider=provider,
+        provider_state=provider_state,
+        control_state=control_state,
+        policy=effective_policy,
+        deployment_id=config.deployment_id,
+        route_reservations=route_reservations or {},
+        execution_authorized=execution_authorized,
+        retrieve_history=not bool(getattr(args, "jobs_file", None)),
     )
-    if orphaned_stale_heartbeat_job_ids and execution_authorized:
-        control_state.remove_heartbeats(orphaned_stale_heartbeat_job_ids)
-        heartbeats = {
-            job_id: heartbeat
-            for job_id, heartbeat in heartbeats.items()
-            if job_id not in orphaned_stale_heartbeat_job_ids
-        }
-
-    destructive_loss_reasons: dict[str, str] = {
-        job.id: (
-            loss_latched_reasons.get(job.id, "post_start_suspension")
-            if job.id in loss_latched_job_ids
-            else "post_start_suspension"
-        )
-        for job in jobs
-        if job.id in loss_latched_job_ids or job.is_lost
-    }
-    observed_heartbeats = apply_route_reservations_to_heartbeats(
-        heartbeats,
-        route_reservations or {},
-    )
-    observed_nodes = merge_jobs_and_heartbeats(
-        jobs,
-        observed_heartbeats,
-        effective_policy,
-    )
-    unreachable_loss_evidence: dict[str, dict[str, Any]] = {}
-    if getattr(provider, "unreachable_lease_expiry_is_permanent_loss", False):
-        for node in observed_nodes:
-            managed_node = is_managed_compute_instance(
-                node.job,
-                config.deployment_id,
-            )
-            if (
-                not managed_node
-                or node.job_id in destructive_loss_reasons
-                or not unreachable_node_lease_expired(node, effective_policy)
-            ):
-                continue
-            reference = unreachable_node_reference(node)
-            if reference is None:
-                continue
-            destructive_loss_reasons[node.job_id] = "ucloud_unreachable_lease_expired"
-            unreachable_loss_evidence[node.job_id] = {
-                "unreachableReference": reference.isoformat(),
-                "lastHeartbeatPresent": node.heartbeat is not None,
-                "lastKnownActiveSandboxes": node.active_sandboxes,
-            }
-    destructive_node_loss_job_ids = tuple(sorted(destructive_loss_reasons))
-    final_heartbeat_job_ids = tuple(
-        sorted(job.id for job in jobs if job.is_final and job.id in heartbeats)
-    )
-    fenced_heartbeat_job_ids = tuple(
-        sorted(
-            set(final_heartbeat_job_ids)
-            | (set(destructive_node_loss_job_ids) & set(heartbeats))
-        )
-    )
-    if fenced_heartbeat_job_ids and execution_authorized:
-        control_state.remove_heartbeats(fenced_heartbeat_job_ids)
-        heartbeats = {
-            job_id: heartbeat
-            for job_id, heartbeat in heartbeats.items()
-            if job_id not in fenced_heartbeat_job_ids
-        }
-    heartbeats = apply_route_reservations_to_heartbeats(
-        heartbeats,
-        route_reservations or {},
-    )
-    nodes = merge_jobs_and_heartbeats(jobs, heartbeats, effective_policy)
+    jobs = observation.jobs
+    nodes = observation.nodes
+    sandbox_nodes = observation.sandbox_nodes
+    builder_nodes = observation.builder_nodes
+    destructive_loss_dispositions = observation.destructive_loss_dispositions
+    destructive_loss_reasons = observation.destructive_loss_reasons
+    destructive_node_loss_job_ids = observation.destructive_node_loss_job_ids
+    loss_latched_evidence = observation.loss_latched_evidence
+    unreachable_loss_evidence = observation.unreachable_loss_evidence
+    final_heartbeat_job_ids = observation.final_heartbeat_job_ids
+    fenced_heartbeat_job_ids = observation.fenced_heartbeat_job_ids
+    orphaned_stale_heartbeat_job_ids = observation.orphaned_stale_heartbeat_job_ids
     destructive_job_id_set = set(destructive_node_loss_job_ids)
-    nodes = [
-        replace(node, permanently_lost=True)
-        if node.job_id in destructive_job_id_set
-        else node
-        for node in nodes
-    ]
-    nodes = apply_route_reservations_to_nodes(
-        nodes,
-        route_reservations or {},
-    )
-    sandbox_nodes = sandbox_pool_nodes(nodes)
-    builder_nodes = builder_pool_nodes(nodes)
     builder_pending = max(
         0,
         int(
@@ -3027,7 +3193,8 @@ def run_reconcile_cycle(
         route
         for job_id in sorted(destructive_sandbox_job_ids)
         for route in (route_reservations or {}).get(job_id, ())
-        if not is_portable_parked_route(route)
+        if sandbox_owner_loss_disposition(route)
+        is SandboxOwnerLossDisposition.TERMINAL_REPLACE
     )
     sandbox_demand = demand_with_lost_sandbox_replacement(
         sandbox_demand,
@@ -3701,7 +3868,8 @@ def run_reconcile_cycle(
                     )
                 elif destructively_lost:
                     node = stop_nodes_by_job_id[job_id]
-                    loss_reason = destructive_loss_reasons[job_id]
+                    loss_disposition = destructive_loss_dispositions[job_id]
+                    loss_reason = loss_disposition.reason
                     latched_request = loss_latched_evidence.get(job_id)
                     if latched_request is not None:
                         # Provider-operation requests are immutable. Route fencing
@@ -3719,21 +3887,16 @@ def run_reconcile_cycle(
                                 "lastKnownActiveSandboxes": node.active_sandboxes,
                             }
                         )
-                        if loss_reason == "post_start_suspension":
-                            request["postStartSuspensionObserved"] = True
-                        elif loss_reason == "ucloud_unreachable_lease_expired":
-                            evidence = unreachable_loss_evidence.get(job_id, {})
-                            request.update(
-                                {
-                                    "providerKind": provider.kind,
-                                    "unreachableLeaseExpired": True,
-                                    "unreachableReference": str(
-                                        evidence.get("unreachableReference") or ""
-                                    ),
-                                    "lastHeartbeatPresent": bool(
-                                        evidence.get("lastHeartbeatPresent", False)
-                                    ),
-                                }
+                        request.update(
+                            _destructive_loss_request_fields(
+                                provider,
+                                loss_disposition,
+                            )
+                        )
+                        diagnostics = unreachable_loss_evidence.get(job_id)
+                        if diagnostics is not None:
+                            request["lastHeartbeatPresent"] = bool(
+                                diagnostics.get("lastHeartbeatPresent", False)
                             )
                 elif drain_intent is None:
                     raise AutoscalerStateError(
@@ -3791,13 +3954,12 @@ def run_reconcile_cycle(
             node.job_id for node in (*sandbox_nodes, *builder_nodes) if node.job.is_lost
         ),
         "destructive_node_loss_job_ids": list(destructive_node_loss_job_ids),
-        # Retained for readers from older SDK/deployment releases. New code must
-        # use the provider-neutral destructive_node_loss_job_ids field above.
-        "destructive_power_cycle_job_ids": list(destructive_node_loss_job_ids),
         "unreachable_permanent_loss_job_ids": sorted(
             job_id
-            for job_id, reason in destructive_loss_reasons.items()
-            if reason == "ucloud_unreachable_lease_expired"
+            for job_id in destructive_loss_reasons
+            if job_id in unreachable_loss_evidence
+            or loss_latched_evidence.get(job_id, {}).get("lossEvidenceKind")
+            == "unreachable_lease_expired"
         ),
         "lost_sandbox_ids": [route.sandbox_id for route in lost_sandbox_routes],
         "buildWarmSandboxResources": build_warm_resources.to_dict(),
@@ -3824,9 +3986,6 @@ def run_reconcile_cycle(
         "prunedFinalHeartbeats": list(final_heartbeat_job_ids),
         "prunedOrphanedStaleHeartbeats": list(orphaned_stale_heartbeat_job_ids),
         "fencedNodeLossHeartbeats": sorted(
-            set(fenced_heartbeat_job_ids) - set(final_heartbeat_job_ids)
-        ),
-        "fencedPowerCycleHeartbeats": sorted(
             set(fenced_heartbeat_job_ids) - set(final_heartbeat_job_ids)
         ),
         "removedStoppedHeartbeats": [],
@@ -3929,175 +4088,18 @@ def run_reconcile_cycle(
         desired_builders=desired_builders,
     )
 
-    if bootstrap_coordinator is not None and args.execute and execution_authorized:
-        bootstrap_results = list(completed_bootstrap_results)
-        for intent in bootstrap_intents:
-            if not intent.runnable or not intent.access.command:
-                bootstrap_results.append(
-                    {
-                        "jobId": intent.job_id,
-                        "nodeId": intent.node_id,
-                        "role": intent.role,
-                        "skipped": True,
-                        "reason": intent.reason,
-                    }
-                )
-                continue
-            bootstrap_records, scheduled = bootstrap_coordinator.submit(
-                intent,
-                config,
-                bootstrap_records,
-                control_state,
-                assert_provider_fence=assert_provider_fence,
-            )
-            bootstrap_results.append(scheduled)
-        result["bootstrapResults"] = bootstrap_results
-        control_state.save_bootstrap_records(bootstrap_records)
-    elif args.execute and execution_authorized and bootstrap_intents:
-        ordered_bootstrap_results: list[dict[str, Any] | None] = [None] * len(
-            bootstrap_intents
+    if args.execute and execution_authorized:
+        bootstrap_records, result["bootstrapResults"] = _execute_bootstrap_phase(
+            coordinator=bootstrap_coordinator,
+            intents=bootstrap_intents,
+            records=bootstrap_records,
+            completed_results=completed_bootstrap_results,
+            config=config,
+            control_state=control_state,
+            assert_provider_fence=assert_provider_fence,
+            metrics_store=metrics_store,
+            telemetry=telemetry,
         )
-        runnable_bootstraps: list[
-            tuple[int, VmBootstrapIntent, int, datetime, float]
-        ] = []
-        for index, intent in enumerate(bootstrap_intents):
-            if not intent.runnable or not intent.access.command:
-                ordered_bootstrap_results[index] = {
-                    "jobId": intent.job_id,
-                    "nodeId": intent.node_id,
-                    "role": intent.role,
-                    "skipped": True,
-                    "reason": intent.reason,
-                }
-                continue
-            assert_provider_fence()
-            attempt_started_at = utc_now()
-            attempt_started_perf = time.perf_counter()
-            bootstrap_records = mark_bootstrap_attempt(bootstrap_records, intent)
-            control_state.save_bootstrap_records(bootstrap_records)
-            attempt_record = bootstrap_records.get(intent.job_id)
-            attempt_count = (
-                attempt_record.attempts
-                if attempt_record is not None
-                else intent.previous_attempts + 1
-            )
-            runnable_bootstraps.append(
-                (
-                    index,
-                    intent,
-                    attempt_count,
-                    attempt_started_at,
-                    attempt_started_perf,
-                )
-            )
-
-        if runnable_bootstraps:
-            max_workers = min(
-                len(runnable_bootstraps),
-                max(1, config.autoscaler_max_init_per_cycle),
-            )
-            futures: dict[
-                Future[_VmBootstrapAttemptResult],
-                tuple[int, VmBootstrapIntent, int, datetime, float],
-            ] = {}
-            with ThreadPoolExecutor(
-                max_workers=max_workers,
-                thread_name_prefix="vm-bootstrap",
-            ) as executor:
-                for prepared in runnable_bootstraps:
-                    index, intent, attempt_count, _started_at, started_perf = prepared
-                    try:
-                        assert_provider_fence()
-                        future = executor.submit(
-                            _execute_vm_bootstrap_attempt,
-                            intent,
-                            config,
-                            attempt_count=attempt_count,
-                            assert_provider_fence=assert_provider_fence,
-                            attempt_started_perf=started_perf,
-                            telemetry=telemetry,
-                            trace_context=telemetry.current_trace_headers(),
-                        )
-                    except Exception as exc:
-                        future = Future()
-                        future.set_result(
-                            _failed_vm_bootstrap_attempt(
-                                intent,
-                                started_perf,
-                                str(exc),
-                            )
-                        )
-                    futures[future] = prepared
-
-                for future in as_completed(futures):
-                    index, intent, attempt_count, started_at, started_perf = futures[
-                        future
-                    ]
-                    try:
-                        attempt_result = future.result()
-                    except Exception as exc:
-                        attempt_result = _failed_vm_bootstrap_attempt(
-                            intent,
-                            started_perf,
-                            str(exc),
-                        )
-
-                    if attempt_result.status == "succeeded":
-                        bootstrap_records = mark_bootstrap_success(
-                            bootstrap_records,
-                            intent,
-                        )
-                    else:
-                        bootstrap_records = mark_bootstrap_failure(
-                            bootstrap_records,
-                            intent,
-                            attempt_result.error,
-                            retry_delay_seconds=attempt_result.retry_delay_seconds,
-                        )
-                    # Only the controller thread mutates and persists the aggregate
-                    # state, once for each independently completed remote attempt.
-                    control_state.save_bootstrap_records(bootstrap_records)
-                    ordered_bootstrap_results[index] = attempt_result.result
-                    record_vm_init_attempt_result(
-                        metrics_store,
-                        intent,
-                        status=attempt_result.status,
-                        attempts=attempt_count,
-                        started_at=started_at,
-                        attempt_started_perf=started_perf,
-                        stage_duration_ms=attempt_result.stage_duration_ms,
-                        run_duration_ms=attempt_result.run_duration_ms,
-                        returncode=attempt_result.returncode,
-                        error=attempt_result.error,
-                        retry_delay_seconds=attempt_result.retry_delay_seconds,
-                        init_phases_ms=attempt_result.init_phases_ms,
-                        init_total_ms=attempt_result.init_total_ms,
-                    )
-
-        bootstrap_results: list[dict[str, Any]] = []
-        for index, item in enumerate(ordered_bootstrap_results):
-            if item is None:
-                intent = bootstrap_intents[index]
-                error = "VM init attempt did not produce a result"
-                bootstrap_records = mark_bootstrap_failure(
-                    bootstrap_records,
-                    intent,
-                    error,
-                )
-                control_state.save_bootstrap_records(bootstrap_records)
-                item = {
-                    "jobId": intent.job_id,
-                    "nodeId": intent.node_id,
-                    "role": intent.role,
-                    "returncode": None,
-                    "status": "failed",
-                    "error": error,
-                    "durationMs": 0,
-                }
-            bootstrap_results.append(item)
-        result["bootstrapResults"] = bootstrap_results
-    elif args.execute and execution_authorized:
-        control_state.save_bootstrap_records(bootstrap_records)
     if execution_authorized and provider_state is not None:
         result["compactedProviderOperations"] = provider_state.compact_terminal_history(
             keep=1000
@@ -4106,6 +4108,181 @@ def run_reconcile_cycle(
         item.to_dict() for item in provider_operation_results
     ]
     return result
+
+
+def _execute_bootstrap_phase(
+    *,
+    coordinator: _VmBootstrapCoordinator | None,
+    intents: list[VmBootstrapIntent],
+    records: dict[str, VmBootstrapRecord],
+    completed_results: list[dict[str, Any]],
+    config: DeploymentConfig,
+    control_state: ControlStateStore,
+    assert_provider_fence: Callable[[], None],
+    metrics_store: MetricsStore | None,
+    telemetry: Telemetry,
+) -> tuple[dict[str, VmBootstrapRecord], list[dict[str, Any]]]:
+    """Execute the VM-init phase while keeping reconcile planning declarative."""
+
+    if coordinator is not None:
+        results = list(completed_results)
+        for intent in intents:
+            if not intent.runnable or not intent.access.command:
+                results.append(_skipped_bootstrap_result(intent))
+                continue
+            records, scheduled = coordinator.submit(
+                intent,
+                config,
+                records,
+                control_state,
+                assert_provider_fence=assert_provider_fence,
+            )
+            results.append(scheduled)
+        control_state.save_bootstrap_records(records)
+        return records, results
+
+    if not intents:
+        control_state.save_bootstrap_records(records)
+        return records, list(completed_results)
+
+    ordered_results: list[dict[str, Any] | None] = [None] * len(intents)
+    runnable: list[tuple[int, VmBootstrapIntent, int, datetime, float]] = []
+    for index, intent in enumerate(intents):
+        if not intent.runnable or not intent.access.command:
+            ordered_results[index] = _skipped_bootstrap_result(intent)
+            continue
+        assert_provider_fence()
+        started_at = utc_now()
+        started_perf = time.perf_counter()
+        records = mark_bootstrap_attempt(records, intent)
+        control_state.save_bootstrap_records(records)
+        attempt_record = records.get(intent.job_id)
+        attempt_count = (
+            attempt_record.attempts
+            if attempt_record is not None
+            else intent.previous_attempts + 1
+        )
+        runnable.append((index, intent, attempt_count, started_at, started_perf))
+
+    if runnable:
+        records = _run_bootstrap_attempts(
+            runnable,
+            ordered_results,
+            records=records,
+            config=config,
+            control_state=control_state,
+            assert_provider_fence=assert_provider_fence,
+            metrics_store=metrics_store,
+            telemetry=telemetry,
+        )
+
+    results: list[dict[str, Any]] = []
+    for index, item in enumerate(ordered_results):
+        if item is None:
+            intent = intents[index]
+            error = "VM init attempt did not produce a result"
+            records = mark_bootstrap_failure(records, intent, error)
+            control_state.save_bootstrap_records(records)
+            item = {
+                "jobId": intent.job_id,
+                "nodeId": intent.node_id,
+                "role": intent.role,
+                "returncode": None,
+                "status": "failed",
+                "error": error,
+                "durationMs": 0,
+            }
+        results.append(item)
+    return records, results
+
+
+def _skipped_bootstrap_result(intent: VmBootstrapIntent) -> dict[str, Any]:
+    return {
+        "jobId": intent.job_id,
+        "nodeId": intent.node_id,
+        "role": intent.role,
+        "skipped": True,
+        "reason": intent.reason,
+    }
+
+
+def _run_bootstrap_attempts(
+    runnable: list[tuple[int, VmBootstrapIntent, int, datetime, float]],
+    ordered_results: list[dict[str, Any] | None],
+    *,
+    records: dict[str, VmBootstrapRecord],
+    config: DeploymentConfig,
+    control_state: ControlStateStore,
+    assert_provider_fence: Callable[[], None],
+    metrics_store: MetricsStore | None,
+    telemetry: Telemetry,
+) -> dict[str, VmBootstrapRecord]:
+    futures: dict[
+        Future[_VmBootstrapAttemptResult],
+        tuple[int, VmBootstrapIntent, int, datetime, float],
+    ] = {}
+    with ThreadPoolExecutor(
+        max_workers=min(len(runnable), max(1, config.autoscaler_max_init_per_cycle)),
+        thread_name_prefix="vm-bootstrap",
+    ) as executor:
+        for prepared in runnable:
+            _index, intent, attempt_count, _started_at, started_perf = prepared
+            try:
+                assert_provider_fence()
+                future = executor.submit(
+                    _execute_vm_bootstrap_attempt,
+                    intent,
+                    config,
+                    attempt_count=attempt_count,
+                    assert_provider_fence=assert_provider_fence,
+                    attempt_started_perf=started_perf,
+                    telemetry=telemetry,
+                    trace_context=telemetry.current_trace_headers(),
+                )
+            except Exception as exc:
+                future = Future()
+                future.set_result(
+                    _failed_vm_bootstrap_attempt(intent, started_perf, str(exc))
+                )
+            futures[future] = prepared
+
+        for future in as_completed(futures):
+            index, intent, attempt_count, started_at, started_perf = futures[future]
+            try:
+                attempt_result = future.result()
+            except Exception as exc:
+                attempt_result = _failed_vm_bootstrap_attempt(
+                    intent,
+                    started_perf,
+                    str(exc),
+                )
+            if attempt_result.status == "succeeded":
+                records = mark_bootstrap_success(records, intent)
+            else:
+                records = mark_bootstrap_failure(
+                    records,
+                    intent,
+                    attempt_result.error,
+                    retry_delay_seconds=attempt_result.retry_delay_seconds,
+                )
+            control_state.save_bootstrap_records(records)
+            ordered_results[index] = attempt_result.result
+            record_vm_init_attempt_result(
+                metrics_store,
+                intent,
+                status=attempt_result.status,
+                attempts=attempt_count,
+                started_at=started_at,
+                attempt_started_perf=started_perf,
+                stage_duration_ms=attempt_result.stage_duration_ms,
+                run_duration_ms=attempt_result.run_duration_ms,
+                returncode=attempt_result.returncode,
+                error=attempt_result.error,
+                retry_delay_seconds=attempt_result.retry_delay_seconds,
+                init_phases_ms=attempt_result.init_phases_ms,
+                init_total_ms=attempt_result.init_total_ms,
+            )
+    return records
 
 
 def record_submitted_vm_metrics(
@@ -4905,7 +5082,12 @@ def demand_with_lost_sandbox_replacement(
     while hard disk remains additive.
     """
 
-    lost = tuple(route for route in routes if not is_portable_parked_route(route))
+    lost = tuple(
+        route
+        for route in routes
+        if sandbox_owner_loss_disposition(route)
+        is SandboxOwnerLossDisposition.TERMINAL_REPLACE
+    )
     if not lost:
         return demand
     resources = ResourceQuantity()

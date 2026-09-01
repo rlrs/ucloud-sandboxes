@@ -1,5 +1,5 @@
 DISK_QUOTA_CAPABILITY = "disk-quota"
-HIBERNATE_LOCAL_CAPABILITY = "hibernate-local-v1"
+HIBERNATE_LOCAL_CAPABILITY = "hibernate-local-v2"
 MANAGED_PRIMARY_CAPABILITY = "managed-primary-v1"
 STORAGE_NATIVE_CAPABILITY = "storage-native-v1"
 STORAGE_NATIVE_MIGRATION_CAPABILITY = "sandbox-migrate-storage-native-v1"

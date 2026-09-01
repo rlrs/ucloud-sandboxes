@@ -94,7 +94,7 @@ class HttpServerTests(unittest.TestCase):
             self.assertEqual(response.getheader("X-Test"), "preserved")
             self.assertEqual(
                 int(response.getheader("Content-Length", "0")),
-                len(json.dumps(payload, indent=2, sort_keys=True).encode()),
+                len(json.dumps(payload, separators=(",", ":")).encode()),
             )
         finally:
             server.shutdown()

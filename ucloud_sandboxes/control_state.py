@@ -74,6 +74,21 @@ class ControlStateStore:
         with self._transaction(write=False) as connection:
             return self._load_heartbeats(connection)
 
+    def get_heartbeat(self, job_id: str) -> NodeHeartbeat | None:
+        """Load one heartbeat without decoding every node inventory."""
+
+        if not job_id:
+            return None
+        with self._transaction(write=False) as connection:
+            row = connection.execute(
+                "SELECT payload FROM control_records "
+                "WHERE namespace = 'heartbeat' AND record_id = ?",
+                (job_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            return self._decode_heartbeat(job_id, row[0])
+
     def upsert_heartbeat(self, heartbeat: NodeHeartbeat) -> None:
         with self._transaction(write=True) as connection:
             heartbeats = self._load_heartbeats(connection)
@@ -105,9 +120,15 @@ class ControlStateStore:
                     if (
                         not heartbeat.node_epoch
                         or heartbeat.node_epoch in retired_epochs
-                        or heartbeat.activity_epoch <= previous.activity_epoch
                     ):
                         return HeartbeatReceiptResult(previous, previous, False)
+                    # Activity counters are scoped to one node boot. A fresh
+                    # boot may legitimately restart its durable/transient
+                    # revision at the same or a lower value, so comparing it
+                    # with the retired boot's counter would permanently fence
+                    # a healthy restarted guest. Epoch retirement, rather
+                    # than a cross-epoch counter comparison, prevents an old
+                    # boot from returning after the new one is accepted.
                     if previous.node_epoch:
                         retired_epochs.add(previous.node_epoch)
                 elif heartbeat.activity_epoch < previous.activity_epoch:
@@ -192,20 +213,25 @@ class ControlStateStore:
     def _load_heartbeats(cls, connection) -> dict[str, NodeHeartbeat]:
         result = {}
         for job_id, payload in cls._records(connection, "heartbeat"):
-            try:
-                raw = json.loads(payload)
-            except (TypeError, json.JSONDecodeError) as exc:
-                raise ValueError("invalid heartbeat control-state record") from exc
-            heartbeat = heartbeat_from_dict(raw) if isinstance(raw, dict) else None
-            if (
-                heartbeat is None
-                or heartbeat.job_id != job_id
-                or not _heartbeat_payload_is_canonical(raw, heartbeat, payload)
-            ):
-                raise ValueError("invalid heartbeat control-state record")
+            heartbeat = cls._decode_heartbeat(job_id, payload)
             _assert_heartbeat_binding(result, heartbeat)
             result[job_id] = heartbeat
         return result
+
+    @staticmethod
+    def _decode_heartbeat(job_id: str, payload: str) -> NodeHeartbeat:
+        try:
+            raw = json.loads(payload)
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise ValueError("invalid heartbeat control-state record") from exc
+        heartbeat = heartbeat_from_dict(raw) if isinstance(raw, dict) else None
+        if (
+            heartbeat is None
+            or heartbeat.job_id != job_id
+            or not _heartbeat_payload_is_canonical(raw, heartbeat, payload)
+        ):
+            raise ValueError("invalid heartbeat control-state record")
+        return heartbeat
 
     @staticmethod
     def _upsert(connection, namespace, record_id, payload) -> None:

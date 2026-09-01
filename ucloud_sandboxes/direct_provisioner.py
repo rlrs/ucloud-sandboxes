@@ -21,7 +21,7 @@ from .direct_registry import (
     DirectSandboxRegistry,
 )
 from .direct_warden import DirectRunscWarden, DirectWardenError
-from .hibernation import HibernationState, hibernation_disk_reservation_mb
+from .hibernation import HibernationState
 from .image_rootfs import DockerOverlay2RootfsStore, OverlayRootfsManager
 from .sandbox import SandboxSpec
 from .storage_native_daemon import (
@@ -813,10 +813,11 @@ class DirectSandboxProvisioner:
             raise DirectRegistryError(
                 "direct registration lacks explicit memory and disk limits"
             )
-        return hibernation_disk_reservation_mb(
-            memory_mb=memory_mb,
-            writable_disk_mb=disk_mb,
-        )
+        # The gateway, route and node quota must use one hard-claim function.
+        # Non-parkable sandboxes never write a memory checkpoint, so charging
+        # hibernation space here contradicted SandboxSpec.requested_resources
+        # and silently consumed more storage than placement had admitted.
+        return registration.spec.requested_resources().disk_mb
 
     def _validate_layout(self) -> None:
         config = self.warden.config

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, fields, replace
+from dataclasses import dataclass, fields, replace
 import math
 from typing import Any
 from urllib.parse import urlparse
@@ -20,7 +20,7 @@ from .models import (
 
 
 def heartbeat_to_dict(heartbeat: NodeHeartbeat) -> dict[str, Any]:
-    raw = asdict(heartbeat)
+    raw = {item.name: getattr(heartbeat, item.name) for item in fields(NodeHeartbeat)}
     raw["updated_at"] = heartbeat.updated_at.isoformat()
     raw["idle_since"] = (
         heartbeat.idle_since.isoformat() if heartbeat.idle_since is not None else None
@@ -30,6 +30,7 @@ def heartbeat_to_dict(heartbeat: NodeHeartbeat) -> dict[str, Any]:
     raw["cached_images_known"] = heartbeat.cached_images_known
     raw["total_resources"] = heartbeat.total_resources.to_dict()
     raw["used_resources"] = heartbeat.used_resources.to_dict()
+    raw["labels"] = dict(heartbeat.labels)
     raw["runtime_metrics"] = (
         heartbeat.runtime_metrics.to_dict()
         if heartbeat.runtime_metrics is not None

@@ -104,11 +104,7 @@ def plan_shadow_wake_queue(
     unplaced: list[dict[str, object]] = []
     for position, request in enumerate(queue, start=1):
         route = route_by_sandbox.get(request.sandbox_id)
-        if (
-            route is None
-            or route.generation != request.sandbox_generation
-            or (route.state or "").lower() not in {"parked", "waking"}
-        ):
+        if not _request_route_is_wakeable(request, route):
             unplaced.append(
                 {
                     "position": position,
@@ -118,6 +114,7 @@ def plan_shadow_wake_queue(
                 }
             )
             continue
+        assert route is not None
         ranked: list[
             tuple[tuple[object, ...], WakeNodeCandidate, ResourceQuantity]
         ] = []
@@ -198,6 +195,18 @@ def plan_shadow_wake_queue(
     }
 
 
+def _request_route_is_wakeable(
+    request: ProgramRequestState,
+    route: SandboxRoute | None,
+) -> bool:
+    return bool(
+        route is not None
+        and not route.delete_operation_id
+        and route.generation == request.sandbox_generation
+        and (route.state or "").lower() in {"parked", "waking"}
+    )
+
+
 def build_program_scale_signals(
     requests: list[ProgramRequestState],
     routes: list[SandboxRoute],
@@ -243,12 +252,9 @@ def build_program_scale_signals(
     ready: list[ProgramRequestState] = []
     for sandbox_id, request in selected_by_sandbox.items():
         route = route_by_sandbox.get(sandbox_id)
-        if (
-            route is None
-            or route.generation != request.sandbox_generation
-            or (route.state or "").lower() not in {"parked", "waking"}
-        ):
+        if not _request_route_is_wakeable(request, route):
             continue
+        assert route is not None
         if request.state == "model_wait":
             model_wait.append(request)
         elif (

@@ -85,9 +85,7 @@ def _exec(
         assert isinstance(result, dict)
         session = result["session"]
     completed_at = time.monotonic()
-    events_payload, events_ms = _request(
-        base_url, f"/v1/exec/{session_id}/events"
-    )
+    events_payload, events_ms = _request(base_url, f"/v1/exec/{session_id}/events")
     assert isinstance(events_payload, dict)
     events = events_payload["events"]
     stdout = "".join(
@@ -115,10 +113,7 @@ def _exec(
             "client_total": total_ms,
             "poll_count": poll_count,
             "server_start": server_start_ms,
-            **{
-                f"server_{key}": float(value)
-                for key, value in manager_timings.items()
-            },
+            **{f"server_{key}": float(value) for key, value in manager_timings.items()},
         },
     }, total_ms
 
@@ -157,12 +152,10 @@ def main() -> int:
 
     timings: dict[str, float] = {}
     health, timings["health_ms"] = _request(args.base_url, "/healthz")
-    heartbeat, timings["heartbeat_ms"] = _request(
-        args.base_url, "/v1/heartbeat"
-    )
+    heartbeat, timings["heartbeat_ms"] = _request(args.base_url, "/v1/heartbeat")
     assert isinstance(heartbeat, dict)
     capabilities = heartbeat["heartbeat"]["capabilities"]
-    required = {"sandbox", "hibernate-local-v1", "direct-runsc-v1"}
+    required = {"sandbox", "hibernate-local-v2", "direct-runsc-v1"}
     if not required.issubset(capabilities):
         raise RuntimeError(f"direct node capabilities are incomplete: {capabilities}")
 

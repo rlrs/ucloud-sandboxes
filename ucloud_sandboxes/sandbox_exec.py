@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import codecs
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -323,6 +324,8 @@ class ExecSessionManager:
                 stdin=subprocess.PIPE if session.spec.stdin else None,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                encoding="utf-8",
+                errors="replace",
                 text=True,
                 bufsize=1,
             )
@@ -380,17 +383,50 @@ class ExecSessionManager:
         if pipe is None:
             return
         try:
+            buffer = getattr(pipe, "buffer", None)
+            read1 = getattr(buffer, "read1", None)
+            if callable(read1):
+                decoder = codecs.getincrementaldecoder(
+                    getattr(pipe, "encoding", None) or "utf-8"
+                )(errors=getattr(pipe, "errors", None) or "replace")
+                while True:
+                    raw_chunk = read1(4096)
+                    if raw_chunk == b"":
+                        tail = decoder.decode(b"", final=True)
+                        if tail:
+                            self._append_stream_chunk(session_id, stream, tail)
+                        return
+                    chunk = decoder.decode(raw_chunk)
+                    if chunk and not self._append_stream_chunk(
+                        session_id,
+                        stream,
+                        chunk,
+                    ):
+                        return
+            # Test doubles and other text streams do not necessarily expose the
+            # underlying buffered reader.  Real subprocess pipes take the read1
+            # path above so flushed short writes are delivered immediately.
             while True:
                 chunk = pipe.read(4096)
                 if chunk == "":
-                    break
-                with self._lock:
-                    session = self._sessions.get(session_id)
-                    if session is None:
-                        return
-                    self._append_event_locked(session, stream, chunk)
+                    return
+                if not self._append_stream_chunk(session_id, stream, chunk):
+                    return
         finally:
             pipe.close()
+
+    def _append_stream_chunk(
+        self,
+        session_id: str,
+        stream: str,
+        chunk: str,
+    ) -> bool:
+        with self._lock:
+            session = self._sessions.get(session_id)
+            if session is None:
+                return False
+            self._append_event_locked(session, stream, chunk)
+            return True
 
     def _wait_process(
         self,

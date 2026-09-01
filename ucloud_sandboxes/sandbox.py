@@ -649,6 +649,17 @@ class SandboxActivitySnapshot:
     reserved_resources: ResourceQuantity
     activity_revision: int
     active_operations: int = 0
+    active_sandbox_creates: int = 0
+
+
+def compose_activity_revision(
+    *,
+    durable_revision: int,
+    transient_revision: int,
+) -> int:
+    """Combine the durable and transient addends of the node activity clock."""
+
+    return durable_revision + transient_revision
 
 
 @dataclass(frozen=True)
@@ -724,8 +735,8 @@ class SandboxLifecycleCoordinator:
         with self._condition:
             if join_transition:
                 completed = self._condition.wait_for(
-                    lambda: not any(
-                        sandbox_id in self._exclusive for sandbox_id in ids
+                    lambda: (
+                        not any(sandbox_id in self._exclusive for sandbox_id in ids)
                     ),
                     timeout=transition_timeout_seconds,
                 )

@@ -75,7 +75,11 @@ class JsonHttpHandler(BaseHTTPRequestHandler):
         status: int = HTTPStatus.OK,
         headers: dict[str, str] | None = None,
     ) -> None:
-        body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+        # API responses are machine-consumed and some hot paths include large
+        # inventories. Avoid sorting and pretty-print whitespace on every
+        # heartbeat, exec poll and proxy response; CLI presentation remains
+        # responsible for human-readable formatting.
+        body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
         self._write_bytes(body, "application/json", status=status, headers=headers)
 
     def _write_bytes(

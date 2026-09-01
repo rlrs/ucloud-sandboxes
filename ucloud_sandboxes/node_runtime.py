@@ -30,6 +30,7 @@ from .sandbox import (
     SandboxRecord,
     SandboxSpec,
     _atomic_write_json,
+    compose_activity_revision,
 )
 
 
@@ -396,6 +397,20 @@ class DirectNodeRuntime:
         operation_id: str,
         background: bool = False,
     ) -> SandboxRecord:
+        record, _activity_revision = self.park_with_activity_revision(
+            sandbox_id,
+            operation_id=operation_id,
+            background=background,
+        )
+        return record
+
+    def park_with_activity_revision(
+        self,
+        sandbox_id: str,
+        *,
+        operation_id: str,
+        background: bool = False,
+    ) -> tuple[SandboxRecord, int]:
         if not isinstance(operation_id, str) or not OPERATION_ID_RE.fullmatch(
             operation_id
         ):
@@ -409,11 +424,13 @@ class DirectNodeRuntime:
                 join_transition=True,
                 transition_timeout_seconds=60.0,
             ):
-                return self.service.park(
+                record = self.service.park(
                     sandbox_id,
                     operation_id=operation_id,
                     background=background,
                 )
+                activity_revision = self.service.advance_lifecycle_activity_revision()
+                return record, activity_revision
         except SandboxBusyError as exc:
             raise SandboxBusyError(
                 "sandbox has active exec/file activity that cannot survive park: "
@@ -428,6 +445,20 @@ class DirectNodeRuntime:
         generation: int,
         operation_id: str,
     ) -> SandboxRecord:
+        record, _activity_revision = self.wake_with_activity_revision(
+            sandbox_id,
+            generation=generation,
+            operation_id=operation_id,
+        )
+        return record
+
+    def wake_with_activity_revision(
+        self,
+        sandbox_id: str,
+        *,
+        generation: int,
+        operation_id: str,
+    ) -> tuple[SandboxRecord, int]:
         if generation <= 0:
             raise ValueError("wake generation must be positive")
         if not isinstance(operation_id, str) or not OPERATION_ID_RE.fullmatch(
@@ -448,11 +479,13 @@ class DirectNodeRuntime:
                 raise SandboxSnapshotPublicationPendingError(
                     "parked snapshot publication is still in progress"
                 )
-            return self.service.wake(
+            record = self.service.wake(
                 sandbox_id,
                 generation=generation,
                 operation_id=operation_id,
             )
+            activity_revision = self.service.advance_lifecycle_activity_revision()
+            return record, activity_revision
 
     def start_managed_process(
         self,
@@ -642,9 +675,7 @@ class DirectNodeRuntime:
         # Read transient operations before durable inventory. During drain,
         # admission has already been atomically closed, so this ordering cannot
         # miss a create transitioning from pre-registry work into the registry.
-        active_reservations, transient_epoch = (
-            self.service.active_reservations_snapshot()
-        )
+        transient = self.service.activity_snapshot()
         inventory = self.service.inventory_snapshot()
         records = inventory.records
         registered_keys = {(record.spec.id, record.generation) for record in records}
@@ -687,7 +718,7 @@ class DirectNodeRuntime:
                 )
             else:
                 used = used + resources
-        for key, resources in active_reservations.items():
+        for key, resources in transient.resource_reservations.items():
             if key in registered_keys:
                 continue
             # The gateway route owns the exact hard-disk reservation before a
@@ -697,14 +728,18 @@ class DirectNodeRuntime:
                 vcpu=resources.vcpu,
                 memory_mb=resources.memory_mb,
             )
-        revision = inventory.activity_revision + transient_epoch
+        revision = compose_activity_revision(
+            durable_revision=inventory.activity_revision,
+            transient_revision=transient.activity_revision,
+        )
         activity = SandboxActivitySnapshot(
             records=records,
             active_sandboxes=sum(record.state == "running" for record in records),
             used_resources=used,
             reserved_resources=reserved,
             activity_revision=revision,
-            active_operations=len(active_reservations),
+            active_operations=transient.active_operations,
+            active_sandbox_creates=transient.active_sandbox_creates,
         )
         build_count = max(0, active_build_count())
         drain = self._drain

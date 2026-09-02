@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.5.22 - 2026-09-03
+
+- Identified HTTP admission exhaustion as a guaranteed pre-dispatch fence, so
+  coordinated clients can safely retry saturated exec, polling, and cleanup
+  requests without treating an already-started mutation as replayable.
+
 ## 0.5.21 - 2026-09-03
 
 - Preserved the typed storage-capacity result across the worker's

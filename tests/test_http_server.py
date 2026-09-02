@@ -201,6 +201,10 @@ class HttpServerTests(unittest.TestCase):
             self.assertEqual(response.getheader("Retry-After"), "1")
             self.assertEqual(response.getheader("X-UCloud-Sandbox-Retryable"), "true")
             self.assertTrue(body["retryable"])
+            self.assertEqual(
+                body["error_code"],
+                "http_request_capacity_exhausted",
+            )
         finally:
             _BlockingHandler.release.set()
             try:

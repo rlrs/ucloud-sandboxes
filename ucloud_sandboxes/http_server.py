@@ -195,6 +195,10 @@ def _http_overload_response() -> bytes:
     body = json.dumps(
         {
             "error": "HTTP request capacity is exhausted; retry shortly",
+            # The server has not dispatched this request to a handler. This
+            # fence therefore makes replay safe even for otherwise mutating
+            # methods such as exec start and sandbox delete.
+            "error_code": "http_request_capacity_exhausted",
             "retryable": True,
         },
         separators=(",", ":"),

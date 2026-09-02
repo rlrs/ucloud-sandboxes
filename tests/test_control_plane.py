@@ -3916,6 +3916,7 @@ class ControlPlaneTests(unittest.TestCase):
                 first_gateway = _gateway_server(
                     raw_path,
                     routing_file=route_file,
+                    registry_url="https://registry.example.org",
                     registry_usage_file=usage_file,
                 )
                 with _running_server(first_gateway) as base:
@@ -3926,22 +3927,28 @@ class ControlPlaneTests(unittest.TestCase):
                         ).status,
                         200,
                     )
-                    created = self._json_request(
-                        f"{base}/v1/sandboxes",
-                        method="POST",
-                        payload={
-                            "id": "ambiguous-one",
-                            "image": image_ref,
-                            "cpus": 1,
-                            "memory_mb": 512,
-                        },
-                        allow_error=True,
-                    )
+                    with patch.object(
+                        control_plane.ControlPlaneHandler,
+                        "_resolve_and_protect_managed_manifest",
+                        return_value="sha256:" + "a" * 64,
+                    ):
+                        created = self._json_request(
+                            f"{base}/v1/sandboxes",
+                            method="POST",
+                            payload={
+                                "id": "ambiguous-one",
+                                "image": image_ref,
+                                "cpus": 1,
+                                "memory_mb": 512,
+                            },
+                            allow_error=True,
+                        )
                     before_restart = RegistryUsageStore(usage_file).snapshot()
 
                 second_gateway = _gateway_server(
                     raw_path,
                     routing_file=route_file,
+                    registry_url="https://registry.example.org",
                     registry_usage_file=usage_file,
                 )
                 with _running_server(second_gateway) as base:
@@ -4224,6 +4231,7 @@ class ControlPlaneTests(unittest.TestCase):
                 gateway = _gateway_server(
                     raw_path,
                     routing_file=route_file,
+                    registry_url="https://registry.example.org",
                     registry_usage_file=raw_path / "registry-usage.json",
                 )
                 with _running_server(gateway) as base:
@@ -4312,6 +4320,40 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(pull["body"], expected_error)
         self.assertEqual(CountingNode.post_count, 0)
         self.assertIsNone(RoutingStore(route_file).get_sandbox("blocked-one"))
+
+    def test_external_registry_images_do_not_use_managed_registry_leases(self) -> None:
+        class RejectingRegistryUsageStore:
+            def __getattr__(self, name: str):
+                raise AssertionError(f"external image reached usage store through {name}")
+
+        with _temporary_root() as raw_path:
+            gateway = _gateway_server(
+                raw_path,
+                registry_url="http://gateway.internal:5000",
+                registry_worker_url="http://gateway-worker.internal:5000",
+                registry_usage_file=raw_path / "registry-usage.sqlite",
+            )
+            try:
+                handler = object.__new__(gateway.RequestHandlerClass)
+                handler.registry_usage_store = RejectingRegistryUsageStore()
+                image = "ghcr.io/astral-sh/uv:python3.12-bookworm-slim"
+                route = _sandbox_route(
+                    sandbox_id="external-image",
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node-1:8090",
+                    spec={"id": "external-image", "image": image},
+                )
+
+                handler._ensure_registry_image_lease(
+                    image,
+                    "external-image-pull",
+                    touch=True,
+                )
+                handler._ensure_registry_route_reference(route, touch=True)
+                handler._record_registry_image_used(image)
+            finally:
+                gateway.server_close()
 
     def test_explicit_managed_digest_fails_closed_without_protection_tag(
         self,

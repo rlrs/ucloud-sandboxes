@@ -3339,12 +3339,22 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     def _record_registry_image_used(self, image_ref: str) -> None:
         if self.registry_usage_store is None:
             return
-        if _private_registry_image_coordinates(image_ref) is None:
+        if self._managed_registry_image_coordinates(image_ref) is None:
             return
         try:
             self.registry_usage_store.touch_image(image_ref)
         except (OSError, ValueError):
             return
+
+    def _managed_registry_image_coordinates(
+        self,
+        image_ref: str,
+    ) -> tuple[str, str] | None:
+        return _managed_registry_image_coordinates(
+            image_ref,
+            self.registry_url or "",
+            self.registry_worker_url or "",
+        )
 
     def _ensure_registry_image_lease(
         self,
@@ -3355,6 +3365,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     ) -> None:
         store = self.registry_usage_store
         if store is None:
+            return
+        if self._managed_registry_image_coordinates(image_ref) is None:
             return
         try:
             _persist_registry_image_protection(
@@ -3379,7 +3391,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         store = self.registry_usage_store
         if store is None:
             return
-        if image_ref:
+        if image_ref and self._managed_registry_image_coordinates(image_ref) is not None:
             try:
                 _persist_registry_image_protection(
                     store,

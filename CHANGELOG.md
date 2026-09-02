@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.5.16 - 2026-09-03
+
+- Scoped image-use leases to the deployment's managed Registry, so public
+  host-qualified images such as GHCR tags no longer fail sandbox creation when
+  their external manifests have no managed digest reference.
+
 ## 0.5.15 - 2026-09-02
 
 - Made VM bootstrap wait for base-image cloud initialization and reconcile

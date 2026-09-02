@@ -90,6 +90,7 @@ class HttpServerTests(unittest.TestCase):
             response, payload = post({"Content-Length": "2"}, b"{}")
             self.assertEqual(response.status, 200)
             self.assertEqual(payload, {"payload": {}})
+            self.assertEqual(response.getheader("Connection"), "close")
             self.assertEqual(response.getheader("Content-Type"), "application/json")
             self.assertEqual(response.getheader("X-Test"), "preserved")
             self.assertEqual(

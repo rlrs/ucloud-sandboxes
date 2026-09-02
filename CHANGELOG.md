@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.5.18 - 2026-09-03
+
+- Prevented body-bearing requests from reusing HTTP/1.1 connections at the
+  public gateway and worker server boundaries, so ingress cannot leave bytes
+  that corrupt a later create, exec, metrics, or delete request; bodyless
+  hot-path polling retains pooled keep-alive connections.
+
 ## 0.5.17 - 2026-09-03
 
 - Prevented body-bearing gateway-to-worker requests from reusing HTTP/1.1

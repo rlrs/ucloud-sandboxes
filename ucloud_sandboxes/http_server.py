@@ -52,6 +52,12 @@ class JsonHttpHandler(BaseHTTPRequestHandler):
         return body
 
     def _request_content_length(self, *, max_bytes: int) -> int:
+        # UCloud's public-link ingress can reuse an upstream HTTP/1.1 socket
+        # after forwarding a body-bearing request even when that request's
+        # lifecycle ends ambiguously. Close every connection whose body we
+        # parse so bytes from one mutation can never become the next request
+        # line. Bodyless polling remains eligible for keep-alive.
+        self.close_connection = True
         if self.headers.get("Transfer-Encoding"):
             raise ValueError("Transfer-Encoding is not supported; use Content-Length")
         length_header = self.headers.get("Content-Length")
@@ -107,6 +113,8 @@ class JsonHttpHandler(BaseHTTPRequestHandler):
         super().send_response(code, message)
 
     def end_headers(self) -> None:
+        if self.close_connection:
+            self.send_header("Connection", "close")
         telemetry = self.telemetry
         if telemetry is not None:
             for key, value in telemetry.current_trace_headers().items():

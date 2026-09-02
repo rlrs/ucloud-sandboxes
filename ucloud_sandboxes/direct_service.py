@@ -17,6 +17,7 @@ from .storage_native_migration import (
     StorageNativeSandboxManifest,
     StorageNativeMigration,
 )
+from .storage_native_daemon import StorageNativeCapacityError
 from .managed_process import (
     MANAGED_PROCESS_BINARY,
     MAX_LOG_READ_BYTES,
@@ -48,6 +49,14 @@ from .telemetry import Telemetry
 
 
 _LOG = logging.getLogger(__name__)
+
+
+@contextmanager
+def _translate_storage_capacity():
+    try:
+        yield
+    except StorageNativeCapacityError as exc:
+        raise SandboxCapacityUnavailableError(str(exc)) from exc
 
 
 @dataclass(frozen=True)
@@ -473,11 +482,22 @@ class DirectSandboxService:
                 operation.generation,
                 spec.requested_resources(),
             ):
-                registration = self.provisioner.create(
-                    spec=spec,
-                    sandbox_generation=operation.generation,
-                    operation_id=operation.operation_id,
-                )
+                try:
+                    registration = self.provisioner.create(
+                        spec=spec,
+                        sandbox_generation=operation.generation,
+                        operation_id=operation.operation_id,
+                    )
+                except StorageNativeCapacityError as exc:
+                    # Capacity rejection is safe to place on another node only
+                    # after this worker has rolled back every partial owner.
+                    try:
+                        self.provisioner.delete(spec.id)
+                    except Exception as cleanup_exc:
+                        raise DirectWardenError(
+                            "storage capacity rejection rollback failed"
+                        ) from cleanup_exc
+                    raise SandboxCapacityUnavailableError(str(exc)) from exc
             self._forget_published_snapshot(spec.id, operation.generation)
             self.mark_activity(spec.id, operation.generation)
             return self._record(registration)
@@ -762,11 +782,12 @@ class DirectSandboxService:
                 ) as span:
                     with self.telemetry.span("sandbox.wake.ensure_network"):
                         self.provisioner.ensure_network(registration)
-                    record = self.warden.resume(
-                        sandbox,
-                        operation_id=operation_id,
-                        timings=timings,
-                    )
+                    with _translate_storage_capacity():
+                        record = self.warden.resume(
+                            sandbox,
+                            operation_id=operation_id,
+                            timings=timings,
+                        )
                     span.add_event("sandbox.wake.timings", timings)
             if record.state != HibernationState.RUNNING:
                 raise DirectWardenError(
@@ -1386,11 +1407,12 @@ class DirectSandboxService:
                     timings["restore_network"] = (time.monotonic() - phase) * 1000
                     phase = time.monotonic()
                     warden_timings: dict[str, float] = {}
-                    record = self.warden.resume(
-                        sandbox,
-                        operation_id=f"wake:{uuid4().hex}",
-                        timings=warden_timings,
-                    )
+                    with _translate_storage_capacity():
+                        record = self.warden.resume(
+                            sandbox,
+                            operation_id=f"wake:{uuid4().hex}",
+                            timings=warden_timings,
+                        )
                     timings["restore"] = (time.monotonic() - phase) * 1000
                     timings.update(
                         {

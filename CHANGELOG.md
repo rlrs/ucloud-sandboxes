@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.5.20 - 2026-09-03
+
+- Classified storage-native hard-capacity and ublk-device exhaustion as
+  retryable node admission, rolling back partial worker ownership before the
+  gateway requeues or selects another node instead of returning a raw 503.
+
 ## 0.5.19 - 2026-09-03
 
 - Closed body-bearing HTTP connections immediately after header parsing and

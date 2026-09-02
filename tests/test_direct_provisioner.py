@@ -44,6 +44,7 @@ from ucloud_sandboxes.sandbox import (
     sandbox_spec_fingerprint,
 )
 from ucloud_sandboxes.storage_native_daemon import (
+    StorageNativeCapacityError,
     StorageNativeConflictError,
     StorageNativeNodeError,
     StorageVolumeOwner,
@@ -497,6 +498,32 @@ class DirectProvisionerTests(unittest.TestCase):
                 parkable.requested_resources().disk_mb,
                 ordinary.requested_resources().disk_mb,
             )
+
+    def test_storage_capacity_rejection_is_retryable_and_rolls_back_owner(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, registry, storage, _, _ = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            with patch.object(
+                storage,
+                "prepare_volume",
+                side_effect=StorageNativeCapacityError(
+                    "storage-native ublk device capacity is exhausted"
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    SandboxCapacityUnavailableError,
+                    "ublk device capacity is exhausted",
+                ):
+                    self.create(service, self.spec())
+
+            self.assertIsNone(registry.get("sandbox"))
+            self.assertEqual(storage.active_records, {})
 
     @contextmanager
     def running_server(self, root: Path, service: DirectSandboxService):

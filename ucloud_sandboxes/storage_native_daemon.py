@@ -95,6 +95,10 @@ class StorageNativeConflictError(StorageNativeNodeError):
     pass
 
 
+class StorageNativeCapacityError(StorageNativeConflictError):
+    """The node cannot allocate another live storage volume right now."""
+
+
 class StorageNativePendingOperation(StorageNativeConflictError):
     pass
 
@@ -701,7 +705,7 @@ class StorageNativeJournal:
                 tuple(sorted(_ACTIVE_CAPACITY_STATES)),
             ).fetchone()[0]
             if int(reserved) + record.virtual_size > hard_capacity_bytes:
-                raise StorageNativeConflictError(
+                raise StorageNativeCapacityError(
                     "storage-native hard capacity is exhausted"
                 )
             record = self._allocate_accounting_id(connection, record)
@@ -811,7 +815,7 @@ class StorageNativeJournal:
                     (*sorted(_ACTIVE_CAPACITY_STATES), record.volume_id),
                 ).fetchone()[0]
                 if int(reserved) + record.virtual_size > hard_capacity_bytes:
-                    raise StorageNativeConflictError(
+                    raise StorageNativeCapacityError(
                         "storage-native hard capacity is exhausted"
                     )
             pending = replace(
@@ -2221,7 +2225,7 @@ class StorageNativeNodeService:
                 and existing_owner is None
                 and demand >= self.config.max_ublk_devices
             ):
-                raise StorageNativeConflictError(
+                raise StorageNativeCapacityError(
                     "storage-native ublk device capacity is exhausted"
                 )
             device = self.backend.create_runtime_device(
@@ -2262,7 +2266,7 @@ class StorageNativeNodeService:
         with self._device_slot_guard:
             active = len(self._backend_ownership())
             if active + self._pending_device_allocations >= maximum:
-                raise StorageNativeConflictError(
+                raise StorageNativeCapacityError(
                     "storage-native ublk device capacity is exhausted"
                 )
             self._pending_device_allocations += 1

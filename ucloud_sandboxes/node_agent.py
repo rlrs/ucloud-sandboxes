@@ -513,6 +513,10 @@ class NodeAgentHandler(BuildContextHttpHandler):
                     "retryable": True,
                 },
                 status=HTTPStatus.SERVICE_UNAVAILABLE,
+                headers={
+                    "Retry-After": "1",
+                    "X-UCloud-Sandbox-Retryable": "true",
+                },
             )
             return
         except (RuntimeError, ValueError) as exc:

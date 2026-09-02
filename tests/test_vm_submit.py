@@ -10,6 +10,12 @@ from ucloud_sandboxes.providers.ucloud.payloads import (
 
 
 class VmSubmitTests(unittest.TestCase):
+    def test_default_ucloud_vm_application_tracks_live_catalog(self) -> None:
+        self.assertEqual(
+            VmApplicationRef().to_dict(),
+            {"name": "vm-ubuntu", "version": "26.04"},
+        )
+
     def test_builds_ucloud_vm_submission_payload(self) -> None:
         options = VmSubmissionOptions(
             name="ucloud-sandbox-node-1",

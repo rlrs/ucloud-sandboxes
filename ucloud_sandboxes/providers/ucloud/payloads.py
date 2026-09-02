@@ -115,7 +115,7 @@ def _same_resource(left: object, right: dict[str, Any]) -> bool:
 
 
 DEFAULT_VM_APPLICATION_NAME = "vm-ubuntu"
-DEFAULT_VM_APPLICATION_VERSION = "24.04"
+DEFAULT_VM_APPLICATION_VERSION = "26.04"
 # Sandbox nodes are deliberately large; the always-on gateway is control-plane
 # infrastructure and should not inherit the worker-node product.
 DEFAULT_VM_PRODUCT_ID = "cpu-amd-zen5-32-vcpu"

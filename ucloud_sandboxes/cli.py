@@ -692,7 +692,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--ssh",
         action="store_true",
         help=(
-            "Request sshEnabled=true. The current vm-ubuntu:24.04 app rejects this "
+            "Request sshEnabled=true. The current vm-ubuntu:26.04 app rejects this "
             "on the live API."
         ),
     )

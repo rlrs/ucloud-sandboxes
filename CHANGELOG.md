@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.5.13 - 2026-09-02
+
+- Updated UCloud gateway, builder, and sandbox VM submissions to the live
+  `vm-ubuntu:26.04` catalog entry after UCloud retired `vm-ubuntu:24.04`.
 - Fenced node restarts with the host boot identity, immutable exec-session
   ownership, and one provider-declared destructive-loss proof contract; UCloud
   guest loss is terminal while recoverable Hetzner power states retain routes.

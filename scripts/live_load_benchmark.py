@@ -21,7 +21,13 @@ SDK_SRC = REPO_ROOT / "ucloud-sandboxes-sdk" / "src"
 if SDK_SRC.is_dir():
     sys.path.insert(0, str(SDK_SRC))
 
-from ucloud_sandboxes_sdk import Image, SandboxApiError, SandboxClient  # noqa: E402
+from ucloud_sandboxes_sdk import (  # noqa: E402
+    Image,
+    SandboxApiError,
+    SandboxClient,
+    SandboxFilesystemSpec,
+    SandboxSpec,
+)
 
 
 T = TypeVar("T")
@@ -486,24 +492,21 @@ def create_one(
     started = time.monotonic()
     try:
         handle = client.create_sandbox(
-            id=sandbox_id,
-            image=image,
-            command=["sleep", str(args.sandbox_ttl_seconds)],
-            cpus=args.cpus,
-            memory_mb=args.memory_mb,
-            disk_mb=args.disk_mb,
-            ttl_seconds=args.sandbox_ttl_seconds,
-            network="bridge",
-            filesystem={
-                "enforce_disk_quota": True,
-                "workspace_path": "/workspace",
-                "tmpfs_mb": 64,
-                "run_tmpfs_mb": 16,
-            },
-            labels={
-                "benchmark.run_id": run_id,
-                "benchmark.index": str(index),
-            },
+            SandboxSpec(
+                id=sandbox_id,
+                image=image,
+                command=("sleep", str(args.sandbox_ttl_seconds)),
+                cpus=args.cpus,
+                memory_mb=args.memory_mb,
+                disk_mb=args.disk_mb,
+                ttl_seconds=args.sandbox_ttl_seconds,
+                network="bridge",
+                filesystem=SandboxFilesystemSpec(enforce_disk_quota=True),
+                labels={
+                    "benchmark.run_id": run_id,
+                    "benchmark.index": str(index),
+                },
+            ),
             request_timeout_seconds=args.create_timeout_seconds,
         )
         response = handle.create_response

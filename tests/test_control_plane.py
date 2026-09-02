@@ -2004,6 +2004,64 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(len(client_ports), 2)
         self.assertEqual(len(set(client_ports)), 1)
 
+    def test_authenticated_node_requests_with_bodies_close_connections(self) -> None:
+        client_ports: list[int] = []
+
+        class EarlyRejectingNode(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def do_POST(self) -> None:
+                # Deliberately reject without consuming the request body. A
+                # subsequent request must not inherit those unread bytes.
+                client_ports.append(self.client_address[1])
+                body = b'{"intentional":true}'
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *_args: object) -> None:
+                return
+
+        node = ThreadingHTTPServer(("127.0.0.1", 0), EarlyRejectingNode)
+        pool = control_plane.urllib3.PoolManager(
+            num_pools=1,
+            maxsize=1,
+            block=True,
+            retries=False,
+        )
+        with _running_server(node) as node_url:
+            try:
+                with patch.object(control_plane, "_NODE_HTTP_POOL", pool):
+                    for index in range(2):
+                        req = request.Request(
+                            f"{node_url}/v1/sandboxes",
+                            data=json.dumps({"id": index}).encode("utf-8"),
+                            method="POST",
+                            headers={"Authorization": "Bearer node-secret"},
+                        )
+                        try:
+                            with control_plane._open_node_request(
+                                req,
+                                timeout=5,
+                                authenticated=True,
+                            ) as response:
+                                self.assertEqual(response.status, 400)
+                                self.assertEqual(
+                                    response.read(), b'{"intentional":true}'
+                                )
+                        except error.URLError:
+                            # Some kernels reset a closing TCP connection that
+                            # still has unread inbound bytes. That is a safe
+                            # transport failure; it must not be pooled.
+                            pass
+            finally:
+                pool.clear()
+
+        self.assertEqual(len(client_ports), 2)
+        self.assertEqual(len(set(client_ports)), 2)
+
     def test_image_inventory_coalesces_repeated_reads(self) -> None:
         class CachedHandler(control_plane.ControlPlaneHandler):
             pass

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.5.17 - 2026-09-03
+
+- Prevented body-bearing gateway-to-worker requests from reusing HTTP/1.1
+  connections, so an early worker response cannot leave unread bytes that
+  corrupt a later create, exec, or delete request; bodyless hot-path polling
+  retains pooled keep-alive connections.
+- Updated the production load harness to construct the current public SDK
+  `SandboxSpec` directly instead of relying on the removed keyword shortcut.
+
 ## 0.5.16 - 2026-09-03
 
 - Scoped image-use leases to the deployment's managed Registry, so public

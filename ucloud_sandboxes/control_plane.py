@@ -530,11 +530,19 @@ def _open_node_request(
     # redirect target selected by a compromised node endpoint.
     if authenticated:
         try:
+            headers = dict(req.header_items())
+            if req.data is not None:
+                # A node can reject a body-bearing request before consuming its
+                # body (for example during admission or authorization changes).
+                # Reusing that HTTP/1.1 connection would let unread bytes become
+                # the next request line. Keep hot bodyless polling pooled, but
+                # make every request with a body self-contained.
+                headers["Connection"] = "close"
             return _NODE_HTTP_POOL.request(
                 req.get_method(),
                 req.full_url,
                 body=req.data,
-                headers=dict(req.header_items()),
+                headers=headers,
                 redirect=False,
                 retries=False,
                 preload_content=False,

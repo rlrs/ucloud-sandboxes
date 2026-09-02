@@ -558,6 +558,36 @@ if [ -n "$UCLOUD_NODE_CONTROL_BEARER_TOKEN_FILE" ] && [ -n "$UCLOUD_NODE_CONTROL
 fi
 log_init_phase "users-and-secrets"
 
+wait_for_base_image_initialization() {{
+  local cloud_init_status
+  if ! command -v cloud-init >/dev/null 2>&1; then
+    return 0
+  fi
+  echo "Waiting for base-image cloud initialization"
+  set +e
+  $SUDO timeout 600 cloud-init status --wait >/dev/null
+  cloud_init_status=$?
+  set -e
+  case "$cloud_init_status" in
+    0|2)
+      # cloud-init returns 2 when it completed with a reported module error.
+      # Package state is reconciled from the offline bundle below, so the
+      # important property here is that cloud-final no longer owns dpkg.
+      ;;
+    124)
+      echo "Timed out waiting for base-image cloud initialization" >&2
+      return 1
+      ;;
+    *)
+      echo "Could not determine that base-image cloud initialization finished" >&2
+      return "$cloud_init_status"
+      ;;
+  esac
+}}
+
+wait_for_base_image_initialization
+log_init_phase "base-image"
+
 UCLOUD_OS_ID="$(. /etc/os-release && printf '%s' "$ID")"
 UCLOUD_OS_VERSION_ID="$(. /etc/os-release && printf '%s' "$VERSION_ID")"
 UCLOUD_OS_CODENAME="$(. /etc/os-release && printf '%s' "${{UBUNTU_CODENAME:-${{VERSION_CODENAME:-}}}}")"
@@ -888,12 +918,19 @@ install_bundled_runtime() {{
       $SUDO chmod 0755 /usr/sbin/policy-rc.d
       policy_rc_d_created=1
     fi
-    if $SUDO apt-get install --no-install-recommends -y \
-      -o DPkg::Lock::Timeout=60 -o Dpkg::Use-Pty=0 \
-      -o Dir::Etc::sourcelist="$offline_apt_root/sources.list" \
-      -o Dir::Etc::sourceparts="$offline_apt_root/sources.list.d" \
-      -o APT::Get::List-Cleanup=0 "${{local_packages[@]}}"; then
-      install_status=0
+    # A newly reachable VM may still carry packages unpacked by cloud-init.
+    # Finish that transaction before APT evaluates our complete offline set.
+    # This is idempotent when the base image is already clean.
+    if $SUDO dpkg --configure --pending; then
+      if $SUDO apt-get install --no-install-recommends -y \
+        -o DPkg::Lock::Timeout=60 -o Dpkg::Use-Pty=0 \
+        -o Dir::Etc::sourcelist="$offline_apt_root/sources.list" \
+        -o Dir::Etc::sourceparts="$offline_apt_root/sources.list.d" \
+        -o APT::Get::List-Cleanup=0 "${{local_packages[@]}}"; then
+        install_status=0
+      else
+        install_status=$?
+      fi
     else
       install_status=$?
     fi

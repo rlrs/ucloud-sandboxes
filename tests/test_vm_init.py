@@ -181,6 +181,20 @@ class VmInitTests(unittest.TestCase):
         )
         self.assertEqual(syntax.returncode, 0, syntax.stderr)
 
+    def test_vm_bootstrap_waits_for_cloud_init_and_repairs_package_state(self) -> None:
+        script = render_vm_init_script(self._options())
+
+        self.assertIn("timeout 600 cloud-init status --wait", script)
+        self.assertIn('log_init_phase "base-image"', script)
+        self.assertLess(
+            script.index("cloud-init status --wait"),
+            script.index("dpkg --configure --pending"),
+        )
+        self.assertLess(
+            script.index("dpkg --configure --pending"),
+            script.index("apt-get install --no-install-recommends"),
+        )
+
     def test_explicit_state_dir_avoids_shared_work_mount(self) -> None:
         script = render_vm_init_script(
             self._options(

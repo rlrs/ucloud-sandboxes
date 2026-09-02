@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ucloud-sandboxes"
-version = "0.5.14"
+version = "0.5.15"
 description = "Provider-aware gVisor sandbox control plane for Linux compute nodes"
 readme = "README.md"
 requires-python = ">=3.10.13"

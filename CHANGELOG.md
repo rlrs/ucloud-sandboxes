@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.5.15 - 2026-09-02
+
+- Made VM bootstrap wait for base-image cloud initialization and reconcile
+  pending package configuration before installing the verified offline runtime,
+  preventing Ubuntu 26.04 workers from racing `cloud-final` package activity.
+
 ## 0.5.14 - 2026-09-02
 
 - Made Ubuntu 26.04 offline worker bootstrap bundles include the complete

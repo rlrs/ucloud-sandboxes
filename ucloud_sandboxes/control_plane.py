@@ -6211,6 +6211,10 @@ def build_server(
         pass
 
     BoundHandler.store = store
+    # UCloud ingress owns public client connection reuse. Do not let its idle
+    # upstream HTTP/1.1 pool consume gateway request threads between requests.
+    # Private gateway-to-worker clients retain pooled keep-alives.
+    BoundHandler.allow_http_keep_alive = False
     BoundHandler.routing_store = routing_store
     BoundHandler.gateway_bearer_token = gateway_bearer_token
     BoundHandler.sandbox_api_token = sandbox_api_token

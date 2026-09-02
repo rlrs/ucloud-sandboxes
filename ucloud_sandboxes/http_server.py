@@ -32,6 +32,7 @@ class JsonHttpHandler(BaseHTTPRequestHandler):
     # so HTTP/1.1 keep-alive is safe.  This is important for the gateway's hot
     # polling paths, where reconnecting for every request is pure overhead.
     protocol_version = "HTTP/1.1"
+    allow_http_keep_alive = True
     max_json_body_bytes = DEFAULT_MAX_JSON_BODY_BYTES
     telemetry: Telemetry | None = None
 
@@ -39,6 +40,12 @@ class JsonHttpHandler(BaseHTTPRequestHandler):
         parsed = super().parse_request()
         if not parsed:
             return False
+        if not self.allow_http_keep_alive:
+            # ThreadingHTTPServer dedicates one thread to a connection, not to
+            # an individual request. Public reverse proxies can otherwise
+            # retain enough idle upstream keep-alives to exhaust the bounded
+            # request pool while the gateway is doing no work.
+            self.close_connection = True
         content_length = self.headers.get("Content-Length")
         if self.headers.get("Transfer-Encoding") or (
             content_length is not None and content_length.strip() != "0"

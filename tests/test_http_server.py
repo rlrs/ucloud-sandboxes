@@ -56,7 +56,39 @@ class _EarlyRejectingJsonHandler(JsonHttpHandler):
         self._write_json({"retryable": True}, status=503)
 
 
+class _NoKeepAliveJsonHandler(JsonHttpHandler):
+    allow_http_keep_alive = False
+
+    def do_GET(self) -> None:
+        self._write_json({"ok": True})
+
+
 class HttpServerTests(unittest.TestCase):
+    def test_handler_can_close_idle_reverse_proxy_connections(self) -> None:
+        server = HighBacklogThreadingHTTPServer(
+            ("127.0.0.1", 0),
+            _NoKeepAliveJsonHandler,
+        )
+        thread = Thread(
+            target=server.serve_forever,
+            kwargs={"poll_interval": 0.01},
+            daemon=True,
+        )
+        thread.start()
+        connection = HTTPConnection(*server.server_address, timeout=5)
+        try:
+            connection.request("GET", "/healthz")
+            response = connection.getresponse()
+            self.assertEqual(response.status, 200)
+            self.assertEqual(response.getheader("Connection"), "close")
+            self.assertEqual(json.loads(response.read()), {"ok": True})
+            self.assertTrue(response.isclosed())
+        finally:
+            connection.close()
+            server.shutdown()
+            thread.join(timeout=1)
+            server.server_close()
+
     def test_json_handler_owns_bounded_framing_and_response_headers(self) -> None:
         server = HighBacklogThreadingHTTPServer(
             ("127.0.0.1", 0),

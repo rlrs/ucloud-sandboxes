@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.5.23 - 2026-09-03
+
+- Kept the public gateway on HTTP/1.1 while closing each reverse-proxy-side
+  connection after its response, preventing UCloud ingress's idle upstream
+  keep-alives from occupying every bounded gateway request thread. Private
+  gateway-to-worker polling retains pooled connections.
+
 ## 0.5.22 - 2026-09-03
 
 - Identified HTTP admission exhaustion as a guaranteed pre-dispatch fence, so

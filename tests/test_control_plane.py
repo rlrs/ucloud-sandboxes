@@ -3684,7 +3684,7 @@ class ControlPlaneTests(unittest.TestCase):
         )
         self.assertLess(elapsed, 5)
 
-    def test_gateway_create_admission_precedes_body_read_and_caps_json(self) -> None:
+    def test_gateway_create_reads_body_before_admission_and_caps_json(self) -> None:
         with _temporary_root() as root:
             gateway = _gateway_server(
                 root,
@@ -3698,10 +3698,21 @@ class ControlPlaneTests(unittest.TestCase):
                 self.assertTrue(limiter.acquire(blocking=False))
                 try:
                     connection = HTTPConnection(host, port, timeout=2)
-                    connection.putrequest("POST", "/v1/sandboxes")
-                    connection.putheader("Content-Type", "application/json")
-                    connection.putheader("Content-Length", "1024")
-                    connection.endheaders()
+                    body = json.dumps(
+                        {
+                            "id": "admission-busy",
+                            "image": "busybox",
+                            "cpus": 1,
+                            "memory_mb": 128,
+                            "disk_mb": 64,
+                        }
+                    ).encode("utf-8")
+                    connection.request(
+                        "POST",
+                        "/v1/sandboxes",
+                        body=body,
+                        headers={"Content-Type": "application/json"},
+                    )
                     response = connection.getresponse()
                     busy_body = json.loads(response.read().decode("utf-8"))
                     connection.close()

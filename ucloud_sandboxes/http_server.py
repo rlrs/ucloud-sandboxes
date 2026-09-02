@@ -35,6 +35,19 @@ class JsonHttpHandler(BaseHTTPRequestHandler):
     max_json_body_bytes = DEFAULT_MAX_JSON_BODY_BYTES
     telemetry: Telemetry | None = None
 
+    def parse_request(self) -> bool:
+        parsed = super().parse_request()
+        if not parsed:
+            return False
+        content_length = self.headers.get("Content-Length")
+        if self.headers.get("Transfer-Encoding") or (
+            content_length is not None and content_length.strip() != "0"
+        ):
+            # This must happen before dispatch: authorization, admission, and
+            # overload paths can all answer without consuming the body.
+            self.close_connection = True
+        return True
+
     def _read_json_body(self) -> object:
         raw = self._read_raw_body(max_bytes=self.max_json_body_bytes).decode("utf-8")
         if not raw:
@@ -52,12 +65,6 @@ class JsonHttpHandler(BaseHTTPRequestHandler):
         return body
 
     def _request_content_length(self, *, max_bytes: int) -> int:
-        # UCloud's public-link ingress can reuse an upstream HTTP/1.1 socket
-        # after forwarding a body-bearing request even when that request's
-        # lifecycle ends ambiguously. Close every connection whose body we
-        # parse so bytes from one mutation can never become the next request
-        # line. Bodyless polling remains eligible for keep-alive.
-        self.close_connection = True
         if self.headers.get("Transfer-Encoding"):
             raise ValueError("Transfer-Encoding is not supported; use Content-Length")
         length_header = self.headers.get("Content-Length")

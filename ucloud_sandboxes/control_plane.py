@@ -2671,32 +2671,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         return updated
 
     def _create_sandbox_on_node(self) -> None:
-        limiter = self.sandbox_create_limiter
-        limiter_acquired = False
-        parsed_ok = False
         try:
-            if limiter is not None and not limiter.acquire(blocking=False):
-                self.sandbox_create_busy_sampler.record(
-                    max_concurrent_sandbox_creates=(
-                        self.max_concurrent_sandbox_creates
-                    ),
-                )
-                self._write_json(
-                    {
-                        "error": "gateway is busy creating sandboxes; retry shortly",
-                        "retryable": True,
-                        "max_concurrent_sandbox_creates": (
-                            self.max_concurrent_sandbox_creates
-                        ),
-                    },
-                    status=HTTPStatus.SERVICE_UNAVAILABLE,
-                    headers={
-                        "Retry-After": str(SANDBOX_CREATE_BUSY_RETRY_AFTER_SECONDS),
-                        "X-UCloud-Sandbox-Retryable": "true",
-                    },
-                )
-                return
-            limiter_acquired = limiter is not None
             body = self._read_raw_body(max_bytes=DEFAULT_MAX_JSON_BODY_BYTES)
             raw = json.loads(body.decode("utf-8")) if body else None
             if not isinstance(raw, dict):
@@ -2709,7 +2684,6 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     requested,
                     self.max_sandbox_resources,
                 )
-            parsed_ok = True
         except SandboxShapeUnschedulableError as exc:
             self._write_json(
                 {
@@ -2725,9 +2699,31 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         except (json.JSONDecodeError, ValueError) as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             return
-        finally:
-            if limiter_acquired and not parsed_ok:
-                limiter.release()
+
+        # Consume and validate the request before admission control. An early
+        # overload response with an unread body can corrupt the next request
+        # when a reverse proxy reuses its upstream HTTP/1.1 connection.
+        limiter = self.sandbox_create_limiter
+        if limiter is not None and not limiter.acquire(blocking=False):
+            self.sandbox_create_busy_sampler.record(
+                max_concurrent_sandbox_creates=self.max_concurrent_sandbox_creates,
+            )
+            self._write_json(
+                {
+                    "error": "gateway is busy creating sandboxes; retry shortly",
+                    "retryable": True,
+                    "max_concurrent_sandbox_creates": (
+                        self.max_concurrent_sandbox_creates
+                    ),
+                },
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+                headers={
+                    "Retry-After": str(SANDBOX_CREATE_BUSY_RETRY_AFTER_SECONDS),
+                    "X-UCloud-Sandbox-Retryable": "true",
+                },
+            )
+            return
+        limiter_acquired = limiter is not None
 
         try:
             self._create_sandbox_on_node_locked(spec)

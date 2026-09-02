@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.5.19 - 2026-09-03
+
+- Closed body-bearing HTTP connections immediately after header parsing and
+  consumed valid sandbox-create bodies before admission control, preventing
+  pre-body authorization or overload responses from leaving bytes that UCloud
+  ingress could replay as the next request.
+
 ## 0.5.18 - 2026-09-03
 
 - Prevented body-bearing requests from reusing HTTP/1.1 connections at the

@@ -51,6 +51,11 @@ class _JsonHandler(JsonHttpHandler):
         )
 
 
+class _EarlyRejectingJsonHandler(JsonHttpHandler):
+    def do_POST(self) -> None:
+        self._write_json({"retryable": True}, status=503)
+
+
 class HttpServerTests(unittest.TestCase):
     def test_json_handler_owns_bounded_framing_and_response_headers(self) -> None:
         server = HighBacklogThreadingHTTPServer(
@@ -132,6 +137,35 @@ class HttpServerTests(unittest.TestCase):
             client.close()
             if accepted is not None:
                 accepted.close()
+            server.server_close()
+
+    def test_early_body_rejection_closes_connection_before_body_is_read(self) -> None:
+        server = HighBacklogThreadingHTTPServer(
+            ("127.0.0.1", 0),
+            _EarlyRejectingJsonHandler,
+        )
+        thread = Thread(
+            target=server.serve_forever,
+            kwargs={"poll_interval": 0.01},
+            daemon=True,
+        )
+        thread.start()
+        connection = HTTPConnection(*server.server_address, timeout=5)
+        try:
+            connection.request(
+                "POST",
+                "/v1/sandboxes",
+                body=b'{"id":"unread"}',
+                headers={"Content-Type": "application/json"},
+            )
+            response = connection.getresponse()
+            self.assertEqual(response.status, 503)
+            self.assertEqual(response.getheader("Connection"), "close")
+            response.read()
+        finally:
+            connection.close()
+            server.shutdown()
+            thread.join(timeout=1)
             server.server_close()
 
     def test_thread_capacity_returns_retryable_json_instead_of_disconnect(self) -> None:

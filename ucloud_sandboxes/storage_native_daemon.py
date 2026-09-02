@@ -2563,6 +2563,8 @@ class StorageNativeNodeClient:
                 )
             return result
         message = str(raw.get("message") or "storage-native operation failed")
+        if status == "capacity":
+            raise StorageNativeCapacityError(message)
         if status == "conflict":
             raise StorageNativeConflictError(message)
         if status == "pending":
@@ -2587,6 +2589,8 @@ class _StorageNativeRequestHandler(socketserver.BaseRequestHandler):
             response = self._observed_dispatch(request)
         except StorageNativePendingOperation as exc:
             response = {"status": "pending", "message": str(exc)}
+        except StorageNativeCapacityError as exc:
+            response = {"status": "capacity", "message": str(exc)}
         except StorageNativeConflictError as exc:
             response = {"status": "conflict", "message": str(exc)}
         except StorageNativeTerminalError as exc:

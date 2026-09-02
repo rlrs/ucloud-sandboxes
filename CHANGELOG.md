@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.5.21 - 2026-09-03
+
+- Preserved the typed storage-capacity result across the worker's
+  storage-daemon Unix protocol, so the worker rollback and gateway requeue path
+  introduced in 0.5.20 also applies in the real multi-process deployment.
+
 ## 0.5.20 - 2026-09-03
 
 - Classified storage-native hard-capacity and ublk-device exhaustion as

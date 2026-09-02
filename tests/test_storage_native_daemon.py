@@ -16,6 +16,7 @@ from ucloud_sandboxes.storage_native import (
     StorageNativeDeviceOwner,
 )
 from ucloud_sandboxes.storage_native_daemon import (
+    StorageNativeCapacityError,
     StorageNativeConflictError,
     StorageNativeNodeConfig,
     StorageNativePendingOperation,
@@ -766,7 +767,7 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
     def test_versioned_unix_socket_protocol(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw)
-            service, backend, _ = self._service(root)
+            service, backend, _ = self._service(root, capacity=2 << 30)
             socket_path = root / "service" / "storage.sock"
             server = StorageNativeNodeServer(
                 socket_path,
@@ -801,6 +802,15 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
                 virtual_size=1 << 30,
             )
             self.assertEqual(other.accounting_id, created.accounting_id + 1)
+            with self.assertRaisesRegex(
+                StorageNativeCapacityError,
+                "hard capacity is exhausted",
+            ):
+                client.prepare_volume(
+                    StorageVolumeOwner("volume-3", "sandbox-3", 4),
+                    operation_id="create:3",
+                    virtual_size=1 << 30,
+                )
             metrics = client.get_metrics()
             self.assertEqual(metrics["hard_reserved_bytes"], 2 << 30)
             self.assertEqual(metrics["active_operations"], 0)

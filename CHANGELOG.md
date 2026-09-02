@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.5.14 - 2026-09-02
+
+- Made Ubuntu 26.04 offline worker bootstrap bundles include the complete
+  version-locked `util-linux` family instead of mixing base and update-pocket
+  packages during installation.
+
 ## 0.5.13 - 2026-09-02
 
 - Updated UCloud gateway, builder, and sandbox VM submissions to the live

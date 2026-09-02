@@ -190,9 +190,11 @@ class DeployTests(unittest.TestCase):
                 self.assertNotIn("REGISTRY_SECRET_KEY=", script)
                 self.assertIn(
                     "download_runtime_packages runtime xfsprogs "
-                    "docker-ce docker-ce-cli containerd.io apparmor kmod ",
+                    "docker-ce docker-ce-cli containerd.io apparmor "
+                    "bsdextrautils eject fdisk kmod libfdisk1 ",
                     script,
                 )
+                self.assertIn("util-linux util-linux-extra uuid-runtime", script)
                 self.assertIn(
                     "OPTIONAL_SYSTEMD_RUNTIME_PACKAGES=systemd-cryptsetup",
                     script,

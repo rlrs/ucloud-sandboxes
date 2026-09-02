@@ -49,21 +49,29 @@ REGISTRY_STORAGE_SYSTEMD_UNITS = (
     "ucloud-sandbox-registry-gc.service",
 )
 # The bundle is resolved against an empty dpkg status so it remains usable on a
-# freshly booted image.  APT still treats several Essential/systemd packages as
-# ambient and can otherwise download a newer libsystemd0 without the matching
-# service packages.  Include that version-locked closure explicitly.
-BUNDLED_SYSTEMD_RUNTIME_PACKAGES = (
+# freshly booted image. APT still treats some Essential packages as ambient.
+# Request the systemd closure and the complete util-linux binary family
+# explicitly so every exact-version dependency is downloaded from one pocket.
+BUNDLED_HOST_RUNTIME_PACKAGES = (
     "apparmor",
+    "bsdextrautils",
+    "eject",
+    "fdisk",
     # UCloud's minimal Ubuntu VM image omits depmod(8), which vm-init needs
     # after installing the verified kernel-module closure.
     "kmod",
+    "libfdisk1",
     "libnss-systemd",
     "libpam-systemd",
     "libsystemd-shared",
+    "mount",
     "systemd",
     "systemd-resolved",
     "systemd-sysv",
     "udev",
+    "util-linux",
+    "util-linux-extra",
+    "uuid-runtime",
 )
 # Ubuntu 24.04 ships systemd-cryptsetup in the main systemd package, while
 # Ubuntu 26.04 exposes the same runtime as a separate package.  Include the
@@ -385,7 +393,7 @@ def render_remote_deploy_script(
     node_runtime_packages = " ".join(SANDBOX_RUNTIME_PACKAGES)
     builder_runtime_packages = " ".join(BUILDER_RUNTIME_PACKAGES)
     runtime_kernel_modules = " ".join(RUNTIME_KERNEL_MODULES)
-    bundled_systemd_runtime_packages = " ".join(BUNDLED_SYSTEMD_RUNTIME_PACKAGES)
+    bundled_host_runtime_packages = " ".join(BUNDLED_HOST_RUNTIME_PACKAGES)
     optional_bundled_systemd_runtime_packages = " ".join(
         OPTIONAL_BUNDLED_SYSTEMD_RUNTIME_PACKAGES
     )
@@ -532,7 +540,7 @@ def render_remote_deploy_script(
         "    fi",
         "  done",
         "  collect_runtime_kernel_modules || return 1",
-        f"  download_runtime_packages runtime {node_runtime_packages} {bundled_systemd_runtime_packages} \"${{AVAILABLE_OPTIONAL_SYSTEMD_RUNTIME_PACKAGES[@]}}\" || return 1",
+        f"  download_runtime_packages runtime {node_runtime_packages} {bundled_host_runtime_packages} \"${{AVAILABLE_OPTIONAL_SYSTEMD_RUNTIME_PACKAGES[@]}}\" || return 1",
         '  sudo chmod -R a+rX "$NODE_PACKAGE_WORK/runtime" || return 1',
         "}",
         "build_runtime_bundle",

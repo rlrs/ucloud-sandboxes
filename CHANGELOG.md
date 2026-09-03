@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.5.25 - 2026-09-03
+
+- Made relay-driven parking retry transient lifecycle conflicts uniformly, so
+  concurrent SDK status or log polling cannot disable later agent-aware park
+  cycles while persistent activity remains bounded by the existing timeout.
+
 ## 0.5.24 - 2026-09-03
 
 - Reduced steady-state UCloud autoscaler inventory work to state-filtered active

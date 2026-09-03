@@ -343,7 +343,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(post.call_count, 2)
         sleep.assert_called_once_with(0.05)
 
-        unsafe_exec = HTTPError(
+        transient_activity = HTTPError(
             "https://gateway.example",
             409,
             "Conflict",
@@ -357,19 +357,25 @@ class CliTests(unittest.TestCase):
             patch.object(
                 cli,
                 "_post_bounded_json",
-                side_effect=unsafe_exec,
+                side_effect=[
+                    transient_activity,
+                    (
+                        {"sandbox": {"state": "parked"}},
+                        {"X-UCloud-Sandbox-Transport-Epoch": "epoch-2"},
+                    ),
+                ],
             ) as post,
             patch.object(cli.time, "sleep") as sleep,
-            self.assertRaisesRegex(RuntimeError, "start_agent"),
         ):
-            cli._post_gateway_sandbox_lifecycle(
+            epoch = cli._post_gateway_sandbox_lifecycle(
                 "https://gateway.example",
                 "secret",
                 relay_request,
                 action="park",
             )
-        self.assertEqual(post.call_count, 1)
-        sleep.assert_not_called()
+        self.assertEqual(epoch, "epoch-2")
+        self.assertEqual(post.call_count, 2)
+        sleep.assert_called_once_with(0.05)
 
     def test_autoscaler_execute_rejects_jobs_fixture_before_provider_calls(
         self,

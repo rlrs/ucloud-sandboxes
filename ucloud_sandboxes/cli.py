@@ -4580,6 +4580,7 @@ def _execute_vm_bootstrap_attempt_unobserved(
             timeout_seconds=config.autoscaler_init_timeout_seconds,
             private_key_file=str(config.init_ssh_private_key_file()),
             known_hosts_file=known_hosts_file,
+            startup_probe_seconds=intent.access.startup_probe_seconds,
         )
         stage_elapsed_ms = int((time.perf_counter() - stage_started_perf) * 1000)
         stage_duration_ms = stage_elapsed_ms

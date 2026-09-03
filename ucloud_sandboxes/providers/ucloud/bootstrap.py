@@ -31,6 +31,11 @@ def bootstrap_access(instance: ProviderInstance) -> InstanceBootstrapAccess:
         command=command,
         runnable=True,
         reason="Instance is running and SSH access is available.",
+        # UCloud announces the SSH tunnel before sshd in the guest is always
+        # ready. Keep the already-scheduled bootstrap worker on that endpoint
+        # instead of turning transient connection failures into autoscaler
+        # retries with increasingly sparse probes.
+        startup_probe_seconds=30,
     )
 
 

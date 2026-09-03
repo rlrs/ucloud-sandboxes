@@ -691,6 +691,8 @@ class MetricsTests(unittest.TestCase):
                     "duration_ms": 60_000,
                     "stage_duration_ms": 1000,
                     "run_duration_ms": 59_000,
+                    "init_phases_ms": {"kernel-modules": 4_000},
+                    "init_total_ms": 58_000,
                     "returncode": 0,
                 },
                 timestamp=(now - timedelta(seconds=20)).isoformat(),
@@ -734,6 +736,10 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(item["last_successful_init_duration_ms"], 60_000)
         self.assertEqual(item["last_successful_package_stage_ms"], 1_000)
         self.assertEqual(item["last_successful_remote_init_ms"], 59_000)
+        self.assertEqual(
+            item["last_successful_init_phases_ms"], {"kernel-modules": 4_000}
+        )
+        self.assertEqual(item["last_successful_reported_init_ms"], 58_000)
         self.assertEqual(item["first_sandbox_scale_up_wait_ms"], 112_000)
 
     def test_metrics_snapshot_does_not_embed_trace_storage(self) -> None:

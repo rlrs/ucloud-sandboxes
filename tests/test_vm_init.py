@@ -356,6 +356,7 @@ class VmInitTests(unittest.TestCase):
         plan = bootstrap_access_from_payload(payload)
         self.assertTrue(plan.runnable)
         self.assertEqual(plan.command, "ssh ucloud@example -p 22")
+        self.assertEqual(plan.startup_probe_seconds, 30)
         self.assertEqual(extract_ssh_command(payload), plan.command)
 
         payload["status"]["state"] = "IN_QUEUE"
@@ -368,6 +369,13 @@ class VmInitTests(unittest.TestCase):
         )
         self.assertEqual(phases, {"runtime-bundle": 17321, "docker-daemon": 823})
         self.assertEqual(total, 24100)
+
+    def test_kernel_bootstrap_reuses_matching_base_image_module_index(self) -> None:
+        script = render_vm_init_script(self._options())
+
+        self.assertIn('indexed_module_path="$(awk -F:', script)
+        self.assertIn('echo "Reused matching kernel module index"', script)
+        self.assertIn('$SUDO depmod -a "$UCLOUD_KERNEL_RELEASE"', script)
 
     def test_stages_bundle_with_digest(self) -> None:
         calls: list[tuple[tuple[str, ...], bytes | None]] = []
@@ -419,3 +427,32 @@ class VmInitTests(unittest.TestCase):
         self.assertTrue(result.reused)
         self.assertEqual(result.returncode, 0)
         self.assertEqual(len(calls), 1)
+
+    def test_retries_transient_startup_probe_in_place(self) -> None:
+        calls: list[tuple[str, ...]] = []
+        returncodes = iter((255, 255, 0))
+
+        def fake_run(command, *, stdin=None, check=None, timeout=None):
+            del check, timeout
+            self.assertIsNone(stdin)
+            calls.append(tuple(command))
+            return subprocess.CompletedProcess(command, next(returncodes))
+
+        with (
+            patch.object(vm_init.subprocess, "run", side_effect=fake_run),
+            patch.object(vm_init.time, "monotonic", side_effect=(10.0, 10.1, 11.1)),
+            patch.object(vm_init.time, "sleep") as sleep,
+            TemporaryDirectory() as raw_dir,
+        ):
+            package = Path(raw_dir) / "node-package.tar.gz"
+            package.write_bytes(b"snapshot-baked-bundle")
+            result = stage_vm_init_package_over_ssh(
+                "ssh ucloud@example -p 22",
+                self._options(package_spec=str(package)),
+                startup_probe_seconds=30,
+            )
+
+        self.assertTrue(result.reused)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(sleep.call_count, 2)

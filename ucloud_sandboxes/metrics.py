@@ -1738,6 +1738,8 @@ def _vm_lifecycle_summary(events: list[MetricEvent]) -> dict[str, Any]:
                         "duration_ms": data.get("duration_ms"),
                         "stage_duration_ms": data.get("stage_duration_ms"),
                         "run_duration_ms": data.get("run_duration_ms"),
+                        "init_phases_ms": data.get("init_phases_ms") or {},
+                        "init_total_ms": data.get("init_total_ms"),
                         "returncode": data.get("returncode"),
                         "retry_delay_seconds": data.get("retry_delay_seconds"),
                         "skipped": data.get("skipped"),
@@ -1818,6 +1820,16 @@ def _vm_lifecycle_summary(events: list[MetricEvent]) -> dict[str, Any]:
             )
             item["last_successful_remote_init_ms"] = (
                 _optional_int(last_success.get("run_duration_ms"))
+                if last_success is not None
+                else None
+            )
+            item["last_successful_init_phases_ms"] = (
+                dict(last_success.get("init_phases_ms") or {})
+                if last_success is not None
+                else {}
+            )
+            item["last_successful_reported_init_ms"] = (
+                _optional_int(last_success.get("init_total_ms"))
                 if last_success is not None
                 else None
             )

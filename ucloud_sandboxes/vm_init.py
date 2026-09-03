@@ -10,6 +10,7 @@ import re
 import shlex
 import subprocess
 import sys
+import time
 from typing import Literal
 
 from .deployment import DEFAULT_INIT_VERSION, package_version
@@ -1021,29 +1022,72 @@ fi
 log_init_phase "host-aliases"
 
 UCLOUD_RUNTIME_KERNEL_MODULES=({runtime_kernel_modules_shell})
-UCLOUD_KERNEL_MODULE_TARGET="/lib/modules/$(uname -r)/updates/ucloud-sandboxes"
+UCLOUD_KERNEL_RELEASE="$(uname -r)"
+UCLOUD_KERNEL_MODULE_ROOT="/lib/modules/$UCLOUD_KERNEL_RELEASE"
+UCLOUD_KERNEL_MODULE_TARGET="$UCLOUD_KERNEL_MODULE_ROOT/updates/ucloud-sandboxes"
 UCLOUD_KERNEL_MODULE_MARKER="$UCLOUD_KERNEL_MODULE_TARGET/.bundle-sha256"
+UCLOUD_KERNEL_MODULES_LOADED=0
 if [ ! -f "$UCLOUD_KERNEL_MODULE_MARKER" ] \
   || [ "$(cat "$UCLOUD_KERNEL_MODULE_MARKER")" != "$UCLOUD_PACKAGE_BUNDLE_SHA256" ]; then
   echo "Installing bundled container-runtime kernel module closure"
   $SUDO rm -rf "$UCLOUD_KERNEL_MODULE_TARGET"
   $SUDO mkdir -p "$UCLOUD_KERNEL_MODULE_TARGET"
+  UCLOUD_KERNEL_INDEX_REUSABLE=1
   for module_file in "$UCLOUD_BUNDLED_KERNEL_MODULE_DIR"/*.ko*; do
     [ -f "$module_file" ] || {{ echo "Bundled kernel module closure is empty" >&2; exit 1; }}
-    $SUDO install -m 0644 "$module_file" "$UCLOUD_KERNEL_MODULE_TARGET/${{module_file##*/}}"
-  done
-  for module_metadata in modules.order modules.builtin modules.builtin.modinfo; do
-    if [ ! -e "/lib/modules/$(uname -r)/$module_metadata" ]; then
-      $SUDO touch "/lib/modules/$(uname -r)/$module_metadata"
+    module_name="${{module_file##*/}}"
+    # Minimal UCloud images retain depmod's index from the matching kernel
+    # package even when some module payloads are absent. Restore each verified
+    # module to that canonical indexed path so modprobe can use the existing
+    # index without a full depmod scan. Unknown or ambiguous paths fall back to
+    # the conventional updates directory and the safe depmod path below.
+    indexed_module_path="$(awk -F: -v name="$module_name" '
+      {{ count=split($1, parts, "/"); candidate=parts[count] }}
+      candidate == name {{ found=$1; matches++ }}
+      END {{ if (matches == 1) print found; else exit 1 }}
+    ' "$UCLOUD_KERNEL_MODULE_ROOT/modules.dep" 2>/dev/null || true)"
+    if [ -n "$indexed_module_path" ] \
+      && [[ "$indexed_module_path" != /* ]] \
+      && [[ "$indexed_module_path" != *..* ]]; then
+      module_target="$UCLOUD_KERNEL_MODULE_ROOT/$indexed_module_path"
+      $SUDO install -d -m 0755 "$(dirname "$module_target")"
+    else
+      UCLOUD_KERNEL_INDEX_REUSABLE=0
+      module_target="$UCLOUD_KERNEL_MODULE_TARGET/$module_name"
+    fi
+    if [ ! -f "$module_target" ] || ! cmp -s "$module_file" "$module_target"; then
+      $SUDO install -m 0644 "$module_file" "$module_target"
     fi
   done
-  $SUDO depmod -a "$(uname -r)"
+  for module_metadata in modules.order modules.builtin modules.builtin.modinfo; do
+    if [ ! -e "$UCLOUD_KERNEL_MODULE_ROOT/$module_metadata" ]; then
+      $SUDO touch "$UCLOUD_KERNEL_MODULE_ROOT/$module_metadata"
+    fi
+  done
+  if [ "$UCLOUD_KERNEL_INDEX_REUSABLE" -eq 1 ]; then
+    UCLOUD_KERNEL_MODULES_LOADED=1
+    for module in "${{UCLOUD_RUNTIME_KERNEL_MODULES[@]}}"; do
+      if ! $SUDO modprobe "$module"; then
+        UCLOUD_KERNEL_INDEX_REUSABLE=0
+        UCLOUD_KERNEL_MODULES_LOADED=0
+        break
+      fi
+    done
+  fi
+  if [ "$UCLOUD_KERNEL_INDEX_REUSABLE" -eq 0 ]; then
+    echo "Refreshing kernel module index"
+    $SUDO depmod -a "$UCLOUD_KERNEL_RELEASE"
+  else
+    echo "Reused matching kernel module index"
+  fi
   printf '%s\n' "$UCLOUD_PACKAGE_BUNDLE_SHA256" \
     | $SUDO tee "$UCLOUD_KERNEL_MODULE_MARKER" >/dev/null
 fi
-for module in "${{UCLOUD_RUNTIME_KERNEL_MODULES[@]}}"; do
-  $SUDO modprobe "$module"
-done
+if [ "$UCLOUD_KERNEL_MODULES_LOADED" -eq 0 ]; then
+  for module in "${{UCLOUD_RUNTIME_KERNEL_MODULES[@]}}"; do
+    $SUDO modprobe "$module"
+  done
+fi
 log_init_phase "kernel-modules"
 
 
@@ -1969,6 +2013,7 @@ def stage_vm_init_package_over_ssh(
     private_key_file: str | None = None,
     known_hosts_file: str | None = None,
     remote_package_dir: str = DEFAULT_REMOTE_PACKAGE_DIR,
+    startup_probe_seconds: int = 0,
 ) -> VmInitPackageStageResult:
     local_path = local_package_spec_path(options.package_spec)
     package_size = local_path.stat().st_size
@@ -2014,26 +2059,30 @@ def stage_vm_init_package_over_ssh(
         f'test "$(stat -c %s {quoted_path})" = {package_size} && '
         f'test "$(cat {quoted_marker} 2>/dev/null)" = {package_sha256})'
     )
-    probe = subprocess.run(
-        ssh_remote_command(
-            ssh_command,
-            probe_command,
-            private_key_file=private_key_file,
-            known_hosts_file=known_hosts_file,
-        ),
-        check=False,
-        timeout=timeout_seconds,
+    probe_argv = ssh_remote_command(
+        ssh_command,
+        probe_command,
+        private_key_file=private_key_file,
+        known_hosts_file=known_hosts_file,
     )
+    probe_deadline = time.monotonic() + max(0, startup_probe_seconds)
+    while True:
+        probe = subprocess.run(
+            probe_argv,
+            check=False,
+            timeout=timeout_seconds,
+        )
+        if probe.returncode != 255:
+            break
+        retry_in = min(1.0, max(0.0, probe_deadline - time.monotonic()))
+        if retry_in <= 0:
+            break
+        time.sleep(retry_in)
     if probe.returncode == 0:
         return VmInitPackageStageResult(
             local_path=local_path,
             remote_path=remote_path,
-            command=ssh_remote_command(
-                ssh_command,
-                probe_command,
-                private_key_file=private_key_file,
-                known_hosts_file=known_hosts_file,
-            ),
+            command=probe_argv,
             returncode=0,
             package_sha256=package_sha256,
             reused=True,
@@ -2042,12 +2091,7 @@ def stage_vm_init_package_over_ssh(
         return VmInitPackageStageResult(
             local_path=local_path,
             remote_path=remote_path,
-            command=ssh_remote_command(
-                ssh_command,
-                probe_command,
-                private_key_file=private_key_file,
-                known_hosts_file=known_hosts_file,
-            ),
+            command=probe_argv,
             returncode=255,
             package_sha256=package_sha256,
         )

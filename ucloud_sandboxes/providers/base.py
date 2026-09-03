@@ -118,6 +118,7 @@ class InstanceBootstrapAccess:
     runnable: bool
     reason: str
     refresh_recommended: bool = False
+    startup_probe_seconds: int = 0
 
 
 @dataclass(frozen=True)

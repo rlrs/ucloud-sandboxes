@@ -148,7 +148,8 @@ This deliberately retains objects for between seven and roughly eight days
 after last route use with a daily sweep. Bucket lifecycle is still responsible
 for abandoned multipart uploads because they are not ordinary listed objects.
 
-Each worker admits up to two concurrent snapshot publications by default. This
+Each worker admits up to four concurrent snapshot publications by default,
+configured by `sandbox.storage_native_max_concurrent_publications`. This
 queue is deliberately narrower than the storage daemon's global operation
 limit, leaving slots available for wake, mount, release, and delete work. Park
 still returns after the local checkpoint when background
@@ -160,6 +161,11 @@ is complete, the worker caches the descriptor and reports it in heartbeats; the
 gateway validates it and acquires the Registry reference before granting
 portable route authority. Heartbeats do not rebuild descriptors or scan the
 Registry lease database.
+
+The same publication gate, phase spans, and metric keys apply to Registry and
+S3 backends. `sandbox.storage_native_max_ublk_devices` independently bounds
+active plus pooled ublk devices; its default is 128, while the warm pool remains
+bounded by its separate high watermark.
 
 ## Performance qualification
 

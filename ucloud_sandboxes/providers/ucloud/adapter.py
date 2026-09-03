@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from pathlib import Path
+import time
 from typing import Any, Callable, Sequence
 
 from ...models import ProviderInstance
@@ -64,6 +65,7 @@ class UCloudProvider:
         evidence=(("postStartSuspensionObserved", True),),
     )
     destructive_instance_losses = (_post_start_instance_loss,)
+    _active_job_states = ("IN_QUEUE", "RUNNING", "SUSPENDED")
 
     def __init__(
         self,
@@ -74,6 +76,9 @@ class UCloudProvider:
         client_factory: Callable[[SessionStore], UCloudClient] = UCloudClient,
         sandbox_profile: UCloudCreateProfile,
         builder_profile: UCloudCreateProfile,
+        deployment_id: str = "",
+        full_inventory_refresh_seconds: float = 300.0,
+        monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         if not project_id.strip():
             raise ValueError("UCloud project id is required")
@@ -85,6 +90,17 @@ class UCloudProvider:
             "sandbox": sandbox_profile,
             "builder": builder_profile,
         }
+        self._deployment_id = deployment_id.strip()
+        self._full_inventory_refresh_seconds = max(
+            1.0, float(full_inventory_refresh_seconds)
+        )
+        self._monotonic = monotonic
+        self._inventory_by_id: dict[str, ProviderInstance] = {}
+        self._recent_terminal_by_id: dict[str, ProviderInstance] = {}
+        self._last_full_inventory_at: float | None = None
+        self._force_full_inventory = True
+        self._awaiting_instance_ids: set[str] = set()
+        self._discovery_retry_until = 0.0
 
     @property
     def client(self) -> UCloudClient:
@@ -98,13 +114,102 @@ class UCloudProvider:
 
     def list_instances(self) -> list[ProviderInstance]:
         try:
-            payloads = self.client.browse_all_jobs(
-                self.scope_id,
-                include_application=False,
-            )
+            now = self._monotonic()
+            if self._full_inventory_due(now):
+                payloads = self.client.browse_all_jobs(
+                    self.scope_id,
+                    include_application=False,
+                )
+                self._replace_from_full_inventory(payloads)
+                self._last_full_inventory_at = now
+                self._force_full_inventory = False
+            elif self._inventory_by_id:
+                payloads = []
+                for state in self._active_job_states:
+                    payloads.extend(
+                        self.client.browse_all_jobs(
+                            self.scope_id,
+                            include_application=False,
+                            filter_state=state,
+                        )
+                    )
+                self._replace_active_inventory(payloads)
         except UCloudError as exc:
             raise ProviderError(str(exc)) from exc
-        return [self.decode_instance(item) for item in payloads]
+        return [
+            *self._inventory_by_id.values(),
+            *self._recent_terminal_by_id.values(),
+        ]
+
+    def _full_inventory_due(self, now: float) -> bool:
+        if self._awaiting_instance_ids and now <= self._discovery_retry_until:
+            return True
+        if now > self._discovery_retry_until:
+            self._awaiting_instance_ids.clear()
+        return bool(
+            self._force_full_inventory
+            or self._last_full_inventory_at is None
+            or now - self._last_full_inventory_at
+            >= self._full_inventory_refresh_seconds
+        )
+
+    def _replace_from_full_inventory(self, payloads: list[dict[str, Any]]) -> None:
+        previous_active_ids = set(self._inventory_by_id)
+        observed = self._decode_managed_inventory(payloads)
+        self._awaiting_instance_ids.difference_update(item.id for item in observed)
+        self._inventory_by_id = {
+            item.id: item for item in observed if not item.is_final
+        }
+        self._recent_terminal_by_id = {
+            item.id: item
+            for item in observed
+            if item.is_final and item.id in previous_active_ids
+        }
+
+    def _replace_active_inventory(self, payloads: list[dict[str, Any]]) -> None:
+        previous = self._inventory_by_id
+        observed = self._decode_managed_inventory(payloads)
+        active = {item.id: item for item in observed if not item.is_final}
+        vanished_ids = set(previous) - set(active)
+        terminals = dict(self._recent_terminal_by_id)
+        for instance_id in vanished_ids:
+            try:
+                terminal = self.retrieve_instance(instance_id, include_updates=False)
+            except ProviderError:
+                # Preserve the last non-terminal observation until a full census
+                # can safely establish whether the job vanished or the narrow
+                # provider query was transiently incomplete.
+                active[instance_id] = previous[instance_id]
+                continue
+            if terminal.is_final:
+                terminals[instance_id] = terminal
+            else:
+                active[instance_id] = terminal
+        self._inventory_by_id = active
+        self._recent_terminal_by_id = terminals
+
+    def _decode_managed_inventory(
+        self, payloads: list[dict[str, Any]]
+    ) -> list[ProviderInstance]:
+        return [
+            self.decode_instance(item)
+            for item in payloads
+            if self._payload_is_managed(item)
+        ]
+
+    def _payload_is_managed(self, payload: dict[str, Any]) -> bool:
+        if not self._deployment_id:
+            return True
+        specification = payload.get("specification")
+        labels = specification.get("labels") if isinstance(specification, dict) else None
+        return bool(
+            isinstance(labels, dict)
+            and labels.get("ucloud-sandboxes/deployment") == self._deployment_id
+            and (
+                labels.get("ucloud-sandboxes/node") == "true"
+                or labels.get("ucloud-sandboxes/builder") == "true"
+            )
+        )
 
     def decode_instance(self, payload: dict[str, Any]) -> ProviderInstance:
         return instance_from_payload(payload)
@@ -194,6 +299,9 @@ class UCloudProvider:
                 error="UCloud explicitly rejected the create operation",
             )
         if len(instance_ids) == 1:
+            self._force_full_inventory = True
+            self._awaiting_instance_ids.update(instance_ids)
+            self._discovery_retry_until = self._monotonic() + 60.0
             return ProviderMutationResult(
                 status="accepted",
                 instance_ids=instance_ids,

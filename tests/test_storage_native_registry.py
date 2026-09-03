@@ -215,21 +215,44 @@ class StorageNativeRegistryTests(unittest.TestCase):
                 source["lowers"][:2], [layer.to_dict() for layer in existing]
             )
             self.assertEqual(source["lowers"][2], {"file": str(delta)})
+            metrics = publisher.metrics()
             self.assertEqual(
-                publisher.metrics(),
+                {
+                    key: metrics[key]
+                    for key in (
+                        "snapshot_publications",
+                        "snapshot_compactions",
+                        "snapshot_uploaded_bytes",
+                        "snapshot_compaction_input_layers",
+                        "snapshot_compaction_input_bytes",
+                        "snapshot_compaction_output_bytes",
+                        "snapshot_compact_after_layers",
+                        "snapshot_compact_after_bytes",
+                        "snapshot_publication_limit",
+                        "snapshot_publication_active",
+                        "snapshot_publication_waiting",
+                    )
+                },
                 {
                     "snapshot_publications": 1,
                     "snapshot_compactions": 1,
+                    "snapshot_uploaded_bytes": len(b"flattened-chain"),
                     "snapshot_compaction_input_layers": 3,
                     "snapshot_compaction_input_bytes": 311,
                     "snapshot_compaction_output_bytes": len(b"flattened-chain"),
                     "snapshot_compact_after_layers": 2,
                     "snapshot_compact_after_bytes": 1 << 30,
-                    "snapshot_publication_limit": 2,
+                    "snapshot_publication_limit": 4,
                     "snapshot_publication_active": 0,
                     "snapshot_publication_waiting": 0,
                 },
             )
+            self.assertGreaterEqual(metrics["snapshot_publication_duration_ms_total"], 0)
+            self.assertGreaterEqual(metrics["snapshot_publication_duration_ms_max"], 0)
+            self.assertGreaterEqual(
+                metrics["snapshot_publication_queue_wait_ms_total"], 0
+            )
+            self.assertGreaterEqual(metrics["snapshot_publication_queue_wait_ms_max"], 0)
 
 
 if __name__ == "__main__":

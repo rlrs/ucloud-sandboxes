@@ -211,7 +211,12 @@ class VmInitTests(unittest.TestCase):
             "--max-ublk-devices ${UCLOUD_STORAGE_NATIVE_MAX_UBLK_DEVICES}",
             script,
         )
-        self.assertIn("--max-concurrent-publications 2", script)
+        self.assertIn("UCLOUD_STORAGE_NATIVE_MAX_CONCURRENT_PUBLICATIONS=4", script)
+        self.assertIn(
+            "--max-concurrent-publications "
+            "${UCLOUD_STORAGE_NATIVE_MAX_CONCURRENT_PUBLICATIONS}",
+            script,
+        )
         self.assertIn("UCLOUD_DIRECT_IDLE_PARK_SECONDS=60.0", script)
         self.assertIn(
             "--idle-park-seconds ${UCLOUD_DIRECT_IDLE_PARK_SECONDS}",
@@ -223,15 +228,7 @@ class VmInitTests(unittest.TestCase):
         hetzner = vm_init.vm_runtime_profile("hetzner")
 
         self.assertEqual(ucloud.state_dir, vm_init.DEFAULT_UCLOUD_NODE_STATE_DIR)
-        self.assertEqual(
-            ucloud.storage_native_max_ublk_devices,
-            vm_init.DEFAULT_UCLOUD_STORAGE_NATIVE_MAX_UBLK_DEVICES,
-        )
         self.assertEqual(hetzner.state_dir, "")
-        self.assertEqual(
-            hetzner.storage_native_max_ublk_devices,
-            vm_init.DEFAULT_STORAGE_NATIVE_MAX_UBLK_DEVICES,
-        )
 
     def test_authorized_keys_are_rendered_as_inert_shell_values(self) -> None:
         with TemporaryDirectory() as raw_dir:

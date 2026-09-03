@@ -13,6 +13,10 @@ from urllib.parse import quote
 
 from .managed_registry import RegistryClient
 from .storage_native import StorageNativeLayer
+from .storage_native_publication import (
+    DEFAULT_MAX_CONCURRENT_PUBLICATIONS,
+    PublicationGate,
+)
 from .telemetry import Telemetry
 
 
@@ -159,7 +163,7 @@ class RegistrySnapshotPublisher:
         stream_socket_root: Path,
         upload_chunk_bytes: int = 8 * 1024 * 1024,
         stream_timeout_seconds: float = 120.0,
-        max_concurrent_publications: int = 2,
+        max_concurrent_publications: int = DEFAULT_MAX_CONCURRENT_PUBLICATIONS,
         compact_after_layers: int = DEFAULT_COMPACT_AFTER_LAYERS,
         compact_after_bytes: int = DEFAULT_COMPACT_AFTER_BYTES,
         telemetry: Telemetry | None = None,
@@ -190,15 +194,13 @@ class RegistrySnapshotPublisher:
         self.compact_after_layers = compact_after_layers
         self.compact_after_bytes = compact_after_bytes
         self.telemetry = telemetry or Telemetry.disabled("registry-snapshot-publisher")
-        self._publication_slots = threading.BoundedSemaphore(
-            max_concurrent_publications
-        )
+        self._publication_gate = PublicationGate(max_concurrent_publications)
         self._metrics_lock = threading.Lock()
-        self._publication_limit = max_concurrent_publications
-        self._publication_active = 0
-        self._publication_waiting = 0
         self._publications = 0
         self._compactions = 0
+        self._uploaded_bytes = 0
+        self._publication_duration_ms = 0
+        self._publication_duration_max_ms = 0
         self._compaction_input_layers = 0
         self._compaction_input_bytes = 0
         self._compaction_output_bytes = 0
@@ -218,6 +220,7 @@ class RegistrySnapshotPublisher:
         existing_repo_blob_url: str = "",
         global_config_path: Path | None = None,
     ) -> StorageSnapshotPublication:
+        started = time.monotonic()
         with self.telemetry.span(
             "snapshot.publish",
             attributes={
@@ -227,23 +230,9 @@ class RegistrySnapshotPublisher:
                 "snapshot.virtual_size": virtual_size,
             },
         ) as span:
-            waiting_started = time.monotonic()
-            with self._metrics_lock:
-                self._publication_waiting += 1
-            self._publication_slots.acquire()
-            with self._metrics_lock:
-                self._publication_waiting -= 1
-                self._publication_active += 1
-            try:
-                span.add_event(
-                    "snapshot.publication_slot.acquired",
-                    {
-                        "snapshot.queue.wait_seconds": max(
-                            0.0, time.monotonic() - waiting_started
-                        )
-                    },
-                )
-                return self._publish_locked(
+            with self._publication_gate.acquire(self.telemetry) as queue_wait_ms:
+                span.set_attribute("snapshot.queue.wait_ms", queue_wait_ms)
+                publication, compacted, uploaded_bytes = self._publish_locked(
                     exporter=exporter,
                     source_layer_paths=source_layer_paths,
                     virtual_size=virtual_size,
@@ -251,24 +240,38 @@ class RegistrySnapshotPublisher:
                     existing_repo_blob_url=existing_repo_blob_url,
                     global_config_path=global_config_path,
                 )
-            finally:
-                with self._metrics_lock:
-                    self._publication_active -= 1
-                self._publication_slots.release()
+            span.set_attributes(
+                {
+                    "snapshot.compacted": compacted,
+                    "snapshot.uploaded_bytes": uploaded_bytes,
+                    "snapshot.result_layer_count": len(publication.layers),
+                }
+            )
+        elapsed_ms = int((time.monotonic() - started) * 1000)
+        with self._metrics_lock:
+            self._publications += 1
+            self._compactions += int(compacted)
+            self._uploaded_bytes += uploaded_bytes
+            self._publication_duration_ms += elapsed_ms
+            self._publication_duration_max_ms = max(
+                self._publication_duration_max_ms, elapsed_ms
+            )
+        return publication
 
     def metrics(self) -> dict[str, int]:
         with self._metrics_lock:
             return {
                 "snapshot_publications": self._publications,
                 "snapshot_compactions": self._compactions,
+                "snapshot_uploaded_bytes": self._uploaded_bytes,
+                "snapshot_publication_duration_ms_total": self._publication_duration_ms,
+                "snapshot_publication_duration_ms_max": self._publication_duration_max_ms,
                 "snapshot_compaction_input_layers": self._compaction_input_layers,
                 "snapshot_compaction_input_bytes": self._compaction_input_bytes,
                 "snapshot_compaction_output_bytes": self._compaction_output_bytes,
                 "snapshot_compact_after_layers": self.compact_after_layers,
                 "snapshot_compact_after_bytes": self.compact_after_bytes,
-                "snapshot_publication_limit": self._publication_limit,
-                "snapshot_publication_active": self._publication_active,
-                "snapshot_publication_waiting": self._publication_waiting,
+                **self._publication_gate.metrics(),
             }
 
     def verify(
@@ -351,7 +354,7 @@ class RegistrySnapshotPublisher:
         existing_layers: tuple[PublishedStorageLayer, ...],
         existing_repo_blob_url: str,
         global_config_path: Path | None,
-    ) -> StorageSnapshotPublication:
+    ) -> tuple[StorageSnapshotPublication, bool, int]:
         if virtual_size <= 0:
             raise ValueError("snapshot virtual size must be positive")
         if not source_layer_paths and not existing_layers:
@@ -377,35 +380,49 @@ class RegistrySnapshotPublisher:
                 raise ValueError(
                     "compacted publication requires an absolute global config path"
                 )
-            layers = (
-                self._publish_compacted_layer(
-                    exporter,
-                    existing_layers=existing_layers,
-                    existing_repo_blob_url=existing_repo_blob_url,
-                    source_layer_paths=source_layer_paths,
-                    global_config_path=global_config_path,
-                ),
-            )
+            with self.telemetry.span(
+                "snapshot.compact_and_upload",
+                attributes={
+                    "snapshot.input_layer_count": input_layers,
+                    "snapshot.input_bytes": input_bytes,
+                },
+            ):
+                layers = (
+                    self._publish_compacted_layer(
+                        exporter,
+                        existing_layers=existing_layers,
+                        existing_repo_blob_url=existing_repo_blob_url,
+                        source_layer_paths=source_layer_paths,
+                        global_config_path=global_config_path,
+                    ),
+                )
+            uploaded_bytes = layers[0].size
         else:
-            new_layers = tuple(
-                self._publish_dense_layer(exporter, source)
-                for source in source_layer_paths
-            )
+            with self.telemetry.span(
+                "snapshot.export_and_upload",
+                attributes={"snapshot.source_layer_count": len(source_layer_paths)},
+            ):
+                new_layers = tuple(
+                    self._publish_dense_layer(exporter, source)
+                    for source in source_layer_paths
+                )
             layers = (*existing_layers, *new_layers)
-        config = self._snapshot_config(virtual_size=virtual_size, layers=layers)
-        config_digest = self._upload_bytes(config)
-        tag = f"ucloud-storage-v1-{config_digest.removeprefix('sha256:')}"
-        manifest = self._oci_manifest(
-            config_digest=config_digest,
-            config_size=len(config),
-            layers=layers,
-        )
-        manifest_digest = self.registry.put_manifest(
-            self.repository,
-            tag,
-            manifest,
-            media_type=OCI_MANIFEST_MEDIA_TYPE,
-        )
+            uploaded_bytes = sum(layer.size for layer in new_layers)
+        with self.telemetry.span("snapshot.commit_metadata"):
+            config = self._snapshot_config(virtual_size=virtual_size, layers=layers)
+            config_digest = self._upload_bytes(config)
+            tag = f"ucloud-storage-v1-{config_digest.removeprefix('sha256:')}"
+            manifest = self._oci_manifest(
+                config_digest=config_digest,
+                config_size=len(config),
+                layers=layers,
+            )
+            manifest_digest = self.registry.put_manifest(
+                self.repository,
+                tag,
+                manifest,
+                media_type=OCI_MANIFEST_MEDIA_TYPE,
+            )
         publication = StorageSnapshotPublication(
             manifest_digest=manifest_digest,
             tag=tag,
@@ -416,13 +433,11 @@ class RegistrySnapshotPublisher:
             backend="registry",
         )
         with self._metrics_lock:
-            self._publications += 1
             if should_compact:
-                self._compactions += 1
                 self._compaction_input_layers += input_layers
                 self._compaction_input_bytes += input_bytes
                 self._compaction_output_bytes += layers[0].size
-        return publication
+        return publication, should_compact, uploaded_bytes
 
     def _publish_dense_layer(
         self,

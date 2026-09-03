@@ -128,6 +128,16 @@ class ConfigTests(unittest.TestCase):
             with self.subTest(label=label), self.assertRaises(ValueError):
                 DeploymentConfig.from_dict(raw)
 
+    def test_rejects_device_pool_larger_than_ublk_capacity(self) -> None:
+        raw = self._raw()
+        sandbox = raw["sandbox"]
+        assert isinstance(sandbox, dict)
+        sandbox["storage_native_pool_high_watermark"] = 17
+        sandbox["storage_native_max_ublk_devices"] = 16
+
+        with self.assertRaisesRegex(ValueError, "cannot exceed"):
+            DeploymentConfig.from_dict(raw)
+
     def test_sqlite_and_registry_roots_are_independent(self) -> None:
         raw = self._raw()
         raw["data_root"] = "/srv/ucloud/state"

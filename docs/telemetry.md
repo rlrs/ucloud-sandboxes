@@ -115,7 +115,9 @@ series' first sample.
 
 Worker heartbeat `actual_usage` also exposes snapshot publication saturation as
 `storage_publication_active`, `storage_publication_waiting`, and
-`storage_publication_limit`. These are separate from the storage daemon's
+`storage_publication_limit`. It also exports cumulative publication count,
+compaction count, uploaded bytes, total/max queue wait, and total/max duration.
+These are separate from the storage daemon's
 general operation semaphore, so an agent can distinguish a Registry/S3 upload
 queue from local mount, release, or device pressure. Publication saturation is
 diagnostic only: another VM cannot make an existing local checkpoint portable,
@@ -156,6 +158,9 @@ Important span groups include:
 
 - `gateway.sandbox_create` and its image resolution, placement, pull, and node
   proxy phases;
+- `gateway.node_response_headers`, `gateway.node_response_body`, and
+  `node.sandbox_exec_start`, separating gateway fanout, response transfer, and
+  worker process startup without recording command content;
 - `sandbox.park`, checkpoint, artifact commit, runtime stop, storage release,
   and background publication;
 - `sandbox.wake`, network setup, storage mount, runsc restore, readiness, and

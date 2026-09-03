@@ -5550,6 +5550,41 @@ class ControlPlaneTests(unittest.TestCase):
             [0.25, 0.5],
         )
 
+    def test_active_prepared_warmup_gates_matching_create_admission(self) -> None:
+        with _temporary_root() as raw_path:
+            store = RoutingStore(raw_path / "routes.sqlite")
+            store.upsert_image_warmup(
+                "prepare-1",
+                "busybox:latest",
+                ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
+                count=1,
+                ttl_seconds=60,
+            )
+            handler = object.__new__(control_plane.ControlPlaneHandler)
+            handler.routing_store = store
+            handler._managed_image_requires_digest_cache_identity = lambda _image: False
+            handler._ready_sandbox_heartbeats = lambda: []
+            handler._placement_routes = lambda: []
+            requested = ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024)
+            with control_plane._IMAGE_WARMUP_TASKS_GUARD:
+                control_plane._IMAGE_WARMUP_TASKS.add(("prepare-1", "node-1"))
+            try:
+                matching = handler._active_image_warmup_for_image(
+                    "busybox:latest", requested
+                )
+                unrelated = handler._active_image_warmup_for_image(
+                    "alpine:latest", requested
+                )
+            finally:
+                with control_plane._IMAGE_WARMUP_TASKS_GUARD:
+                    control_plane._IMAGE_WARMUP_TASKS.discard(
+                        ("prepare-1", "node-1")
+                    )
+
+        self.assertIsNotNone(matching)
+        self.assertEqual(matching.warmup_id, "prepare-1")
+        self.assertIsNone(unrelated)
+
     def test_atomic_allocation_spec_conflict_never_dispatches_to_node(self) -> None:
         class CountingNode(BaseHTTPRequestHandler):
             creates = 0

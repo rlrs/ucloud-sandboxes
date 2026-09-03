@@ -2831,6 +2831,32 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 )
                 return
 
+            active_warmup = self._active_image_warmup_for_image(
+                spec.image,
+                requested,
+            )
+            if active_warmup is not None:
+                # A capacity preparation already owns this pull. Keep create
+                # requests out of node placement and the per-node pull lock
+                # until that work completes; the SDK retries this explicit,
+                # short-lived admission response.
+                root.set_attribute("outcome", "image_warmup_pending")
+                root.set_attribute("image.warmup.id", active_warmup.warmup_id)
+                self._write_json(
+                    {
+                        "error": "prepared image warmup is still in progress",
+                        "error_code": "image_warmup_pending",
+                        "retryable": True,
+                        "warmup_id": active_warmup.warmup_id,
+                    },
+                    status=HTTPStatus.SERVICE_UNAVAILABLE,
+                    headers={
+                        "Retry-After": "1",
+                        "X-UCloud-Sandbox-Retryable": "true",
+                    },
+                )
+                return
+
             if self.registry_layer_cache is not None:
                 with self.telemetry.span(
                     "gateway.sandbox_resolve_layers",
@@ -5583,6 +5609,54 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             "warmups": summaries,
         }
 
+    def _active_image_warmup_for_image(
+        self,
+        image: str,
+        requested: ResourceQuantity,
+    ) -> PendingImageWarmup | None:
+        requested_keys = _requested_image_cache_keys(
+            image,
+            "",
+            require_digest=self._managed_image_requires_digest_cache_identity(image),
+        )
+        if not requested_keys:
+            return None
+        with _IMAGE_WARMUP_TASKS_GUARD:
+            active_warmup_ids = {warmup_id for warmup_id, _node_id in _IMAGE_WARMUP_TASKS}
+        if not active_warmup_ids:
+            return None
+        matching_warmup: PendingImageWarmup | None = None
+        for warmup in self.routing_store.image_warmups():
+            if warmup.warmup_id not in active_warmup_ids:
+                continue
+            warmup_keys = _requested_image_cache_keys(
+                warmup.image,
+                warmup.image_id,
+                require_digest=self._managed_image_requires_digest_cache_identity(
+                    warmup.image
+                ),
+            )
+            if requested_keys.intersection(warmup_keys):
+                matching_warmup = warmup
+                break
+        if matching_warmup is None:
+            return None
+
+        routes = self._placement_routes()
+        for heartbeat in self._ready_sandbox_heartbeats():
+            if not _heartbeat_has_image(
+                heartbeat,
+                image,
+                require_digest=self._managed_image_requires_digest_cache_identity(
+                    image
+                ),
+            ):
+                continue
+            available = _node_available_resources(heartbeat, routes)
+            if _node_can_fit_available(heartbeat, requested, available):
+                return None
+        return matching_warmup
+
     def _schedule_image_warmup(
         self,
         warmup: PendingImageWarmup,
@@ -5872,17 +5946,34 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             body=body,
             extra_headers=extra_headers,
         )
+        proxy_attributes = _node_proxy_span_attributes(method, path, node_url)
         try:
-            with _open_node_request(
-                proxied,
-                timeout=timeout_seconds,
-                authenticated=True,
-            ) as response:
+            with self.telemetry.span(
+                "gateway.node_response_headers",
+                attributes=proxy_attributes,
+            ) as headers_span:
+                response = _open_node_request(
+                    proxied,
+                    timeout=timeout_seconds,
+                    authenticated=True,
+                )
+                headers_span.set_attribute("http.response.status_code", response.status)
+            with response:
                 try:
-                    response_body = _read_bounded_proxy_body(
-                        response,
-                        max_bytes=DEFAULT_MAX_PROXY_RESPONSE_BYTES,
-                    )
+                    with self.telemetry.span(
+                        "gateway.node_response_body",
+                        attributes={
+                            **proxy_attributes,
+                            "http.response.status_code": response.status,
+                        },
+                    ) as body_span:
+                        response_body = _read_bounded_proxy_body(
+                            response,
+                            max_bytes=DEFAULT_MAX_PROXY_RESPONSE_BYTES,
+                        )
+                        body_span.set_attribute(
+                            "http.response.body.size", len(response_body)
+                        )
                 except ProxyResponseTooLargeError:
                     return _proxy_response_too_large(DEFAULT_MAX_PROXY_RESPONSE_BYTES)
                 return ProxiedResponse(
@@ -5892,10 +5983,18 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 )
         except error.HTTPError as exc:
             try:
-                response_body = _read_bounded_proxy_body(
-                    exc,
-                    max_bytes=DEFAULT_MAX_PROXY_ERROR_BYTES,
-                )
+                with self.telemetry.span(
+                    "gateway.node_response_body",
+                    attributes={
+                        **proxy_attributes,
+                        "http.response.status_code": exc.code,
+                    },
+                ) as body_span:
+                    response_body = _read_bounded_proxy_body(
+                        exc,
+                        max_bytes=DEFAULT_MAX_PROXY_ERROR_BYTES,
+                    )
+                    body_span.set_attribute("http.response.body.size", len(response_body))
             except ProxyResponseTooLargeError:
                 return _proxy_response_too_large(DEFAULT_MAX_PROXY_ERROR_BYTES)
             return ProxiedResponse(exc.code, exc.headers, response_body)
@@ -6284,6 +6383,31 @@ def _collection_id_from_path(path: str, prefix: str) -> str | None:
     if not rest:
         return None
     return unquote(rest.split("/", 1)[0])
+
+
+def _node_proxy_span_attributes(
+    method: str,
+    path: str,
+    node_url: str,
+) -> dict[str, str]:
+    """Return bounded-cardinality attributes for gateway-to-node phases."""
+
+    parsed_path = urlparse(path).path
+    sandbox_route = match_sandbox_http_route(method, parsed_path)
+    if sandbox_route is not None:
+        route = f"sandbox.{sandbox_route.action}"
+    elif parsed_path.startswith("/v1/exec/"):
+        route = "exec.session"
+    elif parsed_path.startswith("/v1/sandboxes/"):
+        route = "sandbox.internal"
+    else:
+        route = parsed_path
+    node = urlparse(node_url)
+    return {
+        "http.request.method": method.upper(),
+        "http.route": route,
+        "server.address": node.hostname or "",
+    }
 
 
 def _is_sdk_api_request(method: str, path: str) -> bool:

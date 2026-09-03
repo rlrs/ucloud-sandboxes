@@ -23,6 +23,7 @@ from .storage_native_registry import (
     SnapshotPublisherRouter,
 )
 from .storage_native_s3 import S3SnapshotPublisher
+from .storage_native_publication import DEFAULT_MAX_CONCURRENT_PUBLICATIONS
 from .telemetry import Telemetry, TelemetrySettings
 
 
@@ -55,7 +56,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--snapshot-s3-prefix")
     parser.add_argument("--snapshot-s3-credential-process")
     parser.add_argument("--publication-stream-root", type=Path)
-    parser.add_argument("--max-concurrent-publications", default=2, type=int)
+    parser.add_argument(
+        "--max-concurrent-publications",
+        default=DEFAULT_MAX_CONCURRENT_PUBLICATIONS,
+        type=int,
+    )
     parser.add_argument(
         "--snapshot-compact-after-layers",
         default=DEFAULT_COMPACT_AFTER_LAYERS,

@@ -25,6 +25,7 @@ def provider_from_configuration(
     sandbox_disk_gb: int,
     builder_product_id: str,
     builder_disk_gb: int,
+    deployment_id: str = "",
     client_factory: Callable[[SessionStore], UCloudClient] = UCloudClient,
 ) -> UCloudProvider:
     settings = UCloudSettings.from_provider(configuration)
@@ -42,6 +43,7 @@ def provider_from_configuration(
             product_id=builder_product_id,
             disk_gb=builder_disk_gb,
         ),
+        deployment_id=deployment_id,
     )
 
 

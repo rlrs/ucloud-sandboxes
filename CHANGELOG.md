@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 0.5.24 - 2026-09-03
+
+- Reduced steady-state UCloud autoscaler inventory work to state-filtered active
+  jobs, with a periodic deployment-scoped full census and exact transition
+  checks, instead of repeatedly paging through the project's job history.
+- Avoided reinstalling already configured host dependency packages during the
+  verified offline VM bootstrap, removing unnecessary initramfs regeneration
+  from the Ubuntu 26.04 cold-node path.
+- Unified Registry and S3 snapshot publication concurrency and queue telemetry,
+  raised the configurable defaults to four publications and 128 ublk devices,
+  and exported publication queue, duration, count, compaction, and byte totals
+  through worker heartbeats.
+- Split gateway-to-worker proxy latency into response-header and response-body
+  spans, added a worker exec-start span with manager phases, and made matching
+  image warmups an explicit retryable admission state until usable warm capacity
+  exists.
+
 ## 0.5.23 - 2026-09-03
 
 - Kept the public gateway on HTTP/1.1 while closing each reverse-proxy-side

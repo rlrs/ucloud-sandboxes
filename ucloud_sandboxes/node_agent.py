@@ -555,7 +555,17 @@ class NodeAgentHandler(BuildContextHttpHandler):
             if not isinstance(raw, dict):
                 raise ValueError("exec payload must be a JSON object")
             spec = SandboxExecSpec.from_dict(raw, sandbox_id=sandbox_id)
-            session = self.exec_manager.start(spec)
+            with self.telemetry.span(
+                "node.sandbox_exec_start",
+                attributes={"sandbox.id": sandbox_id},
+            ) as span:
+                session = self.exec_manager.start(spec)
+                manager_timings = self.manager.consume_exec_start_timings()
+                start_ms = _elapsed_ms(started)
+                span.set_attribute("node.exec.start_ms", start_ms)
+                for key, value in manager_timings.items():
+                    if isinstance(value, (int, float)) and not isinstance(value, bool):
+                        span.set_attribute(f"node.exec.manager.{key}", value)
         except SandboxAdmissionClosedError as exc:
             self._write_json(
                 {
@@ -581,11 +591,10 @@ class NodeAgentHandler(BuildContextHttpHandler):
         except (RuntimeError, ValueError) as exc:
             self._write_exception(exc)
             return
-        manager_timings = self.manager.consume_exec_start_timings()
         self.telemetry.add_event(
             "sandbox.exec.start.timings",
             {
-                "start_ms": _elapsed_ms(started),
+                "start_ms": start_ms,
                 "manager": manager_timings,
             },
         )
@@ -594,7 +603,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 "session": session.to_dict(),
                 "timings": {
                     "manager": manager_timings,
-                    "start_ms": _elapsed_ms(started),
+                    "start_ms": start_ms,
                 },
             },
             status=HTTPStatus.CREATED,
@@ -1685,6 +1694,21 @@ def build_direct_node_agent_server(
             storage_publication_active=int(raw.get("snapshot_publication_active", 0)),
             storage_publication_waiting=int(raw.get("snapshot_publication_waiting", 0)),
             storage_publication_limit=int(raw.get("snapshot_publication_limit", 0)),
+            storage_publication_queue_wait_ms_total=int(
+                raw.get("snapshot_publication_queue_wait_ms_total", 0)
+            ),
+            storage_publication_queue_wait_ms_max=int(
+                raw.get("snapshot_publication_queue_wait_ms_max", 0)
+            ),
+            storage_publication_duration_ms_total=int(
+                raw.get("snapshot_publication_duration_ms_total", 0)
+            ),
+            storage_publication_duration_ms_max=int(
+                raw.get("snapshot_publication_duration_ms_max", 0)
+            ),
+            storage_snapshot_publications=int(raw.get("snapshot_publications", 0)),
+            storage_snapshot_compactions=int(raw.get("snapshot_compactions", 0)),
+            storage_snapshot_uploaded_bytes=int(raw.get("snapshot_uploaded_bytes", 0)),
             storage_published_volumes=int(raw.get("published_volumes", 0)),
             storage_error_volumes=int(raw.get("error_volumes", 0)),
             storage_device_pool_enabled=bool(raw.get("device_pool_enabled", False)),

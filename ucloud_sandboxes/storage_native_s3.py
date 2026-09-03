@@ -24,6 +24,10 @@ from .storage_native_registry import (
     StorageSnapshotPublication,
     consume_export_stream,
 )
+from .storage_native_publication import (
+    DEFAULT_MAX_CONCURRENT_PUBLICATIONS,
+    PublicationGate,
+)
 from .telemetry import Telemetry
 
 
@@ -287,7 +291,7 @@ class S3SnapshotPublisher:
         upload_chunk_bytes: int = 64 * 1024 * 1024,
         upload_part_concurrency: int = 4,
         stream_timeout_seconds: float = 120.0,
-        max_concurrent_publications: int = 2,
+        max_concurrent_publications: int = DEFAULT_MAX_CONCURRENT_PUBLICATIONS,
         verification_concurrency: int = 8,
         compact_after_layers: int = DEFAULT_COMPACT_AFTER_LAYERS,
         compact_after_bytes: int = DEFAULT_COMPACT_AFTER_BYTES,
@@ -341,13 +345,8 @@ class S3SnapshotPublisher:
                 credential_process=self.credential_process,
             )
         )
-        self._publication_slots = threading.BoundedSemaphore(
-            max_concurrent_publications
-        )
+        self._publication_gate = PublicationGate(max_concurrent_publications)
         self._metrics_lock = threading.Lock()
-        self._publication_limit = max_concurrent_publications
-        self._publication_active = 0
-        self._publication_waiting = 0
         self._publications = 0
         self._compactions = 0
         self._uploaded_bytes = 0
@@ -378,22 +377,8 @@ class S3SnapshotPublisher:
                 "snapshot.virtual_size": virtual_size,
             },
         ) as span:
-            waiting_started = time.monotonic()
-            with self._metrics_lock:
-                self._publication_waiting += 1
-            self._publication_slots.acquire()
-            with self._metrics_lock:
-                self._publication_waiting -= 1
-                self._publication_active += 1
-            try:
-                span.add_event(
-                    "snapshot.publication_slot.acquired",
-                    {
-                        "snapshot.queue.wait_seconds": max(
-                            0.0, time.monotonic() - waiting_started
-                        )
-                    },
-                )
+            with self._publication_gate.acquire(self.telemetry) as queue_wait_ms:
+                span.set_attribute("snapshot.queue.wait_ms", queue_wait_ms)
                 publication, compacted, uploaded_bytes = self._publish_locked(
                     client=self._client_factory(),
                     exporter=exporter,
@@ -403,10 +388,6 @@ class S3SnapshotPublisher:
                     existing_repo_blob_url=existing_repo_blob_url,
                     global_config_path=global_config_path,
                 )
-            finally:
-                with self._metrics_lock:
-                    self._publication_active -= 1
-                self._publication_slots.release()
             span.set_attributes(
                 {
                     "snapshot.compacted": compacted,
@@ -505,7 +486,7 @@ class S3SnapshotPublisher:
             return {
                 "snapshot_publications": self._publications,
                 "snapshot_compactions": self._compactions,
-                "snapshot_object_upload_bytes": self._uploaded_bytes,
+                "snapshot_uploaded_bytes": self._uploaded_bytes,
                 "snapshot_publication_duration_ms_total": self._publication_duration_ms,
                 "snapshot_publication_duration_ms_max": self._publication_duration_max_ms,
                 "snapshot_compact_after_layers": self.compact_after_layers,
@@ -513,9 +494,7 @@ class S3SnapshotPublisher:
                 "snapshot_upload_part_concurrency": self.upload_part_concurrency,
                 "snapshot_upload_part_bytes": self.upload_chunk_bytes,
                 "snapshot_verification_concurrency": self.verification_concurrency,
-                "snapshot_publication_limit": self._publication_limit,
-                "snapshot_publication_active": self._publication_active,
-                "snapshot_publication_waiting": self._publication_waiting,
+                **self._publication_gate.metrics(),
             }
 
     def _publish_locked(

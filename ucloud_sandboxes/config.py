@@ -13,6 +13,7 @@ from .providers import (
     default_provider_configuration,
     validate_provider_configuration,
 )
+from .storage_native_publication import DEFAULT_MAX_CONCURRENT_PUBLICATIONS
 from .telemetry import TelemetrySettings
 
 
@@ -263,6 +264,10 @@ class SandboxPoolConfig:
     storage_native_cache_gb: int = 32
     storage_native_pool_low_watermark: int = 2
     storage_native_pool_high_watermark: int = 16
+    storage_native_max_ublk_devices: int = 128
+    storage_native_max_concurrent_publications: int = (
+        DEFAULT_MAX_CONCURRENT_PUBLICATIONS
+    )
     direct_disk_headroom_mb: int = 16 * 1024
     direct_max_concurrent_restores: int = 8
     direct_idle_park_seconds: float = 0.0
@@ -298,6 +303,8 @@ class SandboxPoolConfig:
             "docker_quota_image_gb",
             "storage_native_cache_gb",
             "storage_native_pool_high_watermark",
+            "storage_native_max_ublk_devices",
+            "storage_native_max_concurrent_publications",
             "direct_disk_headroom_mb",
             "direct_max_concurrent_restores",
             "max_concurrent_image_pulls",
@@ -317,6 +324,14 @@ class SandboxPoolConfig:
             raise ValueError(
                 "sandbox.storage_native_pool_low_watermark cannot exceed "
                 "sandbox.storage_native_pool_high_watermark"
+            )
+        if (
+            result.storage_native_pool_high_watermark
+            > result.storage_native_max_ublk_devices
+        ):
+            raise ValueError(
+                "sandbox.storage_native_pool_high_watermark cannot exceed "
+                "sandbox.storage_native_max_ublk_devices"
             )
         _require_sha1("sandbox.direct_runsc_commit", result.direct_runsc_commit)
         _require_repository(

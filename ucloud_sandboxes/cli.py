@@ -5574,6 +5574,7 @@ def compute_provider_from_args(
         sandbox_disk_gb=config.sandbox.disk_gb,
         builder_product_id=config.builder.product_id,
         builder_disk_gb=config.builder.disk_gb,
+        deployment_id=config.deployment_id,
         client_factory=UCloudClient,
     )
 
@@ -5890,9 +5891,12 @@ def vm_init_options_for_job(
             config.sandbox.storage_native_pool_high_watermark
         ),
         storage_native_max_ublk_devices=(
-            runtime_profile.storage_native_max_ublk_devices
+            config.sandbox.storage_native_max_ublk_devices
             if role == "sandbox"
             else DEFAULT_STORAGE_NATIVE_MAX_UBLK_DEVICES
+        ),
+        storage_native_max_concurrent_publications=(
+            config.sandbox.storage_native_max_concurrent_publications
         ),
         direct_disk_headroom_mb=config.sandbox.direct_disk_headroom_mb,
         direct_max_concurrent_restores=(config.sandbox.direct_max_concurrent_restores),
@@ -5954,6 +5958,9 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         "storageNativePoolLowWatermark": (options.storage_native_pool_low_watermark),
         "storageNativePoolHighWatermark": (options.storage_native_pool_high_watermark),
         "storageNativeMaxUblkDevices": options.storage_native_max_ublk_devices,
+        "storageNativeMaxConcurrentPublications": (
+            options.storage_native_max_concurrent_publications
+        ),
         "directDiskHeadroomMb": options.direct_disk_headroom_mb,
         "directMaxConcurrentRestores": options.direct_max_concurrent_restores,
         "directIdleParkSeconds": options.direct_idle_park_seconds,

@@ -12,6 +12,10 @@ from ucloud_sandboxes.providers.ucloud.api import (
     SessionState,
     SessionStore,
 )
+from ucloud_sandboxes.providers.ucloud.adapter import (
+    UCloudCreateProfile,
+    UCloudProvider,
+)
 
 
 class FakeUCloudClient(UCloudClient):
@@ -79,6 +83,21 @@ class UCloudClientTests(unittest.TestCase):
         self.assertEqual(
             [call.get("next") for call in client.calls], [None, "page-2", "page-3"]
         )
+        self.assertTrue(
+            all(call.get("itemsPerPage") == "1000" for call in client.calls)
+        )
+
+    def test_browse_all_jobs_applies_state_filter_to_every_page(self) -> None:
+        class EmptyClient(FakeUCloudClient):
+            def request_json(self, *args, **kwargs):
+                self.calls.append({"params": kwargs.get("params")})
+                return {"items": [], "next": None}
+
+        client = EmptyClient()
+
+        client.browse_all_jobs("project-1", filter_state="RUNNING")
+
+        self.assertEqual(client.calls[0]["params"]["filterState"], "RUNNING")
 
     def test_browse_all_jobs_fails_closed_on_repeated_cursor(self) -> None:
         class RepeatingCursorClient(FakeUCloudClient):
@@ -166,6 +185,147 @@ class UCloudClientTests(unittest.TestCase):
                 },
             },
         )
+
+    def test_provider_uses_narrow_active_inventory_between_full_censuses(self) -> None:
+        deployment_id = "deployment-1"
+
+        def job(job_id: str, state: str, *, managed: bool = True) -> dict:
+            return {
+                "id": job_id,
+                "createdAt": 1,
+                "specification": {
+                    "labels": (
+                        {
+                            "ucloud-sandboxes/deployment": deployment_id,
+                            "ucloud-sandboxes/node": "true",
+                        }
+                        if managed
+                        else {}
+                    )
+                },
+                "status": {
+                    "state": state,
+                    "startedAt": 1 if state != "IN_QUEUE" else None,
+                },
+                "updates": [],
+            }
+
+        class InventoryClient:
+            def __init__(self) -> None:
+                self.calls: list[str | None] = []
+
+            def browse_all_jobs(self, _project_id, **kwargs):
+                state = kwargs.get("filter_state")
+                self.calls.append(state)
+                if state is None:
+                    return [
+                        job("node-1", "RUNNING"),
+                        job("other", "RUNNING", managed=False),
+                        job("old", "SUCCESS"),
+                    ]
+                return [job("node-1", "RUNNING")] if state == "RUNNING" else []
+
+        now = [0.0]
+        client = InventoryClient()
+        profile = UCloudCreateProfile(None, require_private_network=False)
+        provider = UCloudProvider(
+            "project-1",
+            client=client,  # type: ignore[arg-type]
+            sandbox_profile=profile,
+            builder_profile=profile,
+            deployment_id=deployment_id,
+            monotonic=lambda: now[0],
+        )
+
+        first = provider.list_instances()
+        now[0] = 1.0
+        second = provider.list_instances()
+
+        self.assertEqual([item.id for item in first], ["node-1"])
+        self.assertEqual([item.id for item in second], ["node-1"])
+        self.assertEqual(
+            client.calls,
+            [None, "IN_QUEUE", "RUNNING", "SUSPENDED"],
+        )
+
+    def test_provider_avoids_idle_inventory_calls_until_next_census(self) -> None:
+        class EmptyInventoryClient:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def browse_all_jobs(self, _project_id, **_kwargs):
+                self.calls += 1
+                return []
+
+        now = [0.0]
+        client = EmptyInventoryClient()
+        profile = UCloudCreateProfile(None, require_private_network=False)
+        provider = UCloudProvider(
+            "project-1",
+            client=client,  # type: ignore[arg-type]
+            sandbox_profile=profile,
+            builder_profile=profile,
+            deployment_id="deployment-1",
+            full_inventory_refresh_seconds=300,
+            monotonic=lambda: now[0],
+        )
+
+        self.assertEqual(provider.list_instances(), [])
+        now[0] = 299.0
+        self.assertEqual(provider.list_instances(), [])
+        now[0] = 300.0
+        self.assertEqual(provider.list_instances(), [])
+
+        self.assertEqual(client.calls, 2)
+
+    def test_provider_retries_full_census_until_created_job_is_visible(self) -> None:
+        deployment_id = "deployment-1"
+
+        class EventuallyConsistentClient:
+            def __init__(self) -> None:
+                self.browse_calls = 0
+
+            def submit_jobs(self, _project_id, _request):
+                return {"responses": [{"id": "node-1"}]}
+
+            def browse_all_jobs(self, _project_id, **_kwargs):
+                self.browse_calls += 1
+                if self.browse_calls == 1:
+                    return []
+                return [
+                    {
+                        "id": "node-1",
+                        "createdAt": 1,
+                        "specification": {
+                            "labels": {
+                                "ucloud-sandboxes/deployment": deployment_id,
+                                "ucloud-sandboxes/node": "true",
+                            }
+                        },
+                        "status": {"state": "IN_QUEUE", "startedAt": None},
+                        "updates": [],
+                    }
+                ]
+
+        now = [0.0]
+        client = EventuallyConsistentClient()
+        profile = UCloudCreateProfile(None, require_private_network=False)
+        provider = UCloudProvider(
+            "project-1",
+            client=client,  # type: ignore[arg-type]
+            sandbox_profile=profile,
+            builder_profile=profile,
+            deployment_id=deployment_id,
+            monotonic=lambda: now[0],
+        )
+
+        self.assertEqual(provider.create({}).status, "accepted")
+        self.assertEqual(provider.list_instances(), [])
+        now[0] = 1.0
+        observed = provider.list_instances()
+
+        self.assertEqual([item.id for item in observed], ["node-1"])
+        self.assertEqual(client.browse_calls, 2)
 
 
 if __name__ == "__main__":

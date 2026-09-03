@@ -137,8 +137,9 @@ class UCloudClient:
         self,
         project_id: str,
         *,
-        items_per_page: int = 100,
+        items_per_page: int = 1000,
         include_application: bool = False,
+        filter_state: str | None = None,
     ) -> list[dict[str, Any]]:
         """Return a complete job inventory or fail instead of returning a prefix."""
 
@@ -146,6 +147,8 @@ class UCloudClient:
             "itemsPerPage": str(items_per_page),
             "includeApplication": str(include_application).lower(),
         }
+        if filter_state:
+            params["filterState"] = filter_state
         items: list[dict[str, Any]] = []
         next_token: str | None = None
         seen_tokens: set[str] = set()

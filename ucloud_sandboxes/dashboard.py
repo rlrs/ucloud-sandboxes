@@ -6063,13 +6063,17 @@ function renderNodesPage() {
     summary.publicationActive += asNumber(actual.storage_publication_active);
     summary.publicationWaiting += asNumber(actual.storage_publication_waiting);
     summary.publicationLimit += asNumber(actual.storage_publication_limit);
+    summary.publicationWaitMax = Math.max(summary.publicationWaitMax, asNumber(actual.storage_publication_queue_wait_ms_max));
+    summary.publicationDurationMax = Math.max(summary.publicationDurationMax, asNumber(actual.storage_publication_duration_ms_max));
+    summary.publications += asNumber(actual.storage_snapshot_publications);
+    summary.compactions += asNumber(actual.storage_snapshot_compactions);
     summary.errors += asNumber(actual.storage_error_volumes);
     summary.materializationActive += asNumber(actual.image_materialization_active_operations);
     summary.materializationWaiting += asNumber(actual.image_materialization_waiting_operations);
     summary.materializationLimit += asNumber(actual.image_materialization_max_concurrent_operations);
     summary.psi = Math.max(summary.psi, asNumber(actual.memory_psi_full_avg10));
     return summary;
-  }, { active: 0, waiting: 0, limit: 0, publicationActive: 0, publicationWaiting: 0, publicationLimit: 0, errors: 0, materializationActive: 0, materializationWaiting: 0, materializationLimit: 0, psi: 0 });
+  }, { active: 0, waiting: 0, limit: 0, publicationActive: 0, publicationWaiting: 0, publicationLimit: 0, publicationWaitMax: 0, publicationDurationMax: 0, publications: 0, compactions: 0, errors: 0, materializationActive: 0, materializationWaiting: 0, materializationLimit: 0, psi: 0 });
   const staleOrIncompatible = allSandboxNodes.filter((item) => !item.fresh || !item.agent_version_compatible).length;
   setText("nodesReadyValue", formatInteger(nodes.sandbox_ready));
   setText("nodesProvisioningValue", formatInteger(autoscaler.provisioning_nodes));
@@ -6082,7 +6086,7 @@ function renderNodesPage() {
   setText("nodesMemoryPressureDetail", `target ${formatPercentPoint(ratioToPercent(policy.target_memory_utilization))}`);
   setText("nodesPsiValue", `${formatNumber(storage.psi)}%`);
   setText("nodesStorageQueueValue", `${formatInteger(storage.active + storage.materializationActive)} / ${formatInteger(storage.waiting + storage.materializationWaiting)}`);
-  setText("nodesStorageQueueDetail", `active / waiting; storage ${formatInteger(storage.limit)} max, snapshot publication ${formatInteger(storage.publicationActive)} / ${formatInteger(storage.publicationWaiting)} of ${formatInteger(storage.publicationLimit)}, image materialization ${formatInteger(storage.materializationLimit)} max`);
+  setText("nodesStorageQueueDetail", `active / waiting; storage ${formatInteger(storage.limit)} max, snapshot ${formatInteger(storage.publicationActive)} / ${formatInteger(storage.publicationWaiting)} of ${formatInteger(storage.publicationLimit)}, max wait ${formatDurationMs(storage.publicationWaitMax)}, max duration ${formatDurationMs(storage.publicationDurationMax)}, ${formatInteger(storage.publications)} published / ${formatInteger(storage.compactions)} compacted, image materialization ${formatInteger(storage.materializationLimit)} max`);
   setText("nodesVolumeErrorsValue", formatInteger(storage.errors));
   setText(
     "nodesPageDetail",
@@ -6189,6 +6193,8 @@ function nodePressureText(item) {
   if (limit > 0) parts.push(`storage ${asNumber(actual.storage_active_operations) + asNumber(actual.storage_waiting_operations)}/${limit}`);
   const publicationLimit = asNumber(actual.storage_publication_limit);
   if (publicationLimit > 0) parts.push(`snapshot publication ${asNumber(actual.storage_publication_active) + asNumber(actual.storage_publication_waiting)}/${publicationLimit}`);
+  if (asNumber(actual.storage_publication_queue_wait_ms_max) > 0) parts.push(`snapshot max wait ${formatDurationMs(actual.storage_publication_queue_wait_ms_max)}`);
+  if (asNumber(actual.storage_publication_duration_ms_max) > 0) parts.push(`snapshot max duration ${formatDurationMs(actual.storage_publication_duration_ms_max)}`);
   const materializationLimit = asNumber(actual.image_materialization_max_concurrent_operations);
   if (materializationLimit > 0) parts.push(`image materialization ${asNumber(actual.image_materialization_active_operations) + asNumber(actual.image_materialization_waiting_operations)}/${materializationLimit}`);
   if (asNumber(actual.storage_error_volumes) > 0) parts.push(`${formatInteger(actual.storage_error_volumes)} volume errors`);

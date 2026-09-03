@@ -15,6 +15,7 @@ from typing import Literal
 from .deployment import DEFAULT_INIT_VERSION, package_version
 from .direct_network import DirectNetworkTcpEgress
 from .models import ResourceQuantity
+from .storage_native_publication import DEFAULT_MAX_CONCURRENT_PUBLICATIONS
 
 
 DEFAULT_WORK_DIR = "/work/ucloud-sandboxes"
@@ -62,10 +63,8 @@ DEFAULT_STORAGE_NATIVE_REPOSITORY = "ucloud-sandbox-snapshots"
 DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK = 2
 DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK = 16
 DEFAULT_STORAGE_NATIVE_MAX_UBLK_DEVICES = 0
-DEFAULT_UCLOUD_STORAGE_NATIVE_MAX_UBLK_DEVICES = 64
 DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_LAYERS = 8
 DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_BYTES = 4 * 1024 * 1024 * 1024
-DEFAULT_STORAGE_NATIVE_MAX_CONCURRENT_PUBLICATIONS = 2
 PINNED_STORAGE_NATIVE_AGENTENV_COMMIT = "db1492b7915a408b37f863c9e3a34b2ccb2fb1b0"
 DEFAULT_DIRECT_DISK_HEADROOM_MB = 16 * 1024
 DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES = 8
@@ -76,7 +75,6 @@ class VmRuntimeProfile:
     """Provider-specific host constraints consumed by the common VM init."""
 
     state_dir: str = ""
-    storage_native_max_ublk_devices: int = DEFAULT_STORAGE_NATIVE_MAX_UBLK_DEVICES
 
 
 def vm_runtime_profile(provider_kind: str) -> VmRuntimeProfile:
@@ -89,9 +87,6 @@ def vm_runtime_profile(provider_kind: str) -> VmRuntimeProfile:
     if provider_kind == "ucloud":
         return VmRuntimeProfile(
             state_dir=DEFAULT_UCLOUD_NODE_STATE_DIR,
-            storage_native_max_ublk_devices=(
-                DEFAULT_UCLOUD_STORAGE_NATIVE_MAX_UBLK_DEVICES
-            ),
         )
     return VmRuntimeProfile()
 
@@ -190,6 +185,9 @@ class VmInitOptions:
     storage_native_pool_low_watermark: int = DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK
     storage_native_pool_high_watermark: int = DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK
     storage_native_max_ublk_devices: int = DEFAULT_STORAGE_NATIVE_MAX_UBLK_DEVICES
+    storage_native_max_concurrent_publications: int = (
+        DEFAULT_MAX_CONCURRENT_PUBLICATIONS
+    )
     direct_disk_headroom_mb: int = DEFAULT_DIRECT_DISK_HEADROOM_MB
     direct_max_concurrent_restores: int = DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES
     direct_idle_park_seconds: float = 0.0
@@ -483,6 +481,7 @@ UCLOUD_STORAGE_NATIVE_CACHE_GB={options.storage_native_cache_gb}
 UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK={options.storage_native_pool_low_watermark}
 UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK={options.storage_native_pool_high_watermark}
 UCLOUD_STORAGE_NATIVE_MAX_UBLK_DEVICES={options.storage_native_max_ublk_devices}
+UCLOUD_STORAGE_NATIVE_MAX_CONCURRENT_PUBLICATIONS={options.storage_native_max_concurrent_publications}
 UCLOUD_STORAGE_NATIVE_REGISTRY_URL={shlex.quote(options.storage_native_registry_url)}
 UCLOUD_STORAGE_NATIVE_REPOSITORY={shlex.quote(options.storage_native_repository)}
 UCLOUD_STORAGE_NATIVE_SNAPSHOT_BACKEND={shlex.quote(options.storage_native_snapshot_backend)}
@@ -887,6 +886,7 @@ install_bundled_runtime() {{
   local package_file package_name install_status offline_apt_root
   local policy_rc_d_created=0
   local -a local_packages=()
+  local -a missing_local_packages=()
   local -a portable_packages=()
   shopt -s nullglob
   local package_files=("$package_dir"/*.deb)
@@ -902,8 +902,21 @@ install_bundled_runtime() {{
         ;;
     esac
   done
+  # The verified bundle contains a complete offline dependency closure, but
+  # explicitly giving every .deb to APT also upgrades host packages that are
+  # already usable. On fresh UCloud images that needlessly regenerates the
+  # initramfs and dominates node bootstrap. Ask APT to install only packages
+  # absent from the base image; it still validates the installed dependency
+  # versions and fails closed because the configured sources are empty.
+  for package_file in "${{local_packages[@]}}"; do
+    package_name="$(dpkg-deb -f "$package_file" Package)"
+    if [ "$(dpkg-query -W -f='${{db:Status-Abbrev}}' "$package_name" 2>/dev/null || true)" = "ii " ]; then
+      continue
+    fi
+    missing_local_packages+=("$package_file")
+  done
   install_status=0
-  if [ "${{#local_packages[@]}}" -gt 0 ]; then
+  if [ "${{#missing_local_packages[@]}}" -gt 0 ]; then
     # APT 3 on Ubuntu 26.04 rejects even explicitly supplied local .deb files
     # when --no-download is set. Give APT an empty source configuration
     # instead: dependencies may be satisfied only by the verified bundle or
@@ -926,7 +939,7 @@ install_bundled_runtime() {{
         -o DPkg::Lock::Timeout=60 -o Dpkg::Use-Pty=0 \
         -o Dir::Etc::sourcelist="$offline_apt_root/sources.list" \
         -o Dir::Etc::sourceparts="$offline_apt_root/sources.list.d" \
-        -o APT::Get::List-Cleanup=0 "${{local_packages[@]}}"; then
+        -o APT::Get::List-Cleanup=0 "${{missing_local_packages[@]}}"; then
         install_status=0
       else
         install_status=$?
@@ -1482,7 +1495,7 @@ User=root
 Group=root
 EnvironmentFile={env_file}
 WorkingDirectory={work_dir}
-ExecStart=${{UCLOUD_STORAGE_AGENT_BIN}} --socket ${{UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET}} --backend-socket ${{UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET}} --backend-global-config ${{UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG}} --journal ${{UCLOUD_STORAGE_NATIVE_ROOT}}/journal.sqlite --runtime-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/runtime --mount-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/mounts --hard-capacity-bytes ${{UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES}}{storage_publication_args} --max-concurrent-publications {DEFAULT_STORAGE_NATIVE_MAX_CONCURRENT_PUBLICATIONS} --snapshot-compact-after-layers {DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_LAYERS} --snapshot-compact-after-bytes {DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_BYTES} --device-pool-enabled --device-pool-low-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK}} --device-pool-high-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK}} --max-ublk-devices ${{UCLOUD_STORAGE_NATIVE_MAX_UBLK_DEVICES}}{telemetry_args} --deployment-id ${{UCLOUD_DEPLOYMENT_ID}} --node-id ${{UCLOUD_NODE_ID}}
+ExecStart=${{UCLOUD_STORAGE_AGENT_BIN}} --socket ${{UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET}} --backend-socket ${{UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET}} --backend-global-config ${{UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG}} --journal ${{UCLOUD_STORAGE_NATIVE_ROOT}}/journal.sqlite --runtime-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/runtime --mount-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/mounts --hard-capacity-bytes ${{UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES}}{storage_publication_args} --max-concurrent-publications ${{UCLOUD_STORAGE_NATIVE_MAX_CONCURRENT_PUBLICATIONS}} --snapshot-compact-after-layers {DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_LAYERS} --snapshot-compact-after-bytes {DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_BYTES} --device-pool-enabled --device-pool-low-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK}} --device-pool-high-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK}} --max-ublk-devices ${{UCLOUD_STORAGE_NATIVE_MAX_UBLK_DEVICES}}{telemetry_args} --deployment-id ${{UCLOUD_DEPLOYMENT_ID}} --node-id ${{UCLOUD_NODE_ID}}
 Restart=always
 RestartSec=2
 
@@ -1670,6 +1683,10 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         ):
             raise ValueError(
                 "storage-native pool high watermark cannot exceed maximum ublk devices."
+            )
+        if options.storage_native_max_concurrent_publications < 1:
+            raise ValueError(
+                "storage-native publication concurrency must be positive."
             )
         if options.direct_disk_headroom_mb < 1:
             raise ValueError("direct runtime disk headroom must be positive.")

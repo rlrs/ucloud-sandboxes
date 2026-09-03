@@ -329,6 +329,13 @@ class NodeRuntimeMetrics:
     storage_publication_active: int = 0
     storage_publication_waiting: int = 0
     storage_publication_limit: int = 0
+    storage_publication_queue_wait_ms_total: int = 0
+    storage_publication_queue_wait_ms_max: int = 0
+    storage_publication_duration_ms_total: int = 0
+    storage_publication_duration_ms_max: int = 0
+    storage_snapshot_publications: int = 0
+    storage_snapshot_compactions: int = 0
+    storage_snapshot_uploaded_bytes: int = 0
     storage_published_volumes: int = 0
     storage_error_volumes: int = 0
     storage_device_pool_enabled: bool = False
@@ -362,6 +369,13 @@ class NodeRuntimeMetrics:
         raw.setdefault("storage_publication_active", 0)
         raw.setdefault("storage_publication_waiting", 0)
         raw.setdefault("storage_publication_limit", 0)
+        raw.setdefault("storage_publication_queue_wait_ms_total", 0)
+        raw.setdefault("storage_publication_queue_wait_ms_max", 0)
+        raw.setdefault("storage_publication_duration_ms_total", 0)
+        raw.setdefault("storage_publication_duration_ms_max", 0)
+        raw.setdefault("storage_snapshot_publications", 0)
+        raw.setdefault("storage_snapshot_compactions", 0)
+        raw.setdefault("storage_snapshot_uploaded_bytes", 0)
         if set(raw) != field_names:
             return None
         collected_at = parse_iso_datetime(raw["collected_at"])

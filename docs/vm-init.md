@@ -47,7 +47,10 @@ repositories or installs a substitute artifact from the network.
    network policy, and bundle digest.
 2. Create the service user and install heartbeat and node-control secrets with
    mode `0600`.
-3. Verify and install the bundled runtime packages and kernel modules.
+3. Verify the complete bundled runtime, install only missing host dependency
+   packages from its offline closure, then install its exact portable runtime
+   payloads and kernel modules. Already configured host dependencies are not
+   needlessly upgraded or allowed to trigger initramfs regeneration.
 4. Provision bounded swap and Docker image-cache storage.
 5. On sandbox nodes, install direct `runsc`, managed PID 1, and the
    storage-native backend; create its cache and device-pool services.

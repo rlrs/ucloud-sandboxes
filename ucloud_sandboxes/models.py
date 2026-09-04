@@ -157,8 +157,13 @@ class SandboxInventoryEntry:
     snapshot_repository: str = ""
     snapshot_tag: str = ""
     storage_snapshot: dict[str, Any] = field(default_factory=dict)
+    storage_dependency: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
+        if self.storage_dependency is not None and not isinstance(
+            self.storage_dependency, dict
+        ):
+            raise ValueError("sandbox storage dependency must be an object")
         if not self.sandbox_id:
             raise ValueError("sandbox inventory id is required")
         if self.generation < 1:
@@ -214,7 +219,8 @@ class SandboxInventoryEntry:
             "storage_snapshot",
         }
         supplied_snapshot_keys = set(raw) & snapshot_keys
-        if not required_keys.issubset(raw) or set(raw) - required_keys - snapshot_keys:
+        allowed_keys = required_keys | snapshot_keys | {"storage_dependency"}
+        if not required_keys.issubset(raw) or set(raw) - allowed_keys:
             return None
         if supplied_snapshot_keys and supplied_snapshot_keys != snapshot_keys:
             return None
@@ -248,6 +254,9 @@ class SandboxInventoryEntry:
         snapshot_repository = raw.get("snapshot_repository", "")
         snapshot_tag = raw.get("snapshot_tag", "")
         storage_snapshot = raw.get("storage_snapshot", {})
+        storage_dependency = raw.get("storage_dependency")
+        if storage_dependency is not None and not isinstance(storage_dependency, dict):
+            return None
         if (
             not isinstance(storage_schema, str)
             or not isinstance(snapshot_manifest_digest, str)
@@ -278,6 +287,9 @@ class SandboxInventoryEntry:
             snapshot_repository=snapshot_repository,
             snapshot_tag=snapshot_tag,
             storage_snapshot=dict(storage_snapshot),
+            storage_dependency=(
+                dict(storage_dependency) if storage_dependency is not None else None
+            ),
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -289,6 +301,8 @@ class SandboxInventoryEntry:
             "state": self.state,
             "resources": self.resources.to_dict(),
         }
+        if self.storage_dependency is not None:
+            payload["storage_dependency"] = dict(self.storage_dependency)
         if self.storage_snapshot:
             payload.update(
                 {

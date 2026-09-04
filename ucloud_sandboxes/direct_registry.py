@@ -558,12 +558,14 @@ class DirectSandboxRegistry:
         sandbox_id: str,
         *,
         expected_revision: int,
+        expected_generation: int | None = None,
     ) -> DirectSandboxRegistration:
         return self._transition(
             sandbox_id,
             expected_revision,
             {"planned", "quota_ready", "rootfs_ready", "owned"},
             "deleting",
+            expected_generation=expected_generation,
         )
 
     def begin_delete_moved(
@@ -776,6 +778,7 @@ class DirectSandboxRegistry:
         phase: str,
         *,
         fence: tuple[str, str] | None = None,
+        expected_generation: int | None = None,
         error: str = "direct registration transition lost its ownership fence",
         retire: bool = False,
         **changes: Any,
@@ -789,6 +792,10 @@ class DirectSandboxRegistry:
             )
             if (
                 record.revision != revision
+                or (
+                    expected_generation is not None
+                    and record.sandbox_generation != expected_generation
+                )
                 or not phase_matches
                 or (
                     fence is not None

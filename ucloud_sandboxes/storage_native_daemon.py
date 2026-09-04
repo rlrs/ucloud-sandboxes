@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import closing, contextmanager, suppress
 from dataclasses import asdict, dataclass, fields, replace
 from enum import Enum
+from functools import wraps
 import errno
 import hashlib
 import json
@@ -51,6 +52,7 @@ _PROTOCOL_EXTRA_FIELDS = {
         )
     },
     "GetVolume": ("volume_id",),
+    "ListVolumesPage": ("after_volume_id",),
     "PrepareVolume": (*_OWNER_REQUEST_FIELDS, "operation_id", "virtual_size"),
     "PrepareImport": (*_OWNER_REQUEST_FIELDS, "operation_id", "publication"),
     **{
@@ -310,6 +312,14 @@ class StorageVolumeRecord:
     def publication(self) -> StorageSnapshotPublication:
         if self.state != StorageVolumeState.PUBLISHED:
             raise StorageNativeConflictError("storage-native volume is not published")
+        return self.dependency_publication()
+
+    def dependency_publication(self) -> StorageSnapshotPublication:
+        """Describe remote layers even while a writable COW volume is mounted."""
+        if not self.published_layers:
+            raise StorageNativeConflictError(
+                "storage-native volume has no remote layers"
+            )
         return StorageSnapshotPublication(
             manifest_digest=self.published_manifest_digest,
             tag=self.published_tag,
@@ -603,6 +613,10 @@ class StorageNativeJournal:
                 )
             self._require_schema(connection)
             self._require_data(connection)
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS volumes_live_inventory "
+                "ON volumes(volume_id) WHERE state != 'deleted'"
+            )
 
     @staticmethod
     def _require_schema(connection: sqlite3.Connection) -> None:
@@ -941,6 +955,18 @@ class StorageNativeJournal:
             ).fetchall()
         return tuple(self._decode_record_row(row) for row in rows)
 
+    def list_live_page(
+        self, after_volume_id: str, *, limit: int = 128
+    ) -> tuple[StorageVolumeRecord, ...]:
+        with closing(self._connect()) as connection:
+            rows = connection.execute(
+                "SELECT volume_id, state, virtual_size, accounting_id, record_json "
+                "FROM volumes WHERE state != 'deleted' AND volume_id > ? "
+                "ORDER BY volume_id LIMIT ?",
+                (after_volume_id, limit),
+            ).fetchall()
+        return tuple(self._decode_record_row(row) for row in rows)
+
     def mark_reconcile_error(
         self,
         record: StorageVolumeRecord,
@@ -1134,6 +1160,67 @@ class StorageNativeJournal:
         return connection
 
 
+class _StorageOperationGate:
+    """Allow concurrent mutations, but give reconciliation a quiescent view."""
+
+    def __init__(self) -> None:
+        self._condition = threading.Condition()
+        self._local = threading.local()
+        self._active = 0
+        self._maintenance = False
+        self._waiting = 0
+
+    @contextmanager
+    def operation(self):
+        if getattr(self._local, "depth", 0):
+            self._local.depth += 1
+            try:
+                yield
+            finally:
+                self._local.depth -= 1
+            return
+        with self._condition:
+            self._condition.wait_for(
+                lambda: not self._maintenance and not self._waiting
+            )
+            self._active += 1
+            self._local.depth = 1
+        try:
+            yield
+        finally:
+            with self._condition:
+                self._local.depth = 0
+                self._active -= 1
+                self._condition.notify_all()
+
+    @contextmanager
+    def maintenance(self):
+        with self._condition:
+            self._waiting += 1
+            try:
+                self._condition.wait_for(
+                    lambda: not self._maintenance and not self._active
+                )
+                self._maintenance = True
+            finally:
+                self._waiting -= 1
+        try:
+            yield
+        finally:
+            with self._condition:
+                self._maintenance = False
+                self._condition.notify_all()
+
+
+def _storage_mutation(method):
+    @wraps(method)
+    def guarded(self, *args, **kwargs):
+        with self._operations.operation():
+            return method(self, *args, **kwargs)
+
+    return guarded
+
+
 class StorageNativeNodeService:
     def __init__(
         self,
@@ -1154,6 +1241,7 @@ class StorageNativeNodeService:
         )
         self.publisher = publisher
         self.journal = StorageNativeJournal(config.journal_path)
+        self._operations = _StorageOperationGate()
         self._pool_metrics_lock = threading.Lock()
         self._pool_acquires = 0
         self._pool_reused_acquires = 0
@@ -1214,6 +1302,7 @@ class StorageNativeNodeService:
             **pool_metrics,
         }
 
+    @_storage_mutation
     def create_volume(
         self,
         *,
@@ -1305,6 +1394,7 @@ class StorageNativeNodeService:
                 self.journal.fail(record, f"{type(exc).__name__}: {exc}")
                 raise
 
+    @_storage_mutation
     def acquire_snapshot(
         self,
         *,
@@ -1420,6 +1510,7 @@ class StorageNativeNodeService:
             ),
         )
 
+    @_storage_mutation
     def freeze_and_seal(
         self,
         *,
@@ -1489,6 +1580,7 @@ class StorageNativeNodeService:
             self.journal.fail(pending, f"{type(exc).__name__}: {exc}")
             raise
 
+    @_storage_mutation
     def mount_snapshot_cow(
         self,
         *,
@@ -1594,6 +1686,7 @@ class StorageNativeNodeService:
             self.journal.fail(pending, f"{type(exc).__name__}: {exc}")
             raise
 
+    @_storage_mutation
     def discard_mounted_cow(
         self,
         *,
@@ -1650,6 +1743,7 @@ class StorageNativeNodeService:
             self.journal.fail(pending, f"{type(exc).__name__}: {exc}")
             raise
 
+    @_storage_mutation
     def release_runtime(
         self,
         *,
@@ -1692,6 +1786,7 @@ class StorageNativeNodeService:
             self.journal.fail(pending, f"{type(exc).__name__}: {exc}")
             raise
 
+    @_storage_mutation
     def publish_snapshot(
         self,
         *,
@@ -1771,6 +1866,7 @@ class StorageNativeNodeService:
             )
             raise
 
+    @_storage_mutation
     def delete_volume(
         self,
         *,
@@ -1815,6 +1911,7 @@ class StorageNativeNodeService:
             self.journal.fail(current, f"{type(exc).__name__}: {exc}")
             raise
 
+    @_storage_mutation
     def converge_volume(
         self,
         owner: StorageVolumeOwner,
@@ -1955,6 +2052,10 @@ class StorageNativeNodeService:
             )
 
     def reconcile(self) -> dict[str, Any]:
+        with self._operations.maintenance():
+            return self._reconcile_exclusive()
+
+    def _reconcile_exclusive(self) -> dict[str, Any]:
         records = list(self.journal.list())
         live_devices = self.host.ublk_device_ids()
         backend_owners = self._backend_ownership()
@@ -2472,20 +2573,38 @@ class StorageNativeNodeClient:
         )
 
     def list_volumes(self) -> tuple[StorageVolumeRecord, ...]:
-        result = self._call({"operation": "ListVolumes"})
-        records = result.get("records")
-        if not isinstance(records, list):
-            raise StorageNativeNodeError(
-                "storage-native service returned an invalid volume inventory"
+        """Return live volumes in bounded pages; tombstones remain journaled."""
+        inventory: list[StorageVolumeRecord] = []
+        after = ""
+        while True:
+            result = self._call(
+                {"operation": "ListVolumesPage", "after_volume_id": after}
             )
-        try:
-            if any(not isinstance(raw, dict) for raw in records):
-                raise ValueError("volume inventory entries must be objects")
-            return tuple(StorageVolumeRecord.from_json(raw) for raw in records)
-        except (TypeError, ValueError) as exc:
-            raise StorageNativeNodeError(
-                "storage-native service returned an invalid volume inventory"
-            ) from exc
+            records = result.get("records")
+            next_after = result.get("next_after_volume_id")
+            try:
+                if not isinstance(records, list) or any(
+                    not isinstance(raw, dict) for raw in records
+                ):
+                    raise ValueError("volume inventory entries must be objects")
+                page = tuple(StorageVolumeRecord.from_json(raw) for raw in records)
+                if not isinstance(next_after, str) or (
+                    next_after
+                    and (
+                        not page
+                        or next_after != page[-1].volume_id
+                        or next_after <= after
+                    )
+                ):
+                    raise ValueError("invalid volume inventory cursor")
+            except (TypeError, ValueError) as exc:
+                raise StorageNativeNodeError(
+                    "storage-native service returned an invalid volume inventory"
+                ) from exc
+            inventory.extend(page)
+            if not next_after:
+                return tuple(inventory)
+            after = next_after
 
     def _record_call(
         self,
@@ -2791,6 +2910,24 @@ class _StorageNativeUnixServer(
             if record is None:
                 raise StorageNativeConflictError("storage-native volume does not exist")
             return self.service._record_result(record)
+        if operation == "ListVolumesPage":
+            after = request.get("after_volume_id")
+            if not isinstance(after, str):
+                raise ValueError("after_volume_id must be a string")
+            page = self.service.journal.list_live_page(after)
+            records: list[dict[str, Any]] = []
+            size = 0
+            for record in page:
+                raw = record.to_json()
+                encoded_size = len(json.dumps(raw, ensure_ascii=True).encode("ascii"))
+                if records and size + encoded_size > _PROTOCOL_MAX_BYTES // 2:
+                    break
+                records.append(raw)
+                size += encoded_size
+            return {
+                "records": records,
+                "next_after_volume_id": records[-1]["volume_id"] if records else "",
+            }
         if operation == "ListVolumes":
             return {
                 "records": [record.to_json() for record in self.service.journal.list()]

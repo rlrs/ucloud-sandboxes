@@ -371,7 +371,7 @@ class FakeWarden:
 
     def storage_records_snapshot(self, sandboxes):
         return {
-            sandbox.memory_directory: SimpleNamespace(state=StorageVolumeState.MOUNTED)
+            sandbox.memory_directory: self.storage.get_volume(sandbox.memory_directory)
             for sandbox in sandboxes
         }
 

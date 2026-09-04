@@ -131,6 +131,9 @@ class RegistryTests(unittest.TestCase):
             json.dumps(asdict(heartbeat), default=lambda value: value.isoformat())
         )
 
+        for entry in legacy_payload["inventory"]:
+            if entry.get("storage_dependency") is None:
+                entry.pop("storage_dependency", None)
         self.assertEqual(payload, legacy_payload)
         self.assertEqual(heartbeat_from_dict(payload), heartbeat)
         self.assertEqual(len(payload["cached_images"]), 600)

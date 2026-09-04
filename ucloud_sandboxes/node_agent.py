@@ -173,7 +173,13 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 self.physical_disk_path
             )
             inventory = tuple(
-                self._sandbox_inventory_entry(record) for record in activity.records
+                self._sandbox_inventory_entry(
+                    record,
+                    storage_dependency=node_snapshot.storage_dependencies.get(
+                        record.spec.id
+                    ),
+                )
+                for record in activity.records
             )
             self._write_json(
                 {
@@ -773,7 +779,9 @@ class NodeAgentHandler(BuildContextHttpHandler):
         )
         return payload
 
-    def _sandbox_inventory_entry(self, record: Any) -> SandboxInventoryEntry:
+    def _sandbox_inventory_entry(
+        self, record: Any, *, storage_dependency: dict[str, Any] | None = None
+    ) -> SandboxInventoryEntry:
         """Include completed background publication metadata in heartbeats."""
 
         snapshot = None
@@ -796,6 +804,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
             snapshot_repository=(snapshot.publication.repository if snapshot else ""),
             snapshot_tag=(snapshot.publication.tag if snapshot else ""),
             storage_snapshot=(snapshot.to_dict() if snapshot else {}),
+            storage_dependency=storage_dependency,
         )
 
     def _wake_sandbox(self, path: str) -> None:

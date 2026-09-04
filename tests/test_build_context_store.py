@@ -76,6 +76,30 @@ class BuildContextBlobStoreTests(unittest.TestCase):
                 ):
                     store.path(invalid)
 
+    def test_reupload_refreshes_eviction_age(self) -> None:
+        with TemporaryDirectory() as directory:
+            store = BuildContextBlobStore(
+                Path(directory), max_blob_bytes=100, max_age_seconds=60
+            )
+            payload = b"context"
+            digest = _digest(payload)
+            first = store.put_with_status(
+                digest, BytesIO(payload), content_length=len(payload)
+            )
+            os.utime(first.path, (1, 1))
+            repeated = store.put_with_status(
+                digest, BytesIO(payload), content_length=len(payload)
+            )
+            self.assertTrue(repeated.deduplicated)
+            store.gc(protected=(digest,))
+            other = b"other"
+            store.put_with_status(
+                _digest(other), BytesIO(other), content_length=len(other)
+            )
+            store.gc(protected=(_digest(other),))
+            with store.open(digest) as handle:
+                self.assertEqual(handle.read(), payload)
+
     def test_corrupt_existing_blob_is_atomically_replaced(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = BuildContextBlobStore(Path(raw_dir), max_blob_bytes=100)

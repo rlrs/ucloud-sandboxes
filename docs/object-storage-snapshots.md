@@ -123,8 +123,12 @@ bucket, key policy, lifecycle policy, and performance gate pass.
 
 ## Retention and garbage collection
 
-The gateway's durable routes are the reference set. Garbage collection must be
-mark-and-sweep, not age-only deletion:
+The gateway's durable routes, retained storage dependencies, and unfinished
+migrations form the reference set. A successful wake clears the old snapshot's
+restore authority, but its remote lower layers remain live: running volumes
+read them lazily. The routing journal therefore retains a separate dependency
+record until a newer complete publication replaces it or the route is deleted.
+Garbage collection must be mark-and-sweep, not age-only deletion:
 
 - mark every manifest and layer reachable from a live route, pending detach,
   or retained rollback publication;
@@ -147,6 +151,19 @@ returning reference clears the marker and a later write restarts the clock.
 This deliberately retains objects for between seven and roughly eight days
 after last route use with a daily sweep. Bucket lifecycle is still responsible
 for abandoned multipart uploads because they are not ordinary listed objects.
+
+Running-sandbox heartbeats report remote layer dependencies independently of
+parked restore metadata. The collector refuses to delete when any route lacks
+a dependency report or retained publication; a new local sandbox reports an
+explicit empty dependency set. This also covers a worker that publishes and
+wakes before the gateway observes the parked snapshot.
+
+When upgrading, update the workers and gateway before resuming the snapshot GC
+timer. Existing parked publications are backfilled automatically. References
+erased by an older gateway are recovered from current worker heartbeats;
+collection remains blocked until every route has dependency metadata. An
+unreachable worker must recover or its sandbox must be retired before that
+proof can be completed.
 
 Each worker admits up to four concurrent snapshot publications by default,
 configured by `sandbox.storage_native_max_concurrent_publications`. This

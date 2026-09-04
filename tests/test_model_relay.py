@@ -12,6 +12,7 @@ from threading import Event
 import time
 from typing import Any, AsyncIterator
 import unittest
+from unittest.mock import patch
 
 from aiohttp import ClientSession, web
 
@@ -628,6 +629,155 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual((response.status, response.body), (200, {"ok": True}))
             await restored.aclose()
+
+    async def test_abandoned_pins_release_capacity_durably(self) -> None:
+        for action in ("unregister", "replace", "expire"):
+            with (
+                self.subTest(action=action),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                path = Path(directory) / "relay.sqlite3"
+                state = ModelRelayState(state_path=path, max_completed_requests=1)
+                token = (await state.register_rollout("abandoned"))[
+                    "registration_token"
+                ]
+                first, delivery = await enqueue_and_poll(state, "abandoned", token)
+                await state.respond(
+                    request_id=first.request_id,
+                    registration_token=token,
+                    lease_id=delivery.lease_id,
+                    response=RelayWorkerResponse(200, {}),
+                    defer_delivery=True,
+                )
+                if action == "unregister":
+                    await state.unregister_rollout(
+                        "abandoned", registration_token=token
+                    )
+                elif action == "replace":
+                    await state.register_rollout("abandoned")
+                else:
+                    with patch(
+                        "ucloud_sandboxes.model_relay.time.time",
+                        return_value=time.time() + 7200,
+                    ):
+                        await state.maintain()
+                result = await state.wait_for_response(first, timeout_seconds=1)
+                self.assertEqual(result.status, 504 if action == "expire" else 410)
+                self.assertEqual((await state.stats())["completed_retained"], 0)
+                await state.aclose()
+                restored = ModelRelayState(state_path=path, max_completed_requests=1)
+                self.assertEqual((await restored.stats())["completed_retained"], 0)
+                token = (await restored.register_rollout("next"))["registration_token"]
+                second, delivery = await enqueue_and_poll(restored, "next", token)
+                await restored.respond(
+                    request_id=second.request_id,
+                    registration_token=token,
+                    lease_id=delivery.lease_id,
+                    response=RelayWorkerResponse(200, {}),
+                )
+                self.assertEqual(
+                    (
+                        await restored.wait_for_response(second, timeout_seconds=1)
+                    ).status,
+                    200,
+                )
+                await restored.aclose()
+
+    async def test_restart_resolves_expired_or_orphaned_pins(self) -> None:
+        for orphan in (False, True):
+            with (
+                self.subTest(orphan=orphan),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                path = Path(directory) / "relay.sqlite3"
+                state = ModelRelayState(state_path=path)
+                token = (await state.register_rollout("pin"))["registration_token"]
+                first, delivery = await enqueue_and_poll(state, "pin", token)
+                await state.respond(
+                    request_id=first.request_id,
+                    registration_token=token,
+                    lease_id=delivery.lease_id,
+                    response=RelayWorkerResponse(200, {}),
+                    defer_delivery=True,
+                )
+                if orphan:
+                    state._store.delete_rollout("pin")
+                await state.aclose()
+                restored = ModelRelayState(state_path=path)
+                with patch(
+                    "ucloud_sandboxes.model_relay.time.time",
+                    return_value=time.time() + 7200,
+                ):
+                    await restored.maintain()
+                    recovered = restored._completed[first.request_id]
+                    self.assertFalse(recovered.delivery_pending)
+                    self.assertEqual(
+                        recovered.completed_response.status, 410 if orphan else 504
+                    )
+                    self.assertTrue(recovered.future.done())
+                await restored.aclose()
+
+    async def test_expired_pin_cleanup_retries_failed_persistence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state = ModelRelayState(state_path=Path(directory) / "relay.sqlite3")
+            token = (await state.register_rollout("pin"))["registration_token"]
+            first, delivery = await enqueue_and_poll(state, "pin", token)
+            await state.respond(
+                request_id=first.request_id,
+                registration_token=token,
+                lease_id=delivery.lease_id,
+                response=RelayWorkerResponse(200, {}),
+                defer_delivery=True,
+            )
+            with patch(
+                "ucloud_sandboxes.model_relay.time.time",
+                return_value=time.time() + 7200,
+            ):
+                with patch.object(
+                    state._store, "delete_requests", side_effect=OSError("disk")
+                ):
+                    with self.assertRaises(OSError):
+                        await state.maintain()
+                self.assertFalse(first.future.done())
+                await state.maintain()
+            self.assertEqual(
+                (await state.wait_for_response(first, timeout_seconds=1)).status, 504
+            )
+            await state.aclose()
+
+    async def test_completion_does_not_scan_retained_history(self) -> None:
+        class NoScanDict(dict):
+            def items(self):
+                raise AssertionError("completion scanned history")
+
+            def values(self):
+                raise AssertionError("completion scanned history")
+
+            def __iter__(self):
+                raise AssertionError("completion scanned history")
+
+        state = ModelRelayState(max_completed_requests=8)
+        token = (await state.register_rollout("indexed"))["registration_token"]
+        for _ in range(8):
+            first, delivery = await enqueue_and_poll(state, "indexed", token)
+            await state.respond(
+                request_id=first.request_id,
+                registration_token=token,
+                lease_id=delivery.lease_id,
+                response=RelayWorkerResponse(200, {}),
+            )
+        state._completed = NoScanDict(state._completed)
+        second, delivery = await enqueue_and_poll(state, "indexed", token)
+        await state.respond(
+            request_id=second.request_id,
+            registration_token=token,
+            lease_id=delivery.lease_id,
+            response=RelayWorkerResponse(200, {}),
+        )
+        self.assertEqual(len(state._completed), 8)
+        self.assertEqual(
+            (await state.wait_for_response(second, timeout_seconds=1)).status, 200
+        )
 
     async def test_completed_capacity_never_evicts_deferred_pins(self) -> None:
         state = ModelRelayState(max_completed_requests=1)

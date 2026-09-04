@@ -667,6 +667,7 @@ class NodeDrainSnapshot:
     activity: SandboxActivitySnapshot
     drain: NodeDrainState
     active_image_builds: int
+    storage_dependencies: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     @property
     def ready(self) -> bool:

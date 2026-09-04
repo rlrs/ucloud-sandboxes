@@ -24,6 +24,7 @@ from .models import (
 )
 from .managed_process import ManagedProcessRecord
 from .sandbox import OPERATION_ID_RE
+from .storage_native_registry import StorageSnapshotPublication
 
 
 _ROUTE_LOCKS_GUARD = RLock()
@@ -731,6 +732,44 @@ class RoutingStore:
                     ),
                 )
         return record
+
+    def storage_snapshot_dependencies_readonly(
+        self, *, require_complete: bool = False
+    ) -> list[dict[str, Any]]:
+        """GC roots, including live remote layers after restore authority expires."""
+        with self._connect() as conn:
+            conn.execute("BEGIN")
+            if (
+                require_complete
+                and conn.execute(
+                    """
+                SELECT 1 FROM sandboxes s
+                LEFT JOIN sandbox_storage_dependencies d
+                  ON s.sandbox_id = d.sandbox_id AND s.generation = d.generation
+                WHERE d.sandbox_id IS NULL LIMIT 1
+                """
+                ).fetchone()
+                is not None
+            ):
+                raise ValueError(
+                    "cannot GC before every sandbox reports its storage dependencies; "
+                    "wait for current worker heartbeats or republish its parked snapshot"
+                )
+            rows = conn.execute(
+                """
+                SELECT d.storage_snapshot_json
+                FROM sandbox_storage_dependencies d JOIN sandboxes s
+                  ON s.sandbox_id = d.sandbox_id AND s.generation = d.generation
+                WHERE d.storage_snapshot_json != '{}'
+                UNION
+                SELECT storage_snapshot_json FROM sandboxes
+                  WHERE storage_snapshot_json != '{}'
+                UNION
+                SELECT storage_snapshot_json FROM sandbox_migrations
+                  WHERE phase != 'complete' AND storage_snapshot_json != '{}'
+                """
+            ).fetchall()
+        return [_object(json.loads(row[0])) for row in rows]
 
     def sandbox_routes_readonly(self) -> list[SandboxRoute]:
         with self._connect() as conn:
@@ -1861,6 +1900,31 @@ class RoutingStore:
                     ):
                         stale_snapshot_routes.append(existing)
                     self._write_sandbox(conn, candidate)
+                    if item.storage_dependency is not None:
+                        # This metadata conveys liveness only, never permission
+                        # to restore a running sandbox from an old checkpoint.
+                        dependency = item.storage_dependency
+                        if dependency:
+                            dependency = StorageSnapshotPublication.from_dict(
+                                dependency
+                            ).to_dict()
+                        conn.execute(
+                            """
+                            INSERT INTO sandbox_storage_dependencies VALUES (?, ?, ?)
+                            ON CONFLICT(sandbox_id) DO UPDATE SET
+                                generation = excluded.generation,
+                                storage_snapshot_json = excluded.storage_snapshot_json
+                            WHERE excluded.storage_snapshot_json != '{}'
+                            """,
+                            (
+                                candidate.sandbox_id,
+                                candidate.generation,
+                                _object_json({"publication": dependency})
+                                if dependency
+                                else "{}",
+                            ),
+                        )
+
                     conn.execute(
                         "DELETE FROM pending WHERE sandbox_id = ?",
                         (candidate.sandbox_id,),
@@ -2120,6 +2184,10 @@ class RoutingStore:
             removed = conn.execute(
                 "DELETE FROM sandboxes WHERE sandbox_id = ?", (sandbox_id,)
             ).rowcount
+        conn.execute(
+            "DELETE FROM sandbox_storage_dependencies WHERE sandbox_id = ?",
+            (sandbox_id,),
+        )
         conn.execute("DELETE FROM pending WHERE sandbox_id = ?", (sandbox_id,))
         conn.execute("DELETE FROM exec_sessions WHERE sandbox_id = ?", (sandbox_id,))
         conn.execute(
@@ -3004,6 +3072,25 @@ class RoutingStore:
             )
             conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS sandbox_storage_dependencies (
+                    sandbox_id TEXT PRIMARY KEY,
+                    generation INTEGER NOT NULL,
+                    storage_snapshot_json TEXT NOT NULL
+                ) STRICT
+                """
+            )
+            # Upgrade existing parked routes before a wake can clear their
+            # restore metadata. Dependency ownership lasts until route deletion
+            # or replacement by a newer, complete layer publication.
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO sandbox_storage_dependencies
+                SELECT sandbox_id, generation, storage_snapshot_json
+                FROM sandboxes WHERE storage_snapshot_json != '{}'
+                """
+            )
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS sandbox_generation_hwm (
                     sandbox_id TEXT PRIMARY KEY,
                     generation INTEGER NOT NULL CHECK (generation > 0)
@@ -3615,6 +3702,24 @@ class RoutingStore:
                 route.updated_at,
             ),
         )
+        conn.execute(
+            "DELETE FROM sandbox_storage_dependencies WHERE sandbox_id = ? AND generation != ?",
+            (route.sandbox_id, route.generation),
+        )
+        if route.storage_snapshot:
+            conn.execute(
+                """
+                INSERT INTO sandbox_storage_dependencies VALUES (?, ?, ?)
+                ON CONFLICT(sandbox_id) DO UPDATE SET
+                    generation = excluded.generation,
+                    storage_snapshot_json = excluded.storage_snapshot_json
+                """,
+                (
+                    route.sandbox_id,
+                    route.generation,
+                    _object_json(route.storage_snapshot),
+                ),
+            )
         conn.execute(
             """
             INSERT INTO sandbox_generation_hwm (sandbox_id, generation)

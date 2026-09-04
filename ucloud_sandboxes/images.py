@@ -706,6 +706,7 @@ class ImageManager:
         self._build_lock = RLock()
         self._build_conditions: dict[str, Condition] = {}
         self._active_threads: dict[str, Thread] = {}
+        self._pending_terminal_builds: dict[str, ImageBuildRecord] = {}
         self._active_image_operations = 0
         self._active_pulls = 0
         self._waiting_pulls = 0
@@ -722,12 +723,12 @@ class ImageManager:
         return self.store.load().get(image_id)
 
     def list_builds(self) -> list[ImageBuildRecord]:
-        return list(self.build_store.load().values())
+        with self._build_lock:
+            self._retry_terminal_builds_locked()
+            return list(self.build_store.load().values())
 
     def active_build_count(self) -> int:
-        builds = sum(
-            1 for record in self.build_store.load().values() if not record.terminal
-        )
+        builds = sum(1 for record in self.list_builds() if not record.terminal)
         with self._build_lock:
             return builds + self._active_image_operations
 
@@ -772,6 +773,7 @@ class ImageManager:
 
     def get_build(self, build_id_or_image_id: str) -> ImageBuildRecord | None:
         with self._build_lock:
+            self._retry_terminal_builds_locked()
             record = self.build_store.get(build_id_or_image_id)
             if record is not None and record.build_id in self._pending_build_logs:
                 self._flush_build_log_locked(record.build_id)
@@ -827,6 +829,7 @@ class ImageManager:
                 request_fingerprint=request_fingerprint,
             )
             with self._build_lock:
+                self._retry_terminal_builds_locked()
                 record, build_started = self.build_store.reserve_build(
                     record,
                     max_active_builds=self.max_active_builds,
@@ -932,7 +935,9 @@ class ImageManager:
             updated_at=failed_at,
             finished_at=failed_at,
         )
+        self._pending_terminal_builds[build_id] = failed
         self.build_store.upsert(failed)
+        self._pending_terminal_builds.pop(build_id, None)
         if condition is not None:
             condition.notify_all()
         return failed
@@ -948,6 +953,7 @@ class ImageManager:
         )
         with self._build_lock:
             while True:
+                self._retry_terminal_builds_locked()
                 record = self.build_store.get(build_id_or_image_id)
                 if record is None:
                     return record
@@ -1128,9 +1134,19 @@ class ImageManager:
             ):
                 self._flush_build_log_locked(build_id)
 
+    def _retry_terminal_builds_locked(self) -> None:
+        # Worker threads can finish while SQLite is temporarily unwritable.
+        # Keep their terminal result until a later request/heartbeat commits it;
+        # process liveness alone cannot recover these abandoned capacity slots.
+        for build_id, record in tuple(self._pending_terminal_builds.items()):
+            self.build_store.upsert(record)
+            self._pending_terminal_builds.pop(build_id, None)
+
     def _update_build(self, build_id: str, **changes: Any) -> ImageBuildRecord | None:
         with self._build_lock:
-            record = self.build_store.get(build_id)
+            record = self._pending_terminal_builds.get(
+                build_id
+            ) or self.build_store.get(build_id)
             if record is None:
                 return None
             pending = self._pending_build_logs.pop(build_id, "")
@@ -1141,7 +1157,10 @@ class ImageManager:
                 )
                 self._build_log_last_flush[build_id] = time.monotonic()
             updated = replace(record, updated_at=utc_now().isoformat(), **changes)
+            if updated.terminal:
+                self._pending_terminal_builds[build_id] = updated
             self.build_store.upsert(updated)
+            self._pending_terminal_builds.pop(build_id, None)
             condition = self._build_conditions.get(build_id)
             if condition is not None:
                 condition.notify_all()

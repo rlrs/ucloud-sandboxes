@@ -437,10 +437,12 @@ class DirectSandboxProvisioner:
             )
         self._delete_registration(registration)
 
-    def delete(self, sandbox_id: str) -> None:
+    def delete(self, sandbox_id: str, *, generation: int | None = None) -> None:
         registration = self.registry.get(sandbox_id)
         if registration is None:
             return
+        if generation is not None and registration.sandbox_generation != generation:
+            raise DirectRegistryError("delete generation does not own direct sandbox")
         if registration.phase != "deleting":
             if registration.migration_id and registration.phase != "owned":
                 raise DirectRegistryError(
@@ -454,6 +456,7 @@ class DirectSandboxProvisioner:
             registration = self.registry.begin_delete(
                 sandbox_id,
                 expected_revision=registration.revision,
+                expected_generation=registration.sandbox_generation,
             )
         if registration.phase != "deleting":
             raise DirectRegistryError("direct sandbox could not enter deletion")

@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 0.5.27 - 2026-09-04
+
+- Fenced deletion by sandbox generation and made explicit wake honor node
+  admission, live resource pressure, and concurrent restore limits.
+- Serialized storage reconciliation against active mutations and introduced
+  indexed, paginated live-volume inventory without removing replay tombstones.
+- Retained remote storage dependencies across wake and reported them in running
+  worker heartbeats; snapshot GC waits for complete dependency metadata.
+- Bounded exec input/output by the overall timeout and retained failed build
+  completion writes for later persistence instead of leaking build capacity.
+- Fixed relay completion pin cleanup and replaced full completion scans with
+  incremental indexes; refreshed retention when reusing uploaded build contexts.
+- Added cross-component regression coverage and documented review findings and
+  gateway-first upgrade requirements.
+
 ## 0.5.25 - 2026-09-03
 
 - Made relay-driven parking retry transient lifecycle conflicts uniformly, so

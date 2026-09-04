@@ -685,6 +685,7 @@ class DirectNodeRuntime:
             if item.registration.has_direct_sandbox
         )
         storage_records = self.service.warden.storage_records_snapshot(direct_sandboxes)
+        storage_dependencies: dict[str, dict] = {}
         used = ResourceQuantity()
         reserved = ResourceQuantity()
         for item in inventory.items:
@@ -695,6 +696,7 @@ class DirectNodeRuntime:
                 if registration.quota_total_mb is not None
                 else record.spec.disk_mb or 0
             )
+            storage_dependencies[record.spec.id] = {}
             disk_charged = True
             # Planned and quota-ready registrations are valid, durable create
             # reservations but do not own a runsc sandbox yet. They remain
@@ -703,6 +705,10 @@ class DirectNodeRuntime:
             if registration.has_direct_sandbox:
                 storage = storage_records[registration.memory_directory]
                 disk_charged = storage.state.value != "published"
+                if storage.published_layers:
+                    storage_dependencies[record.spec.id] = (
+                        storage.dependency_publication().to_dict()
+                    )
             resources = ResourceQuantity(disk_mb=quota_disk if disk_charged else 0)
             if record.state == "running":
                 # Direct-runtime CPU and memory limits bound an individual
@@ -753,7 +759,7 @@ class DirectNodeRuntime:
             drain = replace(drain, drain_activity_epoch=revision)
             self._drain = drain
             self._registry.save_drain(drain)
-        return NodeDrainSnapshot(activity, drain, build_count)
+        return NodeDrainSnapshot(activity, drain, build_count, storage_dependencies)
 
     def _attach_exec_lease(self, sandbox_id: str, lease: object) -> None:
         with self._activity_guard:

@@ -153,6 +153,7 @@ class BuildContextBlobStore:
             with self._hold_lock():
                 if target.exists() and _file_matches_digest(target, digest_hex):
                     os.chmod(target, 0o600)
+                    os.utime(target, follow_symlinks=False)
                     return BlobPutResult(target, deduplicated=True)
                 os.replace(temporary, target)
                 os.chmod(target, 0o600)

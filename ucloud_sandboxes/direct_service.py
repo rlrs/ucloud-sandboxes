@@ -6,6 +6,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 import json
 import logging
+import os
+import selectors
+import signal
 import subprocess
 import threading
 import time
@@ -118,88 +121,94 @@ class DirectProcessRunner:
         max_stderr_bytes: int,
     ) -> DirectExecResult:
         command = tuple(str(item) for item in argv)
+        deadline = (
+            None if timeout_seconds is None else time.monotonic() + timeout_seconds
+        )
         process = subprocess.Popen(
             command,
             stdin=subprocess.PIPE if input_bytes is not None else subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            bufsize=0,
+            start_new_session=True,
         )
         output = bytearray()
         error = bytearray()
-        overflow = threading.Event()
+        pending_input = memoryview(input_bytes or b"")
 
-        def pump(stream, target: bytearray, limit: int) -> None:
-            while True:
-                chunk = stream.read(64 * 1024)
-                if not chunk:
-                    return
-                remaining = limit + 1 - len(target)
-                if remaining > 0:
-                    target.extend(chunk[:remaining])
-                if len(target) > limit:
-                    overflow.set()
-                    try:
-                        process.terminate()
-                    except ProcessLookupError:
-                        pass
-                    return
+        def remaining() -> float | None:
+            if deadline is None:
+                return None
+            seconds = deadline - time.monotonic()
+            if seconds <= 0:
+                raise subprocess.TimeoutExpired(command, timeout_seconds)
+            return seconds
 
-        readers = [
-            threading.Thread(
-                target=pump,
-                args=(process.stdout, output, max_stdout_bytes),
-                daemon=True,
-            ),
-            threading.Thread(
-                target=pump,
-                args=(process.stderr, error, max_stderr_bytes),
-                daemon=True,
-            ),
-        ]
-        for reader in readers:
-            reader.start()
-        writer: threading.Thread | None = None
-        if input_bytes is not None:
-            assert process.stdin is not None
-
-            def write_input() -> None:
-                try:
-                    process.stdin.write(input_bytes)
-                except BrokenPipeError:
-                    pass
-                finally:
-                    process.stdin.close()
-
-            writer = threading.Thread(target=write_input, daemon=True)
-            writer.start()
+        # Nonblocking descriptors make the deadline cover stdin and inherited
+        # output pipes too. Buffered reader threads can block forever in close()
+        # when a descendant keeps a pipe open after the direct child exits.
         try:
-            exit_code = process.wait(timeout=timeout_seconds)
-        except subprocess.TimeoutExpired as exc:
-            process.terminate()
+            with selectors.DefaultSelector() as selector:
+                for stream, target, limit in (
+                    (process.stdout, output, max_stdout_bytes),
+                    (process.stderr, error, max_stderr_bytes),
+                ):
+                    assert stream is not None
+                    os.set_blocking(stream.fileno(), False)
+                    selector.register(stream, selectors.EVENT_READ, (target, limit))
+                if process.stdin is not None:
+                    if pending_input:
+                        os.set_blocking(process.stdin.fileno(), False)
+                        selector.register(process.stdin, selectors.EVENT_WRITE)
+                    else:
+                        process.stdin.close()
+                while selector.get_map():
+                    for key, _events in selector.select(remaining()):
+                        stream = key.fileobj
+                        if key.events == selectors.EVENT_WRITE:
+                            try:
+                                written = os.write(
+                                    stream.fileno(), pending_input[:65536]
+                                )
+                                pending_input = pending_input[written:]
+                            except BrokenPipeError:
+                                pending_input = memoryview(b"")
+                            except BlockingIOError:
+                                continue
+                            if not pending_input:
+                                selector.unregister(stream)
+                                stream.close()
+                        else:
+                            try:
+                                chunk = os.read(stream.fileno(), 65536)
+                            except BlockingIOError:
+                                continue
+                            if not chunk:
+                                selector.unregister(stream)
+                                stream.close()
+                                continue
+                            target, limit = key.data
+                            if len(target) + len(chunk) > limit:
+                                raise SandboxFileTooLargeError(
+                                    "direct sandbox exec exceeded its bounded output allowance"
+                                )
+                            target.extend(chunk)
+                exit_code = process.wait(timeout=remaining())
+        except BaseException as exc:
+            # The direct child may already have exited; its descendants still
+            # belong to the session and may own the pipe ends we are waiting on.
             try:
-                process.wait(timeout=2)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait()
-            for reader in readers:
-                reader.join(timeout=2)
-            if writer is not None:
-                writer.join(timeout=2)
-            assert process.stdout is not None and process.stderr is not None
-            process.stdout.close()
-            process.stderr.close()
-            raise DirectWardenError("direct sandbox exec timed out") from exc
-        for reader in readers:
-            reader.join(timeout=2)
-        if writer is not None:
-            writer.join(timeout=2)
-        assert process.stdout is not None and process.stderr is not None
-        process.stdout.close()
-        process.stderr.close()
-        if overflow.is_set():
-            raise SandboxFileTooLargeError(
-                "direct sandbox exec exceeded its bounded output allowance"
-            )
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.wait()
+            if isinstance(exc, subprocess.TimeoutExpired):
+                raise DirectWardenError("direct sandbox exec timed out") from exc
+            raise
+        finally:
+            for stream in (process.stdin, process.stdout, process.stderr):
+                if stream is not None:
+                    stream.close()
         return DirectExecResult(
             argv=command,
             exit_code=exit_code,
@@ -492,7 +501,9 @@ class DirectSandboxService:
                     # Capacity rejection is safe to place on another node only
                     # after this worker has rolled back every partial owner.
                     try:
-                        self.provisioner.delete(spec.id)
+                        self.provisioner.delete(
+                            spec.id, generation=operation.generation
+                        )
                     except Exception as cleanup_exc:
                         raise DirectWardenError(
                             "storage capacity rejection rollback failed"
@@ -544,7 +555,7 @@ class DirectSandboxService:
             elif registration.sandbox_generation != generation:
                 return False
             else:
-                self.provisioner.delete(sandbox_id)
+                self.provisioner.delete(sandbox_id, generation=generation)
                 deleted = True
         assert deleted
         with self._activity_guard:
@@ -567,7 +578,7 @@ class DirectSandboxService:
             raise DirectWardenError("delete generation does not own direct sandbox")
         key = (sandbox_id, registration.sandbox_generation)
         with self._lock(*key):
-            self.provisioner.delete(sandbox_id)
+            self.provisioner.delete(sandbox_id, generation=generation)
         with self._activity_guard:
             self._last_activity.pop(key, None)
         self._forget_published_snapshot(*key)
@@ -607,7 +618,7 @@ class DirectSandboxService:
                     "eviction generation does not own the direct sandbox"
                 )
             if registration.phase == "deleting":
-                self.provisioner.delete(sandbox_id)
+                self.provisioner.delete(sandbox_id, generation=generation)
             else:
                 if registration.phase != "owned":
                     raise DirectWardenError(
@@ -627,7 +638,7 @@ class DirectSandboxService:
                     raise DirectWardenError(
                         "worker publication does not match the durable route"
                     )
-                self.provisioner.delete(sandbox_id)
+                self.provisioner.delete(sandbox_id, generation=generation)
         with self._activity_guard:
             self._last_activity.pop(key, None)
         self._forget_published_snapshot(*key)
@@ -773,22 +784,33 @@ class DirectSandboxService:
                 record = self.warden.reconcile(sandbox)
             if record.state == HibernationState.PARKED:
                 timings: dict[str, float] = {}
-                with self.telemetry.span(
-                    "sandbox.wake",
-                    attributes={
-                        "sandbox.id": sandbox_id,
-                        "sandbox.generation": generation,
-                    },
-                ) as span:
-                    with self.telemetry.span("sandbox.wake.ensure_network"):
-                        self.provisioner.ensure_network(registration)
-                    with _translate_storage_capacity():
-                        record = self.warden.resume(
-                            sandbox,
-                            operation_id=operation_id,
-                            timings=timings,
-                        )
-                    span.add_event("sandbox.wake.timings", timings)
+                with (
+                    self._reserve_active_capacity(
+                        sandbox_id,
+                        generation,
+                        ResourceQuantity(
+                            vcpu=registration.spec.cpus or 0,
+                            memory_mb=registration.spec.memory_mb or 0,
+                        ),
+                    ),
+                    self._restore_slots,
+                ):
+                    with self.telemetry.span(
+                        "sandbox.wake",
+                        attributes={
+                            "sandbox.id": sandbox_id,
+                            "sandbox.generation": generation,
+                        },
+                    ) as span:
+                        with self.telemetry.span("sandbox.wake.ensure_network"):
+                            self.provisioner.ensure_network(registration)
+                        with _translate_storage_capacity():
+                            record = self.warden.resume(
+                                sandbox,
+                                operation_id=operation_id,
+                                timings=timings,
+                            )
+                        span.add_event("sandbox.wake.timings", timings)
             if record.state != HibernationState.RUNNING:
                 raise DirectWardenError(
                     f"direct sandbox cannot wake from {record.state.value}"

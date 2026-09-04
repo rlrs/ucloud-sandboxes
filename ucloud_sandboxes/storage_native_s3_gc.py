@@ -12,7 +12,6 @@ from typing import Callable, Iterable
 
 from .config import DeploymentConfig
 from .routing import RoutingStore
-from .storage_native_migration import StorageNativeMigration
 from .storage_native_registry import StorageSnapshotPublication
 from .storage_native_s3 import Boto3S3ObjectClient, S3ObjectClient, S3ObjectStat
 
@@ -285,19 +284,19 @@ def main(argv: list[str] | None = None) -> int:
     routing_store = RoutingStore(config.routing_file())
 
     def current_publications() -> list[StorageSnapshotPublication]:
-        publications: list[StorageSnapshotPublication] = []
-        for route in routing_store.sandbox_routes_readonly():
-            if not route.storage_snapshot:
-                continue
-            publication = StorageNativeMigration.from_dict(
-                route.storage_snapshot
-            ).publication
+        publications: dict[tuple[str, str], StorageSnapshotPublication] = {}
+        for snapshot in routing_store.storage_snapshot_dependencies_readonly(
+            require_complete=True
+        ):
+            publication = StorageSnapshotPublication.from_dict(
+                snapshot.get("publication")
+            )
             if (
                 publication.backend == "s3"
                 and publication.repository == expected_repository
             ):
-                publications.append(publication)
-        return publications
+                publications[(publication.repository, publication.manifest_digest)] = publication
+        return list(publications.values())
 
     grace_seconds = args.grace_days * 24 * 60 * 60
     plan = plan_s3_snapshot_gc(

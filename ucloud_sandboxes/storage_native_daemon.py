@@ -38,7 +38,7 @@ from .telemetry import Telemetry
 _SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,239}\Z")
 _PROTOCOL_SCHEMA = 4
 _JOURNAL_APPLICATION_ID = 0x55435342
-_JOURNAL_SCHEMA_VERSION = 2
+_JOURNAL_SCHEMA_VERSION = 3
 _PROTOCOL_MAX_BYTES = 1024 * 1024
 _OWNER_REQUEST_FIELDS = ("sandbox_generation", "sandbox_id", "volume_id")
 _PROTOCOL_EXTRA_FIELDS = {
@@ -550,6 +550,14 @@ class LinuxStorageHostOperations:
 
 
 class StorageNativeJournal:
+    _RETIREMENT_SCHEMA = """
+        CREATE TABLE retired_devices (
+            owner_id TEXT PRIMARY KEY,
+            device_id INTEGER NOT NULL,
+            volume_id TEXT NOT NULL,
+            virtual_size INTEGER NOT NULL CHECK(virtual_size > 0)
+        );
+    """
     _SCHEMA = f"""
         BEGIN IMMEDIATE;
         CREATE TABLE volumes (
@@ -573,6 +581,7 @@ class StorageNativeJournal:
         );
         INSERT INTO counters (name, next_value)
         VALUES ('accounting_id', 200000);
+        {_RETIREMENT_SCHEMA}
         PRAGMA application_id = {_JOURNAL_APPLICATION_ID};
         PRAGMA user_version = {_JOURNAL_SCHEMA_VERSION};
         COMMIT;
@@ -623,6 +632,13 @@ class StorageNativeJournal:
                         raise StorageNativeNodeError(
                             "storage-native journal initialization failed"
                         ) from exc
+            elif application_id == _JOURNAL_APPLICATION_ID and schema_version == 2:
+                self._require_schema(connection, legacy=True)
+                self._require_data(connection)
+                connection.executescript(
+                    "BEGIN IMMEDIATE;" + self._RETIREMENT_SCHEMA
+                    + f"PRAGMA user_version = {_JOURNAL_SCHEMA_VERSION}; COMMIT;"
+                )
             elif (
                 application_id != _JOURNAL_APPLICATION_ID
                 or schema_version != _JOURNAL_SCHEMA_VERSION
@@ -638,7 +654,7 @@ class StorageNativeJournal:
             )
 
     @staticmethod
-    def _require_schema(connection: sqlite3.Connection) -> None:
+    def _require_schema(connection: sqlite3.Connection, *, legacy: bool = False) -> None:
         expected = {
             "volumes": (
                 "volume_id",
@@ -657,6 +673,10 @@ class StorageNativeJournal:
             ),
             "counters": ("name", "next_value"),
         }
+        if not legacy:
+            expected["retired_devices"] = (
+                "owner_id", "device_id", "volume_id", "virtual_size"
+            )
         tables = {
             str(row[0])
             for row in connection.execute(
@@ -737,7 +757,7 @@ class StorageNativeJournal:
                 ),
                 tuple(sorted(_ACTIVE_CAPACITY_STATES)),
             ).fetchone()[0]
-            if int(reserved) + record.virtual_size > hard_capacity_bytes:
+            if int(reserved) + self._retired_bytes(connection) + record.virtual_size > hard_capacity_bytes:
                 raise StorageNativeCapacityError(
                     "storage-native hard capacity is exhausted"
                 )
@@ -847,7 +867,7 @@ class StorageNativeJournal:
                     ),
                     (*sorted(_ACTIVE_CAPACITY_STATES), record.volume_id),
                 ).fetchone()[0]
-                if int(reserved) + record.virtual_size > hard_capacity_bytes:
+                if int(reserved) + self._retired_bytes(connection) + record.virtual_size > hard_capacity_bytes:
                     raise StorageNativeCapacityError(
                         "storage-native hard capacity is exhausted"
                     )
@@ -1175,6 +1195,29 @@ class StorageNativeJournal:
                 f"storage volume is {record.state.value}, not an allowed state"
             )
 
+    @staticmethod
+    def _retired_bytes(connection: sqlite3.Connection) -> int:
+        return int(connection.execute(
+            "SELECT COALESCE(SUM(virtual_size), 0) FROM retired_devices"
+        ).fetchone()[0])
+
+    def retire_device(self, owner: StorageNativeDeviceOwner, record: StorageVolumeRecord) -> None:
+        with closing(self._connect()) as connection:
+            connection.execute(
+                "INSERT OR IGNORE INTO retired_devices VALUES (?, ?, ?, ?)",
+                (owner.owner_id, owner.device_id, record.volume_id, record.virtual_size),
+            )
+
+    def retired_devices(self) -> list[tuple[str, int, str, int]]:
+        with closing(self._connect()) as connection:
+            return connection.execute(
+                "SELECT owner_id, device_id, volume_id, virtual_size FROM retired_devices"
+            ).fetchall()
+
+    def forget_retired_device(self, owner_id: str) -> None:
+        with closing(self._connect()) as connection:
+            connection.execute("DELETE FROM retired_devices WHERE owner_id = ?", (owner_id,))
+
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(
             self.path,
@@ -1278,15 +1321,20 @@ class StorageNativeNodeService:
         self._released_device_ids: set[int] = set()
         self._device_slot_guard = threading.Lock()
         self._pending_device_allocations = 0
+        self._retirement_lock = threading.Lock()
         self._ensure_roots()
 
     def metrics(self) -> dict[str, Any]:
+        self._reap_retired_devices()
         records = self.journal.list()
         reserved = sum(
             record.virtual_size
             for record in records
             if record.state.value in _ACTIVE_CAPACITY_STATES
         )
+        retired = self.journal.retired_devices()
+        retired_bytes = sum(row[3] for row in retired)
+        reserved += retired_bytes
         cache_bytes = 0
         for record in records:
             for raw_path in record.cached_layer_paths:
@@ -1308,6 +1356,8 @@ class StorageNativeNodeService:
                 "device_pool_discards": self._pool_discards,
             }
         return {
+            "retired_devices": len(retired),
+            "retired_reserved_bytes": retired_bytes,
             "cache_bytes": cache_bytes,
             "device_pool_enabled": self.config.device_pool_enabled,
             "device_pool_low_watermark": (self.config.device_pool_low_watermark),
@@ -2100,12 +2150,14 @@ class StorageNativeNodeService:
             return self._reconcile_exclusive()
 
     def _reconcile_exclusive(self) -> dict[str, Any]:
+        self._reap_retired_devices()
         records = list(self.journal.list())
         live_devices = self.host.ublk_device_ids()
         backend_owners = self._backend_ownership()
         expected_owner_ids = {
             record.device_owner_id for record in records if record.device_owner_id
         }
+        expected_owner_ids.update(row[0] for row in self.journal.retired_devices())
         orphan_devices = sorted(
             owner.device_id
             for owner_id, owner in backend_owners.items()
@@ -2256,7 +2308,8 @@ class StorageNativeNodeService:
             # against a device that is already idle in the warm pool.
             self.journal.update_pending(released)
         volume_root = self._volume_root(record.volume_id)
-        if volume_root.exists():
+        has_retired = any(row[2] == record.volume_id for row in self.journal.retired_devices())
+        if volume_root.exists() and not has_retired:
             if volume_root.is_symlink() or not volume_root.is_dir():
                 raise StorageNativeTerminalError("volume root is not a real directory")
             shutil.rmtree(volume_root)
@@ -2440,33 +2493,72 @@ class StorageNativeNodeService:
         return by_owner
 
     def _release_backend_device(self, device_id: int) -> None:
-        if not self.config.device_pool_enabled:
-            self.backend.delete(device_id)
-            return
         # Successful umount does not prove the block device can be rebound.
         # Allow short deferred filesystem teardown, then retire the owned device
         # rather than exposing its next owner to the previous filesystem.
         deadline = time.monotonic() + 0.5
         while not self.host.device_is_unused(Path(f"/dev/ublkb{device_id}")):
             if time.monotonic() >= deadline:
-                self._discard_backend_device(device_id)
+                self._quarantine_backend_device(device_id)
                 return
             time.sleep(0.05)
+        if not self.config.device_pool_enabled:
+            self.backend.delete(device_id)
+            return
         self.backend.release(device_id)
         with self._pool_metrics_lock:
             self._pool_releases += 1
             self._released_device_ids.add(device_id)
 
     def _discard_backend_device(self, device_id: int) -> None:
+        if not self.host.device_is_unused(Path(f"/dev/ublkb{device_id}")):
+            self._quarantine_backend_device(device_id)
+            return
         self.backend.delete(device_id)
         if self.config.device_pool_enabled:
             with self._pool_metrics_lock:
                 self._pool_discards += 1
                 self._released_device_ids.discard(device_id)
 
-    @staticmethod
-    def _remove_local_layers(paths: tuple[Path, ...]) -> None:
+    def _quarantine_backend_device(self, device_id: int) -> None:
+        owners = [o for o in self._backend_ownership().values() if o.device_id == device_id]
+        if not owners:
+            raise StorageNativeNodeError("cannot quarantine a device without its owner")
+        owner = owners[0]
+        volume_id = owner.image_config_path.relative_to(self.config.runtime_root).parts[0]
+        record = self.journal.load(volume_id)
+        if record is None:
+            raise StorageNativeNodeError("cannot quarantine an unjournaled volume")
+        self.journal.retire_device(owner, record)
+
+    def _reap_retired_devices(self) -> None:
+        if not self._retirement_lock.acquire(blocking=False):
+            return
+        try:
+            for owner_id, device_id, volume_id, _ in self.journal.retired_devices():
+                owner = self._backend_ownership().get(owner_id)
+                if owner is not None:
+                    if owner.device_id != device_id or not self.host.device_is_unused(owner.device_path):
+                        continue
+                    # The identity still owns this device, and the kernel no
+                    # longer holds it. Never delete a recycled numeric ID.
+                    self.backend.delete(device_id)
+                self.journal.forget_retired_device(owner_id)
+                record = self.journal.load(volume_id)
+                if record is not None and record.state == StorageVolumeState.DELETED and not any(
+                    row[2] == volume_id for row in self.journal.retired_devices()
+                ):
+                    shutil.rmtree(self._volume_root(volume_id), ignore_errors=True)
+        finally:
+            self._retirement_lock.release()
+
+    def _remove_local_layers(self, paths: tuple[Path, ...]) -> None:
+        retained_roots = {
+            self._volume_root(row[2]) for row in self.journal.retired_devices()
+        }
         for path in paths:
+            if any(root in path.parents for root in retained_roots):
+                continue
             try:
                 path.unlink(missing_ok=True)
             except OSError:

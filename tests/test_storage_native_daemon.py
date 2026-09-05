@@ -241,12 +241,26 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
                 owner, action="release", operation_id="park"
             )
             self.assertEqual(released.state, StorageVolumeState.RELEASED)
-            self.assertIn(created.device_id, backend.delete_calls)
+            self.assertEqual(backend.delete_calls, [])
             self.assertNotIn(created.device_id, backend.release_calls)
             self.assertTrue(all(Path(p).exists() for p in released.sealed_layer_paths))
             resumed = service.converge_volume(owner, action="mount", operation_id="wake")
             self.assertEqual(resumed.state, StorageVolumeState.MOUNTED)
             self.assertNotEqual(resumed.device_id, created.device_id)
+            restarted = StorageNativeNodeService(
+                service.config, backend=backend, host=host,
+                global_config_path=service.global_config_path,
+            )
+            restarted.reconcile()
+            self.assertEqual(restarted.metrics()["retired_devices"], 1)
+            self.assertEqual(backend.delete_calls, [])
+            service.converge_volume(owner, action="delete", operation_id="delete")
+            self.assertTrue(Path(released.sealed_layer_paths[0]).exists())
+            self.assertEqual(restarted.metrics()["hard_reserved_bytes"], 1 << 30)
+            host.busy_devices.clear()
+            self.assertEqual(restarted.metrics()["retired_devices"], 0)
+            self.assertEqual(backend.delete_calls, [created.device_id])
+            self.assertFalse(Path(released.sealed_layer_paths[0]).exists())
 
     def test_busy_acquired_device_is_never_formatted_or_mounted(self):
         with TemporaryDirectory() as raw:
@@ -259,8 +273,38 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
                 )
             self.assertEqual(host.formatted, [])
             self.assertEqual(host.mounted, set())
-            self.assertEqual(backend.delete_calls, [1])
+            self.assertEqual(backend.delete_calls, [])
+            self.assertEqual(service.metrics()["retired_devices"], 1)
             self.assertEqual(backend.release_calls, [])
+
+    def test_quarantine_capacity_and_recycled_device_identity(self):
+        with TemporaryDirectory() as raw:
+            service, backend, host = self._service(Path(raw), pooled=True, capacity=2 << 30)
+            owner = StorageVolumeOwner("vol", "sandbox", 1)
+            created = service.converge_volume(owner, action="prepare", operation_id="create", virtual_size=1 << 30)
+            host.busy_devices.add(Path(created.device_path))
+            service.converge_volume(owner, action="release", operation_id="park")
+            with self.assertRaises(StorageNativeCapacityError):
+                service.converge_volume(StorageVolumeOwner("other", "other", 1), action="prepare", operation_id="other", virtual_size=1 << 30)
+            # Backend restart can remove the old owner and reuse its numeric ID.
+            backend.delete(created.device_id)
+            backend.next_device_id = created.device_id
+            host.busy_devices.clear()
+            resumed = service.converge_volume(owner, action="mount", operation_id="wake")
+            self.assertEqual(resumed.device_id, created.device_id)
+            self.assertEqual(service.metrics()["retired_devices"], 0)
+            self.assertIn(resumed.device_owner_id, backend.owners)
+            self.assertEqual(backend.delete_calls, [created.device_id])
+
+    def test_journal_migrates_v2_without_changing_volume_identity(self):
+        with TemporaryDirectory() as raw:
+            service, _, _ = self._service(Path(raw))
+            record = service.converge_volume(StorageVolumeOwner("vol", "sandbox", 1), action="prepare", operation_id="create", virtual_size=1 << 30)
+            with sqlite3.connect(service.journal.path) as connection:
+                connection.executescript("DROP TABLE retired_devices; PRAGMA user_version=2;")
+            migrated = StorageNativeJournal(service.journal.path)
+            self.assertEqual(migrated.load("vol"), record)
+            self.assertEqual(migrated.retired_devices(), [])
 
     def _service(
         self,

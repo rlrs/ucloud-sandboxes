@@ -582,6 +582,22 @@ class DirectRunscWardenTests(unittest.TestCase):
         self.assertEqual(storage.record["state"], "released")
         self.assertIsNone(self.warden.inspect(self.sandbox))
 
+    def test_delete_reaped_capture_does_not_remount_failed_storage(self) -> None:
+        storage, _rootfs, _incarnation = self._use_storage_native()
+        self.warden.create(self.sandbox, operation_id="create:1")
+        storage.fail_next_release = True
+        with self.assertRaisesRegex(Exception, "release failure"):
+            self.warden.park(self.sandbox, operation_id="park:1")
+        storage.fail_next_mount = True
+        events = tuple(storage.events)
+        with patch.object(self.warden, "_candidate_identity_or_none", return_value=(42, 99)):
+            with self.assertRaisesRegex(DirectWardenError, "still has a runtime identity"):
+                self.warden.delete(self.sandbox)
+            self.assertIsNotNone(self.warden.inspect(self.sandbox))
+        self.warden.delete(self.sandbox)
+        self.assertEqual(tuple(storage.events), events)
+        self.assertIsNone(self.warden.inspect(self.sandbox))
+
     def test_interrupted_storage_park_boundaries_reconcile(self) -> None:
         cases = (
             ("storage", "fail_next_seal", "seal failure"),

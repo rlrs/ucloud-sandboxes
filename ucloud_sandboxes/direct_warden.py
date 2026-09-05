@@ -987,10 +987,15 @@ class DirectRunscWarden:
     def delete(self, sandbox: DirectSandbox) -> None:
         """Fence one backend; the storage authority removes its opaque volume."""
         snapshot = self.inspect(sandbox)
-        if snapshot is not None and snapshot.state in {
-            HibernationState.HIBERNATING,
-            HibernationState.RESTORING,
-        }:
+        if (
+            snapshot is not None
+            and snapshot.state
+            in {
+                HibernationState.HIBERNATING,
+                HibernationState.RESTORING,
+            }
+            and snapshot.authority != HibernationAuthority.PENDING
+        ):
             self.reconcile(sandbox)
         with self._locked(sandbox):
             journal = self._journal(sandbox)
@@ -998,11 +1003,32 @@ class DirectRunscWarden:
             if record is None:
                 self._parked_manifest_path(sandbox).unlink(missing_ok=True)
                 return
-            if record.state not in {
-                HibernationState.RUNNING,
-                HibernationState.PARKED,
-                HibernationState.RECOVERY_REQUIRED,
-            }:
+            reaped_capture = (
+                record.state == HibernationState.HIBERNATING
+                and record.authority == HibernationAuthority.PENDING
+            )
+            if reaped_capture:
+                # A release failure can follow successful capture and runtime
+                # teardown. Deletion must not remount the failed volume just
+                # to reconcile a checkpoint the caller has asked to discard.
+                if (
+                    record.sentry_pid is not None
+                    or record.candidate_pid is not None
+                    or self._candidate_identity_or_none(sandbox) is not None
+                ):
+                    raise DirectWardenError(
+                        "reaped capture still has a runtime identity"
+                    )
+                self._best_effort_delete(sandbox)
+            if (
+                record.state
+                not in {
+                    HibernationState.RUNNING,
+                    HibernationState.PARKED,
+                    HibernationState.RECOVERY_REQUIRED,
+                }
+                and not reaped_capture
+            ):
                 raise DirectWardenError(
                     "sandbox transition must be reconciled before deletion"
                 )

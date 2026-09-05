@@ -11,6 +11,10 @@ import subprocess
 import sys
 
 
+from ucloud_sandboxes.environment_contract import describe_environment
+from ucloud_sandboxes.sandbox import SandboxSpec
+
+
 MANIFEST = Path(__file__).resolve().parents[1] / "docs/prime-tasksets.json"
 
 
@@ -74,6 +78,22 @@ def verdict(summary: dict, *, mode: str) -> str:
             if summary.get("checks", {}).get(check, {}).get("valid") != total:
                 return "failed_or_incomplete"
     return "setup_passed" if mode == "setup" else "sample_passed"
+
+
+def runtime_preflight(row: dict) -> dict:
+    # Manifest requirements are pinned with the audited taskset sources. This
+    # runs before importing a taskset, downloading datasets or building indices.
+    spec = SandboxSpec(
+        id="qualification-preflight",
+        image="unresolved",
+        memory_mb=128,
+        required_features=tuple(row.get("required_runtime_features", ())),
+    )
+    report = describe_environment(spec)
+    return {
+        "requirements_satisfied": report["requirements_satisfied"],
+        "problems": report["problems"],
+    }
 
 
 def command(
@@ -164,6 +184,7 @@ def main() -> int:
         {
             "taskset": row["taskset"],
             "mode": row["mode"],
+            "preflight": runtime_preflight(row),
             "command": command(
                 args.python,
                 row,
@@ -193,9 +214,26 @@ def main() -> int:
             f"Wrote {len(plan)} checks to {output / 'plan.json'}; no sandboxes created"
         )
         return 0
-    verify_installed_sources(args.python, args.source.resolve(), rows)
+    runnable = [
+        row
+        for row, check in zip(rows, plan)
+        if check["preflight"]["requirements_satisfied"]
+    ]
+    if runnable:
+        verify_installed_sources(args.python, args.source.resolve(), runnable)
     results = []
     for row, check in zip(rows, plan):
+        if not check["preflight"]["requirements_satisfied"]:
+            results.append(
+                {
+                    "taskset": row["taskset"],
+                    "status": "blocked_preflight",
+                    "preflight": check["preflight"],
+                }
+            )
+            (output / "results.json").write_text(json.dumps(results, indent=2) + "\n")
+            print(f"Blocked before setup: {row['taskset']}", flush=True)
+            continue
         print(f"Checking {row['taskset']} ({row['mode']})", flush=True)
         with (output / f"{row['taskset']}.log").open("w") as log:
             completed = subprocess.run(
@@ -218,7 +256,9 @@ def main() -> int:
             }
         )
         (output / "results.json").write_text(json.dumps(results, indent=2) + "\n")
-    return int(any(row["status"] == "failed_or_incomplete" for row in results))
+    return int(
+        any(row["status"] not in {"setup_passed", "sample_passed"} for row in results)
+    )
 
 
 if __name__ == "__main__":

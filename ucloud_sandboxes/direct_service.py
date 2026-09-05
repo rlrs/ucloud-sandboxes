@@ -1147,7 +1147,20 @@ class DirectSandboxService:
     ) -> ManagedProcessRecord:
         registration = self._require_managed_registration(sandbox_id)
         uid, gid = self._managed_workload_credentials(registration)
-        payload = spec.control_payload(uid=uid, gid=gid)
+        default_cwd = None
+        if spec.cwd is None:
+            try:
+                config = json.loads(
+                    (Path(registration.bundle) / "config.json").read_text()
+                )
+                default_cwd = config["annotations"][
+                    "dev.ucloud-sandboxes.managed-process.cwd"
+                ]
+            except (OSError, KeyError, TypeError, ValueError) as exc:
+                raise ManagedProcessError(
+                    "managed process default cwd is unavailable"
+                ) from exc
+        payload = spec.control_payload(uid=uid, gid=gid, default_cwd=default_cwd)
         raw = self._managed_control(registration, payload, retry_not_ready=True)
         return ManagedProcessRecord.from_control_response(
             raw,
@@ -1344,9 +1357,13 @@ class DirectSandboxService:
         max_bytes: int,
     ) -> bytes:
         validate_container_path("sandbox file path", path)
+        registration = self._require_registration(sandbox_id)
+        command = ("/bin/cat", "--", path)
+        if registration.spec.filesystem.management_helper == "static":
+            command = ("/.ucloud-job-init", "files", "read", path, str(max_bytes))
         result = self.exec(
             sandbox_id,
-            ("/bin/cat", "--", path),
+            command,
             max_stdout_bytes=max_bytes,
             max_stderr_bytes=64 * 1024,
         )
@@ -1363,9 +1380,19 @@ class DirectSandboxService:
         payload: bytes,
     ) -> None:
         validate_container_path("sandbox file path", path)
+        registration = self._require_registration(sandbox_id)
+        command = ("/bin/sh", "-c", sandbox_file_write_script(), "ucloud-write", path)
+        if registration.spec.filesystem.management_helper == "static":
+            command = (
+                "/.ucloud-job-init",
+                "files",
+                "write",
+                path,
+                str(max(1, len(payload))),
+            )
         result = self.exec(
             sandbox_id,
-            ("/bin/sh", "-c", sandbox_file_write_script(), "ucloud-write", path),
+            command,
             input_bytes=payload,
             max_stdout_bytes=64 * 1024,
             max_stderr_bytes=64 * 1024,

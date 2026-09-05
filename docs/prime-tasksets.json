@@ -127,7 +127,10 @@
         "environments/swe/swebench_multilingual/swebench_multilingual/__init__.py": "8500303b3475b454015329e5a4710c20156ed85a954ccbd0a1341c5eb9893550",
         "environments/swe/swebench_multilingual/swebench_multilingual/taskset.py": "1b8e7da6785cc9615c35dc49ab4cd060f60d36a94747a9dbb3bdfe859d77ea7b",
         "environments/swe/swebench_multilingual/pyproject.toml": "e05933b04d77865c4ae55f1d57dc5310da118aa7b24b65f79db1d86b9894c7a0"
-      }
+      },
+      "required_runtime_features": [
+        "framework-network-policy"
+      ]
     },
     {
       "taskset": "senior-swe-bench",
@@ -293,7 +296,10 @@
         "environments/search/browsecomp_plus/browsecomp_plus/servers/search.py": "1db772dccc6050e12d0a8be87c41fdceaf4b07f737d6bfa89dd63db515f27d7d",
         "environments/search/browsecomp_plus/browsecomp_plus/taskset.py": "01445aa3e2d9d7924a19555d60e30cbe14189a32ccb7762d5f8426e7565d836a",
         "environments/search/browsecomp_plus/pyproject.toml": "3384fb2d008a705fefebfb4354aca3e745e1c8df054e72bdc36136c7e1e71923"
-      }
+      },
+      "required_runtime_features": [
+        "framework-network-policy"
+      ]
     }
   ]
 }

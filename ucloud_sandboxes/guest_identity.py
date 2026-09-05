@@ -98,3 +98,24 @@ def resolve_identity(rootfs: Path, value: str) -> GuestIdentity:
             identity.uid, gid, identity.name, identity.home, identity.shell
         )
     return identity
+
+
+def resolve_groups(rootfs: Path, values: tuple[str, ...]) -> tuple[int, ...]:
+    """Explicit supplementary groups only; never infer host or image membership."""
+    groups = None
+    result = []
+    for value in values:
+        if value.isascii() and value.isdecimal():
+            gid = _number(value)
+        else:
+            if groups is None:
+                groups = _account_file(rootfs, "group")
+            entry = next(
+                (row for row in groups if len(row) == 4 and row[0] == value), None
+            )
+            if entry is None:
+                raise ValueError(f"image group {value!r} is absent from /etc/group")
+            gid = _number(entry[2])
+        if gid not in result:
+            result.append(gid)
+    return tuple(result)

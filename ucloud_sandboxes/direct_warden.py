@@ -340,6 +340,18 @@ class DirectRunscWarden:
                 self._best_effort_delete(sandbox)
                 raise
 
+    def _readiness_command(self, sandbox: DirectSandbox) -> tuple[str, ...]:
+        try:
+            config = json.loads((sandbox.bundle / "config.json").read_text())
+        except FileNotFoundError:
+            return self.config.readiness_command
+        if (
+            config.get("annotations", {}).get("dev.ucloud-sandboxes.file-helper")
+            == "v1"
+        ):
+            return ("/.ucloud-job-init", "files", "ready")
+        return self.config.readiness_command
+
     def exec(
         self,
         sandbox: DirectSandbox,
@@ -717,7 +729,7 @@ class DirectRunscWarden:
                     *self._state_prefix(),
                     "exec",
                     sandbox.container_id,
-                    *self.config.readiness_command,
+                    *self._readiness_command(sandbox),
                 )
                 timings["readiness_exec"] = (time.monotonic() - phase) * 1000
             except Exception:
@@ -944,7 +956,7 @@ class DirectRunscWarden:
                 *self._state_prefix(),
                 "exec",
                 sandbox.container_id,
-                *self.config.readiness_command,
+                *self._readiness_command(sandbox),
             )
             running = journal.commit_running(
                 operation_id=restoring.operation_id,

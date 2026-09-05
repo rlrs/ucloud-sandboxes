@@ -1,3 +1,5 @@
+ENVIRONMENT_CONTRACT_CAPABILITY = "environment-contract-v1"
+STATIC_FILE_MANAGEMENT_CAPABILITY = "static-file-management-v1"
 DISK_QUOTA_CAPABILITY = "disk-quota"
 HIBERNATE_LOCAL_CAPABILITY = "hibernate-local-v2"
 MANAGED_PRIMARY_CAPABILITY = "managed-primary-v1"

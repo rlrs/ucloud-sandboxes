@@ -24,6 +24,8 @@ import urllib3
 from urllib3.exceptions import HTTPError as Urllib3HTTPError
 
 from .capabilities import (
+    ENVIRONMENT_CONTRACT_CAPABILITY,
+    STATIC_FILE_MANAGEMENT_CAPABILITY,
     DISK_QUOTA_CAPABILITY,
     HIBERNATE_LOCAL_CAPABILITY,
     MANAGED_PRIMARY_CAPABILITY,
@@ -198,17 +200,26 @@ def _wake_pending_demand_id(sandbox_id: str) -> str:
 
 
 def _sandbox_required_capabilities(spec: dict[str, Any]) -> tuple[str, ...]:
-    if not bool(spec.get("parkable")):
-        return ()
-    return tuple(
-        capability
-        for capability in (
-            HIBERNATE_LOCAL_CAPABILITY,
-            DISK_QUOTA_CAPABILITY,
-            MANAGED_PRIMARY_CAPABILITY if bool(spec.get("managed_process")) else "",
-        )
-        if capability
-    )
+    capabilities = []
+    if bool(spec.get("parkable")):
+        capabilities.extend((HIBERNATE_LOCAL_CAPABILITY, DISK_QUOTA_CAPABILITY))
+        if bool(spec.get("managed_process")):
+            capabilities.append(MANAGED_PRIMARY_CAPABILITY)
+    filesystem = spec.get("filesystem") or {}
+    security = spec.get("security") or {}
+    if (
+        spec.get("profile") == "linux_session"
+        or spec.get("required_features")
+        or spec.get("dns_servers")
+        or security.get("supplementary_groups")
+        or filesystem.get("shm_mb", 64) != 64
+        or filesystem.get("workspace_storage") is not None
+        or filesystem.get("management_helper", "shell") != "shell"
+    ):
+        capabilities.append(ENVIRONMENT_CONTRACT_CAPABILITY)
+    if filesystem.get("management_helper") == "static":
+        capabilities.append(STATIC_FILE_MANAGEMENT_CAPABILITY)
+    return tuple(capabilities)
 
 
 def _sandbox_supports_managed_lifecycle(spec: dict[str, Any]) -> bool:

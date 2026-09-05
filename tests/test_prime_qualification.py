@@ -1,7 +1,7 @@
 import json
 import unittest
 
-from scripts.qualify_prime_tasksets import MANIFEST, verdict
+from scripts.qualify_prime_tasksets import MANIFEST, verdict, runtime_preflight
 from scripts.prime_validation_entrypoint import resolve_image
 
 
@@ -29,6 +29,46 @@ class PrimeQualificationTests(unittest.TestCase):
         self.assertEqual(resolve_image("tmax", image + "extra", exact), image + "extra")
         with self.assertRaises(ValueError):
             resolve_image("swerebench-v2", image, rules + rules)
+
+    def test_public_build_alias_requires_published_digest(self):
+        from scripts.build_public_task_image import image_alias
+
+        row = {"taskset": "senior-swe-bench", "source_image": "upstream/task:latest"}
+        result = {
+            "status": "succeeded",
+            "image": {
+                "state": "available",
+                "available_to_sandboxes": True,
+                "pushed": True,
+                "tag": "registry:5000/task:latest",
+                "manifest_digest": "sha256:" + "a" * 64,
+            },
+        }
+        self.assertEqual(
+            image_alias(row, result)["target"], "registry:5000/task@sha256:" + "a" * 64
+        )
+        for field, value in (
+            ("pushed", False),
+            ("available_to_sandboxes", False),
+            ("manifest_digest", "sha256:invalid"),
+        ):
+            broken = {**result, "image": {**result["image"], field: value}}
+            with self.assertRaises(ValueError):
+                image_alias(row, broken)
+
+    def test_known_network_gaps_block_before_dataset_setup(self):
+        rows = json.loads(MANIFEST.read_text())["tasksets"]
+        blocked = [
+            row["taskset"]
+            for row in rows
+            if not runtime_preflight(row)["requirements_satisfied"]
+        ]
+        self.assertEqual(set(blocked), {"browsecomp-plus", "swebench-multilingual"})
+        self.assertFalse(
+            runtime_preflight({"required_runtime_features": ["unknown-feature"]})[
+                "requirements_satisfied"
+            ]
+        )
 
     def test_manifest_covers_article_families(self):
         rows = json.loads(MANIFEST.read_text())["tasksets"]

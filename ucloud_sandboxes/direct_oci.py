@@ -2,15 +2,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
+import ipaddress
 from pathlib import Path
 import re
 import shutil
 import stat
+import subprocess
 import tempfile
 from typing import Any
 
 from .image_rootfs import DockerImageConfig, MaterializedRootfs
-from .guest_identity import resolve_identity
+from .guest_identity import resolve_identity, resolve_groups
 from .sandbox import SandboxSpec, linux_host_entrypoint_script
 
 
@@ -115,6 +117,7 @@ class DirectOciConfigBuilder:
             raise DirectOciConfigError(
                 "direct sandboxes require explicit memory_mb and disk_mb limits"
             )
+        self.validate_management_helper(spec)
         if spec.ssh.enabled:
             raise DirectOciConfigError(
                 "direct runtime SSH requires node network integration"
@@ -127,6 +130,9 @@ class DirectOciConfigBuilder:
             )
         except ValueError as exc:
             raise DirectOciConfigError(str(exc)) from exc
+        supplementary_gids = resolve_groups(
+            image.rootfs, spec.security.supplementary_groups
+        )
         args = (
             ()
             if spec.managed_process or spec.profile in {"linux_host", "linux_session"}
@@ -213,6 +219,8 @@ class DirectOciConfigBuilder:
             "dev.ucloud-sandboxes.profile": spec.profile,
             "dev.ucloud-sandboxes.sandbox-id": spec.id,
         }
+        if spec.filesystem.management_helper == "static":
+            annotations["dev.ucloud-sandboxes.file-helper"] = "v1"
         if spec.managed_process:
             annotations.update(
                 {
@@ -300,13 +308,48 @@ class DirectOciConfigBuilder:
                     {"hard": 1_048_576, "soft": 1_048_576, "type": "RLIMIT_NOFILE"}
                 ],
                 "terminal": False,
-                "user": {"gid": gid, "uid": uid},
+                "user": {
+                    "gid": gid,
+                    "uid": uid,
+                    **(
+                        {"additionalGids": list(supplementary_gids)}
+                        if supplementary_gids
+                        else {}
+                    ),
+                },
             },
             "root": {
                 "path": "rootfs",
                 "readonly": spec.security.read_only_rootfs,
             },
         }
+
+    def validate_management_helper(self, spec: SandboxSpec) -> None:
+        if spec.filesystem.management_helper != "static":
+            return
+        binary = self.managed_init_binary
+        if binary is None:
+            raise DirectOciConfigError(
+                "static file management requires an updated managed-process binary"
+            )
+        # This is the trusted node artifact, never an executable from the image.
+        self._validate_init_binary(binary)
+        try:
+            result = subprocess.run(
+                [str(binary), "files", "ready"],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise DirectOciConfigError(
+                "static file helper protocol probe failed"
+            ) from exc
+        if result.returncode != 0:
+            raise DirectOciConfigError(
+                "configured binary does not support static file management"
+            )
 
     def install_init(self, rootfs: Path, *, enabled: bool) -> None:
         """Atomically install the trusted init into a prepared writable rootfs."""
@@ -486,6 +529,10 @@ class DirectOciConfigBuilder:
                 rootfs,
                 os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
             )
+            try:
+                os.mkdir("etc", mode=0o755, dir_fd=root_fd)
+            except FileExistsError:
+                pass
             etc_fd = os.open(
                 "etc",
                 os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
@@ -500,9 +547,11 @@ class DirectOciConfigBuilder:
             with os.fdopen(descriptor, "w", encoding="ascii") as handle:
                 descriptor = -1
                 handle.write(
-                    "nameserver 1.1.1.1\n"
-                    "nameserver 8.8.8.8\n"
-                    "options timeout:2 attempts:2\n"
+                    "".join(
+                        f"nameserver {ipaddress.IPv4Address(server)}\n"
+                        for server in (spec.dns_servers or ("1.1.1.1", "8.8.8.8"))
+                    )
+                    + "options timeout:2 attempts:2\n"
                 )
                 handle.flush()
                 os.fsync(handle.fileno())
@@ -627,7 +676,13 @@ class DirectOciConfigBuilder:
             },
             {
                 "destination": "/dev/shm",
-                "options": ["nosuid", "noexec", "nodev", "mode=1777", "size=65536k"],
+                "options": [
+                    "nosuid",
+                    "noexec",
+                    "nodev",
+                    "mode=1777",
+                    f"size={spec.filesystem.shm_mb * 1024}k",
+                ],
                 "source": "shm",
                 "type": "tmpfs",
             },
@@ -666,7 +721,7 @@ class DirectOciConfigBuilder:
                 "type": "tmpfs",
             },
         ]
-        if spec.filesystem.enforce_disk_quota:
+        if spec.filesystem.workspace_is_tmpfs:
             assert spec.disk_mb is not None
             mounts.append(
                 {

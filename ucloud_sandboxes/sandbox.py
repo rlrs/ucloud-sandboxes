@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import re
+import ipaddress
 import subprocess
 import tempfile
 from threading import Condition, RLock
@@ -160,6 +161,7 @@ class SandboxSecuritySpec:
     user: str | None = DEFAULT_SANDBOX_USER
     cap_drop: tuple[str, ...] = ("ALL",)
     cap_add: tuple[str, ...] = ()
+    supplementary_groups: tuple[str, ...] = ()
     no_new_privileges: bool = True
     pids_limit: int | None = DEFAULT_PIDS_LIMIT
     read_only_rootfs: bool = False
@@ -173,6 +175,7 @@ class SandboxSecuritySpec:
             raw,
             "security",
             {
+                "supplementary_groups",
                 "cap_add",
                 "cap_drop",
                 "init",
@@ -189,6 +192,9 @@ class SandboxSecuritySpec:
             user=user or None,
             cap_drop=_json_string_list(raw.get("cap_drop", ["ALL"]), "cap_drop"),
             cap_add=_json_string_list(raw.get("cap_add", []), "cap_add"),
+            supplementary_groups=_json_string_list(
+                raw.get("supplementary_groups", []), "supplementary_groups"
+            ),
             no_new_privileges=_json_bool(
                 raw.get("no_new_privileges", True), "no_new_privileges"
             ),
@@ -204,6 +210,10 @@ class SandboxSecuritySpec:
     def validate(self) -> None:
         if self.user is not None:
             validate_security_value("security user", self.user)
+        if len(self.supplementary_groups) > 64:
+            raise ValueError("at most 64 supplementary groups are supported")
+        for item in self.supplementary_groups:
+            validate_security_value("supplementary group", item)
         for item in self.cap_drop:
             validate_security_value("cap_drop", item)
         for item in self.cap_add:
@@ -216,6 +226,11 @@ class SandboxSecuritySpec:
             "user": self.user,
             "cap_drop": list(self.cap_drop),
             "cap_add": list(self.cap_add),
+            **(
+                {"supplementary_groups": list(self.supplementary_groups)}
+                if self.supplementary_groups
+                else {}
+            ),
             "no_new_privileges": self.no_new_privileges,
             "pids_limit": self.pids_limit,
             "read_only_rootfs": self.read_only_rootfs,
@@ -229,6 +244,9 @@ class SandboxFilesystemSpec:
     workspace_path: str = "/workspace"
     tmpfs_mb: int = 64
     run_tmpfs_mb: int = 16
+    shm_mb: int = 64
+    workspace_storage: str | None = None
+    management_helper: str = "shell"
 
     @classmethod
     def from_dict(cls, raw: object) -> "SandboxFilesystemSpec":
@@ -237,7 +255,15 @@ class SandboxFilesystemSpec:
         raw = _json_object(
             raw,
             "filesystem",
-            {"enforce_disk_quota", "run_tmpfs_mb", "tmpfs_mb", "workspace_path"},
+            {
+                "enforce_disk_quota",
+                "run_tmpfs_mb",
+                "tmpfs_mb",
+                "workspace_path",
+                "shm_mb",
+                "workspace_storage",
+                "management_helper",
+            },
         )
         return cls(
             enforce_disk_quota=_json_bool(
@@ -248,10 +274,29 @@ class SandboxFilesystemSpec:
             ),
             tmpfs_mb=_json_int(raw.get("tmpfs_mb", 64), "tmpfs_mb"),
             run_tmpfs_mb=_json_int(raw.get("run_tmpfs_mb", 16), "run_tmpfs_mb"),
+            shm_mb=_json_int(raw.get("shm_mb", 64), "shm_mb"),
+            management_helper=_json_string(
+                raw.get("management_helper", "shell"), "management_helper"
+            ),
+            workspace_storage=(
+                _json_string(raw["workspace_storage"], "workspace_storage")
+                if raw.get("workspace_storage") is not None
+                else None
+            ),
         )
 
     def validate(self) -> None:
         validate_workspace_path(self.workspace_path)
+        if self.management_helper not in {"shell", "static"}:
+            raise ValueError("management_helper must be shell or static")
+        if self.workspace_storage not in {None, "image", "tmpfs"}:
+            raise ValueError("workspace_storage must be image or tmpfs")
+        if self.enforce_disk_quota and self.workspace_storage == "image":
+            raise ValueError(
+                "legacy enforce_disk_quota conflicts with workspace_storage=image"
+            )
+        if self.shm_mb <= 0:
+            raise ValueError("shm_mb must be positive")
         if self.tmpfs_mb <= 0:
             raise ValueError("tmpfs_mb must be positive.")
         if self.run_tmpfs_mb <= 0:
@@ -261,9 +306,24 @@ class SandboxFilesystemSpec:
         return {
             "enforce_disk_quota": self.enforce_disk_quota,
             "workspace_path": self.workspace_path,
+            **(
+                {"management_helper": self.management_helper}
+                if self.management_helper != "shell"
+                else {}
+            ),
             "tmpfs_mb": self.tmpfs_mb,
             "run_tmpfs_mb": self.run_tmpfs_mb,
+            **({"shm_mb": self.shm_mb} if self.shm_mb != 64 else {}),
+            **(
+                {"workspace_storage": self.workspace_storage}
+                if self.workspace_storage is not None
+                else {}
+            ),
         }
+
+    @property
+    def workspace_is_tmpfs(self) -> bool:
+        return self.workspace_storage == "tmpfs" or self.enforce_disk_quota
 
 
 @dataclass(frozen=True)
@@ -362,6 +422,7 @@ class SandboxSpec:
     id: str
     image: str
     profile: str = "container"
+    required_features: tuple[str, ...] = ()
     command: tuple[str, ...] = ()
     env: dict[str, str] = field(default_factory=dict)
     working_dir: str | None = None
@@ -369,6 +430,7 @@ class SandboxSpec:
     cpus: float | None = None
     disk_mb: int | None = None
     network: str = "bridge"
+    dns_servers: tuple[str, ...] = ()
     ttl_seconds: int | None = None
     parkable: bool = False
     managed_process: bool = False
@@ -421,8 +483,10 @@ class SandboxSpec:
             "managed_process",
             "memory_mb",
             "network",
+            "dns_servers",
             "parkable",
             "profile",
+            "required_features",
             "security",
             "ssh",
             "ttl_seconds",
@@ -460,6 +524,9 @@ class SandboxSpec:
             id=_json_string(raw.get("id", ""), "id"),
             image=_json_string(raw.get("image", ""), "image"),
             profile=profile,
+            required_features=_json_string_list(
+                raw.get("required_features", []), "required_features"
+            ),
             command=command_items,
             env=env,
             working_dir=(
@@ -483,6 +550,7 @@ class SandboxSpec:
                 else None
             ),
             network=_json_string(raw.get("network", "bridge"), "network"),
+            dns_servers=_json_string_list(raw.get("dns_servers", []), "dns_servers"),
             ttl_seconds=(
                 _json_int(raw["ttl_seconds"], "ttl_seconds")
                 if raw.get("ttl_seconds") is not None
@@ -565,6 +633,24 @@ class SandboxSpec:
             )
         if self.network not in {"none", "bridge"}:
             raise ValueError("network must be either 'none' or 'bridge'.")
+        if self.managed_process and self.security.supplementary_groups:
+            raise ValueError(
+                "managed_process does not yet support supplementary groups"
+            )
+        from .environment_contract import validate_requirements
+
+        if len(self.required_features) > 64 or any(
+            not isinstance(name, str) or not re.fullmatch(r"[a-z][a-z0-9-]{0,63}", name)
+            for name in self.required_features
+        ):
+            raise ValueError("required_features must contain at most 64 feature names")
+        validate_requirements(self)
+        if len(self.dns_servers) > 3:
+            raise ValueError("at most three DNS servers are supported")
+        for server in self.dns_servers:
+            ipaddress.IPv4Address(server)
+        if self.dns_servers and self.network == "none":
+            raise ValueError("DNS servers require bridge networking")
         self.ssh.validate()
         self.security.validate()
         self.filesystem.validate()
@@ -576,6 +662,14 @@ class SandboxSpec:
 
     def to_dict(self) -> dict[str, Any]:
         raw = asdict(self)
+        if self.required_features:
+            raw["required_features"] = list(self.required_features)
+        else:
+            raw.pop("required_features")
+        if self.dns_servers:
+            raw["dns_servers"] = list(self.dns_servers)
+        else:
+            raw.pop("dns_servers")
         raw["command"] = list(self.command)
         raw["ssh"] = self.ssh.to_dict()
         raw["security"] = self.security.to_dict()

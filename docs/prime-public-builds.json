@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "builds": [
+    {
+      "taskset": "senior-swe-bench",
+      "source_image": "senior-swe-bench/better-auth-fix-api-key-run:latest",
+      "repository": "https://github.com/snorkel-ai/senior-swe-bench-v2026.06.git",
+      "commit": "e30b0e19fdbc4b099e752c6d5324f5b250aee3dc",
+      "context": "tasks/better-auth-fix-api-key-run/environment",
+      "dockerfile_sha256": "9fb0f60054ac6b2eee9f307988e447ed53222b204e188a074ea1e8c82a0180ca"
+    }
+  ]
+}

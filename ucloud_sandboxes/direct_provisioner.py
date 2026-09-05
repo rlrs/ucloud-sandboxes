@@ -660,7 +660,10 @@ class DirectSandboxProvisioner:
             )
             self.oci.install_managed_init(
                 sandbox.bundle / "rootfs",
-                enabled=registration.spec.managed_process,
+                enabled=(
+                    registration.spec.managed_process
+                    or registration.spec.filesystem.management_helper == "static"
+                ),
             )
             record = self.warden.inspect(sandbox)
             if record is None:
@@ -844,6 +847,7 @@ class DirectSandboxProvisioner:
 
     def _validate_spec(self, spec: SandboxSpec) -> None:
         spec.validate()
+        self.oci.validate_management_helper(spec)
         if spec.memory_mb is None or spec.disk_mb is None:
             raise ValueError(
                 "direct sandboxes require explicit memory_mb and disk_mb limits"

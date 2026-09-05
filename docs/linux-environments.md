@@ -110,10 +110,10 @@ This avoids replacing production bundles during runtime qualification.
 ## Further realism
 
 A qualified distro image and explicit tooling/service contracts can address
-most agent userspace assumptions without relaxing isolation. A static guest
-management helper would remove shell-tool assumptions. Configurable DNS,
-shared-memory sizing, workspace persistence and capability reporting need
-separate contracts and live park/wake tests.
+most agent userspace assumptions without relaxing isolation. The optional static guest
+management helper removes file-operation shell-tool assumptions. DNS and shared
+memory now have explicit controls; workspace persistence and runtime capability
+claims still need live park/wake qualification.
 
 Systemd support should be an experimental preset qualified against the exact
 patched runtime. Workloads requiring unsupported syscalls, devices or boot
@@ -150,3 +150,126 @@ for the 23-family sample matrix and remaining blockers. The existing
 `verifiers-ucloud` adapter also lacks the framework-aware network policy needed
 by BrowseComp-Plus and SWE-bench Multilingual; disabling all network access is not a substitute for
 allowing only framework services.
+
+## Explicit requirements and environment description
+
+The follow-up changes add `required_features` to the create specification.
+Unknown, unsupported and unqualified requirements fail validation before resource
+placement. For example, `required_features: ["framework-network-policy"]` fails
+with the current backend instead of weakening the task's network restrictions.
+`network-off` requires `network: "none"`; `static-file-management` requires the
+static helper selection below and an updated node artifact.
+
+`GET /v1/sandboxes/{id}/environment` returns configuration facts without waking
+the guest or exposing environment values. It distinguishes requirements that
+are satisfied by configuration from unqualified behavior. Image identity,
+effective cwd/home, runtime digest and live/lifecycle behavior remain explicitly
+unresolved: this endpoint is not a runtime attestation. An empty requirement
+list does not certify arbitrary Linux compatibility.
+
+For pre-provisioning inspection:
+
+```bash
+python scripts/preflight_environment.py sandbox.json
+```
+
+The report includes warnings when workspace tmpfs would hide image contents.
+The Prime qualification planner now checks the pinned manifest's known runtime
+requirements before importing tasksets or loading datasets. BrowseComp-Plus and
+SWE-bench Multilingual currently return `blocked_preflight`, which is a failing
+qualification result, not a skip counted as success.
+
+## Optional filesystem and identity controls
+
+These settings preserve the old defaults when omitted:
+
+```json
+{
+  "security": {"supplementary_groups": ["build", "42"]},
+  "filesystem": {
+    "shm_mb": 256,
+    "workspace_storage": "image",
+    "management_helper": "static"
+  },
+  "dns_servers": ["9.9.9.9"]
+}
+```
+
+Supplementary groups are explicit, deduplicated and resolved against image-local
+`/etc/group`, never host membership. Managed primary jobs currently reject this
+option because their privilege-drop protocol clears supplementary groups.
+When a job's `cwd` is omitted, it inherits the resolved OCI workload cwd. Explicit
+cwd values still take precedence. Older SDKs that send `/workspace` explicitly
+continue to request that directory.
+
+`shm_mb` controls `/dev/shm` (default 64 MiB). `workspace_storage: "image"`
+preserves the quota-owned image-backed writable workspace; `"tmpfs"` deliberately
+overlays it with memory-backed storage sized to `disk_mb`. It hides image files
+at that mount point. Legacy `enforce_disk_quota: true` retains its old tmpfs
+meaning; combining it with `workspace_storage: "image"` is rejected. Park/wake
+persistence for these configurations is not newly certified by these changes.
+
+`dns_servers` accepts up to three IPv4 literals with bridge networking. Omission
+preserves the existing public resolvers. These addresses remain subject to node
+egress enforcement; selecting a resolver does not allow it through that policy.
+Resolver preparation creates missing `/etc` safely but still rejects a symlinked
+`/etc`. Coherent hostname/hosts and confined setup-symlink resolution remain work
+for a later change.
+
+`management_helper: "static"` installs the updated static managed-process binary
+as `/.ucloud-job-init`, also for ordinary containers. File reads/writes and restore
+readiness then use its `files` protocol without an image shell or core utilities.
+Reads require regular files and are bounded. Writes use same-directory temporary
+files, mode 0600 and atomic replacement; destination symlinks are replaced and
+oversized input leaves the previous file intact. This does not preserve executable
+mode or make concurrent guest writes serializable. The helper runs under the
+existing exec identity inside gVisor and is not trusted against guest root.
+
+Both node code and the helper artifact must be updated. A missing configured
+binary or an older binary lacking the protocol rejects creation before resource
+provisioning. The protocol probe executes only the trusted node artifact, never
+image-provided code on the host. Existing deployment bundles are not automatically replaced. Session
+profiles still require their shell bootstrap; use `container` with a suitable
+application entrypoint for a shellless image.
+
+## Differential qualification
+
+`guest_conformance_probe.py` tests literal paths/symlinks, xattrs, cross-process
+file locks, POSIX ACL enforcement and inheritance, Unix sockets and signals.
+ACL checks require root with the ability to drop to test identities and a
+traversable parent directory; missing prerequisites are reported as blocked.
+
+Run `qualify_guest_features.py` on a disposable Linux host with `--backend docker`
+and `--docker-runtime runc` or `runsc`, or against a gateway with `--backend gateway`.
+It requires an image digest, runtime identifier and fresh output path. The image
+must contain Python 3.10 or later. The Docker runner applies the product's default
+tmpfs sizes. Gateway and Docker network policies differ; these probes do not
+exercise external connectivity. Runtime identifiers supplied to the script are
+operator evidence, not independently attested facts.
+
+`qualify_static_management.py --runtime /absolute/runsc --helper /absolute/helper
+--output evidence.json` exercises the branch OCI builder with an otherwise empty
+rootfs, UID 1000, group 42 and no capabilities. Run it as root on a disposable Linux
+host, using a root-owned executable helper built from `runtime/managed_process`.
+It checks shellless file operations, readiness, identity and write containment.
+
+See [follow-up qualification](reviews/sandbox-compatibility-followup-2026-09-05.md)
+for version-specific results and the remaining runtime upgrade gates.
+
+For the pinned public Senior SWE build, check out the repository/commit in
+`docs/prime-public-builds.json`, then run:
+
+```bash
+python scripts/build_public_task_image.py --taskset senior-swe-bench \
+  --source /path/to/pinned/senior-swe-bench --output /path/to/new-build-evidence \
+  --execute
+```
+
+This uses `UCLOUD_SANDBOX_URL` and SDK authentication from the environment. Supply
+the resulting `aliases.json` to `qualify_prime_tasksets.py --image-aliases`.
+Build success does not count as task/grading success.
+
+Placement requests using the new controls require `environment-contract-v1`.
+Static management additionally requires `static-file-management-v1`, advertised
+only after the trusted helper's protocol probe succeeds on that node. This keeps
+mixed-version pools from assigning these requests to older nodes.

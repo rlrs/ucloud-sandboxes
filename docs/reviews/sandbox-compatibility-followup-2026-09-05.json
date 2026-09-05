@@ -1,0 +1,626 @@
+{
+  "schema_version": 1,
+  "date": "2026-09-05",
+  "branch": "codex/sandbox-linux-compatibility",
+  "ucloud": {
+    "job_id": "12381596",
+    "project_id": "4827bd3a-4e74-4393-9b82-49f71636c141",
+    "product": "cpu-amd-zen5-16-vcpu",
+    "application": "vm-ubuntu:26.04",
+    "kernel": "7.0.0-30-generic",
+    "docker_version": "29.1.3",
+    "kvm_device_present": false
+  },
+  "runtime_sources": {
+    "20260721.0": {
+      "commit": "9f653e577965df2ddd13875b5530cd2588661f1c",
+      "sha256": "d319040e8c2981c44955ae72e5e0d57aa5ef390379fbc7f58d9a68b0c86329f7",
+      "patched": false
+    },
+    "20260817.0": {
+      "commit": "50e1502a95d36ad2faf2c7ef33b8bf21fe975293",
+      "sha256": "048b89aada69dc3333422e139d6e9d02f8ab06bda52398060e0fbdacca00074c",
+      "patched": false
+    }
+  },
+  "feature_runs": [
+    {
+      "schema_version": 1,
+      "backend": "docker",
+      "docker_runtime": "runc",
+      "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+      "runtime_identifier": "29.1.3",
+      "probe_sha256": "7c10884929ee0c6946dedf94d75dfd9a71a7f29a2b2b7f9dda4a50d4f9dad95c",
+      "started_at": "2026-09-05T11:01:14.323334+00:00",
+      "directory": "/srv",
+      "memory_mb": 1024,
+      "cpus": 1,
+      "probe": {
+        "gid": 0,
+        "groups": [
+          0
+        ],
+        "kernel": "7.0.0-30-generic",
+        "platform": "Linux",
+        "python": "3.13.15",
+        "results": {
+          "filesystem-locks": {
+            "status": "passed"
+          },
+          "filesystem-xattrs": {
+            "status": "passed"
+          },
+          "literal-paths-and-symlinks": {
+            "status": "passed"
+          },
+          "posix-acl": {
+            "status": "passed"
+          },
+          "process-signals": {
+            "status": "passed"
+          },
+          "unix-sockets": {
+            "status": "passed"
+          }
+        },
+        "schema_version": 1,
+        "uid": 0
+      },
+      "exit_code": 0,
+      "status": "passed",
+      "cleanup": "completed"
+    },
+    {
+      "schema_version": 1,
+      "backend": "docker",
+      "docker_runtime": "runc",
+      "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+      "runtime_identifier": "29.1.3",
+      "probe_sha256": "7c10884929ee0c6946dedf94d75dfd9a71a7f29a2b2b7f9dda4a50d4f9dad95c",
+      "started_at": "2026-09-05T11:01:13.757919+00:00",
+      "directory": "/tmp",
+      "memory_mb": 1024,
+      "cpus": 1,
+      "probe": {
+        "gid": 0,
+        "groups": [
+          0
+        ],
+        "kernel": "7.0.0-30-generic",
+        "platform": "Linux",
+        "python": "3.13.15",
+        "results": {
+          "filesystem-locks": {
+            "status": "passed"
+          },
+          "filesystem-xattrs": {
+            "status": "passed"
+          },
+          "literal-paths-and-symlinks": {
+            "status": "passed"
+          },
+          "posix-acl": {
+            "status": "passed"
+          },
+          "process-signals": {
+            "status": "passed"
+          },
+          "unix-sockets": {
+            "status": "passed"
+          }
+        },
+        "schema_version": 1,
+        "uid": 0
+      },
+      "exit_code": 0,
+      "status": "passed",
+      "cleanup": "completed"
+    },
+    {
+      "schema_version": 1,
+      "backend": "docker",
+      "docker_runtime": "runsc-old",
+      "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+      "runtime_identifier": "d319040e8c2981c44955ae72e5e0d57aa5ef390379fbc7f58d9a68b0c86329f7",
+      "probe_sha256": "7c10884929ee0c6946dedf94d75dfd9a71a7f29a2b2b7f9dda4a50d4f9dad95c",
+      "started_at": "2026-09-05T11:01:15.951891+00:00",
+      "directory": "/srv",
+      "memory_mb": 1024,
+      "cpus": 1,
+      "probe": {
+        "gid": 0,
+        "groups": [
+          0
+        ],
+        "kernel": "4.19.0-gvisor",
+        "platform": "Linux",
+        "python": "3.13.15",
+        "results": {
+          "filesystem-locks": {
+            "status": "passed"
+          },
+          "filesystem-xattrs": {
+            "status": "passed"
+          },
+          "literal-paths-and-symlinks": {
+            "status": "passed"
+          },
+          "posix-acl": {
+            "errno": 95,
+            "status": "failed"
+          },
+          "process-signals": {
+            "status": "passed"
+          },
+          "unix-sockets": {
+            "status": "passed"
+          }
+        },
+        "schema_version": 1,
+        "uid": 0
+      },
+      "exit_code": 1,
+      "status": "failed",
+      "cleanup": "completed"
+    },
+    {
+      "schema_version": 1,
+      "backend": "docker",
+      "docker_runtime": "runsc-old",
+      "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+      "runtime_identifier": "d319040e8c2981c44955ae72e5e0d57aa5ef390379fbc7f58d9a68b0c86329f7",
+      "probe_sha256": "7c10884929ee0c6946dedf94d75dfd9a71a7f29a2b2b7f9dda4a50d4f9dad95c",
+      "started_at": "2026-09-05T11:01:15.053207+00:00",
+      "directory": "/tmp",
+      "memory_mb": 1024,
+      "cpus": 1,
+      "probe": {
+        "gid": 0,
+        "groups": [
+          0
+        ],
+        "kernel": "4.19.0-gvisor",
+        "platform": "Linux",
+        "python": "3.13.15",
+        "results": {
+          "filesystem-locks": {
+            "status": "passed"
+          },
+          "filesystem-xattrs": {
+            "status": "passed"
+          },
+          "literal-paths-and-symlinks": {
+            "status": "passed"
+          },
+          "posix-acl": {
+            "errno": 95,
+            "status": "failed"
+          },
+          "process-signals": {
+            "status": "passed"
+          },
+          "unix-sockets": {
+            "status": "passed"
+          }
+        },
+        "schema_version": 1,
+        "uid": 0
+      },
+      "exit_code": 1,
+      "status": "failed",
+      "cleanup": "completed"
+    },
+    {
+      "schema_version": 1,
+      "backend": "docker",
+      "docker_runtime": "runsc",
+      "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+      "runtime_identifier": "048b89aada69dc3333422e139d6e9d02f8ab06bda52398060e0fbdacca00074c",
+      "probe_sha256": "7c10884929ee0c6946dedf94d75dfd9a71a7f29a2b2b7f9dda4a50d4f9dad95c",
+      "started_at": "2026-09-05T11:01:17.839541+00:00",
+      "directory": "/srv",
+      "memory_mb": 1024,
+      "cpus": 1,
+      "probe": {
+        "gid": 0,
+        "groups": [
+          0
+        ],
+        "kernel": "4.19.0-gvisor",
+        "platform": "Linux",
+        "python": "3.13.15",
+        "results": {
+          "filesystem-locks": {
+            "status": "passed"
+          },
+          "filesystem-xattrs": {
+            "status": "passed"
+          },
+          "literal-paths-and-symlinks": {
+            "status": "passed"
+          },
+          "posix-acl": {
+            "status": "passed"
+          },
+          "process-signals": {
+            "status": "passed"
+          },
+          "unix-sockets": {
+            "status": "passed"
+          }
+        },
+        "schema_version": 1,
+        "uid": 0
+      },
+      "exit_code": 0,
+      "status": "passed",
+      "cleanup": "completed"
+    },
+    {
+      "schema_version": 1,
+      "backend": "docker",
+      "docker_runtime": "runsc",
+      "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+      "runtime_identifier": "048b89aada69dc3333422e139d6e9d02f8ab06bda52398060e0fbdacca00074c",
+      "probe_sha256": "7c10884929ee0c6946dedf94d75dfd9a71a7f29a2b2b7f9dda4a50d4f9dad95c",
+      "started_at": "2026-09-05T11:01:16.922323+00:00",
+      "directory": "/tmp",
+      "memory_mb": 1024,
+      "cpus": 1,
+      "probe": {
+        "gid": 0,
+        "groups": [
+          0
+        ],
+        "kernel": "4.19.0-gvisor",
+        "platform": "Linux",
+        "python": "3.13.15",
+        "results": {
+          "filesystem-locks": {
+            "status": "passed"
+          },
+          "filesystem-xattrs": {
+            "status": "passed"
+          },
+          "literal-paths-and-symlinks": {
+            "status": "passed"
+          },
+          "posix-acl": {
+            "status": "passed"
+          },
+          "process-signals": {
+            "status": "passed"
+          },
+          "unix-sockets": {
+            "status": "passed"
+          }
+        },
+        "schema_version": 1,
+        "uid": 0
+      },
+      "exit_code": 0,
+      "status": "passed",
+      "cleanup": "completed"
+    }
+  ],
+  "static_management_runs": [
+    {
+      "schema_version": 1,
+      "checks": {
+        "shellless-files": true,
+        "readiness": true,
+        "identity": true,
+        "root-write-denied": true,
+        "oversized-write-preserves-old": true,
+        "no-image-shell": true
+      },
+      "error_type": null,
+      "cleanup": "completed",
+      "runtime_sha256": "048b89aada69dc3333422e139d6e9d02f8ab06bda52398060e0fbdacca00074c",
+      "helper_sha256": "803b047efcbe7db6ffdbf71f04ec850de3fa277e405672f34b89d18e21b60f7b",
+      "spec": {
+        "id": "static-helper-probe",
+        "image": "scratch-helper",
+        "profile": "container",
+        "command": [
+          "/.ucloud-job-init",
+          "supervise",
+          "--state-dir",
+          "/workspace/state"
+        ],
+        "env": {},
+        "working_dir": null,
+        "memory_mb": 256,
+        "cpus": null,
+        "disk_mb": 256,
+        "network": "none",
+        "ttl_seconds": null,
+        "parkable": false,
+        "managed_process": false,
+        "ssh": {
+          "enabled": false,
+          "user": "root",
+          "host": "127.0.0.1",
+          "host_port": null,
+          "container_port": 22,
+          "authorized_keys": []
+        },
+        "security": {
+          "user": "1000:1000",
+          "cap_drop": [
+            "ALL"
+          ],
+          "cap_add": [],
+          "supplementary_groups": [
+            "42"
+          ],
+          "no_new_privileges": true,
+          "pids_limit": 256,
+          "read_only_rootfs": false,
+          "init": false
+        },
+        "filesystem": {
+          "enforce_disk_quota": false,
+          "workspace_path": "/workspace",
+          "management_helper": "static",
+          "tmpfs_mb": 64,
+          "run_tmpfs_mb": 16,
+          "shm_mb": 128,
+          "workspace_storage": "image"
+        },
+        "linux_host": {
+          "enable_cron": false,
+          "enable_sshd": false,
+          "keep_alive": true,
+          "writable_paths": [
+            "/run",
+            "/run/lock",
+            "/run/sshd",
+            "/tmp",
+            "/var/tmp",
+            "/var/run",
+            "/var/lock",
+            "/var/spool/cron",
+            "/var/spool/cron/crontabs",
+            "/etc/cron.d",
+            "/logs",
+            "/logs/agent",
+            "/logs/verifier",
+            "/tests",
+            "/task",
+            "/oracle",
+            "/workspace"
+          ]
+        },
+        "labels": {}
+      }
+    },
+    {
+      "schema_version": 1,
+      "checks": {
+        "shellless-files": true,
+        "readiness": true,
+        "identity": true,
+        "root-write-denied": true,
+        "oversized-write-preserves-old": true,
+        "no-image-shell": true
+      },
+      "error_type": null,
+      "cleanup": "completed",
+      "runtime_sha256": "d319040e8c2981c44955ae72e5e0d57aa5ef390379fbc7f58d9a68b0c86329f7",
+      "helper_sha256": "803b047efcbe7db6ffdbf71f04ec850de3fa277e405672f34b89d18e21b60f7b",
+      "spec": {
+        "id": "static-helper-probe",
+        "image": "scratch-helper",
+        "profile": "container",
+        "command": [
+          "/.ucloud-job-init",
+          "supervise",
+          "--state-dir",
+          "/workspace/state"
+        ],
+        "env": {},
+        "working_dir": null,
+        "memory_mb": 256,
+        "cpus": null,
+        "disk_mb": 256,
+        "network": "none",
+        "ttl_seconds": null,
+        "parkable": false,
+        "managed_process": false,
+        "ssh": {
+          "enabled": false,
+          "user": "root",
+          "host": "127.0.0.1",
+          "host_port": null,
+          "container_port": 22,
+          "authorized_keys": []
+        },
+        "security": {
+          "user": "1000:1000",
+          "cap_drop": [
+            "ALL"
+          ],
+          "cap_add": [],
+          "supplementary_groups": [
+            "42"
+          ],
+          "no_new_privileges": true,
+          "pids_limit": 256,
+          "read_only_rootfs": false,
+          "init": false
+        },
+        "filesystem": {
+          "enforce_disk_quota": false,
+          "workspace_path": "/workspace",
+          "management_helper": "static",
+          "tmpfs_mb": 64,
+          "run_tmpfs_mb": 16,
+          "shm_mb": 128,
+          "workspace_storage": "image"
+        },
+        "linux_host": {
+          "enable_cron": false,
+          "enable_sshd": false,
+          "keep_alive": true,
+          "writable_paths": [
+            "/run",
+            "/run/lock",
+            "/run/sshd",
+            "/tmp",
+            "/var/tmp",
+            "/var/run",
+            "/var/lock",
+            "/var/spool/cron",
+            "/var/spool/cron/crontabs",
+            "/etc/cron.d",
+            "/logs",
+            "/logs/agent",
+            "/logs/verifier",
+            "/tests",
+            "/task",
+            "/oracle",
+            "/workspace"
+          ]
+        },
+        "labels": {}
+      }
+    }
+  ],
+  "senior_swe": {
+    "source": {
+      "taskset": "senior-swe-bench",
+      "source_image": "senior-swe-bench/better-auth-fix-api-key-run:latest",
+      "repository": "https://github.com/snorkel-ai/senior-swe-bench-v2026.06.git",
+      "commit": "e30b0e19fdbc4b099e752c6d5324f5b250aee3dc",
+      "context": "tasks/better-auth-fix-api-key-run/environment",
+      "dockerfile_sha256": "9fb0f60054ac6b2eee9f307988e447ed53222b204e188a074ea1e8c82a0180ca"
+    },
+    "native": {
+      "runtime": "runc",
+      "image_id": "sha256:07367158abb86f11e6a4e36aa68539f622d8593e5017542d09fb06b55539e7ec",
+      "stage": "public solution, task setup, native verifier only",
+      "exit_code": 0,
+      "verifier_results": {
+        "passed": 4,
+        "total": 4,
+        "all_pass": true,
+        "tests": {
+          "js::api-key parallel storage (secondary-storage) parallel_reads: lists secondary-storage keys with concurrent per-id reads": {
+            "pass": true
+          },
+          "js::api-key parallel storage (secondary-storage) list_correctness: returns exactly the reference's keys with ordering preserved": {
+            "pass": true
+          },
+          "js::api-key parallel storage (secondary-storage + fallback) parallel_populate_no_per_key_reflist: rebuild fans per-key writes out and writes the ref index once": {
+            "pass": true
+          },
+          "js::api-key parallel storage (secondary-storage + fallback) concurrent_creates_no_lost_id: two simultaneous creates both appear in a later list": {
+            "pass": true
+          }
+        }
+      }
+    },
+    "gvisor_with_explicit_resolver": {
+      "runtime": "runsc",
+      "image_id": "sha256:07367158abb86f11e6a4e36aa68539f622d8593e5017542d09fb06b55539e7ec",
+      "stage": "public solution, task setup, native verifier only",
+      "exit_code": 0,
+      "verifier_results": {
+        "passed": 4,
+        "total": 4,
+        "all_pass": true,
+        "tests": {
+          "js::api-key parallel storage (secondary-storage) parallel_reads: lists secondary-storage keys with concurrent per-id reads": {
+            "pass": true
+          },
+          "js::api-key parallel storage (secondary-storage) list_correctness: returns exactly the reference's keys with ordering preserved": {
+            "pass": true
+          },
+          "js::api-key parallel storage (secondary-storage + fallback) parallel_populate_no_per_key_reflist: rebuild fans per-key writes out and writes the ref index once": {
+            "pass": true
+          },
+          "js::api-key parallel storage (secondary-storage + fallback) concurrent_creates_no_lost_id: two simultaneous creates both appear in a later list": {
+            "pass": true
+          }
+        }
+      }
+    },
+    "full_model_based_grading": "not run",
+    "registry_publication": "not performed"
+  },
+  "preflight": [
+    {
+      "taskset": "swebench-multilingual",
+      "status": "blocked_preflight",
+      "preflight": {
+        "requirements_satisfied": false,
+        "problems": [
+          {
+            "feature": "framework-network-policy",
+            "status": "unsupported",
+            "reason": "Framework-aware egress enforcement is not implemented."
+          }
+        ]
+      }
+    },
+    {
+      "taskset": "browsecomp-plus",
+      "status": "blocked_preflight",
+      "preflight": {
+        "requirements_satisfied": false,
+        "problems": [
+          {
+            "feature": "framework-network-policy",
+            "status": "unsupported",
+            "reason": "Framework-aware egress enforcement is not implemented."
+          }
+        ]
+      }
+    }
+  ],
+  "limitations": [
+    "Production runtime and artifacts unchanged",
+    "Direct OCI/helper checks on upstream runtimes; no new gateway or park/wake certification",
+    "No framework-aware network enforcement or VM backend implemented",
+    "Upstream ACL save/restore tests disabled for timeout; patch series does not apply cleanly to newer release"
+  ],
+  "checks": {
+    "repository_tests": 733,
+    "repository_skips": 4,
+    "sdk_tests": 82,
+    "go_tests": "passed",
+    "lint_shell_package_checks": "passed"
+  },
+  "source_sha256": {
+    "runtime/managed_process/files.go": "330517a760c368d79973eed6bfae85195e6b7bf11e4849ab2b955145ca125840",
+    "runtime/managed_process/files_test.go": "e236ca9ca91b8810b8234f5f6f3f8ce38d4e880bbf20db22aac2280578af399b",
+    "scripts/build_public_task_image.py": "c1c7a11acdb5e3f45896bbcfd2d202920035c97c3cbf27b281285dbdc96179f9",
+    "scripts/guest_conformance_probe.py": "7c10884929ee0c6946dedf94d75dfd9a71a7f29a2b2b7f9dda4a50d4f9dad95c",
+    "scripts/preflight_environment.py": "9b00d68bc7130af0c83ca71159f2d3817e580865f9646d5758391338ed50a3f6",
+    "scripts/qualify_guest_features.py": "a5a3df80ac66ef1f6c139d285d596da279ce31bf003633220f78eef5209fd09e",
+    "scripts/qualify_static_management.py": "c2efc913c3db84ac580210ec560778fff242ca3c20a801b330d3a3ae229de0ce",
+    "tests/test_environment_contract.py": "7f36807debb7ad1b12d2070dc2fcfc29f96cd9921da7adb183454ab02529353c",
+    "ucloud_sandboxes/environment_contract.py": "34b22db55b0239c13f0b0b717100be19a0ab36245f04bd200ba16f9a3b39b834",
+    "runtime/managed_process/main.go": "5b39c5288df1aff2e6952d58bac0cdbb668f99ddddb79993ecc4e0cff2b39a3b",
+    "scripts/qualify_prime_tasksets.py": "7f47158bb0c1f6f3a7c39fd8050727ec6c7527dbe705e81a6a6cce2d94c1c493",
+    "tests/test_http_contract.py": "8968adfa16f441ee8bd5347eb5a9584007c20c6f0082de537e279ee3213d519d",
+    "tests/test_prime_qualification.py": "1a50fd38472a8c7a3fadcdf436dfa507d7c36d79f6153c755edf358d34ca7b95",
+    "ucloud_sandboxes/capabilities.py": "aba4c368b000552e97a774d1792f39caf0d5f68c2bcc039863bb276008d7fe62",
+    "ucloud_sandboxes/control_plane.py": "9ab1ab677d665e670bbb57f22a537eec208bee673f2925f4292f28ef74ff1acc",
+    "ucloud_sandboxes/direct_oci.py": "4befbe0593449468fe69fbd5a1233b8e54a5385fc6ebcf50a2bb6ed0bb412376",
+    "ucloud_sandboxes/direct_provisioner.py": "ef4d990bc5ce09bdb204fbcda06b7f78834488b6bfaa8312a8bb0887fa1e7b49",
+    "ucloud_sandboxes/direct_service.py": "55698326cd490dc555e4971276e108632900e460be667715f543f553b1e22f86",
+    "ucloud_sandboxes/direct_warden.py": "d6b371db929ec87190e4d673940a4cbb9d5d32fa5c7fcb2bb53cc2793298e0a8",
+    "ucloud_sandboxes/guest_identity.py": "34c31d2d32406bf786c51307c56c9d385e4d3b722946d9cb599f6b6c65ace6e7",
+    "ucloud_sandboxes/http_contract.py": "02f76b3775c68034bd901311c84604b6226e0f6cbc3bec36641f20b71847ccb1",
+    "ucloud_sandboxes/managed_process.py": "563366b55548c719b140849805e9ce78e5dde71be3c0e69b0fb43683d3af331e",
+    "ucloud_sandboxes/node_agent.py": "9173b198fecd5fea3db42609b6ef595d5e3ecb29809613b95611480b38fb7b92",
+    "ucloud_sandboxes/sandbox.py": "777b5d98acea557b8cd0878444e4b3b5f1e077ac47576cd288a06e6747d2a7d4"
+  },
+  "cleanup": {
+    "reference_job": "SUCCESS (stopped)",
+    "production_services": "unchanged",
+    "temporary_credentials": "removed"
+  }
+}

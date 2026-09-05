@@ -9,6 +9,7 @@ import re
 from typing import Any, Mapping
 
 from .models import parse_iso_datetime
+from .guest_paths import validate_guest_path
 
 
 MANAGED_PROCESS_BINARY = "/.ucloud-job-init"
@@ -29,7 +30,7 @@ class ManagedProcessStart:
     job_id: str
     argv: tuple[str, ...]
     env: dict[str, str] = field(default_factory=dict)
-    cwd: str = "/workspace"
+    cwd: str | None = None
     max_stdout_bytes: int = DEFAULT_MAX_STDOUT_BYTES
     max_stderr_bytes: int = DEFAULT_MAX_STDERR_BYTES
 
@@ -63,8 +64,8 @@ class ManagedProcessStart:
             for key, value in env.items()
         ):
             raise ValueError("managed process env must contain strings")
-        cwd = raw.get("cwd", "/workspace")
-        if not isinstance(cwd, str):
+        cwd = raw.get("cwd")
+        if cwd is not None and not isinstance(cwd, str):
             raise ValueError("managed process cwd must be a string")
         job_id = raw.get("job_id")
         if not isinstance(job_id, str):
@@ -94,23 +95,27 @@ class ManagedProcessStart:
             raise ValueError("managed process argv must be non-empty and bounded")
         if any("\0" in item for item in self.argv):
             raise ValueError("managed process argv contains NUL")
-        if not self.cwd.startswith("/") or "\0" in self.cwd:
-            raise ValueError("managed process cwd must be absolute")
+        if self.cwd is not None:
+            validate_guest_path("managed process cwd", self.cwd)
         for key, value in self.env.items():
             if not _ENV_KEY.fullmatch(key) or "\0" in value:
                 raise ValueError("managed process environment is invalid")
         if self.max_stdout_bytes < 1 or self.max_stderr_bytes < 1:
             raise ValueError("managed process log limits must be positive")
 
-    def control_payload(self, *, uid: int, gid: int) -> dict[str, Any]:
+    def control_payload(
+        self, *, uid: int, gid: int, default_cwd: str | None = None
+    ) -> dict[str, Any]:
         self.validate()
+        cwd = self.cwd if self.cwd is not None else default_cwd
+        validate_guest_path("resolved managed process cwd", cwd)
         return {
             "version": MANAGED_PROCESS_PROTOCOL_VERSION,
             "action": "start",
             "job_id": self.job_id,
             "argv": list(self.argv),
             "env": dict(sorted(self.env.items())),
-            "cwd": self.cwd,
+            "cwd": cwd,
             "uid": uid,
             "gid": gid,
             "max_stdout_bytes": self.max_stdout_bytes,

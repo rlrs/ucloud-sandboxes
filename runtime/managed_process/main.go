@@ -174,6 +174,10 @@ func main() {
 		fatalf("usage: %s supervise|ctl", os.Args[0])
 	}
 	switch os.Args[1] {
+	case "files":
+		if err := runFiles(os.Args[2:], os.Stdin, os.Stdout); err != nil {
+			fatalf("file operation failed: %v", err)
+		}
 	case "supervise":
 		if err := runSupervisor(os.Args[2:]); err != nil {
 			fatalf("supervisor failed: %v", err)

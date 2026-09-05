@@ -19,6 +19,8 @@ from .build_context_store import (
     build_context_digest_from_path,
 )
 from .capabilities import (
+    ENVIRONMENT_CONTRACT_CAPABILITY,
+    STATIC_FILE_MANAGEMENT_CAPABILITY,
     DISK_QUOTA_CAPABILITY,
     HIBERNATE_LOCAL_CAPABILITY,
     MANAGED_PRIMARY_CAPABILITY,
@@ -57,6 +59,7 @@ from .sandbox import (
     SandboxCapacityUnavailableError,
     SandboxConflictError,
     SandboxFileTooLargeError,
+    SandboxFilesystemSpec,
     SandboxOperation,
     SandboxSnapshotPublicationPendingError,
     SandboxSpec,
@@ -241,6 +244,17 @@ class NodeAgentHandler(BuildContextHttpHandler):
             )
             return
         sandbox_route = match_sandbox_http_route("GET", parsed.path)
+        if sandbox_route is not None and sandbox_route.action == "environment":
+            from .environment_contract import describe_environment
+
+            record = self.manager.get(sandbox_route.sandbox_id)
+            if record is None:
+                self._write_json(
+                    {"error": "sandbox not found"}, status=HTTPStatus.NOT_FOUND
+                )
+            else:
+                self._write_json({"environment": describe_environment(record.spec)})
+            return
         if sandbox_route is not None and sandbox_route.action == "files":
             self._download_file(parsed)
             return
@@ -1650,6 +1664,7 @@ def build_direct_node_agent_server(
     DirectBoundHandler.init_version = init_version
     DirectBoundHandler.total_resources = configured_resources
     direct_capabilities = [
+        ENVIRONMENT_CONTRACT_CAPABILITY,
         "sandbox",
         "image-cache",
         DISK_QUOTA_CAPABILITY,
@@ -1658,6 +1673,19 @@ def build_direct_node_agent_server(
     ]
     if service.provisioner.oci.managed_init_binary is not None:
         direct_capabilities.append(MANAGED_PRIMARY_CAPABILITY)
+        try:
+            service.provisioner.oci.validate_management_helper(
+                SandboxSpec(
+                    id="file-helper-probe",
+                    image="unresolved",
+                    filesystem=SandboxFilesystemSpec(management_helper="static"),
+                )
+            )
+        except ValueError:
+            # An older supervisor remains valid for legacy managed jobs.
+            pass
+        else:
+            direct_capabilities.append(STATIC_FILE_MANAGEMENT_CAPABILITY)
     direct_capabilities.extend(
         (
             STORAGE_NATIVE_CAPABILITY,

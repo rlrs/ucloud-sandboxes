@@ -170,6 +170,42 @@ class VmInitTests(unittest.TestCase):
             with self.subTest(field=field), self.assertRaisesRegex(ValueError, message):
                 render_vm_init_script(self._options(**{field: ""}))
 
+    def test_new_gvisor_requires_verified_complete_companions(self):
+        from ucloud_sandboxes.gvisor_distribution import GVISOR_COMMIT, GVISOR_SIDECARS
+
+        script = render_vm_init_script(self._options(direct_runsc_commit=GVISOR_COMMIT))
+        start = script.index("import hashlib\nimport json\nimport os")
+        validator = script[start : script.index('\nPY\n)"', start)]
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = write_bundle(root, "sandbox")
+            direct = manifest["runtime"]["direct_runsc"]
+            direct["commit"] = GVISOR_COMMIT
+            direct["sidecars"] = []
+            for name in GVISOR_SIDECARS:
+                path = root / "runtime/direct/gvisor-bin" / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(name.encode())
+                direct["sidecars"].append(
+                    {
+                        "file": path.relative_to(root).as_posix(),
+                        "size": path.stat().st_size,
+                        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                    }
+                )
+            (root / "package-bundle.json").write_text(json.dumps(manifest))
+            result = self._run_bundle_validator(validator, root)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            (root / "runtime/direct/gvisor-bin/gvisor_sentry").write_bytes(b"corrupt")
+            result = self._run_bundle_validator(validator, root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("gVisor companion executable", result.stderr)
+            direct["sidecars"] = []
+            (root / "package-bundle.json").write_text(json.dumps(manifest))
+            result = self._run_bundle_validator(validator, root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("companion executable set mismatch", result.stderr)
+
     def test_embedded_runtime_validator_and_shell_compile(self) -> None:
         script, validator = self._bundle_validator()
         compile(validator, "<bundle-validator>", "exec")

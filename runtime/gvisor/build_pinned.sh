@@ -1,24 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly EXPECTED_COMMIT="9f653e577965df2ddd13875b5530cd2588661f1c"
-readonly EXPECTED_PATCH_SERIES_SHA256="8fb36e2f8679db5d79d1ecd6c80ee236c32424c2a8ae2b93ffa9120efd436748"
-readonly EXPECTED_PATCHED_FILES_SHA256="d6c13f78e38dbf2b9e5427340bc5bb39791499e5913c98506dca3257f851072f"
+readonly EXPECTED_COMMIT="50e1502a95d36ad2faf2c7ef33b8bf21fe975293"
+readonly EXPECTED_PATCH_SERIES_SHA256="44beb70f08a1eca01dce6077cf8d4bb8e2cd4b093ef7055b806039125cd21573"
+readonly EXPECTED_PATCHED_FILES_SHA256="ea7dcf91cd27683702b616a10a4124dd0e8e146afca51a3519d8b76ca6667144"
 readonly BUILD_CONFIG="opt"
-readonly -a PATCH_NAMES=(
-  "0001-disk-backed-main-memory.patch"
-  "0002-quota-owned-memory-directory.patch"
-  "0003-two-phase-hibernation-capture.patch"
-  "0004-restore-cpu-startup-burst.patch"
-  "0005-restore-start-paused.patch"
-)
-readonly -a EXPECTED_PATCH_SHA256S=(
-  "6bdf87cf565e96b0d65909a56f19a6a8790b10af0f973f22300d4b07bba9d554"
-  "65acb8f572ab74e1ea6e3ebd4f29abd1a8e0b7bb354faafa9dbab47a2d75da5c"
-  "495db595700dec88b770a868ed84b2d0b5fa1bf2bd2ab9f511e57816feffe3bd"
-  "00e8dc2769edcf936ffec65647a87b43366ba0c6c36bbea33069e4e94cf9d264"
-  "818a844362cfae61279e096bc27e9f34dd38187f606541c77bec57ffd057824a"
-)
+readonly -a PATCH_NAMES=("20260817/0001-ucloud-hibernation.patch")
+readonly -a EXPECTED_PATCH_SHA256S=("bed13a2a1ef790a61a7a09d3a70511a15a7504d1ef2342edc672b4203950f5e6")
 
 usage() {
   echo "usage: $0 GVISOR_CHECKOUT OUTPUT_DIRECTORY" >&2
@@ -26,16 +14,20 @@ usage() {
 }
 
 [[ $# -eq 2 ]] || usage
-readonly SOURCE_DIR="$(cd "$1" && pwd -P)"
+SOURCE_DIR="$(cd "$1" && pwd -P)"
+readonly SOURCE_DIR
 mkdir -p "$2"
-readonly OUTPUT_DIR="$(cd "$2" && pwd -P)"
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+OUTPUT_DIR="$(cd "$2" && pwd -P)"
+readonly OUTPUT_DIR
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+readonly SCRIPT_DIR
 
 [[ "$(git -C "${SOURCE_DIR}" rev-parse HEAD)" == "${EXPECTED_COMMIT}" ]] || {
   echo "gVisor checkout is not at ${EXPECTED_COMMIT}" >&2
   exit 1
 }
-readonly CHECK_DIR="$(mktemp -d)"
+CHECK_DIR="$(mktemp -d)"
+readonly CHECK_DIR
 trap 'rm -rf "${CHECK_DIR}"' EXIT
 touch "${CHECK_DIR}/expected-paths-unsorted" "${CHECK_DIR}/patch-series"
 for index in "${!PATCH_NAMES[@]}"; do
@@ -50,9 +42,10 @@ for index in "${!PATCH_NAMES[@]}"; do
   git -C "${SOURCE_DIR}" apply --numstat "${patch_path}" |
     cut -f3 >> "${CHECK_DIR}/expected-paths-unsorted"
 done
-readonly PATCH_SERIES_SHA256="$(
+PATCH_SERIES_SHA256="$(
   sha256sum "${CHECK_DIR}/patch-series" | awk '{print $1}'
 )"
+readonly PATCH_SERIES_SHA256
 [[ "${PATCH_SERIES_SHA256}" == "${EXPECTED_PATCH_SERIES_SHA256}" ]] || {
   echo "hibernation patch series digest does not match the pinned digest" >&2
   exit 1
@@ -82,7 +75,7 @@ cmp "${CHECK_DIR}/expected-paths" "${CHECK_DIR}/actual-paths" || {
   echo "patched checkout contains paths outside the pinned patch" >&2
   exit 1
 }
-readonly PATCHED_FILES_SHA256="$(
+PATCHED_FILES_SHA256="$(
   cd "${SOURCE_DIR}"
   while IFS= read -r path; do
     sha256sum "${path}"
@@ -90,12 +83,18 @@ readonly PATCHED_FILES_SHA256="$(
     sha256sum |
     awk '{print $1}'
 )"
+readonly PATCHED_FILES_SHA256
 [[ "${PATCHED_FILES_SHA256}" == "${EXPECTED_PATCHED_FILES_SHA256}" ]] || {
   echo "patched checkout contains changes outside the pinned patch" >&2
   exit 1
 }
 command -v bazel >/dev/null
-readonly BAZEL_VERSION="$(cd "${SOURCE_DIR}" && bazel --version)"
+BAZEL_VERSION="$(cd "${SOURCE_DIR}" && bazel version --gnu_format)"
+readonly BAZEL_VERSION
+[[ "${BAZEL_VERSION}" == "bazel $(cat "${SOURCE_DIR}/.bazelversion")" ]] || {
+  echo "Bazel version does not match the upstream pin" >&2
+  exit 1
+}
 
 (
   cd "${SOURCE_DIR}"
@@ -111,44 +110,67 @@ readonly BAZEL_VERSION="$(cd "${SOURCE_DIR}" && bazel --version)"
   bazel test \
     "--test_filter=TestStartPausedStatusTransition" \
     "//runsc/container:container_test"
-  bazel build "-c" "${BUILD_CONFIG}" "//runsc:runsc"
+  bazel build "-c" "${BUILD_CONFIG}" "//:release"
 )
 
-readonly BUILT_RUNSC="${SOURCE_DIR}/bazel-bin/runsc/runsc_/runsc"
-[[ -x "${BUILT_RUNSC}" ]]
-readonly RUNSC_SHA256="$(sha256sum "${BUILT_RUNSC}" | awk '{print $1}')"
-readonly ARTIFACT_NAME="runsc-hibernate-${RUNSC_SHA256}"
-install -m 0755 "${BUILT_RUNSC}" "${OUTPUT_DIR}/${ARTIFACT_NAME}"
-
-python3 - "${OUTPUT_DIR}/${ARTIFACT_NAME}.manifest.json" <<PY
+readonly BUILT_RELEASE="${SOURCE_DIR}/bazel-bin/release"
+python3 - "${BUILT_RELEASE}" "${OUTPUT_DIR}" "${CHECK_DIR}/patch-series" \
+  "${BAZEL_VERSION}" "${BUILD_CONFIG}" "${EXPECTED_COMMIT}" \
+  "${PATCH_SERIES_SHA256}" "${PATCHED_FILES_SHA256}" <<'PY'
+import hashlib
 import json
 from pathlib import Path
 import platform
+import shutil
+import tempfile
+import sys
 
+release_path, output_path, series_path, bazel_version, build_config, commit, series_sha256, files_sha256 = sys.argv[1:]
+release = Path(release_path)
+names = ["runsc", "gvisor-bin/checkpointgofer", "gvisor-bin/gvisor-sentry-prewarmer",
+         "gvisor-bin/gvisor_sentry", "gvisor-bin/runsc-metric-server"]
+files = {}
+for name in names:
+    source = release / name
+    value = hashlib.sha256()
+    with source.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            value.update(chunk)
+    digest = value.hexdigest()
+    files[name] = {"sha256": digest, "size": source.stat().st_size}
+identity = hashlib.sha256(json.dumps(files, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+artifact = "gvisor-hibernate-" + identity
 payload = {
-    "artifact": "${ARTIFACT_NAME}",
-    "bazel_version": "${BAZEL_VERSION}",
-    "build_config": "${BUILD_CONFIG}",
-    "gvisor_commit": "${EXPECTED_COMMIT}",
+    "artifact": artifact,
+    "bazel_version": bazel_version,
+    "build_config": build_config,
+    "gvisor_commit": commit,
     "host_architecture": platform.machine(),
-    "patch_series_sha256": "${PATCH_SERIES_SHA256}",
+    "patch_series_sha256": series_sha256,
     "patches": [
         {"name": name, "sha256": digest}
         for digest, name in (
             line.split("  ", 1)
-            for line in Path("${CHECK_DIR}/patch-series").read_text(
-                encoding="ascii"
-            ).splitlines()
+            for line in Path(series_path).read_text(encoding="ascii").splitlines()
         )
     ],
-    "patched_files_sha256": "${PATCHED_FILES_SHA256}",
-    "runsc_sha256": "${RUNSC_SHA256}",
-    "schema": 1,
+    "patched_files_sha256": files_sha256,
+    "runsc_sha256": files["runsc"]["sha256"],
+    "files": files,
+    "schema": 2,
 }
-Path("${OUTPUT_DIR}/${ARTIFACT_NAME}.manifest.json").write_text(
-    json.dumps(payload, indent=2, sort_keys=True) + "\n",
-    encoding="utf-8",
-)
+output = Path(output_path) / artifact
+# Never combine companions from different builds in a shared gvisor-bin directory.
+if output.exists():
+    raise SystemExit(f"output distribution already exists: {output}")
+with tempfile.TemporaryDirectory(prefix=".gvisor-build-", dir=output.parent) as temporary:
+    staging = Path(temporary) / artifact
+    for name in names:
+        destination = staging / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(release / name, destination)
+        destination.chmod(0o755)
+    (staging / "build-manifest.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    staging.rename(output)
+print(output / "runsc")
 PY
-
-echo "${OUTPUT_DIR}/${ARTIFACT_NAME}"

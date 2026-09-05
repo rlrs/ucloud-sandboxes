@@ -24,7 +24,7 @@ _FEATURES = {
     ),
     "posix-acl": (
         "unqualified",
-        "The pinned runtime failed the sampled ACL oracle; filesystem-specific qualification is required.",
+        "Requires placement on a qualified runtime and filesystem; configuration alone does not establish support.",
     ),
     "filesystem-xattrs": (
         "unqualified",
@@ -32,7 +32,7 @@ _FEATURES = {
     ),
     "filesystem-locks": (
         "unqualified",
-        "Lock behavior has not been qualified across lifecycle operations.",
+        "Requires placement on a runtime qualified for the requested lock and lifecycle operations.",
     ),
     "filesystem-notifications": (
         "unqualified",

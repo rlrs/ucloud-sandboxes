@@ -1,0 +1,850 @@
+{
+  "build_tests": [
+    "TestExternalBackingSaveRestore",
+    "TestExternalBackingRestoreRejectsWrongSize",
+    "TestCreateMemoryFileWithDiskBacking",
+    "TestRemoveCPUQuotaForStartup",
+    "TestStartPausedStatusTransition"
+  ],
+  "clean_patch_application": "passed",
+  "download_archive_sha256": "1580606042d13eb9dc56a24fae8324e44a1085bf82b23354f7857216b62e9a99",
+  "feature_comparison": {
+    "gvisor_image": {
+      "backend": "docker",
+      "cleanup": "completed",
+      "cpus": 1,
+      "directory": "/srv",
+      "docker_runtime": "runsc-candidate",
+      "exit_code": 0,
+      "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+      "memory_mb": 1024,
+      "probe": {
+        "gid": 0,
+        "groups": [
+          0
+        ],
+        "kernel": "4.19.0-gvisor",
+        "platform": "Linux",
+        "python": "3.13.15",
+        "results": {
+          "filesystem-locks": {
+            "status": "passed"
+          },
+          "filesystem-xattrs": {
+            "status": "passed"
+          },
+          "literal-paths-and-symlinks": {
+            "status": "passed"
+          },
+          "posix-acl": {
+            "status": "passed"
+          },
+          "process-signals": {
+            "status": "passed"
+          },
+          "unix-sockets": {
+            "status": "passed"
+          }
+        },
+        "schema_version": 1,
+        "uid": 0
+      },
+      "probe_sha256": "7c10884929ee0c6946dedf94d75dfd9a71a7f29a2b2b7f9dda4a50d4f9dad95c",
+      "runtime_identifier": "runsc-candidate-bf977a610da69323196f681294436c5460b5ad2f2f4e492bcaa7dbd4332b2773",
+      "schema_version": 1,
+      "started_at": "2026-09-05T13:02:15.241896+00:00",
+      "status": "passed"
+    },
+    "gvisor_tmpfs": {
+      "backend": "docker",
+      "cleanup": "completed",
+      "cpus": 1,
+      "directory": "/tmp",
+      "docker_runtime": "runsc-candidate",
+      "exit_code": 0,
+      "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+      "memory_mb": 1024,
+      "probe": {
+        "gid": 0,
+        "groups": [
+          0
+        ],
+        "kernel": "4.19.0-gvisor",
+        "platform": "Linux",
+        "python": "3.13.15",
+        "results": {
+          "filesystem-locks": {
+            "status": "passed"
+          },
+          "filesystem-xattrs": {
+            "status": "passed"
+          },
+          "literal-paths-and-symlinks": {
+            "status": "passed"
+          },
+          "posix-acl": {
+            "status": "passed"
+          },
+          "process-signals": {
+            "status": "passed"
+          },
+          "unix-sockets": {
+            "status": "passed"
+          }
+        },
+        "schema_version": 1,
+        "uid": 0
+      },
+      "probe_sha256": "7c10884929ee0c6946dedf94d75dfd9a71a7f29a2b2b7f9dda4a50d4f9dad95c",
+      "runtime_identifier": "runsc-candidate-bf977a610da69323196f681294436c5460b5ad2f2f4e492bcaa7dbd4332b2773",
+      "schema_version": 1,
+      "started_at": "2026-09-05T13:02:14.640433+00:00",
+      "status": "passed"
+    },
+    "native_image": {
+      "backend": "docker",
+      "cleanup": "completed",
+      "cpus": 1,
+      "directory": "/srv",
+      "docker_runtime": "runc",
+      "exit_code": 0,
+      "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+      "memory_mb": 1024,
+      "probe": {
+        "gid": 0,
+        "groups": [
+          0
+        ],
+        "kernel": "7.0.0-30-generic",
+        "platform": "Linux",
+        "python": "3.13.15",
+        "results": {
+          "filesystem-locks": {
+            "status": "passed"
+          },
+          "filesystem-xattrs": {
+            "status": "passed"
+          },
+          "literal-paths-and-symlinks": {
+            "status": "passed"
+          },
+          "posix-acl": {
+            "status": "passed"
+          },
+          "process-signals": {
+            "status": "passed"
+          },
+          "unix-sockets": {
+            "status": "passed"
+          }
+        },
+        "schema_version": 1,
+        "uid": 0
+      },
+      "probe_sha256": "7c10884929ee0c6946dedf94d75dfd9a71a7f29a2b2b7f9dda4a50d4f9dad95c",
+      "runtime_identifier": "dc61317da24db892bd614ef8af0ec54f22b2b8235e0fcdcda51b3a82e4ee61c5",
+      "schema_version": 1,
+      "started_at": "2026-09-05T13:05:30.609866+00:00",
+      "status": "passed"
+    },
+    "native_tmpfs": {
+      "backend": "docker",
+      "cleanup": "completed",
+      "cpus": 1,
+      "directory": "/tmp",
+      "docker_runtime": "runc",
+      "exit_code": 0,
+      "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+      "memory_mb": 1024,
+      "probe": {
+        "gid": 0,
+        "groups": [
+          0
+        ],
+        "kernel": "7.0.0-30-generic",
+        "platform": "Linux",
+        "python": "3.13.15",
+        "results": {
+          "filesystem-locks": {
+            "status": "passed"
+          },
+          "filesystem-xattrs": {
+            "status": "passed"
+          },
+          "literal-paths-and-symlinks": {
+            "status": "passed"
+          },
+          "posix-acl": {
+            "status": "passed"
+          },
+          "process-signals": {
+            "status": "passed"
+          },
+          "unix-sockets": {
+            "status": "passed"
+          }
+        },
+        "schema_version": 1,
+        "uid": 0
+      },
+      "probe_sha256": "7c10884929ee0c6946dedf94d75dfd9a71a7f29a2b2b7f9dda4a50d4f9dad95c",
+      "runtime_identifier": "dc61317da24db892bd614ef8af0ec54f22b2b8235e0fcdcda51b3a82e4ee61c5",
+      "schema_version": 1,
+      "started_at": "2026-09-05T13:05:30.145263+00:00",
+      "status": "passed"
+    }
+  },
+  "hibernation": {
+    "capture_rollback": "pass",
+    "cycles": [
+      {
+        "cpu_max": "25000 100000",
+        "cycle": 0,
+        "state": {
+          "acl": "pass",
+          "counter": 57,
+          "flock": "pass",
+          "identity": {
+            "gid": 1000,
+            "groups": [
+              42
+            ],
+            "uid": 1000
+          }
+        }
+      },
+      {
+        "cpu_max": "25000 100000",
+        "cycle": 1,
+        "state": {
+          "acl": "pass",
+          "counter": 76,
+          "flock": "pass",
+          "identity": {
+            "gid": 1000,
+            "groups": [
+              42
+            ],
+            "uid": 1000
+          }
+        }
+      },
+      {
+        "cpu_max": "25000 100000",
+        "cycle": 2,
+        "state": {
+          "acl": "pass",
+          "counter": 103,
+          "flock": "pass",
+          "identity": {
+            "gid": 1000,
+            "groups": [
+              42
+            ],
+            "uid": 1000
+          }
+        }
+      },
+      {
+        "cpu_max": "25000 100000",
+        "cycle": 3,
+        "state": {
+          "acl": "pass",
+          "counter": 126,
+          "flock": "pass",
+          "identity": {
+            "gid": 1000,
+            "groups": [
+              42
+            ],
+            "uid": 1000
+          }
+        }
+      },
+      {
+        "cpu_max": "25000 100000",
+        "cycle": 4,
+        "state": {
+          "acl": "pass",
+          "counter": 142,
+          "flock": "pass",
+          "identity": {
+            "gid": 1000,
+            "groups": [
+              42
+            ],
+            "uid": 1000
+          }
+        }
+      },
+      {
+        "cpu_max": "25000 100000",
+        "cycle": 5,
+        "state": {
+          "acl": "pass",
+          "counter": 160,
+          "flock": "pass",
+          "identity": {
+            "gid": 1000,
+            "groups": [
+              42
+            ],
+            "uid": 1000
+          }
+        }
+      },
+      {
+        "cpu_max": "25000 100000",
+        "cycle": 6,
+        "state": {
+          "acl": "pass",
+          "counter": 185,
+          "flock": "pass",
+          "identity": {
+            "gid": 1000,
+            "groups": [
+              42
+            ],
+            "uid": 1000
+          }
+        }
+      },
+      {
+        "cpu_max": "25000 100000",
+        "cycle": 7,
+        "state": {
+          "acl": "pass",
+          "counter": 208,
+          "flock": "pass",
+          "identity": {
+            "gid": 1000,
+            "groups": [
+              42
+            ],
+            "uid": 1000
+          }
+        }
+      },
+      {
+        "cpu_max": "25000 100000",
+        "cycle": 8,
+        "state": {
+          "acl": "pass",
+          "counter": 226,
+          "flock": "pass",
+          "identity": {
+            "gid": 1000,
+            "groups": [
+              42
+            ],
+            "uid": 1000
+          }
+        }
+      },
+      {
+        "cpu_max": "25000 100000",
+        "cycle": 9,
+        "state": {
+          "acl": "pass",
+          "counter": 243,
+          "flock": "pass",
+          "identity": {
+            "gid": 1000,
+            "groups": [
+              42
+            ],
+            "uid": 1000
+          }
+        }
+      }
+    ],
+    "gvisor_commit": "50e1502a95d36ad2faf2c7ef33b8bf21fe975293",
+    "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+    "initial": {
+      "acl": "pass",
+      "counter": 14,
+      "flock": "pass",
+      "identity": {
+        "gid": 1000,
+        "groups": [
+          42
+        ],
+        "uid": 1000
+      }
+    },
+    "runsc_sha256": "bf977a610da69323196f681294436c5460b5ad2f2f4e492bcaa7dbd4332b2773",
+    "schema": 1
+  },
+  "journal_model_recovery": {
+    "cases": [
+      {
+        "cycles": 100,
+        "elapsed_ms": 38.489,
+        "name": "hibernate-begin-live",
+        "operations_per_second": 2598.144
+      },
+      {
+        "cycles": 100,
+        "elapsed_ms": 46.524,
+        "name": "hibernate-sentry-dead-before-reap",
+        "operations_per_second": 2149.406
+      },
+      {
+        "cycles": 100,
+        "elapsed_ms": 91.127,
+        "name": "hibernate-complete-live-before-stop",
+        "operations_per_second": 1097.364
+      },
+      {
+        "cycles": 100,
+        "elapsed_ms": 44.597,
+        "name": "hibernate-pending-no-complete",
+        "operations_per_second": 2242.298
+      },
+      {
+        "cycles": 100,
+        "elapsed_ms": 109.312,
+        "name": "hibernate-complete-before-commit",
+        "operations_per_second": 914.811
+      },
+      {
+        "cycles": 100,
+        "elapsed_ms": 110.711,
+        "name": "hibernate-committed",
+        "operations_per_second": 903.249
+      },
+      {
+        "cycles": 100,
+        "elapsed_ms": 120.046,
+        "name": "restore-before-launch",
+        "operations_per_second": 833.014
+      },
+      {
+        "cycles": 100,
+        "elapsed_ms": 138.911,
+        "name": "restore-started-before-identity",
+        "operations_per_second": 719.883
+      },
+      {
+        "cycles": 100,
+        "elapsed_ms": 137.372,
+        "name": "restore-candidate-alive",
+        "operations_per_second": 727.952
+      },
+      {
+        "cycles": 100,
+        "elapsed_ms": 141.707,
+        "name": "restore-candidate-dead",
+        "operations_per_second": 705.681
+      },
+      {
+        "cycles": 100,
+        "elapsed_ms": 146.343,
+        "name": "restore-running-committed",
+        "operations_per_second": 683.328
+      }
+    ],
+    "cycles_per_case": 100,
+    "schema": 1,
+    "total_restarts": 1100
+  },
+  "limitations": [
+    "Journal model recovery simulates durable crash states; it is not 1100 VM or process crashes.",
+    "Real Warden qualification uses local park/wake; registry migration and full Prime tasksets were not repeated.",
+    "Global required-feature admission remains conservative until it can attest placement-specific runtime and filesystem capabilities.",
+    "July checkpoint wire format is incompatible; existing production deployments retain their original pin."
+  ],
+  "path_with_spaces_and_quote": "passed",
+  "process_state_conformance": {
+    "cycles": 20,
+    "runsc_sha256": "bf977a610da69323196f681294436c5460b5ad2f2f4e492bcaa7dbd4332b2773",
+    "samples": [
+      {
+        "cycle": 0,
+        "park_ms": 89.46968899999774,
+        "response": "ok 8590456832",
+        "restore_ms": 364.51385400005165,
+        "verify_ms": 63.33451499995135
+      },
+      {
+        "cycle": 1,
+        "park_ms": 92.57147500011342,
+        "response": "ok 17180391424",
+        "restore_ms": 464.78226699991865,
+        "verify_ms": 50.594541000009485
+      },
+      {
+        "cycle": 2,
+        "park_ms": 88.53826399990794,
+        "response": "ok 25770326016",
+        "restore_ms": 264.8270119998415,
+        "verify_ms": 66.60933000011937
+      },
+      {
+        "cycle": 3,
+        "park_ms": 88.41563800001495,
+        "response": "ok 34360260608",
+        "restore_ms": 464.5520479998595,
+        "verify_ms": 17.401333999941926
+      },
+      {
+        "cycle": 4,
+        "park_ms": 22.175936000166985,
+        "response": "ok 42950195200",
+        "restore_ms": 414.5189160001337,
+        "verify_ms": 66.03043599989178
+      },
+      {
+        "cycle": 5,
+        "park_ms": 20.24007199997868,
+        "response": "ok 51540129792",
+        "restore_ms": 264.3506619999698,
+        "verify_ms": 72.9137329999503
+      },
+      {
+        "cycle": 6,
+        "park_ms": 87.96624100000372,
+        "response": "ok 60130064384",
+        "restore_ms": 314.45299899996826,
+        "verify_ms": 36.09471000004305
+      },
+      {
+        "cycle": 7,
+        "park_ms": 90.91998200005946,
+        "response": "ok 68719998976",
+        "restore_ms": 364.42389900003036,
+        "verify_ms": 17.287793000150486
+      },
+      {
+        "cycle": 8,
+        "park_ms": 60.87903599996025,
+        "response": "ok 77309933568",
+        "restore_ms": 364.5922339999288,
+        "verify_ms": 19.343107000167947
+      },
+      {
+        "cycle": 9,
+        "park_ms": 97.61692699999003,
+        "response": "ok 85899868160",
+        "restore_ms": 414.39629999990757,
+        "verify_ms": 17.294413000172426
+      },
+      {
+        "cycle": 10,
+        "park_ms": 22.505714000089938,
+        "response": "ok 94489802752",
+        "restore_ms": 414.7392279999167,
+        "verify_ms": 16.75500800001828
+      },
+      {
+        "cycle": 11,
+        "park_ms": 100.41523300014887,
+        "response": "ok 103079737344",
+        "restore_ms": 364.5840809999754,
+        "verify_ms": 18.557430000100794
+      },
+      {
+        "cycle": 12,
+        "park_ms": 21.245120000003226,
+        "response": "ok 111669671936",
+        "restore_ms": 414.4114240000363,
+        "verify_ms": 31.153545999814014
+      },
+      {
+        "cycle": 13,
+        "park_ms": 91.07609699981367,
+        "response": "ok 120259606528",
+        "restore_ms": 364.4630579999557,
+        "verify_ms": 58.06280199999492
+      },
+      {
+        "cycle": 14,
+        "park_ms": 89.50124799980586,
+        "response": "ok 128849541120",
+        "restore_ms": 464.73346300012963,
+        "verify_ms": 48.63099599992893
+      },
+      {
+        "cycle": 15,
+        "park_ms": 91.06878600005075,
+        "response": "ok 137439475712",
+        "restore_ms": 364.54984900001364,
+        "verify_ms": 72.74597099990388
+      },
+      {
+        "cycle": 16,
+        "park_ms": 93.19264400005522,
+        "response": "ok 146029410304",
+        "restore_ms": 364.4299380000575,
+        "verify_ms": 76.61265100000492
+      },
+      {
+        "cycle": 17,
+        "park_ms": 91.70252299986714,
+        "response": "ok 154619344896",
+        "restore_ms": 414.3294390000847,
+        "verify_ms": 16.607446000080017
+      },
+      {
+        "cycle": 18,
+        "park_ms": 61.34767300000021,
+        "response": "ok 163209279488",
+        "restore_ms": 314.34457500017743,
+        "verify_ms": 21.79470099986247
+      },
+      {
+        "cycle": 19,
+        "park_ms": 87.55669100014529,
+        "response": "ok 171799214080",
+        "restore_ms": 414.47910499982754,
+        "verify_ms": 17.53580699983104
+      }
+    ],
+    "schema": 1
+  },
+  "repository_tests": {
+    "go_tests": "passed",
+    "lint_and_wheel_checks": "passed",
+    "sdk_tests": 82,
+    "skipped": 4,
+    "tests": 740
+  },
+  "runtime": {
+    "artifact": "gvisor-hibernate-69386782a596ce54bf0547807208392ea84ba1794f2f2264cb1c580416b28f2f",
+    "bazel_version": "bazel 8.3.1",
+    "build_config": "opt",
+    "files": {
+      "gvisor-bin/checkpointgofer": {
+        "sha256": "10f00452a228bbfabf961275dbf07970591572e995e87d16740681e688a96b7b",
+        "size": 68923530
+      },
+      "gvisor-bin/gvisor-sentry-prewarmer": {
+        "sha256": "70425fafd4f5b7ed5c96f78ce4f23c68948304da6fd6dd60ad33dd945a34760e",
+        "size": 1392
+      },
+      "gvisor-bin/gvisor_sentry": {
+        "sha256": "c4842ac4844015099e9524008d30d3e0f57e6650fe21a912285f50bab3bc47ea",
+        "size": 48215258
+      },
+      "gvisor-bin/runsc-metric-server": {
+        "sha256": "16461ad331b30061f93d3b9bd2f82e2baeb816e6046bd9de4852d0e7d76d61ab",
+        "size": 52632226
+      },
+      "runsc": {
+        "sha256": "bf977a610da69323196f681294436c5460b5ad2f2f4e492bcaa7dbd4332b2773",
+        "size": 105431327
+      }
+    },
+    "gvisor_commit": "50e1502a95d36ad2faf2c7ef33b8bf21fe975293",
+    "host_architecture": "x86_64",
+    "patch_series_sha256": "44beb70f08a1eca01dce6077cf8d4bb8e2cd4b093ef7055b806039125cd21573",
+    "patched_files_sha256": "ea7dcf91cd27683702b616a10a4124dd0e8e146afca51a3519d8b76ca6667144",
+    "patches": [
+      {
+        "name": "20260817/0001-ucloud-hibernation.patch",
+        "sha256": "bed13a2a1ef790a61a7a09d3a70511a15a7504d1ef2342edc672b4203950f5e6"
+      }
+    ],
+    "runsc_sha256": "bf977a610da69323196f681294436c5460b5ad2f2f4e492bcaa7dbd4332b2773",
+    "schema": 2
+  },
+  "schema": 1,
+  "shellless_management": {
+    "checks": {
+      "identity": true,
+      "no-image-shell": true,
+      "oversized-write-preserves-old": true,
+      "readiness": true,
+      "root-write-denied": true,
+      "shellless-files": true
+    },
+    "cleanup": "completed",
+    "error_type": null,
+    "helper_sha256": "803b047efcbe7db6ffdbf71f04ec850de3fa277e405672f34b89d18e21b60f7b",
+    "runtime_sha256": "bf977a610da69323196f681294436c5460b5ad2f2f4e492bcaa7dbd4332b2773",
+    "schema_version": 1,
+    "spec": {
+      "command": [
+        "/.ucloud-job-init",
+        "supervise",
+        "--state-dir",
+        "/workspace/state"
+      ],
+      "cpus": null,
+      "disk_mb": 256,
+      "env": {},
+      "filesystem": {
+        "enforce_disk_quota": false,
+        "management_helper": "static",
+        "run_tmpfs_mb": 16,
+        "shm_mb": 128,
+        "tmpfs_mb": 64,
+        "workspace_path": "/workspace",
+        "workspace_storage": "image"
+      },
+      "id": "static-helper-probe",
+      "image": "scratch-helper",
+      "labels": {},
+      "linux_host": {
+        "enable_cron": false,
+        "enable_sshd": false,
+        "keep_alive": true,
+        "writable_paths": [
+          "/run",
+          "/run/lock",
+          "/run/sshd",
+          "/tmp",
+          "/var/tmp",
+          "/var/run",
+          "/var/lock",
+          "/var/spool/cron",
+          "/var/spool/cron/crontabs",
+          "/etc/cron.d",
+          "/logs",
+          "/logs/agent",
+          "/logs/verifier",
+          "/tests",
+          "/task",
+          "/oracle",
+          "/workspace"
+        ]
+      },
+      "managed_process": false,
+      "memory_mb": 256,
+      "network": "none",
+      "parkable": false,
+      "profile": "container",
+      "security": {
+        "cap_add": [],
+        "cap_drop": [
+          "ALL"
+        ],
+        "init": false,
+        "no_new_privileges": true,
+        "pids_limit": 256,
+        "read_only_rootfs": false,
+        "supplementary_groups": [
+          "42"
+        ],
+        "user": "1000:1000"
+      },
+      "ssh": {
+        "authorized_keys": [],
+        "container_port": 22,
+        "enabled": false,
+        "host": "127.0.0.1",
+        "host_port": null,
+        "user": "root"
+      },
+      "ttl_seconds": null,
+      "working_dir": null
+    }
+  },
+  "source_hashes": {
+    "runtime/gvisor/20260817/0001-ucloud-hibernation.patch": "bed13a2a1ef790a61a7a09d3a70511a15a7504d1ef2342edc672b4203950f5e6",
+    "runtime/gvisor/build_pinned.sh": "63b36d66b18eb446a11cdf11b0cd4ca6d2cd2906a7fe888849f6e4fcae674e42",
+    "runtime/gvisor/compatibility_workload.py": "0cfaaa6b9a91879cc8fe05f682e5bc057ddc80d743d222caca3697fce41a60f1",
+    "runtime/storage_native/benchmark_warden.py": "9f9633e5ba3efc963532c8c08f64ba459a1c163dd5c659e8ffdee0df9a38a4f1",
+    "scripts/qualify_gvisor_hibernation.py": "ce1daa4a4154901a83f69fe3480eaa28f1c8c11b0c7cea2089bfce0ccce9969a",
+    "ucloud_sandboxes/direct_runtime.py": "e076c679cbe94fea2d3178f9219263c6589a2a8ab9b1be134e64f023b380576d",
+    "ucloud_sandboxes/gvisor_distribution.py": "540c88463ab2ea9ecf27553c3f3f16b867433ceb3f9a03ae645b62b3221fcc60"
+  },
+  "storage_backend": {
+    "agentenv_commit": "db1492b7915a408b37f863c9e3a34b2ccb2fb1b0",
+    "artifact": "uvm-ublk-daemon-259ea3d41327311fbab384dacc72f0f2655fe9fae1169a61b3803a629bc4ff65",
+    "artifact_sha256": "259ea3d41327311fbab384dacc72f0f2655fe9fae1169a61b3803a629bc4ff65",
+    "cargo_package": "uvm-ublk-daemon",
+    "host_architecture": "x86_64",
+    "license": "MIT",
+    "patches": [
+      {
+        "name": "agentenv-streaming-dense-export.patch",
+        "sha256": "628cff8e4d4d50ba63a661896fabfc16d40dec6e3c8de764dca3828eda613104"
+      },
+      {
+        "name": "agentenv-pooled-delete.patch",
+        "sha256": "d424c23f256debe498b8a958addba556a363fc9b70c286b02cd7f9651244666b"
+      },
+      {
+        "name": "agentenv-owner-identity.patch",
+        "sha256": "269398f97b1ea1de13a68401e0498c16d158a665993d2358b4bb10e074a2dbfb"
+      }
+    ],
+    "schema": 3
+  },
+  "ucloud": {
+    "application": "vm-ubuntu:26.04",
+    "architecture": "x86_64",
+    "final_state": "SUCCESS",
+    "host_kernel": "7.0.0-30-generic",
+    "job_id": "12381696",
+    "product": "cpu-amd-zen5-16-vcpu",
+    "project_id": "4827bd3a-4e74-4393-9b82-49f71636c141"
+  },
+  "warden_real_ublk_xfs": {
+    "create_runtime_seconds": 0.09951891499986232,
+    "create_volume_seconds": 0.14175517099965873,
+    "migration_timings": {},
+    "noop_seconds": 0.01611743400007981,
+    "park_seconds": 0.15918604800026515,
+    "parked_storage": {
+      "accounting_id": 200000,
+      "cached_layer_paths": [],
+      "device_id": null,
+      "device_owner_id": "",
+      "device_path": "",
+      "error": "",
+      "mount_path": "/var/tmp/gvisor-build/warden-work/ucloud-storage-native-warden-40_9d9v9/volumes/warden-benchmark.sandbox-1",
+      "operation_id": "storage-ac56c7c33b813260fc0fa678fce104c1799be2f5e7a5db586c501dde37864c92",
+      "published_backend": "",
+      "published_layers": [],
+      "published_manifest_digest": "",
+      "published_repo_blob_url": "",
+      "published_repository": "",
+      "published_tag": "",
+      "revision": 3,
+      "runtime_dir": "/var/tmp/gvisor-build/warden-work/ucloud-storage-native-warden-40_9d9v9/storage-runtime/warden-benchmark.sandbox-1/runtime",
+      "runtime_image_config": "",
+      "sandbox_generation": 1,
+      "sandbox_id": "warden-benchmark",
+      "sealed_layer_bytes": 116441088,
+      "sealed_layer_paths": [
+        "/var/tmp/gvisor-build/warden-work/ucloud-storage-native-warden-40_9d9v9/storage-runtime/warden-benchmark.sandbox-1/runtime/layers/revision-2.commit"
+      ],
+      "source_image_config": "/var/tmp/gvisor-build/warden-work/ucloud-storage-native-warden-40_9d9v9/storage-runtime/warden-benchmark.sandbox-1/source.json",
+      "state": "released",
+      "updated_ns": 1788614003194574331,
+      "virtual_size": 1073741824,
+      "volume_id": "warden-benchmark.sandbox-1"
+    },
+    "registry_phase_deltas": {
+      "explicit_noop": {},
+      "full_conformance": {},
+      "through_restore_readiness": {}
+    },
+    "registry_range_delta": {},
+    "response": "ok 8590456832",
+    "resume_seconds": 0.16577154500009783,
+    "resume_timings_ms": {
+      "artifact_cleanup": 1.1826259997178568,
+      "begin_restore_journal": 1.6706329997759894,
+      "candidate_fence": 0.08306499967147829,
+      "candidate_journal": 2.030486999956338,
+      "candidate_resume": 24.05573399983041,
+      "commit_running_journal": 2.2247410001909884,
+      "readiness_exec": 16.185396000309993,
+      "runsc_restore": 64.24113200000647,
+      "runsc_state": 8.28481299959094,
+      "validate_artifact": 45.700978000240866,
+      "warden_total": 165.7423110000309
+    },
+    "resumed_storage_revision": 4,
+    "schema": 1,
+    "sealed_layer_bytes": 116441088,
+    "source_deleted_before_destination_resume": false,
+    "status": "passed",
+    "test_root": "/var/tmp/gvisor-build/warden-work/ucloud-storage-native-warden-40_9d9v9",
+    "upper_mode": "hybridLogStructured",
+    "virtual_size": 1073741824
+  }
+}

@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import sys
 from threading import Event
 import time
@@ -18,6 +18,8 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from uuid import uuid4
 
 from opentelemetry.propagate import inject
+
+from .gvisor_distribution import distribution_files
 
 from .agent import (
     build_heartbeat,
@@ -1922,6 +1924,36 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
                     "result": staged_direct_runsc.to_dict(),
                 }
             )
+        if plan.local_direct_runsc is not None:
+            companions = distribution_files(
+                plan.local_direct_runsc, plan.direct_runsc_commit
+            )
+            if companions:
+                companions.append(
+                    (
+                        plan.local_direct_runsc.parent / "build-manifest.json",
+                        "build-manifest.json",
+                    )
+                )
+            for local_path, relative in companions:
+                remote_path = str(
+                    PurePosixPath(plan.remote_direct_runsc_path).parent / relative
+                )
+                staged = stage_file_over_ssh(
+                    ssh_command,
+                    local_path,
+                    remote_path,
+                    mode="0644" if relative == "build-manifest.json" else "0755",
+                    timeout_seconds=timeout,
+                    private_key_file=args.ssh_private_key_file,
+                )
+                result["stagedFiles"].append(
+                    {
+                        "localPath": str(local_path),
+                        "remotePath": remote_path,
+                        "result": staged.to_dict(),
+                    }
+                )
         if plan.local_managed_init is not None:
             staged_managed_init = stage_file_over_ssh(
                 ssh_command,

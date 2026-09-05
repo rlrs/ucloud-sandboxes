@@ -27,6 +27,7 @@ import tempfile
 import zipfile
 
 from ucloud_sandboxes.vm_init import PINNED_STORAGE_NATIVE_AGENTENV_COMMIT
+from ucloud_sandboxes.gvisor_distribution import GVISOR_COMMIT, GVISOR_SIDECARS
 
 
 EXPECTED_STORAGE_PATCHES = [
@@ -112,6 +113,36 @@ def validate_source_bundle(root: Path, manifest: dict[str, object]) -> None:
             raise ValueError(f"source bundle is missing {section}")
         path = default_root / str(item["file"])
         validate_digest(path, str(item["sha256"]), section)
+
+    if role == "sandbox":
+        direct = runtime["direct_runsc"]
+        sidecars = direct.get("sidecars", [])
+        expected = (
+            {"runtime/direct/gvisor-bin/" + name for name in GVISOR_SIDECARS}
+            if direct.get("commit") == GVISOR_COMMIT
+            else set()
+        )
+        if not isinstance(sidecars, list) or any(
+            not isinstance(item, dict) for item in sidecars
+        ):
+            raise ValueError("invalid gVisor companion manifest")
+        if {item.get("file") for item in sidecars} != expected or len(sidecars) != len(
+            expected
+        ):
+            raise ValueError("gVisor companion executable set mismatch")
+        directory = root / "runtime/direct/gvisor-bin"
+        actual = (
+            {"runtime/direct/gvisor-bin/" + path.name for path in directory.iterdir()}
+            if directory.exists()
+            else set()
+        )
+        if directory.is_symlink() or actual != expected:
+            raise ValueError("gVisor companion directory mismatch")
+        for item in sidecars:
+            path = root / item["file"]
+            if path.is_symlink() or path.stat().st_size != item.get("size"):
+                raise ValueError("invalid gVisor companion executable")
+            validate_digest(path, item["sha256"], "gVisor companion")
 
     kernel = runtime.get("kernel")
     if not isinstance(kernel, dict) or not isinstance(kernel.get("files"), list):

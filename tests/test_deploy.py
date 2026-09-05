@@ -269,6 +269,93 @@ class DeployTests(unittest.TestCase):
         self.assertIn('mv -f "$temporary" /work/release/release.whl', remote_command)
         self.assertEqual(run.call_args.kwargs["input"], b"new wheel")
 
+    def test_sandbox_bundle_contains_complete_new_gvisor_distribution(self):
+        from ucloud_sandboxes.gvisor_distribution import GVISOR_COMMIT, GVISOR_SIDECARS
+
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            raw = self._config().to_dict()
+            raw["sandbox"]["direct_runsc_commit"] = GVISOR_COMMIT
+            plan = self._plan(root, config=DeploymentConfig.from_dict(raw))
+            runtime = root / "runtime"
+            (runtime / "debs").mkdir(parents=True)
+            (runtime / "debs/runtime.deb").write_bytes(b"package")
+            agent = root / "agent.tar"
+            agent.write_bytes(b"agent")
+            kernel = root / "kernel"
+            kernel.mkdir()
+            (kernel / "xfs.ko").write_bytes(b"module")
+            files = {}
+            names = ["runsc", *("gvisor-bin/" + name for name in GVISOR_SIDECARS)]
+            for name in names:
+                binary = root / name
+                binary.parent.mkdir(exist_ok=True)
+                binary.write_bytes(name.encode())
+                binary.chmod(0o755)
+                files[name] = {
+                    "size": binary.stat().st_size,
+                    "sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
+                }
+            (root / "build-manifest.json").write_text(
+                json.dumps(
+                    {"schema": 2, "gvisor_commit": GVISOR_COMMIT, "files": files}
+                )
+            )
+            script = render_remote_deploy_script(plan)
+            start = script.index("import hashlib\nimport gzip")
+            code = compile(
+                script[
+                    start : script.index(
+                        '\nPY\ndone\nrm -rf "$NODE_PACKAGE_WORK"', start
+                    )
+                ],
+                "<builder>",
+                "exec",
+            )
+            backend_manifest = plan.local_storage_native_manifest
+            backend = root / json.loads(backend_manifest.read_text())["artifact"]
+            target = root / "sandbox.tar.gz"
+            argv = [
+                "builder",
+                str(target),
+                str(runtime),
+                "ubuntu",
+                "26.04",
+                "resolute",
+                "amd64",
+                "sandbox",
+                "xfsprogs",
+                str(agent),
+                "7.0.0",
+                str(kernel),
+                "xfs",
+                str(root / "runsc"),
+                GVISOR_COMMIT,
+                str(backend),
+                str(backend_manifest),
+                str(root / (backend.name + ".LICENSE")),
+                str(plan.local_managed_init),
+            ]
+            with patch.object(sys, "argv", argv):
+                exec(code, {"__name__": "__main__"})
+            with tarfile.open(target) as archive:
+                manifest = json.load(archive.extractfile("package-bundle.json"))
+                sidecars = manifest["runtime"]["direct_runsc"]["sidecars"]
+                self.assertEqual(len(sidecars), 4)
+                for item in sidecars:
+                    self.assertEqual(
+                        hashlib.sha256(
+                            archive.extractfile(item["file"]).read()
+                        ).hexdigest(),
+                        item["sha256"],
+                    )
+            (root / "gvisor-bin/gvisor_sentry").write_bytes(b"tampered")
+            with (
+                patch.object(sys, "argv", argv),
+                self.assertRaisesRegex(SystemExit, "executable mismatch"),
+            ):
+                exec(code, {"__name__": "__main__"})
+
     def test_offline_bundle_builder_is_deterministic(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)

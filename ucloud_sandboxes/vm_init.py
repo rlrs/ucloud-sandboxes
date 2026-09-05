@@ -16,6 +16,7 @@ from typing import Literal
 from .deployment import DEFAULT_INIT_VERSION, package_version
 from .direct_network import DirectNetworkTcpEgress
 from .models import ResourceQuantity
+from .gvisor_distribution import GVISOR_COMMIT, GVISOR_SIDECARS
 from .storage_native_publication import DEFAULT_MAX_CONCURRENT_PUBLICATIONS
 
 
@@ -35,8 +36,8 @@ DEFAULT_DOCKER_MAX_CONCURRENT_DOWNLOADS = 3
 DEFAULT_MAX_CONCURRENT_IMAGE_PULLS = 8
 DEFAULT_REMOTE_PACKAGE_DIR = "/var/cache/ucloud-sandboxes/init-packages"
 DEFAULT_REMOTE_PACKAGE_FILENAME = "node-package.tar.gz"
-STATIC_RUNTIME_RECEIPT_SCHEMA = 1
-DEFAULT_DIRECT_RUNSC = "/usr/local/libexec/ucloud-direct-runsc"
+STATIC_RUNTIME_RECEIPT_SCHEMA = 2
+DEFAULT_DIRECT_RUNSC = "/usr/local/libexec/ucloud-gvisor/runsc"
 DEFAULT_MANAGED_INIT = "/usr/local/libexec/ucloud-sandbox-init"
 DEFAULT_STORAGE_NATIVE_BACKEND = "/usr/local/libexec/ucloud-storage-native-backend"
 DEFAULT_STORAGE_NATIVE_BACKEND_SOCKET = (
@@ -622,7 +623,12 @@ if [ -f "$UCLOUD_STATIC_RUNTIME_RECEIPT" ] \
     if [ "$UCLOUD_NODE_ROLE" != sandbox ] \
       || {{ [ -x "$UCLOUD_DIRECT_RUNSC" ] \
         && [ -x "$UCLOUD_MANAGED_INIT" ] \
-        && [ -x "$UCLOUD_STORAGE_NATIVE_BACKEND" ]; }}; then
+        && [ -x "$UCLOUD_STORAGE_NATIVE_BACKEND" ] \
+        && {{ [ "$UCLOUD_DIRECT_RUNSC_COMMIT" != {GVISOR_COMMIT} ] \
+          || {{ [ -x "$(dirname \"$UCLOUD_DIRECT_RUNSC\")/gvisor-bin/checkpointgofer" ] \
+            && [ -x "$(dirname \"$UCLOUD_DIRECT_RUNSC\")/gvisor-bin/gvisor-sentry-prewarmer" ] \
+            && [ -x "$(dirname \"$UCLOUD_DIRECT_RUNSC\")/gvisor-bin/gvisor_sentry" ] \
+            && [ -x "$(dirname \"$UCLOUD_DIRECT_RUNSC\")/gvisor-bin/runsc-metric-server" ]; }}; }}; }}; then
       UCLOUD_STATIC_RUNTIME_READY=1
       echo "Using snapshot-baked runtime $UCLOUD_PACKAGE_BUNDLE_SHA256"
     fi
@@ -704,8 +710,8 @@ def verified_artifact(metadata: dict, file_name: str, label: str) -> str:
     if not re.fullmatch(r"[0-9a-f]{{64}}", sha256) or not isinstance(size, int) or size <= 0:
         raise SystemExit(f"invalid {{label}} metadata")
     path = bundle_dir / file_name
-    if not path.is_file():
-        raise SystemExit(f"missing {{label}}")
+    if path.is_symlink() or not path.is_file():
+        raise SystemExit(f"missing or nonregular {{label}}")
     if path.stat().st_size != size:
         raise SystemExit(f"{{label}} size mismatch")
     if digest(path) != sha256:
@@ -792,6 +798,22 @@ if runtime.get("role") == "sandbox":
     direct_sha256 = verified_artifact(
         direct, "runtime/direct/runsc", "direct runtime binary"
     )
+
+    sidecars = direct.get("sidecars", [])
+    required_sidecars = {{"runtime/direct/gvisor-bin/" + name for name in {GVISOR_SIDECARS!r}}} if commit == {GVISOR_COMMIT!r} else set()
+    if not isinstance(sidecars, list) or any(not isinstance(item, dict) for item in sidecars):
+        raise SystemExit("invalid gVisor companion metadata")
+    declared_sidecars = {{item.get("file") for item in sidecars}}
+    if declared_sidecars != required_sidecars or len(sidecars) != len(required_sidecars):
+        raise SystemExit("gVisor companion executable set mismatch")
+    sidecar_dir = bundle_dir / "runtime/direct/gvisor-bin"
+    if sidecar_dir.is_symlink():
+        raise SystemExit("gVisor companion directory cannot be a symlink")
+    actual_sidecars = {{"runtime/direct/gvisor-bin/" + path.name for path in sidecar_dir.iterdir()}} if sidecar_dir.exists() else set()
+    if actual_sidecars != required_sidecars:
+        raise SystemExit("gVisor companion files do not match metadata")
+    for item in sidecars:
+        verified_artifact(item, item["file"], "gVisor companion executable")
 
     managed = runtime.get("managed_init")
     if not isinstance(managed, dict):
@@ -1160,6 +1182,16 @@ if [ "$UCLOUD_NODE_ROLE" = sandbox ]; then
     $SUDO install -d -m 0755 -o root -g root "$(dirname "$UCLOUD_DIRECT_RUNSC")"
     $SUDO install -m 0755 -o root -g root "$UCLOUD_BUNDLED_DIRECT_RUNSC" "$UCLOUD_DIRECT_RUNSC"
     printf '%s  %s\n' "$UCLOUD_BUNDLED_DIRECT_RUNSC_SHA256" "$UCLOUD_DIRECT_RUNSC" | sha256sum --check --status -
+    if [ "$UCLOUD_DIRECT_RUNSC_COMMIT" = {GVISOR_COMMIT} ]; then
+      $SUDO install -d -m 0755 -o root -g root "$(dirname "$UCLOUD_DIRECT_RUNSC")/gvisor-bin"
+      for sidecar in {" ".join(GVISOR_SIDECARS)}; do
+        $SUDO install -m 0755 -o root -g root \
+          "$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/direct/gvisor-bin/$sidecar" \
+          "$(dirname "$UCLOUD_DIRECT_RUNSC")/gvisor-bin/$sidecar"
+        cmp "$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/direct/gvisor-bin/$sidecar" \
+          "$(dirname "$UCLOUD_DIRECT_RUNSC")/gvisor-bin/$sidecar"
+      done
+    fi
     "$UCLOUD_DIRECT_RUNSC" --version >/dev/null
     echo "Installing bundle-verified managed-process init"
     $SUDO install -m 0755 -o root -g root "$UCLOUD_BUNDLED_MANAGED_INIT" "$UCLOUD_MANAGED_INIT"

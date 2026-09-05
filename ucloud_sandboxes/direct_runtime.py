@@ -13,6 +13,7 @@ from .direct_registry import DirectSandboxRegistry
 from .direct_service import DirectSandboxService
 from .direct_warden import DirectRunscWarden, DirectRunscWardenConfig
 from .hibernation import HibernationRuntimeFingerprint
+from .gvisor_distribution import installed_sidecar_fingerprints
 from .image_rootfs import DockerOverlay2RootfsStore, OverlayRootfsManager
 from .storage_native_daemon import StorageNativeNodeClient
 from .telemetry import Telemetry
@@ -59,16 +60,18 @@ def build_direct_runtime_service(
     resolved_image_cache_root.mkdir(mode=0o700, parents=True, exist_ok=True)
     volume_mount_root.mkdir(mode=0o700, parents=True, exist_ok=True)
     runsc_digest = _sha256_file(runsc)
-    boot_digest = _canonical_sha256(
-        {
-            "network": network,
-            "platform": "systrap",
-            # These identifiers describe the only shipped mounted-overlay and
-            # storage-native layout; changing either must fence old snapshots.
-            "rootfs_format": "ucloud-overlay2-rootfs-v1",
-            "quota_layout": "storage-native-v1",
-        }
-    )
+    boot_settings: dict[str, object] = {
+        "network": network,
+        "platform": "systrap",
+        "rootfs_format": "ucloud-overlay2-rootfs-v1",
+        "quota_layout": "storage-native-v1",
+    }
+    companions = installed_sidecar_fingerprints(runsc, runsc_commit)
+    if companions:
+        # Preserve legacy fingerprints, but bind new checkpoints to every
+        # executable that can implement their kernel and restore operations.
+        boot_settings["gvisor_companions"] = companions
+    boot_digest = _canonical_sha256(boot_settings)
     fingerprint = HibernationRuntimeFingerprint(
         runsc_sha256=runsc_digest,
         runsc_commit=runsc_commit,

@@ -1,5 +1,7 @@
 # Patched gVisor 20260817 integration
 
+Subsequent production rollout: [0.5.28 UCloud deployment](gvisor-deployment-2026-09-05.md).
+
 The active build now targets gVisor `20260817.0`, commit
 `50e1502a95d36ad2faf2c7ef33b8bf21fe975293`. The port preserves disk-backed
 application memory, quota ownership, two-phase hibernation capture, CPU startup

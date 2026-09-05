@@ -2,7 +2,8 @@
 """Repack a qualified node bundle with a new agent wheel and storage backend.
 
 This intentionally preserves the source bundle's OS packages, kernel-module
-closure, runsc, and managed init.  It is useful when those expensive artifacts
+closure. Runtime replacement is explicit and validates the complete pinned
+gVisor distribution before updating the manifest.  It is useful when those expensive artifacts
 have already been qualified for an unchanged OS image, but the pure-Python node
 agent or the content-addressed storage backend has changed.
 """
@@ -27,7 +28,11 @@ import tempfile
 import zipfile
 
 from ucloud_sandboxes.vm_init import PINNED_STORAGE_NATIVE_AGENTENV_COMMIT
-from ucloud_sandboxes.gvisor_distribution import GVISOR_COMMIT, GVISOR_SIDECARS
+from ucloud_sandboxes.gvisor_distribution import (
+    GVISOR_COMMIT,
+    GVISOR_SIDECARS,
+    distribution_files,
+)
 
 
 EXPECTED_STORAGE_PATCHES = [
@@ -427,8 +432,48 @@ def build_bundle(root: Path, manifest_bytes: bytes, output: Path) -> None:
     )
 
 
+def replace_direct_runtime(
+    root: Path, manifest: dict, runsc: Path, commit: str, managed_init: Path
+) -> None:
+    """Replace a sandbox runtime only after validating all release inputs."""
+    runtime = manifest["runtime"]
+    if runtime.get("role") != "sandbox":
+        raise ValueError("direct runtime replacement requires a sandbox bundle")
+    if commit != GVISOR_COMMIT:
+        raise ValueError("replacement runtime must use the qualified gVisor pin")
+    companions = distribution_files(runsc, commit)
+    info = managed_init.lstat()
+    if not stat.S_ISREG(info.st_mode) or not info.st_mode & 0o111:
+        raise ValueError("managed init must be a regular executable")
+    direct = root / "runtime/direct"
+    if direct.exists():
+        shutil.rmtree(direct)
+    direct.mkdir(parents=True)
+
+    def install(source: Path, relative: str) -> dict:
+        destination = direct / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+        return {
+            "file": "runtime/direct/" + relative,
+            "size": destination.stat().st_size,
+            "sha256": sha256_file(destination),
+        }
+
+    runtime["direct_runsc"] = {
+        **install(runsc, "runsc"),
+        "commit": commit,
+        "sidecars": [install(source, relative) for source, relative in companions],
+    }
+    runtime["managed_init"] = install(managed_init, "ucloud-sandbox-init")
+    shutil.copy2(runsc.parent / "build-manifest.json", direct / "build-manifest.json")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--direct-runsc", type=Path)
+    parser.add_argument("--direct-runsc-commit")
+    parser.add_argument("--managed-init", type=Path)
     parser.add_argument("--source", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--wheel", required=True, type=Path)
@@ -464,6 +509,11 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    replacement = (args.direct_runsc, args.direct_runsc_commit, args.managed_init)
+    if any(replacement) and not all(replacement):
+        raise SystemExit(
+            "--direct-runsc, --direct-runsc-commit and --managed-init are required together"
+        )
     inputs = (
         args.source,
         args.wheel,
@@ -480,7 +530,9 @@ def main() -> None:
             "--kernel-release and --kernel-module-dir must be supplied together"
         )
     if args.kernel_module_dir is not None and not args.kernel_module_dir.is_dir():
-        raise SystemExit(f"kernel module directory does not exist: {args.kernel_module_dir}")
+        raise SystemExit(
+            f"kernel module directory does not exist: {args.kernel_module_dir}"
+        )
     if args.output.resolve() == args.source.resolve():
         raise SystemExit("output must not replace the qualified source bundle")
     if args.agent_runtime_root is not None:
@@ -490,8 +542,7 @@ def main() -> None:
             )
         if args.agent_dependency_wheel:
             raise SystemExit(
-                "--agent-dependency-wheel cannot be combined with "
-                "--agent-runtime-root"
+                "--agent-dependency-wheel cannot be combined with --agent-runtime-root"
             )
 
     storage_build = validate_storage_build(
@@ -554,6 +605,8 @@ def main() -> None:
                 if not module.is_file():
                     continue
                 shutil.copyfile(module, target_kernel_dir / module.name)
+        if args.direct_runsc is not None:
+            replace_direct_runtime(bundle_root, manifest, *replacement)
         manifest_bytes = update_manifest(
             manifest,
             agent_archive=agent_archive,
@@ -568,6 +621,7 @@ def main() -> None:
                 else None
             ),
         )
+        validate_source_bundle(bundle_root, manifest)
         build_bundle(bundle_root, manifest_bytes, args.output)
 
     print(f"bundle={args.output}")

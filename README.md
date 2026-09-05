@@ -25,6 +25,8 @@ under `docs/`, not in this overview.
   benchmark workloads.
 - [API reference](docs/api-reference.md): heartbeat, gateway, sandbox, image,
   prepare, exec, file, dashboard, and node-agent endpoints.
+- [Linux environments](docs/linux-environments.md): userspace profiles, path and
+  identity contracts, realism limits, and live compatibility qualification.
 - [Architecture](docs/architecture.md): control plane, builder, registry,
   routing, resource placement, disk quota, and networking design notes.
 - [Compute provider portability](docs/provider-portability.md): provider

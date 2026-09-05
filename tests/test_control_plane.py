@@ -2006,9 +2006,18 @@ class ControlPlaneTests(unittest.TestCase):
 
     def test_authenticated_node_requests_with_bodies_close_connections(self) -> None:
         client_ports: list[int] = []
+        release_connections = Event()
 
         class EarlyRejectingNode(BaseHTTPRequestHandler):
             protocol_version = "HTTP/1.1"
+
+            def handle(self) -> None:
+                self.close_connection = True
+                self.handle_one_request()
+                # Keep the response socket alive until both attempts finish.
+                # Closing with unread request bytes can reset TCP before the
+                # client reads the response, depending on kernel scheduling.
+                release_connections.wait(10)
 
             def do_POST(self) -> None:
                 # Deliberately reject without consuming the request body. A
@@ -2018,6 +2027,8 @@ class ControlPlaneTests(unittest.TestCase):
                 self.send_response(400)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
+                if self.headers.get("Connection", "").lower() == "close":
+                    self.send_header("Connection", "close")
                 self.end_headers()
                 self.wfile.write(body)
 
@@ -2041,22 +2052,15 @@ class ControlPlaneTests(unittest.TestCase):
                             method="POST",
                             headers={"Authorization": "Bearer node-secret"},
                         )
-                        try:
-                            with control_plane._open_node_request(
-                                req,
-                                timeout=5,
-                                authenticated=True,
-                            ) as response:
-                                self.assertEqual(response.status, 400)
-                                self.assertEqual(
-                                    response.read(), b'{"intentional":true}'
-                                )
-                        except error.URLError:
-                            # Some kernels reset a closing TCP connection that
-                            # still has unread inbound bytes. That is a safe
-                            # transport failure; it must not be pooled.
-                            pass
+                        with control_plane._open_node_request(
+                            req,
+                            timeout=5,
+                            authenticated=True,
+                        ) as response:
+                            self.assertEqual(response.status, 400)
+                            self.assertEqual(response.read(), b'{"intentional":true}')
             finally:
+                release_connections.set()
                 pool.clear()
 
         self.assertEqual(len(client_ports), 2)
@@ -4393,7 +4397,9 @@ class ControlPlaneTests(unittest.TestCase):
     def test_external_registry_images_do_not_use_managed_registry_leases(self) -> None:
         class RejectingRegistryUsageStore:
             def __getattr__(self, name: str):
-                raise AssertionError(f"external image reached usage store through {name}")
+                raise AssertionError(
+                    f"external image reached usage store through {name}"
+                )
 
         with _temporary_root() as raw_path:
             gateway = _gateway_server(
@@ -5577,9 +5583,7 @@ class ControlPlaneTests(unittest.TestCase):
                 )
             finally:
                 with control_plane._IMAGE_WARMUP_TASKS_GUARD:
-                    control_plane._IMAGE_WARMUP_TASKS.discard(
-                        ("prepare-1", "node-1")
-                    )
+                    control_plane._IMAGE_WARMUP_TASKS.discard(("prepare-1", "node-1"))
 
         self.assertIsNotNone(matching)
         self.assertEqual(matching.warmup_id, "prepare-1")

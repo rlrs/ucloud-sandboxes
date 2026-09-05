@@ -174,8 +174,7 @@ class RegistryStoreConfig:
             )
             if not Path(data_root).is_relative_to(Path(mount_point)):
                 raise ValueError(
-                    "registry_store.data_root must be inside "
-                    "registry_store.mount_point"
+                    "registry_store.data_root must be inside registry_store.mount_point"
                 )
             if result.endpoint or result.bucket or result.region or result.prefix:
                 raise ValueError(
@@ -409,6 +408,7 @@ class DeploymentConfig:
     policy: ScalePolicy
     sandbox: SandboxPoolConfig
     builder: BuilderPoolConfig
+    node_package_root: str = DEFAULT_INSTALL_ROOT + "/release"
 
     @classmethod
     def default(cls, scope_id: str = "project-id") -> "DeploymentConfig":
@@ -465,6 +465,7 @@ class DeploymentConfig:
     def from_dict(cls, raw: object) -> "DeploymentConfig":
         if not isinstance(raw, dict):
             raise ValueError("deployment config must be a JSON object")
+        raw = {"node_package_root": DEFAULT_INSTALL_ROOT + "/release", **raw}
         expected = {item.name for item in fields(cls)}
         schema = _require_int("schema", raw.get("schema"), minimum=1)
         if schema != DEPLOYMENT_CONFIG_SCHEMA:
@@ -501,6 +502,9 @@ class DeploymentConfig:
             deployment_id=_require_string("deployment_id", raw["deployment_id"]),
             provider=provider,
             data_root=_require_absolute_path("data_root", raw["data_root"]),
+            node_package_root=_require_absolute_path(
+                "node_package_root", raw["node_package_root"]
+            ),
             registry_store=registry_store,
             gateway_private_host=_require_string(
                 "gateway_private_host", raw["gateway_private_host"]
@@ -646,10 +650,10 @@ class DeploymentConfig:
         return self._state_file("ssh/gateway-init.pub")
 
     def sandbox_node_package_bundle(self) -> Path:
-        return Path(DEFAULT_INSTALL_ROOT) / "release/sandbox-node-package.tar.gz"
+        return Path(self.node_package_root) / "sandbox-node-package.tar.gz"
 
     def builder_node_package_bundle(self) -> Path:
-        return Path(DEFAULT_INSTALL_ROOT) / "release/builder-node-package.tar.gz"
+        return Path(self.node_package_root) / "builder-node-package.tar.gz"
 
     def registry_data_dir(self) -> Path:
         if self.registry_store.kind != "filesystem":
@@ -693,8 +697,7 @@ class DeploymentConfig:
     @property
     def heartbeat_url(self) -> str:
         return (
-            f"http://{self.gateway_private_host}:{self.gateway_port}"
-            "/v1/nodes/heartbeat"
+            f"http://{self.gateway_private_host}:{self.gateway_port}/v1/nodes/heartbeat"
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -713,6 +716,11 @@ class DeploymentConfig:
             "deployment_id": self.deployment_id,
             "provider": provider,
             "data_root": self.data_root,
+            **(
+                {"node_package_root": self.node_package_root}
+                if self.node_package_root != DEFAULT_INSTALL_ROOT + "/release"
+                else {}
+            ),
             "registry_store": asdict(self.registry_store),
             "gateway_private_host": self.gateway_private_host,
             "registry_private_ip": self.registry_private_ip,

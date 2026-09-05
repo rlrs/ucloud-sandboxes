@@ -1,0 +1,11 @@
+{
+  "rules": [
+    {
+      "taskset": "swerebench-v2",
+      "source_prefix": "prime/primeintellect/",
+      "target_prefix": "docker.io/swerebenchv2/",
+      "provenance": "https://huggingface.co/datasets/PrimeIntellect/SWE-rebench-V2-Filtered-Verified#dataset-generation",
+      "reason": "The dataset publisher documents rewriting docker.io/swerebenchv2/ to prime/primeintellect/ without changing the remaining name/tag. Reverse that taskset-specific rewrite for OCI runtimes."
+    }
+  ]
+}

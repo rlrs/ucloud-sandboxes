@@ -263,7 +263,6 @@ class FakeOverlays:
         spec_sha256,
         imported_parked=False,
     ):
-        del config_template
         incarnation = f"{sandbox_id}.sandbox-{sandbox_generation}"
         writable = self.writable_root / incarnation
         if not writable.is_dir():
@@ -276,6 +275,9 @@ class FakeOverlays:
         bundle = self.bundle_root / incarnation
         merged = bundle / "rootfs"
         merged.mkdir(parents=True)
+        (bundle / "config.json").write_text(
+            json.dumps(config_template), encoding="utf-8"
+        )
         sandbox = DirectSandbox(
             sandbox_id=sandbox_id,
             sandbox_generation=sandbox_generation,

@@ -14,6 +14,11 @@ from threading import Condition, RLock
 from typing import Any, Iterator, Protocol
 
 from .hibernation import hibernation_disk_reservation_mb
+from .guest_paths import (
+    validate_guest_path,
+    validate_setup_path,
+    validate_workspace_path,
+)
 from .models import ResourceQuantity, utc_now
 
 
@@ -24,8 +29,7 @@ SANDBOX_RESERVED_LABEL_PREFIX = "ucloud-sandboxes."
 DEFAULT_SANDBOX_USER = "1000:1000"
 DEFAULT_PIDS_LIMIT = 256
 SECURITY_VALUE_RE = re.compile(r"^[A-Za-z0-9_.:@/-]+$")
-CONTAINER_PATH_RE = re.compile(r"^/[A-Za-z0-9_./-]+$")
-SANDBOX_PROFILES = {"container", "linux_host"}
+SANDBOX_PROFILES = {"container", "linux_host", "linux_session"}
 DEFAULT_LINUX_HOST_WRITABLE_PATHS = (
     "/run",
     "/run/lock",
@@ -247,7 +251,7 @@ class SandboxFilesystemSpec:
         )
 
     def validate(self) -> None:
-        validate_container_path("workspace_path", self.workspace_path)
+        validate_workspace_path(self.workspace_path)
         if self.tmpfs_mb <= 0:
             raise ValueError("tmpfs_mb must be positive.")
         if self.run_tmpfs_mb <= 0:
@@ -290,7 +294,7 @@ class SandboxLinuxHostSpec:
 
     def validate(self) -> None:
         for path in self.writable_paths:
-            validate_container_path("linux_host writable path", path)
+            validate_setup_path("linux_host writable path", path)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -369,10 +373,36 @@ class SandboxSpec:
     parkable: bool = False
     managed_process: bool = False
     ssh: SandboxSshSpec = SandboxSshSpec()
-    security: SandboxSecuritySpec = SandboxSecuritySpec()
-    filesystem: SandboxFilesystemSpec = SandboxFilesystemSpec()
-    linux_host: SandboxLinuxHostSpec = SandboxLinuxHostSpec()
+    security: SandboxSecuritySpec | None = None
+    filesystem: SandboxFilesystemSpec | None = None
+    linux_host: SandboxLinuxHostSpec | None = None
     labels: dict[str, str] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.security is None:
+            object.__setattr__(
+                self,
+                "security",
+                linux_host_default_security()
+                if self.profile == "linux_host"
+                else SandboxSecuritySpec(),
+            )
+        if self.filesystem is None:
+            object.__setattr__(
+                self,
+                "filesystem",
+                linux_host_default_filesystem()
+                if self.profile in {"linux_host", "linux_session"}
+                else SandboxFilesystemSpec(),
+            )
+        if self.linux_host is None:
+            object.__setattr__(
+                self,
+                "linux_host",
+                SandboxLinuxHostSpec(writable_paths=())
+                if self.profile == "linux_session"
+                else SandboxLinuxHostSpec(),
+            )
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "SandboxSpec":
@@ -405,13 +435,27 @@ class SandboxSpec:
         command_items = _json_string_list(raw.get("command", []), "command")
         env = _json_string_map(raw.get("env", {}), "env")
         labels = _json_string_map(raw.get("labels", {}), "labels")
-        security = SandboxSecuritySpec.from_dict(raw.get("security"))
-        filesystem = SandboxFilesystemSpec.from_dict(raw.get("filesystem"))
+        security_raw = raw.get("security")
+        filesystem_raw = raw.get("filesystem")
         if profile == "linux_host":
-            if raw.get("security") is None:
-                security = linux_host_default_security()
-            if raw.get("filesystem") is None:
-                filesystem = linux_host_default_filesystem()
+            if security_raw is None or isinstance(security_raw, dict):
+                security_raw = {
+                    **linux_host_default_security().to_dict(),
+                    **(security_raw or {}),
+                }
+        if profile in {"linux_host", "linux_session"}:
+            if filesystem_raw is None or isinstance(filesystem_raw, dict):
+                filesystem_raw = {
+                    **linux_host_default_filesystem().to_dict(),
+                    **(filesystem_raw or {}),
+                }
+        security = SandboxSecuritySpec.from_dict(security_raw)
+        filesystem = SandboxFilesystemSpec.from_dict(filesystem_raw)
+        linux_host_raw = raw.get("linux_host")
+        if profile == "linux_session" and (
+            linux_host_raw is None or isinstance(linux_host_raw, dict)
+        ):
+            linux_host_raw = {"writable_paths": [], **(linux_host_raw or {})}
         return cls(
             id=_json_string(raw.get("id", ""), "id"),
             image=_json_string(raw.get("image", ""), "image"),
@@ -451,7 +495,7 @@ class SandboxSpec:
             ssh=SandboxSshSpec.from_dict(raw.get("ssh")),
             security=security,
             filesystem=filesystem,
-            linux_host=SandboxLinuxHostSpec.from_dict(raw.get("linux_host")),
+            linux_host=SandboxLinuxHostSpec.from_dict(linux_host_raw),
             labels=labels,
         )
 
@@ -817,85 +861,57 @@ def linux_host_default_filesystem() -> SandboxFilesystemSpec:
 def linux_host_entrypoint_script() -> str:
     return r"""set -eu
 
-install_service_shim() {
-  if command -v service >/dev/null 2>&1; then
-    return 0
-  fi
-  mkdir -p /usr/local/bin 2>/dev/null || return 0
-  cat > /usr/local/bin/service <<'UCLOUD_SERVICE_SHIM'
-#!/bin/sh
-name="${1:-}"
-action="${2:-}"
-case "$name:$action" in
-  cron:start|crond:start)
-    if command -v cron >/dev/null 2>&1; then cron >/tmp/ucloud-cron.log 2>&1 || true; exit 0; fi
-    if command -v crond >/dev/null 2>&1; then crond >/tmp/ucloud-cron.log 2>&1 || true; exit 0; fi
-    exit 0
-    ;;
-  ssh:start|sshd:start)
-    if command -v sshd >/dev/null 2>&1; then sshd >/tmp/ucloud-sshd.log 2>&1 || true; exit 0; fi
-    if [ -x /usr/sbin/sshd ]; then /usr/sbin/sshd >/tmp/ucloud-sshd.log 2>&1 || true; exit 0; fi
-    exit 0
-    ;;
-esac
-exit 0
-UCLOUD_SERVICE_SHIM
-  chmod +x /usr/local/bin/service 2>/dev/null || true
-}
-
 prepare_paths() {
   old_ifs="$IFS"
   IFS=:
+  set -f
   for path in ${UCLOUD_SANDBOX_LINUX_HOST_PATHS:-}; do
     [ -n "$path" ] || continue
-    mkdir -p -- "$path" 2>/dev/null || true
+    if [ ! -d "$path" ]; then
+      mkdir -p -- "$path" || { echo "cannot prepare sandbox directory: $path" >&2; exit 1; }
+    fi
   done
+  set +f
   IFS="$old_ifs"
-  chmod 1777 /tmp /var/tmp 2>/dev/null || true
-  chmod 0777 /tests /logs /logs/agent /logs/verifier /task /oracle /workspace 2>/dev/null || true
 }
 
 start_cron() {
   [ "${UCLOUD_SANDBOX_ENABLE_CRON:-0}" = "1" ] || return 0
-  if command -v service >/dev/null 2>&1; then
-    service cron start >/tmp/ucloud-cron.log 2>&1 || service crond start >/tmp/ucloud-cron.log 2>&1 || true
-  fi
   if command -v cron >/dev/null 2>&1; then
-    cron >/tmp/ucloud-cron.log 2>&1 || true
-    return 0
-  fi
-  if command -v crond >/dev/null 2>&1; then
-    crond >/tmp/ucloud-cron.log 2>&1 || true
+    cron
+  elif command -v crond >/dev/null 2>&1; then
+    crond
+  else
+    echo "cron was requested but neither cron nor crond is installed" >&2
+    exit 1
   fi
 }
 
 start_sshd() {
   [ "${UCLOUD_SANDBOX_ENABLE_SSHD:-0}" = "1" ] || return 0
   user="${UCLOUD_SANDBOX_SSH_USER:-root}"
-  home_dir="$(getent passwd "$user" 2>/dev/null | awk -F: '{print $6}' || true)"
-  [ -n "$home_dir" ] || home_dir=/root
-  mkdir -p "$home_dir/.ssh" /run/sshd 2>/dev/null || true
+  home_dir="$(getent passwd "$user" | awk -F: '{print $6}')"
+  [ -n "$home_dir" ] || { echo "SSH user has no home: $user" >&2; exit 1; }
+  mkdir -p "$home_dir/.ssh" /run/sshd
   if [ -n "${UCLOUD_SANDBOX_SSH_AUTHORIZED_KEYS:-}" ]; then
-    printf '%s\n' "$UCLOUD_SANDBOX_SSH_AUTHORIZED_KEYS" > "$home_dir/.ssh/authorized_keys" 2>/dev/null || true
-    chmod 700 "$home_dir/.ssh" 2>/dev/null || true
-    chmod 600 "$home_dir/.ssh/authorized_keys" 2>/dev/null || true
-    chown -R "$user" "$home_dir/.ssh" 2>/dev/null || true
+    printf '%s\n' "$UCLOUD_SANDBOX_SSH_AUTHORIZED_KEYS" > "$home_dir/.ssh/authorized_keys"
+    chmod 700 "$home_dir/.ssh"
+    chmod 600 "$home_dir/.ssh/authorized_keys"
+    chown "$user" "$home_dir/.ssh" "$home_dir/.ssh/authorized_keys"
   fi
-  if command -v ssh-keygen >/dev/null 2>&1; then
-    ssh-keygen -A >/tmp/ucloud-ssh-keygen.log 2>&1 || true
-  fi
-  sshd_path=
+  ssh-keygen -A
   if command -v sshd >/dev/null 2>&1; then
     sshd_path="$(command -v sshd)"
   elif [ -x /usr/sbin/sshd ]; then
     sshd_path=/usr/sbin/sshd
+  else
+    echo "sshd was requested but is not installed" >&2
+    exit 1
   fi
-  if [ -n "$sshd_path" ]; then
-    "$sshd_path" -p "${UCLOUD_SANDBOX_SSH_PORT:-22}" >/tmp/ucloud-sshd.log 2>&1 || true
-  fi
+  "$sshd_path" -t
+  "$sshd_path" -p "${UCLOUD_SANDBOX_SSH_PORT:-22}"
 }
 
-install_service_shim
 prepare_paths
 start_cron
 start_sshd
@@ -992,11 +1008,4 @@ def validate_security_value(name: str, value: str) -> None:
 
 
 def validate_container_path(name: str, value: str) -> None:
-    if not value.startswith("/"):
-        raise ValueError(f"{name} must be an absolute container path.")
-    if "\n" in value or "\r" in value or ":" in value or "," in value:
-        raise ValueError(f"{name} contains unsupported characters.")
-    if ".." in Path(value).parts:
-        raise ValueError(f"{name} cannot contain '..'.")
-    if not CONTAINER_PATH_RE.match(value):
-        raise ValueError(f"{name} contains unsupported characters.")
+    validate_guest_path(name, value)

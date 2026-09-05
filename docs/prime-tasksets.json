@@ -1,0 +1,299 @@
+{
+  "source_url": "https://github.com/PrimeIntellect-ai/research-environments",
+  "source_commit": "cb9cffdd0f08592081d281b3b38f30b62ae99edb",
+  "article_url": "https://www.primeintellect.ai/blog/scaling-agentic-rl",
+  "tasksets": [
+    {
+      "taskset": "swesmith-env",
+      "article_name": "swesmith",
+      "domain": "swe",
+      "package_path": "environments/swe/swesmith_env",
+      "mode": "all",
+      "source_sha256": {
+        "environments/swe/swesmith_env/swesmith_env/__init__.py": "f1485b665b2271d3109757ee9f59b0583c878908a00daca7a31ad77049e671e3",
+        "environments/swe/swesmith_env/swesmith_env/taskset.py": "c5c9d42c205fe9150156887d9d8bd9a1ad8117416769648a26a9a0e097c3554a",
+        "environments/swe/swesmith_env/pyproject.toml": "022d5a49900e3359c337c174cd55d6eaa836a35df8d3867e94b9faa0f63b5df4"
+      }
+    },
+    {
+      "taskset": "openswe",
+      "article_name": "openswe",
+      "domain": "swe",
+      "package_path": "environments/swe/openswe",
+      "mode": "all",
+      "source_sha256": {
+        "environments/swe/openswe/openswe/__init__.py": "31f5c94ad80280a59632f1ae77bee18f66ccbaf04426b59e0ce2eae10f40ff3f",
+        "environments/swe/openswe/openswe/taskset.py": "65a08181a98999ddc16f1afc7d03810df6f8cf35d76745331d5e3b24e1c3ec6e",
+        "environments/swe/openswe/pyproject.toml": "17aa739eb88ed1ac879c06ba0d5e238a6657a4885adcd357b6bf7cd3c931b1a6"
+      }
+    },
+    {
+      "taskset": "swerebench-v2",
+      "article_name": "swerebench_v2",
+      "domain": "swe",
+      "package_path": "environments/swe/swerebench_v2",
+      "mode": "all",
+      "source_sha256": {
+        "environments/swe/swerebench_v2/swerebench_v2/__init__.py": "c2280c7f9e3ab779777c42980331bcd9b068489fe2691285f8f8805300e130e2",
+        "environments/swe/swerebench_v2/swerebench_v2/log_parsers.py": "4e04e18254dd050aa9ddc3af03525e87c6d66f38d0a7d750506fb79ea1dd7035",
+        "environments/swe/swerebench_v2/swerebench_v2/taskset.py": "f4deceb49d30c7be72c3c98fbcde8d5ab1d2fe971ca00cd4cf8c370eb4c65684",
+        "environments/swe/swerebench_v2/swerebench_v2/test_patch.py": "15baa8eaea44786f37b15aadafbabdf5ca0a4a25d58436653465c83716a484f4",
+        "environments/swe/swerebench_v2/tests/test_swerebench_v2.py": "8e632066f75a2a2318b2777ea23f1d506e39b46097dbedf5207cc9ee91b2e10e",
+        "environments/swe/swerebench_v2/pyproject.toml": "343bdd2ce8539463bdd0e2729d4d1971b0e60b29b36ed656a016e1c3e89f4584"
+      }
+    },
+    {
+      "taskset": "scaleswe",
+      "article_name": "scaleswe",
+      "domain": "swe",
+      "package_path": "environments/swe/scaleswe",
+      "mode": "all",
+      "source_sha256": {
+        "environments/swe/scaleswe/scaleswe/__init__.py": "84a704609626a454f528533dea82cebd05b9df9557733a9fa66f39b0e1fa3fbb",
+        "environments/swe/scaleswe/scaleswe/score.py": "7de17a9ba612b569894ff0c95b5331de8c0011cc7e5f1d7705bfad47f9076819",
+        "environments/swe/scaleswe/scaleswe/taskset.py": "f5615735392fbd000d8370261167cda1007e1687f7371d25c97d402058649b1c",
+        "environments/swe/scaleswe/pyproject.toml": "cecd8eb8f7ecd573d80e572200baf7e58425da545f1f5492a6a12b46cfc79ec4"
+      }
+    },
+    {
+      "taskset": "swelego",
+      "article_name": "swelego",
+      "domain": "swe",
+      "package_path": "environments/swe/swelego",
+      "mode": "all",
+      "source_sha256": {
+        "environments/swe/swelego/swelego/__init__.py": "d878ac9e0c16b74452c5df7ff91083b9bd9d88c793598d7c84a974289a872073",
+        "environments/swe/swelego/swelego/taskset.py": "d1ddde71120757f0f110350d9236eaa77ec570d2128ca38cc1de402d914647c0",
+        "environments/swe/swelego/pyproject.toml": "00d027fa6adfa712511553dd60d1f588a4265a4db8bc7ca437389d25ef07f7f6"
+      }
+    },
+    {
+      "taskset": "multiswe",
+      "article_name": "multiswe",
+      "domain": "swe",
+      "package_path": "environments/swe/multiswe",
+      "mode": "all",
+      "source_sha256": {
+        "environments/swe/multiswe/multiswe/__init__.py": "fb6c4c1dee64710c023450109e55b5a066b856dd824345d797cdc22f4549a084",
+        "environments/swe/multiswe/multiswe/_qiskit/__init__.py": "4a8c429eac6cf694a4de9e6aaacc68996fd13c886ec702e1840129388b738f9c",
+        "environments/swe/multiswe/multiswe/_qiskit/qiskit.py": "4e9f2db521f0864d21e6a426be40056ac33235a71334c57d966b45be452110d1",
+        "environments/swe/multiswe/multiswe/taskset.py": "9d6a711c60028bf8b4d3859f288e5ea74c92dc72feecf93e1456bb2d3cd36847",
+        "environments/swe/multiswe/pyproject.toml": "10a958b88bc6d8ac0f40318686e941b0a0c2142977ac1286d9d935016044ae50"
+      }
+    },
+    {
+      "taskset": "r2e-gym",
+      "article_name": "r2e_gym",
+      "domain": "swe",
+      "package_path": "environments/swe/r2e_gym",
+      "mode": "all",
+      "source_sha256": {
+        "environments/swe/r2e_gym/r2e_gym/__init__.py": "5be3c266710dbb6a1073f84524c8da5d11bb34a62f708fc1a19673def7ad7532",
+        "environments/swe/r2e_gym/r2e_gym/taskset.py": "0e62501e6066efa0ef7de4ebf28e1c0096c56841f486efbbb8f3126f5b99fe8e",
+        "environments/swe/r2e_gym/pyproject.toml": "da53e8f86ba114e66329d285963163b8053f3605f0dade2106cfd6646310f78f"
+      }
+    },
+    {
+      "taskset": "swebench-pro",
+      "article_name": "swebench_pro",
+      "domain": "swe",
+      "package_path": "environments/swe/swebench_pro",
+      "mode": "all",
+      "source_sha256": {
+        "environments/swe/swebench_pro/swebench_pro/__init__.py": "75e2949ef80d5c8d8dd46c987aed6796f52f9b0018eadc7d63ab478130ba6566",
+        "environments/swe/swebench_pro/swebench_pro/taskset.py": "47a8b5f5e901f6845877875939b8191f39d477480d86fe4094ab9833f22135e6",
+        "environments/swe/swebench_pro/pyproject.toml": "174458f737d15441cc364099812317a2c5fd8b8dad161ef71a36d8ee0b91b770"
+      }
+    },
+    {
+      "taskset": "swebench-verified",
+      "article_name": "swebench_verified",
+      "domain": "swe",
+      "package_path": "environments/swe/swebench_verified",
+      "mode": "all",
+      "source_sha256": {
+        "environments/swe/swebench_verified/swebench_verified/__init__.py": "04bacd92941a9d84391685f76c33240e92e25fc8ffbee2f18e0171c568ef66e0",
+        "environments/swe/swebench_verified/swebench_verified/taskset.py": "253a7b57cca09018535c2558690e9c0ef11d2c236c3642f2b2faf81ff4fcfd19",
+        "environments/swe/swebench_verified/pyproject.toml": "18c24033a86b0c34d08aa3ca0ea3eaa50b3ab2e89ae900088454af4705e22aea"
+      }
+    },
+    {
+      "taskset": "swebench-multilingual",
+      "article_name": "swebench_multilingual",
+      "domain": "swe",
+      "package_path": "environments/swe/swebench_multilingual",
+      "mode": "all",
+      "source_sha256": {
+        "environments/swe/swebench_multilingual/swebench_multilingual/__init__.py": "8500303b3475b454015329e5a4710c20156ed85a954ccbd0a1341c5eb9893550",
+        "environments/swe/swebench_multilingual/swebench_multilingual/taskset.py": "1b8e7da6785cc9615c35dc49ab4cd060f60d36a94747a9dbb3bdfe859d77ea7b",
+        "environments/swe/swebench_multilingual/pyproject.toml": "e05933b04d77865c4ae55f1d57dc5310da118aa7b24b65f79db1d86b9894c7a0"
+      }
+    },
+    {
+      "taskset": "senior-swe-bench",
+      "article_name": "senior_swe_bench",
+      "domain": "swe",
+      "package_path": "environments/swe/senior_swe_bench",
+      "mode": "all",
+      "source_sha256": {
+        "environments/swe/senior_swe_bench/senior_swe_bench/__init__.py": "7cfda63f6f155d029cd5384ee02b739f142d3621392bf73db6571f27d62216f4",
+        "environments/swe/senior_swe_bench/senior_swe_bench/taskset.py": "efee1b2a7ee5ed92339279da2aa35f364fc8de740417d28f36ba0d3b58d064a1",
+        "environments/swe/senior_swe_bench/pyproject.toml": "5fb7ec77ccee66b4c3dfafda3e266a08e0262b183e832e5e725d37fe475c1fe4"
+      }
+    },
+    {
+      "taskset": "tmax",
+      "article_name": "tmax",
+      "domain": "terminal",
+      "package_path": "environments/terminal/tmax",
+      "mode": "all",
+      "source_sha256": {
+        "environments/terminal/tmax/tmax/__init__.py": "1d4f67973fe4b2dd48f6ebd740a9ccc69036c891b0153a941f65a3c5589a7913",
+        "environments/terminal/tmax/tmax/taskset.py": "c016fbfa4d888fa146ee15511d502f60a3e8b6e07da71094522fad0433e1d098",
+        "environments/terminal/tmax/pyproject.toml": "684bc56f0e2f26bf9f7057909cc8a960076a1b4740e711592ce6337dee80f8f9"
+      }
+    },
+    {
+      "taskset": "terminal-lego",
+      "article_name": "terminal_lego",
+      "domain": "terminal",
+      "package_path": "environments/terminal/terminal_lego",
+      "mode": "all",
+      "source_sha256": {
+        "environments/terminal/terminal_lego/terminal_lego/__init__.py": "b42e82ba54a20cae203004f872dc50391b97d1679b4fe11f8430a5a292af5ea5",
+        "environments/terminal/terminal_lego/terminal_lego/taskset.py": "3d0ec09bfed336fa516e4adfa88c89ee0f8292a748fa98a57c43015788a31033",
+        "environments/terminal/terminal_lego/pyproject.toml": "5a08b71653739d97efd04b7d00421e2032780192a9fb887d050cc5d4f3e8f45e"
+      }
+    },
+    {
+      "taskset": "openthoughts-tblite",
+      "article_name": "openthoughts_tblite",
+      "domain": "terminal",
+      "package_path": "environments/terminal/openthoughts_tblite",
+      "mode": "all",
+      "source_sha256": {
+        "environments/terminal/openthoughts_tblite/openthoughts_tblite/__init__.py": "38e51259735596bc73395d3243231a36dc9fc56c62a98dbbf8154966de2df71e",
+        "environments/terminal/openthoughts_tblite/openthoughts_tblite/taskset.py": "1e5f084a970b759b27e970da798259ad284df1be8c60ae2d56be151dfff22636",
+        "environments/terminal/openthoughts_tblite/pyproject.toml": "4686de3b81716b8a783fe63b4d974090a25b004caa5fc957c0700d9c4d72c23b"
+      }
+    },
+    {
+      "taskset": "terminal-bench-2",
+      "article_name": "terminal_bench_2",
+      "domain": "terminal",
+      "package_path": "environments/terminal/terminal_bench_2",
+      "mode": "all",
+      "source_sha256": {
+        "environments/terminal/terminal_bench_2/terminal_bench_2/__init__.py": "1dff8112b3b5e1177b16b7857d5eec77af305becec23cb7cad592fe51e136c8b",
+        "environments/terminal/terminal_bench_2/terminal_bench_2/taskset.py": "151e51da5d2f3086fa41e96f98743ef19bc972d9dde067ea25714e845a4ff15d",
+        "environments/terminal/terminal_bench_2/pyproject.toml": "b7abf5320139804dd8024a0d639389e8d9edaa35848bc1b69e316978128b7aa4"
+      }
+    },
+    {
+      "taskset": "papersearchqa",
+      "article_name": "papersearchqa",
+      "domain": "search",
+      "package_path": "environments/search/papersearchqa",
+      "mode": "setup",
+      "source_sha256": {
+        "environments/search/papersearchqa/papersearchqa/__init__.py": "fc7caab36a6f9127735f5f1a9fe95549e4f9c7d9ac193b1b4aff8d50c335c1ea",
+        "environments/search/papersearchqa/papersearchqa/judge.py": "ea1fc66ed51931054dad01bace1dfbd9d307f7a711d5c3ba80d4c161e463f551",
+        "environments/search/papersearchqa/papersearchqa/taskset.py": "a83c6157e031b7a989a18671c914e55d9ab3c0df6b43838eadd23bd76a0964ff",
+        "environments/search/papersearchqa/pyproject.toml": "4d23f996d27b9ae2db113d9f0ab85c6fa86f7c836b453e617b796ba4824faa31"
+      }
+    },
+    {
+      "taskset": "wideseek",
+      "article_name": "wideseek",
+      "domain": "search",
+      "package_path": "environments/search/wideseek",
+      "mode": "setup",
+      "source_sha256": {
+        "environments/search/wideseek/wideseek/__init__.py": "040af9e50cfea2e8ea48655ee5c5854e9aceab13c7ce70f96722464aed8a0d2d",
+        "environments/search/wideseek/wideseek/judge.py": "eb6a957e162148652584e3eded9225ee9cb5503e1cca6e24200b1b83a35fc75c",
+        "environments/search/wideseek/wideseek/reward.py": "02c3056c6608cf513ccc9d67ef6163ee9cc3b0107e01d39b6aa2a0091443c96c",
+        "environments/search/wideseek/wideseek/taskset.py": "01c301e083fb1607b990211fa501423f7894994a3987df47d9d3934d8224cdd5",
+        "environments/search/wideseek/pyproject.toml": "24d796139b29157be5f6a95df79ff46ae83978c902125e0a9eacc27b06dd3e9b"
+      }
+    },
+    {
+      "taskset": "s1-deepresearch",
+      "article_name": "s1_deepresearch",
+      "domain": "search",
+      "package_path": "environments/search/s1_deepresearch",
+      "mode": "setup",
+      "source_sha256": {
+        "environments/search/s1_deepresearch/s1_deepresearch/__init__.py": "6ac95513c54fc780384b0d024e27a557452d64af2929e3d8fe71c814363892b2",
+        "environments/search/s1_deepresearch/s1_deepresearch/judge.py": "3011253f38a4137abff604da2e4c6b1f085c0b2db895d70191246c4a440aecdd",
+        "environments/search/s1_deepresearch/s1_deepresearch/taskset.py": "d1b6744992b3d623899d188bbc762859ea9aa323c64dff777112505f1cd246f4",
+        "environments/search/s1_deepresearch/pyproject.toml": "d058828b6d1ae72e8fdf6bd52ebeab8afdc949465f94f49c1dde7f9d0660b7c8"
+      }
+    },
+    {
+      "taskset": "openseeker",
+      "article_name": "openseeker",
+      "domain": "search",
+      "package_path": "environments/search/openseeker",
+      "mode": "setup",
+      "source_sha256": {
+        "environments/search/openseeker/openseeker/__init__.py": "188d103fe7509e7bf2da1a360b0c2dfa091c44b99e75333ed4089f418498840c",
+        "environments/search/openseeker/openseeker/judge.py": "4197b06446b65c95969795ac8ace0531c6feb34f57c419ca0317801ed7802995",
+        "environments/search/openseeker/openseeker/taskset.py": "c780212727d7721cfd1cea3bdb466300d7d9097ed419f6e39f7a3908a5835aa2",
+        "environments/search/openseeker/pyproject.toml": "73d4af93fa741caf90c9392aae600fccc6b70c1a0ab2955c03bffc23dbc8ab6d"
+      }
+    },
+    {
+      "taskset": "deepdive",
+      "article_name": "deepdive",
+      "domain": "search",
+      "package_path": "environments/search/deepdive",
+      "mode": "setup",
+      "source_sha256": {
+        "environments/search/deepdive/deepdive/__init__.py": "e7089300e44204a6f7a54a32727766ac2f63347bcaa05937350e15b4276a3481",
+        "environments/search/deepdive/deepdive/judge.py": "baf85016a3e54f70847abe6c36adeea2562f998dc1806ca0970610a565d37fbe",
+        "environments/search/deepdive/deepdive/taskset.py": "de83244b8f69938f05ff6230c2aeb46c990a3290827c7eab30c362ae62b1c774",
+        "environments/search/deepdive/pyproject.toml": "170bba3fb0e48dadd12585d69ee7cf4a7be9b6ba97e4afce1e18224a58a28be9"
+      }
+    },
+    {
+      "taskset": "browsecomp",
+      "article_name": "browsecomp",
+      "domain": "search",
+      "package_path": "environments/search/browsecomp",
+      "mode": "setup",
+      "source_sha256": {
+        "environments/search/browsecomp/browsecomp/__init__.py": "af6c612e9f846a3e4c35f841c9c1f0a8dcfb56fabb68f8dbeedd4e766f87d71d",
+        "environments/search/browsecomp/browsecomp/taskset.py": "d95983a8c42dba6238fac0017251414166bc1defe2b748b5412bf67202fb8957",
+        "environments/search/browsecomp/pyproject.toml": "7bec9c52af1b5e17fa2e7935496ea989cb89aea45683fa047fc811db136a16a5"
+      }
+    },
+    {
+      "taskset": "redsearcher",
+      "article_name": "redsearcher",
+      "domain": "search",
+      "package_path": "environments/search/redsearcher",
+      "mode": "setup",
+      "source_sha256": {
+        "environments/search/redsearcher/redsearcher/__init__.py": "e36fedc625f4e2b2fdf8a4fd9200caab65d95512c8aa7092d194b74c551584ef",
+        "environments/search/redsearcher/redsearcher/judge.py": "d8e85fe1d653ce42e849e5674e140a03596d27a74de15b7cc14aaa8035e460a4",
+        "environments/search/redsearcher/redsearcher/taskset.py": "4cc5350c2bc26583fa1e489d0730c626dff23328d97a3f8b19bc59f70c949474",
+        "environments/search/redsearcher/pyproject.toml": "6175ed10e03bc99894e3e7d2aaa106c9682479433a2303970c8aa8867178985e"
+      }
+    },
+    {
+      "taskset": "browsecomp-plus",
+      "article_name": "browsecomp_plus",
+      "domain": "search",
+      "package_path": "environments/search/browsecomp_plus",
+      "mode": "setup",
+      "source_sha256": {
+        "environments/search/browsecomp_plus/browsecomp_plus/__init__.py": "2e7a4b64598c7023ff5fc0de42b6cd6aa70bc484a675b80d3201d647b4dcf7a6",
+        "environments/search/browsecomp_plus/browsecomp_plus/corpus.py": "c378b6a3fda71e6e3444fd37fb5269352fffe842b482504ccf44e830aece08bd",
+        "environments/search/browsecomp_plus/browsecomp_plus/servers/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "environments/search/browsecomp_plus/browsecomp_plus/servers/search.py": "1db772dccc6050e12d0a8be87c41fdceaf4b07f737d6bfa89dd63db515f27d7d",
+        "environments/search/browsecomp_plus/browsecomp_plus/taskset.py": "01445aa3e2d9d7924a19555d60e30cbe14189a32ccb7762d5f8426e7565d836a",
+        "environments/search/browsecomp_plus/pyproject.toml": "3384fb2d008a705fefebfb4354aca3e745e1c8df054e72bdc36136c7e1e71923"
+      }
+    }
+  ]
+}

@@ -10,11 +10,11 @@ import tempfile
 from typing import Any
 
 from .image_rootfs import DockerImageConfig, MaterializedRootfs
+from .guest_identity import resolve_identity
 from .sandbox import SandboxSpec, linux_host_entrypoint_script
 
 
 _ENV_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
-_NUMERIC_USER = re.compile(r"([0-9]+)(?::([0-9]+))?\Z")
 _CAPABILITY = re.compile(r"(?:CAP_)?([A-Z0-9_]+)\Z")
 _LINUX_CAPABILITIES = {
     "AUDIT_CONTROL",
@@ -121,12 +121,41 @@ class DirectOciConfigBuilder:
             )
 
         image_config = image.image_config
-        args = () if spec.managed_process else self._process_args(spec, image_config)
+        try:
+            identity = resolve_identity(
+                image.rootfs, spec.security.user or image_config.user or "0"
+            )
+        except ValueError as exc:
+            raise DirectOciConfigError(str(exc)) from exc
+        args = (
+            ()
+            if spec.managed_process or spec.profile in {"linux_host", "linux_session"}
+            else self._process_args(spec, image_config)
+        )
         environment = self._environment(spec, image_config)
-        if spec.profile == "linux_host":
+        environment.setdefault(
+            "PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        )
+        if identity.home.startswith("/"):
+            environment.setdefault("HOME", identity.home)
+        elif spec.profile == "linux_session":
+            environment.setdefault("HOME", spec.filesystem.workspace_path)
+        if identity.name:
+            environment.setdefault("USER", identity.name)
+            environment.setdefault("LOGNAME", identity.name)
+        if identity.shell.startswith("/"):
+            environment.setdefault("SHELL", identity.shell)
+        if spec.profile == "linux_session":
+            environment["HOME"] = spec.env.get(
+                "HOME",
+                identity.home
+                if identity.home.startswith("/")
+                else spec.filesystem.workspace_path,
+            )
+        if spec.profile in {"linux_host", "linux_session"}:
             args = (
                 "/bin/sh",
-                "-lc",
+                "-c",
                 linux_host_entrypoint_script(),
                 "ucloud-linux-host",
                 *spec.command,
@@ -141,9 +170,7 @@ class DirectOciConfigBuilder:
                     "managed_process requires a configured managed-process init binary"
                 )
             self._validate_init_binary(self.managed_init_binary)
-            managed_uid, managed_gid = self._numeric_user(
-                spec.security.user or image_config.user or "0"
-            )
+            managed_uid, managed_gid = identity.uid, identity.gid
             args = (
                 "/.ucloud-job-init",
                 "supervise",
@@ -158,7 +185,7 @@ class DirectOciConfigBuilder:
             self._validate_init_binary(self.init_binary)
             args = ("/.ucloud-init", "--", *args)
 
-        uid, gid = self._numeric_user(spec.security.user or image_config.user or "0")
+        uid, gid = identity.uid, identity.gid
         if spec.managed_process:
             uid, gid = 0, 0
         capabilities = self._capabilities(spec)
@@ -371,18 +398,35 @@ class DirectOciConfigBuilder:
         contract before runsc starts because the overlay rootfs is otherwise
         populated entirely from the image and BusyBox has no /workspace.
         """
+        spec.filesystem.validate()
+        self._prepare_directory(rootfs, spec.filesystem.workspace_path, workspace=True)
+
+    def prepare_working_directory(self, rootfs: Path, *, directory: str) -> None:
+        """Create a missing OCI cwd; never rewrite existing image permissions."""
+        from .guest_paths import validate_guest_path
+
+        validate_guest_path("working_dir", directory)
+        if directory == "/":
+            return
+        self._prepare_directory(rootfs, directory, workspace=False)
+
+    def _prepare_directory(
+        self, rootfs: Path, directory: str, *, workspace: bool
+    ) -> None:
         if not rootfs.is_absolute() or not rootfs.is_dir() or rootfs.is_symlink():
             raise DirectOciConfigError(
                 "direct-runtime workspace target must be an absolute rootfs directory"
             )
         components = tuple(
             component
-            for component in Path(spec.filesystem.workspace_path).parts
-            if component != "/"
+            for component in directory.split("/")
+            if component not in {"", "."}
         )
-        if not components or any(
-            component in {"", ".", ".."} for component in components
-        ):
+        # Linux treats repeated leading slashes as root. Never pass a pathlib
+        # anchor such as "//" to openat: an absolute component ignores dir_fd.
+        if not components and not workspace:
+            return
+        if not components or ".." in components:
             raise DirectOciConfigError(
                 "direct-runtime workspace must name a directory below rootfs"
             )
@@ -393,7 +437,9 @@ class DirectOciConfigBuilder:
                 rootfs,
                 os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
             )
+            created = False
             for component in components:
+                created = False
                 try:
                     child_fd = os.open(
                         component,
@@ -407,12 +453,13 @@ class DirectOciConfigBuilder:
                         os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
                         dir_fd=directory_fd,
                     )
+                    created = True
                 os.close(directory_fd)
                 directory_fd = child_fd
-            # A workspace is private to one sandbox mount namespace. Making the
-            # directory writable avoids host uid mapping assumptions and
-            # matches the SDK contract for arbitrary numeric OCI users.
-            os.fchmod(directory_fd, 0o777)
+            # Preserve image ownership/modes. Only a newly created workspace is
+            # shared; the sticky bit protects entries from other guest users.
+            if created and workspace:
+                os.fchmod(directory_fd, 0o1777)
             os.fsync(directory_fd)
         except OSError as exc:
             raise DirectOciConfigError(
@@ -515,23 +562,18 @@ class DirectOciConfigBuilder:
 
     @staticmethod
     def _working_directory(spec: SandboxSpec, image: DockerImageConfig) -> str:
-        directory = spec.working_dir or image.working_dir or "/"
+        directory = (
+            spec.working_dir
+            or image.working_dir
+            or (
+                spec.filesystem.workspace_path
+                if spec.profile == "linux_session"
+                else "/"
+            )
+        )
         if not directory.startswith("/") or "\0" in directory:
             raise DirectOciConfigError("sandbox working directory must be absolute")
         return directory
-
-    @staticmethod
-    def _numeric_user(value: str) -> tuple[int, int]:
-        match = _NUMERIC_USER.fullmatch(value)
-        if match is None:
-            raise DirectOciConfigError(
-                "direct runtime requires a numeric OCI user (uid or uid:gid)"
-            )
-        uid = int(match.group(1))
-        gid = int(match.group(2) or match.group(1))
-        if uid > 2**32 - 2 or gid > 2**32 - 2:
-            raise DirectOciConfigError("OCI uid/gid is out of range")
-        return uid, gid
 
     @staticmethod
     def _capabilities(spec: SandboxSpec) -> set[str]:
@@ -650,7 +692,7 @@ class DirectOciConfigBuilder:
             ),
             "UCLOUD_SANDBOX_KEEP_ALIVE": ("1" if spec.linux_host.keep_alive else "0"),
             "UCLOUD_SANDBOX_LINUX_HOST_PATHS": ":".join(spec.linux_host.writable_paths),
-            "UCLOUD_SANDBOX_PROFILE": "linux_host",
+            "UCLOUD_SANDBOX_PROFILE": spec.profile,
             "UCLOUD_SANDBOX_SSH_PORT": str(spec.ssh.container_port),
             "UCLOUD_SANDBOX_SSH_USER": spec.ssh.user,
         }

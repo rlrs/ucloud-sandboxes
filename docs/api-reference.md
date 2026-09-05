@@ -364,7 +364,7 @@ use the explicit `"linux_host"` profile:
   "disk_mb": 4096,
   "network": "bridge",
   "linux_host": {
-    "enable_cron": true,
+    "enable_cron": false,
     "enable_sshd": false,
     "keep_alive": true,
     "writable_paths": ["/tests", "/logs/verifier", "/task", "/oracle"]
@@ -372,13 +372,19 @@ use the explicit `"linux_host"` profile:
 }
 ```
 
-`linux_host` starts the container through a shell bootstrap that prepares common
-host-like writable paths, installs a small `service` command shim when the
-image does not provide one, optionally starts cron/sshd when those binaries
-exist in the image, and keeps the container alive when no command is supplied.
-If no explicit `security` object is supplied, this profile uses root-oriented
-defaults rather than the hardened non-root defaults. It still runs under gVisor;
-it is not equivalent to a real VM or full `systemd` boot.
+`linux_host` starts a shell bootstrap that prepares benchmark directories without
+changing existing modes and keeps the container alive when no command is supplied.
+Cron/sshd are opt-in and must already be installed and correctly configured;
+requested services fail startup when they cannot start. No `service` shim is
+installed. This profile uses root-oriented defaults; partial security overrides
+inherit its remaining defaults.
+
+`linux_session` uses the same persistent shell startup with the restricted
+container security defaults, workspace cwd and identity-derived HOME. It
+preserves image PATH without sourcing login profiles. Explicit environment and
+security fields override the preset. All profiles still run under gVisor;
+none is equivalent to a booted VM. See [Linux environments](linux-environments.md)
+for identity, file/path, image and qualification contracts.
 
 `GET /v1/sandboxes` is a cheap cached read of the gateway routing table. It
 returns records with stable top-level identity fields as well as the full nested

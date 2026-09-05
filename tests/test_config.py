@@ -58,6 +58,20 @@ class ConfigTests(unittest.TestCase):
             {"region": "north-1", "machine_profile": "sandbox-large"},
         )
 
+    def test_isolated_node_package_root_round_trips(self) -> None:
+        raw = self._raw()
+        self.assertNotIn("node_package_root", raw)
+        raw["node_package_root"] = "/var/lib/canary/release"
+        config = DeploymentConfig.from_dict(raw)
+        self.assertEqual(
+            config.sandbox_node_package_bundle(),
+            Path("/var/lib/canary/release/sandbox-node-package.tar.gz"),
+        )
+        self.assertEqual(DeploymentConfig.from_dict(config.to_dict()), config)
+        raw["node_package_root"] = "relative/release"
+        with self.assertRaises(ValueError):
+            DeploymentConfig.from_dict(raw)
+
     def test_file_reader_has_no_old_or_partial_schema(self) -> None:
         with TemporaryDirectory() as raw_dir:
             path = Path(raw_dir) / "deployment.json"

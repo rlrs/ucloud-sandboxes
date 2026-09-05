@@ -54,6 +54,19 @@ from .telemetry import Telemetry
 _LOG = logging.getLogger(__name__)
 
 
+def sandbox_file_write_script() -> str:
+    return (
+        "set -eu; target=$1; dir=${target%/*}; "
+        '[ -n "$dir" ] || dir=/; '
+        '[ ! -d "$target" ] || { echo "file target is a directory" >&2; exit 1; }; '
+        'mkdir -p -- "$dir"; '
+        'tmp=$(mktemp "$dir/.ucloud-write.XXXXXX"); '
+        "trap 'rm -f -- \"$tmp\"' EXIT HUP INT TERM; "
+        'cat >"$tmp"; chmod 0600 "$tmp"; mv -f -- "$tmp" "$target"; '
+        "trap - EXIT HUP INT TERM"
+    )
+
+
 @contextmanager
 def _translate_storage_capacity():
     try:
@@ -1350,17 +1363,9 @@ class DirectSandboxService:
         payload: bytes,
     ) -> None:
         validate_container_path("sandbox file path", path)
-        script = (
-            "set -eu; target=$1; dir=${target%/*}; "
-            'mkdir -p -- "$dir"; '
-            'tmp=$(mktemp "$dir/.ucloud-write.XXXXXX"); '
-            "trap 'rm -f -- \"$tmp\"' EXIT HUP INT TERM; "
-            'cat >"$tmp"; chmod 0600 "$tmp"; mv -f -- "$tmp" "$target"; '
-            "trap - EXIT HUP INT TERM"
-        )
         result = self.exec(
             sandbox_id,
-            ("/bin/sh", "-c", script, "ucloud-write", path),
+            ("/bin/sh", "-c", sandbox_file_write_script(), "ucloud-write", path),
             input_bytes=payload,
             max_stdout_bytes=64 * 1024,
             max_stderr_bytes=64 * 1024,

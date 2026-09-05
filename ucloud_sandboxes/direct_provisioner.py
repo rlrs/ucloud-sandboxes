@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from dataclasses import replace
 from pathlib import Path
 import logging
@@ -634,6 +636,13 @@ class DirectSandboxProvisioner:
                 sandbox.bundle / "rootfs",
                 spec=registration.spec,
             )
+            prepared_config = json.loads(
+                (sandbox.bundle / "config.json").read_text(encoding="utf-8")
+            )
+            self.oci.prepare_working_directory(
+                sandbox.bundle / "rootfs",
+                directory=prepared_config["process"]["cwd"],
+            )
             self.oci.prepare_network_files(
                 sandbox.bundle / "rootfs",
                 spec=registration.spec,
@@ -801,8 +810,7 @@ class DirectSandboxProvisioner:
     ) -> StorageVolumeOwner:
         return StorageVolumeOwner(
             volume_id=(
-                f"{registration.sandbox_id}.sandbox-"
-                f"{registration.sandbox_generation}"
+                f"{registration.sandbox_id}.sandbox-{registration.sandbox_generation}"
             ),
             sandbox_id=registration.sandbox_id,
             sandbox_generation=registration.sandbox_generation,

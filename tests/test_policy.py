@@ -172,6 +172,30 @@ def minimum_additional_disk_bins(
 
 
 class ScalePolicyTests(unittest.TestCase):
+    def test_storage_error_capacity_cannot_suppress_replacement(self):
+        broken = node(
+            "broken",
+            total_resources=ResourceQuantity(vcpu=32, memory_mb=98304, disk_mb=100000),
+            capabilities=("disk-quota", "storage-native-v1"),
+            runtime_metrics=NodeRuntimeMetrics(
+                collected_at=utc_now(),
+                storage_hard_capacity_mb=100000,
+                storage_error_volumes=1,
+            ),
+        )
+        decision = evaluate_scale(
+            [broken],
+            demand(
+                pending_resources=ResourceQuantity(
+                    vcpu=1, memory_mb=1024, disk_mb=4096
+                ),
+                pending_count=1,
+            ),
+            ScalePolicy(),
+        )
+        self.assertEqual(decision.projected_free_resources, ResourceQuantity())
+        self.assertTrue(any(action.kind == "create" for action in decision.actions))
+
     @settings(max_examples=100, deadline=None, derandomize=True)
     @given(
         free_disk_chunks=st.lists(

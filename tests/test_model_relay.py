@@ -378,6 +378,10 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             response=RelayWorkerResponse(200, {"ok": True}),
             defer_delivery=True,
         )
+        stats = await state.stats()
+        self.assertEqual(stats["inflight"], 0)
+        self.assertEqual(stats["delivery_pending"], 1)
+        self.assertGreaterEqual(stats["oldest_delivery_pending_seconds"], 0)
         wake_task = asyncio.create_task(
             _notify_result(  # type: ignore[arg-type]
                 FakeRequest(),

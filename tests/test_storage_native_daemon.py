@@ -261,6 +261,61 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
         )
         return service, backend, host
 
+    def test_failed_snapshot_mount_can_discard_without_releasing_recycled_device(self):
+        from unittest.mock import patch
+        with TemporaryDirectory() as raw:
+            service, backend, host = self._service(Path(raw), pooled=True)
+            owner = StorageVolumeOwner("vol", "sandbox", 1)
+            service.converge_volume(owner, action="prepare", operation_id="create", virtual_size=1 << 30)
+            released = service.converge_volume(
+                owner, action="release", operation_id="park"
+            )
+            with patch.object(
+                host, "mount", side_effect=RuntimeError("duplicate UUID")
+            ):
+                with self.assertRaisesRegex(RuntimeError, "duplicate UUID"):
+                    service.converge_volume(owner, action="mount", operation_id="wake")
+            failed = service.journal.load("vol")
+            self.assertEqual(failed.state, StorageVolumeState.ERROR)
+            other = StorageVolumeOwner("other", "other", 1)
+            live = service.converge_volume(
+                other, action="prepare", operation_id="other", virtual_size=1 << 30
+            )
+            self.assertEqual(live.device_id, failed.device_id)
+            recovered = service.converge_volume(
+                owner, action="discard", operation_id="rollback"
+            )
+            self.assertEqual(recovered.state, StorageVolumeState.RELEASED)
+            self.assertEqual(recovered.sealed_layer_paths, released.sealed_layer_paths)
+            self.assertIsNone(recovered.device_id)
+            self.assertIn(live.device_owner_id, backend.owners)
+            mounted = service.converge_volume(
+                owner, action="mount", operation_id="retry"
+            )
+            self.assertEqual(mounted.state, StorageVolumeState.MOUNTED)
+            self.assertNotEqual(mounted.device_id, live.device_id)
+
+    def test_discard_rejects_unrelated_terminal_errors(self):
+        with TemporaryDirectory() as raw:
+            service, _, _ = self._service(Path(raw))
+            owner = StorageVolumeOwner("vol", "sandbox", 1)
+            service.converge_volume(
+                owner, action="prepare", operation_id="create", virtual_size=1 << 30
+            )
+            released = service.converge_volume(
+                owner, action="release", operation_id="park"
+            )
+            service.journal.mark_reconcile_error(
+                released, "unrelated ownership failure"
+            )
+            with self.assertRaises(StorageNativeConflictError):
+                service.converge_volume(
+                    owner, action="discard", operation_id="rollback"
+                )
+            self.assertEqual(
+                service.journal.load("vol").state, StorageVolumeState.ERROR
+            )
+
     def test_ublk_limit_rejects_before_journaling_and_reuses_idle_device(self) -> None:
         with TemporaryDirectory() as raw:
             service, backend, _ = self._service(

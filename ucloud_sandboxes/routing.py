@@ -442,7 +442,8 @@ class PendingSandboxDemand(_ExpiringDemand):
         return not (
             reason.startswith("image_pull_http_")
             or reason == "registry_lease_unavailable"
-            or reason == "wake_snapshot_publication_pending"
+            or reason
+            in {"wake_snapshot_publication_pending", "wake_storage_recovery_required"}
         )
 
     def to_dict(self) -> dict[str, Any]:

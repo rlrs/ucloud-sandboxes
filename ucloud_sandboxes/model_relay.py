@@ -1041,6 +1041,17 @@ class ModelRelayState:
                 "leased": leased_by_rollout,
                 "inflight": len(self._requests),
                 "inflight_bytes": self._inflight_bytes,
+                "delivery_pending": sum(
+                    r.delivery_pending for r in self._completed.values()
+                ),
+                "oldest_delivery_pending_seconds": max(
+                    (
+                        max(0.0, now - (r.completed_at or r.created_at))
+                        for r in self._completed.values()
+                        if r.delivery_pending
+                    ),
+                    default=0.0,
+                ),
                 "completed_retained": len(self._completed),
                 "completed_bytes": self._completed_bytes,
                 "workers": [dict(record) for record in self._workers.values()],

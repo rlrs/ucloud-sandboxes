@@ -2828,9 +2828,11 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(len(migrations), 1)
         self.assertEqual(migrations[0].destination_node_id, "destination-node")
 
-    def test_unpublished_park_retries_without_starting_blocking_migration(
-        self,
-    ) -> None:
+    def test_unpublished_park_retries_without_starting_blocking_migration(self) -> None:
+        self._assert_unpublished_wake_error(storage_errors=0)
+        self._assert_unpublished_wake_error(storage_errors=1)
+
+    def _assert_unpublished_wake_error(self, *, storage_errors: int) -> None:
         with _temporary_root() as root:
             routing = RoutingStore(root / "routes.sqlite")
             resources = ResourceQuantity(vcpu=2, memory_mb=4096, disk_mb=8192)
@@ -2863,6 +2865,7 @@ class ControlPlaneTests(unittest.TestCase):
                     runtime_metrics=NodeRuntimeMetrics(
                         collected_at=utc_now(),
                         cpu_percent=95.0,
+                        storage_error_volumes=storage_errors,
                         cpu_count=4,
                         memory_total_mb=8192,
                         memory_available_mb=4096,
@@ -2903,8 +2906,13 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertIsNone(selected)
         self.assertEqual(migrations, [])
         self.assertEqual(writes[0][1], 503)
-        self.assertEqual(writes[0][0]["error_code"], "snapshot_publication_pending")
-        self.assertEqual(writes[0][2]["Retry-After"], "1")
+        self.assertEqual(
+            writes[0][0]["error_code"],
+            "storage_recovery_required"
+            if storage_errors
+            else "snapshot_publication_pending",
+        )
+        self.assertEqual(writes[0][2]["Retry-After"], "5" if storage_errors else "1")
 
     def test_gateway_hides_stale_private_registry_image_records(self) -> None:
         class MissingManifestRegistryHandler(BaseHTTPRequestHandler):

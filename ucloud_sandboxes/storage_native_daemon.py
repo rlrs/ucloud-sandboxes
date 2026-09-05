@@ -470,7 +470,11 @@ class LinuxStorageHostOperations:
         )
 
     def mount(self, device: Path, target: Path) -> None:
-        self._run("mount", "-o", "noatime", str(device), str(target))
+        # Independently owned COW snapshots retain their parent filesystem UUID.
+        # Ownership is fenced by the volume journal and block backend, not UUID.
+        self._run(
+            "mount", "-t", "xfs", "-o", "noatime,nouuid", str(device), str(target)
+        )
 
     def sync(self, target: Path) -> None:
         self._run("sync", "-f", str(target))
@@ -954,6 +958,14 @@ class StorageNativeJournal:
                 "FROM volumes ORDER BY volume_id"
             ).fetchall()
         return tuple(self._decode_record_row(row) for row in rows)
+
+    def is_failed_snapshot_mount(self, record: StorageVolumeRecord) -> bool:
+        with closing(self._connect()) as connection:
+            row = connection.execute(
+                "SELECT kind, status FROM operations WHERE operation_id = ? AND volume_id = ?",
+                (record.operation_id, record.volume_id),
+            ).fetchone()
+        return row is not None and tuple(row) == ("MountSnapshotCow", "failed")
 
     def list_live_page(
         self, after_volume_id: str, *, limit: int = 128
@@ -1698,6 +1710,13 @@ class StorageNativeNodeService:
     ) -> StorageVolumeRecord:
         """Drop an uncommitted writable upper and restore its parent authority."""
 
+        original = self.journal.load(volume_id)
+        recover_mount = bool(
+            original is not None
+            and original.state == StorageVolumeState.ERROR
+            and self.journal.is_failed_snapshot_mount(original)
+            and (original.sealed_layer_paths or original.published_layers)
+        )
         pending = self._begin_transition(
             kind="DiscardMountedCow",
             operation_id=operation_id,
@@ -1705,7 +1724,10 @@ class StorageNativeNodeService:
             sandbox_id=sandbox_id,
             sandbox_generation=sandbox_generation,
             expected_revision=expected_revision,
-            allowed_states={StorageVolumeState.MOUNTED},
+            allowed_states={
+                StorageVolumeState.MOUNTED,
+                *((StorageVolumeState.ERROR,) if recover_mount else ()),
+            },
             next_state=StorageVolumeState.RELEASING,
         )
         if isinstance(pending, OperationReplay):
@@ -1722,7 +1744,11 @@ class StorageNativeNodeService:
             mount_path = Path(pending.mount_path)
             if self.host.is_mounted(mount_path):
                 self.host.unmount(mount_path)
-            if pending.device_id is not None:
+            if recover_mount:
+                # A failed mount may already have returned its device to the pool.
+                # Resolve the exact owner before cleanup; never release a recycled ID.
+                self._best_effort_release(pending, require_backend=True)
+            elif pending.device_id is not None:
                 self._release_backend_device(pending.device_id)
             record = replace(
                 pending,
@@ -2014,7 +2040,10 @@ class StorageNativeNodeService:
                 operation_id=_storage_operation_id(owner, operation_id, "publish"),
                 expected_revision=record.revision,
             )
-        if action == "discard" and record.state == StorageVolumeState.MOUNTED:
+        if action == "discard" and record.state in {
+            StorageVolumeState.MOUNTED,
+            StorageVolumeState.ERROR,
+        }:
             record = self.discard_mounted_cow(
                 **owner.request_fields(),
                 operation_id=_storage_operation_id(owner, operation_id, "discard"),

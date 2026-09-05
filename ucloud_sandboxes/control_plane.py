@@ -4778,6 +4778,29 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 return self._mark_sandbox_waking(route)
 
             if route.worker_state == "attached" and not is_portable_parked_route(route):
+                if (
+                    source_heartbeat is not None
+                    and source_heartbeat.runtime_metrics is not None
+                    and source_heartbeat.runtime_metrics.storage_error_volumes > 0
+                ):
+                    self.routing_store.upsert_pending_with_demand(
+                        _wake_pending_demand_id(route.sandbox_id),
+                        route.resources,
+                        failure_reason="wake_storage_recovery_required",
+                    )
+                    self._write_json(
+                        {
+                            "error": "source node storage requires recovery before this sandbox can wake",
+                            "error_code": "storage_recovery_required",
+                            "retryable": True,
+                        },
+                        status=HTTPStatus.SERVICE_UNAVAILABLE,
+                        headers={
+                            "Retry-After": "5",
+                            "X-UCloud-Sandbox-Retryable": "true",
+                        },
+                    )
+                    return None
                 # Background park publication is deliberately asynchronous.
                 # Do not turn a transiently busy local source into a blocking
                 # migration/EnsurePublished call. The node heartbeat will

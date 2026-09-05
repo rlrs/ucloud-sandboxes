@@ -22,6 +22,7 @@ from .models import (
 )
 from .resource_admission import (
     dynamic_request_fits,
+    node_storage_pressure_allows,
     reserve_dynamic_resources,
     reusable_dynamic_resources,
 )
@@ -1256,6 +1257,10 @@ def _security_adjusted_resources(
     node: SandboxNode,
     resources: ResourceQuantity,
 ) -> ResourceQuantity:
+    if node.heartbeat is not None and not node_storage_pressure_allows(
+        node.heartbeat, ResourceQuantity()
+    ):
+        return ResourceQuantity()
     if resources.disk_mb <= 0 or _node_has_disk_quota(node):
         return resources
     return ResourceQuantity(

@@ -190,6 +190,10 @@ class FakeHost:
         self.formatted: list[Path] = []
         self.fail_next_unmount = False
         self.detached: list[Path] = []
+        self.busy_devices: set[Path] = set()
+
+    def device_is_unused(self, device: Path) -> bool:
+        return device not in self.busy_devices
 
     def format_xfs(self, device: Path) -> None:
         self.formatted.append(device)
@@ -225,6 +229,39 @@ class FakeHost:
 
 
 class StorageNativeNodeServiceTests(unittest.TestCase):
+    def test_busy_device_is_retired_after_park_and_checkpoint_resumes(self):
+        with TemporaryDirectory() as raw:
+            service, backend, host = self._service(Path(raw), pooled=True)
+            owner = StorageVolumeOwner("vol", "sandbox", 1)
+            created = service.converge_volume(
+                owner, action="prepare", operation_id="create", virtual_size=1 << 30
+            )
+            host.busy_devices.add(Path(created.device_path))
+            released = service.converge_volume(
+                owner, action="release", operation_id="park"
+            )
+            self.assertEqual(released.state, StorageVolumeState.RELEASED)
+            self.assertIn(created.device_id, backend.delete_calls)
+            self.assertNotIn(created.device_id, backend.release_calls)
+            self.assertTrue(all(Path(p).exists() for p in released.sealed_layer_paths))
+            resumed = service.converge_volume(owner, action="mount", operation_id="wake")
+            self.assertEqual(resumed.state, StorageVolumeState.MOUNTED)
+            self.assertNotEqual(resumed.device_id, created.device_id)
+
+    def test_busy_acquired_device_is_never_formatted_or_mounted(self):
+        with TemporaryDirectory() as raw:
+            service, backend, host = self._service(Path(raw), pooled=True)
+            host.busy_devices.add(Path("/dev/ublkb1"))
+            with self.assertRaisesRegex(StorageNativeNodeError, "still in use"):
+                service.converge_volume(
+                    StorageVolumeOwner("vol", "sandbox", 1), action="prepare",
+                    operation_id="create", virtual_size=1 << 30
+                )
+            self.assertEqual(host.formatted, [])
+            self.assertEqual(host.mounted, set())
+            self.assertEqual(backend.delete_calls, [1])
+            self.assertEqual(backend.release_calls, [])
+
     def _service(
         self,
         root: Path,

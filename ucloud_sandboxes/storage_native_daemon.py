@@ -435,6 +435,8 @@ class StorageSnapshotPublisher(Protocol):
 
 
 class StorageHostOperations(Protocol):
+    def device_is_unused(self, device: Path) -> bool: ...
+
     def format_xfs(self, device: Path) -> None: ...
 
     def mount(self, device: Path, target: Path) -> None: ...
@@ -457,6 +459,19 @@ class StorageHostOperations(Protocol):
 class LinuxStorageHostOperations:
     def __init__(self, *, timeout_seconds: float = 120.0) -> None:
         self.timeout_seconds = timeout_seconds
+
+    @staticmethod
+    def device_is_unused(device: Path) -> bool:
+        # Mountinfo cannot see detached mounts or filesystem references held by
+        # another overlay. Ask the block layer before permitting device reuse.
+        try:
+            fd = os.open(device, os.O_RDONLY | os.O_EXCL | os.O_CLOEXEC)
+        except OSError:
+            return False
+        try:
+            return stat.S_ISBLK(os.fstat(fd).st_mode)
+        finally:
+            os.close(fd)
 
     def format_xfs(self, device: Path) -> None:
         self._run(
@@ -2366,6 +2381,11 @@ class StorageNativeNodeService:
                 upper_mode=self.config.upper_mode,
                 owner_id=owner_id,
             )
+        if not self.host.device_is_unused(device.device_path):
+            self._discard_backend_device(device.device_id)
+            raise StorageNativeNodeError(
+                "block backend supplied a device still in use by the kernel"
+            )
         if self.config.device_pool_enabled:
             with self._pool_metrics_lock:
                 reused = (
@@ -2423,6 +2443,15 @@ class StorageNativeNodeService:
         if not self.config.device_pool_enabled:
             self.backend.delete(device_id)
             return
+        # Successful umount does not prove the block device can be rebound.
+        # Allow short deferred filesystem teardown, then retire the owned device
+        # rather than exposing its next owner to the previous filesystem.
+        deadline = time.monotonic() + 0.5
+        while not self.host.device_is_unused(Path(f"/dev/ublkb{device_id}")):
+            if time.monotonic() >= deadline:
+                self._discard_backend_device(device_id)
+                return
+            time.sleep(0.05)
         self.backend.release(device_id)
         with self._pool_metrics_lock:
             self._pool_releases += 1

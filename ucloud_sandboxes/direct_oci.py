@@ -201,9 +201,10 @@ class DirectOciConfigBuilder:
         linux_resources: dict[str, Any] = {
             "memory": {
                 "limit": memory_bytes,
-                # One additional memory bound of swap, matching the existing
-                # product's 2x combined memory+swap admission.
-                "swap": memory_bytes,
+                # OCI expresses the combined memory+swap bound. Equal values
+                # disable swap (runsc subtracts limit for memory.swap.max).
+                # Permit one additional memory bound of swap.
+                "swap": memory_bytes * 2,
             }
         }
         if spec.cpus is not None:

@@ -1,0 +1,553 @@
+diff --git a/pkg/sentry/fsimpl/gofer/filesystem.go b/pkg/sentry/fsimpl/gofer/filesystem.go
+index 3fbb1d5..5cf6bf7 100644
+--- a/pkg/sentry/fsimpl/gofer/filesystem.go
++++ b/pkg/sentry/fsimpl/gofer/filesystem.go
+@@ -853,6 +853,9 @@ func (fs *filesystem) LinkAt(ctx context.Context, rp *vfs.ResolvingPath, vd vfs.
+ 
+ // MkdirAt implements vfs.FilesystemImpl.MkdirAt.
+ func (fs *filesystem) MkdirAt(ctx context.Context, rp *vfs.ResolvingPath, opts vfs.MkdirOptions) error {
++	// This filesystem does not implement default POSIX ACL inheritance.
++	opts.Mode &^= opts.Umask
++	opts.Umask = 0
+ 	creds := rp.Credentials()
+ 	return fs.doCreateAt(ctx, rp, true /* dir */, func(parent *dentry, name string, ds **[]*dentry) (*dentry, error) {
+ 		// If the parent is a setgid directory, use the parent's GID
+@@ -905,6 +908,9 @@ func (fs *filesystem) MkdirAt(ctx context.Context, rp *vfs.ResolvingPath, opts v
+ 
+ // MknodAt implements vfs.FilesystemImpl.MknodAt.
+ func (fs *filesystem) MknodAt(ctx context.Context, rp *vfs.ResolvingPath, opts vfs.MknodOptions) error {
++	// This filesystem does not implement default POSIX ACL inheritance.
++	opts.Mode &^= opts.Umask
++	opts.Umask = 0
+ 	return fs.doCreateAt(ctx, rp, false /* dir */, func(parent *dentry, name string, ds **[]*dentry) (*dentry, error) {
+ 		creds := rp.Credentials()
+ 		if child, err := parent.mknod(ctx, name, creds, &opts); err == nil {
+@@ -952,6 +958,9 @@ func (fs *filesystem) MknodAt(ctx context.Context, rp *vfs.ResolvingPath, opts v
+ 
+ // OpenAt implements vfs.FilesystemImpl.OpenAt.
+ func (fs *filesystem) OpenAt(ctx context.Context, rp *vfs.ResolvingPath, opts vfs.OpenOptions) (*vfs.FileDescription, error) {
++	// This filesystem does not implement default POSIX ACL inheritance.
++	opts.Mode &^= opts.Umask
++	opts.Umask = 0
+ 	// Reject O_TMPFILE, which is not supported; supporting it correctly in the
+ 	// presence of other remote filesystem users requires remote filesystem
+ 	// support, and it isn't clear that there's any way to implement this in
+diff --git a/pkg/sentry/fsimpl/kernfs/filesystem.go b/pkg/sentry/fsimpl/kernfs/filesystem.go
+index 62d206f..db45e02 100644
+--- a/pkg/sentry/fsimpl/kernfs/filesystem.go
++++ b/pkg/sentry/fsimpl/kernfs/filesystem.go
+@@ -446,6 +446,9 @@ func (fs *Filesystem) LinkAt(ctx context.Context, rp *vfs.ResolvingPath, vd vfs.
+ 
+ // MkdirAt implements vfs.FilesystemImpl.MkdirAt.
+ func (fs *Filesystem) MkdirAt(ctx context.Context, rp *vfs.ResolvingPath, opts vfs.MkdirOptions) error {
++	// This filesystem does not implement default POSIX ACL inheritance.
++	opts.Mode &^= opts.Umask
++	opts.Umask = 0
+ 	if rp.Done() {
+ 		return linuxerr.EEXIST
+ 	}
+@@ -483,6 +486,9 @@ func (fs *Filesystem) MkdirAt(ctx context.Context, rp *vfs.ResolvingPath, opts v
+ 
+ // MknodAt implements vfs.FilesystemImpl.MknodAt.
+ func (fs *Filesystem) MknodAt(ctx context.Context, rp *vfs.ResolvingPath, opts vfs.MknodOptions) error {
++	// This filesystem does not implement default POSIX ACL inheritance.
++	opts.Mode &^= opts.Umask
++	opts.Umask = 0
+ 	if rp.Done() {
+ 		return linuxerr.EEXIST
+ 	}
+@@ -520,6 +526,9 @@ func (fs *Filesystem) MknodAt(ctx context.Context, rp *vfs.ResolvingPath, opts v
+ 
+ // OpenAt implements vfs.FilesystemImpl.OpenAt.
+ func (fs *Filesystem) OpenAt(ctx context.Context, rp *vfs.ResolvingPath, opts vfs.OpenOptions) (*vfs.FileDescription, error) {
++	// This filesystem does not implement default POSIX ACL inheritance.
++	opts.Mode &^= opts.Umask
++	opts.Umask = 0
+ 	ats := vfs.AccessTypesForOpenFlags(&opts)
+ 	trunc := opts.Flags&linux.O_TRUNC != 0
+ 	mnt := rp.Mount()
+diff --git a/pkg/sentry/fsimpl/overlay/filesystem.go b/pkg/sentry/fsimpl/overlay/filesystem.go
+index d14451b..df50af3 100644
+--- a/pkg/sentry/fsimpl/overlay/filesystem.go
++++ b/pkg/sentry/fsimpl/overlay/filesystem.go
+@@ -1015,6 +1015,7 @@ func (fs *filesystem) createAndOpenLocked(ctx context.Context, rp *vfs.Resolving
+ 	upperFD, err := vfsObj.OpenAt(ctx, createCreds, &pop, &vfs.OpenOptions{
+ 		Flags: opts.Flags&^vfs.FileCreationFlags | linux.O_CREAT | linux.O_EXCL,
+ 		Mode:  opts.Mode,
++		Umask: opts.Umask,
+ 	})
+ 	if err != nil {
+ 		if haveUpperWhiteout {
+diff --git a/pkg/sentry/fsimpl/tmpfs/device_file.go b/pkg/sentry/fsimpl/tmpfs/device_file.go
+index 056c4b0..2f720dc 100644
+--- a/pkg/sentry/fsimpl/tmpfs/device_file.go
++++ b/pkg/sentry/fsimpl/tmpfs/device_file.go
+@@ -57,7 +57,7 @@ func isOvlWhiteoutDev(mode linux.FileMode, major, minor uint32) bool {
+ // from parentDir.
+ //
+ // Precondition: fs.mu must be locked for writing.
+-func (fs *filesystem) newDeviceFileLocked(kuid auth.KUID, kgid auth.KGID, mode linux.FileMode, major, minor uint32, parentDir *directory) (*inode, error) {
++func (fs *filesystem) newDeviceFileLocked(kuid auth.KUID, kgid auth.KGID, mode, umask linux.FileMode, major, minor uint32, parentDir *directory) (*inode, error) {
+ 	ovlWhiteout := isOvlWhiteoutDev(mode, major, minor)
+ 	if ovlWhiteout && fs.ovlWhiteout != nil {
+ 		// If reusing the same inode, acts like a hard link.
+@@ -76,7 +76,7 @@ func (fs *filesystem) newDeviceFileLocked(kuid auth.KUID, kgid auth.KGID, mode l
+ 	default:
+ 		panic(fmt.Sprintf("invalid file type for device file: %s", mode))
+ 	}
+-	err := file.inode.init(file, fs, kuid, kgid, mode, parentDir)
++	err := file.inode.init(file, fs, kuid, kgid, mode, umask, parentDir)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+diff --git a/pkg/sentry/fsimpl/tmpfs/directory.go b/pkg/sentry/fsimpl/tmpfs/directory.go
+index f9ceb42..807793f 100644
+--- a/pkg/sentry/fsimpl/tmpfs/directory.go
++++ b/pkg/sentry/fsimpl/tmpfs/directory.go
+@@ -51,9 +51,9 @@ type directory struct {
+ //
+ // If parentDir is not nil, certain fields (such as setgid and default ACL) will be inherited
+ // from parentDir.
+-func (fs *filesystem) newDirectory(kuid auth.KUID, kgid auth.KGID, mode linux.FileMode, parentDir *directory) (*directory, error) {
++func (fs *filesystem) newDirectory(kuid auth.KUID, kgid auth.KGID, mode, umask linux.FileMode, parentDir *directory) (*directory, error) {
+ 	dir := &directory{}
+-	err := dir.inode.init(dir, fs, kuid, kgid, linux.S_IFDIR|mode, parentDir)
++	err := dir.inode.init(dir, fs, kuid, kgid, linux.S_IFDIR|mode, umask, parentDir)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+diff --git a/pkg/sentry/fsimpl/tmpfs/filesystem.go b/pkg/sentry/fsimpl/tmpfs/filesystem.go
+index acfc409..201f707 100644
+--- a/pkg/sentry/fsimpl/tmpfs/filesystem.go
++++ b/pkg/sentry/fsimpl/tmpfs/filesystem.go
+@@ -303,7 +303,7 @@ func (fs *filesystem) MkdirAt(ctx context.Context, rp *vfs.ResolvingPath, opts v
+ 		if parentDir.inode.nlink.Load() == maxLinks {
+ 			return linuxerr.EMLINK
+ 		}
+-		childDir, err := fs.newDirectory(creds.EffectiveKUID, creds.EffectiveKGID, opts.Mode, parentDir)
++		childDir, err := fs.newDirectory(creds.EffectiveKUID, creds.EffectiveKGID, opts.Mode, opts.Umask, parentDir)
+ 		if err != nil {
+ 			return err
+ 		}
+@@ -322,13 +322,13 @@ func (fs *filesystem) MknodAt(ctx context.Context, rp *vfs.ResolvingPath, opts v
+ 		var err error
+ 		switch opts.Mode.FileType() {
+ 		case linux.S_IFREG:
+-			childInode, err = fs.newRegularFile(creds.EffectiveKUID, creds.EffectiveKGID, opts.Mode, parentDir)
++			childInode, err = fs.newRegularFile(creds.EffectiveKUID, creds.EffectiveKGID, opts.Mode, opts.Umask, parentDir)
+ 		case linux.S_IFIFO:
+-			childInode, err = fs.newNamedPipe(creds.EffectiveKUID, creds.EffectiveKGID, opts.Mode, parentDir)
++			childInode, err = fs.newNamedPipe(creds.EffectiveKUID, creds.EffectiveKGID, opts.Mode, opts.Umask, parentDir)
+ 		case linux.S_IFBLK, linux.S_IFCHR:
+-			childInode, err = fs.newDeviceFileLocked(creds.EffectiveKUID, creds.EffectiveKGID, opts.Mode, opts.DevMajor, opts.DevMinor, parentDir)
++			childInode, err = fs.newDeviceFileLocked(creds.EffectiveKUID, creds.EffectiveKGID, opts.Mode, opts.Umask, opts.DevMajor, opts.DevMinor, parentDir)
+ 		case linux.S_IFSOCK:
+-			childInode, err = fs.newSocketFile(creds.EffectiveKUID, creds.EffectiveKGID, opts.Mode, opts.Endpoint, parentDir)
++			childInode, err = fs.newSocketFile(creds.EffectiveKUID, creds.EffectiveKGID, opts.Mode, opts.Umask, opts.Endpoint, parentDir)
+ 		default:
+ 			return linuxerr.EINVAL
+ 		}
+@@ -426,7 +426,7 @@ afterTrailingSymlink:
+ 		defer rp.Mount().EndWrite()
+ 		// Create and open the child.
+ 		creds := rp.Credentials()
+-		childInode, err := fs.newRegularFile(creds.EffectiveKUID, creds.EffectiveKGID, opts.Mode, parentDir)
++		childInode, err := fs.newRegularFile(creds.EffectiveKUID, creds.EffectiveKGID, opts.Mode, opts.Umask, parentDir)
+ 		if err != nil {
+ 			return nil, err
+ 		}
+diff --git a/pkg/sentry/fsimpl/tmpfs/named_pipe.go b/pkg/sentry/fsimpl/tmpfs/named_pipe.go
+index d7b5b6f..78e83a0 100644
+--- a/pkg/sentry/fsimpl/tmpfs/named_pipe.go
++++ b/pkg/sentry/fsimpl/tmpfs/named_pipe.go
+@@ -36,9 +36,9 @@ type namedPipe struct {
+ // Preconditions:
+ //   - fs.mu must be locked.
+ //   - rp.Mount().CheckBeginWrite() has been called successfully.
+-func (fs *filesystem) newNamedPipe(kuid auth.KUID, kgid auth.KGID, mode linux.FileMode, parentDir *directory) (*inode, error) {
++func (fs *filesystem) newNamedPipe(kuid auth.KUID, kgid auth.KGID, mode, umask linux.FileMode, parentDir *directory) (*inode, error) {
+ 	file := &namedPipe{pipe: pipe.NewVFSPipe(true /* isNamed */, pipe.DefaultPipeSize)}
+-	err := file.inode.init(file, fs, kuid, kgid, linux.S_IFIFO|mode, parentDir)
++	err := file.inode.init(file, fs, kuid, kgid, linux.S_IFIFO|mode, umask, parentDir)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+diff --git a/pkg/sentry/fsimpl/tmpfs/regular_file.go b/pkg/sentry/fsimpl/tmpfs/regular_file.go
+index 4fec658..598b495 100644
+--- a/pkg/sentry/fsimpl/tmpfs/regular_file.go
++++ b/pkg/sentry/fsimpl/tmpfs/regular_file.go
+@@ -116,12 +116,12 @@ type regularFile struct {
+ //
+ // If parentDir is not nil, certain fields (such as setgid and default ACL) will be inherited
+ // from parentDir.
+-func (fs *filesystem) newRegularFile(kuid auth.KUID, kgid auth.KGID, mode linux.FileMode, parentDir *directory) (*inode, error) {
++func (fs *filesystem) newRegularFile(kuid auth.KUID, kgid auth.KGID, mode, umask linux.FileMode, parentDir *directory) (*inode, error) {
+ 	file := &regularFile{
+ 		memoryUsageKind: fs.usage,
+ 		seals:           linux.F_SEAL_SEAL,
+ 	}
+-	err := file.inode.init(file, fs, kuid, kgid, linux.S_IFREG|mode, parentDir)
++	err := file.inode.init(file, fs, kuid, kgid, linux.S_IFREG|mode, umask, parentDir)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+@@ -143,7 +143,7 @@ func newUnlinkedRegularFileDescription(ctx context.Context, creds *auth.Credenti
+ 		panic("tmpfs.newUnlinkedRegularFileDescription() called with non-tmpfs mount")
+ 	}
+ 
+-	inode, err := fs.newRegularFile(creds.EffectiveKUID, creds.EffectiveKGID, 0777, nil /* parentDir */)
++	inode, err := fs.newRegularFile(creds.EffectiveKUID, creds.EffectiveKGID, 0777, 0 /* umask */, nil /* parentDir */)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+diff --git a/pkg/sentry/fsimpl/tmpfs/socket_file.go b/pkg/sentry/fsimpl/tmpfs/socket_file.go
+index f7e4b67..ae9dac7 100644
+--- a/pkg/sentry/fsimpl/tmpfs/socket_file.go
++++ b/pkg/sentry/fsimpl/tmpfs/socket_file.go
+@@ -33,9 +33,9 @@ type socketFile struct {
+ //
+ // If parentDir is not nil, certain fields (such as setgid and default ACL) will be inherited
+ // from parentDir.
+-func (fs *filesystem) newSocketFile(kuid auth.KUID, kgid auth.KGID, mode linux.FileMode, ep transport.BoundEndpoint, parentDir *directory) (*inode, error) {
++func (fs *filesystem) newSocketFile(kuid auth.KUID, kgid auth.KGID, mode, umask linux.FileMode, ep transport.BoundEndpoint, parentDir *directory) (*inode, error) {
+ 	file := &socketFile{ep: ep}
+-	err := file.inode.init(file, fs, kuid, kgid, mode, parentDir)
++	err := file.inode.init(file, fs, kuid, kgid, mode, umask, parentDir)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+diff --git a/pkg/sentry/fsimpl/tmpfs/symlink.go b/pkg/sentry/fsimpl/tmpfs/symlink.go
+index 8e03d08..a71f3df 100644
+--- a/pkg/sentry/fsimpl/tmpfs/symlink.go
++++ b/pkg/sentry/fsimpl/tmpfs/symlink.go
+@@ -34,7 +34,7 @@ func (fs *filesystem) newSymlink(kuid auth.KUID, kgid auth.KGID, mode linux.File
+ 	link := &symlink{
+ 		target: target,
+ 	}
+-	err := link.inode.init(link, fs, kuid, kgid, linux.S_IFLNK|mode, parentDir)
++	err := link.inode.init(link, fs, kuid, kgid, linux.S_IFLNK|mode, 0 /* umask */, parentDir)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+diff --git a/pkg/sentry/fsimpl/tmpfs/tar.go b/pkg/sentry/fsimpl/tmpfs/tar.go
+index 1be942e..ccf244f 100644
+--- a/pkg/sentry/fsimpl/tmpfs/tar.go
++++ b/pkg/sentry/fsimpl/tmpfs/tar.go
+@@ -205,7 +205,7 @@ func (fs *filesystem) mkdirFromTar(hdr *tar.Header, pathToInode map[string]*inod
+ 	if !ok {
+ 		return nil, fmt.Errorf("parent inode at %v is not a directory", dir)
+ 	}
+-	childDir, err := fs.newDirectory(auth.KUID(hdr.Uid), auth.KGID(hdr.Gid), linux.FileMode(hdr.Mode), nil /* parentDir */)
++	childDir, err := fs.newDirectory(auth.KUID(hdr.Uid), auth.KGID(hdr.Gid), linux.FileMode(hdr.Mode), 0 /* umask */, nil /* parentDir */)
+ 	if err != nil {
+ 		return nil, fmt.Errorf("failed to create new directory inode: %v", err)
+ 	}
+@@ -236,13 +236,13 @@ func (fs *filesystem) mknodFromTar(ctx context.Context, hdr *tar.Header, pathToI
+ 	var err error
+ 	switch hdr.Typeflag {
+ 	case tar.TypeReg:
+-		childInode, err = fs.newRegularFile(auth.KUID(hdr.Uid), auth.KGID(hdr.Gid), linux.FileMode(hdr.Mode), nil /* parentDir */)
++		childInode, err = fs.newRegularFile(auth.KUID(hdr.Uid), auth.KGID(hdr.Gid), linux.FileMode(hdr.Mode), 0 /* umask */, nil /* parentDir */)
+ 	case tar.TypeFifo:
+-		childInode, err = fs.newNamedPipe(auth.KUID(hdr.Uid), auth.KGID(hdr.Gid), linux.FileMode(hdr.Mode), nil /* parentDir */)
++		childInode, err = fs.newNamedPipe(auth.KUID(hdr.Uid), auth.KGID(hdr.Gid), linux.FileMode(hdr.Mode), 0 /* umask */, nil /* parentDir */)
+ 	case tar.TypeBlock:
+-		childInode, err = fs.newDeviceFileLocked(auth.KUID(hdr.Uid), auth.KGID(hdr.Gid), linux.FileMode(hdr.Mode|linux.S_IFBLK), uint32(hdr.Devmajor), uint32(hdr.Devminor), nil /* parentDir */)
++		childInode, err = fs.newDeviceFileLocked(auth.KUID(hdr.Uid), auth.KGID(hdr.Gid), linux.FileMode(hdr.Mode|linux.S_IFBLK), 0 /* umask */, uint32(hdr.Devmajor), uint32(hdr.Devminor), nil /* parentDir */)
+ 	case tar.TypeChar:
+-		childInode, err = fs.newDeviceFileLocked(auth.KUID(hdr.Uid), auth.KGID(hdr.Gid), linux.FileMode(hdr.Mode|linux.S_IFCHR), uint32(hdr.Devmajor), uint32(hdr.Devminor), nil /* parentDir */)
++		childInode, err = fs.newDeviceFileLocked(auth.KUID(hdr.Uid), auth.KGID(hdr.Gid), linux.FileMode(hdr.Mode|linux.S_IFCHR), 0 /* umask */, uint32(hdr.Devmajor), uint32(hdr.Devminor), nil /* parentDir */)
+ 	default:
+ 		return fmt.Errorf("mknod unsupported file type %v for %v", hdr.Typeflag, hdr.Name)
+ 	}
+@@ -707,7 +707,7 @@ func (fs *filesystem) mkdirMergeFromTar(hdr *tar.Header, pathToInode map[string]
+ 	if parentInode.nlink.Load() == maxLinks {
+ 		return nil, fmt.Errorf("maximum number of links reached for %v", dir)
+ 	}
+-	childDir, err := fs.newDirectory(auth.KUID(hdr.Uid), auth.KGID(hdr.Gid), linux.FileMode(hdr.Mode), parentDir)
++	childDir, err := fs.newDirectory(auth.KUID(hdr.Uid), auth.KGID(hdr.Gid), linux.FileMode(hdr.Mode), 0 /* umask */, parentDir)
+ 	if err != nil {
+ 		return nil, fmt.Errorf("failed to create new directory inode: %v", err)
+ 	}
+@@ -765,13 +765,13 @@ func (fs *filesystem) mknodMergeFromTar(ctx context.Context, hdr *tar.Header, pa
+ 	var err error
+ 	switch hdr.Typeflag {
+ 	case tar.TypeReg:
+-		childInode, err = fs.newRegularFile(auth.KUID(hdr.Uid), auth.KGID(hdr.Gid), linux.FileMode(hdr.Mode), parentDir)
++		childInode, err = fs.newRegularFile(auth.KUID(hdr.Uid), auth.KGID(hdr.Gid), linux.FileMode(hdr.Mode), 0 /* umask */, parentDir)
+ 	case tar.TypeFifo:
+-		childInode, err = fs.newNamedPipe(auth.KUID(hdr.Uid), auth.KGID(hdr.Gid), linux.FileMode(hdr.Mode), parentDir)
++		childInode, err = fs.newNamedPipe(auth.KUID(hdr.Uid), auth.KGID(hdr.Gid), linux.FileMode(hdr.Mode), 0 /* umask */, parentDir)
+ 	case tar.TypeBlock:
+-		childInode, err = fs.newDeviceFileLocked(auth.KUID(hdr.Uid), auth.KGID(hdr.Gid), linux.FileMode(hdr.Mode|linux.S_IFBLK), uint32(hdr.Devmajor), uint32(hdr.Devminor), parentDir)
++		childInode, err = fs.newDeviceFileLocked(auth.KUID(hdr.Uid), auth.KGID(hdr.Gid), linux.FileMode(hdr.Mode|linux.S_IFBLK), 0 /* umask */, uint32(hdr.Devmajor), uint32(hdr.Devminor), parentDir)
+ 	case tar.TypeChar:
+-		childInode, err = fs.newDeviceFileLocked(auth.KUID(hdr.Uid), auth.KGID(hdr.Gid), linux.FileMode(hdr.Mode|linux.S_IFCHR), uint32(hdr.Devmajor), uint32(hdr.Devminor), parentDir)
++		childInode, err = fs.newDeviceFileLocked(auth.KUID(hdr.Uid), auth.KGID(hdr.Gid), linux.FileMode(hdr.Mode|linux.S_IFCHR), 0 /* umask */, uint32(hdr.Devmajor), uint32(hdr.Devminor), parentDir)
+ 	default:
+ 		return fmt.Errorf("mknod unsupported file type %v for %v", hdr.Typeflag, hdr.Name)
+ 	}
+diff --git a/pkg/sentry/fsimpl/tmpfs/tmpfs.go b/pkg/sentry/fsimpl/tmpfs/tmpfs.go
+index b4d33ef..000576c 100644
+--- a/pkg/sentry/fsimpl/tmpfs/tmpfs.go
++++ b/pkg/sentry/fsimpl/tmpfs/tmpfs.go
+@@ -411,7 +411,7 @@ func (fstype FilesystemType) GetFilesystem(ctx context.Context, vfsObj *vfs.Virt
+ 	var root *dentry
+ 	switch rootFileType {
+ 	case linux.S_IFREG:
+-		inode, err := fs.newRegularFile(rootKUID, rootKGID, rootMode, nil /* parentDir */)
++		inode, err := fs.newRegularFile(rootKUID, rootKGID, rootMode, 0 /* umask */, nil /* parentDir */)
+ 		if err != nil {
+ 			return nil, nil, err
+ 		}
+@@ -423,7 +423,7 @@ func (fstype FilesystemType) GetFilesystem(ctx context.Context, vfsObj *vfs.Virt
+ 		}
+ 		root = fs.newDentry(inode)
+ 	case linux.S_IFDIR:
+-		dirInode, err := fs.newDirectory(rootKUID, rootKGID, rootMode, nil /* parentDir */)
++		dirInode, err := fs.newDirectory(rootKUID, rootKGID, rootMode, 0 /* umask */, nil /* parentDir */)
+ 		if err != nil {
+ 			return nil, nil, err
+ 		}
+@@ -661,7 +661,7 @@ const maxLinks = math.MaxUint32
+ // Returns ENOSPC if the maximum inode count has been exhausted and no more inodes can be allocated.
+ //
+ // If parentDir is not nil, the setgid bit and default ACL will be inherited from parentDir.
+-func (i *inode) init(impl any, fs *filesystem, kuid auth.KUID, kgid auth.KGID, mode linux.FileMode, parentDir *directory) error {
++func (i *inode) init(impl any, fs *filesystem, kuid auth.KUID, kgid auth.KGID, mode, umask linux.FileMode, parentDir *directory) error {
+ 	if mode.FileType() == 0 {
+ 		panic("file type is required in FileMode")
+ 	}
+@@ -679,31 +679,26 @@ func (i *inode) init(impl any, fs *filesystem, kuid auth.KUID, kgid auth.KGID, m
+ 		}
+ 	}
+ 
+-	// Inherit the parent's default mode and ACL as appropriate
+-	i.mode = atomicbitops.FromUint32(uint32(mode))
++	// Resolve the default ACL before applying the caller's umask. The ACL and
++	// umask are alternative restrictions; the requested mode bounds both.
++	var parentDefaultACL *vfs.PosixACL
+ 	if parentDir != nil && mode.FileType() != linux.ModeSymlink {
+-		parentDefaultACL := parentDir.inode.defaultACL.Load()
+-
+-		if parentDefaultACL != nil {
+-			// TODO(gvisor.dev/issues/13688): Linux only masks in the process's umask when creating
+-			// in a directory with no default ACL. In gVisor, the umask is masked in by the syscall
+-			// layer and not passed along to VFS and the filesystems, so skipping the umask in this
+-			// case will require some refactoring.
+-			//
+-			// This will never lead to overly-permissive file permissions, only too-strict.
+-
+-			newACL := parentDefaultACL.MaskNewFileMode(uint16(mode))
+-			equivMode, equiv := newACL.Mode()
+-			if !equiv {
+-				i.accessACL.Store(&newACL)
+-			}
+-			newMode := (uint16(equivMode) & linux.PermissionsMask) | (uint16(mode) &^ linux.PermissionsMask)
+-			i.mode = atomicbitops.FromUint32(uint32(newMode))
+-
+-			if mode.IsDir() {
+-				i.defaultACL.Store(parentDefaultACL)
+-			}
+-
++		parentDefaultACL = parentDir.inode.defaultACL.Load()
++	}
++	if parentDefaultACL == nil {
++		mode &^= umask
++	}
++	i.mode = atomicbitops.FromUint32(uint32(mode))
++	if parentDefaultACL != nil {
++		newACL := parentDefaultACL.MaskNewFileMode(uint16(mode))
++		equivMode, equiv := newACL.Mode()
++		if !equiv {
++			i.accessACL.Store(&newACL)
++		}
++		newMode := (uint16(equivMode) & linux.PermissionsMask) | (uint16(mode) &^ linux.PermissionsMask)
++		i.mode = atomicbitops.FromUint32(uint32(newMode))
++		if mode.IsDir() {
++			i.defaultACL.Store(parentDefaultACL)
+ 		}
+ 	}
+ 
+diff --git a/pkg/sentry/fsimpl/tmpfs/tmpfs_test.go b/pkg/sentry/fsimpl/tmpfs/tmpfs_test.go
+index 7cf0def..30099dd 100644
+--- a/pkg/sentry/fsimpl/tmpfs/tmpfs_test.go
++++ b/pkg/sentry/fsimpl/tmpfs/tmpfs_test.go
+@@ -364,3 +364,78 @@ func TestMountOptionsEnforcement(t *testing.T) {
+ 		t.Fatalf("second write got err %v, want ENOSPC", err)
+ 	}
+ }
++
++// TestCreateUmaskAndDefaultACL verifies that the original requested mode, not
++// the mode after umask, bounds inherited ACLs. The named user is not in the
++// owning group, so successful writes require actual ACL enforcement.
++func TestCreateUmaskAndDefaultACL(t *testing.T) {
++	for _, hasACL := range []bool{false, true} {
++		for _, umask := range []linux.FileMode{0022, 0077} {
++			for _, kind := range []string{"file", "directory", "fifo"} {
++				for _, private := range []bool{false, true} {
++					t.Run(fmt.Sprintf("acl=%v/umask=%03o/%s/private=%v", hasACL, umask, kind, private), func(t *testing.T) {
++						ctx := contexttest.Context(t)
++						creds := auth.CredentialsFromContext(ctx)
++						vfsObj, root, cleanup, err := newTmpfsRoot(ctx)
++						if err != nil {
++							t.Fatal(err)
++						}
++						defer cleanup()
++						rootPop := vfs.PathOperation{Root: root, Start: root}
++						if hasACL {
++							mask := vfs.MayRead | vfs.MayWrite | vfs.MayExec
++							acl := &vfs.PosixACL{UGOPerms: 0700, Mask: &mask, Users: []vfs.ACLUser{{UID: 1001, Perms: mask}}}
++							if _, _, err := vfsObj.SetPosixACLAt(ctx, creds, &rootPop, vfs.DefaultACL, acl, false); err != nil {
++								t.Fatal(err)
++							}
++						}
++						mode := linux.FileMode(0666)
++						if kind == "directory" {
++							mode = 0777
++						}
++						if private {
++							mode &= 0700
++						}
++						pop := vfs.PathOperation{Root: root, Start: root, Path: fspath.Parse("child")}
++						switch kind {
++						case "file":
++							fd, err := vfsObj.OpenAt(ctx, creds, &pop, &vfs.OpenOptions{Flags: linux.O_CREAT | linux.O_EXCL | linux.O_RDWR, Mode: mode, Umask: umask})
++							if err != nil {
++								t.Fatal(err)
++							}
++							fd.DecRef(ctx)
++						case "directory":
++							if err := vfsObj.MkdirAt(ctx, creds, &pop, &vfs.MkdirOptions{Mode: mode, Umask: umask}); err != nil {
++								t.Fatal(err)
++							}
++						case "fifo":
++							if err := vfsObj.MknodAt(ctx, creds, &pop, &vfs.MknodOptions{Mode: linux.S_IFIFO | mode, Umask: umask}); err != nil {
++								t.Fatal(err)
++							}
++						}
++						stat, err := vfsObj.StatAt(ctx, creds, &pop, &vfs.StatOptions{Mask: linux.STATX_MODE})
++						if err != nil {
++							t.Fatal(err)
++						}
++						want := mode &^ umask
++						if hasACL {
++							want = mode & 0770
++						}
++						if got := linux.FileMode(stat.Mode) & 0777; got != want {
++							t.Errorf("mode=%#o, want %#o", got, want)
++						}
++						other := auth.NewUserCredentials(1001, 1001, nil, &auth.TaskCapabilities{}, creds.UserNamespace)
++						err = vfsObj.AccessAt(ctx, other, vfs.MayWrite, &pop)
++						if hasACL && !private {
++							if err != nil {
++								t.Errorf("named user write denied: %v", err)
++							}
++						} else if !linuxerr.Equals(linuxerr.EACCES, err) {
++							t.Errorf("private/umasked write error=%v, want EACCES", err)
++						}
++					})
++				}
++			}
++		}
++	}
++}
+diff --git a/pkg/sentry/syscalls/linux/sys_file.go b/pkg/sentry/syscalls/linux/sys_file.go
+index bac6ff1..f9a1a45 100644
+--- a/pkg/sentry/syscalls/linux/sys_file.go
++++ b/pkg/sentry/syscalls/linux/sys_file.go
+@@ -75,7 +75,8 @@ func mknodat(t *kernel.Task, dirfd int32, addr hostarch.Addr, mode linux.FileMod
+ 	}
+ 	major, minor := linux.DecodeDeviceID(dev)
+ 	return t.Kernel().VFS().MknodAt(t, t.Credentials(), &tpop.pop, &vfs.MknodOptions{
+-		Mode:     mode &^ linux.FileMode(t.FSContext().Umask()),
++		Mode:     mode,
++		Umask:    linux.FileMode(t.FSContext().Umask()),
+ 		DevMajor: uint32(major),
+ 		DevMinor: minor,
+ 	})
+@@ -118,7 +119,8 @@ func openat(t *kernel.Task, dirfd int32, pathAddr hostarch.Addr, flags uint32, m
+ 
+ 	file, err := t.Kernel().VFS().OpenAt(t, t.Credentials(), &tpop.pop, &vfs.OpenOptions{
+ 		Flags: flags | linux.O_LARGEFILE,
+-		Mode:  linux.FileMode(mode & (0777 | linux.S_ISUID | linux.S_ISGID | linux.S_ISVTX) &^ t.FSContext().Umask()),
++		Mode:  linux.FileMode(mode & (0777 | linux.S_ISUID | linux.S_ISGID | linux.S_ISVTX)),
++		Umask: linux.FileMode(t.FSContext().Umask()),
+ 	})
+ 	if err != nil {
+ 		return 0, nil, err
+@@ -960,7 +962,8 @@ func mkdirat(t *kernel.Task, dirfd int32, addr hostarch.Addr, mode uint) error {
+ 	}
+ 	defer tpop.Release(t)
+ 	return t.Kernel().VFS().MkdirAt(t, t.Credentials(), &tpop.pop, &vfs.MkdirOptions{
+-		Mode: linux.FileMode(mode & (0777 | linux.S_ISVTX) &^ t.FSContext().Umask()),
++		Mode:  linux.FileMode(mode & (0777 | linux.S_ISVTX)),
++		Umask: linux.FileMode(t.FSContext().Umask()),
+ 	})
+ }
+ 
+diff --git a/pkg/sentry/vfs/options.go b/pkg/sentry/vfs/options.go
+index e599f89..ffbbb89 100644
+--- a/pkg/sentry/vfs/options.go
++++ b/pkg/sentry/vfs/options.go
+@@ -38,6 +38,10 @@ type MkdirOptions struct {
+ 	// Mode is the file mode bits for the created directory.
+ 	Mode linux.FileMode
+ 
++	// Umask is applied to Mode only when the final parent has no default ACL.
++	// Keep Mode unmasked so ACL inheritance can honor the requested permissions.
++	Umask linux.FileMode
++
+ 	// If ForSyntheticMountpoint is true, FilesystemImpl.MkdirAt() may create
+ 	// the given directory in memory only (as opposed to persistent storage).
+ 	// The created directory should be able to support the creation of
+@@ -66,6 +70,10 @@ type MknodOptions struct {
+ 	// Mode is the file type and mode bits for the created file.
+ 	Mode linux.FileMode
+ 
++	// Umask is applied to Mode only when the final parent has no default ACL.
++	// Keep Mode unmasked so ACL inheritance can honor the requested permissions.
++	Umask linux.FileMode
++
+ 	// If Mode specifies a character or block device special file, DevMajor and
+ 	// DevMinor are the major and minor device numbers for the created device.
+ 	DevMajor uint32
+@@ -137,6 +145,10 @@ type OpenOptions struct {
+ 	// created file.
+ 	Mode linux.FileMode
+ 
++	// Umask is applied to Mode only when the final parent has no default ACL.
++	// Keep Mode unmasked so ACL inheritance can honor the requested permissions.
++	Umask linux.FileMode
++
+ 	// FileExec is set when the file is being opened to be executed.
+ 	// VirtualFilesystem.OpenAt() checks that the caller has execute permissions
+ 	// on the file, that the file is a regular file, and that the mount doesn't
+diff --git a/pkg/sentry/vfs/vfs.go b/pkg/sentry/vfs/vfs.go
+index cea9193..9c86b3f 100644
+--- a/pkg/sentry/vfs/vfs.go
++++ b/pkg/sentry/vfs/vfs.go
+@@ -344,6 +344,7 @@ func (vfs *VirtualFilesystem) LinkAt(ctx context.Context, creds *auth.Credential
+ 
+ // MkdirAt creates a directory at the given path.
+ func (vfs *VirtualFilesystem) MkdirAt(ctx context.Context, creds *auth.Credentials, pop *PathOperation, opts *MkdirOptions) error {
++	opts.Umask &= 0777
+ 	if !pop.Path.Begin.Ok() {
+ 		// pop.Path should not be empty in operations that create/delete files.
+ 		// This is consistent with mkdirat(dirfd, "", mode).
+@@ -384,6 +385,7 @@ func (vfs *VirtualFilesystem) MkdirAt(ctx context.Context, creds *auth.Credentia
+ // MknodAt creates a file of the given mode at the given path. It returns an
+ // error from the linuxerr package.
+ func (vfs *VirtualFilesystem) MknodAt(ctx context.Context, creds *auth.Credentials, pop *PathOperation, opts *MknodOptions) error {
++	opts.Umask &= 0777
+ 	if !pop.Path.Begin.Ok() {
+ 		// pop.Path should not be empty in operations that create/delete files.
+ 		// This is consistent with mknodat(dirfd, "", mode, dev).
+@@ -421,6 +423,7 @@ func (vfs *VirtualFilesystem) MknodAt(ctx context.Context, creds *auth.Credentia
+ // OpenAt returns a FileDescription providing access to the file at the given
+ // path. A reference is taken on the returned FileDescription.
+ func (vfs *VirtualFilesystem) OpenAt(ctx context.Context, creds *auth.Credentials, pop *PathOperation, opts *OpenOptions) (*FileDescription, error) {
++	opts.Umask &= 0777
+ 	fsmetric.Opens.Increment()
+ 
+ 	// Remove:

@@ -1,0 +1,8 @@
+{
+  "without_CAP_FSETID_mode": "0o770",
+  "parent_gid": 42,
+  "groups": [],
+  "uid": 0,
+  "with_CAP_FSETID_mode": "0o2770",
+  "conclusion": "Linux strips requested setgid when CAP_FSETID is absent and gid42 is not a process group."
+}

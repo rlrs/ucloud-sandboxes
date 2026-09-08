@@ -84,6 +84,24 @@ The worker uses those same CPU, load, memory, swap, and PSI thresholds for
 create, wake, and exec. It no longer has a second additive CPU/memory gate that
 can disagree with gateway placement.
 
+CPU utilization at or above 90% blocks admission. A one-minute load average at
+or above 1.25 times the CPU count blocks admission only when current CPU usage
+is also at least 80%, or when that CPU sample is unavailable. Linux load average
+includes both runnable tasks and uninterruptible sleepers, as documented in
+[the kernel load-average implementation](https://github.com/torvalds/linux/blob/master/kernel/sched/loadavg.c#L16).
+The former unconditional load gate could reject an exec as CPU overloaded
+during disk flushes or while their load average decayed, despite spare CPU.
+The corroborating sample prevents that rejection; it does not establish that
+storage throughput or latency is healthy. Density qualification must still pass
+its measured action, park, wake and queued-completion targets.
+
+Admission always retains at least 2 GiB of available physical RAM when memory
+telemetry is known, even when swap remains free. Above that floor, available RAM
+plus free swap must cover the larger of 2 GiB and the requested memory limit.
+Swap can absorb cold pages; it is not extra resident working-set capacity. OCI
+memory limits permit an equal additional swap allowance by expressing the
+combined bound as twice `memory_mb`.
+
 Autoscaler placement uses the same dynamic accounting: CPU and memory are
 reusable after the per-sandbox physical-shape check, while each planned
 placement consumes hard disk. Live pressure remains a separate retained-node

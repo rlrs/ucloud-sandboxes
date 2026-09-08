@@ -1,0 +1,16 @@
+{
+  "utc": "2026-09-07T22:14:29.226818+00:00",
+  "node_job_id": "12383398",
+  "node_name": "density-review-20260907",
+  "sandbox_ids": [],
+  "active_sandbox_creates": 0,
+  "runtime_metrics": {
+    "storage_ublk_active_devices": 0,
+    "storage_ublk_retired_devices": null,
+    "storage_error_volumes": 0,
+    "storage_hard_reserved_mb": 0
+  },
+  "owned_native_containers": [],
+  "owned_native_networks": [],
+  "note": "Read-only direct-node heartbeat/inventory and Docker inventory check after sequential ACL and SWE-rebench gVisor/native runs. The retired-device metric was absent, not measured as zero. No node service or production deployment was changed during these comparisons."
+}

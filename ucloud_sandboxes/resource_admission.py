@@ -91,19 +91,59 @@ def dynamic_pressure_error(
 
     if metrics is None:
         return "direct node has no fresh runtime metrics for dynamic admission"
+    return _cpu_pressure_error(metrics) or _memory_pressure_error(metrics, requested)
+
+
+def dynamic_cpu_pressure_retryable(
+    metrics: NodeRuntimeMetrics | None,
+    requested: ResourceQuantity,
+) -> bool:
+    """Allow a bounded resample only for known CPU pressure with memory headroom.
+
+    In particular, a CPU rejection must not hide a simultaneous memory failure,
+    and the load fallback with an unknown CPU measurement remains fail-closed.
+    """
+
+    return bool(
+        metrics is not None
+        and metrics.cpu_percent is not None
+        and _cpu_pressure_error(metrics) is not None
+        and _memory_pressure_error(metrics, requested) is None
+    )
+
+
+def _cpu_pressure_error(metrics: NodeRuntimeMetrics) -> str | None:
     if metrics.cpu_percent is not None and metrics.cpu_percent >= 90.0:
         return "direct node CPU pressure blocks active admission"
     if (
         metrics.cpu_count > 0
         and metrics.load_average_1m is not None
         and metrics.load_average_1m >= metrics.cpu_count * 1.25
+        # Linux load includes uninterruptible I/O sleepers and decays after
+        # their work completes. Do not mistake a storage flush burst for CPU
+        # saturation when the current CPU sample demonstrates spare capacity.
+        # Keep the conservative load backstop if CPU sampling is unavailable.
+        and (metrics.cpu_percent is None or metrics.cpu_percent >= 80.0)
     ):
         return "direct node CPU load blocks active admission"
+    return None
+
+
+def _memory_pressure_error(
+    metrics: NodeRuntimeMetrics,
+    requested: ResourceQuantity,
+) -> str | None:
     if (
         metrics.memory_psi_full_avg10 is not None
         and metrics.memory_psi_full_avg10 >= 10.0
     ):
         return "direct node memory pressure blocks active admission"
+    # Free swap can absorb cold anonymous pages, but cannot substitute for the
+    # resident headroom needed by the node agent, sentries and a new operation.
+    # Keep a physical floor even before PSI's ten-second average catches up to
+    # reclaim. Larger sandbox limits remain reusable and may use RAM plus swap.
+    if metrics.memory_total_mb > 0 and metrics.memory_available_mb < 2048:
+        return "direct node has insufficient physical live memory headroom"
     minimum_headroom_mb = max(2048, requested.memory_mb)
     if metrics.swap_total_mb > 0:
         available_memory_mb = metrics.memory_available_mb + metrics.swap_free_mb

@@ -221,13 +221,15 @@ class DirectLifecycle:
             raise
 
     def release_shared(self, sandbox_id: str) -> None:
-        registration = self.owner.service.provisioner.registry.get(sandbox_id)
-        if registration is not None:
-            self.owner.service.mark_activity(
-                sandbox_id,
-                registration.sandbox_generation,
-            )
-        self._coordinator.release_shared(sandbox_id)
+        try:
+            registration = self.owner.service.provisioner.registry.get(sandbox_id)
+            if registration is not None:
+                self.owner.service.mark_activity(
+                    sandbox_id,
+                    registration.sandbox_generation,
+                )
+        finally:
+            self._coordinator.release_shared(sandbox_id)
 
     @contextmanager
     def shared(self, sandbox_id: str) -> Iterator[None]:

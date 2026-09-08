@@ -2,11 +2,11 @@
 set -euo pipefail
 
 readonly EXPECTED_COMMIT="50e1502a95d36ad2faf2c7ef33b8bf21fe975293"
-readonly EXPECTED_PATCH_SERIES_SHA256="44beb70f08a1eca01dce6077cf8d4bb8e2cd4b093ef7055b806039125cd21573"
-readonly EXPECTED_PATCHED_FILES_SHA256="ea7dcf91cd27683702b616a10a4124dd0e8e146afca51a3519d8b76ca6667144"
+readonly EXPECTED_PATCH_SERIES_SHA256="e87ff7015c04691ee37905b0f54257acee060518a2672f3d764d4d8b36a4ad42"
+readonly EXPECTED_PATCHED_FILES_SHA256="53aa4c8bd9164196b5c6624d4f0cb19a0194ce56cf8f016863342dd83f35e571"
 readonly BUILD_CONFIG="opt"
-readonly -a PATCH_NAMES=("20260817/0001-ucloud-hibernation.patch")
-readonly -a EXPECTED_PATCH_SHA256S=("bed13a2a1ef790a61a7a09d3a70511a15a7504d1ef2342edc672b4203950f5e6")
+readonly -a PATCH_NAMES=("20260817/0001-ucloud-hibernation.patch" "20260817/0002-ucloud-default-acl-umask.patch" "20260817/0003-ucloud-release-detached-mounts.patch")
+readonly -a EXPECTED_PATCH_SHA256S=("bed13a2a1ef790a61a7a09d3a70511a15a7504d1ef2342edc672b4203950f5e6" "361476d2fe3ab4c8adc80ab0c54e63c18f96984c2d59c00b51b770cb9f3fd506" "0b3d2eb13a8f417e1ee9c5d9e80ef5df38eba59d6cde3623dfa9d058bd7f493c")
 
 usage() {
   echo "usage: $0 GVISOR_CHECKOUT OUTPUT_DIRECTORY" >&2
@@ -110,6 +110,9 @@ readonly BAZEL_VERSION
   bazel test \
     "--test_filter=TestStartPausedStatusTransition" \
     "//runsc/container:container_test"
+  bazel test "//pkg/sentry/fsimpl/tmpfs:tmpfs_test"
+  bazel test "--test_filter=TestPinnedBootExecutable" "//runsc/sandbox:sandbox_test"
+  bazel test "--test_filter=TestWithoutCgroupCPUWatcher" "//runsc/specutils:specutils_test"
   bazel build "-c" "${BUILD_CONFIG}" "//:release"
 )
 

@@ -35,6 +35,53 @@ from ucloud_sandboxes.storage_native_registry import (
 )
 
 
+class JournalWriterCoordinationTests(unittest.TestCase):
+    def test_writer_handoff_rolls_back_and_does_not_block_readers(self):
+        with TemporaryDirectory() as raw:
+            journal = StorageNativeJournal(Path(raw).resolve() / "journal.sqlite")
+            first_entered = threading.Event()
+            second_started = threading.Event()
+            second_entered = threading.Event()
+            release = threading.Event()
+
+            def first():
+                with journal._write_connection() as connection:
+                    connection.execute("BEGIN IMMEDIATE")
+                    connection.execute("UPDATE counters SET next_value = 200123")
+                    first_entered.set()
+                    if not release.wait(5):
+                        raise TimeoutError("test did not release writer")
+                    raise RuntimeError("injected transaction failure")
+
+            def second():
+                second_started.set()
+                with journal._write_connection() as connection:
+                    second_entered.set()
+                    connection.execute("BEGIN IMMEDIATE")
+                    value = connection.execute("SELECT next_value FROM counters").fetchone()[0]
+                    connection.execute("UPDATE counters SET next_value = next_value + 1")
+                    connection.commit()
+                    return value
+
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                one = pool.submit(first)
+                try:
+                    self.assertTrue(first_entered.wait(5))
+                    two = pool.submit(second)
+                    self.assertTrue(second_started.wait(5))
+                    self.assertEqual(journal.retired_devices(), [])
+                    self.assertFalse(second_entered.wait(0.05))
+                finally:
+                    release.set()
+                with self.assertRaisesRegex(RuntimeError, "injected"):
+                    one.result(timeout=5)
+                self.assertEqual(two.result(timeout=5), 200000)
+            # A new connection sees the committed counter after both close.
+            with closing(journal._connect()) as connection:
+                self.assertEqual(connection.execute("SELECT next_value FROM counters").fetchone()[0], 200001)
+                self.assertEqual(connection.execute("PRAGMA synchronous").fetchone()[0], 2)
+
+
 @dataclass(frozen=True)
 class FakeLayer:
     digest: str
@@ -229,6 +276,136 @@ class FakeHost:
 
 
 class StorageNativeNodeServiceTests(unittest.TestCase):
+    def _retired_admission_fixture(self, root):
+        service, backend, host = self._service(
+            root, pooled=True, capacity=3 << 30, max_ublk_devices=1
+        )
+        owner = StorageVolumeOwner("retired", "retired", 1)
+        created = service.converge_volume(
+            owner, action="prepare", operation_id="create", virtual_size=1 << 30
+        )
+        host.busy_devices.add(Path(created.device_path))
+        service.converge_volume(owner, action="release", operation_id="park")
+        return service, backend, host, created
+
+    def test_device_admission_reclaims_unused_retirement_without_metrics(self):
+        with TemporaryDirectory() as raw:
+            service, backend, host, retired = self._retired_admission_fixture(Path(raw))
+            host.busy_devices.clear()
+            mounted = service.converge_volume(
+                StorageVolumeOwner("next", "next", 1),
+                action="prepare", operation_id="next", virtual_size=1 << 30,
+            )
+            self.assertEqual(mounted.state, StorageVolumeState.MOUNTED)
+            self.assertEqual(backend.delete_calls, [retired.device_id])
+            self.assertEqual(service.journal.retired_devices(), [])
+            self.assertEqual(service._pending_device_allocations, 0)
+
+    def test_device_admission_coordinates_with_reaper_without_allocation_lock(self):
+        with TemporaryDirectory() as raw:
+            service, backend, host, retired = self._retired_admission_fixture(Path(raw))
+            host.busy_devices.clear()
+            deleting = threading.Event()
+            finish_delete = threading.Event()
+            waiting_for_reaper = threading.Event()
+            original_delete = backend.delete
+            original_reap = service._reap_retired_devices
+
+            def reap(**kwargs):
+                if kwargs:
+                    waiting_for_reaper.set()
+                return original_reap(**kwargs)
+
+            def delete(device_id):
+                deleting.set()
+                if not finish_delete.wait(timeout=5):
+                    raise RuntimeError("test did not release backend deletion")
+                original_delete(device_id)
+
+            backend.delete = delete
+            service._reap_retired_devices = reap
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                reaper = pool.submit(service._reap_retired_devices)
+                self.assertTrue(deleting.wait(timeout=2))
+                admission = pool.submit(
+                    service.converge_volume,
+                    StorageVolumeOwner("next", "next", 1),
+                    action="prepare", operation_id="next", virtual_size=1 << 30,
+                )
+                try:
+                    self.assertTrue(waiting_for_reaper.wait(timeout=1))
+                    # Waiting for an older scan must not block the ownership
+                    # transfer of another allocation already in progress.
+                    self.assertTrue(service._device_slot_guard.acquire(timeout=1))
+                    service._device_slot_guard.release()
+                    self.assertFalse(admission.done())
+                finally:
+                    finish_delete.set()
+                self.assertEqual(reaper.result(timeout=2), 1)
+                self.assertEqual(admission.result(timeout=2).state, StorageVolumeState.MOUNTED)
+            self.assertEqual(backend.delete_calls, [retired.device_id])
+            self.assertEqual(service._pending_device_allocations, 0)
+
+    def test_device_admission_rechecks_after_last_retirement_disappears(self):
+        with TemporaryDirectory() as raw:
+            service, backend, host, retired = self._retired_admission_fixture(Path(raw))
+            host.busy_devices.clear()
+            original_retired = service.journal.retired_devices
+            reclaimed = False
+
+            def retired_devices():
+                nonlocal reclaimed
+                if not reclaimed:
+                    # Simulate metrics finishing reclamation after admission's
+                    # first full-capacity snapshot, before it reads retirement.
+                    reclaimed = True
+                    backend.delete(retired.device_id)
+                    service.journal.forget_retired_device(retired.device_owner_id)
+                return original_retired()
+
+            service.journal.retired_devices = retired_devices
+            mounted = service.converge_volume(
+                StorageVolumeOwner("next", "next", 1),
+                action="prepare", operation_id="next", virtual_size=1 << 30,
+            )
+            self.assertEqual(mounted.state, StorageVolumeState.MOUNTED)
+            self.assertEqual(backend.delete_calls, [retired.device_id])
+            self.assertEqual(service._pending_device_allocations, 0)
+
+    def test_device_admission_keeps_busy_retirement_charged_after_deadline(self):
+        with TemporaryDirectory() as raw:
+            service, backend, _, retired = self._retired_admission_fixture(Path(raw))
+            service._DEVICE_RECLAIM_WAIT_SECONDS = 0.04
+            with self.assertRaises(StorageNativeCapacityError):
+                service.converge_volume(
+                    StorageVolumeOwner("next", "next", 1),
+                    action="prepare", operation_id="next", virtual_size=1 << 30,
+                )
+            self.assertEqual(backend.delete_calls, [])
+            self.assertEqual(backend.release_calls, [])
+            self.assertIn(retired.device_owner_id, backend.owners)
+            self.assertEqual(len(service.journal.retired_devices()), 1)
+            self.assertIsNone(service.journal.load("next"))
+            self.assertEqual(service._pending_device_allocations, 0)
+
+    def test_device_admission_does_not_reclaim_recycled_numeric_id(self):
+        with TemporaryDirectory() as raw:
+            service, backend, host, retired = self._retired_admission_fixture(Path(raw))
+            original = backend.owners.pop(retired.device_owner_id)
+            replacement = replace(original, owner_id="replacement-owner")
+            backend.owners[replacement.owner_id] = replacement
+            host.busy_devices.clear()
+            with self.assertRaises(StorageNativeCapacityError):
+                service.converge_volume(
+                    StorageVolumeOwner("next", "next", 1),
+                    action="prepare", operation_id="next", virtual_size=1 << 30,
+                )
+            self.assertEqual(backend.delete_calls, [])
+            self.assertIn(replacement.owner_id, backend.owners)
+            self.assertEqual(service.journal.retired_devices(), [])
+            self.assertIsNone(service.journal.load("next"))
+            self.assertEqual(service._pending_device_allocations, 0)
+
     def test_busy_device_is_retired_after_park_and_checkpoint_resumes(self):
         with TemporaryDirectory() as raw:
             service, backend, host = self._service(Path(raw), pooled=True)
@@ -244,11 +421,15 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
             self.assertEqual(backend.delete_calls, [])
             self.assertNotIn(created.device_id, backend.release_calls)
             self.assertTrue(all(Path(p).exists() for p in released.sealed_layer_paths))
-            resumed = service.converge_volume(owner, action="mount", operation_id="wake")
+            resumed = service.converge_volume(
+                owner, action="mount", operation_id="wake"
+            )
             self.assertEqual(resumed.state, StorageVolumeState.MOUNTED)
             self.assertNotEqual(resumed.device_id, created.device_id)
             restarted = StorageNativeNodeService(
-                service.config, backend=backend, host=host,
+                service.config,
+                backend=backend,
+                host=host,
                 global_config_path=service.global_config_path,
             )
             restarted.reconcile()
@@ -268,8 +449,10 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
             host.busy_devices.add(Path("/dev/ublkb1"))
             with self.assertRaisesRegex(StorageNativeNodeError, "still in use"):
                 service.converge_volume(
-                    StorageVolumeOwner("vol", "sandbox", 1), action="prepare",
-                    operation_id="create", virtual_size=1 << 30
+                    StorageVolumeOwner("vol", "sandbox", 1),
+                    action="prepare",
+                    operation_id="create",
+                    virtual_size=1 << 30,
                 )
             self.assertEqual(host.formatted, [])
             self.assertEqual(host.mounted, set())
@@ -279,18 +462,29 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
 
     def test_quarantine_capacity_and_recycled_device_identity(self):
         with TemporaryDirectory() as raw:
-            service, backend, host = self._service(Path(raw), pooled=True, capacity=2 << 30)
+            service, backend, host = self._service(
+                Path(raw), pooled=True, capacity=2 << 30
+            )
             owner = StorageVolumeOwner("vol", "sandbox", 1)
-            created = service.converge_volume(owner, action="prepare", operation_id="create", virtual_size=1 << 30)
+            created = service.converge_volume(
+                owner, action="prepare", operation_id="create", virtual_size=1 << 30
+            )
             host.busy_devices.add(Path(created.device_path))
             service.converge_volume(owner, action="release", operation_id="park")
             with self.assertRaises(StorageNativeCapacityError):
-                service.converge_volume(StorageVolumeOwner("other", "other", 1), action="prepare", operation_id="other", virtual_size=1 << 30)
+                service.converge_volume(
+                    StorageVolumeOwner("other", "other", 1),
+                    action="prepare",
+                    operation_id="other",
+                    virtual_size=1 << 30,
+                )
             # Backend restart can remove the old owner and reuse its numeric ID.
             backend.delete(created.device_id)
             backend.next_device_id = created.device_id
             host.busy_devices.clear()
-            resumed = service.converge_volume(owner, action="mount", operation_id="wake")
+            resumed = service.converge_volume(
+                owner, action="mount", operation_id="wake"
+            )
             self.assertEqual(resumed.device_id, created.device_id)
             self.assertEqual(service.metrics()["retired_devices"], 0)
             self.assertIn(resumed.device_owner_id, backend.owners)
@@ -299,9 +493,16 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
     def test_journal_migrates_v2_without_changing_volume_identity(self):
         with TemporaryDirectory() as raw:
             service, _, _ = self._service(Path(raw))
-            record = service.converge_volume(StorageVolumeOwner("vol", "sandbox", 1), action="prepare", operation_id="create", virtual_size=1 << 30)
+            record = service.converge_volume(
+                StorageVolumeOwner("vol", "sandbox", 1),
+                action="prepare",
+                operation_id="create",
+                virtual_size=1 << 30,
+            )
             with sqlite3.connect(service.journal.path) as connection:
-                connection.executescript("DROP TABLE retired_devices; PRAGMA user_version=2;")
+                connection.executescript(
+                    "DROP TABLE retired_devices; PRAGMA user_version=2;"
+                )
             migrated = StorageNativeJournal(service.journal.path)
             self.assertEqual(migrated.load("vol"), record)
             self.assertEqual(migrated.retired_devices(), [])
@@ -344,10 +545,13 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
 
     def test_failed_snapshot_mount_can_discard_without_releasing_recycled_device(self):
         from unittest.mock import patch
+
         with TemporaryDirectory() as raw:
             service, backend, host = self._service(Path(raw), pooled=True)
             owner = StorageVolumeOwner("vol", "sandbox", 1)
-            service.converge_volume(owner, action="prepare", operation_id="create", virtual_size=1 << 30)
+            service.converge_volume(
+                owner, action="prepare", operation_id="create", virtual_size=1 << 30
+            )
             released = service.converge_volume(
                 owner, action="release", operation_id="park"
             )
@@ -443,6 +647,146 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
 
             self.assertEqual(second.device_id, first.device_id)
             self.assertEqual(backend.live, {first.device_id})
+
+    def test_128_active_devices_fit_with_16_additional_idle_pool_devices(self) -> None:
+        with TemporaryDirectory() as raw:
+            service, backend, _ = self._service(
+                Path(raw), capacity=129 << 30, pooled=True, max_ublk_devices=128
+            )
+
+            def refill_pool() -> None:
+                # AgentEnv's high watermark bounds idle devices, separately
+                # from the node service's active runtime-owner ceiling.
+                while len(backend.idle) < 16:
+                    device_id = backend.next_device_id
+                    backend.next_device_id += 1
+                    backend.live.add(device_id)
+                    backend.idle.add(device_id)
+
+            refill_pool()
+            for index in range(128):
+                service.create_volume(
+                    sandbox_id=f"sandbox-{index}",
+                    sandbox_generation=1,
+                    volume_id=f"volume-{index}",
+                    operation_id=f"create:{index}",
+                    virtual_size=1 << 30,
+                )
+                refill_pool()
+
+            metrics = service.metrics()
+            self.assertEqual(metrics["ublk_active_devices"], 128)
+            self.assertEqual(metrics["ublk_live_devices"], 144)
+            self.assertEqual(metrics["device_pool_idle_devices"], 16)
+            with self.assertRaisesRegex(
+                StorageNativeConflictError, "ublk device capacity is exhausted"
+            ):
+                service.create_volume(
+                    sandbox_id="sandbox-129",
+                    sandbox_generation=1,
+                    volume_id="volume-129",
+                    operation_id="create:129",
+                    virtual_size=1 << 30,
+                )
+            self.assertIsNone(service.journal.load("volume-129"))
+
+    def test_acquired_device_is_not_counted_twice_during_slow_format(self) -> None:
+        with TemporaryDirectory() as raw:
+            service, backend, host = self._service(
+                Path(raw), capacity=3 << 30, pooled=True, max_ublk_devices=2
+            )
+            formatting = threading.Event()
+            finish_format = threading.Event()
+            original_format = host.format_xfs
+
+            def format_xfs(device):
+                if device == Path("/dev/ublkb1"):
+                    formatting.set()
+                    if not finish_format.wait(timeout=5):
+                        raise RuntimeError("test did not release formatting")
+                original_format(device)
+
+            host.format_xfs = format_xfs
+
+            def create(index):
+                return service.create_volume(
+                    sandbox_id=f"sandbox-{index}",
+                    sandbox_generation=1,
+                    volume_id=f"volume-{index}",
+                    operation_id=f"create:{index}",
+                    virtual_size=1 << 30,
+                )
+
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                first = pool.submit(create, 1)
+                try:
+                    self.assertTrue(formatting.wait(timeout=2))
+                    self.assertEqual(len(backend.owners), 1)
+                    second = create(2)
+                    self.assertEqual(service.metrics()["ublk_active_devices"], 2)
+                    with self.assertRaises(StorageNativeCapacityError):
+                        create(3)
+                    self.assertIsNone(service.journal.load("volume-3"))
+                finally:
+                    finish_format.set()
+                self.assertNotEqual(first.result().device_id, second.device_id)
+            self.assertEqual(service._pending_device_allocations, 0)
+
+    def test_device_slot_failures_preserve_backend_ownership_accounting(self) -> None:
+        for failure in ("before_acquire", "lost_acquire_response", "format"):
+            with self.subTest(failure=failure), TemporaryDirectory() as raw:
+                service, backend, host = self._service(
+                    Path(raw), capacity=3 << 30, pooled=True, max_ublk_devices=1
+                )
+                acquire = backend.create_runtime_device
+                format_xfs = host.format_xfs
+
+                def failing_acquire(**kwargs):
+                    if failure == "lost_acquire_response":
+                        acquire(**kwargs)
+                    raise RuntimeError("injected acquisition failure")
+
+                def failing_format(device):
+                    raise RuntimeError("injected format failure")
+
+                if failure == "format":
+                    host.format_xfs = failing_format
+                else:
+                    backend.create_runtime_device = failing_acquire
+                # A failed rollback must remain charged to the real owner.
+                backend.fail_next_release = failure != "before_acquire"
+
+                def create(index):
+                    return service.create_volume(
+                        sandbox_id=f"sandbox-{index}",
+                        sandbox_generation=1,
+                        volume_id=f"volume-{index}",
+                        operation_id=f"create:{index}",
+                        virtual_size=1 << 30,
+                    )
+
+                with self.assertRaisesRegex(RuntimeError, "injected"):
+                    create(1)
+                self.assertEqual(service._pending_device_allocations, 0)
+                backend.create_runtime_device = acquire
+                host.format_xfs = format_xfs
+                if failure == "before_acquire":
+                    self.assertEqual(len(backend.owners), 0)
+                else:
+                    self.assertEqual(len(backend.owners), 1)
+                    with self.assertRaises(StorageNativeCapacityError):
+                        create(2)
+                    first = service.journal.load("volume-1")
+                    service.delete_volume(
+                        sandbox_id="sandbox-1",
+                        sandbox_generation=1,
+                        volume_id="volume-1",
+                        operation_id="delete:1",
+                        expected_revision=first.revision,
+                    )
+                self.assertEqual(create(2).state, StorageVolumeState.MOUNTED)
+                self.assertEqual(len(backend.owners), 1)
+                self.assertEqual(service._pending_device_allocations, 0)
 
     def test_ublk_limit_rejects_wake_before_changing_released_volume(self) -> None:
         with TemporaryDirectory() as raw:

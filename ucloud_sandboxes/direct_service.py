@@ -35,7 +35,12 @@ from .direct_registry import DirectSandboxRegistration
 from .direct_warden import DirectWardenError
 from .hibernation import HibernationState
 from .models import NodeRuntimeMetrics, ResourceQuantity
-from .resource_admission import dynamic_pressure_error, dynamic_request_fits
+from .resource_admission import (
+    dynamic_cpu_pressure_retryable,
+    dynamic_pressure_error,
+    dynamic_request_fits,
+)
+from .runtime_metrics import DEFAULT_CPU_SAMPLE_SECONDS
 from .sandbox import (
     OPERATION_ID_RE,
     SandboxAdmissionClosedError,
@@ -52,6 +57,11 @@ from .telemetry import Telemetry
 
 
 _LOG = logging.getLogger(__name__)
+
+# A short host spike must expire from the production sampler's 200 ms cache
+# before resampling. Keep a deadline; sustained pressure still rejects work.
+_CPU_ADMISSION_RETRY_SECONDS = 0.21
+_CPU_ADMISSION_DEADLINE_SECONDS = 1.0
 
 
 def sandbox_file_write_script() -> str:
@@ -272,6 +282,7 @@ class DirectSandboxService:
         # adjustment, and resets only when a new boot also changes node_epoch.
         self._activity_epoch = time.monotonic_ns()
         self._capacity_guard = threading.Lock()
+        self._admission_changed = threading.Condition(self._capacity_guard)
         self._locks: dict[tuple[str, int], _LifecycleLockEntry] = {}
         self._locks_guard = threading.Lock()
         self._admission_open = True
@@ -808,6 +819,11 @@ class DirectSandboxService:
                     ),
                     self._restore_slots,
                 ):
+                    current = self._require_registration(sandbox_id)
+                    if current.sandbox_generation != generation:
+                        raise DirectWardenError(
+                            "wake generation does not own direct sandbox"
+                        )
                     with self.telemetry.span(
                         "sandbox.wake",
                         attributes={
@@ -1407,6 +1423,7 @@ class DirectSandboxService:
         # reservation snapshot or has already finished.
         with self._capacity_guard:
             self._admission_open = False
+            self._admission_changed.notify_all()
 
     def open_admission(self) -> None:
         with self._capacity_guard:
@@ -1456,6 +1473,10 @@ class DirectSandboxService:
                 timings["restore_queue"] = (time.monotonic() - phase) * 1000
                 try:
                     registration = self._require_registration(sandbox.sandbox_id)
+                    if registration.sandbox_generation != sandbox.sandbox_generation:
+                        raise DirectWardenError(
+                            "wake generation does not own direct sandbox"
+                        )
                     phase = time.monotonic()
                     self.provisioner.ensure_network(registration)
                     timings["restore_network"] = (time.monotonic() - phase) * 1000
@@ -1484,6 +1505,83 @@ class DirectSandboxService:
         return timings
 
     @contextmanager
+    def _active_admission_guard(
+        self,
+        requested: ResourceQuantity,
+        *,
+        check_shape: bool,
+        validate_owner: Callable[[], None] | None = None,
+    ):
+        """Yield the capacity lock only to publish an admitted operation's lease.
+
+        Sampling and condition waits release the lock. A waiting operation owns
+        no reservation yet, so drain may close admission and prove the node
+        empty; every attempt rechecks that fence before it can publish a lease.
+        Existing lifecycle locks/leases keep create, wake and exec owners stable.
+        """
+
+        deadline = time.monotonic() + _CPU_ADMISSION_DEADLINE_SECONDS
+        previous_error: str | None = None
+
+        def check_capacity() -> ResourceQuantity | None:
+            if not self._admission_open:
+                raise SandboxAdmissionClosedError("direct node admission is closed")
+            capacity = self._active_capacity
+            if capacity is not None and check_shape:
+                if not dynamic_request_fits(requested, ResourceQuantity(), capacity):
+                    raise SandboxCapacityUnavailableError(
+                        "sandbox CPU or memory request exceeds the physical node shape"
+                    )
+            return capacity
+
+        while True:
+            with self._capacity_guard:
+                capacity = check_capacity()
+                if previous_error is not None and time.monotonic() >= deadline:
+                    raise SandboxCapacityUnavailableError(previous_error)
+                metrics_provider = (
+                    self._runtime_metrics_provider if capacity is not None else None
+                )
+            # Production samples single-flight; never invalidate the shared
+            # cache or hold up other sandboxes/drain while /proc is sampled.
+            metrics = metrics_provider() if metrics_provider is not None else None
+            if previous_error is not None and validate_owner is not None:
+                validate_owner()
+            with self._capacity_guard:
+                capacity = check_capacity()
+                if (
+                    capacity is not None
+                    and metrics_provider is not self._runtime_metrics_provider
+                ):
+                    raise SandboxCapacityUnavailableError(
+                        "direct node runtime metrics provider changed during admission"
+                    )
+                pressure_error = (
+                    dynamic_pressure_error(metrics, requested)
+                    if capacity is not None
+                    else None
+                )
+                now = time.monotonic()
+                if previous_error is not None and now >= deadline:
+                    # A slow collector must not grant an operation after its
+                    # pressure retry deadline, even if its late sample is low.
+                    raise SandboxCapacityUnavailableError(previous_error)
+                if pressure_error is None:
+                    yield
+                    return
+                if not dynamic_cpu_pressure_retryable(metrics, requested):
+                    raise SandboxCapacityUnavailableError(pressure_error)
+                # Do not start a retry unless its backoff and the normal CPU
+                # sampling interval both fit within the one-second deadline.
+                retry_at = now + _CPU_ADMISSION_RETRY_SECONDS
+                if retry_at + DEFAULT_CPU_SAMPLE_SECONDS >= deadline:
+                    raise SandboxCapacityUnavailableError(pressure_error)
+                previous_error = pressure_error
+                while time.monotonic() < retry_at:
+                    check_capacity()
+                    self._admission_changed.wait(retry_at - time.monotonic())
+
+    @contextmanager
     def _reserve_active_capacity(
         self,
         sandbox_id: str,
@@ -1491,36 +1589,11 @@ class DirectSandboxService:
         requested: ResourceQuantity,
     ):
         key = (sandbox_id, generation)
-        # Keep provider work outside the reservation guard. The production node
-        # provider single-flights adjacent /proc samples; explicitly configured
-        # service providers retain their own concurrency and freshness policy.
-        with self._capacity_guard:
-            metrics_provider = (
-                self._runtime_metrics_provider
-                if self._active_capacity is not None
-                else None
-            )
-        metrics = metrics_provider() if metrics_provider is not None else None
-        with self._capacity_guard:
-            if not self._admission_open:
-                raise SandboxAdmissionClosedError("direct node admission is closed")
-            capacity = self._active_capacity
-            if capacity is not None:
-                active_requested = ResourceQuantity(
-                    vcpu=requested.vcpu,
-                    memory_mb=requested.memory_mb,
-                )
-                if not dynamic_request_fits(
-                    active_requested,
-                    ResourceQuantity(),
-                    capacity,
-                ):
-                    raise SandboxCapacityUnavailableError(
-                        "sandbox CPU or memory request exceeds the physical node shape"
-                    )
-                pressure_error = dynamic_pressure_error(metrics, active_requested)
-                if pressure_error is not None:
-                    raise SandboxCapacityUnavailableError(pressure_error)
+        active_requested = ResourceQuantity(
+            vcpu=requested.vcpu,
+            memory_mb=requested.memory_mb,
+        )
+        with self._active_admission_guard(active_requested, check_shape=True):
             self._active_reservations[key] = requested
             self._activity_epoch += 1
         try:
@@ -1538,30 +1611,19 @@ class DirectSandboxService:
             raise SandboxConflictError("exec generation does not own direct sandbox")
         token = f"exec:{uuid4().hex}"
         key = (sandbox_id, generation)
-        # Keep provider work outside the capacity guard. The production node
-        # provider single-flights adjacent /proc samples; explicitly configured
-        # service providers retain their own concurrency and freshness policy.
-        with self._capacity_guard:
-            metrics_provider = (
-                self._runtime_metrics_provider
-                if self._active_capacity is not None
-                else None
-            )
-        metrics = metrics_provider() if metrics_provider is not None else None
-        with self._capacity_guard:
-            if not self._admission_open:
-                raise SandboxAdmissionClosedError("direct node admission is closed")
-            if self._active_capacity is not None:
-                # A sandbox's configured limits bound that sandbox; they do not
-                # describe what its next command will consume. Charging the
-                # complete shape here artificially capped a 32-vCPU worker at
-                # eight concurrent execs from 4-vCPU sandboxes even when the
-                # host was mostly idle. Admit from current host CPU, load,
-                # memory and PSI instead. ExecSessionManager retains the hard
-                # session-count backstop for admission bursts between samples.
-                pressure_error = dynamic_pressure_error(metrics, ResourceQuantity())
-                if pressure_error is not None:
-                    raise SandboxCapacityUnavailableError(pressure_error)
+
+        def validate_owner() -> None:
+            current = self._require_registration(sandbox_id)
+            if current.sandbox_generation != generation:
+                raise SandboxConflictError(
+                    "exec generation does not own direct sandbox"
+                )
+
+        # Limits bound the sandbox, not its next command. A zero-resource lease
+        # retains dynamic pressure checks and full-lifetime activity fencing.
+        with self._active_admission_guard(
+            ResourceQuantity(), check_shape=False, validate_owner=validate_owner
+        ):
             # Keep a zero-resource lease so drain fencing, idle parking and
             # active-operation telemetry still cover the full exec lifetime.
             self._active_exec_reservations[token] = (key, ResourceQuantity())

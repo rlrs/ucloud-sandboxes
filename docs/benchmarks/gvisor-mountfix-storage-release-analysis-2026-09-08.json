@@ -1,0 +1,103 @@
+{
+  "scope": "128 captured first-wave EnsureReleased operations before journal truncation at VM poweroff; later wave is not covered",
+  "operations": 128,
+  "operations_with_exclusive_open_failure": 0,
+  "phases": {
+    "backend.release": {
+      "count": 128,
+      "p50_ms": 32.465,
+      "p95_ms": 45.355,
+      "max_ms": 54.902
+    },
+    "backend.restack_snapshot": {
+      "count": 128,
+      "p50_ms": 6.789,
+      "p95_ms": 16.812,
+      "max_ms": 32.538
+    },
+    "dispatch.dispatch": {
+      "count": 128,
+      "p50_ms": 122.434,
+      "p95_ms": 1250.515,
+      "max_ms": 3304.401
+    },
+    "host.device_is_unused": {
+      "count": 128,
+      "p50_ms": 0.048,
+      "p95_ms": 0.179,
+      "max_ms": 0.552
+    },
+    "host.freeze": {
+      "count": 128,
+      "p50_ms": 38.89,
+      "p95_ms": 55.6,
+      "max_ms": 146.731
+    },
+    "host.sync": {
+      "count": 128,
+      "p50_ms": 3.536,
+      "p95_ms": 4.235,
+      "max_ms": 13.113
+    },
+    "host.unfreeze": {
+      "count": 128,
+      "p50_ms": 1.254,
+      "p95_ms": 1.635,
+      "max_ms": 1.999
+    },
+    "host.unmount": {
+      "count": 128,
+      "p50_ms": 10.359,
+      "p95_ms": 32.318,
+      "max_ms": 50.284
+    },
+    "journal._connect": {
+      "count": 640,
+      "p50_ms": 0.307,
+      "p95_ms": 1.701,
+      "max_ms": 35.472
+    },
+    "journal.begin_transition": {
+      "count": 256,
+      "p50_ms": 3.055,
+      "p95_ms": 94.386,
+      "max_ms": 1553.225
+    },
+    "journal.finish": {
+      "count": 256,
+      "p50_ms": 3.278,
+      "p95_ms": 243.836,
+      "max_ms": 2423.123
+    },
+    "journal.load": {
+      "count": 128,
+      "p50_ms": 0.683,
+      "p95_ms": 5.072,
+      "max_ms": 25.058
+    },
+    "service._begin_transition": {
+      "count": 256,
+      "p50_ms": 3.065,
+      "p95_ms": 94.399,
+      "max_ms": 1553.243
+    },
+    "service._release_backend_device": {
+      "count": 128,
+      "p50_ms": 32.533,
+      "p95_ms": 45.436,
+      "max_ms": 54.99
+    },
+    "service.freeze_and_seal": {
+      "count": 128,
+      "p50_ms": 64.044,
+      "p95_ms": 984.889,
+      "max_ms": 2575.118
+    },
+    "service.release_runtime": {
+      "count": 128,
+      "p50_ms": 56.823,
+      "p95_ms": 336.114,
+      "max_ms": 1350.94
+    }
+  }
+}

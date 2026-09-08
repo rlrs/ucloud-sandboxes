@@ -4,7 +4,7 @@ Sandbox nodes run the deployment-pinned `runsc` binary directly under the
 privileged Warden. Docker and containerd provide OCI image layers only; they do
 not own sandbox processes, writable storage, or lifecycle state.
 
-The active patch, `20260817/0001-ucloud-hibernation.patch`, ports all five
+The first patch, `20260817/0001-ucloud-hibernation.patch`, ports all five
 Warden primitives to gVisor release `20260817.0`, commit
 `50e1502a95d36ad2faf2c7ef33b8bf21fe975293`:
 
@@ -14,8 +14,28 @@ Warden primitives to gVisor release `20260817.0`, commit
 4. bounded restore CPU startup burst;
 5. paused restore handoff.
 
+The second patch, `20260817/0002-ucloud-default-acl-umask.patch`, fixes upstream
+[issue 13688](https://github.com/google/gvisor/issues/13688). Creation carries
+the requested mode and umask separately through VFS and overlay. Tmpfs applies
+the umask when the final parent has no default ACL; inherited ACL permissions
+are instead bounded by the original requested mode. Explicit private modes
+remain private, and filesystems without ACL inheritance retain ordinary umask
+behavior. Unix socket bind retains Linux's separate rule of applying umask
+before creating the socket, including under a default ACL.
+
+The third patch, `20260817/0003-ucloud-release-detached-mounts.patch`, opens
+the sentry executable in the host mount namespace before spawning it. Direct
+and prewarmed launches execute through that descriptor, then close the donation.
+It also disables Go's automatic cgroup CPU watcher in sentry and gofer children,
+while preserving gVisor's explicit CPU sizing and the OCI CPU quota. The sentry
+starts with two Go scheduler processors until its loader applies the configured
+CPU count. These changes prevent executable mappings and cached `cpu.max`
+descriptors from retaining detached cloned mount trees and sibling sandbox disks.
+Live density qualification is required before rollout.
+
 The original five July patches remain here as historical reference. They are
-not applied by the current build. The port uses upstream's new protobuf memory
+not applied by the current build. All three August patches are applied and attested.
+The port uses upstream's new protobuf memory
 metadata, checks external backing size before installing allocator state, and
 patches the sentry's new `runsc/cmd/sentry/sentrycmd/boot.go` location.
 
@@ -52,6 +72,12 @@ replacing their runtime. Do not relabel old checkpoint fingerprints or attempt
 to restore old memory images using this release. Legacy deployment bundles
 remain accepted with their original explicit runtime commit.
 
+The August distribution with the ACL patch also requires a fresh runtime
+generation. The added VFS option fields change generated save/restore layouts;
+do not assume compatibility with checkpoints from the earlier August build.
+The exact executable and companion fingerprints enforce this boundary even
+though the upstream source commit is unchanged.
+
 Actual UCloud qualification and artifact identity are recorded in
 [`gvisor-integration-2026-09-05.md`](../../docs/reviews/gvisor-integration-2026-09-05.md).
 
@@ -72,7 +98,7 @@ The focused runtime tests are:
 
 ```bash
 bazel test //pkg/sentry/pgalloc:pgalloc_test //runsc/boot:boot_test \
-  //runsc/cmd:cmd_test
+  //runsc/cmd:cmd_test //pkg/sentry/fsimpl/tmpfs:tmpfs_test
 ```
 
 The repository benchmarks exercise the current direct-Warden boundary:
@@ -87,6 +113,13 @@ The repository benchmarks exercise the current direct-Warden boundary:
 
 `qualify_direct_node.py` verifies create, exec, file transfer, park, wake,
 delete, and daemon-restart recovery through the node API.
+
+`compatibility_workload.py` additionally verifies cross-user writes with
+default ACLs and umasks 0022/0077 on `/tmp` and `/srv`, including nested
+directories, FIFOs, Unix sockets, setgid ownership, explicit 0600/0700 modes,
+and controls without default ACLs. `qualify_gvisor_hibernation.py` requires
+this matrix to pass before and after hibernation. These are qualification
+requirements; adding the patch does not itself establish a live runtime pass.
 
 ## Ownership invariants
 

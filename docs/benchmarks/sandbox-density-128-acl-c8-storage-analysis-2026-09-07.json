@@ -1,0 +1,164 @@
+{
+  "deployment_scope": "Before v7. Storage candidate v4 and node candidate v5 with the corrected pinned ACL runtime, using temporary diagnostic wrappers. This first-park sample does not establish the performance of the v7 admission-reclamation fix.",
+  "inferred_quarantines": 124,
+  "links": {
+    "benchmark": "sandbox-density-128-acl-c8-deep-2026-09-07.json",
+    "compressed_raw_storage_trace": "sandbox-density-128-acl-c8-storage-journal-2026-09-07.jsonl.gz",
+    "regression_tests": "../../tests/test_storage_native_daemon.py",
+    "storage_implementation": "../../ucloud_sandboxes/storage_native_daemon.py"
+  },
+  "measurement_date_utc": "2026-09-07",
+  "percentile_method": "sorted[floor(0.95*(n-1))]",
+  "repair_test_proof": {
+    "command": ".venv/bin/python -m unittest tests.test_storage_native_daemon tests.test_storage_native_stateful",
+    "independent_race_fencing_review": "pass",
+    "new_regressions": [
+      "test_device_admission_reclaims_unused_retirement_without_metrics",
+      "test_device_admission_coordinates_with_reaper_without_allocation_lock",
+      "test_device_admission_rechecks_after_last_retirement_disappears",
+      "test_device_admission_keeps_busy_retirement_charged_after_deadline",
+      "test_device_admission_does_not_reclaim_recycled_numeric_id"
+    ],
+    "preserved_contracts": [
+      "Busy devices remain charged and are never rebound.",
+      "Recycled numeric IDs are not reclaimed for a different owner.",
+      "Reservation and capacity decisions remain atomic.",
+      "Park timeout and durability requirements are unchanged."
+    ],
+    "result": "pass",
+    "ruff": "pass",
+    "scope": "Local validation of the v7 capacity-pressure reclamation repair; separate from the pre-v7 timings above.",
+    "tests": 28
+  },
+  "sample_scope": {
+    "ensure_released_operations": 128,
+    "first_park_only": true,
+    "quarantines_inferred_from_retirement_ownership_lookup": 124,
+    "raw_trace_also_contains_partial_wake_samples": true
+  },
+  "schema": 1,
+  "scope": "128 sandboxes, c8, first park of final ACL runtime before admission reclamation repair",
+  "source_archive": {
+    "path": "sandbox-density-128-acl-c8-storage-journal-2026-09-07.jsonl.gz",
+    "raw_bytes": 1035468,
+    "raw_sha256": "9995427053c0a4efb8672a81ea7f5911772c8923331f7a47650063cd059281a9",
+    "sha256": "18eae01b813214114c13b532c1c1a2cdd5d315cfdde2dfd783efdae69635a386"
+  },
+  "source_sha256": "9995427053c0a4efb8672a81ea7f5911772c8923331f7a47650063cd059281a9",
+  "stages_ms": {
+    "backend.release": {
+      "max": 940.67,
+      "n": 4,
+      "p50": 899.9845,
+      "p95": 910.495
+    },
+    "backend.restack_snapshot": {
+      "max": 61.071,
+      "n": 128,
+      "p50": 6.011,
+      "p95": 16.755
+    },
+    "dispatch.dispatch": {
+      "max": 1508.2,
+      "n": 128,
+      "p50": 581.17,
+      "p95": 1048.319
+    },
+    "host.device_is_unused": {
+      "max": 0.658,
+      "n": 1389,
+      "p50": 0.029,
+      "p95": 0.066
+    },
+    "host.freeze": {
+      "max": 68.052,
+      "n": 128,
+      "p50": 43.81,
+      "p95": 56.445
+    },
+    "host.sync": {
+      "max": 8.3,
+      "n": 128,
+      "p50": 3.537,
+      "p95": 4.014
+    },
+    "host.unfreeze": {
+      "max": 2.363,
+      "n": 128,
+      "p50": 1.1855,
+      "p95": 1.517
+    },
+    "host.unmount": {
+      "max": 9.031,
+      "n": 128,
+      "p50": 1.8145,
+      "p95": 2.821
+    },
+    "journal._connect": {
+      "max": 11.128,
+      "n": 888,
+      "p50": 0.264,
+      "p95": 0.921
+    },
+    "journal.begin_transition": {
+      "max": 663.2,
+      "n": 256,
+      "p50": 2.842,
+      "p95": 54.768
+    },
+    "journal.finish": {
+      "max": 449.666,
+      "n": 256,
+      "p50": 2.6765,
+      "p95": 53.382
+    },
+    "journal.load": {
+      "max": 8.593,
+      "n": 252,
+      "p50": 0.6074999999999999,
+      "p95": 1.664
+    },
+    "queue_wait": {
+      "max": 4.201,
+      "n": 128,
+      "p50": 0.109,
+      "p95": 0.145
+    },
+    "service._backend_ownership": {
+      "max": 1.329,
+      "n": 124,
+      "p50": 0.808,
+      "p95": 1.063
+    },
+    "service._begin_transition": {
+      "max": 663.214,
+      "n": 256,
+      "p50": 2.8535000000000004,
+      "p95": 54.779
+    },
+    "service._release_backend_device": {
+      "max": 1442.142,
+      "n": 128,
+      "p50": 505.39200000000005,
+      "p95": 593.381
+    },
+    "service.freeze_and_seal": {
+      "max": 779.817,
+      "n": 128,
+      "p50": 63.733999999999995,
+      "p95": 212.403
+    },
+    "service.release_runtime": {
+      "max": 1451.05,
+      "n": 128,
+      "p50": 514.605,
+      "p95": 711.547
+    },
+    "total": {
+      "max": 1508.351,
+      "n": 128,
+      "p50": 581.326,
+      "p95": 1048.467
+    }
+  }
+}

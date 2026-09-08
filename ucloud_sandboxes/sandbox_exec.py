@@ -122,6 +122,7 @@ class ExecSession:
     )
     activity_lease: bool = field(default=False, repr=False, compare=False)
     capacity_lease: object | None = field(default=None, repr=False, compare=False)
+    completion_lock: Lock = field(default_factory=Lock, repr=False, compare=False)
     stdin_lock: Lock = field(
         default_factory=Lock,
         repr=False,
@@ -287,11 +288,13 @@ class ExecSessionManager:
                     return session
                 session.stdin_open = False
                 session.updated_at = utc_now()
-                if session.process is None:
+                process = session.process
+                if process is None:
                     self._append_event_locked(session, "stdin_closed", "")
-                    self._complete_locked(session, 0)
-                    return session
-                stdin = session.process.stdin
+                stdin = process.stdin if process is not None else None
+            if process is None:
+                self._complete(session, 0)
+                return session
             if stdin is not None:
                 try:
                     stdin.close()
@@ -474,7 +477,7 @@ class ExecSessionManager:
                 if self._sessions.get(session_id) is not session:
                     return exit_code
                 session.stdin_open = False
-                self._complete_locked(session, exit_code)
+            self._complete(session, exit_code)
         return exit_code
 
     @staticmethod
@@ -498,7 +501,7 @@ class ExecSessionManager:
             messages.append(f"exec start fence cleanup failed: {cleanup_error}")
         with self._lock:
             self._append_event_locked(session, "error", "; ".join(messages))
-            self._complete_locked(session, 1)
+        self._complete(session, 1)
 
     def _abort_started_process(
         self,
@@ -568,35 +571,38 @@ class ExecSessionManager:
         session.updated_at = utc_now()
         session.condition.notify_all()
 
-    def _complete_locked(self, session: ExecSession, exit_code: int) -> None:
-        if session.status in {"exited", "failed"}:
-            return
-        session.stdin_open = False
-        session.process = None
-        session.exit_code = exit_code
-        session.status = "exited" if exit_code == 0 else "failed"
-        self._append_event_locked(session, "exit", "", exit_code=exit_code)
-        if session.capacity_lease is not None:
-            capacity_lease = session.capacity_lease
-            session.capacity_lease = None
-            try:
-                self._release_capacity_lease(capacity_lease)
-            except Exception as exc:
-                self._append_event_locked(
-                    session,
-                    "error",
-                    f"exec capacity lease cleanup failed: {exc}",
-                )
-        if session.activity_lease:
-            session.activity_lease = False
-            try:
-                self.sandbox_manager.lifecycle.release_shared(session.spec.sandbox_id)
-            except Exception as exc:
-                self._append_event_locked(
-                    session,
-                    "error",
-                    f"exec activity lease cleanup failed: {exc}",
-                )
+    def _complete(self, session: ExecSession, exit_code: int) -> None:
+        # Lease release can access storage. Serialize completion for this
+        # session while leaving other sessions' registry and events available.
+        with session.completion_lock:
+            with self._lock:
+                if session.status in {"exited", "failed"}:
+                    return
+                session.stdin_open = False
+                session.process = None
+                capacity_lease = session.capacity_lease
+                session.capacity_lease = None
+                activity_lease = session.activity_lease
+                session.activity_lease = False
+            errors = []
+            if capacity_lease is not None:
+                try:
+                    self._release_capacity_lease(capacity_lease)
+                except Exception as exc:
+                    errors.append(f"exec capacity lease cleanup failed: {exc}")
+            if activity_lease:
+                try:
+                    self.sandbox_manager.lifecycle.release_shared(session.spec.sandbox_id)
+                except Exception as exc:
+                    errors.append(f"exec activity lease cleanup failed: {exc}")
+            with self._lock:
+                # A terminal result must imply that all cleanup was attempted.
+                # Keep the running session unevictable until that point.
+                for error in errors:
+                    self._append_event_locked(session, "error", error)
+                session.exit_code = exit_code
+                session.status = "exited" if exit_code == 0 else "failed"
+                self._append_event_locked(session, "exit", "", exit_code=exit_code)
 
     def _release_capacity_lease(self, capacity_lease: object) -> None:
         release_capacity = getattr(

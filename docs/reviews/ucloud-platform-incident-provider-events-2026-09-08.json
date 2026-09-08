@@ -1,0 +1,79 @@
+{
+  "job_id": "12383398",
+  "state": "RUNNING",
+  "captured_at": "2026-09-08T07:27:29.129639+00:00",
+  "updates": [
+    {
+      "state": null,
+      "status": "SSH: Connected! Available at: ssh ucloud@ssh.cloud.sdu.dk -p 2435",
+      "timestamp": 1788817190290,
+      "utc": "2026-09-07T21:39:50.290000+00:00"
+    },
+    {
+      "state": null,
+      "status": "Job has been scheduled and is starting soon (Assigned to bit-c26a-03)",
+      "timestamp": 1788817192520,
+      "utc": "2026-09-07T21:39:52.520000+00:00"
+    },
+    {
+      "state": "SUSPENDED",
+      "status": "The virtual machine is powered off.",
+      "timestamp": 1788817192766,
+      "utc": "2026-09-07T21:39:52.766000+00:00"
+    },
+    {
+      "state": "RUNNING",
+      "status": "Your job is now running.",
+      "timestamp": 1788817196255,
+      "utc": "2026-09-07T21:39:56.255000+00:00"
+    },
+    {
+      "state": "SUSPENDED",
+      "status": "The virtual machine is powered off.",
+      "timestamp": 1788819837925,
+      "utc": "2026-09-07T22:23:57.925000+00:00"
+    },
+    {
+      "state": "RUNNING",
+      "status": "Your job is now running.",
+      "timestamp": 1788819872465,
+      "utc": "2026-09-07T22:24:32.465000+00:00"
+    },
+    {
+      "state": "SUSPENDED",
+      "status": "The virtual machine is powered off.",
+      "timestamp": 1788847978143,
+      "utc": "2026-09-08T06:12:58.143000+00:00"
+    },
+    {
+      "state": "RUNNING",
+      "status": "Your job is now running.",
+      "timestamp": 1788848021261,
+      "utc": "2026-09-08T06:13:41.261000+00:00"
+    },
+    {
+      "state": "SUSPENDED",
+      "status": "The virtual machine is powered off.",
+      "timestamp": 1788850048807,
+      "utc": "2026-09-08T06:47:28.807000+00:00"
+    },
+    {
+      "state": "RUNNING",
+      "status": "Your job is now running.",
+      "timestamp": 1788850089103,
+      "utc": "2026-09-08T06:48:09.103000+00:00"
+    },
+    {
+      "state": "SUSPENDED",
+      "status": "The virtual machine is powered off.",
+      "timestamp": 1788850782364,
+      "utc": "2026-09-08T06:59:42.364000+00:00"
+    },
+    {
+      "state": "RUNNING",
+      "status": "Your job is now running.",
+      "timestamp": 1788850826134,
+      "utc": "2026-09-08T07:00:26.134000+00:00"
+    }
+  ]
+}

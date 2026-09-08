@@ -91,9 +91,18 @@ Add `--execute` to provision real sandboxes using `UCLOUD_SANDBOX_URL` and
 one task per family; `--num-tasks 0` requests the complete datasets. SWE and
 terminal checks require valid setup and gold grading. Search checks qualify
 setup only, not model-based answering, search providers or grading. Missing,
-unchecked and error results never count as success. Dataset loading and image
-access require their own credentials; Prime image handles are not automatically
+unchecked, inconsistent and error results never count as success. A requested
+nonzero sample count must match the recorded task count exactly. Malformed
+summaries fail that family without aborting the remaining families. Dataset
+loading and image access require their own credentials; Prime image handles are not automatically
 interchangeable with OCI registry references.
+
+Every execution writes `<taskset>-runtimes.jsonl` with the resolved image and
+CPU/memory/disk values before provisioning. Optional `--cpu`, `--memory-gib`
+and `--disk-gib` limits are forwarded to Verifiers and checked again after the
+task resolves its resources. Any mismatch rejects that runtime before creation.
+This catches upstream overriding an explicit value equal to its runtime default.
+These records describe the resolved request, not an attestation of host resources.
 
 `qualify_linux_environment.py --output /tmp/linux-results.json` exercises the
 live gateway's userspace contract on Ubuntu, Alpine and named users, including
@@ -135,21 +144,27 @@ runs the task's actual setup hook, public `solution/solve.sh`, and original
 shared verifier. It does not support separate verifier environments. An oracle
 pass supplements setup evidence; it still tests only the selected task.
 
-The live September 5 qualification found that POSIX ACLs are **unsupported** by
-the pinned gVisor runtime: the OpenThoughts ACL oracle fails at `setfacl`. The
-same operation succeeds in Docker on the UCloud builder VM. No choice of these
-userspace profiles fixes that kernel-interface gap. Consequently this branch
-does **not** claim compatibility with every task in the 23 families. Covering
-ACL-dependent tasks requires a backend providing those Linux semantics (for
-example a dedicated VM), or implementing and qualifying ACL support in gVisor.
-Silently ignoring ACL errors or substituting `chmod` would change the task and
-its permission semantics.
+The initial September 5 taskset sample found that the then-pinned July gVisor
+runtime lacked POSIX ACLs: the OpenThoughts oracle failed at `setfacl`. The
+patched `20260817.0` upgrade enabled those ACL operations. The
+[runtime integration qualification](reviews/gvisor-integration-2026-09-05.md)
+passed ACL enforcement/inheritance, file locks and identities across ten
+hibernation cycles. The new distribution was
+[deployed in release 0.5.28](reviews/gvisor-deployment-2026-09-05.md).
+A [fresh original-oracle run](reviews/prime-acl-oracle-2026-09-07.json) on the
+isolated August-runtime node completed the solution but failed three of nine
+grader tests: inherited ACLs did not permit the expected cross-user writes.
+The focused runtime probe did not expose this umask/inheritance boundary.
+This project does **not** claim compatibility with every task in the 23 families.
 
 See the [UCloud qualification report](reviews/sandbox-qualification-2026-09-05.md)
 for the 23-family sample matrix and remaining blockers. The existing
 `verifiers-ucloud` adapter also lacks the framework-aware network policy needed
 by BrowseComp-Plus and SWE-bench Multilingual; disabling all network access is not a substitute for
 allowing only framework services.
+The [September 7 compatibility review](reviews/prime-compatibility-2026-09-07.md)
+reconciles that sample with the later runtime deployment and documents resource
+requirements and outstanding grading, image and networking coverage.
 
 ## Explicit requirements and environment description
 
@@ -254,7 +269,9 @@ host, using a root-owned executable helper built from `runtime/managed_process`.
 It checks shellless file operations, readiness, identity and write containment.
 
 See [follow-up qualification](reviews/sandbox-compatibility-followup-2026-09-05.md)
-for version-specific results and the remaining runtime upgrade gates.
+for the original version comparison and
+[patched runtime integration](reviews/gvisor-integration-2026-09-05.md) for the
+subsequently completed upgrade and lifecycle qualification.
 
 For the pinned public Senior SWE build, check out the repository/commit in
 `docs/prime-public-builds.json`, then run:

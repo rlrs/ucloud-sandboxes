@@ -693,14 +693,19 @@ class DirectSandboxProvisioner:
             record = self.warden.inspect(registration.to_direct_sandbox())
             if record is None:
                 raise DirectWardenError("owned direct sandbox has no lifecycle journal")
+            # Quarantine retains this incarnation's ownership and storage until
+            # explicit cleanup. It must remain visible without blocking startup
+            # for other sandboxes or replaying its failed lifecycle transition.
             if record.state not in {
                 HibernationState.RUNNING,
                 HibernationState.PARKED,
+                HibernationState.RECOVERY_REQUIRED,
             }:
                 record = self.warden.reconcile(registration.to_direct_sandbox())
             if record.state not in {
                 HibernationState.RUNNING,
                 HibernationState.PARKED,
+                HibernationState.RECOVERY_REQUIRED,
             }:
                 raise DirectWardenError(
                     f"direct sandbox requires operator action: {record.state.value}"

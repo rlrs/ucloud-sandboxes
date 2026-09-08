@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import socket
 import subprocess
 import tempfile
@@ -162,46 +163,54 @@ class DirectNetworkManager:
         if any(ipaddress.IPv4Address(item) not in NETWORK_CIDR for item in avoided):
             raise ValueError("avoided guest IP is outside the direct network")
         key = self._key(sandbox_id, sandbox_generation)
-        with self._locked():
-            state = self._load()
-            slot = state["leases"].get(key)
-            if slot is None:
-                used = {int(item) for item in state["leases"].values()}
-                slot = next(
-                    (candidate for candidate in range(1, MAX_NETWORK_SLOTS + 1)
-                     if candidate not in used
-                     and self._lease(
-                         sandbox_id,
-                         sandbox_generation,
-                         candidate,
-                     ).guest_ip not in avoided),
-                    None,
-                )
+        with self._lease_locked(key):
+            with self._locked():
+                state = self._load()
+                slot = state["leases"].get(key)
                 if slot is None:
-                    raise DirectNetworkError("direct network slot capacity is exhausted")
-                state["leases"][key] = slot
-                self._store(state)
-            lease = self._lease(sandbox_id, sandbox_generation, int(slot))
-            if lease.guest_ip in avoided:
-                raise DirectNetworkError(
-                    "existing direct network lease reuses a forbidden guest IP"
-                )
-            if not host_rules_ready:
-                self._ensure_host_rules()
+                    used = {int(item) for item in state["leases"].values()}
+                    slot = next(
+                        (candidate for candidate in range(1, MAX_NETWORK_SLOTS + 1)
+                         if candidate not in used
+                         and self._lease(
+                             sandbox_id,
+                             sandbox_generation,
+                             candidate,
+                         ).guest_ip not in avoided),
+                        None,
+                    )
+                    if slot is None:
+                        raise DirectNetworkError("direct network slot capacity is exhausted")
+                    state["leases"][key] = slot
+                    self._store(state)
+                lease = self._lease(sandbox_id, sandbox_generation, int(slot))
+                if lease.guest_ip in avoided:
+                    raise DirectNetworkError(
+                        "existing direct network lease reuses a forbidden guest IP"
+                    )
+                if not host_rules_ready:
+                    self._ensure_host_rules()
             self._ensure_kernel_lease(lease)
             return lease
 
     def release(self, sandbox_id: str, sandbox_generation: int) -> None:
         key = self._key(sandbox_id, sandbox_generation)
-        with self._locked():
-            state = self._load()
-            raw_slot = state["leases"].get(key)
-            if raw_slot is None:
-                return
-            lease = self._lease(sandbox_id, sandbox_generation, int(raw_slot))
+        with self._lease_locked(key):
+            with self._locked():
+                state = self._load()
+                raw_slot = state["leases"].get(key)
+                if raw_slot is None:
+                    return
+                lease = self._lease(sandbox_id, sandbox_generation, int(raw_slot))
+            # Keep the slot allocated until kernel cleanup finishes. Different
+            # incarnations can set up their own namespaces during this work.
             self._cleanup_kernel_lease(lease)
-            del state["leases"][key]
-            self._store(state)
+            with self._locked():
+                state = self._load()
+                if state["leases"].get(key) != raw_slot:
+                    raise DirectNetworkError("network lease changed during cleanup")
+                del state["leases"][key]
+                self._store(state)
 
     def lease(self, sandbox_id: str, sandbox_generation: int) -> DirectNetworkLease | None:
         key = self._key(sandbox_id, sandbox_generation)
@@ -213,10 +222,14 @@ class DirectNetworkManager:
         return self._lease(sandbox_id, sandbox_generation, int(raw_slot))
 
     def _ensure_host_rules(self) -> None:
+        # Read a fresh kernel snapshot for this reconciliation, never a cached
+        # assertion that policy remains installed across requests.
+        snapshot = self._iptables_snapshot()
         self.runner(("sysctl", "-q", "-w", "net.ipv4.ip_forward=1"))
         self._ensure_iptables(
             ("iptables", "-C", "INPUT", "-s", str(NETWORK_CIDR), "-j", "DROP"),
             ("iptables", "-I", "INPUT", "1", "-s", str(NETWORK_CIDR), "-j", "DROP"),
+            snapshot=snapshot,
         )
         for destination in DENIED_DESTINATIONS:
             self._ensure_iptables(
@@ -228,11 +241,13 @@ class DirectNetworkManager:
                     "iptables", "-I", "FORWARD", "1", "-s", str(NETWORK_CIDR),
                     "-d", destination, "-j", "DROP",
                 ),
+                snapshot=snapshot,
             )
-        self._reconcile_tcp_egress()
+        self._reconcile_tcp_egress(snapshot=snapshot)
         self._ensure_iptables(
             ("iptables", "-C", "FORWARD", "-s", str(NETWORK_CIDR), "-j", "ACCEPT"),
             ("iptables", "-A", "FORWARD", "-s", str(NETWORK_CIDR), "-j", "ACCEPT"),
+            snapshot=snapshot,
         )
         self._ensure_iptables(
             (
@@ -245,6 +260,7 @@ class DirectNetworkManager:
                 "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED",
                 "-j", "ACCEPT",
             ),
+            snapshot=snapshot,
         )
         self._ensure_iptables(
             (
@@ -255,9 +271,12 @@ class DirectNetworkManager:
                 "iptables", "-t", "nat", "-A", "POSTROUTING",
                 "-s", str(NETWORK_CIDR), "-j", "MASQUERADE",
             ),
+            snapshot=snapshot,
         )
 
-    def _reconcile_tcp_egress(self) -> None:
+    def _reconcile_tcp_egress(
+        self, *, snapshot: set[tuple[str, ...]] | None = None
+    ) -> None:
         # Exact service exceptions sit above the broad private-destination
         # denies. DNS names are resolved on the host and become /32 rules; no
         # resolver or general RFC1918 access is exposed to a sandbox.
@@ -303,6 +322,7 @@ class DirectNetworkManager:
                 self._ensure_iptables(
                     ("iptables", "-C", "FORWARD", *rule),
                     ("iptables", "-I", "FORWARD", "1", *rule),
+                    snapshot=snapshot,
                 )
             for address, port in sorted(old_rules - new_rules):
                 self._run_best_effort(
@@ -416,11 +436,73 @@ class DirectNetworkManager:
             except FileNotFoundError:
                 pass
 
+    @staticmethod
+    def _iptables_rule_key(command: Sequence[str]) -> tuple[str, ...]:
+        words = list(command)
+        if words and words[0] == "iptables":
+            words.pop(0)
+        table = "filter"
+        if words[:1] == ["-t"] and len(words) >= 2:
+            table = words[1]
+            del words[:2]
+        if words[:1] in (["-C"], ["-A"]):
+            words[0] = "-A"
+        # iptables-save makes the implicit TCP matcher explicit. Strip only
+        # that redundant module; retain every other predicate verbatim.
+        if "-p" in words and words[words.index("-p") + 1:][:1] == ["tcp"]:
+            for i in range(len(words) - 1):
+                if words[i:i + 2] == ["-m", "tcp"]:
+                    del words[i:i + 2]
+                    break
+        return (table, *words)
+
+    @classmethod
+    def _iptables_snapshot(cls) -> set[tuple[str, ...]] | None:
+        try:
+            result = subprocess.run(
+                ("iptables-save",),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                check=False,
+                timeout=5,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if result.returncode != 0 or not isinstance(result.stdout, str):
+            return None
+        rules: set[tuple[str, ...]] = set()
+        table = None
+        try:
+            for line in result.stdout.splitlines():
+                if line.startswith("*"):
+                    if table is not None:
+                        return None
+                    table = line[1:]
+                elif line == "COMMIT":
+                    if table is None:
+                        return None
+                    table = None
+                elif line.startswith("-A "):
+                    if table is None:
+                        return None
+                    rules.add(cls._iptables_rule_key(
+                        ("-t", table, *shlex.split(line))
+                    ))
+        except ValueError:
+            return None
+        return rules if table is None else None
+
     def _ensure_iptables(
         self,
         check: Sequence[str],
         install: Sequence[str],
+        *,
+        snapshot: set[tuple[str, ...]] | None = None,
     ) -> None:
+        if snapshot is not None and self._iptables_rule_key(check) in snapshot:
+            return
         result = subprocess.run(
             tuple(check),
             stdin=subprocess.DEVNULL,
@@ -593,13 +675,20 @@ class DirectNetworkManager:
             except FileNotFoundError:
                 pass
 
-    def _locked(self):
-        manager = self
+    def _lease_locked(self, key: str):
+        digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
+        directory = self.lock_path.with_name(self.lock_path.name + ".leases")
+        # Retain lock inodes after deletion so existing waiters cannot acquire
+        # a different lock from a later operation for the same incarnation.
+        return self._locked(directory / (digest + ".lock"))
+
+    def _locked(self, path: Path | None = None):
+        lock_path = self.lock_path if path is None else path
 
         class Lock:
             def __enter__(self):
-                manager.lock_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-                self.handle = manager.lock_path.open("a+b")
+                lock_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                self.handle = lock_path.open("a+b")
                 fcntl.flock(self.handle.fileno(), fcntl.LOCK_EX)
                 return self
 

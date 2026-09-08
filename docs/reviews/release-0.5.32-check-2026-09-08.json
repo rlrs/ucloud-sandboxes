@@ -1,0 +1,9 @@
+{
+  "exit_code": 0,
+  "version": "0.5.32",
+  "command": "bash scripts/check.sh",
+  "full_log": "release-0.5.32-check-2026-09-08.log.gz",
+  "raw_sha256": "821e39bb51083dc8f914cdf76cab5a8f14708773f83c00f48f0ebd9310454fb4",
+  "wheel_sha256": "6f43febfd6e958b32323824857ec50fbdb2bcfd1d4e3e2004a47a0dae377287e",
+  "qualification": "User accepted measured density baseline; original SLO failures retained."
+}

@@ -1,0 +1,871 @@
+{
+  "assessment": [
+    "Wake CPU averaged25.86% with a37.73% one-second maximum. The next interval fell to19.48%. This is inconsistent with sustained90% host saturation at one-second resolution;50ms spikes remain possible and were reported by admission.",
+    "Eleven adjacent CPU503s repeat the C16 clustering. A bounded fresh-sample wait with unchanged thresholds is supported as a candidate; this run predates deployment of that change and does not prove its success.",
+    "C8 lowered service latency but still failed queued completion thresholds and wake makespan. All128 park calls succeeding is not a complete SLO pass.",
+    "No OOM or swap IO occurred during wake. Host had96GiB configured swap with772KiB used; this must not be conflated with earlier no-swap runs."
+  ],
+  "benchmark_status": "failed",
+  "cleanup_errors": [],
+  "configuration": {
+    "act_p95_ms": 2000,
+    "burst_ms": 15000,
+    "cleanup_timeout_seconds": 180,
+    "completion_p95_ms": 10000,
+    "concurrency": 8,
+    "count": 128,
+    "cpu_ms": 100,
+    "cpus": 1.0,
+    "create_concurrency": 8,
+    "cycles": 3,
+    "dirty_mb": 16,
+    "dirty_page_count": 4096,
+    "disk_mb": 2048,
+    "expected_cpus": 32,
+    "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+    "memory_mb": 1024,
+    "park_p95_ms": 2000,
+    "resident_mb": 256,
+    "wake_p95_ms": 3000
+  },
+  "coverage": {
+    "actual_sample_gap_seconds": {
+      "count": 119,
+      "max": 1.0003538131713867,
+      "min": 1.0000536441802979,
+      "p50": 1.0000944137573242,
+      "p95": 1.0001180171966553
+    },
+    "boot_ids": [
+      "ed483050-13f2-405c-a1a1-84edb1f6bf21"
+    ],
+    "first_sample_utc": "2026-09-07T23:10:09.463300+00:00",
+    "host_rows": 160,
+    "last_sample_utc": "2026-09-07T23:12:48.478426+00:00",
+    "limitation": "Sampler restarted during create. Baseline, single-create, single-act and the first23.055 seconds of create have no host coverage. Complete in-phase counter intervals cover55.006 of79.050 create seconds. Act/park/wake are covered, with boundary-crossing intervals excluded.",
+    "rejected_intervals": {},
+    "run_delta_coverage_seconds": 119.01141810417175,
+    "run_finished_at": "2026-09-07T23:12:09.028156+00:00",
+    "run_seconds": 149.02532410621643,
+    "run_started_at": "2026-09-07T23:09:40.002832+00:00",
+    "sample_collection_seconds": {
+      "count": 120,
+      "max": 0.209296170000016,
+      "min": 0.0005374090001168952,
+      "p50": 0.0009885780000331579,
+      "p95": 0.1679888939997909
+    }
+  },
+  "failure_timing_support": {
+    "failed_ids": [
+      98,
+      99,
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108
+    ],
+    "neighbor_successful_requests": [
+      {
+        "finish_from_wake_seconds": 15.715027672005817,
+        "id": "density-902eed08ef744fc5-97",
+        "start_from_wake_seconds": 13.8527622599795
+      },
+      {
+        "finish_from_wake_seconds": 15.71069826700841,
+        "id": "density-902eed08ef744fc5-109",
+        "start_from_wake_seconds": 14.223223334003706
+      }
+    ],
+    "qualification": "Neighbor timings bracket sequential queue progress approximately; errors lack individual timestamps. Do not interpret this as exact timestamps for each503."
+  },
+  "independently_recomputed_phase_violations": [
+    "park_0: completion_ms p95 invalid or exceeds 10000",
+    "wake_0: incomplete or nonunique successful target wave",
+    "wake_0: completion_ms p95 invalid or exceeds 10000",
+    "wake_0: makespan invalid or exceeds limit"
+  ],
+  "inputs": {
+    "analysis_helper_sha256": "d859f07c32cf87c4e01574e4e651ff6401f63a70273e7ed0f74ac8ddd8f757cd",
+    "benchmark": "sandbox-density-128-acl-c8-deep-2026-09-07.json",
+    "host_gzip": "sandbox-density-128-acl-c8-host-2026-09-07.jsonl.gz",
+    "host_uncompressed_sha256": "4cedef9de73c20648d192dd73eae5ad8a72db9913278ad2d109ee67d9ede7e54"
+  },
+  "interpretation": [
+    "All p95s use nearest rank from raw successful operation durations; failures remain separate and never disappear into a percentile.",
+    "Host counter deltas use only adjacent same-boot intervals wholly inside each UTC phase. No interpolation across boundaries; coverage and actual cadence are explicit.",
+    "Host CPU executing excludes idle, iowait and steal. Guest and guest_nice are not added twice. PSI percentages use cumulative stall deltas, not decayed averages.",
+    "vmstat swap counters are pages, not bytes. Host swap total/used are explicit; compare runs only after checking configuration and swap differences.",
+    "MemAvailable includes reclaimable mapped file cache and does not measure guest resident consumption.",
+    "Sentry totals require exactly the target count, unique PIDs and nonoverlapping cgroups, no read errors, and complete required fields. No partial sample is extrapolated.",
+    "Sentries match the sampler runtime root; this sampler does not independently retain sandbox IDs. Correlate with dedicated-node benchmark inventory checks.",
+    "PSS/RSS are process mapping views; cgroup memory.current is a separate charge view. Never add those views or overlapping memory.stat categories such as file, shmem and file_mapped.",
+    "Sentry collection is sequential and its window must fit the phase. No sample proves every process was observed at precisely the same instant.",
+    "cpu.max is the sampled leaf cgroup limit; effective ancestor limits are not recorded by this sampler.",
+    "Exec diagnostics align by journald completion timestamp; park diagnostics align by recorded start timestamp. Untimestamped execs appear only in aggregate.",
+    "Disk await is aggregate device completion accounting, not a measured guest operation delay or proof of the causal bottleneck."
+  ],
+  "phases": [
+    {
+      "completion_ms": {
+        "count": 1,
+        "max": 4406.754091003677,
+        "min": 4406.754091003677,
+        "p50": 4406.754091003677,
+        "p95": 4406.754091003677
+      },
+      "error_count": 0,
+      "errors": [],
+      "expected_operations": 1,
+      "finished_at": "2026-09-07T23:09:44.924215+00:00",
+      "host": {
+        "complete_target_memory_summary": {
+          "cgroup_memory_current_bytes": {
+            "count": 0
+          },
+          "process_pss_kb": {
+            "count": 0
+          },
+          "process_rss_kb": {
+            "count": 0
+          },
+          "sample_count": 0
+        },
+        "complete_target_sentry_samples": [],
+        "cpu_executing_percent": null,
+        "cpu_interval_executing_percent": {
+          "count": 0
+        },
+        "cpu_iowait_percent": null,
+        "cpu_steal_percent": null,
+        "delta_coverage_seconds": 0,
+        "disk_rates": {
+          "flush_await_ms": null,
+          "read_await_ms": null,
+          "read_mib_per_second": null,
+          "write_await_ms": null,
+          "write_mib_per_second": null
+        },
+        "point_samples": 0,
+        "psi_stalled_percent": {},
+        "swap_used_kb": {
+          "count": 0
+        },
+        "vmstat_delta": {},
+        "window_seconds": 4.4070069789886475
+      },
+      "makespan_ms": 4407.038039993495,
+      "name": "single_create",
+      "service_ms": {
+        "count": 1,
+        "max": 4406.38005497749,
+        "min": 4406.38005497749,
+        "p50": 4406.38005497749,
+        "p95": 4406.38005497749
+      },
+      "started_at": "2026-09-07T23:09:40.517208+00:00",
+      "successful_operations": 1
+    },
+    {
+      "completion_ms": {
+        "count": 3,
+        "max": 1471.4569709904026,
+        "min": 476.4868459897116,
+        "p50": 973.5622850130312,
+        "p95": 1471.4569709904026
+      },
+      "error_count": 0,
+      "errors": [],
+      "expected_operations": 3,
+      "finished_at": "2026-09-07T23:09:46.404661+00:00",
+      "host": {
+        "complete_target_memory_summary": {
+          "cgroup_memory_current_bytes": {
+            "count": 0
+          },
+          "process_pss_kb": {
+            "count": 0
+          },
+          "process_rss_kb": {
+            "count": 0
+          },
+          "sample_count": 0
+        },
+        "complete_target_sentry_samples": [],
+        "cpu_executing_percent": null,
+        "cpu_interval_executing_percent": {
+          "count": 0
+        },
+        "cpu_iowait_percent": null,
+        "cpu_steal_percent": null,
+        "delta_coverage_seconds": 0,
+        "disk_rates": {
+          "flush_await_ms": null,
+          "read_await_ms": null,
+          "read_mib_per_second": null,
+          "write_await_ms": null,
+          "write_mib_per_second": null
+        },
+        "point_samples": 0,
+        "psi_stalled_percent": {},
+        "swap_used_kb": {
+          "count": 0
+        },
+        "vmstat_delta": {},
+        "window_seconds": 1.4716060161590576
+      },
+      "makespan_ms": 1471.622490993468,
+      "name": "single_act",
+      "service_ms": {
+        "count": 3,
+        "max": 497.8651019919198,
+        "min": 476.2941040098667,
+        "p50": 497.04432097496465,
+        "p95": 497.8651019919198
+      },
+      "started_at": "2026-09-07T23:09:44.933055+00:00",
+      "successful_operations": 3
+    },
+    {
+      "completion_ms": {
+        "count": 127,
+        "max": 79049.47056499077,
+        "min": 3613.643588993,
+        "p50": 38344.419625005685,
+        "p95": 75015.8601749863
+      },
+      "error_count": 0,
+      "errors": [],
+      "expected_operations": 127,
+      "finished_at": "2026-09-07T23:11:05.459161+00:00",
+      "host": {
+        "complete_target_memory_summary": {
+          "cgroup_memory_current_bytes": {
+            "count": 1,
+            "max": 38466850816,
+            "min": 38466850816,
+            "p50": 38466850816,
+            "p95": 38466850816
+          },
+          "process_pss_kb": {
+            "count": 1,
+            "max": 1941806,
+            "min": 1941806,
+            "p50": 1941806,
+            "p95": 1941806
+          },
+          "process_rss_kb": {
+            "count": 1,
+            "max": 6337080,
+            "min": 6337080,
+            "p50": 6337080,
+            "p95": 6337080
+          },
+          "sample_count": 1
+        },
+        "complete_target_sentry_samples": [
+          {
+            "cgroup_memory_current_bytes": 38466850816,
+            "cgroup_memory_stat_bytes": {
+              "anon": 2030870528,
+              "file": 35977510912,
+              "file_dirty": 837885952,
+              "file_mapped": 35262038016,
+              "file_writeback": 0,
+              "kernel": 441196544,
+              "shmem": 23068672
+            },
+            "collection_seconds": 0.20203144200013412,
+            "leaf_cpu_max_counts": {
+              "100000 100000": 128
+            },
+            "process_count": 128,
+            "process_mappings_kb": {
+              "Pss": 1941806,
+              "Pss_Anon": 1337340,
+              "Pss_File": 591534,
+              "Pss_Shmem": 12932,
+              "Rss": 6337080,
+              "Swap": 0,
+              "SwapPss": 0
+            },
+            "unix_time": 1788822664.4689114
+          }
+        ],
+        "cpu_executing_percent": 23.06602536073459,
+        "cpu_interval_executing_percent": {
+          "count": 55,
+          "max": 39.7357396068321,
+          "min": 4.238110643804594,
+          "p50": 24.583333333333332,
+          "p95": 36.934353091140856
+        },
+        "cpu_iowait_percent": 15.45605596851771,
+        "cpu_steal_percent": 0.0023320215711995335,
+        "delta_coverage_seconds": 55.005611419677734,
+        "disk_rates": {
+          "flush_await_ms": 1.0864295648718458,
+          "read_await_ms": 2.9592290585618977,
+          "read_mib_per_second": 1.1147300187643154,
+          "write_await_ms": 27.374520468120235,
+          "write_mib_per_second": 979.2968194010413
+        },
+        "point_samples": 56,
+        "psi_stalled_percent": {
+          "cpu.full": 0.0,
+          "cpu.some": 3.03798095661599,
+          "io.full": 22.83873713201896,
+          "io.some": 26.715348890282538,
+          "memory.full": 1.814016741650185,
+          "memory.some": 1.8168164560070532
+        },
+        "swap_used_kb": {
+          "count": 56,
+          "max": 772,
+          "min": 768,
+          "p50": 768,
+          "p95": 772
+        },
+        "vmstat_delta": {
+          "oom_kill": 0,
+          "pgmajfault": 104876,
+          "pgscan_direct": 908113,
+          "pgscan_kswapd": 3750635,
+          "pgsteal_direct": 906245,
+          "pgsteal_kswapd": 3742839,
+          "pswpin": 0,
+          "pswpout": 1
+        },
+        "window_seconds": 79.05038094520569
+      },
+      "makespan_ms": 79050.43043597834,
+      "name": "create",
+      "service_ms": {
+        "count": 127,
+        "max": 8353.41925098328,
+        "min": 2539.00982401683,
+        "p50": 4995.251611020649,
+        "p95": 6716.692762012826
+      },
+      "started_at": "2026-09-07T23:09:46.408780+00:00",
+      "successful_operations": 127
+    },
+    {
+      "completion_ms": {
+        "count": 128,
+        "max": 9057.511661027092,
+        "min": 528.55632500723,
+        "p50": 4626.0273170191795,
+        "p95": 8558.401758025866
+      },
+      "error_count": 0,
+      "errors": [],
+      "expected_operations": 128,
+      "finished_at": "2026-09-07T23:11:14.720250+00:00",
+      "host": {
+        "complete_target_memory_summary": {
+          "cgroup_memory_current_bytes": {
+            "count": 2,
+            "max": 38601519104,
+            "min": 38570106880,
+            "p50": 38570106880,
+            "p95": 38601519104
+          },
+          "process_pss_kb": {
+            "count": 2,
+            "max": 2059017,
+            "min": 2005555,
+            "p50": 2005555,
+            "p95": 2059017
+          },
+          "process_rss_kb": {
+            "count": 2,
+            "max": 6457608,
+            "min": 6411792,
+            "p50": 6411792,
+            "p95": 6457608
+          },
+          "sample_count": 2
+        },
+        "complete_target_sentry_samples": [
+          {
+            "cgroup_memory_current_bytes": 38570106880,
+            "cgroup_memory_stat_bytes": {
+              "anon": 2059907072,
+              "file": 36040904704,
+              "file_dirty": 1304076288,
+              "file_mapped": 35744231424,
+              "file_writeback": 0,
+              "kernel": 442408960,
+              "shmem": 23068672
+            },
+            "collection_seconds": 0.2046975759999441,
+            "leaf_cpu_max_counts": {
+              "100000 100000": 128
+            },
+            "process_count": 128,
+            "process_mappings_kb": {
+              "Pss": 2005555,
+              "Pss_Anon": 1365696,
+              "Pss_File": 626927,
+              "Pss_Shmem": 12932,
+              "Rss": 6411792,
+              "Swap": 0,
+              "SwapPss": 0
+            },
+            "unix_time": 1788822669.4693992
+          },
+          {
+            "cgroup_memory_current_bytes": 38601519104,
+            "cgroup_memory_stat_bytes": {
+              "anon": 2095976448,
+              "file": 36037672960,
+              "file_dirty": 2673598464,
+              "file_mapped": 35856797696,
+              "file_writeback": 0,
+              "kernel": 441901056,
+              "shmem": 23068672
+            },
+            "collection_seconds": 0.20741800199994032,
+            "leaf_cpu_max_counts": {
+              "100000 100000": 128
+            },
+            "process_count": 128,
+            "process_mappings_kb": {
+              "Pss": 2059017,
+              "Pss_Anon": 1400944,
+              "Pss_File": 645141,
+              "Pss_Shmem": 12932,
+              "Rss": 6457608,
+              "Swap": 0,
+              "SwapPss": 0
+            },
+            "unix_time": 1788822674.4698467
+          }
+        ],
+        "cpu_executing_percent": 25.332808192201657,
+        "cpu_interval_executing_percent": {
+          "count": 8,
+          "max": 27.488151658767773,
+          "min": 20.96317280453258,
+          "p50": 25.377833753148614,
+          "p95": 27.488151658767773
+        },
+        "cpu_iowait_percent": 0.5947223316266247,
+        "cpu_steal_percent": 0.0,
+        "delta_coverage_seconds": 8.000756978988647,
+        "disk_rates": {
+          "flush_await_ms": 0.0,
+          "read_await_ms": 0.327688399661304,
+          "read_mib_per_second": 3.0915043495205126,
+          "write_await_ms": 1.858649789029536,
+          "write_mib_per_second": 37.55650490811219
+        },
+        "point_samples": 9,
+        "psi_stalled_percent": {
+          "cpu.full": 0.0,
+          "cpu.some": 8.031190069732922,
+          "io.full": 0.5539475841647469,
+          "io.some": 0.6761485212220287,
+          "memory.full": 0.005224505644875095,
+          "memory.some": 0.005224505644875095
+        },
+        "swap_used_kb": {
+          "count": 9,
+          "max": 772,
+          "min": 772,
+          "p50": 772,
+          "p95": 772
+        },
+        "vmstat_delta": {
+          "oom_kill": 0,
+          "pgmajfault": 3503,
+          "pgscan_direct": 0,
+          "pgscan_kswapd": 0,
+          "pgsteal_direct": 0,
+          "pgsteal_kswapd": 0,
+          "pswpin": 0,
+          "pswpout": 0
+        },
+        "window_seconds": 9.058151960372925
+      },
+      "makespan_ms": 9058.184998022625,
+      "name": "act_0",
+      "service_ms": {
+        "count": 128,
+        "max": 657.5671999889892,
+        "min": 435.2065960119944,
+        "p50": 531.8950619839597,
+        "p95": 631.0243569896556
+      },
+      "started_at": "2026-09-07T23:11:05.662098+00:00",
+      "successful_operations": 128
+    },
+    {
+      "completion_ms": {
+        "count": 128,
+        "max": 14793.989882979076,
+        "min": 793.3256249816623,
+        "p50": 8262.987150985282,
+        "p95": 13497.813237976516
+      },
+      "error_count": 0,
+      "errors": [],
+      "expected_operations": 128,
+      "finished_at": "2026-09-07T23:11:29.527019+00:00",
+      "host": {
+        "complete_target_memory_summary": {
+          "cgroup_memory_current_bytes": {
+            "count": 0
+          },
+          "process_pss_kb": {
+            "count": 0
+          },
+          "process_rss_kb": {
+            "count": 0
+          },
+          "sample_count": 0
+        },
+        "complete_target_sentry_samples": [],
+        "cpu_executing_percent": 6.144483263834104,
+        "cpu_interval_executing_percent": {
+          "count": 14,
+          "max": 7.492886500158077,
+          "min": 3.4244423499842913,
+          "p50": 6.15530303030303,
+          "p95": 7.492886500158077
+        },
+        "cpu_iowait_percent": 2.490702130057478,
+        "cpu_steal_percent": 0.006762087230925279,
+        "delta_coverage_seconds": 14.001308917999268,
+        "disk_rates": {
+          "flush_await_ms": 0.2548565318125111,
+          "read_await_ms": 0.6459669254134324,
+          "read_mib_per_second": 3.8372528464772504,
+          "write_await_ms": 4.551307615614695,
+          "write_mib_per_second": 273.97661693390836
+        },
+        "point_samples": 15,
+        "psi_stalled_percent": {
+          "cpu.full": 0.0,
+          "cpu.some": 0.812566886898295,
+          "io.full": 6.570585688723307,
+          "io.some": 6.755418407946662,
+          "memory.full": 0.04878115353357963,
+          "memory.some": 0.049481088093797906
+        },
+        "swap_used_kb": {
+          "count": 15,
+          "max": 772,
+          "min": 772,
+          "p50": 772,
+          "p95": 772
+        },
+        "vmstat_delta": {
+          "oom_kill": 0,
+          "pgmajfault": 70,
+          "pgscan_direct": 128,
+          "pgscan_kswapd": 120134,
+          "pgsteal_direct": 128,
+          "pgsteal_kswapd": 120117,
+          "pswpin": 0,
+          "pswpout": 0
+        },
+        "window_seconds": 14.794636964797974
+      },
+      "makespan_ms": 14794.66293999576,
+      "name": "park_0",
+      "service_ms": {
+        "count": 128,
+        "max": 1745.3884790011216,
+        "min": 673.0166750203352,
+        "p50": 767.3514130001422,
+        "p95": 1396.6098399832845
+      },
+      "started_at": "2026-09-07T23:11:14.732382+00:00",
+      "successful_operations": 128
+    },
+    {
+      "completion_ms": {
+        "count": 117,
+        "max": 18331.50705700973,
+        "min": 1267.8524370130617,
+        "p50": 9268.395410006633,
+        "p95": 17723.770213022362
+      },
+      "error_count": 11,
+      "errors": [
+        "POST /v1/sandboxes/density-902eed08ef744fc5-98/wake: HTTP 503: {\"error\":\"direct node CPU pressure blocks active admission\",\"lifecycle_state\":\"parked\"}",
+        "POST /v1/sandboxes/density-902eed08ef744fc5-99/wake: HTTP 503: {\"error\":\"direct node CPU pressure blocks active admission\",\"lifecycle_state\":\"parked\"}",
+        "POST /v1/sandboxes/density-902eed08ef744fc5-100/wake: HTTP 503: {\"error\":\"direct node CPU pressure blocks active admission\",\"lifecycle_state\":\"parked\"}",
+        "POST /v1/sandboxes/density-902eed08ef744fc5-101/wake: HTTP 503: {\"error\":\"direct node CPU pressure blocks active admission\",\"lifecycle_state\":\"parked\"}",
+        "POST /v1/sandboxes/density-902eed08ef744fc5-102/wake: HTTP 503: {\"error\":\"direct node CPU pressure blocks active admission\",\"lifecycle_state\":\"parked\"}",
+        "POST /v1/sandboxes/density-902eed08ef744fc5-103/wake: HTTP 503: {\"error\":\"direct node CPU pressure blocks active admission\",\"lifecycle_state\":\"parked\"}",
+        "POST /v1/sandboxes/density-902eed08ef744fc5-104/wake: HTTP 503: {\"error\":\"direct node CPU pressure blocks active admission\",\"lifecycle_state\":\"parked\"}",
+        "POST /v1/sandboxes/density-902eed08ef744fc5-105/wake: HTTP 503: {\"error\":\"direct node CPU pressure blocks active admission\",\"lifecycle_state\":\"parked\"}",
+        "POST /v1/sandboxes/density-902eed08ef744fc5-106/wake: HTTP 503: {\"error\":\"direct node CPU pressure blocks active admission\",\"lifecycle_state\":\"parked\"}",
+        "POST /v1/sandboxes/density-902eed08ef744fc5-107/wake: HTTP 503: {\"error\":\"direct node CPU pressure blocks active admission\",\"lifecycle_state\":\"parked\"}",
+        "POST /v1/sandboxes/density-902eed08ef744fc5-108/wake: HTTP 503: {\"error\":\"direct node CPU pressure blocks active admission\",\"lifecycle_state\":\"parked\"}"
+      ],
+      "expected_operations": 128,
+      "finished_at": "2026-09-07T23:11:52.252876+00:00",
+      "host": {
+        "complete_target_memory_summary": {
+          "cgroup_memory_current_bytes": {
+            "count": 0
+          },
+          "process_pss_kb": {
+            "count": 0
+          },
+          "process_rss_kb": {
+            "count": 0
+          },
+          "sample_count": 0
+        },
+        "complete_target_sentry_samples": [],
+        "cpu_executing_percent": 25.860167828508416,
+        "cpu_interval_executing_percent": {
+          "count": 17,
+          "max": 37.729866835764106,
+          "min": 19.47969543147208,
+          "p50": 26.183666984429614,
+          "p95": 37.729866835764106
+        },
+        "cpu_iowait_percent": 2.8183228362644144,
+        "cpu_steal_percent": 0.0056067430429663405,
+        "delta_coverage_seconds": 17.0015549659729,
+        "disk_rates": {
+          "flush_await_ms": 0.3450611888111888,
+          "read_await_ms": 2.9328921517940234,
+          "read_mib_per_second": 521.825431130047,
+          "write_await_ms": 6.355635675867368,
+          "write_mib_per_second": 221.88227827101758
+        },
+        "point_samples": 18,
+        "psi_stalled_percent": {
+          "cpu.full": 0.0,
+          "cpu.some": 7.384201048154885,
+          "io.full": 4.7215445975771315,
+          "io.some": 6.358100786448517,
+          "memory.full": 1.0934764518426598,
+          "memory.some": 1.1822565665451639
+        },
+        "swap_used_kb": {
+          "count": 18,
+          "max": 772,
+          "min": 772,
+          "p50": 772,
+          "p95": 772
+        },
+        "vmstat_delta": {
+          "oom_kill": 0,
+          "pgmajfault": 15134,
+          "pgscan_direct": 517827,
+          "pgscan_kswapd": 1573716,
+          "pgsteal_direct": 516493,
+          "pgsteal_kswapd": 1572586,
+          "pswpin": 0,
+          "pswpout": 0
+        },
+        "window_seconds": 18.33334708213806
+      },
+      "makespan_ms": 18333.366628998192,
+      "name": "wake_0",
+      "service_ms": {
+        "count": 117,
+        "max": 2009.6749890071806,
+        "min": 891.59991798806,
+        "p50": 1183.3875390002504,
+        "p95": 1731.8198580178432
+      },
+      "started_at": "2026-09-07T23:11:33.919529+00:00",
+      "successful_operations": 117
+    }
+  ],
+  "raw_report_had_slo_violations_field": false,
+  "remaining_owned_ids": [],
+  "run_id": "density-902eed08ef744fc5",
+  "schema": 1,
+  "snapshot_counts": {
+    "baseline": {
+      "active_sandbox_creates": 0,
+      "active_sandboxes": 0,
+      "inventory_complete": true
+    },
+    "final": {
+      "active_sandbox_creates": 0,
+      "active_sandboxes": 0,
+      "inventory_complete": true
+    },
+    "parked_0": {
+      "active_sandbox_creates": 0,
+      "active_sandboxes": 0,
+      "inventory_complete": true
+    },
+    "resident": {
+      "active_sandbox_creates": 0,
+      "active_sandboxes": 128,
+      "inventory_complete": true
+    }
+  },
+  "wake_cpu_intervals": [
+    {
+      "end_from_wake_seconds": 1.5522403717041016,
+      "end_utc": "2026-09-07T23:11:35.471769+00:00",
+      "executing_percent": 22.93986636971047,
+      "iowait_percent": 5.058860960865415,
+      "loadavg_end": "9.10 4.63 3.78 15/1323 505475",
+      "start_from_wake_seconds": 0.5521433353424072,
+      "start_utc": "2026-09-07T23:11:34.471672+00:00"
+    },
+    {
+      "end_from_wake_seconds": 2.5523316860198975,
+      "end_utc": "2026-09-07T23:11:36.471861+00:00",
+      "executing_percent": 21.209243431465655,
+      "iowait_percent": 5.698005698005698,
+      "loadavg_end": "9.17 4.71 3.82 5/1730 506576",
+      "start_from_wake_seconds": 1.5522403717041016,
+      "start_utc": "2026-09-07T23:11:35.471769+00:00"
+    },
+    {
+      "end_from_wake_seconds": 3.552438497543335,
+      "end_utc": "2026-09-07T23:11:37.471967+00:00",
+      "executing_percent": 21.303656597774246,
+      "iowait_percent": 4.483306836248013,
+      "loadavg_end": "9.17 4.71 3.82 4/2233 507784",
+      "start_from_wake_seconds": 2.5523316860198975,
+      "start_utc": "2026-09-07T23:11:36.471861+00:00"
+    },
+    {
+      "end_from_wake_seconds": 4.552547216415405,
+      "end_utc": "2026-09-07T23:11:38.472076+00:00",
+      "executing_percent": 23.284625158831005,
+      "iowait_percent": 4.923761118170267,
+      "loadavg_end": "9.17 4.71 3.82 10/2540 508696",
+      "start_from_wake_seconds": 3.552438497543335,
+      "start_utc": "2026-09-07T23:11:37.471967+00:00"
+    },
+    {
+      "end_from_wake_seconds": 5.552632570266724,
+      "end_utc": "2026-09-07T23:11:39.472162+00:00",
+      "executing_percent": 23.842962017235877,
+      "iowait_percent": 4.277050750079796,
+      "loadavg_end": "9.17 4.71 3.82 15/2979 509802",
+      "start_from_wake_seconds": 4.552547216415405,
+      "start_utc": "2026-09-07T23:11:38.472076+00:00"
+    },
+    {
+      "end_from_wake_seconds": 6.552731037139893,
+      "end_utc": "2026-09-07T23:11:40.472260+00:00",
+      "executing_percent": 26.183666984429614,
+      "iowait_percent": 1.8112488083889418,
+      "loadavg_end": "9.17 4.71 3.82 12/3473 511118",
+      "start_from_wake_seconds": 5.552632570266724,
+      "start_utc": "2026-09-07T23:11:39.472162+00:00"
+    },
+    {
+      "end_from_wake_seconds": 7.552838325500488,
+      "end_utc": "2026-09-07T23:11:41.472367+00:00",
+      "executing_percent": 27.136479591836736,
+      "iowait_percent": 0.5420918367346939,
+      "loadavg_end": "8.84 4.72 3.82 14/3963 512458",
+      "start_from_wake_seconds": 6.552731037139893,
+      "start_utc": "2026-09-07T23:11:40.472260+00:00"
+    },
+    {
+      "end_from_wake_seconds": 8.552937746047974,
+      "end_utc": "2026-09-07T23:11:42.472467+00:00",
+      "executing_percent": 25.619834710743802,
+      "iowait_percent": 1.2078830260648443,
+      "loadavg_end": "8.84 4.72 3.82 11/4453 513731",
+      "start_from_wake_seconds": 7.552838325500488,
+      "start_utc": "2026-09-07T23:11:41.472367+00:00"
+    },
+    {
+      "end_from_wake_seconds": 9.553031921386719,
+      "end_utc": "2026-09-07T23:11:43.472561+00:00",
+      "executing_percent": 26.066199872692554,
+      "iowait_percent": 0.5410566518141311,
+      "loadavg_end": "8.84 4.72 3.82 9/4939 515037",
+      "start_from_wake_seconds": 8.552937746047974,
+      "start_utc": "2026-09-07T23:11:42.472467+00:00"
+    },
+    {
+      "end_from_wake_seconds": 10.553120136260986,
+      "end_utc": "2026-09-07T23:11:44.472649+00:00",
+      "executing_percent": 28.06738715829625,
+      "iowait_percent": 0.6357279084551812,
+      "loadavg_end": "8.84 4.72 3.82 8/5477 516420",
+      "start_from_wake_seconds": 9.553031921386719,
+      "start_utc": "2026-09-07T23:11:43.472561+00:00"
+    },
+    {
+      "end_from_wake_seconds": 11.55320429801941,
+      "end_utc": "2026-09-07T23:11:45.472733+00:00",
+      "executing_percent": 28.013959390862944,
+      "iowait_percent": 0.5076142131979695,
+      "loadavg_end": "8.84 4.72 3.82 10/5808 517347",
+      "start_from_wake_seconds": 10.553120136260986,
+      "start_utc": "2026-09-07T23:11:44.472649+00:00"
+    },
+    {
+      "end_from_wake_seconds": 12.553288459777832,
+      "end_utc": "2026-09-07T23:11:46.472817+00:00",
+      "executing_percent": 26.262305493807556,
+      "iowait_percent": 0.6033661479834869,
+      "loadavg_end": "8.93 4.81 3.86 9/6265 518572",
+      "start_from_wake_seconds": 11.55320429801941,
+      "start_utc": "2026-09-07T23:11:45.472733+00:00"
+    },
+    {
+      "end_from_wake_seconds": 13.553371906280518,
+      "end_utc": "2026-09-07T23:11:47.472901+00:00",
+      "executing_percent": 27.405525563671006,
+      "iowait_percent": 0.6986344871387742,
+      "loadavg_end": "8.93 4.81 3.86 7/6675 519646",
+      "start_from_wake_seconds": 12.553288459777832,
+      "start_utc": "2026-09-07T23:11:46.472817+00:00"
+    },
+    {
+      "end_from_wake_seconds": 14.553454399108887,
+      "end_utc": "2026-09-07T23:11:48.472983+00:00",
+      "executing_percent": 37.729866835764106,
+      "iowait_percent": 7.641090678503487,
+      "loadavg_end": "8.93 4.81 3.86 1/6976 520413",
+      "start_from_wake_seconds": 13.553371906280518,
+      "start_utc": "2026-09-07T23:11:47.472901+00:00"
+    },
+    {
+      "end_from_wake_seconds": 15.553537368774414,
+      "end_utc": "2026-09-07T23:11:49.473066+00:00",
+      "executing_percent": 19.47969543147208,
+      "iowait_percent": 8.121827411167512,
+      "loadavg_end": "8.93 4.81 3.86 10/7194 521043",
+      "start_from_wake_seconds": 14.553454399108887,
+      "start_utc": "2026-09-07T23:11:48.472983+00:00"
+    },
+    {
+      "end_from_wake_seconds": 16.553617000579834,
+      "end_utc": "2026-09-07T23:11:50.473146+00:00",
+      "executing_percent": 27.541296060991105,
+      "iowait_percent": 0.6353240152477764,
+      "loadavg_end": "8.93 4.81 3.86 7/7675 522323",
+      "start_from_wake_seconds": 15.553537368774414,
+      "start_utc": "2026-09-07T23:11:49.473066+00:00"
+    },
+    {
+      "end_from_wake_seconds": 17.553698301315308,
+      "end_utc": "2026-09-07T23:11:51.473227+00:00",
+      "executing_percent": 27.517416086130464,
+      "iowait_percent": 0.506649778340722,
+      "loadavg_end": "8.93 4.88 3.89 6/8169 523561",
+      "start_from_wake_seconds": 16.553617000579834,
+      "start_utc": "2026-09-07T23:11:50.473146+00:00"
+    }
+  ]
+}

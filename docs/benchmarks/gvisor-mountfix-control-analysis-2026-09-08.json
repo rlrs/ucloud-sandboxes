@@ -1,0 +1,14 @@
+{
+  "status": "passed_mount_release_control",
+  "node_job_id": "12383398",
+  "patch_series_sha256": "e87ff7015c04691ee37905b0f54257acee060518a2672f3d764d4d8b36a4ad42",
+  "samples_during_hold": 58,
+  "first_sample_seconds_after_park": 1.2551403045654297,
+  "last_sample_seconds_after_park": 58.69567012786865,
+  "running_sentries_each_sample": 2,
+  "retired_devices_each_sample": 0,
+  "cached_cpu_max_descriptors": 0,
+  "executable_mount_namespace_id": 8,
+  "executable_mount_id": 2147483795,
+  "scope": "Mount lifetime diagnostic, not latency acceptance; benchmark records intentional hold as SLO violations."
+}

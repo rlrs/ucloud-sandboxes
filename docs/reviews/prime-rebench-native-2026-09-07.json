@@ -1,0 +1,29 @@
+{
+  "task": "elastic__synthetics-316",
+  "image": "docker.io/swerebenchv2/elastic-synthetics@sha256:43dec4337c7e470deff79db238b03e914f8a5234277b52ec7f3fd414e8978883",
+  "runtime": "native-docker-runc",
+  "cpus": 4,
+  "memory_mb": 4096,
+  "combined_memory_swap_mb": 8192,
+  "disk_mb": 10240,
+  "disk_limit_enforced": true,
+  "status": "gold_failed",
+  "source_sha256": "f4deceb49d30c7be72c3c98fbcde8d5ab1d2fe971ca00cd4cf8c370eb4c65684",
+  "parser_sha256": "4e04e18254dd050aa9ddc3af03525e87c6d66f38d0a7d750506fb79ea1dd7035",
+  "container_id": "417194277b06a866a4f31fbfd9689a3f198e1f8f37a5c5c5ae0b58cc10ef6e19",
+  "setup": "passed",
+  "gold_patch": "applied",
+  "reward": 0,
+  "cleanup": "completed",
+  "elapsed_seconds": 54.92977360100008,
+  "task_key": "f0fe2c516a578bdad76e0817b324ad15917bcaf6d02e34be08567c80d4e8c114",
+  "qualification": {
+    "utc_date": "2026-09-07",
+    "node_job_id": "12383398",
+    "node_name": "density-review-20260907",
+    "kernel": "7.0.0-30-generic",
+    "recording": "Original pinned task method bodies and log parser run through a native Docker/runc adapter. Only framework declarations/decorators were removed to load with host Python stdlib; the 11 setup/gold/test runtime operations were compared against actual pinned task before execution and were identical.",
+    "grader_changes": "None; original patches, test commands, warnings, timeout behavior and reward parser retained.",
+    "test_output": "prime-rebench-native-2026-09-07.tests.txt"
+  }
+}

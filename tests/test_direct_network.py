@@ -1,8 +1,10 @@
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
 import json
 import unittest
+import threading
 
 from ucloud_sandboxes.direct_network import (
     DirectNetworkError,
@@ -17,6 +19,121 @@ class DirectNetworkManagerTests(unittest.TestCase):
             root / "network-slots.json",
             namespace_root=root / "netns",
         )
+
+    def test_rule_snapshot_requires_exact_predicates_and_table(self) -> None:
+        raw = (
+            "*filter\n:FORWARD ACCEPT [0:0]\n"
+            "-A FORWARD -s 100.96.0.0/16 -d 10.36.0.2/32 "
+            "-p tcp -m tcp --dport 8092 -j ACCEPT\nCOMMIT\n"
+            "*nat\n-A POSTROUTING -s 100.96.0.0/16 -j MASQUERADE\nCOMMIT\n"
+        )
+        with patch(
+            "ucloud_sandboxes.direct_network.subprocess.run",
+            return_value=Mock(returncode=0, stdout=raw),
+        ):
+            snapshot = DirectNetworkManager._iptables_snapshot()
+        self.assertIsNotNone(snapshot)
+        key = DirectNetworkManager._iptables_rule_key
+        rule = ("iptables", "-C", "FORWARD", "-s", "100.96.0.0/16",
+                "-d", "10.36.0.2/32", "-p", "tcp", "--dport", "8092", "-j", "ACCEPT")
+        self.assertIn(key(rule), snapshot)
+        self.assertNotIn(key((*rule[:-1], "DROP")), snapshot)
+        self.assertNotIn(key((*rule, "-m", "comment", "--comment", "extra")), snapshot)
+        self.assertNotIn(key(tuple("8093" if x == "8092" else x for x in rule)), snapshot)
+        self.assertNotIn(key(("iptables", "-t", "nat", *rule[1:])), snapshot)
+        self.assertIn(key(("iptables", "-t", "nat", "-C", "POSTROUTING",
+                           "-s", "100.96.0.0/16", "-j", "MASQUERADE")), snapshot)
+
+    def test_rule_snapshot_rejects_failed_or_incomplete_reads(self) -> None:
+        cases = [
+            Mock(returncode=1, stdout="*filter\nCOMMIT\n"),
+            Mock(returncode=0, stdout="*filter\n-A INPUT -j DROP\n"),
+            Mock(returncode=0, stdout="-A INPUT -j DROP\nCOMMIT\n"),
+            Mock(returncode=0, stdout='*filter\n-A INPUT --comment "broken\nCOMMIT\n'),
+        ]
+        for result in cases:
+            with self.subTest(result=result), patch(
+                "ucloud_sandboxes.direct_network.subprocess.run", return_value=result
+            ):
+                self.assertIsNone(DirectNetworkManager._iptables_snapshot())
+        with patch("ucloud_sandboxes.direct_network.subprocess.run", side_effect=FileNotFoundError):
+            self.assertIsNone(DirectNetworkManager._iptables_snapshot())
+
+    def test_missing_snapshot_rule_uses_original_check_and_repair(self) -> None:
+        with TemporaryDirectory() as raw:
+            manager = self.manager(Path(raw).resolve())
+            manager.runner = Mock()
+            check = ("iptables", "-C", "INPUT", "-j", "DROP")
+            install = ("iptables", "-I", "INPUT", "1", "-j", "DROP")
+            with patch("ucloud_sandboxes.direct_network.subprocess.run",
+                       return_value=Mock(returncode=1)) as run:
+                manager._ensure_iptables(check, install, snapshot=set())
+            self.assertEqual(run.call_args.args[0], check)
+            manager.runner.assert_called_once_with(install)
+
+    def test_host_reconciliation_reads_policy_fresh_each_time(self) -> None:
+        with TemporaryDirectory() as raw:
+            manager = self.manager(Path(raw).resolve())
+            manager.runner = Mock()
+            checks = []
+            with patch.object(manager, "_iptables_snapshot", return_value=set()), patch.object(
+                manager, "_ensure_iptables", side_effect=lambda check, _install, **_kwargs: checks.append(check)
+            ):
+                manager._ensure_host_rules()
+            all_rules = {manager._iptables_rule_key(check) for check in checks}
+            with patch.object(manager, "_iptables_snapshot", side_effect=[all_rules, set()]) as snapshot, patch(
+                "ucloud_sandboxes.direct_network.subprocess.run", return_value=Mock(returncode=0)
+            ) as run:
+                manager._ensure_host_rules()
+                run.assert_not_called()
+                manager._ensure_host_rules()
+                self.assertEqual(run.call_count, len(checks))
+                self.assertEqual(snapshot.call_count, 2)
+
+    def test_kernel_work_is_independent_but_cleanup_keeps_its_slot(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            first = self.manager(root)
+            second = self.manager(root)
+            entered = threading.Event()
+            unblock = threading.Event()
+            release_started = threading.Event()
+            cleaned = threading.Event()
+
+            def configure(lease):
+                if lease.sandbox_id == "a":
+                    entered.set()
+                    if not unblock.wait(5):
+                        raise TimeoutError("test did not release namespace setup")
+
+            def release_a():
+                release_started.set()
+                second.release("a", 1)
+
+            with patch.object(first, "_ensure_host_rules"), patch.object(
+                second, "_ensure_host_rules"
+            ), patch.object(first, "_ensure_kernel_lease", side_effect=configure), patch.object(
+                second, "_ensure_kernel_lease"
+            ), patch.object(second, "_cleanup_kernel_lease", side_effect=lambda _: cleaned.set()), ThreadPoolExecutor(max_workers=3) as pool:
+                creating = pool.submit(first.ensure, "a", 1)
+                try:
+                    self.assertTrue(entered.wait(5))
+                    other = pool.submit(second.ensure, "b", 1).result(timeout=2)
+                    deleting = pool.submit(release_a)
+                    self.assertTrue(release_started.wait(5))
+                    self.assertFalse(cleaned.wait(0.05))
+                    third = second.ensure("c", 1)
+                    self.assertEqual((other.slot, third.slot), (2, 3))
+                finally:
+                    unblock.set()
+                self.assertEqual(creating.result(timeout=5).slot, 1)
+                deleting.result(timeout=5)
+                replacement = second.ensure("d", 1)
+                self.assertEqual(replacement.slot, 1)
+                self.assertTrue(cleaned.is_set())
+                self.assertIsNone(first.lease("a", 1))
+            lock_directory = first.lock_path.with_name(first.lock_path.name + ".leases")
+            self.assertEqual(len(list(lock_directory.glob("*.lock"))), 4)
 
     def test_allocates_unique_durable_slots_and_stable_namespace(self) -> None:
         with TemporaryDirectory() as raw:

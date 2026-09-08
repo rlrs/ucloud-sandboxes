@@ -1,0 +1,58 @@
+{
+  "job_id": "12383398",
+  "state": "RUNNING",
+  "updates": [
+    {
+      "state": null,
+      "status": "SSH: Connected! Available at: ssh ucloud@ssh.cloud.sdu.dk -p 2435",
+      "timestamp": 1788817190290
+    },
+    {
+      "state": null,
+      "status": "Job has been scheduled and is starting soon (Assigned to bit-c26a-03)",
+      "timestamp": 1788817192520
+    },
+    {
+      "state": "SUSPENDED",
+      "status": "The virtual machine is powered off.",
+      "timestamp": 1788817192766
+    },
+    {
+      "state": "RUNNING",
+      "status": "Your job is now running.",
+      "timestamp": 1788817196255
+    },
+    {
+      "state": "SUSPENDED",
+      "status": "The virtual machine is powered off.",
+      "timestamp": 1788819837925
+    },
+    {
+      "state": "RUNNING",
+      "status": "Your job is now running.",
+      "timestamp": 1788819872465
+    },
+    {
+      "state": "SUSPENDED",
+      "status": "The virtual machine is powered off.",
+      "timestamp": 1788847978143
+    },
+    {
+      "state": "RUNNING",
+      "status": "Your job is now running.",
+      "timestamp": 1788848021261
+    }
+  ],
+  "pre_reboot_id": "ed483050-13f2-405c-a1a1-84edb1f6bf21",
+  "post_reboot_id": "8f66facc-8d4e-493e-9b10-476ba6189ba6",
+  "cause": "unknown",
+  "guest_oom_kill_count_during_retained_run": 0,
+  "guest_swapout_pages_during_retained_run": 0,
+  "last_valid_host_sample_unix": 1788847973.4474103,
+  "invalid_trailing_host_sample_bytes": 1124,
+  "kernel_panic_timeout": 0,
+  "kernel_panic_on_oops": 0,
+  "vm_panic_on_oom": 0,
+  "pstore": "empty",
+  "post_reboot_apport_report": "heartbeat command failed to connect to unavailable test service; after poweroff, not evidence of cause"
+}

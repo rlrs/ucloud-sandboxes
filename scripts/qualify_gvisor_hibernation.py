@@ -85,6 +85,7 @@ def main():
         )
         if (
             result.get("acl") != "pass"
+            or result.get("acl_umask") != "pass"
             or result.get("flock") != "pass"
             or result.get("identity") != {"uid": 1000, "gid": 1000, "groups": [42]}
         ):
@@ -122,6 +123,9 @@ def main():
             "CAP_CHOWN",
             "CAP_DAC_OVERRIDE",
             "CAP_FOWNER",
+            # Root installs setgid fixtures owned by group 42 before the
+            # workload drops all supplementary groups and switches identity.
+            "CAP_FSETID",
             "CAP_SETUID",
             "CAP_SETGID",
         ]

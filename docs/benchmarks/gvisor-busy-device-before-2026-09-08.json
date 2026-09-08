@@ -1,0 +1,10 @@
+{
+  "time": 1788822964.623813,
+  "owner": "device:d78a687b01dd4286ad9bf4e2b1366a0d9813f9b5035c44c5e4c0fd13b5de5e63",
+  "device": 116,
+  "volume": "density-2f4af7aaabf04f48-15.sandbox-1",
+  "major_minor": "259:116",
+  "matching_namespaces": {},
+  "namespace_count": 233,
+  "exclusive_errno": 16
+}

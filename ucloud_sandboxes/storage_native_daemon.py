@@ -591,6 +591,7 @@ class StorageNativeJournal:
         if not path.is_absolute():
             raise ValueError("storage-native journal path must be absolute")
         self.path = path
+        self._writer_guard = threading.Lock()
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         mode = self.path.parent.stat().st_mode
         if mode & 0o022:
@@ -636,7 +637,8 @@ class StorageNativeJournal:
                 self._require_schema(connection, legacy=True)
                 self._require_data(connection)
                 connection.executescript(
-                    "BEGIN IMMEDIATE;" + self._RETIREMENT_SCHEMA
+                    "BEGIN IMMEDIATE;"
+                    + self._RETIREMENT_SCHEMA
                     + f"PRAGMA user_version = {_JOURNAL_SCHEMA_VERSION}; COMMIT;"
                 )
             elif (
@@ -654,7 +656,9 @@ class StorageNativeJournal:
             )
 
     @staticmethod
-    def _require_schema(connection: sqlite3.Connection, *, legacy: bool = False) -> None:
+    def _require_schema(
+        connection: sqlite3.Connection, *, legacy: bool = False
+    ) -> None:
         expected = {
             "volumes": (
                 "volume_id",
@@ -675,7 +679,10 @@ class StorageNativeJournal:
         }
         if not legacy:
             expected["retired_devices"] = (
-                "owner_id", "device_id", "volume_id", "virtual_size"
+                "owner_id",
+                "device_id",
+                "volume_id",
+                "virtual_size",
             )
         tables = {
             str(row[0])
@@ -734,7 +741,7 @@ class StorageNativeJournal:
         hard_capacity_bytes: int,
     ) -> StorageVolumeRecord | OperationReplay:
         request_sha256 = _request_sha256(request)
-        with closing(self._connect()) as connection:
+        with self._write_connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             replay = self._operation_replay(
                 connection,
@@ -757,7 +764,10 @@ class StorageNativeJournal:
                 ),
                 tuple(sorted(_ACTIVE_CAPACITY_STATES)),
             ).fetchone()[0]
-            if int(reserved) + self._retired_bytes(connection) + record.virtual_size > hard_capacity_bytes:
+            if (
+                int(reserved) + self._retired_bytes(connection) + record.virtual_size
+                > hard_capacity_bytes
+            ):
                 raise StorageNativeCapacityError(
                     "storage-native hard capacity is exhausted"
                 )
@@ -780,7 +790,7 @@ class StorageNativeJournal:
         record: StorageVolumeRecord,
     ) -> StorageVolumeRecord | OperationReplay:
         request_sha256 = _request_sha256(request)
-        with closing(self._connect()) as connection:
+        with self._write_connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             replay = self._operation_replay(
                 connection,
@@ -838,7 +848,7 @@ class StorageNativeJournal:
         hard_capacity_bytes: int = 0,
     ) -> StorageVolumeRecord | OperationReplay:
         request_sha256 = _request_sha256(request)
-        with closing(self._connect()) as connection:
+        with self._write_connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             replay = self._operation_replay(
                 connection,
@@ -867,7 +877,12 @@ class StorageNativeJournal:
                     ),
                     (*sorted(_ACTIVE_CAPACITY_STATES), record.volume_id),
                 ).fetchone()[0]
-                if int(reserved) + self._retired_bytes(connection) + record.virtual_size > hard_capacity_bytes:
+                if (
+                    int(reserved)
+                    + self._retired_bytes(connection)
+                    + record.virtual_size
+                    > hard_capacity_bytes
+                ):
                     raise StorageNativeCapacityError(
                         "storage-native hard capacity is exhausted"
                     )
@@ -894,7 +909,7 @@ class StorageNativeJournal:
         self,
         record: StorageVolumeRecord,
     ) -> None:
-        with closing(self._connect()) as connection:
+        with self._write_connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             current = self._load(connection, record.volume_id)
             if (
@@ -945,7 +960,7 @@ class StorageNativeJournal:
         status: Literal["completed", "failed"],
         require_pending: bool = True,
     ) -> None:
-        with closing(self._connect()) as connection:
+        with self._write_connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             current = self._load(connection, pending.volume_id)
             if (
@@ -1027,7 +1042,7 @@ class StorageNativeJournal:
             error=error[:4096],
             updated_ns=time.time_ns(),
         )
-        with closing(self._connect()) as connection:
+        with self._write_connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             current = self._load(connection, record.volume_id)
             if current.revision != record.revision:
@@ -1197,15 +1212,24 @@ class StorageNativeJournal:
 
     @staticmethod
     def _retired_bytes(connection: sqlite3.Connection) -> int:
-        return int(connection.execute(
-            "SELECT COALESCE(SUM(virtual_size), 0) FROM retired_devices"
-        ).fetchone()[0])
+        return int(
+            connection.execute(
+                "SELECT COALESCE(SUM(virtual_size), 0) FROM retired_devices"
+            ).fetchone()[0]
+        )
 
-    def retire_device(self, owner: StorageNativeDeviceOwner, record: StorageVolumeRecord) -> None:
-        with closing(self._connect()) as connection:
+    def retire_device(
+        self, owner: StorageNativeDeviceOwner, record: StorageVolumeRecord
+    ) -> None:
+        with self._write_connection() as connection:
             connection.execute(
                 "INSERT OR IGNORE INTO retired_devices VALUES (?, ?, ?, ?)",
-                (owner.owner_id, owner.device_id, record.volume_id, record.virtual_size),
+                (
+                    owner.owner_id,
+                    owner.device_id,
+                    record.volume_id,
+                    record.virtual_size,
+                ),
             )
 
     def retired_devices(self) -> list[tuple[str, int, str, int]]:
@@ -1215,8 +1239,26 @@ class StorageNativeJournal:
             ).fetchall()
 
     def forget_retired_device(self, owner_id: str) -> None:
+        with self._write_connection() as connection:
+            connection.execute(
+                "DELETE FROM retired_devices WHERE owner_id = ?", (owner_id,)
+            )
+
+    @contextmanager
+    def _write_connection(self):
+        # SQLite permits one writer. Coordinate this process's short journal
+        # transactions without SQLite's busy-handler retry/backoff competing
+        # with other local requests. Keep independent connections and SQLite's
+        # own cross-process fencing; reads do not acquire this guard.
         with closing(self._connect()) as connection:
-            connection.execute("DELETE FROM retired_devices WHERE owner_id = ?", (owner_id,))
+            with self._writer_guard:
+                try:
+                    yield connection
+                finally:
+                    # Replay returns and failed fences may leave BEGIN open.
+                    # Roll back before handing the writer slot to another call.
+                    if connection.in_transaction:
+                        connection.rollback()
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(
@@ -1291,7 +1333,19 @@ def _storage_mutation(method):
     return guarded
 
 
+@dataclass
+class _DeviceAllocationSlot:
+    # Guarded by the service's _device_slot_guard. Once the backend owns the
+    # device, its owner record replaces this transient reservation atomically.
+    pending: bool = True
+
+
 class StorageNativeNodeService:
+    # Admission may wait for retirement already made safe by kernel teardown.
+    # Backend commands retain their own configured timeout; this bounds waits
+    # between attempts and for another reaper to relinquish its lock.
+    _DEVICE_RECLAIM_WAIT_SECONDS = 2.0
+
     def __init__(
         self,
         config: StorageNativeNodeConfig,
@@ -1419,7 +1473,7 @@ class StorageNativeNodeService:
 
         existing = self.journal.load(volume_id)
         slot = self._device_allocation_slot() if existing is None else suppress()
-        with slot:
+        with slot as allocation_slot:
             reserved = self.journal.reserve_create(
                 request=request,
                 record=record,
@@ -1443,7 +1497,7 @@ class StorageNativeNodeService:
                     runtime_dir=runtime_dir,
                     virtual_size=virtual_size,
                     owner_id=record.device_owner_id,
-                    reserved_slot=True,
+                    allocation_slot=allocation_slot,
                 )
                 if device.virtual_size != virtual_size:
                     raise StorageNativeTerminalError(
@@ -1667,13 +1721,14 @@ class StorageNativeNodeService:
         operation_id: str,
         expected_revision: int,
     ) -> StorageVolumeRecord:
-        with self._device_allocation_slot():
+        with self._device_allocation_slot() as allocation_slot:
             return self._mount_snapshot_cow_with_reserved_device(
                 sandbox_id=sandbox_id,
                 sandbox_generation=sandbox_generation,
                 volume_id=volume_id,
                 operation_id=operation_id,
                 expected_revision=expected_revision,
+                allocation_slot=allocation_slot,
             )
 
     def _mount_snapshot_cow_with_reserved_device(
@@ -1684,6 +1739,7 @@ class StorageNativeNodeService:
         volume_id: str,
         operation_id: str,
         expected_revision: int,
+        allocation_slot: _DeviceAllocationSlot | None,
     ) -> StorageVolumeRecord:
         pending = self._begin_transition(
             kind="MountSnapshotCow",
@@ -1736,7 +1792,7 @@ class StorageNativeNodeService:
                 runtime_dir=runtime_dir,
                 virtual_size=pending.virtual_size,
                 owner_id=pending.device_owner_id,
-                reserved_slot=True,
+                allocation_slot=allocation_slot,
             )
             if device.virtual_size != pending.virtual_size:
                 raise StorageNativeTerminalError(
@@ -2308,7 +2364,9 @@ class StorageNativeNodeService:
             # against a device that is already idle in the warm pool.
             self.journal.update_pending(released)
         volume_root = self._volume_root(record.volume_id)
-        has_retired = any(row[2] == record.volume_id for row in self.journal.retired_devices())
+        has_retired = any(
+            row[2] == record.volume_id for row in self.journal.retired_devices()
+        )
         if volume_root.exists() and not has_retired:
             if volume_root.is_symlink() or not volume_root.is_dir():
                 raise StorageNativeTerminalError("volume root is not a real directory")
@@ -2404,7 +2462,7 @@ class StorageNativeNodeService:
         runtime_dir: Path,
         virtual_size: int,
         owner_id: str,
-        reserved_slot: bool = False,
+        allocation_slot: _DeviceAllocationSlot | None = None,
     ) -> StorageNativeDevice:
         idle_before = (
             self.host.ublk_device_ids()
@@ -2416,7 +2474,7 @@ class StorageNativeNodeService:
             owners = self._backend_ownership()
             existing_owner = owners.get(owner_id)
             demand = len(owners) + self._pending_device_allocations
-            if reserved_slot:
+            if allocation_slot is not None and allocation_slot.pending:
                 demand -= 1
             if (
                 self.config.max_ublk_devices > 0
@@ -2434,6 +2492,13 @@ class StorageNativeNodeService:
                 upper_mode=self.config.upper_mode,
                 owner_id=owner_id,
             )
+            # The owner is now visible to every later admission check. Keeping
+            # its transient reservation through format/mount double-counts it
+            # and rejects the last slots of a concurrent create/wake burst.
+            # Transfer accounting while still holding the same admission lock.
+            if allocation_slot is not None and allocation_slot.pending:
+                self._pending_device_allocations -= 1
+                allocation_slot.pending = False
         if not self.host.device_is_unused(device.device_path):
             self._discard_backend_device(device.device_id)
             raise StorageNativeNodeError(
@@ -2464,20 +2529,52 @@ class StorageNativeNodeService:
 
         maximum = self.config.max_ublk_devices
         if maximum <= 0:
-            yield
+            yield None
             return
-        with self._device_slot_guard:
-            active = len(self._backend_ownership())
-            if active + self._pending_device_allocations >= maximum:
-                raise StorageNativeCapacityError(
-                    "storage-native ublk device capacity is exhausted"
-                )
-            self._pending_device_allocations += 1
+        slot = _DeviceAllocationSlot()
+        deadline = time.monotonic() + self._DEVICE_RECLAIM_WAIT_SECONDS
+        while True:
+            with self._device_slot_guard:
+                active = len(self._backend_ownership())
+                if active + self._pending_device_allocations < maximum:
+                    self._pending_device_allocations += 1
+                    break
+            # Retired owners remain fully charged until their exact identity
+            # and an exclusive block-device open prove reclamation is safe.
+            # Metrics is not a reliable scheduler: its current scan may have
+            # started before the most recent park wave added retirements.
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or not self.journal.retired_devices():
+                # A concurrent reaper can remove the final retired row after
+                # our first owner snapshot. Make rejection, like admission,
+                # depend on a final capacity check under the allocation guard.
+                with self._device_slot_guard:
+                    active = len(self._backend_ownership())
+                    if active + self._pending_device_allocations < maximum:
+                        self._pending_device_allocations += 1
+                        break
+                    raise StorageNativeCapacityError(
+                        "storage-native ublk device capacity is exhausted"
+                    )
+            # Never wait for retirement while holding the allocation guard.
+            # Another allocator may already own a transient reservation, and
+            # its backend acquisition needs that guard to transfer ownership.
+            reclaimed = self._reap_retired_devices(
+                wait_seconds=min(0.05, remaining),
+                deadline=deadline,
+                max_releases=1,
+            )
+            if not reclaimed:
+                time.sleep(min(0.01, max(0.0, deadline - time.monotonic())))
         try:
-            yield
+            yield slot
         finally:
             with self._device_slot_guard:
-                self._pending_device_allocations -= 1
+                # Backend acquisition failures still own the reservation;
+                # successful acquisition already transferred it to an owner.
+                if slot.pending:
+                    self._pending_device_allocations -= 1
+                    slot.pending = False
 
     def _backend_ownership(self) -> dict[str, StorageNativeDeviceOwner]:
         owners = self.backend.list_runtime_device_owners()
@@ -2521,34 +2618,57 @@ class StorageNativeNodeService:
                 self._released_device_ids.discard(device_id)
 
     def _quarantine_backend_device(self, device_id: int) -> None:
-        owners = [o for o in self._backend_ownership().values() if o.device_id == device_id]
+        owners = [
+            o for o in self._backend_ownership().values() if o.device_id == device_id
+        ]
         if not owners:
             raise StorageNativeNodeError("cannot quarantine a device without its owner")
         owner = owners[0]
-        volume_id = owner.image_config_path.relative_to(self.config.runtime_root).parts[0]
+        volume_id = owner.image_config_path.relative_to(self.config.runtime_root).parts[
+            0
+        ]
         record = self.journal.load(volume_id)
         if record is None:
             raise StorageNativeNodeError("cannot quarantine an unjournaled volume")
         self.journal.retire_device(owner, record)
 
-    def _reap_retired_devices(self) -> None:
-        if not self._retirement_lock.acquire(blocking=False):
-            return
+    def _reap_retired_devices(
+        self,
+        *,
+        wait_seconds: float = 0.0,
+        deadline: float | None = None,
+        max_releases: int | None = None,
+    ) -> int:
+        if not self._retirement_lock.acquire(timeout=wait_seconds):
+            return 0
+        reclaimed = 0
         try:
             for owner_id, device_id, volume_id, _ in self.journal.retired_devices():
+                if deadline is not None and time.monotonic() >= deadline:
+                    break
+                if max_releases is not None and reclaimed >= max_releases:
+                    break
                 owner = self._backend_ownership().get(owner_id)
                 if owner is not None:
-                    if owner.device_id != device_id or not self.host.device_is_unused(owner.device_path):
+                    if owner.device_id != device_id or not self.host.device_is_unused(
+                        owner.device_path
+                    ):
                         continue
                     # The identity still owns this device, and the kernel no
                     # longer holds it. Never delete a recycled numeric ID.
                     self.backend.delete(device_id)
                 self.journal.forget_retired_device(owner_id)
+                reclaimed += 1
                 record = self.journal.load(volume_id)
-                if record is not None and record.state == StorageVolumeState.DELETED and not any(
-                    row[2] == volume_id for row in self.journal.retired_devices()
+                if (
+                    record is not None
+                    and record.state == StorageVolumeState.DELETED
+                    and not any(
+                        row[2] == volume_id for row in self.journal.retired_devices()
+                    )
                 ):
                     shutil.rmtree(self._volume_root(volume_id), ignore_errors=True)
+            return reclaimed
         finally:
             self._retirement_lock.release()
 

@@ -1,9 +1,13 @@
 from dataclasses import replace
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+import fcntl
 import json
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import threading
 import unittest
+from unittest.mock import patch
 
 from ucloud_sandboxes.hibernation import (
     HibernationArtifactStore,
@@ -402,6 +406,177 @@ class HibernationTests(unittest.TestCase):
                     sandbox_generation=7,
                     hibernation_generation=1,
                 )
+
+    def test_checkpoint_flush_does_not_block_other_sandbox_park_or_wake(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = HibernationArtifactStore((Path(raw_dir) / "artifacts").resolve())
+            other_store = HibernationArtifactStore(store.root)
+            manifests = []
+            for sandbox_id in ("sandbox-1", "sandbox-2"):
+                generation = store.prepare_generation(
+                    sandbox_id=sandbox_id,
+                    sandbox_generation=7,
+                    hibernation_generation=1,
+                )
+                manifests.append(replace(self._manifest(generation), sandbox_id=sandbox_id))
+            store.publish_complete(manifests[1])
+            memory = manifests[0].files[0]
+            flushing = threading.Event()
+            release = threading.Event()
+            real_fsync = os.fsync
+
+            def slow_memory_flush(descriptor: int) -> None:
+                info = os.fstat(descriptor)
+                if (info.st_dev, info.st_ino) == (memory.device, memory.inode):
+                    flushing.set()
+                    if not release.wait(5):
+                        raise TimeoutError("test did not release the checkpoint flush")
+                real_fsync(descriptor)
+
+            with patch("ucloud_sandboxes.hibernation.os.fsync", side_effect=slow_memory_flush):
+                with ThreadPoolExecutor(max_workers=3) as workers:
+                    publishing = workers.submit(store.publish_complete, manifests[0])
+                    try:
+                        self.assertTrue(flushing.wait(2))
+                        # Wake removes a consumed generation, while another park
+                        # prepares its directory. Neither needs this memory flush.
+                        cleanup = workers.submit(other_store.delete_published, manifests[1])
+                        preparing = workers.submit(
+                            other_store.prepare_generation,
+                            sandbox_id="sandbox-3",
+                            sandbox_generation=7,
+                            hibernation_generation=1,
+                        )
+                        cleanup.result(timeout=2)
+                        self.assertTrue(preparing.result(timeout=2).is_dir())
+                        self.assertFalse(publishing.done())
+                    finally:
+                        release.set()
+                    self.assertEqual(publishing.result(timeout=2), manifests[0])
+
+    def test_checkpoint_publication_still_fences_same_incarnation_rollback(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = HibernationArtifactStore((Path(raw_dir) / "artifacts").resolve())
+            other_store = HibernationArtifactStore(store.root)
+            generation = store.prepare_generation(
+                sandbox_id="sandbox-1", sandbox_generation=7, hibernation_generation=1
+            )
+            manifest = self._manifest(generation)
+            publishing = threading.Event()
+            release = threading.Event()
+            discard_started = threading.Event()
+            real_write = store._atomic_write_at
+
+            def blocked_write(root: Path, name: str, payload: bytes) -> None:
+                if name == store.MANIFEST_NAME:
+                    publishing.set()
+                    if not release.wait(5):
+                        raise TimeoutError("test did not release publication")
+                real_write(root, name, payload)
+
+            def discard() -> None:
+                discard_started.set()
+                other_store.discard_pending(
+                    sandbox_id="sandbox-1", sandbox_generation=7, hibernation_generation=1
+                )
+
+            with patch.object(store, "_atomic_write_at", side_effect=blocked_write):
+                with ThreadPoolExecutor(max_workers=2) as workers:
+                    publication = workers.submit(store.publish_complete, manifest)
+                    try:
+                        self.assertTrue(publishing.wait(2))
+                        rollback = workers.submit(discard)
+                        self.assertTrue(discard_started.wait(2))
+                        with self.assertRaises(FutureTimeoutError):
+                            rollback.result(timeout=0.05)
+                    finally:
+                        release.set()
+                    self.assertEqual(publication.result(timeout=2), manifest)
+                    with self.assertRaisesRegex(HibernationConflictError, "cannot discard"):
+                        rollback.result(timeout=2)
+            self.assertEqual(
+                store.load_complete(
+                    sandbox_id="sandbox-1", sandbox_generation=7, hibernation_generation=1
+                ),
+                manifest,
+            )
+
+    def test_incarnation_lock_retains_legacy_store_lock_exclusion(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = HibernationArtifactStore((Path(raw_dir) / "artifacts").resolve())
+            store.root.mkdir(mode=0o700)
+            lock_path = store.root / store.LOCK_NAME
+            lock_fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+            started = threading.Event()
+
+            def prepare() -> Path:
+                started.set()
+                return store.prepare_generation(
+                    sandbox_id="sandbox-1", sandbox_generation=7, hibernation_generation=1
+                )
+
+            try:
+                fcntl.flock(lock_fd, fcntl.LOCK_EX)
+                with ThreadPoolExecutor(max_workers=1) as workers:
+                    preparing = workers.submit(prepare)
+                    try:
+                        self.assertTrue(started.wait(2))
+                        with self.assertRaises(FutureTimeoutError):
+                            preparing.result(timeout=0.05)
+                    finally:
+                        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+                    self.assertTrue(preparing.result(timeout=2).is_dir())
+            finally:
+                os.close(lock_fd)
+
+    def test_artifact_root_initialization_is_safe_across_sandboxes(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = (Path(raw_dir) / "artifacts").resolve()
+            barrier = threading.Barrier(2)
+            real_mkdir = Path.mkdir
+
+            def racing_mkdir(path: Path, *args, **kwargs) -> None:
+                if path == root:
+                    barrier.wait(timeout=2)
+                real_mkdir(path, *args, **kwargs)
+
+            with patch.object(Path, "mkdir", racing_mkdir):
+                with ThreadPoolExecutor(max_workers=2) as workers:
+                    pending = [
+                        workers.submit(
+                            HibernationArtifactStore(root).prepare_generation,
+                            sandbox_id=f"sandbox-{index}",
+                            sandbox_generation=7,
+                            hibernation_generation=1,
+                        )
+                        for index in range(2)
+                    ]
+                    for future in pending:
+                        self.assertTrue(future.result(timeout=2).is_dir())
+
+    def test_concurrent_artifact_lifecycles_for_128_sandboxes(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = (Path(raw_dir) / "artifacts").resolve()
+
+            def lifecycle(index: int) -> None:
+                store = HibernationArtifactStore(root)
+                sandbox_id = f"sandbox-{index}"
+                identity = {
+                    "sandbox_id": sandbox_id,
+                    "sandbox_generation": 7,
+                    "hibernation_generation": 1,
+                }
+                generation = store.prepare_generation(**identity)
+                manifest = replace(self._manifest(generation), sandbox_id=sandbox_id)
+                store.publish_complete(manifest)
+                self.assertEqual(store.load_complete(**identity), manifest)
+                # runsc restore consumes the main-memory name before cleanup.
+                (generation / "application_memory.img").unlink()
+                store.delete_published(manifest, allow_consumed_main_memory=True)
+                self.assertFalse(generation.exists())
+
+            with ThreadPoolExecutor(max_workers=16) as workers:
+                list(workers.map(lifecycle, range(128)))
 
     def test_journal_hibernate_restore_lifecycle(self) -> None:
         with TemporaryDirectory() as raw_dir:

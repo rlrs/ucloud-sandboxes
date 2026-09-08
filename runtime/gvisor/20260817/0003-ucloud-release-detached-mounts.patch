@@ -1,0 +1,247 @@
+diff --git a/runsc/cmd/sentry/sentrycmd/boot.go b/runsc/cmd/sentry/sentrycmd/boot.go
+index c549cc5..2e0efc8 100644
+--- a/runsc/cmd/sentry/sentrycmd/boot.go
++++ b/runsc/cmd/sentry/sentrycmd/boot.go
+@@ -125,6 +125,9 @@ type Boot struct {
+ 	// passFDs are mappings of user-supplied host to guest file descriptors.
+ 	passFDs sandboxsetup.FDMappings
+ 
++	// bootExecutableFD is only needed for the initial host-mount exec.
++	bootExecutableFD int
++
+ 	// execFD is the host file descriptor used for program execution.
+ 	execFD int
+ 
+@@ -250,6 +253,7 @@ func (*Boot) Usage() string {
+ 
+ // SetFlags implements subcommands.Command.SetFlags.
+ func (b *Boot) SetFlags(f *flag.FlagSet) {
++	f.IntVar(&b.bootExecutableFD, "boot-executable-fd", -1, "host-opened sentry executable, closed after initial exec")
+ 	f.StringVar(&b.bundleDir, "bundle", "", "required path to the root of the bundle directory")
+ 	f.BoolVar(&b.applyCaps, "apply-caps", false, "if true, apply capabilities defined in the spec to the process")
+ 	f.BoolVar(&b.setUpRoot, "setup-root", false, "if true, set up an empty root for the process")
+@@ -357,6 +361,14 @@ func (b *Boot) Execute(_ context.Context, f *flag.FlagSet, args ...any) subcomma
+ 	timer.Reached("ring0 initialized")
+ 
+ 	argOverride := make(map[string]string)
++	if b.bootExecutableFD >= 0 {
++		if err := unix.Close(b.bootExecutableFD); err != nil {
++			util.Fatalf("closing boot executable: %v", err)
++		}
++		b.bootExecutableFD = -1
++		// Never close the numeric FD again after the capability/chroot re-exec.
++		argOverride["boot-executable-fd"] = "-1"
++	}
+ 
+ 	// Do these before chroot takes effect, otherwise we can't read /proc and /sys.
+ 	if len(b.productName) == 0 {
+diff --git a/runsc/container/container.go b/runsc/container/container.go
+index b8d4f51..4a75ad9 100644
+--- a/runsc/container/container.go
++++ b/runsc/container/container.go
+@@ -1526,6 +1526,7 @@ func (c *Container) createGoferProcess(conf *config.Config, mountHints *boot.Pod
+ 	// particular, containerd-shim-runsc-v1 passes GOMAXPROCS=2 in
+ 	// v1.service.newCommand()).
+ 	cmd.Env = slices.DeleteFunc(os.Environ(), func(env string) bool { return strings.HasPrefix(env, "GOMAXPROCS=") })
++	cmd.Env = specutils.WithoutCgroupCPUWatcher(cmd.Env)
+ 	cmd.SysProcAttr = &unix.SysProcAttr{
+ 		// Detach from session. Otherwise, signals sent to the foreground process
+ 		// will also be forwarded by this process, resulting in duplicate signals.
+diff --git a/runsc/sandbox/BUILD b/runsc/sandbox/BUILD
+index afedea0..55e2d4d 100644
+--- a/runsc/sandbox/BUILD
++++ b/runsc/sandbox/BUILD
+@@ -73,6 +73,7 @@ go_test(
+     size = "small",
+     srcs = [
+         "network_test.go",
++        "boot_executable_test.go",
+     ],
+     library = ":sandbox",
+     deps = [
+diff --git a/runsc/sandbox/boot_executable_test.go b/runsc/sandbox/boot_executable_test.go
+new file mode 100644
+index 0000000..7e0e655
+--- /dev/null
++++ b/runsc/sandbox/boot_executable_test.go
+@@ -0,0 +1,56 @@
++package sandbox
++
++import (
++	"os"
++	"os/exec"
++	"path/filepath"
++	"strings"
++	"testing"
++)
++
++func TestPinnedBootExecutable(t *testing.T) {
++	for _, wrapped := range []bool{false, true} {
++		t.Run(map[bool]string{false: "direct", true: "prewarmer-shaped"}[wrapped], func(t *testing.T) {
++			executable := "/bin/echo"
++			cmd := exec.Command(executable, "host-fd-execution")
++			if wrapped {
++				// Match the prewarmer's separate executable path and argv[0].
++				wrapper := filepath.Join(t.TempDir(), "prewarmer")
++				if err := os.WriteFile(wrapper, []byte("#!/bin/bash\nexec -a \"$2\" \"$1\" \"${@:3}\"\n"), 0700); err != nil {
++					t.Fatal(err)
++				}
++				cmd = exec.Command(wrapper, executable, executable, "host-fd-execution")
++			}
++			// A prior donation must not be overwritten or change the child's FD index.
++			prior, err := os.Open("/dev/null")
++			if err != nil {
++				t.Fatal(err)
++			}
++			defer prior.Close()
++			cmd.ExtraFiles = append(cmd.ExtraFiles, prior)
++			file, fd, err := pinBootExecutable(cmd, executable)
++			if err != nil {
++				t.Fatal(err)
++			}
++			defer file.Close()
++			if fd != 4 || len(cmd.ExtraFiles) != 2 {
++				t.Fatalf("fd=%d files=%d", fd, len(cmd.ExtraFiles))
++			}
++			output, err := cmd.CombinedOutput()
++			if err != nil {
++				t.Fatalf("exec: %v: %s", err, output)
++			}
++			if strings.TrimSpace(string(output)) != "host-fd-execution" {
++				t.Fatalf("output=%q", output)
++			}
++		})
++	}
++}
++
++func TestPinnedBootExecutableRejectsUnexpectedWrapper(t *testing.T) {
++	cmd := exec.Command("/bin/echo", "unexpected")
++	file, fd, err := pinBootExecutable(cmd, "/usr/bin/env")
++	if err == nil || file != nil || fd != -1 || len(cmd.ExtraFiles) != 0 {
++		t.Fatalf("file=%v fd=%d err=%v", file, fd, err)
++	}
++}
+diff --git a/runsc/sandbox/sandbox.go b/runsc/sandbox/sandbox.go
+index 0533faa..860129e 100644
+--- a/runsc/sandbox/sandbox.go
++++ b/runsc/sandbox/sandbox.go
+@@ -1069,14 +1069,23 @@ func (s *Sandbox) createSandboxProcess(conf *config.Config, args *Args, startSyn
+ 		log.Warningf("Sidecar %q not found or usable (%v). This slows down gVisor startup significantly.", gvisorbinaries.GvisorSentryPrewarmer.Name, err)
+ 	}
+ 
++	// Open in the host namespace, before the child clones the mount tree.
++	// Otherwise its executable pins the detached old root and locked sibling
++	// mounts until the sentry (including all systrap children) exits.
++	bootFile, bootFD, err := pinBootExecutable(cmd, bootBinPath)
++	if err != nil {
++		return fmt.Errorf("pinning boot executable: %w", err)
++	}
++	defer bootFile.Close()
++
+ 	// Transfer FDs that need to be present before the "boot" command.
+ 	// Start at 3 because 0, 1, and 2 are taken by stdin/out/err.
+-	nextFD := donations.Transfer(cmd, 3)
++	nextFD := donations.Transfer(cmd, 3+len(cmd.ExtraFiles))
+ 
+ 	// Add the "boot" command to the args.
+ 	//
+ 	// All flags after this must be for the boot command
+-	cmd.Args = append(cmd.Args, "boot", "--bundle="+args.BundleDir)
++	cmd.Args = append(cmd.Args, "boot", "--bundle="+args.BundleDir, fmt.Sprintf("--boot-executable-fd=%d", bootFD))
+ 
+ 	if conf.TestOnlyAllowRunAsCurrentUserWithoutChroot {
+ 		// --TESTONLY-unsafe-nonroot is set, so keep env.
+@@ -1181,6 +1190,12 @@ func (s *Sandbox) createSandboxProcess(conf *config.Config, args *Args, startSyn
+ 		cmd.Env = append(cmd.Env, "GODEBUG=cgocheck=0")
+ 	}
+ 
++	// Do this after platform-specific GODEBUG options so none are lost.
++	cmd.Env = specutils.WithoutCgroupCPUWatcher(cmd.Env)
++	// Keep bootstrap fanout bounded until Loader sets the quota-derived value.
++	cmd.Env = slices.DeleteFunc(cmd.Env, func(value string) bool { return strings.HasPrefix(value, "GOMAXPROCS=") })
++	cmd.Env = append(cmd.Env, "GOMAXPROCS=2")
++
+ 	// nss is the set of namespaces to join or create before starting the sandbox
+ 	// process. Mount, IPC and UTS namespaces from the host are not used as they
+ 	// are virtualized inside the sandbox. Be paranoid and run inside an empty
+@@ -2858,3 +2873,26 @@ func (s *Sandbox) GetNetworkConfig() (*boot.CreateLinksAndRoutesArgs, error) {
+ 	}
+ 	return &networkArgs, nil
+ }
++
++// pinBootExecutable keeps direct and prewarmed launches on the host's original
++// executable mount. The returned file must remain open until cmd.Start.
++func pinBootExecutable(cmd *exec.Cmd, executable string) (*os.File, int, error) {
++	file, err := os.Open(executable)
++	if err != nil {
++		return nil, -1, err
++	}
++	fd := 3 + len(cmd.ExtraFiles)
++	target := fmt.Sprintf("/proc/self/fd/%d", fd)
++	if cmd.Path == executable {
++		cmd.Path = target
++	} else {
++		// The prewarmer's first argument is the executable it will exec.
++		if len(cmd.Args) < 2 || cmd.Args[1] != executable {
++			file.Close()
++			return nil, -1, fmt.Errorf("unexpected boot command wrapper")
++		}
++		cmd.Args[1] = target
++	}
++	cmd.ExtraFiles = append(cmd.ExtraFiles, file)
++	return file, fd, nil
++}
+diff --git a/runsc/specutils/specutils.go b/runsc/specutils/specutils.go
+index 435b456..b4e8541 100644
+--- a/runsc/specutils/specutils.go
++++ b/runsc/specutils/specutils.go
+@@ -1061,3 +1061,24 @@ func Features() *features.Features {
+ 
+ 	return globalFeatures
+ }
++
++// WithoutCgroupCPUWatcher prevents Go's lifetime CPU-limit descriptor from
++// pinning a detached clone of the host mount tree after entering a userns.
++// The sentry sets GOMAXPROCS explicitly from its configured CPU count.
++func WithoutCgroupCPUWatcher(env []string) []string {
++	out := make([]string, 0, len(env)+1)
++	var debug []string
++	for _, value := range env {
++		if strings.HasPrefix(value, "GODEBUG=") {
++			for _, option := range strings.Split(strings.TrimPrefix(value, "GODEBUG="), ",") {
++				if option != "" && !strings.HasPrefix(option, "containermaxprocs=") && !strings.HasPrefix(option, "updatemaxprocs=") {
++					debug = append(debug, option)
++				}
++			}
++		} else {
++			out = append(out, value)
++		}
++	}
++	debug = append(debug, "containermaxprocs=0", "updatemaxprocs=0")
++	return append(out, "GODEBUG="+strings.Join(debug, ","))
++}
+diff --git a/runsc/specutils/specutils_test.go b/runsc/specutils/specutils_test.go
+index ec1c38f..bbf52ae 100644
+--- a/runsc/specutils/specutils_test.go
++++ b/runsc/specutils/specutils_test.go
+@@ -841,3 +841,20 @@ func TestTPUProxyEnabled(t *testing.T) {
+ 		})
+ 	}
+ }
++
++func TestWithoutCgroupCPUWatcher(t *testing.T) {
++	original := []string{"KEEP=value", "GODEBUG=asyncpreemptoff=1,containermaxprocs=1", "GODEBUG=cgocheck=0,updatemaxprocs=1", "GOMAXPROCS=4"}
++	got := WithoutCgroupCPUWatcher(original)
++	want := []string{"KEEP=value", "GOMAXPROCS=4", "GODEBUG=asyncpreemptoff=1,cgocheck=0,containermaxprocs=0,updatemaxprocs=0"}
++	if len(got) != len(want) {
++		t.Fatalf("got=%v", got)
++	}
++	for i := range want {
++		if got[i] != want[i] {
++			t.Fatalf("got=%v want=%v", got, want)
++		}
++	}
++	if original[1] != "GODEBUG=asyncpreemptoff=1,containermaxprocs=1" {
++		t.Fatal("mutated caller environment")
++	}
++}

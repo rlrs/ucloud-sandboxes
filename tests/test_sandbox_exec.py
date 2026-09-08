@@ -116,6 +116,152 @@ class SandboxExecProtocolTests(unittest.TestCase):
             any("embedded null byte" in event.data for event in session.events)
         )
 
+    def test_blocked_completion_cleanup_keeps_unrelated_sessions_responsive(self) -> None:
+        for blocked_lease in ("capacity", "activity"):
+            with self.subTest(blocked_lease=blocked_lease):
+                sandbox_manager = FakeSandboxManager()
+                manager = ExecSessionManager(sandbox_manager, max_sessions=2)
+                session = _install_session(manager, BlockingStdin())
+                session.activity_lease = True
+                session.capacity_lease = "capacity:sandbox-one"
+                other = _install_session(manager, BlockingStdin(), sandbox_id="sandbox-two")
+                blocked = Event()
+                release = Event()
+                own_events_done = Event()
+                unrelated_done = Event()
+                failures = []
+                own_events = []
+
+                def cleanup(value):
+                    if value not in ("sandbox-one", "capacity:sandbox-one"):
+                        return
+                    blocked.set()
+                    if not release.wait(5):
+                        raise TimeoutError("test did not release blocked cleanup")
+
+                if blocked_lease == "capacity":
+                    sandbox_manager.release_exec_capacity = cleanup
+                else:
+                    sandbox_manager.lifecycle.release_shared = cleanup
+
+                def complete():
+                    try:
+                        manager._wait_process_unobserved(session.id, FakeProcess(), ())
+                    except BaseException as exc:
+                        failures.append(exc)
+
+                def read_own_events():
+                    try:
+                        own_events.extend(manager.events_after(session.id, wait_seconds=2))
+                    except BaseException as exc:
+                        failures.append(exc)
+                    finally:
+                        own_events_done.set()
+
+                def unrelated():
+                    try:
+                        self.assertIs(manager.get(other.id), other)
+                        self.assertEqual(manager.events_after(other.id), [])
+                        manager._append_stream_chunk(other.id, "stdout", "other output")
+                        manager._wait_process_unobserved(other.id, FakeProcess(), ())
+                        self.assertEqual(other.status, "failed")
+                    except BaseException as exc:
+                        failures.append(exc)
+                    finally:
+                        unrelated_done.set()
+
+                completing = Thread(target=complete)
+                reader = Thread(target=read_own_events)
+                independent = Thread(target=unrelated)
+                completing.start()
+                try:
+                    self.assertTrue(blocked.wait(1))
+                    self.assertEqual(session.status, "running")
+                    self.assertIsNone(session.exit_code)
+                    # Cleanup in progress cannot free the session for eviction.
+                    with manager._lock:
+                        with self.assertRaisesRegex(RuntimeError, "capacity"):
+                            manager._make_session_room_locked()
+                    reader.start()
+                    independent.start()
+                    self.assertTrue(unrelated_done.wait(1))
+                    self.assertFalse(own_events_done.wait(0.05))
+                finally:
+                    release.set()
+                    for thread in (completing, reader, independent):
+                        if thread.ident is not None:
+                            thread.join(2)
+                self.assertFalse(failures)
+                self.assertTrue(own_events_done.is_set())
+                self.assertEqual([event.stream for event in own_events], ["exit"])
+                self.assertEqual(session.status, "failed")
+                self.assertEqual(session.exit_code, 1)
+
+    def test_concurrent_completion_releases_each_lease_once_despite_cleanup_errors(self) -> None:
+        sandbox_manager = FakeSandboxManager()
+        manager = ExecSessionManager(sandbox_manager)
+        session = _install_session(manager, BlockingStdin())
+        session.capacity_lease = "capacity:sandbox-one"
+        session.activity_lease = True
+        blocked = Event()
+        release = Event()
+        duplicate_started = Event()
+        duplicate_done = Event()
+        failures = []
+        capacity_releases, activity_releases = [], []
+
+        def release_capacity(value):
+            capacity_releases.append(value)
+            raise RuntimeError("capacity release failed")
+
+        def release_activity(value):
+            activity_releases.append(value)
+            blocked.set()
+            if not release.wait(5):
+                raise TimeoutError("test did not release activity cleanup")
+            raise RuntimeError("activity release failed")
+
+        sandbox_manager.release_exec_capacity = release_capacity
+        sandbox_manager.lifecycle.release_shared = release_activity
+
+        def complete(exit_code, done=None):
+            try:
+                if done is not None:
+                    duplicate_started.set()
+                manager._complete(session, exit_code)
+            except BaseException as exc:
+                failures.append(exc)
+            finally:
+                if done is not None:
+                    done.set()
+
+        original = Thread(target=complete, args=(0,))
+        duplicate = Thread(target=complete, args=(1, duplicate_done))
+        original.start()
+        try:
+            self.assertTrue(blocked.wait(1))
+            duplicate.start()
+            self.assertTrue(duplicate_started.wait(1))
+            self.assertFalse(duplicate_done.wait(0.05))
+            self.assertEqual(session.status, "running")
+            self.assertFalse(any(event.stream == "exit" for event in session.events))
+        finally:
+            release.set()
+            original.join(2)
+            if duplicate.ident is not None:
+                duplicate.join(2)
+        self.assertFalse(failures)
+        self.assertTrue(duplicate_done.is_set())
+        self.assertEqual(capacity_releases, ["capacity:sandbox-one"])
+        self.assertEqual(activity_releases, ["sandbox-one"])
+        self.assertEqual(session.status, "exited")
+        self.assertEqual(session.exit_code, 0)
+        self.assertFalse(session.activity_lease)
+        self.assertIsNone(session.capacity_lease)
+        self.assertEqual([event.stream for event in session.events], ["error", "error", "exit"])
+        self.assertIn("capacity release failed", session.events[0].data)
+        self.assertIn("activity release failed", session.events[1].data)
+
     def test_output_thread_start_failure_kills_process_and_unwinds_state(self) -> None:
         sandbox_manager = FakeSandboxManager()
         manager = ExecSessionManager(sandbox_manager)
@@ -352,9 +498,11 @@ class ChunkedBinaryPipe:
 def _install_session(
     manager: ExecSessionManager,
     pipe: BlockingStdin,
+    *,
+    sandbox_id: str = "sandbox-one",
 ) -> ExecSession:
     spec = SandboxExecSpec(
-        sandbox_id="sandbox-one",
+        sandbox_id=sandbox_id,
         command=("/bin/cat",),
         stdin=True,
     )

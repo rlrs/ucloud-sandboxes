@@ -181,8 +181,22 @@ Registry lease database.
 
 The same publication gate, phase spans, and metric keys apply to Registry and
 S3 backends. `sandbox.storage_native_max_ublk_devices` independently bounds
-active plus pooled ublk devices; its default is 128, while the warm pool remains
-bounded by its separate high watermark.
+active runtime owners plus pending allocations; its default is 128. Idle pool
+devices are reusable and do not consume these admission slots. The warm pool's
+separate high watermark defaults to 16, so 128 running sandboxes can coexist
+with up to 16 additional idle kernel devices. Immutable Docker image layers do
+not consume ublk devices. Retired devices still owned by the backend retain
+their admission slots until kernel teardown completes.
+
+On older kernels where `ublk_drv.ublks_max` limits all devices, such as
+[Linux 6.8](https://github.com/torvalds/linux/blob/v6.8/drivers/block/ublk_drv.c#L2383),
+the kernel's ceiling must cover both active and idle devices; a value of 128 at that kernel
+boundary leaves no room for a warm pool at full density. Allow at least 144 for
+the default 128-active/16-idle configuration, with additional room for other
+device users. This is separate from the node service's active-device limit;
+newer kernels, including
+[Linux 6.15](https://github.com/torvalds/linux/blob/v6.15/drivers/block/ublk_drv.c#L2775),
+apply `ublks_max` only to unprivileged devices.
 
 ## Performance qualification
 

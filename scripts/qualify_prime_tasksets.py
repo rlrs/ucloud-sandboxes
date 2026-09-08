@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 from pathlib import Path
 import subprocess
 import sys
@@ -58,24 +59,45 @@ def verify_installed_sources(python: str, source: Path, rows: list[dict]) -> Non
             )
 
 
-def verdict(summary: dict, *, mode: str) -> str:
+def _all_valid_counts(counts: object, total: int) -> bool:
+    return (
+        isinstance(counts, dict)
+        and type(counts.get("valid")) is int
+        and counts["valid"] == total
+        and all(type(value) is int and value >= 0 for value in counts.values())
+        and sum(counts.values()) == total
+    )
+
+
+def verdict(summary: object, *, mode: str, expected_total: int | None = None) -> str:
+    """Reject malformed, contradictory, or shorter-than-requested evidence."""
+    if not isinstance(summary, dict) or mode not in {"all", "setup"}:
+        return "failed_or_incomplete"
     total = summary.get("total", 0)
-    outcomes = summary.get("outcomes", {})
     if (
-        not isinstance(total, int)
+        type(total) is not int
         or total < 1
+        or type(summary.get("recorded")) is not int
         or summary.get("recorded") != total
         or summary.get("mode") != mode
-        or any(
-            outcomes.get(key, 0)
-            for key in ("invalid", "error", "timeout", "missing", "unchecked")
+        or not _all_valid_counts(summary.get("outcomes"), total)
+        or (
+            expected_total is not None
+            and (type(expected_total) is not int or total != expected_total)
         )
-        or outcomes.get("valid") != total
     ):
         return "failed_or_incomplete"
-    if mode == "all":
-        for check in ("gold", "setup"):
-            if summary.get("checks", {}).get(check, {}).get("valid") != total:
+    for field, expected in (("terminal", total), ("owed", 0)):
+        if field in summary and (
+            type(summary[field]) is not int or summary[field] != expected
+        ):
+            return "failed_or_incomplete"
+    if mode == "all" or "checks" in summary:
+        checks = summary.get("checks")
+        if not isinstance(checks, dict):
+            return "failed_or_incomplete"
+        for check in ("gold", "setup") if mode == "all" else ("setup",):
+            if not _all_valid_counts(checks.get(check), total):
                 return "failed_or_incomplete"
     return "setup_passed" if mode == "setup" else "sample_passed"
 
@@ -103,12 +125,15 @@ def command(
     output: Path,
     num_tasks: int,
     image_aliases: Path | None = None,
+    resource_overrides: dict[str, float] | None = None,
 ) -> list[str]:
     argv = [
         python,
-        "-m",
-        "verifiers.v1.cli.validate",
+        str(Path(__file__).with_name("prime_validation_entrypoint.py").resolve()),
+        str(image_aliases.resolve()) if image_aliases is not None else "-",
         row["taskset"],
+        "--qualification-evidence",
+        str(output / f"{row['taskset']}-runtimes.jsonl"),
         "--runtime.type",
         "ucloud",
         "--output-dir",
@@ -122,11 +147,15 @@ def command(
         "--timeout.total",
         "1800",
     ]
-    if image_aliases is not None:
-        argv[1:3] = [
-            str(Path(__file__).with_name("prime_validation_entrypoint.py").resolve()),
-            str(image_aliases.resolve()),
-        ]
+    for resource, value in (resource_overrides or {}).items():
+        argv.extend(
+            [
+                f"--runtime.{resource}",
+                str(value),
+                f"--qualification-{resource}",
+                str(value),
+            ]
+        )
     if num_tasks:
         argv.extend(["-n", str(num_tasks)])
     if row["mode"] == "setup":
@@ -164,6 +193,15 @@ def main() -> int:
         type=Path,
         help="Explicit taskset-scoped public image mappings; recorded in the plan",
     )
+    parser.add_argument("--cpu", type=float, help="Require this resolved CPU limit")
+    parser.add_argument(
+        "--memory-gib", type=float, help="Require this resolved memory limit in GiB"
+    )
+    parser.add_argument(
+        "--disk-gib",
+        type=float,
+        help="Require this resolved writable disk limit in GiB",
+    )
     parser.add_argument(
         "--execute",
         action="store_true",
@@ -172,6 +210,19 @@ def main() -> int:
     args = parser.parse_args()
     if args.num_tasks < 0:
         parser.error("--num-tasks cannot be negative")
+    resource_overrides = {
+        key: value
+        for key, value in (
+            ("cpu", args.cpu),
+            ("memory", args.memory_gib),
+            ("disk", args.disk_gib),
+        )
+        if value is not None
+    }
+    if any(
+        not math.isfinite(value) or value <= 0 for value in resource_overrides.values()
+    ):
+        parser.error("resource overrides must be finite and positive")
     manifest = json.loads(MANIFEST.read_text())
     verify_sources(args.source.resolve(), manifest)
     selected = set(args.taskset or [row["taskset"] for row in manifest["tasksets"]])
@@ -191,6 +242,7 @@ def main() -> int:
                 output=output,
                 num_tasks=args.num_tasks,
                 image_aliases=args.image_aliases,
+                resource_overrides=resource_overrides,
             ),
         }
         for row in rows
@@ -203,6 +255,7 @@ def main() -> int:
                 else None,
                 "source_commit": manifest["source_commit"],
                 "sample_size": args.num_tasks or "all",
+                "resource_overrides": resource_overrides,
                 "checks": plan,
             },
             indent=2,
@@ -242,7 +295,9 @@ def main() -> int:
         summary_path = output / row["taskset"] / "summary.json"
         try:
             summary = json.loads(summary_path.read_text())
-            status = verdict(summary, mode=row["mode"])
+            status = verdict(
+                summary, mode=row["mode"], expected_total=args.num_tasks or None
+            )
         except (OSError, ValueError, TypeError):
             summary, status = None, "failed_or_incomplete"
         if completed.returncode:

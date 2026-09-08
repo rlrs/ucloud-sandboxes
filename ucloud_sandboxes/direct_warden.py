@@ -688,12 +688,14 @@ class DirectRunscWarden:
             candidate_record: HibernationRecord | None = None
             try:
                 phase = time.monotonic()
+                # Keep the OCI CPU quota during boot. The optional startup
+                # burst removes it before runsc sizes the sentry's Go scheduler,
+                # letting every concurrent restore use all host CPUs.
                 self._checked(
                     *self._common(),
                     "restore",
                     "--detach",
                     "--background",
-                    "--cpu-startup-burst",
                     "--start-paused",
                     f"--image-path={generation}",
                     f"--bundle={sandbox.bundle}",
@@ -773,6 +775,18 @@ class DirectRunscWarden:
         with self._locked(sandbox):
             journal = self._journal(sandbox)
             durable = journal.load()
+            if (
+                durable is not None
+                and durable.state == HibernationState.RECOVERY_REQUIRED
+            ):
+                # Quarantine is already durable. Its volume may deliberately
+                # remain unreadable until operator recovery or deletion.
+                return durable
+            if (
+                durable is not None
+                and self._storage_record(sandbox).state == StorageVolumeState.ERROR
+            ):
+                return self._quarantine_storage_error(sandbox, journal, durable)
             if durable is not None and durable.state != HibernationState.RUNNING:
                 self._mount_storage(
                     sandbox,
@@ -887,6 +901,48 @@ class DirectRunscWarden:
                     operation_seed=f"reconcile:{record.revision}",
                 )
             return record
+
+    def _quarantine_storage_error(
+        self,
+        sandbox: DirectSandbox,
+        journal: HibernationJournal,
+        record: HibernationRecord,
+    ) -> HibernationRecord:
+        """Fence this incarnation without remounting an unusable volume."""
+        identities = {
+            (pid, ticks)
+            for pid, ticks in (
+                (record.sentry_pid, record.sentry_start_time_ticks),
+                (record.candidate_pid, record.candidate_start_time_ticks),
+            )
+            if pid is not None and ticks is not None
+        }
+        if (
+            record.state == HibernationState.RESTORING
+            and record.authority == HibernationAuthority.PARKED
+        ):
+            # Restore may have daemonized before recording its candidate.
+            candidate = self._candidate_identity_or_none(sandbox)
+            if candidate is not None:
+                identities.add(candidate)
+        for pid, ticks in identities:
+            # A stale PID from before reboot must never fence its new owner.
+            if not hibernation_process_identity_matches(
+                pid, ticks, proc_root=self.config.proc_root
+            ):
+                continue
+            handle = self.fencer.open(pid, ticks)
+            try:
+                handle.terminate(timeout=self.config.stop_timeout_seconds)
+                if handle.alive():
+                    raise DirectWardenError("storage-error runtime could not be fenced")
+            finally:
+                handle.close()
+        return journal.quarantine(
+            reason="storage-native volume is in error state",
+            expected_revision=record.revision,
+            live_process_confirmed_dead=True,
+        )
 
     def _reconcile_restoring(
         self,

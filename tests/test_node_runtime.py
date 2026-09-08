@@ -1,6 +1,7 @@
 import unittest
 from threading import Event, Thread
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 from ucloud_sandboxes.node_runtime import DirectNodeRuntime
 from ucloud_sandboxes.sandbox import (
@@ -73,6 +74,30 @@ class _WakeService(_IdleService):
 
 
 class DirectNodeRuntimeTests(unittest.TestCase):
+    def test_activity_release_unwinds_coordinator_when_storage_cleanup_fails(self) -> None:
+        for failing_step in ("registration", "mark_activity"):
+            with self.subTest(failing_step=failing_step):
+                service = _WakeService()
+                service.provisioner.registry.get = Mock(
+                    return_value=SimpleNamespace(sandbox_generation=1),
+                    side_effect=RuntimeError("registry unavailable") if failing_step == "registration" else None,
+                )
+                service.mark_activity = Mock(
+                    side_effect=RuntimeError("activity update failed") if failing_step == "mark_activity" else None,
+                )
+                manager = DirectNodeRuntime(service)  # type: ignore[arg-type]
+                coordinator = manager.lifecycle._coordinator
+                coordinator.acquire_shared("agent")
+                with self.assertRaises(RuntimeError):
+                    manager.lifecycle.release_shared("agent")
+                # The error remains visible while park/delete can proceed.
+                with coordinator.exclusive("agent"):
+                    pass
+                if failing_step == "registration":
+                    service.mark_activity.assert_not_called()
+                else:
+                    service.mark_activity.assert_called_once_with("agent", 1)
+
     def test_wake_is_idempotent_while_running_activity_is_attached(self) -> None:
         service = _WakeService()
         manager = DirectNodeRuntime(service)  # type: ignore[arg-type]

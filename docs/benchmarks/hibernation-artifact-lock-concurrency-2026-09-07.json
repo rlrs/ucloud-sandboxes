@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "recorded_at": "2026-09-07",
+  "scope": "Local artifact publication concurrency with injected memory-flush latency; not sandbox runtime or storage-throughput qualification",
+  "method": {
+    "sandbox_artifact_generations": 128,
+    "publication_workers": 16,
+    "repetitions": 3,
+    "files_per_generation": 3,
+    "main_memory_file_bytes": 6,
+    "kernel_state_file_bytes": 6,
+    "allocator_metadata_file_bytes": 8,
+    "injected_main_memory_fsync_delay_ms": 20,
+    "other_fsync_calls": "Real local filesystem fsync",
+    "setup": "Prepare 128 generations and manifests before timing",
+    "baseline": "Same artifact store implementation with its previous root-wide exclusive flock held for the entire publication",
+    "updated": "Shared legacy root admission plus an exclusive lock per sandbox incarnation",
+    "latency": "Wall-clock publish_complete duration including admission wait; p95 is sorted sample index 121 of 128",
+    "makespan": "Wall-clock time including executor startup and completion of every publication"
+  },
+  "baseline_samples": [
+    {"makespan_seconds": 3.3686, "publication_p50_seconds": 0.4171, "publication_p95_seconds": 0.4446},
+    {"makespan_seconds": 3.3954, "publication_p50_seconds": 0.4183, "publication_p95_seconds": 0.4527},
+    {"makespan_seconds": 3.3031, "publication_p50_seconds": 0.4046, "publication_p95_seconds": 0.4587}
+  ],
+  "updated_samples": [
+    {"makespan_seconds": 0.2388, "publication_p50_seconds": 0.0273, "publication_p95_seconds": 0.0357},
+    {"makespan_seconds": 0.3480, "publication_p50_seconds": 0.0312, "publication_p95_seconds": 0.1090},
+    {"makespan_seconds": 0.2175, "publication_p50_seconds": 0.0263, "publication_p95_seconds": 0.0307}
+  ],
+  "regressions": {
+    "unrelated_park_and_wake_progress_during_blocked_memory_flush": "Original implementation timed out waiting two seconds for unrelated cleanup; updated implementation completes cleanup and another preparation before the memory flush is released",
+    "same_incarnation_rollback_is_fenced": true,
+    "legacy_exclusive_store_lock_is_respected": true,
+    "concurrent_first_root_initialization": "Passed ten repeated two-worker race tests",
+    "concurrent_128_generation_publish_load_consume_delete": "Passed ten repetitions with sixteen workers",
+    "hibernation_warden_migration_tests": 51
+  },
+  "limitations": [
+    "This measures elimination of an unnecessary software admission queue with tiny checkpoint files and an artificial delay.",
+    "It does not measure 128 real running sandboxes, gVisor restore, ublk, S3, CPU fairness or dirty multi-GiB memory throughput.",
+    "Real concurrent flushes still share device bandwidth; production latency and density require the live workload qualification."
+  ]
+}

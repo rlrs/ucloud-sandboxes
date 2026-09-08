@@ -1,0 +1,1046 @@
+{
+  "cleanup_errors": [],
+  "configuration": {
+    "act_p95_ms": 2000,
+    "burst_ms": 15000,
+    "cleanup_timeout_seconds": 180,
+    "completion_p95_ms": 10000,
+    "concurrency": 1,
+    "count": 3,
+    "cpu_ms": 100,
+    "cpus": 1.0,
+    "create_concurrency": 1,
+    "cycles": 1,
+    "dirty_mb": 16,
+    "dirty_page_count": 4096,
+    "disk_mb": 2048,
+    "expected_cpus": 32,
+    "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+    "memory_mb": 1024,
+    "park_p95_ms": 2000,
+    "resident_mb": 256,
+    "wake_p95_ms": 3000
+  },
+  "errors": [],
+  "finished_at": "2026-09-08T06:04:05.314285+00:00",
+  "image_pull": {
+    "command": [
+      "docker",
+      "pull",
+      "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285"
+    ],
+    "exit_code": 0,
+    "image": {
+      "available_to_sandboxes": true,
+      "created_at": "2026-09-08T06:02:59.419567+00:00",
+      "id": "density-541eda89c84043df",
+      "labels": {},
+      "manifest_digest": "sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+      "pushed": true,
+      "source": "registry",
+      "state": "available",
+      "tag": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+      "updated_at": "2026-09-08T06:02:59.419567+00:00"
+    },
+    "timings": {
+      "docker_pull_ms": 366,
+      "pull_queue_ms": 0,
+      "rootfs_materialize_ms": 74
+    }
+  },
+  "owned_ids": [
+    "density-541eda89c84043df-0",
+    "density-541eda89c84043df-1",
+    "density-541eda89c84043df-2"
+  ],
+  "phases": [
+    {
+      "completion": {
+        "count": 1,
+        "max_ms": 4704.038,
+        "p50_ms": 4704.038,
+        "p95_ms": 4704.038,
+        "p99_ms": 4704.038
+      },
+      "errors": [],
+      "finished_at": "2026-09-08T06:03:04.201117+00:00",
+      "makespan_ms": 4704.3058419949375,
+      "name": "single_create",
+      "samples": [
+        {
+          "completion_ms": 4704.038197000045,
+          "id": "density-541eda89c84043df-0",
+          "result": {
+            "counter": 0,
+            "dirty_mb": 16,
+            "dirty_page_count": 4096,
+            "dirty_start_page": null,
+            "files": 0,
+            "guest_timings_ms": {
+              "total": 0.14872399999976693
+            },
+            "memory_sha256": "525cf1e977b0701f00689a8aeeff867aa70516fbae5df79a1aa494c29b8f1580",
+            "node_exec_start_timings": {
+              "manager": {
+                "exec_lease": 0.11345000166329555,
+                "inspect": 0.17335099983029068,
+                "total": 0.3328319980937522
+              },
+              "start_ms": 57
+            },
+            "nonce": "06874a69655841289e2b6f4560046f1c",
+            "pid": 1,
+            "resident_bytes": 268435456
+          },
+          "service_ms": 4703.567085030954
+        }
+      ],
+      "service": {
+        "count": 1,
+        "max_ms": 4703.567,
+        "p50_ms": 4703.567,
+        "p95_ms": 4703.567,
+        "p99_ms": 4703.567
+      },
+      "started_at": "2026-09-08T06:02:59.496846+00:00"
+    },
+    {
+      "completion": {
+        "count": 3,
+        "max_ms": 1462.061,
+        "p50_ms": 976.972,
+        "p95_ms": 1462.061,
+        "p99_ms": 1462.061
+      },
+      "errors": [],
+      "finished_at": "2026-09-08T06:03:05.666177+00:00",
+      "makespan_ms": 1462.224579998292,
+      "name": "single_act",
+      "samples": [
+        {
+          "completion_ms": 479.4587129727006,
+          "id": "density-541eda89c84043df-0",
+          "result": {
+            "counter": 1,
+            "dirty_mb": 16,
+            "dirty_page_count": 4096,
+            "dirty_start_page": 0,
+            "files": 64,
+            "guest_timings_ms": {
+              "cpu_work": 99.6053839999993,
+              "files_write_read": 7.671659999999747,
+              "memory_dirty_and_hash": 138.63946300000052,
+              "memory_verify": 127.88598299999964,
+              "persistent_verify": 1.3327969999998857,
+              "sqlite_commit": 0.3949350000000962,
+              "total": 375.6581830000005
+            },
+            "memory_sha256": "801596e5d9795f9d5154a41c217debe711561249fd614a44dd42c1de05f7344a",
+            "node_exec_start_timings": {
+              "manager": {
+                "exec_lease": 0.14770199777558446,
+                "inspect": 0.19127699852106161,
+                "total": 0.3762659980566241
+              },
+              "start_ms": 57
+            },
+            "nonce": "06874a69655841289e2b6f4560046f1c",
+            "pid": 1,
+            "resident_bytes": 268435456
+          },
+          "service_ms": 479.23665697453544
+        },
+        {
+          "completion_ms": 976.9717109738849,
+          "id": "density-541eda89c84043df-0",
+          "result": {
+            "counter": 2,
+            "dirty_mb": 16,
+            "dirty_page_count": 4096,
+            "dirty_start_page": 4096,
+            "files": 64,
+            "guest_timings_ms": {
+              "cpu_work": 101.97219700000026,
+              "files_write_read": 13.891313000000238,
+              "memory_dirty_and_hash": 142.62737900000033,
+              "memory_verify": 134.16125999999994,
+              "persistent_verify": 5.492969999999708,
+              "sqlite_commit": 0.36601100000055453,
+              "total": 398.57134099999934
+            },
+            "memory_sha256": "4c081aabc946ae032745e66744055312d81443866f1ebe5a4f0f2ec7d8eeae48",
+            "node_exec_start_timings": {
+              "manager": {
+                "exec_lease": 0.1105759984056931,
+                "inspect": 0.12094099656678736,
+                "total": 0.25425199783057906
+              },
+              "start_ms": 56
+            },
+            "nonce": "06874a69655841289e2b6f4560046f1c",
+            "pid": 1,
+            "resident_bytes": 268435456
+          },
+          "service_ms": 497.48429597821087
+        },
+        {
+          "completion_ms": 1462.0614929590374,
+          "id": "density-541eda89c84043df-0",
+          "result": {
+            "counter": 3,
+            "dirty_mb": 16,
+            "dirty_page_count": 4096,
+            "dirty_start_page": 8192,
+            "files": 64,
+            "guest_timings_ms": {
+              "cpu_work": 92.3011469999997,
+              "files_write_read": 16.125297000000316,
+              "memory_dirty_and_hash": 142.6358050000003,
+              "memory_verify": 127.9871720000001,
+              "persistent_verify": 4.559634000000479,
+              "sqlite_commit": 0.5971389999999133,
+              "total": 384.3006759999996
+            },
+            "memory_sha256": "a51571796d6bb849f338d77bd94ef2bd66e48b36542e084093e0ea2271ac969d",
+            "node_exec_start_timings": {
+              "manager": {
+                "exec_lease": 0.11214800179004669,
+                "inspect": 0.18483800158719532,
+                "total": 0.3485349989205133
+              },
+              "start_ms": 57
+            },
+            "nonce": "06874a69655841289e2b6f4560046f1c",
+            "pid": 1,
+            "resident_bytes": 268435456
+          },
+          "service_ms": 485.0609590066597
+        }
+      ],
+      "service": {
+        "count": 3,
+        "max_ms": 497.484,
+        "p50_ms": 485.061,
+        "p95_ms": 497.484,
+        "p99_ms": 497.484
+      },
+      "started_at": "2026-09-08T06:03:04.203971+00:00"
+    },
+    {
+      "completion": {
+        "count": 2,
+        "max_ms": 9006.567,
+        "p50_ms": 4498.384,
+        "p95_ms": 9006.567,
+        "p99_ms": 9006.567
+      },
+      "errors": [],
+      "finished_at": "2026-09-08T06:03:14.679044+00:00",
+      "makespan_ms": 9006.757175025996,
+      "name": "create",
+      "samples": [
+        {
+          "completion_ms": 4498.383749043569,
+          "id": "density-541eda89c84043df-1",
+          "result": {
+            "counter": 0,
+            "dirty_mb": 16,
+            "dirty_page_count": 4096,
+            "dirty_start_page": null,
+            "files": 0,
+            "guest_timings_ms": {
+              "total": 0.13551400000011427
+            },
+            "memory_sha256": "57ea0f56cec70a2ba67b15773e271ac1066f0ddd56ea9e0852e7402aded602c7",
+            "node_exec_start_timings": {
+              "manager": {
+                "exec_lease": 0.11214899859623984,
+                "inspect": 0.19589500152505934,
+                "total": 0.3554150025593117
+              },
+              "start_ms": 56
+            },
+            "nonce": "5a27f97033a6420facd3296340ee6818",
+            "pid": 1,
+            "resident_bytes": 268435456
+          },
+          "service_ms": 4498.236956947949
+        },
+        {
+          "completion_ms": 9006.567078002263,
+          "id": "density-541eda89c84043df-2",
+          "result": {
+            "counter": 0,
+            "dirty_mb": 16,
+            "dirty_page_count": 4096,
+            "dirty_start_page": null,
+            "files": 0,
+            "guest_timings_ms": {
+              "total": 0.14088199999973128
+            },
+            "memory_sha256": "7351e126dad09160211569a80206430041c4ca651c686198b1a6236aeb49bab0",
+            "node_exec_start_timings": {
+              "manager": {
+                "exec_lease": 0.11016600183211267,
+                "inspect": 0.17212899911100976,
+                "total": 0.3487549984129146
+              },
+              "start_ms": 56
+            },
+            "nonce": "a9293abbed6f4317936b1b72c5ee03d8",
+            "pid": 1,
+            "resident_bytes": 268435456
+          },
+          "service_ms": 4508.128467015922
+        }
+      ],
+      "service": {
+        "count": 2,
+        "max_ms": 4508.128,
+        "p50_ms": 4498.237,
+        "p95_ms": 4508.128,
+        "p99_ms": 4508.128
+      },
+      "started_at": "2026-09-08T06:03:05.672308+00:00"
+    },
+    {
+      "completion": {
+        "count": 3,
+        "max_ms": 1468.287,
+        "p50_ms": 909.036,
+        "p95_ms": 1468.287,
+        "p99_ms": 1468.287
+      },
+      "errors": [],
+      "finished_at": "2026-09-08T06:03:16.239020+00:00",
+      "makespan_ms": 1468.536327010952,
+      "name": "act_0",
+      "samples": [
+        {
+          "completion_ms": 435.8044050168246,
+          "id": "density-541eda89c84043df-0",
+          "result": {
+            "counter": 4,
+            "dirty_mb": 16,
+            "dirty_page_count": 4096,
+            "dirty_start_page": 12288,
+            "files": 64,
+            "guest_timings_ms": {
+              "cpu_work": 102.97033500000019,
+              "files_write_read": 9.555856999998724,
+              "memory_dirty_and_hash": 138.67972699999953,
+              "memory_verify": 128.14076000000085,
+              "persistent_verify": 5.286979000000969,
+              "sqlite_commit": 0.39673700000086853,
+              "total": 385.28846400000026
+            },
+            "memory_sha256": "cecf1ddfd93dcd04a5da57aad0e560d127669eb231cbb81d922f222afad5bdf3",
+            "node_exec_start_timings": {
+              "manager": {
+                "exec_lease": 0.12049100041622296,
+                "inspect": 0.15629500194336288,
+                "total": 0.3202520019840449
+              },
+              "start_ms": 6
+            },
+            "nonce": "06874a69655841289e2b6f4560046f1c",
+            "pid": 1,
+            "resident_bytes": 268435456
+          },
+          "service_ms": 435.59760198695585
+        },
+        {
+          "completion_ms": 909.0362130082212,
+          "id": "density-541eda89c84043df-1",
+          "result": {
+            "counter": 1,
+            "dirty_mb": 16,
+            "dirty_page_count": 4096,
+            "dirty_start_page": 0,
+            "files": 64,
+            "guest_timings_ms": {
+              "cpu_work": 95.37393900000168,
+              "files_write_read": 6.125651999999704,
+              "memory_dirty_and_hash": 139.8866139999999,
+              "memory_verify": 128.57393200000013,
+              "persistent_verify": 1.2192149999989965,
+              "sqlite_commit": 0.8633499999994854,
+              "total": 372.2168230000005
+            },
+            "memory_sha256": "dcdba29c73edcd967cae011908d18328fdd9e7c24a52488123f24ad5260b855d",
+            "node_exec_start_timings": {
+              "manager": {
+                "exec_lease": 0.11565300155780278,
+                "inspect": 0.142304998007603,
+                "total": 0.2733920009632129
+              },
+              "start_ms": 56
+            },
+            "nonce": "5a27f97033a6420facd3296340ee6818",
+            "pid": 1,
+            "resident_bytes": 268435456
+          },
+          "service_ms": 473.2049169833772
+        },
+        {
+          "completion_ms": 1468.2874220306985,
+          "id": "density-541eda89c84043df-2",
+          "result": {
+            "counter": 1,
+            "dirty_mb": 16,
+            "dirty_page_count": 4096,
+            "dirty_start_page": 0,
+            "files": 64,
+            "guest_timings_ms": {
+              "cpu_work": 186.15088100000054,
+              "files_write_read": 7.650849000000015,
+              "memory_dirty_and_hash": 138.47063799999938,
+              "memory_verify": 127.56042300000026,
+              "persistent_verify": 1.2523560000001766,
+              "sqlite_commit": 0.3936620000004609,
+              "total": 461.6498849999999
+            },
+            "memory_sha256": "3f762fd1c6eee412d3a36bc9e05f0b94f0c73fa02795a9cb47fba741fed89d7c",
+            "node_exec_start_timings": {
+              "manager": {
+                "exec_lease": 0.10934499732684344,
+                "inspect": 0.1629859980312176,
+                "total": 0.3186799985996913
+              },
+              "start_ms": 57
+            },
+            "nonce": "a9293abbed6f4317936b1b72c5ee03d8",
+            "pid": 1,
+            "resident_bytes": 268435456
+          },
+          "service_ms": 559.2256609816104
+        }
+      ],
+      "service": {
+        "count": 3,
+        "max_ms": 559.226,
+        "p50_ms": 473.205,
+        "p95_ms": 559.226,
+        "p99_ms": 559.226
+      },
+      "started_at": "2026-09-08T06:03:14.770520+00:00"
+    },
+    {
+      "completion": {
+        "count": 3,
+        "max_ms": 45627.018,
+        "p50_ms": 45442.201,
+        "p95_ms": 45627.018,
+        "p99_ms": 45627.018
+      },
+      "errors": [],
+      "finished_at": "2026-09-08T06:04:01.870705+00:00",
+      "makespan_ms": 45627.20680801431,
+      "name": "park_0",
+      "samples": [
+        {
+          "completion_ms": 45235.33110599965,
+          "id": "density-541eda89c84043df-0",
+          "result": {
+            "state": "parked"
+          },
+          "service_ms": 45235.15109298751
+        },
+        {
+          "completion_ms": 45442.20057898201,
+          "id": "density-541eda89c84043df-1",
+          "result": {
+            "state": "parked"
+          },
+          "service_ms": 206.8339899997227
+        },
+        {
+          "completion_ms": 45627.017993014306,
+          "id": "density-541eda89c84043df-2",
+          "result": {
+            "state": "parked"
+          },
+          "service_ms": 184.78682794375345
+        }
+      ],
+      "service": {
+        "count": 3,
+        "max_ms": 45235.151,
+        "p50_ms": 206.834,
+        "p95_ms": 45235.151,
+        "p99_ms": 45235.151
+      },
+      "started_at": "2026-09-08T06:03:16.243523+00:00"
+    },
+    {
+      "completion": {
+        "count": 3,
+        "max_ms": 2821.159,
+        "p50_ms": 1852.837,
+        "p95_ms": 2821.159,
+        "p99_ms": 2821.159
+      },
+      "errors": [],
+      "finished_at": "2026-09-08T06:04:04.784400+00:00",
+      "makespan_ms": 2821.3820770033635,
+      "name": "wake_0",
+      "samples": [
+        {
+          "completion_ms": 887.2539539588615,
+          "id": "density-541eda89c84043df-0",
+          "result": {
+            "counter": 5,
+            "dirty_mb": 16,
+            "dirty_page_count": 4096,
+            "dirty_start_page": 16384,
+            "files": 64,
+            "guest_timings_ms": {
+              "cpu_work": 98.24245700000489,
+              "files_write_read": 29.993406999999195,
+              "memory_dirty_and_hash": 142.55274700000342,
+              "memory_verify": 190.787456999999,
+              "persistent_verify": 8.759077000000559,
+              "sqlite_commit": 0.48283600000331717,
+              "total": 472.9220989999945
+            },
+            "memory_sha256": "b6981e43f5d43c663692d2146e32a0689e47af54d14f3ec4f9826c4d7a33bfa0",
+            "node_exec_start_timings": {
+              "manager": {
+                "exec_lease": 0.11324099978082813,
+                "inspect": 0.1794600029825233,
+                "total": 0.37108800097485073
+              },
+              "start_ms": 57
+            },
+            "nonce": "06874a69655841289e2b6f4560046f1c",
+            "pid": 1,
+            "resident_bytes": 268435456
+          },
+          "service_ms": 887.059019994922
+        },
+        {
+          "completion_ms": 1852.836871985346,
+          "id": "density-541eda89c84043df-1",
+          "result": {
+            "counter": 2,
+            "dirty_mb": 16,
+            "dirty_page_count": 4096,
+            "dirty_start_page": 4096,
+            "files": 64,
+            "guest_timings_ms": {
+              "cpu_work": 157.51881999999995,
+              "files_write_read": 14.348602999994853,
+              "memory_dirty_and_hash": 141.7088669999984,
+              "memory_verify": 179.98704699999735,
+              "persistent_verify": 9.586892999998042,
+              "sqlite_commit": 0.4342730000033157,
+              "total": 505.65606099999627
+            },
+            "memory_sha256": "52c879dd2fb42c9076a8e1cc1c2876c83d9f1093818735f1e64ce0232a75d2f6",
+            "node_exec_start_timings": {
+              "manager": {
+                "exec_lease": 0.11985099990852177,
+                "inspect": 0.22653099949820898,
+                "total": 0.4186199985269923
+              },
+              "start_ms": 57
+            },
+            "nonce": "5a27f97033a6420facd3296340ee6818",
+            "pid": 1,
+            "resident_bytes": 268435456
+          },
+          "service_ms": 965.5596120283008
+        },
+        {
+          "completion_ms": 2821.158968959935,
+          "id": "density-541eda89c84043df-2",
+          "result": {
+            "counter": 2,
+            "dirty_mb": 16,
+            "dirty_page_count": 4096,
+            "dirty_start_page": 4096,
+            "files": 64,
+            "guest_timings_ms": {
+              "cpu_work": 137.30989499999424,
+              "files_write_read": 14.559829999996055,
+              "memory_dirty_and_hash": 141.25191899999834,
+              "memory_verify": 173.71229900000174,
+              "persistent_verify": 8.393857999998033,
+              "sqlite_commit": 0.6136039999944387,
+              "total": 477.5138130000016
+            },
+            "memory_sha256": "f6cde24cadffb933aba337baad445eb0fe968a81ebd48c9c892724a9c4ff549b",
+            "node_exec_start_timings": {
+              "manager": {
+                "exec_lease": 0.11843899847008288,
+                "inspect": 0.1695949977147393,
+                "total": 0.3501469982438721
+              },
+              "start_ms": 56
+            },
+            "nonce": "a9293abbed6f4317936b1b72c5ee03d8",
+            "pid": 1,
+            "resident_bytes": 268435456
+          },
+          "service_ms": 968.3002330129966
+        }
+      ],
+      "service": {
+        "count": 3,
+        "max_ms": 968.3,
+        "p50_ms": 965.56,
+        "p95_ms": 968.3,
+        "p99_ms": 968.3
+      },
+      "started_at": "2026-09-08T06:04:01.963048+00:00"
+    }
+  ],
+  "remaining_owned_ids": [],
+  "run_id": "density-541eda89c84043df",
+  "schema": 1,
+  "slo_violations": [
+    "park_0: service p95 exceeds 2000 ms",
+    "park_0: completion p95 exceeds 10000 ms",
+    "park_0: burst exceeds 15000 ms"
+  ],
+  "snapshots": {
+    "awake_0": {
+      "active_sandbox_creates": 0,
+      "active_sandboxes": 3,
+      "agent_version": "0.5.31",
+      "capabilities": [
+        "environment-contract-v1",
+        "sandbox",
+        "image-cache",
+        "disk-quota",
+        "hibernate-local-v2",
+        "direct-runsc-v1",
+        "managed-primary-v1",
+        "static-file-management-v1",
+        "storage-native-v1",
+        "sandbox-detach-published-v1",
+        "sandbox-migrate-storage-native-v1"
+      ],
+      "deployment_id": "density-20260907",
+      "init_version": "3",
+      "inventory_complete": true,
+      "node_epoch": "ed48305013f2405ca1a184edb1f6bf21",
+      "node_id": "density-review-20260907",
+      "runtime_metrics": {
+        "collected_at": "2026-09-08T06:04:04.845697+00:00",
+        "cpu_count": 32,
+        "cpu_percent": 0.0,
+        "cpu_vcpu": 0.0,
+        "image_materialization_active_operations": 0,
+        "image_materialization_max_concurrent_operations": 32,
+        "image_materialization_waiting_operations": 0,
+        "image_pull_active_operations": 0,
+        "image_pull_max_concurrent_operations": 8,
+        "image_pull_waiting_operations": 0,
+        "load_average_15m": 0.6318359375,
+        "load_average_1m": 0.658203125,
+        "load_average_5m": 0.80322265625,
+        "memory_available_mb": 87080,
+        "memory_percent": 3.134663730005117,
+        "memory_psi_full_avg10": 0.0,
+        "memory_psi_some_avg10": 0.0,
+        "memory_total_mb": 89898,
+        "memory_used_mb": 2818,
+        "storage_active_operations": 0,
+        "storage_cache_mb": 0,
+        "storage_device_pool_acquires": 524,
+        "storage_device_pool_discards": 0,
+        "storage_device_pool_enabled": true,
+        "storage_device_pool_high_watermark": 16,
+        "storage_device_pool_idle_devices": 16,
+        "storage_device_pool_low_watermark": 2,
+        "storage_device_pool_new_acquires": 0,
+        "storage_device_pool_releases": 52,
+        "storage_device_pool_reused_acquires": 524,
+        "storage_error_volumes": 0,
+        "storage_hard_capacity_mb": 1449984,
+        "storage_hard_reserved_mb": 15552,
+        "storage_max_concurrent_operations": 8,
+        "storage_publication_active": 0,
+        "storage_publication_duration_ms_max": 0,
+        "storage_publication_duration_ms_total": 0,
+        "storage_publication_limit": 4,
+        "storage_publication_queue_wait_ms_max": 0,
+        "storage_publication_queue_wait_ms_total": 0,
+        "storage_publication_waiting": 0,
+        "storage_published_volumes": 0,
+        "storage_snapshot_compactions": 0,
+        "storage_snapshot_publications": 0,
+        "storage_snapshot_uploaded_bytes": 0,
+        "storage_ublk_active_devices": 3,
+        "storage_ublk_live_devices": 19,
+        "storage_ublk_max_devices": 128,
+        "storage_waiting_operations": 0,
+        "swap_free_mb": 98302,
+        "swap_total_mb": 98303,
+        "swap_used_mb": 1
+      },
+      "total_resources": {
+        "disk_mb": 1449984,
+        "memory_mb": 98304,
+        "vcpu": 32.0
+      },
+      "used_resources": {
+        "disk_mb": 15552,
+        "memory_mb": 0,
+        "vcpu": 0.0
+      }
+    },
+    "baseline": {
+      "active_sandbox_creates": 0,
+      "active_sandboxes": 0,
+      "agent_version": "0.5.31",
+      "capabilities": [
+        "environment-contract-v1",
+        "sandbox",
+        "image-cache",
+        "disk-quota",
+        "hibernate-local-v2",
+        "direct-runsc-v1",
+        "managed-primary-v1",
+        "static-file-management-v1",
+        "storage-native-v1",
+        "sandbox-detach-published-v1",
+        "sandbox-migrate-storage-native-v1"
+      ],
+      "deployment_id": "density-20260907",
+      "init_version": "3",
+      "inventory_complete": true,
+      "node_epoch": "ed48305013f2405ca1a184edb1f6bf21",
+      "node_id": "density-review-20260907",
+      "runtime_metrics": {
+        "collected_at": "2026-09-08T06:02:59.028447+00:00",
+        "cpu_count": 32,
+        "cpu_percent": 0.0,
+        "cpu_vcpu": 0.0,
+        "image_materialization_active_operations": 0,
+        "image_materialization_max_concurrent_operations": 32,
+        "image_materialization_waiting_operations": 0,
+        "image_pull_active_operations": 0,
+        "image_pull_max_concurrent_operations": 8,
+        "image_pull_waiting_operations": 0,
+        "load_average_15m": 0.6142578125,
+        "load_average_1m": 0.34912109375,
+        "load_average_5m": 0.79541015625,
+        "memory_available_mb": 87159,
+        "memory_percent": 3.0467863578722554,
+        "memory_psi_full_avg10": 0.0,
+        "memory_psi_some_avg10": 0.0,
+        "memory_total_mb": 89898,
+        "memory_used_mb": 2739,
+        "storage_active_operations": 0,
+        "storage_cache_mb": 0,
+        "storage_device_pool_acquires": 518,
+        "storage_device_pool_discards": 0,
+        "storage_device_pool_enabled": true,
+        "storage_device_pool_high_watermark": 16,
+        "storage_device_pool_idle_devices": 16,
+        "storage_device_pool_low_watermark": 2,
+        "storage_device_pool_new_acquires": 0,
+        "storage_device_pool_releases": 49,
+        "storage_device_pool_reused_acquires": 518,
+        "storage_error_volumes": 0,
+        "storage_hard_capacity_mb": 1449984,
+        "storage_hard_reserved_mb": 0,
+        "storage_max_concurrent_operations": 8,
+        "storage_publication_active": 0,
+        "storage_publication_duration_ms_max": 0,
+        "storage_publication_duration_ms_total": 0,
+        "storage_publication_limit": 4,
+        "storage_publication_queue_wait_ms_max": 0,
+        "storage_publication_queue_wait_ms_total": 0,
+        "storage_publication_waiting": 0,
+        "storage_published_volumes": 0,
+        "storage_snapshot_compactions": 0,
+        "storage_snapshot_publications": 0,
+        "storage_snapshot_uploaded_bytes": 0,
+        "storage_ublk_active_devices": 0,
+        "storage_ublk_live_devices": 16,
+        "storage_ublk_max_devices": 128,
+        "storage_waiting_operations": 0,
+        "swap_free_mb": 98302,
+        "swap_total_mb": 98303,
+        "swap_used_mb": 1
+      },
+      "total_resources": {
+        "disk_mb": 1449984,
+        "memory_mb": 98304,
+        "vcpu": 32.0
+      },
+      "used_resources": {
+        "disk_mb": 0,
+        "memory_mb": 0,
+        "vcpu": 0.0
+      }
+    },
+    "final": {
+      "active_sandbox_creates": 0,
+      "active_sandboxes": 0,
+      "agent_version": "0.5.31",
+      "capabilities": [
+        "environment-contract-v1",
+        "sandbox",
+        "image-cache",
+        "disk-quota",
+        "hibernate-local-v2",
+        "direct-runsc-v1",
+        "managed-primary-v1",
+        "static-file-management-v1",
+        "storage-native-v1",
+        "sandbox-detach-published-v1",
+        "sandbox-migrate-storage-native-v1"
+      ],
+      "deployment_id": "density-20260907",
+      "init_version": "3",
+      "inventory_complete": true,
+      "node_epoch": "ed48305013f2405ca1a184edb1f6bf21",
+      "node_id": "density-review-20260907",
+      "runtime_metrics": {
+        "collected_at": "2026-09-08T06:04:05.285309+00:00",
+        "cpu_count": 32,
+        "cpu_percent": 3.1055900621118013,
+        "cpu_vcpu": 0.9937888198757764,
+        "image_materialization_active_operations": 0,
+        "image_materialization_max_concurrent_operations": 32,
+        "image_materialization_waiting_operations": 0,
+        "image_pull_active_operations": 0,
+        "image_pull_max_concurrent_operations": 8,
+        "image_pull_waiting_operations": 0,
+        "load_average_15m": 0.6318359375,
+        "load_average_1m": 0.658203125,
+        "load_average_5m": 0.80322265625,
+        "memory_available_mb": 87152,
+        "memory_percent": 3.0545729604663063,
+        "memory_psi_full_avg10": 0.0,
+        "memory_psi_some_avg10": 0.0,
+        "memory_total_mb": 89898,
+        "memory_used_mb": 2746,
+        "storage_active_operations": 0,
+        "storage_cache_mb": 0,
+        "storage_device_pool_acquires": 524,
+        "storage_device_pool_discards": 0,
+        "storage_device_pool_enabled": true,
+        "storage_device_pool_high_watermark": 16,
+        "storage_device_pool_idle_devices": 16,
+        "storage_device_pool_low_watermark": 2,
+        "storage_device_pool_new_acquires": 0,
+        "storage_device_pool_releases": 55,
+        "storage_device_pool_reused_acquires": 524,
+        "storage_error_volumes": 0,
+        "storage_hard_capacity_mb": 1449984,
+        "storage_hard_reserved_mb": 0,
+        "storage_max_concurrent_operations": 8,
+        "storage_publication_active": 0,
+        "storage_publication_duration_ms_max": 0,
+        "storage_publication_duration_ms_total": 0,
+        "storage_publication_limit": 4,
+        "storage_publication_queue_wait_ms_max": 0,
+        "storage_publication_queue_wait_ms_total": 0,
+        "storage_publication_waiting": 0,
+        "storage_published_volumes": 0,
+        "storage_snapshot_compactions": 0,
+        "storage_snapshot_publications": 0,
+        "storage_snapshot_uploaded_bytes": 0,
+        "storage_ublk_active_devices": 0,
+        "storage_ublk_live_devices": 16,
+        "storage_ublk_max_devices": 128,
+        "storage_waiting_operations": 0,
+        "swap_free_mb": 98302,
+        "swap_total_mb": 98303,
+        "swap_used_mb": 1
+      },
+      "total_resources": {
+        "disk_mb": 1449984,
+        "memory_mb": 98304,
+        "vcpu": 32.0
+      },
+      "used_resources": {
+        "disk_mb": 0,
+        "memory_mb": 0,
+        "vcpu": 0.0
+      }
+    },
+    "parked_0": {
+      "active_sandbox_creates": 0,
+      "active_sandboxes": 0,
+      "agent_version": "0.5.31",
+      "capabilities": [
+        "environment-contract-v1",
+        "sandbox",
+        "image-cache",
+        "disk-quota",
+        "hibernate-local-v2",
+        "direct-runsc-v1",
+        "managed-primary-v1",
+        "static-file-management-v1",
+        "storage-native-v1",
+        "sandbox-detach-published-v1",
+        "sandbox-migrate-storage-native-v1"
+      ],
+      "deployment_id": "density-20260907",
+      "init_version": "3",
+      "inventory_complete": true,
+      "node_epoch": "ed48305013f2405ca1a184edb1f6bf21",
+      "node_id": "density-review-20260907",
+      "runtime_metrics": {
+        "collected_at": "2026-09-08T06:04:01.930815+00:00",
+        "cpu_count": 32,
+        "cpu_percent": 0.0,
+        "cpu_vcpu": 0.0,
+        "image_materialization_active_operations": 0,
+        "image_materialization_max_concurrent_operations": 32,
+        "image_materialization_waiting_operations": 0,
+        "image_pull_active_operations": 0,
+        "image_pull_max_concurrent_operations": 8,
+        "image_pull_waiting_operations": 0,
+        "load_average_15m": 0.6318359375,
+        "load_average_1m": 0.658203125,
+        "load_average_5m": 0.80322265625,
+        "memory_available_mb": 87186,
+        "memory_percent": 3.0167523192952013,
+        "memory_psi_full_avg10": 0.0,
+        "memory_psi_some_avg10": 0.0,
+        "memory_total_mb": 89898,
+        "memory_used_mb": 2712,
+        "storage_active_operations": 0,
+        "storage_cache_mb": 0,
+        "storage_device_pool_acquires": 521,
+        "storage_device_pool_discards": 0,
+        "storage_device_pool_enabled": true,
+        "storage_device_pool_high_watermark": 16,
+        "storage_device_pool_idle_devices": 16,
+        "storage_device_pool_low_watermark": 2,
+        "storage_device_pool_new_acquires": 0,
+        "storage_device_pool_releases": 52,
+        "storage_device_pool_reused_acquires": 521,
+        "storage_error_volumes": 0,
+        "storage_hard_capacity_mb": 1449984,
+        "storage_hard_reserved_mb": 15552,
+        "storage_max_concurrent_operations": 8,
+        "storage_publication_active": 0,
+        "storage_publication_duration_ms_max": 0,
+        "storage_publication_duration_ms_total": 0,
+        "storage_publication_limit": 4,
+        "storage_publication_queue_wait_ms_max": 0,
+        "storage_publication_queue_wait_ms_total": 0,
+        "storage_publication_waiting": 0,
+        "storage_published_volumes": 0,
+        "storage_snapshot_compactions": 0,
+        "storage_snapshot_publications": 0,
+        "storage_snapshot_uploaded_bytes": 0,
+        "storage_ublk_active_devices": 0,
+        "storage_ublk_live_devices": 16,
+        "storage_ublk_max_devices": 128,
+        "storage_waiting_operations": 0,
+        "swap_free_mb": 98302,
+        "swap_total_mb": 98303,
+        "swap_used_mb": 1
+      },
+      "total_resources": {
+        "disk_mb": 1449984,
+        "memory_mb": 98304,
+        "vcpu": 32.0
+      },
+      "used_resources": {
+        "disk_mb": 15552,
+        "memory_mb": 0,
+        "vcpu": 0.0
+      }
+    },
+    "resident": {
+      "active_sandbox_creates": 0,
+      "active_sandboxes": 3,
+      "agent_version": "0.5.31",
+      "capabilities": [
+        "environment-contract-v1",
+        "sandbox",
+        "image-cache",
+        "disk-quota",
+        "hibernate-local-v2",
+        "direct-runsc-v1",
+        "managed-primary-v1",
+        "static-file-management-v1",
+        "storage-native-v1",
+        "sandbox-detach-published-v1",
+        "sandbox-migrate-storage-native-v1"
+      ],
+      "deployment_id": "density-20260907",
+      "init_version": "3",
+      "inventory_complete": true,
+      "node_epoch": "ed48305013f2405ca1a184edb1f6bf21",
+      "node_id": "density-review-20260907",
+      "runtime_metrics": {
+        "collected_at": "2026-09-08T06:03:14.745930+00:00",
+        "cpu_count": 32,
+        "cpu_percent": 0.0,
+        "cpu_vcpu": 0.0,
+        "image_materialization_active_operations": 0,
+        "image_materialization_max_concurrent_operations": 32,
+        "image_materialization_waiting_operations": 0,
+        "image_pull_active_operations": 0,
+        "image_pull_max_concurrent_operations": 8,
+        "image_pull_waiting_operations": 0,
+        "load_average_15m": 0.63232421875,
+        "load_average_1m": 0.64794921875,
+        "load_average_5m": 0.8388671875,
+        "memory_available_mb": 86899,
+        "memory_percent": 3.3360030256512934,
+        "memory_psi_full_avg10": 0.0,
+        "memory_psi_some_avg10": 0.0,
+        "memory_total_mb": 89898,
+        "memory_used_mb": 2999,
+        "storage_active_operations": 0,
+        "storage_cache_mb": 0,
+        "storage_device_pool_acquires": 521,
+        "storage_device_pool_discards": 0,
+        "storage_device_pool_enabled": true,
+        "storage_device_pool_high_watermark": 16,
+        "storage_device_pool_idle_devices": 16,
+        "storage_device_pool_low_watermark": 2,
+        "storage_device_pool_new_acquires": 0,
+        "storage_device_pool_releases": 49,
+        "storage_device_pool_reused_acquires": 521,
+        "storage_error_volumes": 0,
+        "storage_hard_capacity_mb": 1449984,
+        "storage_hard_reserved_mb": 15552,
+        "storage_max_concurrent_operations": 8,
+        "storage_publication_active": 0,
+        "storage_publication_duration_ms_max": 0,
+        "storage_publication_duration_ms_total": 0,
+        "storage_publication_limit": 4,
+        "storage_publication_queue_wait_ms_max": 0,
+        "storage_publication_queue_wait_ms_total": 0,
+        "storage_publication_waiting": 0,
+        "storage_published_volumes": 0,
+        "storage_snapshot_compactions": 0,
+        "storage_snapshot_publications": 0,
+        "storage_snapshot_uploaded_bytes": 0,
+        "storage_ublk_active_devices": 3,
+        "storage_ublk_live_devices": 19,
+        "storage_ublk_max_devices": 128,
+        "storage_waiting_operations": 0,
+        "swap_free_mb": 98302,
+        "swap_total_mb": 98303,
+        "swap_used_mb": 1
+      },
+      "total_resources": {
+        "disk_mb": 1449984,
+        "memory_mb": 98304,
+        "vcpu": 32.0
+      },
+      "used_resources": {
+        "disk_mb": 15552,
+        "memory_mb": 0,
+        "vcpu": 0.0
+      }
+    }
+  },
+  "started_at": "2026-09-08T06:02:58.966452+00:00",
+  "status": "failed",
+  "workload_sha256": "3a9ed2382951c02522fc78f2261b04bd7ffe2e65003ed0c4cf7afb9e46eeeb22"
+}

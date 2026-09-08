@@ -1,0 +1,225 @@
+{
+  "node_job_id": "12383398",
+  "captured_at_utc": "2026-09-07T22:34:40.705754+00:00",
+  "boot_history": "IDX BOOT ID                          FIRST ENTRY                 LAST ENTRY\n -1 84fa5d94e3b040cf9a9ddc5bee6e5daf Mon 2026-09-07 21:40:02 UTC Mon 2026-09-07 22:23:53 UTC\n  0 ed48305013f2405ca1a184edb1f6bf21 Mon 2026-09-07 22:24:38 UTC Mon 2026-09-07 22:34:40 UTC\n",
+  "previous_boot_tail": [
+    {
+      "utc": "2026-09-07T22:23:53.123906+00:00",
+      "unit": null,
+      "transport": "kernel",
+      "priority": "5",
+      "message": "XFS (ublkb8): Mounting V5 Filesystem 7cc3c86e-f2cd-4954-9190-ea07809b4478"
+    },
+    {
+      "utc": "2026-09-07T22:23:53.131903+00:00",
+      "unit": null,
+      "transport": "kernel",
+      "priority": "4",
+      "message": "overlayfs: fs on '/var/lib/ucloud-sandboxes/docker-xfs/ucloud-rootfs-cache/images/51cce855bb6e44a8ff6ed0f46ded8850f246bfc7549801459f83fc34b80c210f/rootfs' does not support file handles, falling back to xino=off."
+    },
+    {
+      "utc": "2026-09-07T22:23:53.141916+00:00",
+      "unit": null,
+      "transport": "kernel",
+      "priority": "5",
+      "message": "XFS (ublkb8): Starting recovery (logdev: internal)"
+    },
+    {
+      "utc": "2026-09-07T22:23:53.162904+00:00",
+      "unit": null,
+      "transport": "kernel",
+      "priority": "5",
+      "message": "XFS (ublkb8): Ending recovery (logdev: internal)"
+    },
+    {
+      "utc": "2026-09-07T22:23:53.171901+00:00",
+      "unit": null,
+      "transport": "kernel",
+      "priority": "4",
+      "message": "overlayfs: fs on '/var/lib/ucloud-sandboxes/docker-xfs/ucloud-rootfs-cache/images/51cce855bb6e44a8ff6ed0f46ded8850f246bfc7549801459f83fc34b80c210f/rootfs' does not support file handles, falling back to xino=off."
+    },
+    {
+      "utc": "2026-09-07T22:23:53.182906+00:00",
+      "unit": null,
+      "transport": "kernel",
+      "priority": "4",
+      "message": "overlayfs: fs on '/var/lib/ucloud-sandboxes/docker-xfs/ucloud-rootfs-cache/images/51cce855bb6e44a8ff6ed0f46ded8850f246bfc7549801459f83fc34b80c210f/rootfs' does not support file handles, falling back to xino=off."
+    },
+    {
+      "utc": "2026-09-07T22:23:53.184908+00:00",
+      "unit": null,
+      "transport": "kernel",
+      "priority": "5",
+      "message": "XFS (ublkb6): Mounting V5 Filesystem c1eca149-e6b4-4623-98bf-b5d92f6af42c"
+    },
+    {
+      "utc": "2026-09-07T22:23:53.203917+00:00",
+      "unit": null,
+      "transport": "kernel",
+      "priority": "5",
+      "message": "XFS (ublkb6): Starting recovery (logdev: internal)"
+    },
+    {
+      "utc": "2026-09-07T22:23:53.210919+00:00",
+      "unit": null,
+      "transport": "kernel",
+      "priority": "5",
+      "message": "XFS (ublkb6): Ending recovery (logdev: internal)"
+    },
+    {
+      "utc": "2026-09-07T22:23:53.211865+00:00",
+      "unit": "ucloud-storage-native-backend.service",
+      "transport": "stdout",
+      "priority": "6",
+      "message": "2026-09-07T22:23:53.211819Z  INFO uvm_ublk_daemon::server: acquired exclusive overlaybd device (reused) dev_id=9 path=/dev/ublkb9"
+    },
+    {
+      "utc": "2026-09-07T22:23:53.212433+00:00",
+      "unit": "ucloud-storage-native-backend.service",
+      "transport": "stdout",
+      "priority": "6",
+      "message": "2026-09-07T22:23:53.211930Z  INFO uvm_ublk::dev: try add_dev requested_dev_id=4294967295 zero_copy=false"
+    },
+    {
+      "utc": "2026-09-07T22:23:53.212433+00:00",
+      "unit": "ucloud-storage-native-backend.service",
+      "transport": "stdout",
+      "priority": "6",
+      "message": "2026-09-07T22:23:53.212279Z  INFO uvm_ublk::dev: device has been added to ublkdrv dev_id=25 zero_copy=false"
+    }
+  ],
+  "previous_boot_kernel_records_examined": 5041,
+  "previous_boot_kernel_matches": [
+    {
+      "utc": "2026-09-07T21:40:06.065910+00:00",
+      "unit": null,
+      "transport": "kernel",
+      "priority": "6",
+      "message": "bochs-drm 0000:00:01.0: [drm] Registered 1 planes with drm panic"
+    }
+  ],
+  "current_node_failure_count_in_last_600_entries": 9,
+  "current_node_failure_excerpt": [
+    {
+      "utc": "2026-09-07T22:34:18.685910+00:00",
+      "unit": "ucloud-sandbox-node.service",
+      "transport": "stdout",
+      "priority": "6",
+      "message": "  File \"/work/ucloud-sandboxes/density-candidate-v4/ucloud_sandboxes/direct_warden.py\", line 1542, in _mount_storage"
+    },
+    {
+      "utc": "2026-09-07T22:34:18.685910+00:00",
+      "unit": "ucloud-sandbox-node.service",
+      "transport": "stdout",
+      "priority": "6",
+      "message": "  File \"/work/ucloud-sandboxes/density-candidate-v4/ucloud_sandboxes/storage_native_daemon.py\", line 2731, in ensure_mounted"
+    },
+    {
+      "utc": "2026-09-07T22:34:18.685910+00:00",
+      "unit": "ucloud-sandbox-node.service",
+      "transport": "stdout",
+      "priority": "6",
+      "message": "  File \"/work/ucloud-sandboxes/density-candidate-v4/ucloud_sandboxes/storage_native_daemon.py\", line 2824, in _record_call"
+    },
+    {
+      "utc": "2026-09-07T22:34:18.685910+00:00",
+      "unit": "ucloud-sandbox-node.service",
+      "transport": "stdout",
+      "priority": "6",
+      "message": "  File \"/work/ucloud-sandboxes/density-candidate-v4/ucloud_sandboxes/storage_native_daemon.py\", line 2860, in _call"
+    },
+    {
+      "utc": "2026-09-07T22:34:18.685910+00:00",
+      "unit": "ucloud-sandbox-node.service",
+      "transport": "stdout",
+      "priority": "6",
+      "message": "  File \"/work/ucloud-sandboxes/density-candidate-v4/ucloud_sandboxes/storage_native_daemon.py\", line 2896, in _call_unobserved"
+    },
+    {
+      "utc": "2026-09-07T22:34:18.686731+00:00",
+      "unit": "ucloud-sandbox-node.service",
+      "transport": "stdout",
+      "priority": "6",
+      "message": "ucloud_sandboxes.storage_native_daemon.StorageNativeConflictError: storage-native volume is error; cannot mount"
+    },
+    {
+      "utc": "2026-09-07T22:34:18.777610+00:00",
+      "unit": "init.scope",
+      "transport": "journal",
+      "priority": "5",
+      "message": "ucloud-sandbox-node.service: Main process exited, code=exited, status=1/FAILURE"
+    },
+    {
+      "utc": "2026-09-07T22:34:18.777819+00:00",
+      "unit": "init.scope",
+      "transport": "journal",
+      "priority": "4",
+      "message": "ucloud-sandbox-node.service: Failed with result 'exit-code'."
+    }
+  ],
+  "schema_version": 1,
+  "scope": "Read-only evidence from isolated 32-vCPU density node; no provider poweroff cause established.",
+  "provider_events": [
+    {
+      "timestamp_ms": 1788819837925,
+      "utc": "2026-09-07T22:23:57.925Z",
+      "state": "SUSPENDED",
+      "message": "The virtual machine is powered off."
+    },
+    {
+      "timestamp_ms": 1788819872465,
+      "utc": "2026-09-07T22:24:32.465Z",
+      "state": "RUNNING",
+      "message": "Your job is now running."
+    }
+  ],
+  "kernel_scan_result": "No OOM, panic, watchdog, I/O-error, or shutdown cause found in retained previous-boot kernel records. The sole regex match is benign bochs-drm initialization.",
+  "host_metrics": {
+    "requested_path": "/tmp/density-host-metrics-v4.jsonl",
+    "recovered": false,
+    "worker_result": "ENOENT after reboot",
+    "gateway_checked_paths": {
+      "/tmp/density-host-metrics-v4.jsonl": "absent",
+      "/work/ucloud-sandboxes/density-20260907/density-host-metrics-v4.jsonl": "absent"
+    },
+    "final_minute_memory_psi_vmstat_disk_oom": "unavailable; cannot quantify from retained evidence"
+  },
+  "retained_cpu_sampler": {
+    "local_path": "/tmp/density-v4-full-cpu.jsonl",
+    "record_count": 588,
+    "start": {
+      "duration_seconds": 300.0,
+      "event": "start",
+      "interval_seconds": 0.5,
+      "runtime_root": "/var/lib/ucloud-sandboxes/node-state/direct-runtime/runsc",
+      "unix_time": 1788819447.2622988
+    },
+    "complete": {
+      "elapsed_seconds": 300.0020207960001,
+      "event": "complete",
+      "read_errors": 0,
+      "scan_seconds": 13.099569755006087,
+      "scans": 600,
+      "sentry_count": 293,
+      "unix_time": 1788819747.2643173
+    },
+    "coverage_end_utc": "2026-09-07T22:22:27.264317+00:00",
+    "seconds_before_provider_poweroff": 90.66068267822266,
+    "covers_final_minute": false,
+    "note": "Per-process CPU sampling; no host memory, PSI, vmstat, disk, or OOM counters."
+  },
+  "recovery_access": {
+    "method": "Local SSH over base64-framed production gateway SHELL WebSocket restricted to density-review-20260907:22",
+    "host_key_alias": "[ssh.cloud.sdu.dk]:2435",
+    "host_key_verified": true,
+    "private_key_copied": false,
+    "post_boot_private_ipv4": "10.36.86.228/32",
+    "old_external_ssh_port_2435": "refused"
+  },
+  "temporary_process_inventory": {
+    "gateway_oracle_or_ssh_proxy_processes": [],
+    "gateway_detection": "Exact remote Python program prefixes plus bridge marker, excluding the inventory helper itself.",
+    "local_owned_persistent_processes_started_by_recovery": [],
+    "note": "The local SSH ProxyCommand is per connection and exits with SSH. Other agents may have active connections; do not remove helper before recovery work finishes."
+  }
+}

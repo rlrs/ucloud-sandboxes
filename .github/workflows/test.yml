@@ -26,7 +26,7 @@ jobs:
         with:
           repository: rlrs/ucloud-sandboxes-sdk
           # Deliberately pinned: update this SHA with coordinated SDK changes.
-          ref: bbdc54936a85dcb6653ccd64bf556f07fe9f8784
+          ref: 9f34764bd4e776372f2015496c119dc74a9814ad
           path: ucloud-sandboxes-sdk
           persist-credentials: false
       - uses: actions/setup-python@v6
@@ -79,7 +79,7 @@ jobs:
             --publish 9000:9000 \
             --env MINIO_ROOT_USER=minioadmin \
             --env MINIO_ROOT_PASSWORD=minioadmin \
-            minio/minio:RELEASE.2025-09-07T16-13-09Z \
+            quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z \
             server /data --address :9000
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:9000/minio/health/live >/dev/null; then

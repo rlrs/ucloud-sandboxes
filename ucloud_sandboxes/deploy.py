@@ -402,6 +402,8 @@ def render_remote_deploy_script(
     script_parts = [
         "#!/usr/bin/env bash",
         "set -euo pipefail",
+        # Bundle payloads must be readable by the unprivileged VM initializer.
+        "umask 022",
         f"INSTALL_ROOT={shlex.quote(plan.install_root)}",
         f"PROJECT_MOUNT_DIR={shlex.quote(plan.project_mount_dir)}",
         f"DATA_ROOT={shlex.quote(plan.config.data_root)}",
@@ -473,6 +475,7 @@ def render_remote_deploy_script(
         '"$VENV_DIR/bin/pip" install --disable-pip-version-check '
         '--no-compile --target "$NODE_AGENT_RUNTIME_DIR/site-packages" "$REMOTE_WHEEL"',
         "tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner "
+        "--mode=\"u+rwX,go+rX,go-w\" "
         '-cf "$NODE_AGENT_RUNTIME_ARCHIVE" -C "$NODE_AGENT_RUNTIME_DIR" .',
         'RUNTIME_OS_ID="$(. /etc/os-release && printf \'%s\' "$ID")"',
         'RUNTIME_VERSION_ID="$(. /etc/os-release && printf \'%s\' "$VERSION_ID")"',
@@ -736,6 +739,7 @@ def render_remote_deploy_script(
         "                ))",
         "            for path, arcname in archive_paths:",
         "                info = archive.gettarinfo(str(path), arcname=arcname)",
+        "                info.mode = 0o644 | (info.mode & 0o111)",
         "                info.uid = info.gid = 0",
         "                info.uname = info.gname = ''",
         "                info.mtime = 0",

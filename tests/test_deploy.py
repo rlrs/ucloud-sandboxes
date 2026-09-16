@@ -282,6 +282,7 @@ class DeployTests(unittest.TestCase):
             (runtime / "debs/runtime.deb").write_bytes(b"package")
             agent = root / "agent.tar"
             agent.write_bytes(b"agent")
+            agent.chmod(0o600)
             kernel = root / "kernel"
             kernel.mkdir()
             (kernel / "xfs.ko").write_bytes(b"module")
@@ -340,6 +341,11 @@ class DeployTests(unittest.TestCase):
                 exec(code, {"__name__": "__main__"})
             with tarfile.open(target) as archive:
                 manifest = json.load(archive.extractfile("package-bundle.json"))
+                self.assertEqual(
+                    archive.getmember("runtime/agent/node-agent-runtime.tar").mode,
+                    0o644,
+                )
+                self.assertEqual(archive.getmember("runtime/direct/runsc").mode, 0o755)
                 sidecars = manifest["runtime"]["direct_runsc"]["sidecars"]
                 self.assertEqual(len(sidecars), 4)
                 for item in sidecars:

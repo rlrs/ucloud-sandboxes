@@ -15,7 +15,7 @@ Verification passed:
 
 - Full server/SDK CI, including real Linux namespace packet filtering,
   Docker Distribution and S3-compatible contracts.
-- Fresh worker bootstrap from rebuilt sandbox and builder package bundles.
+- Rebuilt sandbox and builder bundles, with a fresh sandbox worker bootstrapped.
 - Production gateway, relay, registry and autoscaler health.
 - Exact match of installed gateway Python sources to the committed release.
 - Restricted sandbox creation, file upload/readback and command execution.

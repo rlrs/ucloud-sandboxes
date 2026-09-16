@@ -189,7 +189,7 @@ class DeployTests(unittest.TestCase):
                 self.assertNotIn("REGISTRY_ACCESS_KEY=", script)
                 self.assertNotIn("REGISTRY_SECRET_KEY=", script)
                 self.assertIn(
-                    "download_runtime_packages runtime xfsprogs "
+                    "download_runtime_packages runtime nftables iproute2 iptables xfsprogs "
                     "docker-ce docker-ce-cli containerd.io apparmor "
                     "bsdextrautils eject fdisk kmod libfdisk1 ",
                     script,

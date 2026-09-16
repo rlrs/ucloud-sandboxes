@@ -94,6 +94,9 @@ def vm_runtime_profile(provider_kind: str) -> VmRuntimeProfile:
 
 
 SANDBOX_RUNTIME_PACKAGES = (
+    "nftables",
+    "iproute2",
+    "iptables",
     "xfsprogs",
     "docker-ce",
     "docker-ce-cli",
@@ -117,6 +120,8 @@ RUNTIME_KERNEL_MODULES = (
     "veth",
     "nf_tables",
     "nft_chain_nat",
+    "nft_nat",
+    "nft_ct",
     "nft_compat",
     "ip_tables",
     "iptable_nat",
@@ -173,6 +178,7 @@ class VmInitOptions:
     direct_runsc_commit: str = ""
     direct_network: str = "none"
     direct_network_allow_tcp: tuple[str, ...] = ()
+    network_relays: dict[str, str] | None = None
     storage_native_registry_url: str = ""
     storage_native_repository: str = DEFAULT_STORAGE_NATIVE_REPOSITORY
     storage_native_snapshot_backend: Literal["registry", "s3"] = "registry"
@@ -336,6 +342,12 @@ def render_vm_init_script(options: VmInitOptions) -> str:
             " --direct-network-allow-tcp " + shlex.quote(endpoint)
             for endpoint in options.direct_network_allow_tcp
         )
+        if options.network_relays:
+            direct_network_allow_flags += " --network-relays-json " + shlex.quote(
+                json.dumps(
+                    options.network_relays, sort_keys=True, separators=(",", ":")
+                )
+            )
         direct_agent_command = (
             f"{agent_bin} serve-direct-node-agent"
             " --job-id ${UCLOUD_JOB_ID}"
@@ -1696,6 +1708,11 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
             raise ValueError(
                 "direct runtime network must be either 'none' or 'sandbox'."
             )
+        from .relay_network import parse_network_relays
+
+        parse_network_relays(options.network_relays or {})
+        if options.network_relays and options.direct_network != "sandbox":
+            raise ValueError("network relays require sandbox networking")
         for endpoint in options.direct_network_allow_tcp:
             DirectNetworkTcpEgress.parse(endpoint)
         if options.direct_network == "none" and options.direct_network_allow_tcp:

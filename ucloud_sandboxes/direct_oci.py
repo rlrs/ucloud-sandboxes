@@ -513,68 +513,83 @@ class DirectOciConfigBuilder:
             if directory_fd >= 0:
                 os.close(directory_fd)
 
-    def prepare_network_files(self, rootfs: Path, *, spec: SandboxSpec) -> None:
-        """Install a deterministic resolver without following image symlinks."""
+    def prepare_network_files(
+        self,
+        rootfs: Path,
+        *,
+        spec: SandboxSpec,
+        relay_hosts: dict[str, str] | None = None,
+    ) -> None:
+        """Install network files with openat/rename; never follow image symlinks.
+
+        Relay names map to stable virtual addresses. Resolution and destination
+        updates happen on the host, so no guest DNS traffic is necessary.
+        """
         if spec.network == "none":
             return
+        if spec.network_policy.egress == "relay":
+            if not relay_hosts:
+                raise DirectOciConfigError(
+                    "relay network requires host-provided name mappings"
+                )
+            contents = {
+                "resolv.conf": "# Relay-only network: external DNS is blocked.\n",
+                "hosts": "127.0.0.1 localhost\n::1 localhost\n"
+                + "".join(
+                    f"{ipaddress.IPv4Address(ip)} {host}\n"
+                    for host, ip in sorted(relay_hosts.items())
+                ),
+            }
+        else:
+            contents = {
+                "resolv.conf": "".join(
+                    f"nameserver {ipaddress.IPv4Address(server)}\n"
+                    for server in (spec.dns_servers or ("1.1.1.1", "8.8.8.8"))
+                )
+                + "options timeout:2 attempts:2\n"
+            }
         if not rootfs.is_absolute() or not rootfs.is_dir() or rootfs.is_symlink():
             raise DirectOciConfigError(
                 "direct-runtime network rootfs must be an absolute directory"
             )
-        root_fd = -1
-        etc_fd = -1
-        temporary = f".ucloud-resolv.{os.getpid()}"
-        descriptor = -1
+        root_fd = etc_fd = -1
         try:
-            root_fd = os.open(
-                rootfs,
-                os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
-            )
+            root_fd = os.open(rootfs, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
             try:
                 os.mkdir("etc", mode=0o755, dir_fd=root_fd)
             except FileExistsError:
                 pass
             etc_fd = os.open(
                 "etc",
-                os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
+                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
                 dir_fd=root_fd,
             )
-            descriptor = os.open(
-                temporary,
-                os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
-                0o644,
-                dir_fd=etc_fd,
-            )
-            with os.fdopen(descriptor, "w", encoding="ascii") as handle:
-                descriptor = -1
-                handle.write(
-                    "".join(
-                        f"nameserver {ipaddress.IPv4Address(server)}\n"
-                        for server in (spec.dns_servers or ("1.1.1.1", "8.8.8.8"))
-                    )
-                    + "options timeout:2 attempts:2\n"
+            for name, content in contents.items():
+                temporary = f".ucloud-network-{os.urandom(12).hex()}"
+                descriptor = os.open(
+                    temporary,
+                    os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                    0o644,
+                    dir_fd=etc_fd,
                 )
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.rename(
-                temporary,
-                "resolv.conf",
-                src_dir_fd=etc_fd,
-                dst_dir_fd=etc_fd,
-            )
+                try:
+                    with os.fdopen(descriptor, "w", encoding="ascii") as handle:
+                        handle.write(content)
+                        handle.flush()
+                        os.fsync(handle.fileno())
+                    os.rename(temporary, name, src_dir_fd=etc_fd, dst_dir_fd=etc_fd)
+                finally:
+                    try:
+                        os.unlink(temporary, dir_fd=etc_fd)
+                    except FileNotFoundError:
+                        pass
             os.fsync(etc_fd)
         except OSError as exc:
             raise DirectOciConfigError(
-                "failed to prepare direct-runtime resolver configuration"
+                "failed to prepare direct-runtime network configuration"
             ) from exc
         finally:
-            if descriptor >= 0:
-                os.close(descriptor)
             if etc_fd >= 0:
-                try:
-                    os.unlink(temporary, dir_fd=etc_fd)
-                except FileNotFoundError:
-                    pass
                 os.close(etc_fd)
             if root_fd >= 0:
                 os.close(root_fd)

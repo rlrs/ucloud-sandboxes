@@ -23,6 +23,7 @@ from uuid import uuid4
 import urllib3
 from urllib3.exceptions import HTTPError as Urllib3HTTPError
 
+from .network_policy import SandboxNetworkPolicy
 from .capabilities import (
     ENVIRONMENT_CONTRACT_CAPABILITY,
     STATIC_FILE_MANAGEMENT_CAPABILITY,
@@ -201,6 +202,9 @@ def _wake_pending_demand_id(sandbox_id: str) -> str:
 
 def _sandbox_required_capabilities(spec: dict[str, Any]) -> tuple[str, ...]:
     capabilities = []
+    policy = SandboxNetworkPolicy.from_dict(spec.get("network_policy", {}))
+    if policy.egress == "relay":
+        capabilities.append(policy.capability)
     if bool(spec.get("parkable")):
         capabilities.extend((HIBERNATE_LOCAL_CAPABILITY, DISK_QUOTA_CAPABILITY))
         if bool(spec.get("managed_process")):

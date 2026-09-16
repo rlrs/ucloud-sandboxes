@@ -646,6 +646,13 @@ class DirectSandboxProvisioner:
             self.oci.prepare_network_files(
                 sandbox.bundle / "rootfs",
                 spec=registration.spec,
+                relay_hosts=(
+                    self.network_manager.hosts_for_policy(
+                        registration.spec.network_policy
+                    )
+                    if self.network_manager is not None
+                    else {}
+                ),
             )
             # Keep the init binary inside the quota-accounted rootfs. A bind
             # mount here is not executable under gVisor on production nodes.
@@ -864,6 +871,8 @@ class DirectSandboxProvisioner:
                 f"spec={spec.network!r} maps to {expected_network!r}, "
                 f"node={self.warden.config.network!r}"
             )
+        if self.network_manager is not None:
+            self.network_manager.validate_policy(spec.network_policy)
         if expected_network == "sandbox" and self.network_manager is None:
             raise ValueError("direct sandbox networking has no node network manager")
         if expected_network == "none" and self.network_manager is not None:
@@ -883,6 +892,7 @@ class DirectSandboxProvisioner:
             registration.sandbox_id,
             registration.sandbox_generation,
             host_rules_ready=host_rules_ready,
+            network_policy=registration.spec.network_policy,
         ).namespace_path
 
     def ensure_network(
@@ -923,6 +933,7 @@ class DirectSandboxProvisioner:
             registration.sandbox_id,
             registration.sandbox_generation,
             avoid_guest_ips=(source_guest_ip,),
+            network_policy=registration.spec.network_policy,
         )
         if lease.guest_ip == source_guest_ip:
             raise StorageNativeMigrationError(

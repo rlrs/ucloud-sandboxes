@@ -14,6 +14,7 @@ import tempfile
 from threading import Condition, RLock
 from typing import Any, Iterator, Protocol
 
+from .network_policy import SandboxNetworkPolicy
 from .hibernation import hibernation_disk_reservation_mb
 from .guest_paths import (
     validate_guest_path,
@@ -431,6 +432,9 @@ class SandboxSpec:
     disk_mb: int | None = None
     network: str = "bridge"
     dns_servers: tuple[str, ...] = ()
+    network_policy: SandboxNetworkPolicy = field(
+        default_factory=SandboxNetworkPolicy, kw_only=True
+    )
     ttl_seconds: int | None = None
     parkable: bool = False
     managed_process: bool = False
@@ -484,6 +488,7 @@ class SandboxSpec:
             "memory_mb",
             "network",
             "dns_servers",
+            "network_policy",
             "parkable",
             "profile",
             "required_features",
@@ -551,6 +556,9 @@ class SandboxSpec:
             ),
             network=_json_string(raw.get("network", "bridge"), "network"),
             dns_servers=_json_string_list(raw.get("dns_servers", []), "dns_servers"),
+            network_policy=SandboxNetworkPolicy.from_dict(
+                raw.get("network_policy", {})
+            ),
             ttl_seconds=(
                 _json_int(raw["ttl_seconds"], "ttl_seconds")
                 if raw.get("ttl_seconds") is not None
@@ -631,6 +639,15 @@ class SandboxSpec:
             raise ValueError(
                 "profile must be one of: " + ", ".join(sorted(SANDBOX_PROFILES))
             )
+        if not isinstance(self.network_policy, SandboxNetworkPolicy):
+            raise ValueError("network_policy must be a SandboxNetworkPolicy")
+        if self.network_policy.egress == "relay":
+            if self.network != "bridge":
+                raise ValueError("relay egress requires bridge networking")
+            if self.dns_servers or self.ssh.enabled:
+                raise ValueError(
+                    "relay egress does not allow custom DNS or inbound SSH"
+                )
         if self.network not in {"none", "bridge"}:
             raise ValueError("network must be either 'none' or 'bridge'.")
         if self.managed_process and self.security.supplementary_groups:
@@ -662,6 +679,10 @@ class SandboxSpec:
 
     def to_dict(self) -> dict[str, Any]:
         raw = asdict(self)
+        if self.network_policy.egress == "direct":
+            raw.pop("network_policy")
+        else:
+            raw["network_policy"] = self.network_policy.to_dict()
         if self.required_features:
             raw["required_features"] = list(self.required_features)
         else:

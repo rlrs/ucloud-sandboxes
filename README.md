@@ -81,3 +81,9 @@ Control-plane and node processes intentionally have no unauthenticated local
 mode. Use the deployment/bootstrap flow to create their distinct gateway,
 sandbox API, heartbeat, and node-control credentials and their pinned runtime
 artifacts.
+
+## Relay-only network access
+
+Sandboxes can opt into a host-enforced named relay policy while retaining bridge
+connectivity. See [network policies](docs/network-policy.md) for deployment
+configuration, SDK examples, DNS behaviour, and the Linux packet test.

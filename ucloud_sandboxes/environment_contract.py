@@ -102,8 +102,9 @@ def describe_environment(spec: SandboxSpec) -> dict[str, Any]:
             "run_tmpfs_mb": spec.filesystem.run_tmpfs_mb,
             "shm_mb": spec.filesystem.shm_mb,
             "network": spec.network,
+            "network_policy": spec.network_policy.to_dict(),
             "dns_servers": list(spec.dns_servers or ("1.1.1.1", "8.8.8.8"))
-            if spec.network == "bridge"
+            if spec.network == "bridge" and spec.network_policy.egress == "direct"
             else [],
         },
         "unresolved": [

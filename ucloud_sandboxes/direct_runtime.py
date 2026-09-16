@@ -4,7 +4,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
-from typing import Sequence
+from typing import Mapping, Sequence
 
 from .direct_network import DirectNetworkManager
 from .direct_oci import DirectOciConfigBuilder
@@ -31,6 +31,7 @@ def build_direct_runtime_service(
     docker_binary: str = "docker",
     network: str = "none",
     network_allow_tcp: Sequence[str] = (),
+    network_relays: Mapping[str, str] | None = None,
     max_concurrent_restores: int = 8,
     idle_park_seconds: float = 0.0,
     storage_native_socket: Path,
@@ -51,6 +52,8 @@ def build_direct_runtime_service(
     ):
         if not path.is_absolute():
             raise ValueError(f"{label} must be absolute")
+    if network_relays and network != "sandbox":
+        raise ValueError("network_relays requires sandbox networking")
     if network not in {"none", "sandbox"}:
         raise ValueError("direct runtime network must be none or sandbox")
     if not storage_native_socket.is_absolute():
@@ -97,6 +100,7 @@ def build_direct_runtime_service(
         DirectNetworkManager(
             state_root / "network-slots.json",
             allowed_tcp_egress=network_allow_tcp,
+            network_relays=network_relays,
         )
         if network == "sandbox"
         else None

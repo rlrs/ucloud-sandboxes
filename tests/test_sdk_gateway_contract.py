@@ -114,6 +114,12 @@ class RuntimeBoundaryHandler(BaseHTTPRequestHandler):
 @unittest.skipUnless(SDK_AVAILABLE, "sibling ucloud-sandboxes-sdk is unavailable")
 class SdkGatewayContractTests(unittest.TestCase):
     def test_create_get_list_delete_lifecycle_preserves_identity(self) -> None:
+        self._check_lifecycle()
+
+    def test_relay_policy_survives_sdk_gateway_and_node_protocol(self) -> None:
+        self._check_lifecycle(relay=True)
+
+    def _check_lifecycle(self, *, relay: bool = False) -> None:
         assert sdk is not None
         RuntimeBoundaryHandler.requests = []
         with TemporaryDirectory() as raw:
@@ -133,7 +139,11 @@ class SdkGatewayContractTests(unittest.TestCase):
                         active_sandboxes=0,
                         agent_version=package_version(),
                         deployment_id="contract-deployment",
-                        capabilities=("sandbox", "disk-quota"),
+                        capabilities=(
+                            "sandbox",
+                            "disk-quota",
+                            "network-policy-relay-v1:default",
+                        ),
                         total_resources=ResourceQuantity(
                             vcpu=8,
                             memory_mb=16_384,
@@ -183,6 +193,13 @@ class SdkGatewayContractTests(unittest.TestCase):
                             cpus=1.5,
                             disk_mb=1024,
                             labels={"request": "request-one"},
+                            **(
+                                {
+                                    "network_policy": sdk.SandboxNetworkPolicy.relay_only()
+                                }
+                                if relay
+                                else {}
+                            ),
                         ),
                         request_timeout_seconds=5,
                     )
@@ -191,6 +208,15 @@ class SdkGatewayContractTests(unittest.TestCase):
                     deleted = handle.delete()
                     after_delete = client.get_sandbox("contract-one")
 
+        if relay:
+            self.assertEqual(
+                handle.record["spec"]["network_policy"],
+                {"egress": "relay", "relay": "default"},
+            )
+            self.assertEqual(
+                fetched["spec"]["network_policy"],
+                handle.record["spec"]["network_policy"],
+            )
         self.assertEqual(handle.id, "contract-one")
         self.assertEqual(handle.record["spec"]["id"], handle.id)
         self.assertIsNotNone(fetched)

@@ -1671,6 +1671,11 @@ def build_direct_node_agent_server(
         HIBERNATE_LOCAL_CAPABILITY,
         "direct-runsc-v1",
     ]
+    if service.provisioner.network_manager is not None:
+        direct_capabilities.extend(
+            relay.capability
+            for relay in service.provisioner.network_manager.relays.values()
+        )
     if service.provisioner.oci.managed_init_binary is not None:
         direct_capabilities.append(MANAGED_PRIMARY_CAPABILITY)
         try:

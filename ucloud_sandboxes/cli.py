@@ -427,6 +427,11 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     direct_node_agent.add_argument(
+        "--network-relays-json",
+        default="{}",
+        help='Trusted relay map, e.g. {"default":"relay.example.org:443"}. Requires nftables.',
+    )
+    direct_node_agent.add_argument(
         "--node-control-bearer-token-file",
         type=Path,
         required=True,
@@ -1129,6 +1134,7 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
         docker_binary=args.docker_binary,
         network=args.network,
         network_allow_tcp=tuple(args.direct_network_allow_tcp or ()),
+        network_relays=json.loads(args.network_relays_json),
         max_concurrent_restores=args.max_concurrent_restores,
         idle_park_seconds=float(args.idle_park_seconds),
         storage_native_socket=args.storage_native_socket.absolute(),
@@ -5890,6 +5896,7 @@ def vm_init_options_for_job(
         direct_network_allow_tcp=(
             config.sandbox.direct_network_allow_tcp if role == "sandbox" else ()
         ),
+        network_relays=(config.sandbox.network_relays if role == "sandbox" else {}),
         storage_native_registry_url=(
             config.registry_worker_url if role == "sandbox" else ""
         ),
@@ -5970,6 +5977,7 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         "directRunscCommit": options.direct_runsc_commit,
         "directNetwork": options.direct_network,
         "directNetworkAllowTcp": list(options.direct_network_allow_tcp),
+        "networkRelays": dict(options.network_relays or {}),
         "storageNativeRegistryUrl": options.storage_native_registry_url,
         "storageNativeRepository": options.storage_native_repository,
         "storageNativeSnapshotBackend": options.storage_native_snapshot_backend,

@@ -497,9 +497,9 @@ class DirectSandboxService:
             try:
                 network_manager.refresh_tcp_egress()
             except Exception:
-                # Keep the last exact /32 rules and retry. The initial
-                # reconciliation is synchronous and fails node startup if the
-                # endpoint has never resolved.
+                # Atomic firewall failures retain the preceding rules. Relay
+                # DNS failures are handled separately by installing deny-all.
+                _LOG.exception("network policy reconciliation failed; retrying")
                 continue
 
     def create(

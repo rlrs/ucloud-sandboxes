@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, fields, replace
+from dataclasses import asdict, dataclass, field, fields, replace
 import json
 import math
 from pathlib import Path
@@ -259,6 +259,7 @@ class SandboxPoolConfig:
     swap_gb: int = 96
     direct_runsc_commit: str = DEFAULT_DIRECT_RUNSC_COMMIT
     direct_network_allow_tcp: tuple[str, ...] = ()
+    network_relays: dict[str, str] = field(default_factory=dict)
     storage_native_repository: str = "ucloud-sandbox-snapshots"
     storage_native_cache_gb: int = 32
     storage_native_pool_low_watermark: int = 2
@@ -288,11 +289,20 @@ class SandboxPoolConfig:
 
     @classmethod
     def from_dict(cls, raw: object) -> "SandboxPoolConfig":
+        # Optional extension of schema 5; existing deployment files remain valid.
+        if isinstance(raw, dict):
+            raw = {"network_relays": {}, **raw}
         values = _exact_dataclass_values("sandbox", raw, cls())
         values["direct_network_allow_tcp"] = _string_tuple(
             "sandbox.direct_network_allow_tcp",
             values["direct_network_allow_tcp"],
         )
+        from .relay_network import parse_network_relays
+
+        values["network_relays"] = {
+            name: relay.endpoint
+            for name, relay in parse_network_relays(values["network_relays"]).items()
+        }
         result = cls(**values)
         _require_string("sandbox.product_id", result.product_id)
         _require_int("sandbox.disk_gb", result.disk_gb, minimum=1)

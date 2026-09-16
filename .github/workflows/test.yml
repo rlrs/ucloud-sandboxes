@@ -26,7 +26,7 @@ jobs:
         with:
           repository: rlrs/ucloud-sandboxes-sdk
           # Deliberately pinned: update this SHA with coordinated SDK changes.
-          ref: 22c0802af2f605b301ab302b790977ca0f78983c
+          ref: bbdc54936a85dcb6653ccd64bf556f07fe9f8784
           path: ucloud-sandboxes-sdk
           persist-credentials: false
       - uses: actions/setup-python@v6
@@ -44,6 +44,12 @@ jobs:
         run: sudo apt-get update && sudo apt-get install --yes shellcheck
       - name: Run the canonical repository check
         run: bash scripts/check.sh
+      - name: Qualify relay-only packet filtering in isolated Linux namespaces
+        if: matrix.python-version == '3.13'
+        run: |
+          sudo apt-get install --yes nftables iptables iproute2
+          sudo env UCLOUD_RUN_NETNS_TESTS=1 PYTHONPATH="$PWD" \
+            "$(uv python find)" -m unittest tests.test_relay_network_linux
       - name: Run the Docker Distribution contract
         if: matrix.python-version == '3.13'
         run: |

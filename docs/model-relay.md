@@ -73,7 +73,10 @@ export OPENAI_BASE_URL="https://relay.example.org/rollouts/run-001/v1"
 export OPENAI_API_KEY="<sandbox-relay-token>"
 ```
 
-Then create the sandbox with outbound networking:
+For host-enforced access to only the relay, configure a named relay and use
+`SandboxNetworkPolicy.relay_only()` as described in [network policies](network-policy.md).
+The bridge-only example below permits general public outbound networking:
+
 
 ```python
 from ucloud_sandboxes_sdk import Image

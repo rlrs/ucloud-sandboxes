@@ -1,9 +1,25 @@
-# UCloud platform incidents during sandbox density testing
+# VM restart incidents during sandbox density testing
 
-Prepared for the user to report to UCloud sysadmins. No report has been sent.
-The user identified these unexpected VM poweroffs as a known UCloud platform
-bug on September 8. Further platform root-cause investigation is out of scope
-for this sandbox performance task.
+Prepared for the user to report to UCloud sysadmins. No report has been sent
+by this agent.
+
+**Attribution update, September 11:** cause remains undetermined. The earlier
+platform-bug classification was an assumption, not an established finding.
+The user relayed a sysadmin observation that a Python process sent the signal
+associated with suspension. Our workload includes privileged Python node and
+storage services, diagnostic tooling, and Python gateway-side orchestration.
+The node service intentionally sends SIGKILL to checkpointed gVisor sentries
+through pidfds; exec timeout cleanup can also kill a child process group.
+Neither action is intended to power off the VM. The reviewed benchmark path
+contains no explicit VM suspend/poweroff request, but this does not exclude a
+bug or an action in temporary tooling that is no longer available locally.
+
+The original sysadmin log line, signal number, sender/target PIDs, and whether
+it came from the guest or hypervisor are needed to interpret this clue. In
+particular, a QEMU host log identifying a signal sender refers to a host-side
+process, not directly to a Python PID inside the guest. Also distinguish the
+four incident times below from subsequent authorized idle-worker termination
+and the user's explicit final termination of this dev job.
 
 Project: **DFM Pretraining** (`4827bd3a-4e74-4393-9b82-49f71636c141`).
 VM job: **12383398**, `density-review-20260907`, last reported host
@@ -74,3 +90,22 @@ all 128 sandboxes through three cycles without a restart or operation errors.
 still fails latency acceptance. Cleanup completed successfully; the dev node
 and both services remained up. This successful run does not remove or close
 the four platform incident records above.
+
+
+September 11 follow-up: a read-only search of retained production autoscaler
+logs from September 7 22:15 through September 8 07:05 UTC examined 28,559
+records, including 4,763 UCloud authorization-403 messages. No executed stop
+request or reference to the dev job/deployment was found in that window. The
+isolated test gateway runs the control plane without an autoscaler. This
+reduces the evidence for an orchestration-initiated stop, but does not exclude
+a guest-side bug or missing temporary tooling. No VM was restarted for this
+review. Detailed readback is retained locally under ignored `dist/`.
+
+Further September 11 [code and signal-path review](vm-power-signal-code-review-2026-09-11.md)
+found no explicit guest power-control request. Seven additional signal-safety
+tests passed as part of 79 targeted tests. The review also identified an
+identity-validation weakness when adopting a PID from stale runtime state;
+a synthetic check accepted an unrelated process identity. This is a separate
+hardening concern, not evidence of a VM suspension request or an established
+cause of these incidents. Root service privileges prevent an absolute claim
+that our processes cannot request power control.

@@ -149,7 +149,7 @@ in a disposable network and mount namespace, with private fixture services:
 
 ```sh
 sudo env UCLOUD_RUN_NETNS_TESTS=1 PYTHONPATH="$PWD" \
-  "$(command -v python3)" -m unittest tests.test_relay_network_linux
+  "$(command -v python3)" tests/test_relay_network_linux.py
 ```
 
 It requires `unshare`, `mount`, `ip`, `iptables`, and `nft`. CI runs this test on

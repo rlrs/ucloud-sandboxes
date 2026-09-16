@@ -49,7 +49,7 @@ jobs:
         run: |
           sudo apt-get install --yes nftables iptables iproute2
           sudo env UCLOUD_RUN_NETNS_TESTS=1 PYTHONPATH="$PWD" \
-            "$(command -v python)" -m unittest tests.test_relay_network_linux
+            "$(command -v python)" tests/test_relay_network_linux.py
       - name: Run the Docker Distribution contract
         if: matrix.python-version == '3.13'
         run: |

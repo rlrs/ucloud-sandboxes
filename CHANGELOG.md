@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.5.36 - 2026-09-18
+
+- Isolate relay journal work from lifecycle HTTP calls so saturated park/wake
+  threads cannot hold up durable responses, leases, and unrelated rollouts.
+- Reserve device slots for in-flight wakes and migration destinations before
+  heartbeats reflect them; include those reservations in local wake admission.
+- Publish local-only parked checkpoints on demand when an owner cannot wake
+  them, enabling migration to spare workers without publishing every relay park.
+- Bound background checkpoint publication work and consume completed publication
+  metadata immediately, with generation and placement fences intact.
+
 ## 0.5.35 - 2026-09-18
 
 - Share startup admission across creates, restores and file transfers; reject

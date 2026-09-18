@@ -491,6 +491,12 @@ class GatewaySchedulingBusyError(RuntimeError):
     """Placement serialization is occupied and the caller should retry."""
 
 
+class _WakeSnapshotPublicationRequired(Exception):
+    def __init__(self, route: SandboxRoute, pending_resources: ResourceQuantity):
+        self.route = route
+        self.pending_resources = pending_resources
+
+
 class SandboxShapeUnschedulableError(ValueError):
     def __init__(
         self,
@@ -1363,7 +1369,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         require_active_resources: bool = False,
         consolidation_source: NodeHeartbeat | None = None,
     ) -> NodeHeartbeat | None:
-        routes = self.routing_store.sandbox_routes_readonly()
+        routes = self._placement_routes()
         active_migrations = self.routing_store.sandbox_migrations(active_only=True)
         if consolidation_source is not None and (
             active_migrations
@@ -1398,7 +1404,9 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             return None
         required_destination_capabilities = _sandbox_required_capabilities(source.spec)
         reservations: dict[str, int] = {}
-        routes_by_id = {route.sandbox_id: route for route in routes}
+        routes_by_id = {
+            route.sandbox_id: route for route in routes if isinstance(route, SandboxRoute)
+        }
         for migration in active_migrations:
             if migration.phase in {"routed", "activated"}:
                 continue
@@ -1423,13 +1431,6 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             ):
                 continue
             available = _node_available_resources(heartbeat, routes)
-            available = replace(
-                available,
-                disk_mb=max(
-                    0,
-                    available.disk_mb - reservations.get(heartbeat.node_id, 0),
-                ),
-            )
             requested = (
                 source.resources
                 if require_active_resources
@@ -4846,6 +4847,64 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         self,
         route: SandboxRoute,
     ) -> SandboxRoute | None:
+        try:
+            return self._reserve_parked_sandbox_wake(route)
+        except _WakeSnapshotPublicationRequired as pending:
+            # Explicit relay parks need not publish every checkpoint. Request
+            # publication only when local admission is blocked, and never hold
+            # the global placement locks while contacting the owner.
+            try:
+                response = self._proxy_request(
+                    pending.route.node_url,
+                    f"/v1/sandboxes/{quote(pending.route.sandbox_id, safe='')}/snapshot/publish",
+                    method="POST",
+                    body=json.dumps({"generation": pending.route.generation}).encode(),
+                    timeout_seconds=2.0,
+                )
+                if response.status < 400:
+                    published = self._refresh_wake_publication(pending.route, response.json())
+                    if published is not None:
+                        return self._reserve_parked_sandbox_wake(published)
+            except (OSError, ValueError):
+                pass  # The next safe wake retry can request publication again.
+            self._write_json(
+                {
+                    "error": "parked snapshot publication is still in progress",
+                    "error_code": "snapshot_publication_pending",
+                    "retryable": True,
+                    "pending_resources": pending.pending_resources.to_dict(),
+                },
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+                headers={"Retry-After": "1", "X-UCloud-Sandbox-Retryable": "true"},
+            )
+            return None
+
+    def _refresh_wake_publication(
+        self, route: SandboxRoute, payload: dict[str, Any],
+    ) -> SandboxRoute | None:
+        record = payload.get("sandbox")
+        if not isinstance(record, dict) or record.get("state") != "parked":
+            return None
+        if not _sandbox_record_matches_route(record, route, SandboxSpec.from_dict(route.spec)):
+            return None
+        observed = _route_with_sandbox_record(route, record)
+        if not is_portable_parked_route(observed):
+            return None
+        with _GATEWAY_SCHEDULING_LOCK, _gateway_placement_lock(self.routing_store.path):
+            current = self.routing_store.get_sandbox_readonly(route.sandbox_id)
+            if current is None or current.state != "parked" or (
+                current.generation, current.create_operation_id, current.spec_hash,
+                current.node_id, current.job_id, current.worker_state,
+            ) != (
+                route.generation, route.create_operation_id, route.spec_hash,
+                route.node_id, route.job_id, route.worker_state,
+            ):
+                return None
+            return self.routing_store.upsert_sandbox(_route_with_sandbox_record(current, record))
+
+    def _reserve_parked_sandbox_wake(
+        self, route: SandboxRoute,
+    ) -> SandboxRoute | None:
         """Reserve wake placement briefly, then relocate without global locks."""
 
         if route.worker_state == "detaching":
@@ -4919,6 +4978,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 route.worker_state == "attached"
                 and source_heartbeat is not None
                 and source_heartbeat.node_id in ready_source_ids
+                and _node_has_storage_device_capacity(source_heartbeat, routes)
                 and _node_can_fit_available(
                     source_heartbeat,
                     active_request,
@@ -4980,20 +5040,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     route.resources,
                     failure_reason="wake_snapshot_publication_pending",
                 )
-                self._write_json(
-                    {
-                        "error": "parked snapshot publication is still in progress",
-                        "error_code": "snapshot_publication_pending",
-                        "retryable": True,
-                        "pending_resources": demand.pending_resources.to_dict(),
-                    },
-                    status=HTTPStatus.SERVICE_UNAVAILABLE,
-                    headers={
-                        "Retry-After": "1",
-                        "X-UCloud-Sandbox-Retryable": "true",
-                    },
-                )
-                return None
+                raise _WakeSnapshotPublicationRequired(route, demand.pending_resources)
 
             active_migration = next(
                 (
@@ -7284,25 +7331,30 @@ def _node_available_resources(
     route_reservations = _node_reserved_route_resources(heartbeat, routes)
     free = heartbeat.free_resources
     disk_mb = max(0, free.disk_mb - route_reservations.disk_mb)
-    metrics = heartbeat.runtime_metrics
-    if (
-        STORAGE_NATIVE_CAPABILITY in heartbeat.capabilities
-        and metrics is not None
-        and metrics.storage_ublk_max_devices > 0
-    ):
-        reserved_device_slots = _node_reserved_storage_device_slots(
-            heartbeat,
-            routes,
-        )
-        if (
-            metrics.storage_ublk_active_devices + reserved_device_slots
-            >= metrics.storage_ublk_max_devices
-        ):
-            disk_mb = 0
+    if not _node_has_storage_device_capacity(heartbeat, routes):
+        disk_mb = 0
     return ResourceQuantity(
         vcpu=max(0.0, free.vcpu - route_reservations.vcpu),
         memory_mb=max(0, free.memory_mb - route_reservations.memory_mb),
         disk_mb=disk_mb,
+    )
+
+
+def _node_has_storage_device_capacity(
+    heartbeat: NodeHeartbeat,
+    routes: list[PlacementRecord],
+) -> bool:
+    metrics = heartbeat.runtime_metrics
+    if (
+        STORAGE_NATIVE_CAPABILITY not in heartbeat.capabilities
+        or metrics is None
+        or metrics.storage_ublk_max_devices <= 0
+    ):
+        return True
+    return (
+        metrics.storage_ublk_active_devices
+        + _node_reserved_storage_device_slots(heartbeat, routes)
+        < metrics.storage_ublk_max_devices
     )
 
 
@@ -7312,13 +7364,8 @@ def _node_reserved_storage_device_slots(
 ) -> int:
     """Count assigned volumes not yet represented by backend ownership metrics."""
 
-    inventory_identities = {
-        (
-            item.sandbox_id,
-            item.generation,
-            item.spec_hash,
-            item.operation_id,
-        )
+    inventory_by_identity = {
+        (item.sandbox_id, item.generation, item.spec_hash, item.operation_id): item
         for item in heartbeat.inventory
     }
     seen: set[tuple[str, ...]] = set()
@@ -7331,14 +7378,18 @@ def _node_reserved_storage_device_slots(
             continue
         seen.add(identity)
         if isinstance(route, SandboxRoute):
-            if route.worker_state == "detached":
+            if route.worker_state == "detached" or route.state.lower() == "parked":
                 continue
-            if (
-                route.sandbox_id,
-                route.generation,
-                route.spec_hash,
+            observed = inventory_by_identity.get((
+                route.sandbox_id, route.generation, route.spec_hash,
                 route.create_operation_id,
-            ) in inventory_identities:
+            ))
+            if observed is not None:
+                # A parked inventory entry has no active device. A wake
+                # reserved after that observation must charge one until the
+                # worker reports the restored owner in its next heartbeat.
+                if route.state.lower() == "waking" and observed.state == "parked":
+                    reserved += 1
                 continue
             if route.resources.disk_mb > 0:
                 reserved += 1

@@ -2899,6 +2899,7 @@ class ControlPlaneTests(unittest.TestCase):
             handler._prepare_migration_destination_image = lambda *_args: (
                 _ for _ in ()
             ).throw(AssertionError("unpublished wake must not begin migration"))
+            handler._proxy_request = lambda *_args, **_kwargs: control_plane.ProxiedResponse(202, {}, b"{}")
 
             selected = handler._ensure_parked_sandbox_wake_placement(parked)
             migrations = routing.sandbox_migrations(active_only=True)

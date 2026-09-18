@@ -355,6 +355,9 @@ class NodeAgentHandler(BuildContextHttpHandler):
         if parsed.path == "/v1/sandboxes":
             self._create_sandbox()
             return
+        if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith("/snapshot/publish"):
+            self._request_snapshot_publication(parsed.path)
+            return
         if parsed.path == "/v1/migrations/import":
             self._import_migration()
             return
@@ -770,6 +773,25 @@ class NodeAgentHandler(BuildContextHttpHandler):
             self._write_exception(exc)
             return
         self._write_json(payload)
+
+    def _request_snapshot_publication(self, path: str) -> None:
+        try:
+            raw = self._read_json_body()
+            if not isinstance(raw, dict) or set(raw) != {"generation"}:
+                raise ValueError("publication requires a generation")
+            generation = raw["generation"]
+            if type(generation) is not int or generation <= 0:
+                raise ValueError("publication generation must be a positive integer")
+            sandbox_id = _sandbox_id_from_path(path, suffix="/snapshot/publish")
+            self.manager.service.request_storage_publication(sandbox_id, generation=generation)
+        except (RuntimeError, ValueError) as exc:
+            self._write_exception(exc)
+            return
+        record = self.manager.service.get_snapshot(sandbox_id)
+        self._write_json(
+            {"accepted": True, "sandbox": self._sandbox_inventory_payload(record) if record else None},
+            status=HTTPStatus.ACCEPTED,
+        )
 
     def _sandbox_inventory_payload(self, record: Any) -> dict[str, Any]:
         payload = record.to_dict()

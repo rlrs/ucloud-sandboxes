@@ -3,6 +3,9 @@ from __future__ import annotations
 import asyncio
 import base64
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
+from functools import partial
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field, replace
 import heapq
@@ -97,14 +100,6 @@ async def _finish_before_cancellation(
     return result
 
 
-async def _blocking_call(
-    function: Callable[..., _TransitionResult],
-    *args: object,
-    **kwargs: object,
-) -> _TransitionResult:
-    return await _finish_before_cancellation(
-        asyncio.to_thread(function, *args, **kwargs)
-    )
 
 
 @dataclass
@@ -396,6 +391,10 @@ class ModelRelayState:
         self._idempotency: dict[tuple[str, str, str], str] = {}
         self._workers: dict[tuple[str, str], JsonObject] = {}
         self._store = RelaySqliteStore(state_path) if state_path is not None else None
+        self._store_executor = (
+            ThreadPoolExecutor(max_workers=1, thread_name_prefix="relay-journal")
+            if self._store is not None else None
+        )
         self._loaded = state_path is None
         self._inflight_bytes = 0
         self._completed_bytes = 0
@@ -720,7 +719,7 @@ class ModelRelayState:
                 ] = request.request_id
             self._counters[counter] += 1
             if self._store is not None:
-                await _blocking_call(self._store.save_request, request)
+                await self._store_call(self._store.save_request, request)
 
     async def poll(
         self,
@@ -780,7 +779,7 @@ class ModelRelayState:
                         for _ in range(min(limit, len(queue)))
                     ]
                     if self._store is not None:
-                        await _blocking_call(
+                        await self._store_call(
                             self._store.save_requests,
                             tuple(requests),
                         )
@@ -957,7 +956,7 @@ class ModelRelayState:
             self._pending.setdefault(request.rollout_id, deque()).append(request)
             self._counters["worker_retries"] += 1
             if self._store is not None:
-                await _blocking_call(self._store.save_request, request)
+                await self._store_call(self._store.save_request, request)
             self._maybe_compact_lease_expiry_heap_locked(request.rollout_id)
             self._wake_rollout_locked(request.rollout_id)
             return request
@@ -1097,7 +1096,7 @@ class ModelRelayState:
                 request.wake_notified_at = time.time()
                 self._counters["wake_notifications"] += 1
                 if self._store is not None:
-                    await _blocking_call(self._store.save_request, request)
+                    await self._store_call(self._store.save_request, request)
 
     async def mark_accepted_notified(
         self,
@@ -1115,13 +1114,30 @@ class ModelRelayState:
                 request.parked_transport_epoch = transport_epoch
                 self._counters["accepted_notifications"] += 1
                 if self._store is not None:
-                    await _blocking_call(self._store.save_request, request)
+                    await self._store_call(self._store.save_request, request)
+
+    async def _store_call(
+        self, function: Callable[..., _TransitionResult], *args: object, **kwargs: object
+    ) -> _TransitionResult:
+        # Lifecycle HTTP calls can occupy the default executor for seconds.
+        # Never hold the relay state lock waiting behind those calls to commit
+        # a response, poll a lease, or acknowledge a wake. SQLite already
+        # serializes these operations, so one dedicated worker is sufficient.
+        callback = partial(copy_context().run, function, *args, **kwargs)
+        return await _finish_before_cancellation(
+            asyncio.get_running_loop().run_in_executor(self._store_executor, callback)
+        )
 
     async def aclose(self) -> None:
-        store = self._store
-        self._store = None
-        if store is not None:
-            await _blocking_call(store.close)
+        async with self._lock:
+            try:
+                if self._store is not None:
+                    await self._store_call(self._store.close)
+            finally:
+                self._store = None
+                if self._store_executor is not None:
+                    self._store_executor.shutdown(wait=False)
+                    self._store_executor = None
 
     async def _register_rollout_transition_locked(
         self,
@@ -1138,7 +1154,7 @@ class ModelRelayState:
                 error_code="relay_rollout_replaced",
             )
         if self._store is not None:
-            await _blocking_call(self._store.save_rollout, record)
+            await self._store_call(self._store.save_rollout, record)
         self._rollouts[rollout_id] = record
         self._pending.setdefault(rollout_id, deque())
         self._wake_rollout_locked(rollout_id)
@@ -1155,13 +1171,13 @@ class ModelRelayState:
             error_code="relay_rollout_closed",
         )
         if self._store is not None:
-            await _blocking_call(self._store.delete_rollout, rollout_id)
+            await self._store_call(self._store.delete_rollout, rollout_id)
         self._rollouts.pop(rollout_id, None)
         self._wake_rollout_locked(rollout_id)
 
     async def _enqueue_transition_locked(self, request: RelayRequest) -> None:
         if self._store is not None:
-            await _blocking_call(self._store.save_request, request)
+            await self._store_call(self._store.save_request, request)
         self._pending.setdefault(request.rollout_id, deque()).append(request)
         self._requests[request.request_id] = request
         if request.expires_at is not None:
@@ -1194,7 +1210,7 @@ class ModelRelayState:
             lease_expires_at=lease_expires_at,
         )
         if self._store is not None:
-            await _blocking_call(self._store.save_request, durable)
+            await self._store_call(self._store.save_request, durable)
         request.leased_by = leased_by
         request.lease_expires_at = lease_expires_at
         assert request.lease_id is not None
@@ -1212,8 +1228,8 @@ class ModelRelayState:
         assert self._store is not None
         loop = asyncio.get_running_loop()
         now = time.time()
-        rollout_rows = await _blocking_call(self._store.load_rollouts)
-        request_rows = await _blocking_call(self._store.load_requests)
+        rollout_rows = await self._store_call(self._store.load_rollouts)
+        request_rows = await self._store_call(self._store.load_requests)
 
         recovered_rollouts: dict[str, JsonObject] = {}
         recovered_pending: dict[str, deque[RelayRequest]] = {}
@@ -1247,7 +1263,7 @@ class ModelRelayState:
                 metadata[AGENT_LIFECYCLE_METADATA_KEY] = MANAGED_AGENT_LIFECYCLE
                 record = dict(record)
                 record["metadata"] = metadata
-                await _blocking_call(self._store.save_rollout, record)
+                await self._store_call(self._store.save_rollout, record)
             _validate_registration_metadata(metadata)
             recovered_rollouts[rollout_id] = record
             recovered_pending[rollout_id] = deque()
@@ -1412,7 +1428,7 @@ class ModelRelayState:
             if request_id not in deleted
         )
         if changed_rows or deleted:
-            await _blocking_call(
+            await self._store_call(
                 self._store.commit_request_batch,
                 changed_rows,
                 tuple(sorted(deleted)),
@@ -1699,7 +1715,7 @@ class ModelRelayState:
             else:
                 self._maybe_compact_lease_expiry_heap_locked(current_rollout_id)
         if expired and self._store is not None:
-            await _blocking_call(self._store.save_requests, tuple(expired))
+            await self._store_call(self._store.save_requests, tuple(expired))
         for expired_rollout_id in {request.rollout_id for request in expired}:
             self._wake_rollout_locked(expired_rollout_id)
 
@@ -1712,7 +1728,7 @@ class ModelRelayState:
         self._pending.setdefault(request.rollout_id, deque()).appendleft(request)
         self._counters["lease_expired"] += 1
         if self._store is not None:
-            await _blocking_call(self._store.save_request, request)
+            await self._store_call(self._store.save_request, request)
         self._maybe_compact_lease_expiry_heap_locked(request.rollout_id)
         self._wake_rollout_locked(request.rollout_id)
 
@@ -1889,7 +1905,7 @@ class ModelRelayState:
 
         async def discard() -> None:
             if self._store is not None and request_ids:
-                await _blocking_call(self._store.delete_requests, request_ids)
+                await self._store_call(self._store.delete_requests, request_ids)
             for request_id in request_ids:
                 request = self._remove_completed_locked(request_id)
                 if request is not None and request.delivery_pending:
@@ -1927,7 +1943,7 @@ class ModelRelayState:
         if request.delivery_pending:
             released = replace(request, delivery_pending=False)
             if self._store is not None:
-                await _blocking_call(self._store.save_request, released)
+                await self._store_call(self._store.save_request, released)
             request.delivery_pending = False
             self._index_completed_locked(request)
         assert request.completed_response is not None
@@ -1959,7 +1975,7 @@ class ModelRelayState:
         )
         durable_requests = tuple(durable for _request, durable, _response in planned)
         if self._store is not None:
-            await _blocking_call(
+            await self._store_call(
                 self._store.commit_request_batch,
                 durable_requests,
                 evicted_ids,

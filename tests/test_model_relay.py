@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 from contextlib import asynccontextmanager
+from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
 import sqlite3
@@ -245,6 +246,41 @@ async def enqueue_and_poll(
 
 
 class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
+    async def test_journal_progresses_when_lifecycle_executor_is_saturated(self):
+        loop = asyncio.get_running_loop()
+        loop.set_default_executor(ThreadPoolExecutor(max_workers=1))
+        entered, release = Event(), Event()
+        with tempfile.TemporaryDirectory() as directory:
+            state = ModelRelayState(state_path=Path(directory) / "relay.sqlite3")
+            token = str((await state.register_rollout("busy"))["registration_token"])
+            original, delivery = await enqueue_and_poll(state, "busy", token)
+
+            def blocked_lifecycle():
+                entered.set()
+                release.wait(timeout=5)
+
+            blocked = asyncio.create_task(asyncio.to_thread(blocked_lifecycle))
+            while not entered.is_set():
+                await asyncio.sleep(0.001)
+            response = asyncio.create_task(state.respond(
+                request_id=delivery.request_id, registration_token=token,
+                lease_id=delivery.lease_id,
+                response=RelayWorkerResponse(200, {"result": "committed"}),
+            ))
+            try:
+                done, _ = await asyncio.wait({response}, timeout=1)
+                self.assertIn(response, done, "journal queued behind lifecycle HTTP")
+                await response
+                self.assertEqual(original.future.result().body, {"result": "committed"})
+                # Other callers can still take the shared state lock, too.
+                await asyncio.wait_for(state.register_rollout("unrelated"), timeout=1)
+            finally:
+                release.set()
+                await blocked
+                await response
+                await state.aclose()
+
+
     async def test_terminal_wake_releases_result_durably_without_claiming_wake(
         self,
     ) -> None:

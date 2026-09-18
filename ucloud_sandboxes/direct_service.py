@@ -309,6 +309,7 @@ class DirectSandboxService:
         self._publication_threads: dict[tuple[str, int], threading.Thread] = {}
         self._publication_errors: dict[tuple[str, int], BaseException] = {}
         self._publication_guard = threading.Lock()
+        self._publication_slots = threading.BoundedSemaphore(16)
         self._published_snapshots: dict[tuple[str, int], StorageNativeMigration] = {}
         self._published_snapshots_guard = threading.Lock()
         self._snapshot_hydration_thread: threading.Thread | None = None
@@ -748,6 +749,20 @@ class DirectSandboxService:
                 )
             return self._record(registration)
 
+    def request_storage_publication(self, sandbox_id: str, *, generation: int) -> None:
+        registration = self._require_registration(sandbox_id)
+        with self._request_lock(sandbox_id, generation):
+            registration = self._require_registration(sandbox_id)
+            if registration.sandbox_generation != generation:
+                raise DirectWardenError("publication generation does not own sandbox")
+            lifecycle = self.warden.inspect(registration.to_direct_sandbox())
+            if lifecycle is None or lifecycle.state != HibernationState.PARKED:
+                raise DirectWardenError("only parked sandboxes can publish a snapshot")
+            if self.cached_storage_native_snapshot(sandbox_id, generation) is None:
+                self._start_storage_publication(
+                    registration, operation_id=f"wake-publication:{uuid4().hex}"
+                )
+
     def storage_native_publication_pending(self, sandbox_id: str) -> bool:
         registration = self._require_registration(sandbox_id)
         key = (sandbox_id, registration.sandbox_generation)
@@ -768,6 +783,8 @@ class DirectSandboxService:
         with self._publication_guard:
             existing = self._publication_threads.get(key)
             if existing is not None and existing.is_alive():
+                return
+            if not self._publication_slots.acquire(blocking=False):
                 return
             self._publication_errors.pop(key, None)
             trace_context = self.telemetry.current_trace_headers()
@@ -791,6 +808,8 @@ class DirectSandboxService:
                         with self._publication_guard:
                             self._publication_errors[key] = exc
                         span.set_error(exc)
+                    finally:
+                        self._publication_slots.release()
 
             thread = threading.Thread(
                 target=publish,
@@ -801,7 +820,12 @@ class DirectSandboxService:
                 daemon=True,
             )
             self._publication_threads[key] = thread
-            thread.start()
+            try:
+                thread.start()
+            except BaseException:
+                self._publication_threads.pop(key, None)
+                self._publication_slots.release()
+                raise
 
     def wake(
         self,

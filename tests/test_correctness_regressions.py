@@ -42,6 +42,7 @@ from ucloud_sandboxes.sandbox import (
     SandboxAdmissionClosedError,
     SandboxCapacityUnavailableError,
     SandboxFileTooLargeError,
+    SandboxRestoreBusyError,
 )
 from ucloud_sandboxes.storage_native_daemon import (
     StorageNativeNodeClient,
@@ -135,34 +136,40 @@ class LifecycleBoundaryTests(unittest.TestCase):
                 sandbox = provisioner.registry.get("sandbox").to_direct_sandbox()
                 self.assertEqual(service.warden.inspect(sandbox).state.value, "parked")
 
-    def test_explicit_wake_waits_for_restore_slot(self):
-        with TemporaryDirectory() as directory:
-            fixture = direct_fixtures.DirectProvisionerTests()
-            provisioner, *_ = fixture.make(Path(directory).resolve())
-            service = DirectSandboxService(provisioner, max_concurrent_restores=1)
-            fixture.create(service, fixture.spec())
-            service.park("sandbox", operation_id="park:test")
-            admitted = threading.Event()
-            original = service._reserve_active_capacity
+    def test_restore_saturation_rejects_before_work_and_retry_succeeds(self):
+        for implicit in (False, True):
+            with self.subTest(implicit=implicit), TemporaryDirectory() as directory:
+                fixture = direct_fixtures.DirectProvisionerTests()
+                provisioner, *_ = fixture.make(Path(directory).resolve())
+                service = DirectSandboxService(provisioner, max_concurrent_restores=1)
+                fixture.create(service, fixture.spec())
+                service.park("sandbox", operation_id="park:test")
+                sandbox = provisioner.registry.get("sandbox").to_direct_sandbox()
 
-            @contextmanager
-            def reserve(*args):
-                with original(*args):
-                    admitted.set()
-                    yield
+                def wake():
+                    if implicit:
+                        service.ensure_running_with_timings(sandbox)
+                    else:
+                        service.wake("sandbox", generation=7, operation_id="wake:test")
 
-            with patch.object(service, "_reserve_active_capacity", side_effect=reserve):
-                with ThreadPoolExecutor(max_workers=1) as pool:
-                    service._restore_slots.acquire()
-                    future = pool.submit(
-                        service.wake, "sandbox", generation=7, operation_id="wake:test"
-                    )
-                    try:
-                        self.assertTrue(admitted.wait(5))
-                        self.assertFalse(future.done())
-                    finally:
-                        service._restore_slots.release()
-                    self.assertEqual(future.result(timeout=5).state, "running")
+                service._restore_slots.acquire()
+                try:
+                    with (
+                        patch.object(service.warden, "resume") as resume,
+                        patch.object(service.provisioner, "ensure_network") as network,
+                    ):
+                        with self.assertRaises(SandboxRestoreBusyError):
+                            wake()
+                        resume.assert_not_called()
+                        network.assert_not_called()
+                    self.assertEqual(service.warden.inspect(sandbox).state.value, "parked")
+                finally:
+                    service._restore_slots.release()
+                wake()
+                self.assertEqual(service.warden.inspect(sandbox).state.value, "running")
+                # Completed restores must release their slot, too.
+                self.assertTrue(service._restore_slots.acquire(blocking=False))
+                service._restore_slots.release()
 
 
 class ProcessDeadlineTests(unittest.TestCase):

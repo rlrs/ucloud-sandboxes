@@ -61,8 +61,10 @@ from .sandbox import (
     SandboxFileTooLargeError,
     SandboxFilesystemSpec,
     SandboxOperation,
+    SandboxRestoreBusyError,
     SandboxSnapshotPublicationPendingError,
     SandboxSpec,
+    SandboxStartupBusyError,
     sandbox_spec_fingerprint,
 )
 from .sandbox_exec import ExecSessionManager, SandboxExecSpec
@@ -231,10 +233,12 @@ class NodeAgentHandler(BuildContextHttpHandler):
             self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
             return
         if parsed.path == "/v1/sandboxes":
-            records = sorted(
-                self.manager.list(),
-                key=lambda item: item.spec.id,
-            )
+            sandbox_ids = parse_qs(parsed.query).get("sandbox_id")
+            if sandbox_ids:
+                record = self.manager.service.get_snapshot(sandbox_ids[0])
+                records = [] if record is None else [record]
+            else:
+                records = sorted(self.manager.list(), key=lambda item: item.spec.id)
             self._write_json(
                 {
                     "sandboxes": [
@@ -771,15 +775,12 @@ class NodeAgentHandler(BuildContextHttpHandler):
         payload = record.to_dict()
         if str(payload.get("state") or "").lower() != "parked":
             return payload
-        service = self.manager.service
-        warden = service.warden
-        try:
-            registration = service._require_registration(record.spec.id)
-            storage_record = warden._storage_record(registration.to_direct_sandbox())
-            if storage_record.state.value != "published":
-                return payload
-            snapshot = service.describe_storage_native_snapshot(record.spec.id)
-        except (RuntimeError, ValueError):
+        # Inventory must remain usable while storage is busy. Publication and
+        # startup hydration populate this generation-fenced cache separately.
+        snapshot = self.manager.service.cached_storage_native_snapshot(
+            record.spec.id, record.generation
+        )
+        if snapshot is None:
             return payload
         payload.update(
             {
@@ -844,6 +845,9 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 generation=generation,
                 operation_id=operation_id,
             )
+        except (SandboxRestoreBusyError, SandboxStartupBusyError) as exc:
+            self._write_exception(exc)
+            return
         except SandboxSnapshotPublicationPendingError as exc:
             self._write_json(
                 {
@@ -1173,8 +1177,9 @@ class NodeAgentHandler(BuildContextHttpHandler):
             )
             return
         try:
-            content = self._read_raw_body(max_bytes=self.max_file_body_bytes)
-            self.manager.upload_file(sandbox_id, container_path, content)
+            with self.manager.service.startup_admission():
+                content = self._read_raw_body(max_bytes=self.max_file_body_bytes)
+                self.manager.upload_file(sandbox_id, container_path, content)
         except (RuntimeError, ValueError) as exc:
             self._write_exception(exc)
             return
@@ -1493,6 +1498,32 @@ class NodeAgentHandler(BuildContextHttpHandler):
         return False
 
     def _write_exception(self, exc: RuntimeError | ValueError) -> None:
+        if isinstance(exc, SandboxStartupBusyError):
+            self._write_json(
+                {
+                    "error": str(exc),
+                    "error_code": "node_startup_busy",
+                    "retryable": True,
+                },
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+                headers={"Retry-After": "1", "X-UCloud-Sandbox-Retryable": "true"},
+            )
+            return
+        if isinstance(exc, SandboxRestoreBusyError):
+            self._write_json(
+                {
+                    "error": str(exc),
+                    "error_code": "node_restore_busy",
+                    "retryable": True,
+                    "lifecycle_state": "parked",
+                },
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+                headers={
+                    "Retry-After": "1",
+                    "X-UCloud-Sandbox-Retryable": "true",
+                },
+            )
+            return
         if isinstance(exc, (RequestBodyTooLargeError, SandboxFileTooLargeError)):
             status = HTTPStatus.REQUEST_ENTITY_TOO_LARGE
         elif isinstance(exc, ImageBuildConflictError):

@@ -33,6 +33,7 @@ def build_direct_runtime_service(
     network_allow_tcp: Sequence[str] = (),
     network_relays: Mapping[str, str] | None = None,
     max_concurrent_restores: int = 8,
+    max_concurrent_startups: int = 8,
     idle_park_seconds: float = 0.0,
     storage_native_socket: Path,
     telemetry: Telemetry | None = None,
@@ -139,6 +140,7 @@ def build_direct_runtime_service(
     return DirectSandboxService(
         provisioner,
         max_concurrent_restores=max_concurrent_restores,
+        max_concurrent_startups=max_concurrent_startups,
         idle_park_seconds=idle_park_seconds,
         telemetry=telemetry,
     )

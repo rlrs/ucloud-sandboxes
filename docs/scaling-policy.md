@@ -134,25 +134,42 @@ pressure rather than an additive sum of sandbox limits. Adding a node helps new
 placements and later wakes; it cannot relocate an exec for a sandbox that is
 already running on another node.
 
-Create pressure is an amplifier for resident host pressure, not an independent
-reason to buy capacity. Two sampled `gateway_busy` rejections in the default
-30-second window prove that all gateway create slots are occupied, but another
-VM is requested only when the ordinary sustained CPU, memory, PSI, storage, or
-image-materialization queue independently proves that it can help. One full
-gateway-limit worth of rejected requests confirms saturation, but does not
-override the configured bound. `create_pressure_max_headroom_nodes` is the
-maximum temporary node headroom this feedback loop may request. Durable pending
-create demand can still grow the fleet toward `max_nodes` over later cycles.
-Already-provisioning nodes count toward both targets, preventing repeated
-scale-up every cycle.
+Sampled gateway create rejections amplify sustained CPU, memory, PSI, storage
+or image-materialization pressure. HTTP rejection counts alone do not buy VMs.
+There is also an earlier, bounded path for a genuine startup queue: at least
+`create_target_concurrency_per_node` durable capacity requests must be waiting,
+the oldest such request must reach `create_pressure_window_seconds` (30 seconds
+by default), and the ready workers must be occupied with fresh observations.
+This queue can justify headroom even while CPU is below its pressure threshold.
+An idle ready worker suppresses this early path. Warm reservations, expired
+requests and suppressed image/publication errors do not age the capacity queue.
 
-Accepted create and wake retries add a second, independent signal. Their count
-is divided by `create_target_concurrency_per_node` and adds pipeline nodes only
-while real node pressure is present. This does not sum nominal sandbox CPU or
-memory limits: runtime admission and exec remain based on measured usage, while
-the retry backlog describes work the current fleet has already failed to admit.
-The value comes only from `policy.create_target_concurrency_per_node`; gateway
-placement and autoscaler policy do not carry separate defaults.
+Both feedback paths obey `create_pressure_max_headroom_nodes`: the default
+permits one temporary worker above the hard-resource baseline. Provisioning
+workers count toward the target, so repeated retries do not buy a new worker
+every cycle. The fleet and provisioning caps still apply. Once ordinary host
+pressure is also sustained, the existing pressure-confirmed pending-demand
+path can grow the fleet toward `max_nodes`.
+
+The gateway's existing `gateway_max_concurrent_sandbox_creates` limit now
+covers creates and sandbox operations that can wake a sandbox, including file
+uploads. Admission precedes reading request bodies; rejected connections are
+closed so unread bytes cannot be parsed as a later request. Heartbeats, health,
+status polling and deletion remain outside that startup budget.
+
+New workers receive `policy.create_target_concurrency_per_node` as their
+`--max-concurrent-startups` limit. It is shared by creates, restores and file
+operations. Nested restore during an admitted file operation reuses one slot.
+The independent restore limit still caps restores when configured lower.
+Same-sandbox lifecycle contention in interactive create/wake/exec paths returns
+backpressure instead of waiting indefinitely for a lifecycle lock. Long-running
+user commands do not hold a startup slot merely because they are running.
+
+Capacity rejection occurs before command execution and carries a precise
+retryable error code plus `Retry-After`. The SDK retries these explicit fences
+with jitter within the caller's deadline. It does not blindly replay an upload
+or exec after an ambiguous timeout. Clients must use the matching SDK update;
+older clients can surface the new 503 rejection directly.
 
 Placement still prefers an existing immutable image copy. At eight concurrent
 creates on that node it may spill to another ready node, using registry-layer
@@ -164,7 +181,8 @@ Node heartbeats expose active sandbox creates plus active, waiting, and maximum
 image-materialization operations. Queue pressure is `waiting / concurrency`:
 occupied slots are productive capacity and cannot trigger scale-up without a queue.
 Gateway saturation can widen a confirmed burst but cannot manufacture pressure
-from healthy cold creates.
+from healthy cold creates. The durable-capacity-queue path above supplies the
+independent, bounded early-startup signal.
 
 Pending or active image builds keep one small runnable sandbox shape warm (1
 vCPU, 512 MiB memory, and 1 GiB disk). They do not reserve an entire pristine

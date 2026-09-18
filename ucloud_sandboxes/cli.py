@@ -399,6 +399,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=8,
     )
     direct_node_agent.add_argument(
+        "--max-concurrent-startups",
+        type=int,
+        default=8,
+        help="Shared limit for create, restore and file operations on this node.",
+    )
+    direct_node_agent.add_argument(
         "--idle-park-seconds",
         type=float,
         default=0.0,
@@ -1138,6 +1144,7 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
         network_allow_tcp=tuple(args.direct_network_allow_tcp or ()),
         network_relays=json.loads(args.network_relays_json),
         max_concurrent_restores=args.max_concurrent_restores,
+        max_concurrent_startups=args.max_concurrent_startups,
         idle_park_seconds=float(args.idle_park_seconds),
         storage_native_socket=args.storage_native_socket.absolute(),
         telemetry=telemetry,
@@ -5952,6 +5959,7 @@ def vm_init_options_for_job(
         ),
         direct_disk_headroom_mb=config.sandbox.direct_disk_headroom_mb,
         direct_max_concurrent_restores=(config.sandbox.direct_max_concurrent_restores),
+        direct_max_concurrent_startups=config.policy.create_target_concurrency_per_node,
         direct_idle_park_seconds=config.sandbox.direct_idle_park_seconds,
         max_concurrent_image_pulls=(
             config.builder.max_concurrent_image_pulls
@@ -6016,6 +6024,7 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         ),
         "directDiskHeadroomMb": options.direct_disk_headroom_mb,
         "directMaxConcurrentRestores": options.direct_max_concurrent_restores,
+        "directMaxConcurrentStartups": options.direct_max_concurrent_startups,
         "directIdleParkSeconds": options.direct_idle_park_seconds,
         "maxConcurrentImagePulls": options.max_concurrent_image_pulls,
         "heartbeatIntervalSeconds": options.heartbeat_interval_seconds,

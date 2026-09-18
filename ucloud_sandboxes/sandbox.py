@@ -98,6 +98,14 @@ class SandboxCapacityUnavailableError(RuntimeError):
     """The node cannot currently admit the requested sandbox resources."""
 
 
+class SandboxRestoreBusyError(SandboxCapacityUnavailableError):
+    """Restore admission rejected the request before any restore or tool work."""
+
+
+class SandboxStartupBusyError(SandboxCapacityUnavailableError):
+    """Startup or lifecycle admission rejected work before execution."""
+
+
 class SandboxSnapshotPublicationPendingError(RuntimeError):
     """A parked sandbox cannot wake until its durable publication completes."""
 

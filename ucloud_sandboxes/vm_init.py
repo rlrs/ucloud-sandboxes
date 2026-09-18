@@ -198,6 +198,7 @@ class VmInitOptions:
     )
     direct_disk_headroom_mb: int = DEFAULT_DIRECT_DISK_HEADROOM_MB
     direct_max_concurrent_restores: int = DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES
+    direct_max_concurrent_startups: int = 8
     direct_idle_park_seconds: float = 0.0
     heartbeat_interval_seconds: int = DEFAULT_HEARTBEAT_INTERVAL_SECONDS
     labels: dict[str, str] | None = None
@@ -368,6 +369,7 @@ def render_vm_init_script(options: VmInitOptions) -> str:
             " --managed-init-binary ${UCLOUD_MANAGED_INIT}"
             " --storage-native-socket ${UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET}"
             " --max-concurrent-restores ${UCLOUD_DIRECT_MAX_CONCURRENT_RESTORES}"
+            " --max-concurrent-startups ${UCLOUD_DIRECT_MAX_CONCURRENT_STARTUPS}"
             " --max-concurrent-image-pulls ${UCLOUD_MAX_CONCURRENT_IMAGE_PULLS}"
             " --idle-park-seconds ${UCLOUD_DIRECT_IDLE_PARK_SECONDS}"
             " --total-vcpu ${UCLOUD_TOTAL_VCPU}"
@@ -482,6 +484,7 @@ UCLOUD_DIRECT_INIT_BINARY=/usr/libexec/docker-init
 UCLOUD_DIRECT_IMAGE_CACHE_ROOT=$UCLOUD_DOCKER_QUOTA_ROOT/ucloud-rootfs-cache
 UCLOUD_DIRECT_WRITABLE_DISK_MB={writable_disk_mb}
 UCLOUD_DIRECT_MAX_CONCURRENT_RESTORES={options.direct_max_concurrent_restores}
+UCLOUD_DIRECT_MAX_CONCURRENT_STARTUPS={options.direct_max_concurrent_startups}
 UCLOUD_DIRECT_IDLE_PARK_SECONDS={options.direct_idle_park_seconds}
 UCLOUD_STORAGE_NATIVE_BACKEND={shlex.quote(storage_native_backend)}
 UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET={shlex.quote(storage_native_backend_socket)}
@@ -1524,6 +1527,7 @@ UCLOUD_DIRECT_INIT_BINARY=$UCLOUD_DIRECT_INIT_BINARY
 UCLOUD_DIRECT_IMAGE_CACHE_ROOT=$UCLOUD_DIRECT_IMAGE_CACHE_ROOT
 UCLOUD_DIRECT_WRITABLE_DISK_MB=$UCLOUD_DIRECT_WRITABLE_DISK_MB
 UCLOUD_DIRECT_MAX_CONCURRENT_RESTORES=$UCLOUD_DIRECT_MAX_CONCURRENT_RESTORES
+UCLOUD_DIRECT_MAX_CONCURRENT_STARTUPS=$UCLOUD_DIRECT_MAX_CONCURRENT_STARTUPS
 UCLOUD_STORAGE_NATIVE_BACKEND=$UCLOUD_STORAGE_NATIVE_BACKEND
 UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET=$UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET
 UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET=$UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET
@@ -1795,6 +1799,8 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
                 "direct runtime physical disk cannot guarantee Docker, swap, "
                 "cache, headroom, and one writable MiB"
             )
+        if options.direct_max_concurrent_startups < 1:
+            raise ValueError("direct max concurrent startups must be positive.")
         if options.direct_max_concurrent_restores < 1:
             raise ValueError("direct max concurrent restores must be positive.")
     if options.docker_quota_image_gb < 0:

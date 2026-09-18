@@ -671,6 +671,9 @@ class SandboxDemand:
     pending_count: int = 0
     suppressed_pending_count: int = 0
     oldest_pending_seconds: int = 0
+    # Unlike oldest_pending_seconds, excludes capacity preparations. A warm
+    # reservation's age must not make a new create look persistently queued.
+    oldest_capacity_pending_seconds: int = 0
     placement_requests: tuple[SandboxPlacementRequest, ...] = ()
     prepared_placement_requests: tuple[SandboxPlacementRequest, ...] = ()
 

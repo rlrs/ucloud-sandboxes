@@ -204,7 +204,7 @@ class DirectLifecycle:
         self._coordinator.acquire_shared(sandbox_id)
         try:
             registration = self.owner.service._require_registration(sandbox_id)
-            with self.owner.service._lock(
+            with self.owner.service._request_lock(
                 sandbox_id,
                 registration.sandbox_generation,
             ):
@@ -349,7 +349,7 @@ class DirectNodeRuntime:
         *,
         operation: SandboxOperation,
     ) -> tuple[SandboxRecord, dict[str, object]]:
-        existing = self.service.get(spec.id)
+        existing = self.service.get_snapshot(spec.id)
         started = time.monotonic()
         record = self.service.create(spec, operation=operation)
         return (

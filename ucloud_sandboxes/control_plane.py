@@ -2785,7 +2785,43 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             updated["manifest_digest"] = ""
         return updated
 
+    @contextmanager
+    def _startup_request_admission(self, *, creating: bool = False):
+        # Bulk startup work shares the create budget; status, heartbeats and
+        # deletion stay outside it. Reject before buffering an upload body.
+        limiter = getattr(self, "sandbox_create_limiter", None)
+        if limiter is not None and not limiter.acquire(blocking=False):
+            if creating:
+                self.sandbox_create_busy_sampler.record(
+                    max_concurrent_sandbox_creates=self.max_concurrent_sandbox_creates,
+                )
+            # An unread request body must never become a second request on a
+            # reused reverse-proxy connection.
+            self.close_connection = True
+            self._write_json(
+                {
+                    "error": "gateway startup concurrency is exhausted",
+                    "error_code": "gateway_startup_busy",
+                    "retryable": True,
+                    "max_concurrent_sandbox_creates": self.max_concurrent_sandbox_creates,
+                },
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+                headers={"Retry-After": "1", "X-UCloud-Sandbox-Retryable": "true"},
+            )
+            yield False
+            return
+        try:
+            yield True
+        finally:
+            if limiter is not None:
+                limiter.release()
+
     def _create_sandbox_on_node(self) -> None:
+        with self._startup_request_admission(creating=True) as admitted:
+            if admitted:
+                self._create_sandbox_admitted()
+
+    def _create_sandbox_admitted(self) -> None:
         try:
             body = self._read_raw_body(max_bytes=DEFAULT_MAX_JSON_BODY_BYTES)
             raw = json.loads(body.decode("utf-8")) if body else None
@@ -2815,37 +2851,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             return
 
-        # Consume and validate the request before admission control. An early
-        # overload response with an unread body can corrupt the next request
-        # when a reverse proxy reuses its upstream HTTP/1.1 connection.
-        limiter = self.sandbox_create_limiter
-        if limiter is not None and not limiter.acquire(blocking=False):
-            self.sandbox_create_busy_sampler.record(
-                max_concurrent_sandbox_creates=self.max_concurrent_sandbox_creates,
-            )
-            self._write_json(
-                {
-                    "error": "gateway is busy creating sandboxes; retry shortly",
-                    "retryable": True,
-                    "max_concurrent_sandbox_creates": (
-                        self.max_concurrent_sandbox_creates
-                    ),
-                },
-                status=HTTPStatus.SERVICE_UNAVAILABLE,
-                headers={
-                    "Retry-After": str(SANDBOX_CREATE_BUSY_RETRY_AFTER_SECONDS),
-                    "X-UCloud-Sandbox-Retryable": "true",
-                },
-            )
-            return
-        limiter_acquired = limiter is not None
-
-        try:
-            self._create_sandbox_on_node_locked(spec)
-        finally:
-            if limiter_acquired:
-                limiter.release()
-        return
+        self._create_sandbox_on_node_locked(spec)
 
     def _create_sandbox_on_node_locked(
         self,
@@ -3711,7 +3717,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     ) -> dict[str, Any] | None:
         response = self._proxy_request(
             node_url,
-            "/v1/sandboxes",
+            f"/v1/sandboxes?sandbox_id={quote(sandbox_id, safe='')}",
             method="GET",
             timeout_seconds=NODE_RECOVERY_PROXY_TIMEOUT_SECONDS,
         )
@@ -4008,6 +4014,15 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         self._write_json(result, status=HTTPStatus.OK)
 
     def _route_sandbox_request(self, sandbox_id: str, path: str) -> None:
+        action = match_sandbox_http_route(self.command, path)
+        if action is not None and action.wakes:
+            with self._startup_request_admission() as admitted:
+                if admitted:
+                    self._route_sandbox_request_admitted(sandbox_id, path)
+        else:
+            self._route_sandbox_request_admitted(sandbox_id, path)
+
+    def _route_sandbox_request_admitted(self, sandbox_id: str, path: str) -> None:
         route = self.routing_store.get_sandbox(sandbox_id)
         if route is None:
             if self.command == "DELETE":

@@ -49,7 +49,9 @@ from .sandbox import (
     SandboxFileTooLargeError,
     SandboxOperation,
     SandboxRecord,
+    SandboxRestoreBusyError,
     SandboxSpec,
+    SandboxStartupBusyError,
     compose_activity_revision,
     validate_container_path,
 )
@@ -249,6 +251,7 @@ class DirectSandboxService:
         *,
         process_runner: DirectProcessRunner | None = None,
         max_concurrent_restores: int = 8,
+        max_concurrent_startups: int = 8,
         idle_park_seconds: float = 0.0,
         deletion_reconcile_interval_seconds: float = 5.0,
         image_reconcile_interval_seconds: float = 300.0,
@@ -256,6 +259,8 @@ class DirectSandboxService:
     ) -> None:
         if max_concurrent_restores < 1:
             raise ValueError("max_concurrent_restores must be positive")
+        if max_concurrent_startups < 1:
+            raise ValueError("max_concurrent_startups must be positive")
         if idle_park_seconds < 0:
             raise ValueError("idle_park_seconds cannot be negative")
         if deletion_reconcile_interval_seconds <= 0:
@@ -267,6 +272,8 @@ class DirectSandboxService:
         self.process_runner = process_runner or DirectProcessRunner()
         self.telemetry = telemetry or Telemetry.disabled("direct-sandbox-service")
         self._restore_slots = threading.Semaphore(max_concurrent_restores)
+        self._startup_slots = threading.BoundedSemaphore(max_concurrent_startups)
+        self._startup_admission_state = threading.local()
         self._active_capacity: ResourceQuantity | None = None
         self._runtime_metrics_provider: (
             Callable[[], NodeRuntimeMetrics | None] | None
@@ -509,7 +516,7 @@ class DirectSandboxService:
         operation: SandboxOperation,
     ) -> SandboxRecord:
         operation.validate_spec(spec)
-        with self._lock(spec.id, operation.generation):
+        with self.startup_admission(), self._request_lock(spec.id, operation.generation):
             with self._reserve_active_capacity(
                 spec.id,
                 operation.generation,
@@ -540,6 +547,14 @@ class DirectSandboxService:
     def get(self, sandbox_id: str) -> SandboxRecord | None:
         registration = self.provisioner.registry.get(sandbox_id)
         return None if registration is None else self._record(registration)
+
+    def get_snapshot(self, sandbox_id: str) -> SandboxRecord | None:
+        """Read one inventory record without storage RPCs or lifecycle waits."""
+
+        registration = self.provisioner.registry.get(sandbox_id)
+        if registration is None or registration.phase == "deleting":
+            return None
+        return self._record_snapshot(registration)
 
     def list(self) -> tuple[SandboxRecord, ...]:
         return tuple(
@@ -802,7 +817,7 @@ class DirectSandboxService:
         registration = self._require_registration(sandbox_id)
         if registration.sandbox_generation != generation:
             raise DirectWardenError("wake generation does not own direct sandbox")
-        with self._lock(sandbox_id, registration.sandbox_generation):
+        with self._request_lock(sandbox_id, registration.sandbox_generation):
             sandbox = registration.to_direct_sandbox()
             record = self.warden.inspect(sandbox)
             if record is None:
@@ -820,6 +835,7 @@ class DirectSandboxService:
             if record.state == HibernationState.PARKED:
                 timings: dict[str, float] = {}
                 with (
+                    self._restore_slot(),
                     self._reserve_active_capacity(
                         sandbox_id,
                         generation,
@@ -828,7 +844,6 @@ class DirectSandboxService:
                             memory_mb=registration.spec.memory_mb or 0,
                         ),
                     ),
-                    self._restore_slots,
                 ):
                     current = self._require_registration(sandbox_id)
                     if current.sandbox_generation != generation:
@@ -1143,7 +1158,7 @@ class DirectSandboxService:
         if max_stdout_bytes < 1 or max_stderr_bytes < 1:
             raise ValueError("direct exec output limits must be positive")
         registration = self._require_registration(sandbox_id)
-        with self._lock(sandbox_id, registration.sandbox_generation):
+        with self._request_lock(sandbox_id, registration.sandbox_generation):
             self.mark_activity(sandbox_id, registration.sandbox_generation)
             sandbox = registration.to_direct_sandbox()
             self._ensure_running(sandbox)
@@ -1392,12 +1407,13 @@ class DirectSandboxService:
         command = ("/bin/cat", "--", path)
         if registration.spec.filesystem.management_helper == "static":
             command = ("/.ucloud-job-init", "files", "read", path, str(max_bytes))
-        result = self.exec(
-            sandbox_id,
-            command,
-            max_stdout_bytes=max_bytes,
-            max_stderr_bytes=64 * 1024,
-        )
+        with self.startup_admission():
+            result = self.exec(
+                sandbox_id,
+                command,
+                max_stdout_bytes=max_bytes,
+                max_stderr_bytes=64 * 1024,
+            )
         if result.exit_code != 0:
             raise DirectWardenError(
                 f"sandbox file read failed with exit {result.exit_code}"
@@ -1421,13 +1437,14 @@ class DirectSandboxService:
                 path,
                 str(max(1, len(payload))),
             )
-        result = self.exec(
-            sandbox_id,
-            command,
-            input_bytes=payload,
-            max_stdout_bytes=64 * 1024,
-            max_stderr_bytes=64 * 1024,
-        )
+        with self.startup_admission():
+            result = self.exec(
+                sandbox_id,
+                command,
+                input_bytes=payload,
+                max_stdout_bytes=64 * 1024,
+                max_stderr_bytes=64 * 1024,
+            )
         if result.exit_code != 0:
             raise DirectWardenError(
                 f"sandbox file write failed with exit {result.exit_code}"
@@ -1452,6 +1469,39 @@ class DirectSandboxService:
     def _ensure_running(self, sandbox) -> None:
         self.ensure_running_with_timings(sandbox)
 
+    @contextmanager
+    def startup_admission(self):
+        """Share one nonblocking budget across creates, restores and file I/O.
+
+        A file request can restore its sandbox on the same thread. Reentrant
+        calls reuse that request's slot rather than requiring a second slot.
+        Running user commands and lightweight inventory do not consume slots.
+        """
+
+        if getattr(self._startup_admission_state, "admitted", False):
+            yield
+            return
+        if not self._startup_slots.acquire(blocking=False):
+            raise SandboxStartupBusyError("node startup concurrency is exhausted")
+        self._startup_admission_state.admitted = True
+        try:
+            yield
+        finally:
+            self._startup_admission_state.admitted = False
+            self._startup_slots.release()
+
+    @contextmanager
+    def _restore_slot(self):
+        # Waiting here occupies a request thread and a sandbox lifecycle lock.
+        # Reject before side effects so the caller can retry with backoff.
+        if not self._restore_slots.acquire(blocking=False):
+            raise SandboxRestoreBusyError("node restore concurrency is exhausted")
+        try:
+            with self.startup_admission():
+                yield
+        finally:
+            self._restore_slots.release()
+
     def ensure_running_with_timings(self, sandbox) -> dict[str, float]:
         started = time.monotonic()
         phase = started
@@ -1475,43 +1525,42 @@ class DirectSandboxService:
             timings["reconcile"] = (time.monotonic() - phase) * 1000
         if record.state == HibernationState.PARKED:
             registration = self._require_registration(sandbox.sandbox_id)
-            with self._reserve_active_capacity(
-                sandbox.sandbox_id,
-                registration.sandbox_generation,
-                ResourceQuantity(
-                    vcpu=registration.spec.cpus or 0,
-                    memory_mb=registration.spec.memory_mb or 0,
+            phase = time.monotonic()
+            with (
+                self._restore_slot(),
+                self._reserve_active_capacity(
+                    sandbox.sandbox_id,
+                    registration.sandbox_generation,
+                    ResourceQuantity(
+                        vcpu=registration.spec.cpus or 0,
+                        memory_mb=registration.spec.memory_mb or 0,
+                    ),
                 ),
             ):
-                phase = time.monotonic()
-                self._restore_slots.acquire()
                 timings["restore_queue"] = (time.monotonic() - phase) * 1000
-                try:
-                    registration = self._require_registration(sandbox.sandbox_id)
-                    if registration.sandbox_generation != sandbox.sandbox_generation:
-                        raise DirectWardenError(
-                            "wake generation does not own direct sandbox"
-                        )
-                    phase = time.monotonic()
-                    self.provisioner.ensure_network(registration)
-                    timings["restore_network"] = (time.monotonic() - phase) * 1000
-                    phase = time.monotonic()
-                    warden_timings: dict[str, float] = {}
-                    with _translate_storage_capacity():
-                        record = self.warden.resume(
-                            sandbox,
-                            operation_id=f"wake:{uuid4().hex}",
-                            timings=warden_timings,
-                        )
-                    timings["restore"] = (time.monotonic() - phase) * 1000
-                    timings.update(
-                        {
-                            f"restore_{name}": elapsed_ms
-                            for name, elapsed_ms in warden_timings.items()
-                        }
+                registration = self._require_registration(sandbox.sandbox_id)
+                if registration.sandbox_generation != sandbox.sandbox_generation:
+                    raise DirectWardenError(
+                        "wake generation does not own direct sandbox"
                     )
-                finally:
-                    self._restore_slots.release()
+                phase = time.monotonic()
+                self.provisioner.ensure_network(registration)
+                timings["restore_network"] = (time.monotonic() - phase) * 1000
+                phase = time.monotonic()
+                warden_timings: dict[str, float] = {}
+                with _translate_storage_capacity():
+                    record = self.warden.resume(
+                        sandbox,
+                        operation_id=f"wake:{uuid4().hex}",
+                        timings=warden_timings,
+                    )
+                timings["restore"] = (time.monotonic() - phase) * 1000
+                timings.update(
+                    {
+                        f"restore_{name}": elapsed_ms
+                        for name, elapsed_ms in warden_timings.items()
+                    }
+                )
         if record.state != HibernationState.RUNNING:
             raise DirectWardenError(
                 f"direct sandbox cannot accept traffic in {record.state.value}"
@@ -1710,6 +1759,13 @@ class DirectSandboxService:
                 raise RuntimeError("direct lifecycle lock reference underflow")
             if entry.users == 0 and self._locks.get(key) is entry:
                 self._locks.pop(key)
+
+    @contextmanager
+    def _request_lock(self, sandbox_id: str, generation: int) -> Iterator[None]:
+        with self._try_lock(sandbox_id, generation) as acquired:
+            if not acquired:
+                raise SandboxStartupBusyError("sandbox lifecycle is busy")
+            yield
 
     @contextmanager
     def _lock(self, sandbox_id: str, generation: int) -> Iterator[None]:

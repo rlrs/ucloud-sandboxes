@@ -112,7 +112,10 @@ def evaluate_scale(
         policy,
         live_signals,
     ) and not any(node.is_idle for node in ready_nodes)
-    create_pressure_scale_up = _create_pressure_requires_capacity(
+    backlog_scale_up = _startup_backlog_requires_capacity(
+        policy, demand, ready_nodes, live_signals
+    )
+    create_pressure_scale_up = backlog_scale_up or _create_pressure_requires_capacity(
         policy,
         live_signals,
     )
@@ -414,6 +417,15 @@ def evaluate_scale(
             max(1, live_signals.sandbox_create_limit),
             max(1, policy.create_target_concurrency_per_node),
         )
+        if backlog_scale_up:
+            pipeline_nodes = max(
+                pipeline_nodes,
+                len(ready_nodes)
+                + _ceil_div(
+                    demand.pending_count,
+                    max(1, policy.create_target_concurrency_per_node),
+                ),
+            )
         target_nodes = min(
             policy.max_nodes,
             max(
@@ -440,6 +452,10 @@ def evaluate_scale(
         )
         if create_count > 0:
             reason = (
+                f"{demand.pending_count} capacity request(s) queued for "
+                f"{demand.oldest_capacity_pending_seconds}s; targeting "
+                f"{target_nodes} temporary startup node(s)"
+            ) if backlog_scale_up else (
                 "sandbox create pipeline saturated at "
                 f"{live_signals.sandbox_create_limit} concurrent request(s); "
                 f"targeting {target_nodes} temporary node(s) after "
@@ -571,6 +587,33 @@ def _create_pressure_requires_capacity(
         # accelerate/magnify a real backlog without reacting to healthy cold
         # creates merely occupying request slots.
         and _live_pressure_requires_capacity(policy, signals)
+    )
+
+
+def _startup_backlog_requires_capacity(
+    policy: ScalePolicy,
+    demand: SandboxDemand,
+    ready_nodes: list[SandboxNode],
+    signals: LiveScaleSignals | None,
+) -> bool:
+    """A sustained capacity queue can justify bounded startup headroom.
+
+    Count durable capacity demands, not HTTP retries or warm reservations.
+    Another VM cannot help a short burst or a pool with an unused ready worker.
+    The existing headroom and provisioning caps still bound the purchase.
+    """
+
+    return bool(
+        policy.create_pressure_enabled
+        and demand.pending_count >= max(1, policy.create_target_concurrency_per_node)
+        and demand.oldest_capacity_pending_seconds
+        >= max(1, policy.create_pressure_window_seconds)
+        and ready_nodes
+        and not any(node.is_idle for node in ready_nodes)
+        and signals is not None
+        and signals.latest_observation_age_seconds is not None
+        and signals.latest_observation_age_seconds
+        <= policy.live_pressure_fresh_seconds
     )
 
 

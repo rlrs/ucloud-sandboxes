@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -150,6 +151,7 @@ class EnvironmentContractTests(unittest.TestCase):
         from ucloud_sandboxes.direct_service import DirectSandboxService
 
         service = object.__new__(DirectSandboxService)
+        service.startup_admission = nullcontext
         spec = self.spec(filesystem={"management_helper": "static"})
         service._require_registration = Mock(return_value=SimpleNamespace(spec=spec))
         service.exec = Mock(return_value=SimpleNamespace(exit_code=0, stdout=b"data"))

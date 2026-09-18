@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.5.35 - 2026-09-18
+
+- Share startup admission across creates, restores and file transfers; reject
+  before buffering uploads and keep gateway status/control traffic independent.
+- Request bounded early worker headroom for sustained capacity queues, excluding
+  reservation age and non-capacity failures, with provisioning credit intact.
+- Use targeted sandbox inventory snapshots and cached publication metadata to
+  avoid full-node storage RPC amplification during startup polling.
+- Return explicit retryable restore/startup rejections before tool execution,
+  and pass the scheduler's startup concurrency limit through worker bootstrap.
+- Include the deployed relay descriptor-limit and terminal caller-loss fixes.
+
 ## 0.5.34 - 2026-09-18
 
 - Balance image builds across live builder load while preserving active-build

@@ -2989,6 +2989,7 @@ class RoutingStore:
                     oldest_pending_seconds,
                     int((now - created_at).total_seconds()),
                 )
+        oldest_capacity_pending_seconds = max(0, oldest_pending_seconds)
         for item in prepared:
             prepared_placement_requests.append(
                 SandboxPlacementRequest(
@@ -3008,6 +3009,7 @@ class RoutingStore:
             pending_count=pending_count,
             suppressed_pending_count=suppressed_pending_count,
             oldest_pending_seconds=max(0, oldest_pending_seconds),
+            oldest_capacity_pending_seconds=oldest_capacity_pending_seconds,
             placement_requests=tuple(placement_requests),
             prepared_placement_requests=tuple(prepared_placement_requests),
         )
@@ -4089,6 +4091,7 @@ def sandbox_demand_from_routing_state(
                 oldest_pending_seconds,
                 int((now - created_at).total_seconds()),
             )
+    oldest_capacity_pending_seconds = max(0, oldest_pending_seconds)
     for item in state.prepared.values():
         if item.is_expired(now):
             continue
@@ -4110,6 +4113,7 @@ def sandbox_demand_from_routing_state(
         pending_count=pending_count,
         suppressed_pending_count=suppressed_pending_count,
         oldest_pending_seconds=max(0, oldest_pending_seconds),
+        oldest_capacity_pending_seconds=oldest_capacity_pending_seconds,
         placement_requests=tuple(placement_requests),
         prepared_placement_requests=tuple(prepared_placement_requests),
     )

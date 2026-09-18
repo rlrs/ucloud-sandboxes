@@ -3696,7 +3696,7 @@ class ControlPlaneTests(unittest.TestCase):
         )
         self.assertLess(elapsed, 5)
 
-    def test_gateway_create_reads_body_before_admission_and_caps_json(self) -> None:
+    def test_gateway_create_rejects_overload_and_caps_admitted_json(self) -> None:
         with _temporary_root() as root:
             gateway = _gateway_server(
                 root,
@@ -3852,7 +3852,7 @@ class ControlPlaneTests(unittest.TestCase):
             record: dict[str, object] = {}
 
             def do_GET(self) -> None:
-                if self.path == "/v1/sandboxes":
+                if self.path.split("?", 1)[0] == "/v1/sandboxes":
                     self._write_json({"sandboxes": [type(self).record]})
                     return
                 self.send_response(404)
@@ -3934,7 +3934,7 @@ class ControlPlaneTests(unittest.TestCase):
             operation: dict[str, object] | None = None
 
             def do_GET(self) -> None:
-                if self.path == "/v1/sandboxes":
+                if self.path.split("?", 1)[0] == "/v1/sandboxes":
                     sandboxes: list[dict[str, object]] = []
                     if type(self).created_spec is not None and type(self).operation:
                         operation = type(self).operation or {}

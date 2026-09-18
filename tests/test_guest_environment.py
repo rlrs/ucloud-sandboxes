@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 from dataclasses import replace
 import os
 from pathlib import Path
@@ -193,6 +194,7 @@ class GuestEnvironmentTests(unittest.TestCase):
 
     def test_file_upload_handles_linux_filenames_and_directory_targets(self):
         service = Mock()
+        service.startup_admission = nullcontext
 
         def execute(sandbox_id, argv, *, input_bytes, **kwargs):
             completed = subprocess.run(argv, input=input_bytes, capture_output=True)
@@ -211,6 +213,7 @@ class GuestEnvironmentTests(unittest.TestCase):
 
     def test_root_level_upload_selects_root_parent(self):
         service = Mock()
+        service.startup_admission = nullcontext
         service.exec.return_value = Mock(exit_code=0)
         DirectSandboxService.write_file(service, "test", "/eval.sh", b"echo ok")
         script = service.exec.call_args.args[1][2]

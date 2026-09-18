@@ -101,6 +101,7 @@ from .model_relay import (
     DEFAULT_MAX_INFLIGHT_BYTES,
     DEFAULT_MAX_INFLIGHT_REQUESTS,
     DEFAULT_MAX_INFLIGHT_REQUESTS_PER_ROLLOUT,
+    RelayCallerUnavailable,
     RelayRequest,
     create_model_relay_app,
 )
@@ -1363,14 +1364,33 @@ def _post_gateway_sandbox_lifecycle(
             )
             break
         except HTTPError as exc:
+            # HTTPError owns the response socket even though open() raised.
+            # Close every failure, including exhausted retries and 5xx errors.
+            try:
+                body = exc.read(_MAX_CONTROL_RESPONSE_BYTES + 1)
+                failure = (
+                    json.loads(body)
+                    if body and len(body) <= _MAX_CONTROL_RESPONSE_BYTES
+                    else {}
+                )
+            except (ValueError, OSError):
+                failure = {}
+            finally:
+                exc.close()
+            permanent = exc.code in {404, 410} or (
+                exc.code == 409
+                and isinstance(failure, dict)
+                and failure.get("retryable") is False
+            )
+            if action == "wake" and permanent:
+                raise RelayCallerUnavailable(exc.code) from exc
             # Another lifecycle request can win the fence between enqueue and
             # this explicit park, and a concurrent status/log read can briefly
             # hold the same activity fence. The bounded idempotent retry
             # observes the stable result without giving transient reads a
             # separate failure policy.
-            if exc.code != 409 or attempt >= 100:
+            if permanent or exc.code != 409 or attempt >= 100:
                 raise
-            exc.close()
             time.sleep(0.05)
     transport_epoch = headers.get("X-UCloud-Sandbox-Transport-Epoch", "").strip()
     return transport_epoch or None

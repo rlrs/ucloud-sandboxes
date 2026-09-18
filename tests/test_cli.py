@@ -234,6 +234,39 @@ def allow_fixture_mutations(test):
 
 
 class CliTests(unittest.TestCase):
+    def test_relay_lifecycle_closes_errors_and_classifies_terminal_wakes(self) -> None:
+        request = SimpleNamespace(
+            sandbox_id="sandbox",
+            sandbox_generation=1,
+            request_id="request",
+            rollout_id="rollout",
+            created_at=1.0,
+        )
+        for status, body, terminal in (
+            (404, b"not found", True),
+            (410, b"gone", True),
+            (409, b'{"retryable":false}', True),
+            (503, b'{"retryable":true}', False),
+            (504, b"upstream timeout", False),
+            (403, b"forbidden", False),
+        ):
+            with self.subTest(status=status):
+                stream = io.BytesIO(body)
+                error = HTTPError("http://gateway", status, "failure", {}, stream)
+                with (
+                    patch.object(cli, "_post_bounded_json", side_effect=error) as post,
+                    patch.object(cli.time, "sleep") as sleep,
+                    self.assertRaises(
+                        cli.RelayCallerUnavailable if terminal else HTTPError
+                    ),
+                ):
+                    cli._post_gateway_sandbox_lifecycle(
+                        "http://gateway", "token", request, action="wake"
+                    )
+                self.assertTrue(stream.closed)
+                self.assertEqual(post.call_count, 1)
+                sleep.assert_not_called()
+
     def test_dashboard_policy_exposes_every_scale_policy_field(self) -> None:
         policy = ScalePolicy()
 

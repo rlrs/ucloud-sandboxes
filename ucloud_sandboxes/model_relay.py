@@ -114,6 +114,14 @@ class RelayWorkerResponse:
     headers: dict[str, str] = field(default_factory=dict)
 
 
+class RelayCallerUnavailable(Exception):
+    """The gateway definitively rejected this sandbox incarnation's wake."""
+
+    def __init__(self, status: int) -> None:
+        self.status = status
+        super().__init__(f"sandbox lifecycle is unavailable (HTTP {status})")
+
+
 @dataclass
 class RelayRequest:
     request_id: str
@@ -2800,6 +2808,7 @@ async def _notify_result(
         notifier is None
         or relay_request.sandbox_id is None
         or relay_request.wake_notified_at is not None
+        or not relay_request.delivery_pending
     ):
         return
     telemetry = _telemetry(request)
@@ -2812,12 +2821,33 @@ async def _notify_result(
             "sandbox.id": relay_request.sandbox_id,
         },
         links=((original_request_link,) if original_request_link is not None else ()),
-    ):
+    ) as span:
         async with relay_request.lifecycle_lock:
-            if relay_request.wake_notified_at is not None:
+            if (
+                relay_request.wake_notified_at is not None
+                or not relay_request.delivery_pending
+            ):
                 return
             try:
                 wake_transport_epoch = await notifier(relay_request)
+            except RelayCallerUnavailable as exc:
+                # A deleted/replaced caller cannot be woken. Acknowledge the
+                # durable model result so workers do not retry it indefinitely.
+                # Keep the original response for authenticated replay; do not
+                # claim that a wake succeeded or discard a sampled result.
+                span.set_attribute("relay.wake.outcome", "caller_unavailable")
+                span.set_attribute("gateway.lifecycle.status_code", exc.status)
+                LOGGER.warning(
+                    "model relay retained result %s but caller %s is unavailable "
+                    "(gateway HTTP %s)",
+                    relay_request.request_id,
+                    relay_request.sandbox_id,
+                    exc.status,
+                )
+                await _state(request).release_completed_response(
+                    relay_request.request_id
+                )
+                return
             except Exception as exc:
                 # The result is already committed. A 503 makes the worker retry its
                 # idempotent response POST, which re-attempts only the wake notification.

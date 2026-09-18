@@ -22,6 +22,7 @@ from ucloud_sandboxes.model_relay import (
     MANAGED_AGENT_LIFECYCLE,
     ModelRelayState,
     RESULT_NOTIFIER_KEY,
+    RelayCallerUnavailable,
     RelayRespondResult,
     RelaySqliteStore,
     RelayWorkerResponse,
@@ -244,6 +245,121 @@ async def enqueue_and_poll(
 
 
 class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
+    async def test_terminal_wake_releases_result_durably_without_claiming_wake(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "relay.sqlite3"
+            state = ModelRelayState(state_path=path)
+            token = (
+                await state.register_rollout(
+                    "deleted-caller", _agent_metadata("sandbox", 1)
+                )
+            )["registration_token"]
+            caller = await state.enqueue(
+                rollout_id="deleted-caller",
+                endpoint="/v1/responses",
+                body={"model": "m"},
+                headers={},
+            )
+            delivery = (
+                await state.poll(
+                    rollout_id="deleted-caller",
+                    registration_token=token,
+                    timeout_seconds=0,
+                    lease_seconds=30,
+                )
+            )[0]
+            response = RelayWorkerResponse(200, {"sample": "preserve-me"})
+            result = await state.respond(
+                request_id=delivery.request_id,
+                registration_token=token,
+                lease_id=delivery.lease_id,
+                response=response,
+                defer_delivery=True,
+            )
+            attempts = []
+
+            async def wake(_request):
+                attempts.append(1)
+                raise RelayCallerUnavailable(404)
+
+            class FakeRequest:
+                app = {STATE_KEY: state, RESULT_NOTIFIER_KEY: wake}
+
+            await asyncio.gather(
+                *[_notify_result(FakeRequest(), result) for _ in range(3)]
+            )
+            self.assertEqual(attempts, [1])
+            self.assertEqual((await caller.future).body, response.body)
+            self.assertIsNone(caller.wake_notified_at)
+            self.assertFalse(caller.delivery_pending)
+            self.assertEqual((await state.stats())["counters"]["wake_notifications"], 0)
+            await state.aclose()
+
+            recovered = ModelRelayState(state_path=path)
+            replay = await recovered.respond(
+                request_id=caller.request_id,
+                registration_token=token,
+                lease_id=delivery.lease_id,
+                response=RelayWorkerResponse(200, {"wrong": True}),
+                defer_delivery=True,
+            )
+            FakeRequest.app[STATE_KEY] = recovered
+            await _notify_result(FakeRequest(), replay)
+            self.assertEqual(attempts, [1])
+            self.assertEqual(replay.request.completed_response.body, response.body)
+            self.assertEqual((await recovered.stats())["delivery_pending"], 0)
+            await recovered.aclose()
+
+    async def test_transient_wake_failure_keeps_result_pending_for_retry(self) -> None:
+        state = ModelRelayState()
+        token = (
+            await state.register_rollout("busy-caller", _agent_metadata("sandbox", 1))
+        )["registration_token"]
+        caller = await state.enqueue(
+            rollout_id="busy-caller",
+            endpoint="/v1/responses",
+            body={},
+            headers={},
+        )
+        delivery = (
+            await state.poll(
+                rollout_id="busy-caller",
+                registration_token=token,
+                timeout_seconds=0,
+                lease_seconds=30,
+            )
+        )[0]
+        result = await state.respond(
+            request_id=caller.request_id,
+            registration_token=token,
+            lease_id=delivery.lease_id,
+            response=RelayWorkerResponse(200, {"ok": True}),
+            defer_delivery=True,
+        )
+
+        async def wake(_request):
+            raise TimeoutError("temporary gateway timeout")
+
+        class FakeRequest:
+            app = {STATE_KEY: state, RESULT_NOTIFIER_KEY: wake}
+
+        with self.assertRaises(web.HTTPServiceUnavailable):
+            await _notify_result(FakeRequest(), result)
+        self.assertTrue(caller.delivery_pending)
+        self.assertFalse(caller.future.done())
+
+        async def recovered_wake(_request):
+            return "same-owner"
+
+        FakeRequest.app[RESULT_NOTIFIER_KEY] = recovered_wake
+        await _notify_result(FakeRequest(), result)
+        await state.release_completed_response(caller.request_id)
+        self.assertEqual((await caller.future).body, {"ok": True})
+        self.assertIsNotNone(caller.wake_notified_at)
+        await state.aclose()
+
     async def test_maintenance_requeues_expired_lease_without_api_traffic(
         self,
     ) -> None:

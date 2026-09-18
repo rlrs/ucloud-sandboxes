@@ -1,11 +1,14 @@
 import json
+import os
 from pathlib import Path
 from ucloud_sandboxes.gvisor_distribution import GVISOR_COMMIT, GVISOR_SIDECARS
 from tempfile import TemporaryDirectory
 import unittest
+import zipfile
 
 from scripts.repack_node_bundle import (
     replace_direct_runtime,
+    replace_agent_package,
     sha256_file,
     validate_agent_runtime_dependencies,
     validate_source_bundle,
@@ -13,6 +16,32 @@ from scripts.repack_node_bundle import (
 
 
 class RepackNodeBundleTests(unittest.TestCase):
+    def test_repacked_agent_is_traversable_under_restrictive_umask(self):
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            runtime = root / "runtime"
+            (runtime / "site-packages").mkdir(parents=True)
+            wheel = root / "agent.whl"
+            with zipfile.ZipFile(wheel, "w") as archive:
+                archive.writestr("ucloud_sandboxes/relay/__init__.py", "")
+                archive.writestr("ucloud_sandboxes/cli.py", "")
+                archive.writestr(
+                    "ucloud_sandboxes-0.5.35.dist-info/WHEEL",
+                    "Root-Is-Purelib: true\nTag: py3-none-any\n",
+                )
+                archive.writestr(
+                    "ucloud_sandboxes-0.5.35.dist-info/METADATA",
+                    "Name: ucloud-sandboxes\nVersion: 0.5.35\n",
+                )
+            previous = os.umask(0o077)
+            try:
+                replace_agent_package(runtime, wheel)
+            finally:
+                os.umask(previous)
+            for directory in (runtime / "site-packages").rglob("*"):
+                if directory.is_dir():
+                    self.assertEqual(directory.stat().st_mode & 0o777, 0o755)
+
     def test_accepts_role_specific_builder_bundle(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)

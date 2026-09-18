@@ -209,6 +209,16 @@ def replace_agent_package(runtime_root: Path, wheel: Path) -> None:
             mode = member.external_attr >> 16
             target.chmod(stat.S_IMODE(mode) if mode else 0o644)
 
+    # Wheel archives commonly omit directory entries. Their implicit parents
+    # must remain traversable by the unprivileged heartbeat service even when
+    # the operator builds the bundle with a restrictive umask.
+    for name in (package_name, dist_info_name):
+        root = site_packages / name
+        root.chmod(0o755)
+        for directory in root.rglob("*"):
+            if directory.is_dir():
+                directory.chmod(0o755)
+
 
 def install_agent_dependency(runtime_root: Path, wheel: Path) -> None:
     """Install one explicit pure-Python dependency wheel into the agent."""

@@ -497,8 +497,10 @@ def _findings(report: dict[str, Any]) -> list[dict[str, str]]:
         if successful > 0:
             kind = "operation_errors_with_success"
             suffix = (
-                f" and {successful} successful completions; this indicates "
-                "retry/recovery activity rather than a continuously failing operation"
+                f" and {successful} successful completions "
+                f"({row['value'] / (row['value'] + successful):.1%} error share); "
+                "mixed outcomes do not establish recovery; inspect error traces "
+                "and recent rates"
             )
         else:
             kind = "operation_errors"

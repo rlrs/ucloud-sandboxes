@@ -700,6 +700,16 @@ class DirectSandboxService:
                 raise DirectWardenError(
                     f"direct sandbox cannot park from {record.state.value}"
                 )
+            if (
+                background
+                and self._idle_park_seconds > 0
+                and self.idle_for_seconds(
+                    sandbox_id, registration.sandbox_generation
+                ) < self._idle_park_seconds
+            ):
+                # The timer's observation may precede a wake or exec. Check
+                # again under the sandbox lock before acting on that snapshot.
+                return self._record(registration)
             with self.telemetry.span(
                 "sandbox.park",
                 attributes={
@@ -803,6 +813,7 @@ class DirectSandboxService:
             ):
                 record = self.warden.reconcile(sandbox)
             if record.state == HibernationState.RUNNING:
+                self.mark_activity(sandbox_id, generation)
                 return self._record(registration)
             if record.state != HibernationState.PARKED:
                 record = self.warden.reconcile(sandbox)
@@ -845,6 +856,10 @@ class DirectSandboxService:
                     f"direct sandbox cannot wake from {record.state.value}"
                 )
             self._forget_published_snapshot(sandbox_id, generation)
+            # A successful wake starts a fresh idle interval. Otherwise the
+            # idle parker can immediately checkpoint it before the triggering
+            # exec/file request acquires its activity lease.
+            self.mark_activity(sandbox_id, generation)
             return self._record(registration)
 
     def prepare_storage_native_move(

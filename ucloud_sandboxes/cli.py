@@ -1038,6 +1038,7 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         ),
         max_http_request_threads=config.gateway_max_http_request_threads,
         max_sandbox_resources=config.sandbox.resources,
+        wake_consolidation_policy=config.policy,
         telemetry=telemetry,
     )
     host, port = server.server_address
@@ -5555,6 +5556,7 @@ def dashboard_scale_policy_to_dict(policy: ScalePolicy) -> dict[str, Any]:
             policy.provisioning_scale_down_multiplier
         ),
         "program_aware_autoscaling_enabled": (policy.program_aware_autoscaling_enabled),
+        "parked_wake_consolidation_enabled": policy.parked_wake_consolidation_enabled,
         "model_wait_capacity_weight": policy.model_wait_capacity_weight,
         "model_wait_max_headroom_nodes": policy.model_wait_max_headroom_nodes,
         "default_node_resources": policy.default_node_resources.to_dict(),

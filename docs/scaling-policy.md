@@ -456,10 +456,48 @@ Scale-down requires a proven empty node or detached, durable parked storage:
 Detachment is different from migration: it does not need another running
 worker and does not immediately download the sandbox again. A later wake
 selects a node, imports the published descriptor, and activates it there. An
-attached parked sandbox still takes the fast same-worker wake path. An
+attached parked sandbox normally takes the fast same-worker wake path; the
+optional consolidation policy below can select an occupied destination. An
 ambiguous eviction leaves the route in `detaching`; it cannot be counted as
 free until a successful retry or a fresh complete heartbeat proves the local
 incarnation absent.
+
+### Consolidating on wake
+
+`policy.parked_wake_consolidation_enabled` defaults to `false`, including when
+loading an older deployment configuration without that field. When enabled,
+a published attached park can resume on an already occupied worker even if
+its current worker could run it. This lets sparsely used nodes empty over
+successive park/wake cycles and become eligible for normal idle scale-down.
+Running processes are not forcibly checkpointed or moved by this policy.
+
+Optional relocation requires:
+
+- source CPU at or below half the configured CPU target (35% with the default
+  70% target), and a destination with at least as many active sandboxes;
+- a strictly lower immutable job/node rank, so consolidation cannot bounce a
+  sandbox back and forth as utilization changes;
+- fresh complete inventories and runtime samples, open admission, and no
+  concurrent creates or storage errors/queues on either worker;
+- a cached exact image on the destination, normal migration capabilities and
+  disk admission, plus room for the full waking CPU/memory shape under the
+  configured utilization targets and PSI/storage pressure limits;
+- no active migration anywhere, no creating/waking/unknown routes on the
+  destination, and expiration of the gateway's 60-second consolidation
+  cooldown. The cooldown applies after reservation and successful completion;
+  it is process-local, while the active migration reservation is durable.
+
+The gateway reserves through the existing fenced migration journal while
+holding the placement lock, then performs transfer outside that lock. Retries
+resume the same migration instead of waking the old incarnation locally.
+The `sandbox_wake_consolidation` metric event records the sandbox, migration,
+source job, and destination job. If optional placement has no suitable target,
+the normal local wake remains available. Necessary relocation from a draining,
+missing, or pressured source remains independent of these optional limits.
+
+This is incremental consolidation at existing park points. It does not
+proactively evacuate running or non-parkable workloads, guarantee a minimum
+worker count, or bypass the configured idle grace and drain/stop proof.
 
 Publication also bounds the immutable snapshot chain. The prospective old
 remote layers plus new local sealed delta are compacted when they exceed eight

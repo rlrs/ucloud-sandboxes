@@ -1120,6 +1120,39 @@ class DirectProvisionerTests(unittest.TestCase):
             self.assertEqual(provisioner.start(), ())
             self.assertIn(("orphan", 1), quota.active_records)
 
+    def test_wake_refreshes_idle_interval_and_stale_timer_cannot_repark(self) -> None:
+        with TemporaryDirectory() as raw:
+            provisioner, _, _, _, warden = self.make(Path(raw).resolve())
+            service = DirectSandboxService(
+                provisioner, process_runner=FakeProcessRunner(), idle_park_seconds=1
+            )
+            created = self.create(service, self.spec())
+            key = (created.spec.id, created.generation)
+            service.park(created.spec.id, operation_id="park:before-wake")
+            service._last_activity[key] = monotonic() - 60
+            service.wake(
+                created.spec.id, generation=created.generation,
+                operation_id="wake:idle-test",
+            )
+            self.assertLess(service.idle_for_seconds(*key), 1)
+            with patch.object(warden, "park", wraps=warden.park) as park:
+                record = service.park(
+                    created.spec.id, operation_id="park:stale-timer", background=True
+                )
+                self.assertEqual(record.state, "running")
+                park.assert_not_called()
+
+            # An idempotent wake is activity too; an explicit park continues
+            # to work even within that refreshed timer interval.
+            service._last_activity[key] = monotonic() - 60
+            service.wake(
+                created.spec.id, generation=created.generation,
+                operation_id="wake:already-running",
+            )
+            self.assertLess(service.idle_for_seconds(*key), 1)
+            record = service.park(created.spec.id, operation_id="park:explicit")
+            self.assertEqual(record.state, "parked")
+
     def test_service_wakes_for_exec_and_supports_binary_file_input(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()

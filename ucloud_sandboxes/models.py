@@ -817,6 +817,7 @@ class ScalePolicy:
     provisioning_latency_lookback_seconds: int = 7 * 24 * 60 * 60
     provisioning_scale_down_multiplier: float = 2.0
     program_aware_autoscaling_enabled: bool = False
+    parked_wake_consolidation_enabled: bool = False
     model_wait_capacity_weight: float = 0.10
     model_wait_max_headroom_nodes: int = 1
     default_node_resources: ResourceQuantity = ResourceQuantity(

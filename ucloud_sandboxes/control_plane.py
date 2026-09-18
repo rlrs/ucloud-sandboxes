@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+from concurrent.futures import Future, TimeoutError as FutureTimeoutError
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
@@ -122,6 +123,7 @@ from .routing import (
     is_worker_detachable_parked_route,
     route_with_inventory_snapshot,
 )
+from .consolidation import can_consolidate_wake, consolidation_rank
 from .sandbox import SandboxSpec, sandbox_spec_fingerprint, sandbox_specs_match
 
 
@@ -145,11 +147,14 @@ IMAGE_BUILD_PROXY_TIMEOUT_SECONDS = 30 * 60
 IMAGE_PULL_PROXY_TIMEOUT_SECONDS = 30 * 60
 IMAGE_PULL_RETRY_ATTEMPTS = 3
 IMAGE_PULL_RETRY_BASE_DELAY_SECONDS = 0.25
+SANDBOX_IMAGE_WAIT_SECONDS = 2.0
+MAX_BACKGROUND_CREATE_IMAGE_PULLS = 32
 # Creation includes quota allocation, rootfs preparation, networking, and
 # runsc startup. Those idempotent lifecycle operations can legitimately queue
 # behind other creates on a dense direct node.
 SANDBOX_CREATE_PROXY_TIMEOUT_SECONDS = 10 * 60
 DEFAULT_PROXY_TIMEOUT_SECONDS = 60
+NODE_CONNECT_TIMEOUT_SECONDS = 5
 DEFAULT_MAX_PROXY_BODY_BYTES = 256 * 1024 * 1024
 DEFAULT_MAX_PROXY_RESPONSE_BYTES = 16 * 1024 * 1024
 DEFAULT_MAX_PROXY_ERROR_BYTES = 1024 * 1024
@@ -527,6 +532,68 @@ class ProxiedResponse:
         return decoded if isinstance(decoded, dict) else {}
 
 
+class CreateImagePullTasks:
+    """Share cold pulls without retaining HTTP admission slots indefinitely."""
+
+    def __init__(self) -> None:
+        self.lock = RLock()
+        self.tasks: dict[tuple[str, ...], Future[ProxiedResponse | None]] = {}
+
+    def run(
+        self, key: tuple[str, ...], pull: Callable[[], ProxiedResponse | None]
+    ) -> ProxiedResponse | None:
+        with self.lock:
+            task = self.tasks.get(key)
+            if task is None:
+                # Completed results need no durable cache: the node inventory
+                # is authoritative, including after eviction or a node restart.
+                self.tasks = {k: v for k, v in self.tasks.items() if not v.done()}
+                if len(self.tasks) >= MAX_BACKGROUND_CREATE_IMAGE_PULLS:
+                    return _create_image_pull_pending_response()
+                task = Future()
+                self.tasks[key] = task
+
+                def work() -> None:
+                    try:
+                        task.set_result(pull())
+                    except BaseException as exc:
+                        task.set_exception(exc)
+
+                try:
+                    Thread(target=work, daemon=True, name="create-image-pull").start()
+                except BaseException:
+                    del self.tasks[key]
+                    raise
+        try:
+            return task.result(timeout=SANDBOX_IMAGE_WAIT_SECONDS)
+        except FutureTimeoutError:
+            if task.done():
+                return task.result()
+            return _create_image_pull_pending_response()
+        finally:
+            with self.lock:
+                if task.done() and self.tasks.get(key) is task:
+                    del self.tasks[key]
+
+
+def _create_image_pull_pending_response() -> ProxiedResponse:
+    return ProxiedResponse(
+        HTTPStatus.SERVICE_UNAVAILABLE,
+        {
+            "Content-Type": "application/json",
+            "Retry-After": "2",
+            "X-UCloud-Sandbox-Retryable": "true",
+        },
+        json.dumps(
+            {
+                "error": "sandbox image preparation is still in progress",
+                "error_code": "image_warmup_pending",
+                "retryable": True,
+            }
+        ).encode("utf-8"),
+    )
+
+
 _NODE_HTTP_POOL = urllib3.PoolManager(
     num_pools=NODE_HTTP_POOL_ORIGINS,
     maxsize=NODE_HTTP_POOL_CONNECTIONS_PER_ORIGIN,
@@ -561,8 +628,10 @@ def _open_node_request(
                 redirect=False,
                 retries=False,
                 preload_content=False,
-                pool_timeout=timeout,
-                timeout=urllib3.Timeout(connect=timeout, read=timeout),
+                pool_timeout=min(timeout, NODE_CONNECT_TIMEOUT_SECONDS),
+                timeout=urllib3.Timeout(
+                    connect=min(timeout, NODE_CONNECT_TIMEOUT_SECONDS), read=timeout
+                ),
             )
         except Urllib3HTTPError as exc:
             raise error.URLError(exc) from exc
@@ -596,10 +665,13 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     registry_layer_cache: RegistryLayerMetadataCache | None
     registry_usage_store: RegistryUsageStore | None
     sandbox_create_limiter: BoundedSemaphore | None
+    create_image_pull_tasks: CreateImagePullTasks
     sandbox_create_busy_sampler: GatewayBusySampler
     max_concurrent_sandbox_creates: int
     create_target_concurrency_per_node: int
     max_sandbox_resources: ResourceQuantity
+    wake_consolidation_policy: ScalePolicy = ScalePolicy()
+    wake_consolidation_next_at: float = 0.0
     server_version = "ucloud-sandboxes-control-plane/0.1"
 
     @traced_http_request
@@ -1289,9 +1361,16 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         *,
         requested_node_id: str,
         require_active_resources: bool = False,
+        consolidation_source: NodeHeartbeat | None = None,
     ) -> NodeHeartbeat | None:
         routes = self.routing_store.sandbox_routes_readonly()
         active_migrations = self.routing_store.sandbox_migrations(active_only=True)
+        if consolidation_source is not None and (
+            active_migrations
+            or time.monotonic() < self.wake_consolidation_next_at
+            or not is_portable_parked_route(source)
+        ):
+            return None
         ready_heartbeats = self._ready_sandbox_heartbeats()
         source_heartbeat = next(
             (
@@ -1362,9 +1441,30 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 available,
             ):
                 continue
+            if consolidation_source is not None:
+                if not can_consolidate_wake(
+                    consolidation_source,
+                    heartbeat,
+                    source.resources,
+                    self.wake_consolidation_policy,
+                    now=utc_now(),
+                ) or not _heartbeat_has_image(
+                    heartbeat, str(source.spec.get("image") or "")
+                ):
+                    continue
+                # A fresh CPU sample cannot account for in-flight admission.
+                if any(
+                    route.node_id == heartbeat.node_id
+                    and route.worker_state != "detached"
+                    and route.state in {"creating", "waking", "unknown"}
+                    for route in routes
+                ):
+                    continue
             candidates.append(heartbeat)
         if not candidates:
             return None
+        if consolidation_source is not None:
+            return min(candidates, key=consolidation_rank)
         image = str(source.spec.get("image") or "")
         return min(
             candidates,
@@ -3003,8 +3103,14 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     "container.image.name": spec.image,
                 },
             ) as span:
-                initial_cache_hit = self._node_has_image(heartbeat, spec.image)
-                image_response = self._ensure_image_on_node(heartbeat, spec.image)
+                initial_cache_hit = _heartbeat_has_image(
+                    heartbeat,
+                    spec.image,
+                    require_digest=self._managed_image_requires_digest_cache_identity(
+                        spec.image
+                    ),
+                )
+                image_response = self._ensure_image_for_create(heartbeat, spec.image)
                 span.set_attribute("cache_hit", image_response is None)
                 span.set_attribute("initial_cache_hit", initial_cache_hit)
                 span.set_attribute(
@@ -3024,6 +3130,15 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                             "error_code",
                             str(pull_payload.get("error_code") or ""),
                         )
+            if (
+                image_response is not None
+                and image_response.json().get("error_code") == "image_warmup_pending"
+            ):
+                # Retain the assigned generation while its pull continues.
+                # Retrying must never move an ambiguous create to another node.
+                root.set_attribute("outcome", "image_warmup_pending")
+                self._send_proxied_response(image_response)
+                return
             if image_response is not None and image_response.status >= 400:
                 removed = self.routing_store.delete_sandbox_if_current(
                     spec.id,
@@ -3308,6 +3423,14 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             self._write_route_worker_unreachable(route)
             return
         self._ensure_registry_route_reference(route, touch=True)
+        heartbeat = self._heartbeat_for_route(job_id=route.job_id)
+        if heartbeat is None:
+            self._write_route_worker_unreachable(route)
+            return
+        image_response = self._ensure_image_for_create(heartbeat, spec.image)
+        if image_response is not None and image_response.status >= 400:
+            self._send_proxied_response(image_response)
+            return
         response = self._proxy_request(
             route.node_url,
             "/v1/sandboxes",
@@ -3651,7 +3774,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 with self.telemetry.span(
                     "gateway.image_build_select_builder",
                 ) as span:
-                    heartbeat = self._select_builder_node()
+                    heartbeat = self._select_builder_node(image_id=spec.id)
                     span.set_attribute(
                         "selected_node_id", heartbeat.node_id if heartbeat else ""
                     )
@@ -4766,7 +4889,18 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             ready_source_ids = {
                 heartbeat.node_id for heartbeat in self._ready_sandbox_heartbeats()
             }
-            if (
+            active_migration = next(
+                (
+                    migration
+                    for migration in self.routing_store.sandbox_migrations(
+                        active_only=True
+                    )
+                    if migration.sandbox_id == route.sandbox_id
+                ),
+                None,
+            )
+            consolidation_destination = None
+            local_can_wake = (
                 route.worker_state == "attached"
                 and source_heartbeat is not None
                 and source_heartbeat.node_id in ready_source_ids
@@ -4775,6 +4909,22 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     active_request,
                     _node_available_resources(source_heartbeat, routes),
                 )
+            )
+            if (
+                local_can_wake
+                and active_migration is None
+                and self.wake_consolidation_policy.parked_wake_consolidation_enabled
+            ):
+                consolidation_destination = self._select_migration_destination(
+                    route,
+                    requested_node_id="",
+                    require_active_resources=True,
+                    consolidation_source=source_heartbeat,
+                )
+            if (
+                local_can_wake
+                and active_migration is None
+                and consolidation_destination is None
             ):
                 self.routing_store.clear_pending(
                     _wake_pending_demand_id(route.sandbox_id)
@@ -4841,10 +4991,13 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 None,
             )
             if active_migration is None:
-                destination = self._select_migration_destination(
-                    route,
-                    requested_node_id="",
-                    require_active_resources=True,
+                destination = (
+                    consolidation_destination
+                    or self._select_migration_destination(
+                        route,
+                        requested_node_id="",
+                        require_active_resources=True,
+                    )
                 )
                 if destination is None:
                     _pending, demand = self.routing_store.upsert_pending_with_demand(
@@ -4872,11 +5025,26 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     return None
                 active_migration = self.routing_store.begin_sandbox_migration(
                     route,
-                    migration_id=f"wake-{uuid4().hex}",
+                    migration_id=(
+                        f"consolidate-wake-{uuid4().hex}"
+                        if consolidation_destination
+                        else f"wake-{uuid4().hex}"
+                    ),
                     destination_node_id=destination.node_id,
                     destination_job_id=destination.job_id,
                     destination_node_url=destination.node_url or "",
                 )
+                if consolidation_destination is not None:
+                    type(self).wake_consolidation_next_at = time.monotonic() + 60
+                    self.metrics_store.append(
+                        "sandbox_wake_consolidation",
+                        {
+                            "sandbox_id": route.sandbox_id,
+                            "migration_id": active_migration.migration_id,
+                            "source_job_id": route.job_id,
+                            "destination_job_id": destination.job_id,
+                        },
+                    )
 
         # The planned migration now reserves the destination shape in normal
         # placement. Clear capacity demand and release both placement locks
@@ -4904,6 +5072,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 },
             )
             return None
+        if migration.migration_id.startswith("consolidate-wake-"):
+            type(self).wake_consolidation_next_at = time.monotonic() + 60
         destination_route = self.routing_store.get_sandbox_readonly(route.sandbox_id)
         return (
             self._mark_sandbox_waking(destination_route)
@@ -5566,7 +5736,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             ),
         )
 
-    def _select_builder_node(self) -> NodeHeartbeat | None:
+    def _select_builder_node(self, *, image_id: str = "") -> NodeHeartbeat | None:
         candidates = [
             heartbeat
             for heartbeat in self._ready_heartbeats()
@@ -5576,9 +5746,73 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         ]
         if not candidates:
             return None
+        # A retry must reach the active build's owner even when that node is
+        # busier than its peers. Probe before balancing new work so node-local
+        # build deduplication and conflicting-spec checks still apply.
+        if image_id and len(candidates) > 1:
+            for heartbeat in candidates:
+                response = self._proxy_request(
+                    heartbeat.node_url or "",
+                    f"/v1/images/builds/{quote(image_id, safe='')}",
+                    method="GET",
+                    timeout_seconds=NODE_RECONCILE_PROXY_TIMEOUT_SECONDS,
+                )
+                if response.status == HTTPStatus.NOT_FOUND:
+                    continue
+                if response.status != HTTPStatus.OK:
+                    return None
+                build = response.json().get("build")
+                if not isinstance(build, dict) or build.get("status") not in {
+                    "running",
+                    "succeeded",
+                    "failed",
+                }:
+                    return None
+                if build["status"] == "running":
+                    return heartbeat
+        if len(candidates) > 1:
+            # Periodic heartbeats can lag an entire burst of build submissions.
+            # Refresh load from the authenticated node before choosing a peer.
+            refreshed = []
+            for heartbeat in candidates:
+                response = self._proxy_request(
+                    heartbeat.node_url or "",
+                    "/v1/heartbeat",
+                    method="GET",
+                    timeout_seconds=NODE_RECONCILE_PROXY_TIMEOUT_SECONDS,
+                )
+                raw = response.json().get("heartbeat")
+                if response.status != HTTPStatus.OK or not isinstance(raw, dict):
+                    continue
+                try:
+                    current = heartbeat_from_dict(raw)
+                except (ValueError, TypeError):
+                    continue
+                if (
+                    current is None
+                    or current.job_id != heartbeat.job_id
+                    or current.node_id != heartbeat.node_id
+                    or current.deployment_id != heartbeat.deployment_id
+                    or current.node_epoch != heartbeat.node_epoch
+                    or current.draining
+                    or not current.admission_open
+                ):
+                    continue
+                refreshed.append(
+                    replace(
+                        heartbeat,
+                        active_image_builds=current.active_image_builds,
+                        physical_disk_free_mb=current.physical_disk_free_mb,
+                    )
+                )
+            candidates = refreshed
+            if not candidates:
+                return None
         return sorted(
             candidates,
             key=lambda heartbeat: (
+                heartbeat.active_image_builds,
+                -heartbeat.physical_disk_free_mb,
                 -heartbeat.free_resources.disk_mb,
                 -heartbeat.free_resources.memory_mb,
                 -heartbeat.free_resources.vcpu,
@@ -5841,6 +6075,34 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             )
             is not None
         )
+
+    def _ensure_image_for_create(
+        self, heartbeat: NodeHeartbeat, image: str
+    ) -> ProxiedResponse | None:
+        if not image.strip() or _heartbeat_has_image(
+            heartbeat,
+            image,
+            require_digest=self._managed_image_requires_digest_cache_identity(image),
+        ):
+            return None
+
+        def pull() -> ProxiedResponse | None:
+            # The route can be canceled while this task runs. Protect the
+            # registry image independently of that route's lifetime.
+            self._ensure_registry_image_lease(
+                image,
+                _registry_operation_lease_owner("create-image-pull", key),
+                touch=True,
+            )
+            return self._ensure_image_on_node(heartbeat, image)
+
+        key = (
+            heartbeat.job_id,
+            heartbeat.node_epoch,
+            heartbeat.node_url or "",
+            image,
+        )
+        return self.create_image_pull_tasks.run(key, pull)
 
     def _ensure_image_on_node(
         self,
@@ -6298,6 +6560,7 @@ def build_server(
     max_http_request_threads: int = DEFAULT_MAX_GATEWAY_HTTP_REQUEST_THREADS,
     build_context_store_dir: Path | None = None,
     max_sandbox_resources: ResourceQuantity | None = None,
+    wake_consolidation_policy: ScalePolicy | None = None,
     telemetry: Telemetry | None = None,
 ) -> HighBacklogThreadingHTTPServer:
     credentials = {
@@ -6347,6 +6610,8 @@ def build_server(
     class BoundHandler(ControlPlaneHandler):
         pass
 
+    BoundHandler.wake_consolidation_policy = wake_consolidation_policy or ScalePolicy()
+    BoundHandler.wake_consolidation_next_at = 0.0
     BoundHandler.store = store
     # UCloud ingress owns public client connection reuse. Do not let its idle
     # upstream HTTP/1.1 pool consume gateway request threads between requests.
@@ -6406,6 +6671,7 @@ def build_server(
         else None
     )
     BoundHandler.sandbox_create_busy_sampler = GatewayBusySampler(metrics_store)
+    BoundHandler.create_image_pull_tasks = CreateImagePullTasks()
     BoundHandler.telemetry = resolved_telemetry
     return HighBacklogThreadingHTTPServer(
         (host, port),

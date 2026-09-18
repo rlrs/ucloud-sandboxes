@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.5.34 - 2026-09-18
+
+- Balance image builds across live builder load while preserving active-build
+  ownership and retry deduplication; report configured builder capacity caps.
+- Bound cold-image preparation waits and node connection/pool acquisition so
+  provisioning retries release gateway request and create-admission capacity.
+- Refresh activity after wake and recheck idle parking under the sandbox lock
+  to prevent immediate re-parking before a resumed command starts.
+- Add optional consolidation of published parked sandboxes onto occupied
+  workers at wake, with pressure/headroom checks, durable migration fencing,
+  stable placement order, and a cooldown. Legacy configurations stay disabled.
+- Report mixed operation errors and successes without implying recovery, and
+  document the production health, capacity, and live restoration checks.
+
 ## 0.5.27 - 2026-09-04
 
 - Fenced deletion by sandbox generation and made explicit wake honor node

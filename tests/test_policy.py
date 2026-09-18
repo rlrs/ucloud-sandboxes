@@ -1323,6 +1323,22 @@ class ScalePolicyTests(unittest.TestCase):
 
         self.assertEqual(decision.stops, ())
 
+    def test_builder_cap_reports_unmet_prepared_demand(self) -> None:
+        for cap in (0, 1):
+            with self.subTest(cap=cap):
+                decision = evaluate_builder_scale(
+                    [node("builder-1", active_image_builds=4)],
+                    pending_builds=5,
+                    prepared_builders=16,
+                    policy=ScalePolicy(),
+                    max_builder_nodes=cap,
+                )
+                self.assertEqual(decision.creates, 0)
+                self.assertIn(
+                    f"builder demand requests 16 node(s), capped by max_builder_nodes={cap}",
+                    decision.reasons,
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

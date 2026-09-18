@@ -784,6 +784,8 @@ def _decode_policy(
     if not isinstance(raw, dict):
         raise ValueError("policy must be a JSON object")
     defaults = ScalePolicy()
+    # Existing deployments retain local wake placement until explicitly enabled.
+    raw = {"parked_wake_consolidation_enabled": False, **raw}
     expected = {item.name for item in fields(defaults)} - _RUNTIME_POLICY_FIELDS
     _require_exact_keys("policy", raw, expected)
     values: dict[str, object] = {}

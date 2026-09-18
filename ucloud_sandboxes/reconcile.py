@@ -139,10 +139,15 @@ def evaluate_builder_scale(
     max_builder_nodes = max(0, max_builder_nodes)
     pending_builds = max(0, pending_builds)
     prepared_builders = max(0, prepared_builders)
-    desired_nodes = max(1 if pending_builds > 0 else 0, prepared_builders)
-    desired_nodes = min(desired_nodes, max_builder_nodes)
+    requested_nodes = max(1 if pending_builds > 0 else 0, prepared_builders)
+    desired_nodes = min(requested_nodes, max_builder_nodes)
     actions: list[ScaleAction] = []
     reasons: list[str] = []
+    if requested_nodes > max_builder_nodes:
+        reasons.append(
+            f"builder demand requests {requested_nodes} node(s), capped by "
+            f"max_builder_nodes={max_builder_nodes}"
+        )
 
     if unreachable_stop_candidates:
         job_ids = tuple(node.job_id for node in unreachable_stop_candidates)
@@ -194,7 +199,8 @@ def evaluate_builder_scale(
             reasons.append(f"max_builder_nodes={max_builder_nodes} reached")
         else:
             reasons.append(
-                f"builder capacity exists for demand ({pending_builds} pending build(s), "
+                f"builder pool meets capped node target={desired_nodes} "
+                f"({pending_builds} pending build(s), "
                 f"{prepared_builders} prepared builder(s))"
             )
     else:

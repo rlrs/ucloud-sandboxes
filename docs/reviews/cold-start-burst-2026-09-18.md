@@ -130,7 +130,8 @@ The initial VM poweroff remains unexplained by retained gateway telemetry.
 These optimizations do not recover unpublished running state from a lost VM,
 provide a durable server-side work queue, or bound every downstream storage and
 process operation. Clients retain admission retries until their deadline. No new
-256-way production test was run. Changes remain local and undeployed.
+256-way production test was run. These changes were subsequently deployed in
+0.5.35; see the [deployment verification](release-0.5.35-deployment-2026-09-18.md).
 
 Follow-up validation: the canonical `scripts/check.sh` completed successfully:
 883 server tests (six skipped), 99 SDK tests with integration dependencies,

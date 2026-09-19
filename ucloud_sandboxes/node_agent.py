@@ -38,6 +38,7 @@ from .http_server import (
 from .http_contract import match_sandbox_http_route
 from .images import (
     DockerImageRuntime,
+    ImageBuildCapacityError,
     ImageBuildConflictError,
     ImageBuildSpec,
     ImageManager,
@@ -1374,6 +1375,9 @@ class NodeAgentHandler(BuildContextHttpHandler):
                     materialize_ms = int(
                         max(0.0, time.monotonic() - pull_finished) * 1000
                     )
+        except SandboxAdmissionClosedError as exc:
+            self._write_exception(exc)
+            return
         except RuntimeError as exc:
             self._write_json(
                 {
@@ -1525,6 +1529,20 @@ class NodeAgentHandler(BuildContextHttpHandler):
         return False
 
     def _write_exception(self, exc: RuntimeError | ValueError) -> None:
+        if isinstance(exc, ImageBuildCapacityError):
+            self._write_json(
+                {"error": str(exc), "error_code": "builder_busy", "retryable": True},
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+                headers={"Retry-After": "2", "X-UCloud-Sandbox-Retryable": "true"},
+            )
+            return
+        if isinstance(exc, SandboxAdmissionClosedError):
+            self._write_json(
+                {"error": str(exc), "error_code": "node_admission_closed", "retryable": True},
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+                headers={"Retry-After": "1", "X-UCloud-Sandbox-Retryable": "true"},
+            )
+            return
         if isinstance(exc, SandboxStartupBusyError):
             self._write_json(
                 {

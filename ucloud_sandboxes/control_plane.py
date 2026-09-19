@@ -3171,6 +3171,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 self._send_proxied_response(image_response)
                 return
             if image_response is not None and image_response.status >= 400:
+                rejection_reason = _node_create_rejection_reason(image_response)
                 removed = self.routing_store.delete_sandbox_if_current(
                     spec.id,
                     generation=route.generation,
@@ -3181,8 +3182,25 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     self._persist_failed_sandbox_demand(
                         spec,
                         removed,
-                        failure_reason=f"image_pull_http_{image_response.status}",
+                        failure_reason=(rejection_reason or f"image_pull_http_{image_response.status}"),
                     )
+                if rejection_reason is not None:
+                    # No create has been dispatched: a draining node's image
+                    # admission rejection is safe to place elsewhere. Preserve
+                    # retryable demand when the next worker is still starting.
+                    if removed is None:
+                        self._write_create_in_progress_response(spec.id)
+                        return
+                    next_excluded = tuple(dict.fromkeys((*excluded_job_ids, route.job_id)))
+                    if self._sandbox_create_alternate_available(spec, excluded_job_ids=next_excluded):
+                        root.set_attribute("outcome", "reselect_after_image_admission_rejection")
+                        self._create_sandbox_on_node_locked(
+                            spec, excluded_job_ids=next_excluded,
+                            last_failure_reason=rejection_reason, image_resolved=True,
+                        )
+                    else:
+                        self._send_proxied_response(image_response)
+                    return
                 root.status = "error"
                 root.set_attribute("outcome", "image_pull_failed")
                 self._write_json(
@@ -3821,9 +3839,12 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     self._write_json(
                         {
                             "error": "no ready builder node is available",
+                            "error_code": "builder_not_ready",
+                            "retryable": True,
                             "pending_image_builds": pending_builds,
                         },
                         status=HTTPStatus.SERVICE_UNAVAILABLE,
+                        headers={"Retry-After": "2", "X-UCloud-Sandbox-Retryable": "true"},
                     )
                     return
                 with self.telemetry.span(
@@ -6430,6 +6451,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             for heartbeat in self.store.load_heartbeats().values()
             if heartbeat.node_url
             and not heartbeat.draining
+            and heartbeat.admission_open
             and heartbeat.is_fresh(now, self.heartbeat_ttl_seconds)
         ]
 

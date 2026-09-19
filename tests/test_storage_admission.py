@@ -3,7 +3,6 @@ from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Event, Thread
-import time
 import unittest
 from unittest.mock import patch
 
@@ -25,11 +24,7 @@ class StorageAdmissionIsolationTests(unittest.TestCase):
             client = StorageNativeNodeClient(server.socket_path, timeout_seconds=2)
             entered, release = Event(), Event()
             try:
-                deadline = time.monotonic() + 2
-                while not server.socket_path.exists():
-                    if time.monotonic() > deadline:
-                        self.fail('storage server did not start')
-                    time.sleep(.01)
+                client.wait_ready(timeout_seconds=2)
                 for name in ('publishing', 'restoring'):
                     owner = StorageVolumeOwner(name, name, 1)
                     client.prepare_volume(owner, operation_id='create:'+name, virtual_size=1 << 30)

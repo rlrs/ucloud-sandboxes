@@ -1,0 +1,1288 @@
+{
+  "incident": "super-park-harness worker loss",
+  "worker_job_id": "12396482",
+  "provider_poweroff_at": "2026-09-19T13:10:09.018+00:00",
+  "provider_terminal_at": "2026-09-19T13:10:10.298+00:00",
+  "routes_owned_before_loss": 103,
+  "terminal_program_request_records": [
+    [
+      "super-park-harness-52bc662cc5ec",
+      "node_lost",
+      "2026-09-19T13:10:10.319954+00:00"
+    ],
+    [
+      "super-park-harness-13bffcbc04db",
+      "node_lost",
+      "2026-09-19T13:10:10.318918+00:00"
+    ],
+    [
+      "super-park-harness-52c082ca28f3",
+      "node_lost",
+      "2026-09-19T13:10:10.320012+00:00"
+    ],
+    [
+      "super-park-harness-e20742bd504f",
+      "node_lost",
+      "2026-09-19T13:10:10.322380+00:00"
+    ],
+    [
+      "super-park-harness-ba9c718d6a54",
+      "node_lost",
+      "2026-09-19T13:10:10.321752+00:00"
+    ],
+    [
+      "super-park-harness-17c49d18f913",
+      "node_lost",
+      "2026-09-19T13:10:10.318973+00:00"
+    ],
+    [
+      "super-park-harness-1a94ad47d1c8",
+      "node_lost",
+      "2026-09-19T13:10:10.319035+00:00"
+    ],
+    [
+      "super-park-harness-9f91003b22ac",
+      "node_lost",
+      "2026-09-19T13:10:10.321218+00:00"
+    ],
+    [
+      "super-park-harness-f9ee56fa644a",
+      "node_lost",
+      "2026-09-19T13:10:10.322699+00:00"
+    ],
+    [
+      "super-park-harness-d867181f365b",
+      "node_lost",
+      "2026-09-19T13:10:10.322244+00:00"
+    ],
+    [
+      "super-park-harness-bb92238823f3",
+      "node_lost",
+      "2026-09-19T13:10:10.321794+00:00"
+    ],
+    [
+      "super-park-harness-83618bb72300",
+      "node_lost",
+      "2026-09-19T13:10:10.320754+00:00"
+    ],
+    [
+      "super-park-harness-6b6da6e75814",
+      "node_lost",
+      "2026-09-19T13:10:10.320450+00:00"
+    ],
+    [
+      "super-park-harness-b51a563c7e6b",
+      "node_lost",
+      "2026-09-19T13:10:10.321556+00:00"
+    ],
+    [
+      "super-park-harness-d17f1cfc9068",
+      "node_lost",
+      "2026-09-19T13:10:10.322141+00:00"
+    ],
+    [
+      "super-park-harness-2e19e87d1081",
+      "node_lost",
+      "2026-09-19T13:10:10.319345+00:00"
+    ],
+    [
+      "super-park-harness-f2cf202abcca",
+      "node_lost",
+      "2026-09-19T13:10:10.322605+00:00"
+    ],
+    [
+      "super-park-harness-bdee1edd6d8d",
+      "node_lost",
+      "2026-09-19T13:10:10.321870+00:00"
+    ],
+    [
+      "super-park-harness-c7afdef64393",
+      "node_lost",
+      "2026-09-19T13:10:10.321996+00:00"
+    ],
+    [
+      "super-park-harness-27879a8e2f62",
+      "node_lost",
+      "2026-09-19T13:10:10.319250+00:00"
+    ],
+    [
+      "super-park-harness-fb7c2097b2d7",
+      "node_lost",
+      "2026-09-19T13:10:10.322737+00:00"
+    ],
+    [
+      "super-park-harness-fbeda8acf1a7",
+      "node_lost",
+      "2026-09-19T13:10:10.322767+00:00"
+    ],
+    [
+      "super-park-harness-351658978cbf",
+      "node_lost",
+      "2026-09-19T13:10:10.319478+00:00"
+    ],
+    [
+      "super-park-harness-1e796fa2b958",
+      "node_lost",
+      "2026-09-19T13:10:10.319120+00:00"
+    ],
+    [
+      "super-park-harness-ef32e24b6b1c",
+      "node_lost",
+      "2026-09-19T13:10:10.322575+00:00"
+    ],
+    [
+      "super-park-harness-430b4e007bd6",
+      "node_lost",
+      "2026-09-19T13:10:10.319653+00:00"
+    ],
+    [
+      "super-park-harness-3727dc0cefe9",
+      "node_lost",
+      "2026-09-19T13:10:10.319566+00:00"
+    ],
+    [
+      "super-park-harness-ee0de39d58b4",
+      "node_lost",
+      "2026-09-19T13:10:10.322508+00:00"
+    ],
+    [
+      "super-park-harness-60412cf383e6",
+      "node_lost",
+      "2026-09-19T13:10:10.320319+00:00"
+    ],
+    [
+      "super-park-harness-2850769b5f05",
+      "node_lost",
+      "2026-09-19T13:10:10.319303+00:00"
+    ],
+    [
+      "super-park-harness-e1ad130e3040",
+      "node_lost",
+      "2026-09-19T13:10:10.322347+00:00"
+    ],
+    [
+      "super-park-harness-4e1392a9d620",
+      "node_lost",
+      "2026-09-19T13:10:10.319826+00:00"
+    ],
+    [
+      "super-park-harness-68a80e480be4",
+      "node_lost",
+      "2026-09-19T13:10:10.320409+00:00"
+    ],
+    [
+      "super-park-harness-263342144e4f",
+      "node_lost",
+      "2026-09-19T13:10:10.319209+00:00"
+    ],
+    [
+      "super-park-harness-782dc7c1ce0a",
+      "node_lost",
+      "2026-09-19T13:10:10.320629+00:00"
+    ],
+    [
+      "super-park-harness-d5dd2a9f0e40",
+      "node_lost",
+      "2026-09-19T13:10:10.322178+00:00"
+    ],
+    [
+      "super-park-harness-0c97ddac3a6f",
+      "node_lost",
+      "2026-09-19T13:10:10.318786+00:00"
+    ],
+    [
+      "super-park-harness-81b535e7b1e0",
+      "node_lost",
+      "2026-09-19T13:10:10.320711+00:00"
+    ],
+    [
+      "super-park-harness-c68f5fbaaeb0",
+      "node_lost",
+      "2026-09-19T13:10:10.321953+00:00"
+    ],
+    [
+      "super-park-harness-7cd2640281a0",
+      "node_lost",
+      "2026-09-19T13:10:10.320670+00:00"
+    ],
+    [
+      "super-park-harness-538ed904961a",
+      "node_lost",
+      "2026-09-19T13:10:10.320059+00:00"
+    ],
+    [
+      "super-park-harness-ee8a4ef79eaf",
+      "node_lost",
+      "2026-09-19T13:10:10.322540+00:00"
+    ],
+    [
+      "super-park-harness-352b8a163511",
+      "node_lost",
+      "2026-09-19T13:10:10.319519+00:00"
+    ],
+    [
+      "super-park-harness-84671d0910f2",
+      "node_lost",
+      "2026-09-19T13:10:10.320799+00:00"
+    ],
+    [
+      "super-park-harness-1052eb33da65",
+      "node_lost",
+      "2026-09-19T13:10:10.318876+00:00"
+    ],
+    [
+      "super-park-harness-aad8bef5196b",
+      "node_lost",
+      "2026-09-19T13:10:10.321343+00:00"
+    ],
+    [
+      "super-park-harness-b59983b1de2f",
+      "node_lost",
+      "2026-09-19T13:10:10.321597+00:00"
+    ],
+    [
+      "super-park-harness-f8d7ff080426",
+      "node_lost",
+      "2026-09-19T13:10:10.322666+00:00"
+    ],
+    [
+      "super-park-harness-99206bd56beb",
+      "node_lost",
+      "2026-09-19T13:10:10.321139+00:00"
+    ],
+    [
+      "super-park-harness-92cf61f6b4d5",
+      "node_lost",
+      "2026-09-19T13:10:10.321020+00:00"
+    ],
+    [
+      "super-park-harness-e5aa8ed606a6",
+      "node_lost",
+      "2026-09-19T13:10:10.322445+00:00"
+    ],
+    [
+      "super-park-harness-437ca068f0eb",
+      "node_lost",
+      "2026-09-19T13:10:10.319694+00:00"
+    ],
+    [
+      "super-park-harness-cf2fc10a3ad2",
+      "node_lost",
+      "2026-09-19T13:10:10.322106+00:00"
+    ],
+    [
+      "super-park-harness-968935a32473",
+      "node_lost",
+      "2026-09-19T13:10:10.321099+00:00"
+    ],
+    [
+      "super-park-harness-6bac728074d1",
+      "node_lost",
+      "2026-09-19T13:10:10.320540+00:00"
+    ],
+    [
+      "super-park-harness-1ca6342842b5",
+      "node_lost",
+      "2026-09-19T13:10:10.319077+00:00"
+    ],
+    [
+      "super-park-harness-cd32d11ad1c3",
+      "node_lost",
+      "2026-09-19T13:10:10.322070+00:00"
+    ],
+    [
+      "super-park-harness-5d934f68387d",
+      "node_lost",
+      "2026-09-19T13:10:10.320237+00:00"
+    ],
+    [
+      "super-park-harness-bc604cc2bda9",
+      "node_lost",
+      "2026-09-19T13:10:10.321834+00:00"
+    ],
+    [
+      "super-park-harness-8add5a1322f2",
+      "node_lost",
+      "2026-09-19T13:10:10.320839+00:00"
+    ],
+    [
+      "super-park-harness-cc15d77c4795",
+      "node_lost",
+      "2026-09-19T13:10:10.322037+00:00"
+    ],
+    [
+      "super-park-harness-00846a746d2f",
+      "node_lost",
+      "2026-09-19T13:10:10.318578+00:00"
+    ],
+    [
+      "super-park-harness-3fbb173a3348",
+      "node_lost",
+      "2026-09-19T13:10:10.319608+00:00"
+    ],
+    [
+      "super-park-harness-06ebe61e0e32",
+      "node_lost",
+      "2026-09-19T13:10:10.318686+00:00"
+    ],
+    [
+      "super-park-harness-5ebec48052e4",
+      "node_lost",
+      "2026-09-19T13:10:10.320277+00:00"
+    ],
+    [
+      "super-park-harness-31a8a10d55a4",
+      "node_lost",
+      "2026-09-19T13:10:10.319433+00:00"
+    ],
+    [
+      "super-park-harness-de0230131e8a",
+      "node_lost",
+      "2026-09-19T13:10:10.322311+00:00"
+    ],
+    [
+      "super-park-harness-934fae8fb29f",
+      "node_lost",
+      "2026-09-19T13:10:10.321061+00:00"
+    ],
+    [
+      "super-park-harness-b003f565c10a",
+      "node_lost",
+      "2026-09-19T13:10:10.321428+00:00"
+    ],
+    [
+      "super-park-harness-04257e91a4e1",
+      "node_lost",
+      "2026-09-19T13:10:10.318636+00:00"
+    ],
+    [
+      "super-park-harness-515872ebae93",
+      "node_lost",
+      "2026-09-19T13:10:10.319911+00:00"
+    ],
+    [
+      "super-park-harness-a7a79480e02c",
+      "node_lost",
+      "2026-09-19T13:10:10.321304+00:00"
+    ],
+    [
+      "super-park-harness-d9da909b89be",
+      "node_lost",
+      "2026-09-19T13:10:10.322278+00:00"
+    ],
+    [
+      "super-park-harness-b70dc48b0066",
+      "node_lost",
+      "2026-09-19T13:10:10.321674+00:00"
+    ],
+    [
+      "super-park-harness-e98a5dabb28c",
+      "node_lost",
+      "2026-09-19T13:10:10.322477+00:00"
+    ],
+    [
+      "super-park-harness-b214af4f6dfa",
+      "node_lost",
+      "2026-09-19T13:10:10.321511+00:00"
+    ],
+    [
+      "super-park-harness-66bb671f1d65",
+      "node_lost",
+      "2026-09-19T13:10:10.320365+00:00"
+    ],
+    [
+      "super-park-harness-ab8e75aa8284",
+      "node_lost",
+      "2026-09-19T13:10:10.321382+00:00"
+    ],
+    [
+      "super-park-harness-0ea7f26b7cb6",
+      "node_lost",
+      "2026-09-19T13:10:10.318831+00:00"
+    ],
+    [
+      "super-park-harness-72c83353afc7",
+      "node_lost",
+      "2026-09-19T13:10:10.320587+00:00"
+    ],
+    [
+      "super-park-harness-4e8ffaa45a4c",
+      "node_lost",
+      "2026-09-19T13:10:10.319869+00:00"
+    ],
+    [
+      "super-park-harness-c6502c6b6884",
+      "node_lost",
+      "2026-09-19T13:10:10.321914+00:00"
+    ],
+    [
+      "super-park-harness-0056fc07a03b",
+      "node_lost",
+      "2026-09-19T13:10:10.318473+00:00"
+    ],
+    [
+      "super-park-harness-20ed807f1c15",
+      "node_lost",
+      "2026-09-19T13:10:10.319168+00:00"
+    ],
+    [
+      "super-park-harness-9a4a0a6211fb",
+      "node_lost",
+      "2026-09-19T13:10:10.321178+00:00"
+    ],
+    [
+      "super-park-harness-f329c48ebd68",
+      "node_lost",
+      "2026-09-19T13:10:10.322637+00:00"
+    ],
+    [
+      "super-park-harness-a2c1441afea2",
+      "node_lost",
+      "2026-09-19T13:10:10.321264+00:00"
+    ],
+    [
+      "super-park-harness-5c7dc109cf95",
+      "node_lost",
+      "2026-09-19T13:10:10.320194+00:00"
+    ],
+    [
+      "super-park-harness-2f3a5e25326d",
+      "node_lost",
+      "2026-09-19T13:10:10.319391+00:00"
+    ],
+    [
+      "super-park-harness-47874a2bf4f0",
+      "node_lost",
+      "2026-09-19T13:10:10.319781+00:00"
+    ],
+    [
+      "super-park-harness-90f1f7b89093",
+      "node_lost",
+      "2026-09-19T13:10:10.320971+00:00"
+    ],
+    [
+      "super-park-harness-e49be8b5c2a5",
+      "node_lost",
+      "2026-09-19T13:10:10.322413+00:00"
+    ],
+    [
+      "super-park-harness-d66ef072a72f",
+      "node_lost",
+      "2026-09-19T13:10:10.322211+00:00"
+    ],
+    [
+      "super-park-harness-448a4f76969a",
+      "node_lost",
+      "2026-09-19T13:10:10.319738+00:00"
+    ],
+    [
+      "super-park-harness-5a2000f7a2a5",
+      "node_lost",
+      "2026-09-19T13:10:10.320152+00:00"
+    ],
+    [
+      "super-park-harness-8d8f547c656e",
+      "node_lost",
+      "2026-09-19T13:10:10.320880+00:00"
+    ],
+    [
+      "super-park-harness-09e73f2ddec5",
+      "node_lost",
+      "2026-09-19T13:10:10.318737+00:00"
+    ],
+    [
+      "super-park-harness-6b89e682e48e",
+      "node_lost",
+      "2026-09-19T13:10:10.320498+00:00"
+    ],
+    [
+      "super-park-harness-8f0c032be013",
+      "node_lost",
+      "2026-09-19T13:10:10.320924+00:00"
+    ],
+    [
+      "super-park-harness-b70a8f06631a",
+      "node_lost",
+      "2026-09-19T13:10:10.321637+00:00"
+    ],
+    [
+      "super-park-harness-b19ac3661532",
+      "node_lost",
+      "2026-09-19T13:10:10.321469+00:00"
+    ],
+    [
+      "super-park-harness-5829d534e2b8",
+      "node_lost",
+      "2026-09-19T13:10:10.320103+00:00"
+    ],
+    [
+      "super-park-harness-b7c98f79c570",
+      "node_lost",
+      "2026-09-19T13:10:10.321712+00:00"
+    ],
+    [
+      "super-park-harness-c7afdef64393",
+      "node_lost",
+      "2026-09-19T13:10:10.321996+00:00"
+    ],
+    [
+      "super-park-harness-27879a8e2f62",
+      "node_lost",
+      "2026-09-19T13:10:10.319250+00:00"
+    ],
+    [
+      "super-park-harness-bdee1edd6d8d",
+      "node_lost",
+      "2026-09-19T13:10:10.321870+00:00"
+    ],
+    [
+      "super-park-harness-2e19e87d1081",
+      "node_lost",
+      "2026-09-19T13:10:10.319345+00:00"
+    ],
+    [
+      "super-park-harness-fb7c2097b2d7",
+      "node_lost",
+      "2026-09-19T13:10:10.322737+00:00"
+    ],
+    [
+      "super-park-harness-f2cf202abcca",
+      "node_lost",
+      "2026-09-19T13:10:10.322605+00:00"
+    ],
+    [
+      "super-park-harness-b7c98f79c570",
+      "node_lost",
+      "2026-09-19T13:10:10.321712+00:00"
+    ],
+    [
+      "super-park-harness-fbeda8acf1a7",
+      "node_lost",
+      "2026-09-19T13:10:10.322767+00:00"
+    ],
+    [
+      "super-park-harness-9f91003b22ac",
+      "node_lost",
+      "2026-09-19T13:10:10.321218+00:00"
+    ],
+    [
+      "super-park-harness-bb92238823f3",
+      "node_lost",
+      "2026-09-19T13:10:10.321794+00:00"
+    ],
+    [
+      "super-park-harness-d867181f365b",
+      "node_lost",
+      "2026-09-19T13:10:10.322244+00:00"
+    ],
+    [
+      "super-park-harness-f9ee56fa644a",
+      "node_lost",
+      "2026-09-19T13:10:10.322699+00:00"
+    ],
+    [
+      "super-park-harness-83618bb72300",
+      "node_lost",
+      "2026-09-19T13:10:10.320754+00:00"
+    ],
+    [
+      "super-park-harness-b51a563c7e6b",
+      "node_lost",
+      "2026-09-19T13:10:10.321556+00:00"
+    ],
+    [
+      "super-park-harness-d17f1cfc9068",
+      "node_lost",
+      "2026-09-19T13:10:10.322141+00:00"
+    ],
+    [
+      "super-park-harness-6b6da6e75814",
+      "node_lost",
+      "2026-09-19T13:10:10.320450+00:00"
+    ],
+    [
+      "super-park-harness-5829d534e2b8",
+      "node_lost",
+      "2026-09-19T13:10:10.320103+00:00"
+    ],
+    [
+      "super-park-harness-b70a8f06631a",
+      "node_lost",
+      "2026-09-19T13:10:10.321637+00:00"
+    ],
+    [
+      "super-park-harness-8f0c032be013",
+      "node_lost",
+      "2026-09-19T13:10:10.320924+00:00"
+    ],
+    [
+      "super-park-harness-b19ac3661532",
+      "node_lost",
+      "2026-09-19T13:10:10.321469+00:00"
+    ],
+    [
+      "super-park-harness-52bc662cc5ec",
+      "node_lost",
+      "2026-09-19T13:10:10.319954+00:00"
+    ],
+    [
+      "super-park-harness-52c082ca28f3",
+      "node_lost",
+      "2026-09-19T13:10:10.320012+00:00"
+    ],
+    [
+      "super-park-harness-e20742bd504f",
+      "node_lost",
+      "2026-09-19T13:10:10.322380+00:00"
+    ],
+    [
+      "super-park-harness-ba9c718d6a54",
+      "node_lost",
+      "2026-09-19T13:10:10.321752+00:00"
+    ],
+    [
+      "super-park-harness-13bffcbc04db",
+      "node_lost",
+      "2026-09-19T13:10:10.318918+00:00"
+    ],
+    [
+      "super-park-harness-1e796fa2b958",
+      "node_lost",
+      "2026-09-19T13:10:10.319120+00:00"
+    ]
+  ],
+  "last_heartbeats": [
+    {
+      "timestamp": "2026-09-19T13:08:15.974448+00:00",
+      "active_image_builds": 0,
+      "active_sandbox_creates": 0,
+      "active_sandboxes": 0,
+      "active_workloads": 0,
+      "actual_usage": {
+        "collected_at": "2026-09-19T13:08:15.946352+00:00",
+        "cpu_count": 32,
+        "cpu_percent": 0.0,
+        "cpu_vcpu": 0.0,
+        "image_materialization_active_operations": 0,
+        "image_materialization_max_concurrent_operations": 32,
+        "image_materialization_waiting_operations": 0,
+        "image_pull_active_operations": 0,
+        "image_pull_max_concurrent_operations": 8,
+        "image_pull_waiting_operations": 0,
+        "load_average_15m": 2.95166015625,
+        "load_average_1m": 5.14501953125,
+        "load_average_5m": 3.017578125,
+        "memory_available_mb": 86527,
+        "memory_percent": 3.749805334935149,
+        "memory_psi_full_avg10": 0.0,
+        "memory_psi_some_avg10": 0.0,
+        "memory_total_mb": 89898,
+        "memory_used_mb": 3371,
+        "storage_active_operations": 0,
+        "storage_cache_mb": 0,
+        "storage_device_pool_acquires": 716,
+        "storage_device_pool_discards": 0,
+        "storage_device_pool_enabled": true,
+        "storage_device_pool_high_watermark": 16,
+        "storage_device_pool_idle_devices": 16,
+        "storage_device_pool_low_watermark": 2,
+        "storage_device_pool_new_acquires": 0,
+        "storage_device_pool_releases": 716,
+        "storage_device_pool_reused_acquires": 716,
+        "storage_error_volumes": 0,
+        "storage_hard_capacity_mb": 1449984,
+        "storage_hard_reserved_mb": 0,
+        "storage_max_concurrent_operations": 8,
+        "storage_publication_active": 0,
+        "storage_publication_duration_ms_max": 0,
+        "storage_publication_duration_ms_total": 0,
+        "storage_publication_limit": 4,
+        "storage_publication_queue_wait_ms_max": 0,
+        "storage_publication_queue_wait_ms_total": 0,
+        "storage_publication_waiting": 0,
+        "storage_published_volumes": 0,
+        "storage_snapshot_compactions": 0,
+        "storage_snapshot_publications": 0,
+        "storage_snapshot_uploaded_bytes": 0,
+        "storage_ublk_active_devices": 0,
+        "storage_ublk_live_devices": 16,
+        "storage_ublk_max_devices": 0,
+        "storage_waiting_operations": 0,
+        "swap_free_mb": 98303,
+        "swap_total_mb": 98303,
+        "swap_used_mb": 0
+      },
+      "admission_open": true,
+      "agent_version": "0.5.53",
+      "capabilities": [
+        "environment-contract-v1",
+        "sandbox",
+        "image-cache",
+        "disk-quota",
+        "hibernate-local-v2",
+        "direct-runsc-v1",
+        "network-policy-relay-v1:default",
+        "managed-primary-v1",
+        "storage-native-v1",
+        "sandbox-detach-published-v1",
+        "sandbox-migrate-storage-native-v1"
+      ],
+      "deployment_id": "live-ucloud-20260824a",
+      "draining": false,
+      "free_resources": {
+        "disk_mb": 1449984,
+        "memory_mb": 98304,
+        "vcpu": 32.0
+      },
+      "heartbeat_updated_at": "2026-09-19T13:08:15.971092+00:00",
+      "idle_since": "2026-09-19T13:08:15.971092+00:00",
+      "init_version": "3",
+      "job_id": "12396482",
+      "load": {
+        "disk": 0.0,
+        "memory": 0.0,
+        "vcpu": 0.0
+      },
+      "node_id": "sandbox-node-02bf3bb35c-1",
+      "node_url": "http://sandbox-node-02bf3bb35c-1:8090",
+      "total_resources": {
+        "disk_mb": 1449984,
+        "memory_mb": 98304,
+        "vcpu": 32.0
+      },
+      "used_resources": {
+        "disk_mb": 0,
+        "memory_mb": 0,
+        "vcpu": 0.0
+      }
+    },
+    {
+      "timestamp": "2026-09-19T13:08:36.043978+00:00",
+      "active_image_builds": 0,
+      "active_sandbox_creates": 0,
+      "active_sandboxes": 35,
+      "active_workloads": 35,
+      "actual_usage": {
+        "collected_at": "2026-09-19T13:08:35.996748+00:00",
+        "cpu_count": 32,
+        "cpu_percent": 45.45454545454545,
+        "cpu_vcpu": 14.545454545454545,
+        "image_materialization_active_operations": 0,
+        "image_materialization_max_concurrent_operations": 32,
+        "image_materialization_waiting_operations": 0,
+        "image_pull_active_operations": 0,
+        "image_pull_max_concurrent_operations": 8,
+        "image_pull_waiting_operations": 0,
+        "load_average_15m": 3.08154296875,
+        "load_average_1m": 6.34423828125,
+        "load_average_5m": 3.4111328125,
+        "memory_available_mb": 84852,
+        "memory_percent": 5.613028098511647,
+        "memory_psi_full_avg10": 0.0,
+        "memory_psi_some_avg10": 0.0,
+        "memory_total_mb": 89898,
+        "memory_used_mb": 5046,
+        "storage_active_operations": 0,
+        "storage_cache_mb": 0,
+        "storage_device_pool_acquires": 751,
+        "storage_device_pool_discards": 0,
+        "storage_device_pool_enabled": true,
+        "storage_device_pool_high_watermark": 16,
+        "storage_device_pool_idle_devices": 16,
+        "storage_device_pool_low_watermark": 2,
+        "storage_device_pool_new_acquires": 0,
+        "storage_device_pool_releases": 716,
+        "storage_device_pool_reused_acquires": 751,
+        "storage_error_volumes": 0,
+        "storage_hard_capacity_mb": 1449984,
+        "storage_hard_reserved_mb": 181440,
+        "storage_max_concurrent_operations": 8,
+        "storage_publication_active": 0,
+        "storage_publication_duration_ms_max": 0,
+        "storage_publication_duration_ms_total": 0,
+        "storage_publication_limit": 4,
+        "storage_publication_queue_wait_ms_max": 0,
+        "storage_publication_queue_wait_ms_total": 0,
+        "storage_publication_waiting": 0,
+        "storage_published_volumes": 0,
+        "storage_snapshot_compactions": 0,
+        "storage_snapshot_publications": 0,
+        "storage_snapshot_uploaded_bytes": 0,
+        "storage_ublk_active_devices": 35,
+        "storage_ublk_live_devices": 51,
+        "storage_ublk_max_devices": 0,
+        "storage_waiting_operations": 0,
+        "swap_free_mb": 98303,
+        "swap_total_mb": 98303,
+        "swap_used_mb": 0
+      },
+      "admission_open": true,
+      "agent_version": "0.5.53",
+      "capabilities": [
+        "environment-contract-v1",
+        "sandbox",
+        "image-cache",
+        "disk-quota",
+        "hibernate-local-v2",
+        "direct-runsc-v1",
+        "network-policy-relay-v1:default",
+        "managed-primary-v1",
+        "storage-native-v1",
+        "sandbox-detach-published-v1",
+        "sandbox-migrate-storage-native-v1"
+      ],
+      "deployment_id": "live-ucloud-20260824a",
+      "draining": false,
+      "free_resources": {
+        "disk_mb": 1268544,
+        "memory_mb": 98304,
+        "vcpu": 32.0
+      },
+      "heartbeat_updated_at": "2026-09-19T13:08:36.039490+00:00",
+      "idle_since": null,
+      "init_version": "3",
+      "job_id": "12396482",
+      "load": {
+        "disk": 0.1251324152542373,
+        "memory": 0.0,
+        "vcpu": 0.0
+      },
+      "node_id": "sandbox-node-02bf3bb35c-1",
+      "node_url": "http://sandbox-node-02bf3bb35c-1:8090",
+      "total_resources": {
+        "disk_mb": 1449984,
+        "memory_mb": 98304,
+        "vcpu": 32.0
+      },
+      "used_resources": {
+        "disk_mb": 181440,
+        "memory_mb": 0,
+        "vcpu": 0.0
+      }
+    },
+    {
+      "timestamp": "2026-09-19T13:08:56.902456+00:00",
+      "active_image_builds": 0,
+      "active_sandbox_creates": 0,
+      "active_sandboxes": 33,
+      "active_workloads": 34,
+      "actual_usage": {
+        "collected_at": "2026-09-19T13:08:56.794502+00:00",
+        "cpu_count": 32,
+        "cpu_percent": 27.09677419354839,
+        "cpu_vcpu": 8.670967741935485,
+        "image_materialization_active_operations": 0,
+        "image_materialization_max_concurrent_operations": 32,
+        "image_materialization_waiting_operations": 0,
+        "image_pull_active_operations": 0,
+        "image_pull_max_concurrent_operations": 8,
+        "image_pull_waiting_operations": 0,
+        "load_average_15m": 3.87841796875,
+        "load_average_1m": 15.63623046875,
+        "load_average_5m": 5.7958984375,
+        "memory_available_mb": 84847,
+        "memory_percent": 5.618589957507397,
+        "memory_psi_full_avg10": 0.0,
+        "memory_psi_some_avg10": 0.0,
+        "memory_total_mb": 89898,
+        "memory_used_mb": 5051,
+        "storage_active_operations": 2,
+        "storage_cache_mb": 0,
+        "storage_device_pool_acquires": 778,
+        "storage_device_pool_discards": 0,
+        "storage_device_pool_enabled": true,
+        "storage_device_pool_high_watermark": 16,
+        "storage_device_pool_idle_devices": 16,
+        "storage_device_pool_low_watermark": 2,
+        "storage_device_pool_new_acquires": 0,
+        "storage_device_pool_releases": 743,
+        "storage_device_pool_reused_acquires": 778,
+        "storage_error_volumes": 0,
+        "storage_hard_capacity_mb": 1449984,
+        "storage_hard_reserved_mb": 321408,
+        "storage_max_concurrent_operations": 8,
+        "storage_publication_active": 0,
+        "storage_publication_duration_ms_max": 0,
+        "storage_publication_duration_ms_total": 0,
+        "storage_publication_limit": 4,
+        "storage_publication_queue_wait_ms_max": 0,
+        "storage_publication_queue_wait_ms_total": 0,
+        "storage_publication_waiting": 0,
+        "storage_published_volumes": 0,
+        "storage_snapshot_compactions": 0,
+        "storage_snapshot_publications": 0,
+        "storage_snapshot_uploaded_bytes": 0,
+        "storage_ublk_active_devices": 34,
+        "storage_ublk_live_devices": 50,
+        "storage_ublk_max_devices": 0,
+        "storage_waiting_operations": 0,
+        "swap_free_mb": 98303,
+        "swap_total_mb": 98303,
+        "swap_used_mb": 0
+      },
+      "admission_open": true,
+      "agent_version": "0.5.53",
+      "capabilities": [
+        "environment-contract-v1",
+        "sandbox",
+        "image-cache",
+        "disk-quota",
+        "hibernate-local-v2",
+        "direct-runsc-v1",
+        "network-policy-relay-v1:default",
+        "managed-primary-v1",
+        "storage-native-v1",
+        "sandbox-detach-published-v1",
+        "sandbox-migrate-storage-native-v1"
+      ],
+      "deployment_id": "live-ucloud-20260824a",
+      "draining": false,
+      "free_resources": {
+        "disk_mb": 1128576,
+        "memory_mb": 96256,
+        "vcpu": 28.0
+      },
+      "heartbeat_updated_at": "2026-09-19T13:08:56.872621+00:00",
+      "idle_since": null,
+      "init_version": "3",
+      "job_id": "12396482",
+      "load": {
+        "disk": 0.2145127118644068,
+        "memory": 0.0,
+        "vcpu": 0.0
+      },
+      "node_id": "sandbox-node-02bf3bb35c-1",
+      "node_url": "http://sandbox-node-02bf3bb35c-1:8090",
+      "total_resources": {
+        "disk_mb": 1449984,
+        "memory_mb": 98304,
+        "vcpu": 32.0
+      },
+      "used_resources": {
+        "disk_mb": 311040,
+        "memory_mb": 0,
+        "vcpu": 0.0
+      }
+    },
+    {
+      "timestamp": "2026-09-19T13:09:17.503470+00:00",
+      "active_image_builds": 0,
+      "active_sandbox_creates": 2,
+      "active_sandboxes": 40,
+      "active_workloads": 43,
+      "actual_usage": {
+        "collected_at": "2026-09-19T13:09:17.450775+00:00",
+        "cpu_count": 32,
+        "cpu_percent": 81.13207547169812,
+        "cpu_vcpu": 25.962264150943398,
+        "image_materialization_active_operations": 0,
+        "image_materialization_max_concurrent_operations": 32,
+        "image_materialization_waiting_operations": 0,
+        "image_pull_active_operations": 0,
+        "image_pull_max_concurrent_operations": 8,
+        "image_pull_waiting_operations": 0,
+        "load_average_15m": 4.357421875,
+        "load_average_1m": 18.97412109375,
+        "load_average_5m": 7.13623046875,
+        "memory_available_mb": 84263,
+        "memory_percent": 6.268215088211083,
+        "memory_psi_full_avg10": 0.0,
+        "memory_psi_some_avg10": 0.0,
+        "memory_total_mb": 89898,
+        "memory_used_mb": 5635,
+        "storage_active_operations": 1,
+        "storage_cache_mb": 0,
+        "storage_device_pool_acquires": 806,
+        "storage_device_pool_discards": 0,
+        "storage_device_pool_enabled": true,
+        "storage_device_pool_high_watermark": 16,
+        "storage_device_pool_idle_devices": 16,
+        "storage_device_pool_low_watermark": 2,
+        "storage_device_pool_new_acquires": 0,
+        "storage_device_pool_releases": 764,
+        "storage_device_pool_reused_acquires": 806,
+        "storage_error_volumes": 0,
+        "storage_hard_capacity_mb": 1449984,
+        "storage_hard_reserved_mb": 466560,
+        "storage_max_concurrent_operations": 8,
+        "storage_publication_active": 0,
+        "storage_publication_duration_ms_max": 0,
+        "storage_publication_duration_ms_total": 0,
+        "storage_publication_limit": 4,
+        "storage_publication_queue_wait_ms_max": 0,
+        "storage_publication_queue_wait_ms_total": 0,
+        "storage_publication_waiting": 0,
+        "storage_published_volumes": 0,
+        "storage_snapshot_compactions": 0,
+        "storage_snapshot_publications": 0,
+        "storage_snapshot_uploaded_bytes": 0,
+        "storage_ublk_active_devices": 42,
+        "storage_ublk_live_devices": 58,
+        "storage_ublk_max_devices": 0,
+        "storage_waiting_operations": 0,
+        "swap_free_mb": 98303,
+        "swap_total_mb": 98303,
+        "swap_used_mb": 0
+      },
+      "admission_open": true,
+      "agent_version": "0.5.53",
+      "capabilities": [
+        "environment-contract-v1",
+        "sandbox",
+        "image-cache",
+        "disk-quota",
+        "hibernate-local-v2",
+        "direct-runsc-v1",
+        "network-policy-relay-v1:default",
+        "managed-primary-v1",
+        "storage-native-v1",
+        "sandbox-detach-published-v1",
+        "sandbox-migrate-storage-native-v1"
+      ],
+      "deployment_id": "live-ucloud-20260824a",
+      "draining": false,
+      "free_resources": {
+        "disk_mb": 983424,
+        "memory_mb": 96256,
+        "vcpu": 28.0
+      },
+      "heartbeat_updated_at": "2026-09-19T13:09:17.492630+00:00",
+      "idle_since": null,
+      "init_version": "3",
+      "job_id": "12396482",
+      "load": {
+        "disk": 0.3146186440677966,
+        "memory": 0.0,
+        "vcpu": 0.0
+      },
+      "node_id": "sandbox-node-02bf3bb35c-1",
+      "node_url": "http://sandbox-node-02bf3bb35c-1:8090",
+      "total_resources": {
+        "disk_mb": 1449984,
+        "memory_mb": 98304,
+        "vcpu": 32.0
+      },
+      "used_resources": {
+        "disk_mb": 456192,
+        "memory_mb": 0,
+        "vcpu": 0.0
+      }
+    },
+    {
+      "timestamp": "2026-09-19T13:09:37.437819+00:00",
+      "active_image_builds": 0,
+      "active_sandbox_creates": 0,
+      "active_sandboxes": 17,
+      "active_workloads": 18,
+      "actual_usage": {
+        "collected_at": "2026-09-19T13:09:37.367082+00:00",
+        "cpu_count": 32,
+        "cpu_percent": 44.57831325301205,
+        "cpu_vcpu": 14.265060240963855,
+        "image_materialization_active_operations": 0,
+        "image_materialization_max_concurrent_operations": 32,
+        "image_materialization_waiting_operations": 0,
+        "image_pull_active_operations": 0,
+        "image_pull_max_concurrent_operations": 8,
+        "image_pull_waiting_operations": 0,
+        "load_average_15m": 5.185546875,
+        "load_average_1m": 25.4736328125,
+        "load_average_5m": 9.458984375,
+        "memory_available_mb": 84809,
+        "memory_percent": 5.660860085875103,
+        "memory_psi_full_avg10": 0.0,
+        "memory_psi_some_avg10": 0.0,
+        "memory_total_mb": 89898,
+        "memory_used_mb": 5089,
+        "storage_active_operations": 1,
+        "storage_cache_mb": 0,
+        "storage_device_pool_acquires": 822,
+        "storage_device_pool_discards": 0,
+        "storage_device_pool_enabled": true,
+        "storage_device_pool_high_watermark": 16,
+        "storage_device_pool_idle_devices": 16,
+        "storage_device_pool_low_watermark": 2,
+        "storage_device_pool_new_acquires": 0,
+        "storage_device_pool_releases": 802,
+        "storage_device_pool_reused_acquires": 822,
+        "storage_error_volumes": 0,
+        "storage_hard_capacity_mb": 1449984,
+        "storage_hard_reserved_mb": 533952,
+        "storage_max_concurrent_operations": 8,
+        "storage_publication_active": 0,
+        "storage_publication_duration_ms_max": 0,
+        "storage_publication_duration_ms_total": 0,
+        "storage_publication_limit": 4,
+        "storage_publication_queue_wait_ms_max": 0,
+        "storage_publication_queue_wait_ms_total": 0,
+        "storage_publication_waiting": 0,
+        "storage_published_volumes": 0,
+        "storage_snapshot_compactions": 0,
+        "storage_snapshot_publications": 0,
+        "storage_snapshot_uploaded_bytes": 0,
+        "storage_ublk_active_devices": 20,
+        "storage_ublk_live_devices": 36,
+        "storage_ublk_max_devices": 0,
+        "storage_waiting_operations": 0,
+        "swap_free_mb": 98303,
+        "swap_total_mb": 98303,
+        "swap_used_mb": 0
+      },
+      "admission_open": true,
+      "agent_version": "0.5.53",
+      "capabilities": [
+        "environment-contract-v1",
+        "sandbox",
+        "image-cache",
+        "disk-quota",
+        "hibernate-local-v2",
+        "direct-runsc-v1",
+        "network-policy-relay-v1:default",
+        "managed-primary-v1",
+        "storage-native-v1",
+        "sandbox-detach-published-v1",
+        "sandbox-migrate-storage-native-v1"
+      ],
+      "deployment_id": "live-ucloud-20260824a",
+      "draining": false,
+      "free_resources": {
+        "disk_mb": 916032,
+        "memory_mb": 95232,
+        "vcpu": 26.0
+      },
+      "heartbeat_updated_at": "2026-09-19T13:09:37.431749+00:00",
+      "idle_since": null,
+      "init_version": "3",
+      "job_id": "12396482",
+      "load": {
+        "disk": 0.357521186440678,
+        "memory": 0.0,
+        "vcpu": 0.0
+      },
+      "node_id": "sandbox-node-02bf3bb35c-1",
+      "node_url": "http://sandbox-node-02bf3bb35c-1:8090",
+      "total_resources": {
+        "disk_mb": 1449984,
+        "memory_mb": 98304,
+        "vcpu": 32.0
+      },
+      "used_resources": {
+        "disk_mb": 518400,
+        "memory_mb": 0,
+        "vcpu": 0.0
+      }
+    },
+    {
+      "timestamp": "2026-09-19T13:09:57.880688+00:00",
+      "active_image_builds": 0,
+      "active_sandbox_creates": 12,
+      "active_sandboxes": 9,
+      "active_workloads": 22,
+      "actual_usage": {
+        "collected_at": "2026-09-19T13:09:57.803214+00:00",
+        "cpu_count": 32,
+        "cpu_percent": 89.1566265060241,
+        "cpu_vcpu": 28.53012048192771,
+        "image_materialization_active_operations": 1,
+        "image_materialization_max_concurrent_operations": 32,
+        "image_materialization_waiting_operations": 0,
+        "image_pull_active_operations": 0,
+        "image_pull_max_concurrent_operations": 8,
+        "image_pull_waiting_operations": 0,
+        "load_average_15m": 5.28173828125,
+        "load_average_1m": 20.8125,
+        "load_average_5m": 9.46826171875,
+        "memory_available_mb": 84746,
+        "memory_percent": 5.730939509221562,
+        "memory_psi_full_avg10": 0.0,
+        "memory_psi_some_avg10": 0.0,
+        "memory_total_mb": 89898,
+        "memory_used_mb": 5152,
+        "storage_active_operations": 0,
+        "storage_cache_mb": 0,
+        "storage_device_pool_acquires": 842,
+        "storage_device_pool_discards": 0,
+        "storage_device_pool_enabled": true,
+        "storage_device_pool_high_watermark": 16,
+        "storage_device_pool_idle_devices": 16,
+        "storage_device_pool_low_watermark": 2,
+        "storage_device_pool_new_acquires": 0,
+        "storage_device_pool_releases": 819,
+        "storage_device_pool_reused_acquires": 842,
+        "storage_error_volumes": 0,
+        "storage_hard_capacity_mb": 1449984,
+        "storage_hard_reserved_mb": 533952,
+        "storage_max_concurrent_operations": 8,
+        "storage_publication_active": 0,
+        "storage_publication_duration_ms_max": 0,
+        "storage_publication_duration_ms_total": 0,
+        "storage_publication_limit": 4,
+        "storage_publication_queue_wait_ms_max": 0,
+        "storage_publication_queue_wait_ms_total": 0,
+        "storage_publication_waiting": 0,
+        "storage_published_volumes": 0,
+        "storage_snapshot_compactions": 0,
+        "storage_snapshot_publications": 0,
+        "storage_snapshot_uploaded_bytes": 0,
+        "storage_ublk_active_devices": 23,
+        "storage_ublk_live_devices": 39,
+        "storage_ublk_max_devices": 0,
+        "storage_waiting_operations": 0,
+        "swap_free_mb": 98303,
+        "swap_total_mb": 98303,
+        "swap_used_mb": 0
+      },
+      "admission_open": true,
+      "agent_version": "0.5.53",
+      "capabilities": [
+        "environment-contract-v1",
+        "sandbox",
+        "image-cache",
+        "disk-quota",
+        "hibernate-local-v2",
+        "direct-runsc-v1",
+        "network-policy-relay-v1:default",
+        "managed-primary-v1",
+        "storage-native-v1",
+        "sandbox-detach-published-v1",
+        "sandbox-migrate-storage-native-v1"
+      ],
+      "deployment_id": "live-ucloud-20260824a",
+      "draining": false,
+      "free_resources": {
+        "disk_mb": 916032,
+        "memory_mb": 84992,
+        "vcpu": 6.0
+      },
+      "heartbeat_updated_at": "2026-09-19T13:09:57.871936+00:00",
+      "idle_since": null,
+      "init_version": "3",
+      "job_id": "12396482",
+      "load": {
+        "disk": 0.3217690677966102,
+        "memory": 0.0,
+        "vcpu": 0.0
+      },
+      "node_id": "sandbox-node-02bf3bb35c-1",
+      "node_url": "http://sandbox-node-02bf3bb35c-1:8090",
+      "total_resources": {
+        "disk_mb": 1449984,
+        "memory_mb": 98304,
+        "vcpu": 32.0
+      },
+      "used_resources": {
+        "disk_mb": 466560,
+        "memory_mb": 0,
+        "vcpu": 0.0
+      }
+    }
+  ],
+  "affected_trace_ids": [
+    "a9d5be849f53c95c04f57dbddf9abed2",
+    "aefde667aacbe5070ec7a5a7fc876b6e",
+    "fd60c835cbb1d8da0c67fc95696f6f27"
+  ],
+  "cause_of_initial_poweroff": "User confirmed worker was intentionally stopped or restarted",
+  "autoscaler_evidence": "Cycle 164: RUNNING, 103 sandboxes, no stop intents. Cycle 165: SUSPENDED, destructive node loss, stop issued.",
+  "current_route_count_at_1318": 0
+}

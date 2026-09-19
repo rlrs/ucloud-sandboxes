@@ -18,6 +18,10 @@ def new_exec_session_id() -> str:
     return f"exec-{uuid4().hex}"
 
 
+class ExecSessionCapacityError(RuntimeError):
+    """No session slot is available; the requested process has not started."""
+
+
 @dataclass(frozen=True)
 class SandboxExecSpec:
     sandbox_id: str
@@ -147,13 +151,15 @@ class ExecSessionManager:
         self,
         sandbox_manager: Any,
         *,
-        max_sessions: int = 128,
+        max_sessions: int = 1024,
         max_events_per_session: int = 512,
+        completed_retention_seconds: float = 30.0,
         telemetry: Telemetry | None = None,
     ) -> None:
         self.sandbox_manager = sandbox_manager
         self.max_sessions = max(1, max_sessions)
         self.max_events_per_session = max(1, max_events_per_session)
+        self.completed_retention_seconds = max(0.0, completed_retention_seconds)
         self.telemetry = telemetry or Telemetry.disabled("exec-session-manager")
         self._sessions: dict[str, ExecSession] = {}
         self._lock = RLock()
@@ -537,11 +543,14 @@ class ExecSessionManager:
     def _make_session_room_locked(self) -> None:
         if len(self._sessions) < self.max_sessions:
             return
+        now = utc_now()
         terminal = sorted(
             (
                 session
                 for session in self._sessions.values()
                 if session.status in {"exited", "failed"}
+                and (now - session.updated_at).total_seconds()
+                >= self.completed_retention_seconds
             ),
             key=lambda session: (session.updated_at, session.id),
         )
@@ -549,7 +558,10 @@ class ExecSessionManager:
             self._sessions.pop(session.id, None)
             if len(self._sessions) < self.max_sessions:
                 return
-        raise RuntimeError("exec session capacity reached")
+        # A just-finished command may still be waiting for its caller to read
+        # the exit/output events. Apply admission backpressure rather than
+        # evicting that result and making the accepted command appear missing.
+        raise ExecSessionCapacityError("exec session capacity reached")
 
     def _append_event_locked(
         self,

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.5.39 - 2026-09-19
+
+- Provide HTTP thread headroom for 256 live agent streams and concurrent tools:
+  768 gateway request threads and 512 per node, with startup admission unchanged.
+- Allow 1024 bounded exec sessions per node, so resident agent processes leave
+  room for tool commands and retained results.
+- Retain completed exec results for at least 30 seconds under capacity pressure;
+  reject new commands before dispatch with safe retry information instead of
+  evicting results before their callers can read them.
+
 ## 0.5.38 - 2026-09-19
 
 - Preserve early handler rejection responses when clients are still sending

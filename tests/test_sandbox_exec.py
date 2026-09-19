@@ -1,14 +1,16 @@
 import unittest
 from collections import deque
+from datetime import timedelta
 from io import StringIO
 import sys
 from threading import Condition, Event, Thread
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from ucloud_sandboxes.models import utc_now
 from ucloud_sandboxes.sandbox_exec import (
     ExecSession,
+    ExecSessionCapacityError,
     ExecSessionManager,
     SandboxExecSpec,
     new_exec_session_id,
@@ -16,6 +18,54 @@ from ucloud_sandboxes.sandbox_exec import (
 
 
 class SandboxExecProtocolTests(unittest.TestCase):
+    def test_node_returns_safe_admission_response_for_session_capacity(self) -> None:
+        from ucloud_sandboxes.node_agent import NodeAgentHandler
+        from ucloud_sandboxes.telemetry import Telemetry
+
+        handler = object.__new__(NodeAgentHandler)
+        handler.telemetry = Telemetry.disabled("test")
+        handler.exec_manager = Mock()
+        handler.exec_manager.start.side_effect = ExecSessionCapacityError("full")
+        handler._read_json_body = Mock(return_value={
+            "command": ["true"], "env": {}, "working_dir": None,
+            "stdin": False, "tty": False,
+        })
+        handler._write_json = Mock()
+        handler._start_exec("/v1/sandboxes/one/exec")
+        response = handler._write_json.call_args
+        self.assertEqual(response.kwargs["status"], 503)
+        self.assertEqual(response.args[0]["error_code"], "node_active_exec_deferred")
+        self.assertTrue(response.args[0]["retryable"])
+        self.assertEqual(response.kwargs["headers"]["Retry-After"], "1")
+
+    def test_capacity_preserves_recent_completed_results(self) -> None:
+        manager = ExecSessionManager(FakeSandboxManager(), max_sessions=2)
+        running = _install_session(manager, BlockingStdin())
+        completed = _install_session(manager, BlockingStdin())
+        completed.status = "exited"
+        manager._append_stream_chunk(completed.id, "stdout", "retained result")
+        with manager._lock:
+            with self.assertRaises(ExecSessionCapacityError):
+                manager._make_session_room_locked()
+        self.assertIs(manager.get(running.id), running)
+        self.assertEqual(manager.events_after(completed.id)[0].data, "retained result")
+        completed.updated_at -= timedelta(seconds=31)
+        with manager._lock:
+            manager._make_session_room_locked()
+        self.assertIsNone(manager.get(completed.id))
+        self.assertIs(manager.get(running.id), running)
+
+    def test_session_capacity_rejection_never_starts_a_process_and_releases_leases(self) -> None:
+        sandbox_manager = FakeSandboxManager()
+        manager = ExecSessionManager(sandbox_manager, max_sessions=1)
+        _install_session(manager, BlockingStdin())
+        with patch("ucloud_sandboxes.sandbox_exec.subprocess.Popen") as popen:
+            with self.assertRaises(ExecSessionCapacityError):
+                manager.start(SandboxExecSpec(sandbox_id="sandbox-two", command=("echo", "ok")))
+        popen.assert_not_called()
+        self.assertEqual(sandbox_manager.lifecycle.released, ["sandbox-two"])
+        self.assertEqual(sandbox_manager.capacity_released, ["capacity:sandbox-two"])
+
     def test_exec_payload_requires_the_canonical_schema(self) -> None:
         payload = {
             "command": ["/bin/echo", "ok"],

@@ -1,0 +1,219 @@
+{
+  "sdk_version": "0.4.21",
+  "transport": "per-sandbox AsyncSandboxClient, matching Verifiers",
+  "prefix": "relay-256-36ced305",
+  "started_at": "2026-09-19T05:32:56.910403+00:00",
+  "count": 256,
+  "concurrency": 256,
+  "image": "release-0534-989b03553a-image",
+  "shape": {
+    "cpus": 2,
+    "memory_mb": 1024,
+    "disk_mb": 5184
+  },
+  "phases": [
+    {
+      "name": "create",
+      "seconds": 76.824,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 46.502,
+        "p50": 60.695,
+        "p95": 73.007,
+        "max": 76.797
+      }
+    },
+    {
+      "name": "initialize-relay-agents",
+      "seconds": 5.537,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 0.375,
+        "p50": 2.073,
+        "p95": 4.406,
+        "max": 5.45
+      }
+    },
+    {
+      "name": "trigger-1",
+      "seconds": 5.18,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 0.144,
+        "p50": 2.442,
+        "p95": 4.878,
+        "max": 5.061
+      }
+    },
+    {
+      "name": "poll-1",
+      "seconds": 0.484,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 0.145,
+        "p50": 0.328,
+        "p95": 0.36,
+        "max": 0.368
+      }
+    },
+    {
+      "name": "commit-and-wake-1",
+      "seconds": 28.757,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 1.027,
+        "p50": 13.151,
+        "p95": 24.083,
+        "max": 28.601
+      }
+    },
+    {
+      "name": "verify-tools-1",
+      "seconds": 3.26,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 0.254,
+        "p50": 1.638,
+        "p95": 3.001,
+        "max": 3.16
+      }
+    },
+    {
+      "name": "trigger-2",
+      "seconds": 5.152,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 0.076,
+        "p50": 1.622,
+        "p95": 3.909,
+        "max": 5.075
+      }
+    },
+    {
+      "name": "poll-2",
+      "seconds": 0.73,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 0.121,
+        "p50": 0.342,
+        "p95": 0.601,
+        "max": 0.616
+      }
+    },
+    {
+      "name": "commit-and-wake-2",
+      "seconds": 27.035,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 0.712,
+        "p50": 11.708,
+        "p95": 21.876,
+        "max": 27.009
+      }
+    },
+    {
+      "name": "verify-tools-2",
+      "seconds": 3.361,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 0.237,
+        "p50": 0.891,
+        "p95": 2.968,
+        "max": 3.177
+      }
+    },
+    {
+      "name": "trigger-3",
+      "seconds": 5.212,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 0.076,
+        "p50": 1.573,
+        "p95": 3.872,
+        "max": 5.149
+      }
+    },
+    {
+      "name": "poll-3",
+      "seconds": 0.504,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 0.14,
+        "p50": 0.345,
+        "p95": 0.383,
+        "max": 0.388
+      }
+    },
+    {
+      "name": "commit-and-wake-3",
+      "seconds": 30.508,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 0.585,
+        "p50": 12.62,
+        "p95": 24.225,
+        "max": 30.482
+      }
+    },
+    {
+      "name": "verify-tools-3",
+      "seconds": 3.297,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 0.228,
+        "p50": 1.574,
+        "p95": 2.085,
+        "max": 3.206
+      }
+    }
+  ],
+  "errors": [],
+  "kind": "relay-managed-agent",
+  "relay_cycles": 3,
+  "placement": [
+    [
+      "12396306",
+      "running",
+      128
+    ],
+    [
+      "12396307",
+      "running",
+      128
+    ]
+  ],
+  "success": true,
+  "relay_cleanup_errors": [],
+  "cleanup_errors": [],
+  "remaining": [],
+  "http_rejections": [],
+  "health": {
+    "count": 221,
+    "failures": [],
+    "latency": {
+      "min": 0.011,
+      "p50": 0.022,
+      "p95": 0.118,
+      "max": 0.413
+    }
+  },
+  "total_seconds": 229.391,
+  "server_version": "0.5.38",
+  "sdk_commit": "f50c6114228bee13524af7c053b74fc36f86d33b",
+  "sdk_wheel_sha256": "d38776b88b38e3a710ad659cf4c813f53c222cff63e0560e219b85a213ed8dbe",
+  "note": "256 concurrent per-rollout relay clients; explicit all-parked barrier; controlled echo replies, no external model calls; 180 commit attempts configured."
+}

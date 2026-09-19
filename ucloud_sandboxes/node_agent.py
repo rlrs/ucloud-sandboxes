@@ -67,7 +67,7 @@ from .sandbox import (
     SandboxStartupBusyError,
     sandbox_spec_fingerprint,
 )
-from .sandbox_exec import ExecSessionManager, SandboxExecSpec
+from .sandbox_exec import ExecSessionCapacityError, ExecSessionManager, SandboxExecSpec
 from .storage_native_migration import (
     STORAGE_NATIVE_MIGRATION_SCHEMA,
     StorageNativeMigration,
@@ -604,7 +604,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 headers={"Retry-After": "1"},
             )
             return
-        except SandboxCapacityUnavailableError as exc:
+        except (SandboxCapacityUnavailableError, ExecSessionCapacityError) as exc:
             self._write_json(
                 {
                     "error": str(exc),

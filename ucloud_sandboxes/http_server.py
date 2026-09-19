@@ -19,7 +19,9 @@ from .telemetry import Telemetry, trace_id_hex
 
 DEFAULT_HTTP_REQUEST_QUEUE_SIZE = 4096
 DEFAULT_HTTP_CLIENT_SOCKET_TIMEOUT_SECONDS = 60.0
-DEFAULT_MAX_HTTP_REQUEST_THREADS = 256
+# Each of 128 resident sandboxes can hold an agent event poll and a tool poll.
+# Reserve room beyond those sleeping requests for lifecycle and health traffic.
+DEFAULT_MAX_HTTP_REQUEST_THREADS = 512
 DEFAULT_MAX_JSON_BODY_BYTES = 16 * 1024 * 1024
 HTTP_OVERLOAD_RETRY_AFTER_SECONDS = 1
 HTTP_OVERLOAD_DRAIN_SECONDS = 2.0

@@ -1,0 +1,167 @@
+{
+  "name": "result",
+  "elapsed": 197.493,
+  "transport": "per-sandbox AsyncSandboxClient, matching Verifiers",
+  "prefix": "qualify-256-5c9d8784",
+  "started_at": "2026-09-19T05:16:28.313682+00:00",
+  "count": 256,
+  "concurrency": 256,
+  "image": "release-0534-989b03553a-image",
+  "shape": {
+    "cpus": 2,
+    "memory_mb": 1024,
+    "disk_mb": 5184
+  },
+  "phases": [
+    {
+      "name": "cold-create",
+      "seconds": 76.745,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 47.47,
+        "p50": 61.632,
+        "p95": 74.81,
+        "max": 76.691
+      }
+    },
+    {
+      "name": "initialize-and-tools",
+      "seconds": 12.66,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 0.84,
+        "p50": 7.829,
+        "p95": 11.977,
+        "max": 12.566
+      }
+    },
+    {
+      "name": "park-1",
+      "seconds": 7.657,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 1.575,
+        "p50": 5.072,
+        "p95": 7.469,
+        "max": 7.553
+      }
+    },
+    {
+      "name": "resume-and-tools-1",
+      "seconds": 27.045,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 1.094,
+        "p50": 19.6,
+        "p95": 22.943,
+        "max": 27.011
+      }
+    },
+    {
+      "name": "park-2",
+      "seconds": 7.732,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 1.43,
+        "p50": 4.894,
+        "p95": 7.541,
+        "max": 7.652
+      }
+    },
+    {
+      "name": "resume-and-tools-2",
+      "seconds": 27.695,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 1.031,
+        "p50": 19.437,
+        "p95": 22.711,
+        "max": 27.611
+      }
+    },
+    {
+      "name": "park-3",
+      "seconds": 7.613,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 1.527,
+        "p50": 5.315,
+        "p95": 7.4,
+        "max": 7.523
+      }
+    },
+    {
+      "name": "resume-and-tools-3",
+      "seconds": 24.23,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 1.187,
+        "p50": 20.005,
+        "p95": 23.193,
+        "max": 24.193
+      }
+    }
+  ],
+  "errors": [],
+  "placement": [
+    [
+      "12396304",
+      "running",
+      128
+    ],
+    [
+      "12396305",
+      "running",
+      128
+    ]
+  ],
+  "success": true,
+  "cleanup_errors": [],
+  "remaining": [],
+  "http_rejections": [
+    {
+      "phase": "cold-create",
+      "code": "503",
+      "count": 8635
+    },
+    {
+      "phase": "initialize-and-tools",
+      "code": "503",
+      "count": 1439
+    },
+    {
+      "phase": "resume-and-tools-1",
+      "code": "503",
+      "count": 3431
+    },
+    {
+      "phase": "resume-and-tools-2",
+      "code": "503",
+      "count": 3430
+    },
+    {
+      "phase": "resume-and-tools-3",
+      "code": "503",
+      "count": 3544
+    }
+  ],
+  "health": {
+    "count": 187,
+    "failures": [],
+    "latency": {
+      "min": 0.011,
+      "p50": 0.032,
+      "p95": 0.186,
+      "max": 0.456
+    }
+  },
+  "total_seconds": 197.438
+}

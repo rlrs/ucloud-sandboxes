@@ -89,3 +89,43 @@ The runtime regression now verifies a wake reaches storage and advances its
 activity revision even with publication pending. The blocked-upload concurrency
 tests continue to verify that stale uploads cannot replace resumed authority or
 delete its checkpoint.
+
+## Production qualification
+
+Runtime commit `a73c5f2fc73f57e2e6da6530ec5987441dcc97c1` (0.5.57) was deployed
+at 18:34:28 UTC on 2026-09-19. Gateway, relay and autoscaler were restarted;
+both worker roles use validated 0.5.57 bundles. The native executable SHA-256
+was verified on a live worker as
+`26f986bc3eca90f7650129981d8d9d6615832a85c68962db34ddde59e1a93018`.
+CI run 35461517645 passed. The follow-up canonical check passed the same 929
+server and 118 SDK tests; 156 targeted tests also passed on production Linux.
+
+Using SDK 0.4.23 and managed-process parkable sandboxes (2 requested CPUs,
+1024 MiB memory, 5184 MiB disk), every operation passed:
+
+| Runtime | Concurrent sandboxes | Complete park/publish/wake cycles | Wake + tool-check p95 range | Gateway health p95 |
+| --- | ---: | ---: | ---: | ---: |
+| 0.5.56 | 16 | 8 | 4.46–21.63 s | 45 ms |
+| 0.5.56 | 64 | 8 | 8.69–15.42 s | 132 ms |
+| 0.5.57 | 64 | 8 | 7.56–8.51 s | 85 ms |
+| 0.5.57 | 256 | 3 | 32.27–34.76 s | 407 ms |
+
+Each cycle verified uploaded/downloaded bytes, a persistent file hash, and the
+resumed process's UUID and monotonic counter. The 0.5.57 64-way run started on
+a fresh worker; the 256-way run used that warm worker plus a newly scaled worker
+(174 and 82 sandboxes respectively). Thus the latter is not a 256-way entirely
+cold-worker benchmark. Both workers reported 0.5.57. All test sandboxes were
+deleted, with no cleanup errors or remaining routes. No gateway health probes
+failed (174 in the final 64-way run and 267 in the 256-way run).
+
+The final 64-way run had zero `snapshot_publication_pending` retries, versus
+366 in the corresponding 0.5.56 run. The 256-way run also had none. Burst admission
+still required retries: provisioning observed retryable 503/no-ready-node/image
+warmup responses, and the three 256-way park batches observed 216
+`http_request_capacity_exhausted` responses in total. These were retried and all
+operations completed, but they remain a throughput/latency limitation; this
+qualification does not establish 512-way capacity or zero-backoff service.
+
+Relay maintenance converted all 111 stale deleted-caller requests to completed
+terminal results after deployment. Completed model responses remain preserved.
+No SDK or Verifiers code was changed for these server-side fixes.

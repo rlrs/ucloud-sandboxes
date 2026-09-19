@@ -1,0 +1,3464 @@
+{
+  "name": "result",
+  "elapsed": 664.282,
+  "sdk_version": "0.4.22",
+  "transport": "per-sandbox AsyncSandboxClient, matching Verifiers",
+  "prefix": "relay-worker-512-2ad21fac",
+  "started_at": "2026-09-19T07:21:02.343143+00:00",
+  "count": 512,
+  "concurrency": 512,
+  "image": "release-0534-989b03553a-image",
+  "shape": {
+    "cpus": 2,
+    "memory_mb": 1024,
+    "disk_mb": 5184
+  },
+  "phases": [
+    {
+      "name": "create",
+      "seconds": 176.103,
+      "passed": 512,
+      "failed": 0,
+      "latency": {
+        "min": 51.735,
+        "p50": 83.004,
+        "p95": 172.595,
+        "max": 175.957
+      }
+    },
+    {
+      "name": "initialize-relay-agents",
+      "seconds": 7.266,
+      "passed": 512,
+      "failed": 0,
+      "latency": {
+        "min": 0.355,
+        "p50": 3.168,
+        "p95": 6.041,
+        "max": 7.079
+      }
+    },
+    {
+      "name": "trigger-1",
+      "seconds": 9.464,
+      "passed": 512,
+      "failed": 0,
+      "latency": {
+        "min": 0.374,
+        "p50": 3.858,
+        "p95": 7.681,
+        "max": 9.218
+      }
+    },
+    {
+      "name": "forward-wake-tools-1",
+      "seconds": 118.337,
+      "passed": 512,
+      "failed": 0,
+      "latency": {
+        "min": 11.668,
+        "p50": 105.791,
+        "p95": 116.674,
+        "max": 118.063
+      }
+    },
+    {
+      "name": "trigger-2",
+      "seconds": 8.683,
+      "passed": 512,
+      "failed": 0,
+      "latency": {
+        "min": 0.316,
+        "p50": 3.257,
+        "p95": 7.113,
+        "max": 8.385
+      }
+    }
+  ],
+  "errors": [],
+  "runner_file_descriptor_limit": 8192,
+  "previous_runner_file_descriptor_limit": 1024,
+  "kind": "shared-relay-run-worker-forwarding",
+  "relay_cycles": 5,
+  "placement": [
+    [
+      "12396331",
+      "running",
+      128
+    ],
+    [
+      "12396332",
+      "running",
+      128
+    ],
+    [
+      "12396333",
+      "running",
+      128
+    ],
+    [
+      "12396334",
+      "running",
+      128
+    ]
+  ],
+  "success": false,
+  "fatal": "KeyboardInterrupt: ",
+  "worker_errors": [],
+  "upstream_counts": {
+    "1": 512,
+    "2": 512
+  },
+  "upstream_peak": {
+    "1": 512,
+    "2": 512
+  },
+  "relay_cleanup_errors": [],
+  "cleanup_errors": [],
+  "remaining": [],
+  "http_rejections": [],
+  "health": {
+    "count": 522,
+    "failures": [],
+    "latency": {
+      "min": 0.013,
+      "p50": 0.032,
+      "p95": 0.501,
+      "max": 4.788
+    }
+  },
+  "relay_health": {
+    "count": 522,
+    "failures": [
+      {
+        "phase": "trigger-2",
+        "seconds": 5.000650036148727,
+        "ok": false,
+        "error": ""
+      },
+      {
+        "phase": "trigger-2",
+        "seconds": 5.00078963697888,
+        "ok": false,
+        "error": ""
+      },
+      {
+        "phase": "trigger-2",
+        "seconds": 5.001605781028047,
+        "ok": false,
+        "error": ""
+      }
+    ],
+    "latency": {
+      "min": 0.007,
+      "p50": 0.01,
+      "p95": 0.597,
+      "max": 5.002
+    }
+  },
+  "resource_samples": [
+    {
+      "runner_open_descriptors": 521,
+      "elapsed": 9.85,
+      "phase": "create",
+      "gateway_host_cpu_percent": null,
+      "gateway_host_memory_available_mb": 3804,
+      "workers": [],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 109,
+        "tasks": 15
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 128,
+        "tasks": 20
+      }
+    },
+    {
+      "runner_open_descriptors": 521,
+      "elapsed": 20.23,
+      "phase": "create",
+      "gateway_host_cpu_percent": 68.23,
+      "gateway_host_memory_available_mb": 3712,
+      "workers": [],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 110,
+        "tasks": 19
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 128,
+        "tasks": 20
+      }
+    },
+    {
+      "runner_open_descriptors": 521,
+      "elapsed": 30.71,
+      "phase": "create",
+      "gateway_host_cpu_percent": 68.35,
+      "gateway_host_memory_available_mb": 3709,
+      "workers": [],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 110,
+        "tasks": 19
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 128,
+        "tasks": 20
+      }
+    },
+    {
+      "runner_open_descriptors": 521,
+      "elapsed": 41.15,
+      "phase": "create",
+      "gateway_host_cpu_percent": 72.17,
+      "gateway_host_memory_available_mb": 3702,
+      "workers": [],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 108,
+        "tasks": 20
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 128,
+        "tasks": 20
+      }
+    },
+    {
+      "runner_open_descriptors": 521,
+      "elapsed": 51.65,
+      "phase": "create",
+      "gateway_host_cpu_percent": 63.68,
+      "gateway_host_memory_available_mb": 3648,
+      "workers": [
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2292,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 111,
+        "tasks": 21
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 128,
+        "tasks": 20
+      }
+    },
+    {
+      "runner_open_descriptors": 489,
+      "elapsed": 62.13,
+      "phase": "create",
+      "gateway_host_cpu_percent": 53.22,
+      "gateway_host_memory_available_mb": 3631,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2087,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2292,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 112,
+        "tasks": 20
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 128,
+        "tasks": 20
+      }
+    },
+    {
+      "runner_open_descriptors": 421,
+      "elapsed": 72.81,
+      "phase": "create",
+      "gateway_host_cpu_percent": 50.1,
+      "gateway_host_memory_available_mb": 3637,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2087,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 81,
+          "cpu_percent": 12.5,
+          "memory_used_mb": 4229,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 1,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 87,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 0.6134969325153374,
+          "memory_used_mb": 2113,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 116,
+        "tasks": 19
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 128,
+        "tasks": 20
+      }
+    },
+    {
+      "runner_open_descriptors": 310,
+      "elapsed": 84.42,
+      "phase": "create",
+      "gateway_host_cpu_percent": 54.66,
+      "gateway_host_memory_available_mb": 3653,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 53,
+          "cpu_percent": 19.54022988505747,
+          "memory_used_mb": 3488,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 3,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 58,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 81,
+          "cpu_percent": 12.5,
+          "memory_used_mb": 4229,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 1,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 87,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 63,
+          "cpu_percent": 12.025316455696203,
+          "memory_used_mb": 3655,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 2,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 65,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 116,
+        "tasks": 19
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 128,
+        "tasks": 20
+      }
+    },
+    {
+      "runner_open_descriptors": 239,
+      "elapsed": 96.26,
+      "phase": "create",
+      "gateway_host_cpu_percent": 46.07,
+      "gateway_host_memory_available_mb": 3653,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 123,
+          "cpu_percent": 7.5,
+          "memory_used_mb": 5093,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 125,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 120,
+          "cpu_percent": 0.628930817610063,
+          "memory_used_mb": 4937,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 120,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 63,
+          "cpu_percent": 12.025316455696203,
+          "memory_used_mb": 3655,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 2,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 65,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 117,
+        "tasks": 19
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 128,
+        "tasks": 20
+      }
+    },
+    {
+      "runner_open_descriptors": 157,
+      "elapsed": 108.08,
+      "phase": "create",
+      "gateway_host_cpu_percent": 59.74,
+      "gateway_host_memory_available_mb": 3654,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 123,
+          "cpu_percent": 7.5,
+          "memory_used_mb": 5093,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 125,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 120,
+          "cpu_percent": 0.628930817610063,
+          "memory_used_mb": 4937,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 120,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 128,
+          "cpu_percent": 1.257861635220126,
+          "memory_used_mb": 5177,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 128,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 118,
+        "tasks": 12
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 128,
+        "tasks": 20
+      }
+    },
+    {
+      "runner_open_descriptors": 137,
+      "elapsed": 118.5,
+      "phase": "create",
+      "gateway_host_cpu_percent": 56.82,
+      "gateway_host_memory_available_mb": 3656,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 128,
+          "cpu_percent": 3.125,
+          "memory_used_mb": 4977,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 128,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 128,
+          "cpu_percent": 0.628930817610063,
+          "memory_used_mb": 4958,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 128,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 128,
+          "cpu_percent": 1.257861635220126,
+          "memory_used_mb": 5177,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 128,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 116,
+        "tasks": 19
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 128,
+        "tasks": 20
+      }
+    },
+    {
+      "runner_open_descriptors": 137,
+      "elapsed": 128.91,
+      "phase": "create",
+      "gateway_host_cpu_percent": 56.37,
+      "gateway_host_memory_available_mb": 3678,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 128,
+          "cpu_percent": 3.125,
+          "memory_used_mb": 4977,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 128,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 128,
+          "cpu_percent": 0.628930817610063,
+          "memory_used_mb": 4958,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 128,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 128,
+          "cpu_percent": 1.257861635220126,
+          "memory_used_mb": 5177,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 128,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 110,
+        "tasks": 19
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 128,
+        "tasks": 20
+      }
+    },
+    {
+      "runner_open_descriptors": 137,
+      "elapsed": 139.36,
+      "phase": "create",
+      "gateway_host_cpu_percent": 58.51,
+      "gateway_host_memory_available_mb": 3652,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 128,
+          "cpu_percent": 3.0837004405286343,
+          "memory_used_mb": 4897,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 128,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 128,
+          "cpu_percent": 1.2658227848101267,
+          "memory_used_mb": 4913,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 128,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 128,
+          "cpu_percent": 2.5316455696202533,
+          "memory_used_mb": 4911,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 128,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 116,
+        "tasks": 18
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 128,
+        "tasks": 20
+      }
+    },
+    {
+      "runner_open_descriptors": 137,
+      "elapsed": 149.8,
+      "phase": "create",
+      "gateway_host_cpu_percent": 53.46,
+      "gateway_host_memory_available_mb": 3689,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 128,
+          "cpu_percent": 3.0837004405286343,
+          "memory_used_mb": 4897,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 128,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 128,
+          "cpu_percent": 1.2658227848101267,
+          "memory_used_mb": 4913,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 128,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 128,
+          "cpu_percent": 2.5316455696202533,
+          "memory_used_mb": 4911,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 128,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2273,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 116,
+        "tasks": 20
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 128,
+        "tasks": 20
+      }
+    },
+    {
+      "runner_open_descriptors": 66,
+      "elapsed": 172.24,
+      "phase": "create",
+      "gateway_host_cpu_percent": 66.71,
+      "gateway_host_memory_available_mb": 3690,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 128,
+          "cpu_percent": 1.257861635220126,
+          "memory_used_mb": 4896,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 128,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 128,
+          "cpu_percent": 3.1055900621118013,
+          "memory_used_mb": 4924,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 128,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 128,
+          "cpu_percent": 0.6369426751592357,
+          "memory_used_mb": 4900,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 128,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 88,
+          "cpu_percent": 34.193548387096776,
+          "memory_used_mb": 4348,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 3,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 94,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 132,
+        "tasks": 16
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 128,
+        "tasks": 20
+      }
+    },
+    {
+      "runner_open_descriptors": 505,
+      "elapsed": 183.19,
+      "phase": "initialize-relay-agents",
+      "gateway_host_cpu_percent": 45.86,
+      "gateway_host_memory_available_mb": 3652,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 128,
+          "cpu_percent": 53.64238410596026,
+          "memory_used_mb": 5426,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 128,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 128,
+          "cpu_percent": 1.89873417721519,
+          "memory_used_mb": 5285,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 128,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 128,
+          "cpu_percent": 60.9271523178808,
+          "memory_used_mb": 5208,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 128,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 88,
+          "cpu_percent": 34.193548387096776,
+          "memory_used_mb": 4348,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 3,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 94,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 120,
+        "tasks": 3
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 129,
+        "tasks": 20
+      }
+    },
+    {
+      "runner_open_descriptors": 1598,
+      "elapsed": 193.99,
+      "phase": "trigger-1",
+      "gateway_host_cpu_percent": 63.82,
+      "gateway_host_memory_available_mb": 3535,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 128,
+          "cpu_percent": 53.64238410596026,
+          "memory_used_mb": 5426,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 128,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 128,
+          "cpu_percent": 1.89873417721519,
+          "memory_used_mb": 5285,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 128,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 128,
+          "cpu_percent": 60.9271523178808,
+          "memory_used_mb": 5208,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 128,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 103,
+          "cpu_percent": 3.1645569620253164,
+          "memory_used_mb": 5546,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 3,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 113,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 128,
+        "tasks": 19
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 277,
+        "tasks": 20
+      }
+    },
+    {
+      "runner_open_descriptors": 1802,
+      "elapsed": 206.42,
+      "phase": "forward-wake-tools-1",
+      "gateway_host_cpu_percent": 59.67,
+      "gateway_host_memory_available_mb": 3181,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 0.6172839506172839,
+          "memory_used_mb": 2449,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 4,
+          "cpu_percent": 2.515723270440252,
+          "memory_used_mb": 2585,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 5,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 25,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 3168,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 25,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 103,
+          "cpu_percent": 3.1645569620253164,
+          "memory_used_mb": 5546,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 3,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 113,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 131,
+        "tasks": 23
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 554,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 777,
+      "elapsed": 224.09,
+      "phase": "forward-wake-tools-1",
+      "gateway_host_cpu_percent": 97.37,
+      "gateway_host_memory_available_mb": 2506,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 27,
+          "cpu_percent": 5.294117647058823,
+          "memory_used_mb": 3199,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 28,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 19,
+          "cpu_percent": 4.123711340206185,
+          "memory_used_mb": 2965,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 19,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 25,
+          "cpu_percent": 4.968944099378882,
+          "memory_used_mb": 3180,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 26,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 9,
+          "cpu_percent": 7.954545454545454,
+          "memory_used_mb": 2736,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 11,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 116,
+        "tasks": 20
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 1214,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 769,
+      "elapsed": 241.42,
+      "phase": "forward-wake-tools-1",
+      "gateway_host_cpu_percent": 97.38,
+      "gateway_host_memory_available_mb": 2143,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 27,
+          "cpu_percent": 5.294117647058823,
+          "memory_used_mb": 3199,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 28,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 19,
+          "cpu_percent": 4.123711340206185,
+          "memory_used_mb": 2965,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 19,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 62,
+          "cpu_percent": 8.227848101265822,
+          "memory_used_mb": 4241,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 1,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 63,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 38,
+          "cpu_percent": 3.488372093023256,
+          "memory_used_mb": 3535,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 38,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 127,
+        "tasks": 21
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 1672,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 762,
+      "elapsed": 254.99,
+      "phase": "forward-wake-tools-1",
+      "gateway_host_cpu_percent": 97.25,
+      "gateway_host_memory_available_mb": 2091,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 53,
+          "cpu_percent": 8.484848484848486,
+          "memory_used_mb": 3925,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 54,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 46,
+          "cpu_percent": 3.125,
+          "memory_used_mb": 3728,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 46,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 62,
+          "cpu_percent": 8.227848101265822,
+          "memory_used_mb": 4241,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 1,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 63,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 62,
+          "cpu_percent": 1.0471204188481675,
+          "memory_used_mb": 4192,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 62,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 128,
+        "tasks": 21
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 1738,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 742,
+      "elapsed": 268.0,
+      "phase": "forward-wake-tools-1",
+      "gateway_host_cpu_percent": 97.05,
+      "gateway_host_memory_available_mb": 2085,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 81,
+          "cpu_percent": 5.031446540880504,
+          "memory_used_mb": 4736,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 81,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 72,
+          "cpu_percent": 4.395604395604396,
+          "memory_used_mb": 4489,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 72,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 88,
+          "cpu_percent": 7.253886010362693,
+          "memory_used_mb": 4933,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 88,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 62,
+          "cpu_percent": 1.0471204188481675,
+          "memory_used_mb": 4192,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 62,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 127,
+        "tasks": 23
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 1736,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 715,
+      "elapsed": 281.96,
+      "phase": "forward-wake-tools-1",
+      "gateway_host_cpu_percent": 96.33,
+      "gateway_host_memory_available_mb": 1945,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 81,
+          "cpu_percent": 5.031446540880504,
+          "memory_used_mb": 4736,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 81,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 72,
+          "cpu_percent": 4.395604395604396,
+          "memory_used_mb": 4489,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 72,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 110,
+          "cpu_percent": 5.063291139240507,
+          "memory_used_mb": 5566,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 110,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 92,
+          "cpu_percent": 4.375,
+          "memory_used_mb": 5079,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 92,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 125,
+        "tasks": 19
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 1878,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 619,
+      "elapsed": 301.58,
+      "phase": "forward-wake-tools-1",
+      "gateway_host_cpu_percent": 94.48,
+      "gateway_host_memory_available_mb": 1683,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 103,
+          "cpu_percent": 10.69182389937107,
+          "memory_used_mb": 5382,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 104,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 102,
+          "cpu_percent": 4.375,
+          "memory_used_mb": 5319,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 102,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 110,
+          "cpu_percent": 5.063291139240507,
+          "memory_used_mb": 5566,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 110,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 115,
+          "cpu_percent": 5.128205128205128,
+          "memory_used_mb": 5735,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 115,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 127,
+        "tasks": 21
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 2131,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 530,
+      "elapsed": 315.14,
+      "phase": "forward-wake-tools-1",
+      "gateway_host_cpu_percent": 90.63,
+      "gateway_host_memory_available_mb": 1494,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 125,
+          "cpu_percent": 6.962025316455696,
+          "memory_used_mb": 6008,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 125,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 122,
+          "cpu_percent": 6.832298136645963,
+          "memory_used_mb": 5890,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 122,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 125,
+          "cpu_percent": 6.211180124223603,
+          "memory_used_mb": 5995,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 125,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 127,
+          "cpu_percent": 1.8633540372670807,
+          "memory_used_mb": 6091,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 127,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 127,
+        "tasks": 21
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 2351,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 1290,
+      "elapsed": 326.54,
+      "phase": "trigger-2",
+      "gateway_host_cpu_percent": 73.57,
+      "gateway_host_memory_available_mb": 1580,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 106,
+          "cpu_percent": 10.897435897435898,
+          "memory_used_mb": 5762,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 1,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 109,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 119,
+          "cpu_percent": 5.69620253164557,
+          "memory_used_mb": 6017,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 119,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 111,
+          "cpu_percent": 7.361963190184049,
+          "memory_used_mb": 5805,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 1,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 112,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 127,
+          "cpu_percent": 1.8633540372670807,
+          "memory_used_mb": 6091,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 127,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 132,
+        "tasks": 20
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 2229,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 998,
+      "elapsed": 347.84,
+      "phase": "trigger-2",
+      "gateway_host_cpu_percent": 26.53,
+      "gateway_host_memory_available_mb": 1625,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 11,
+          "cpu_percent": 0.6172839506172839,
+          "memory_used_mb": 2641,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 11,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 8,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2539,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 8,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 11,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2645,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 11,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 58,
+          "cpu_percent": 0.6211180124223602,
+          "memory_used_mb": 4172,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 58,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 123,
+        "tasks": 3
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 2239,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 1044,
+      "elapsed": 363.1,
+      "phase": "trigger-2",
+      "gateway_host_cpu_percent": 5.24,
+      "gateway_host_memory_available_mb": 1625,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 11,
+          "cpu_percent": 0.6172839506172839,
+          "memory_used_mb": 2641,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 11,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 8,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2539,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 8,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 11,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2645,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 11,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 3,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2371,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 3,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 124,
+        "tasks": 3
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 2239,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 1071,
+      "elapsed": 375.37,
+      "phase": "trigger-2",
+      "gateway_host_cpu_percent": 5.99,
+      "gateway_host_memory_available_mb": 1618,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 6,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2465,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 6,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 5,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2433,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 5,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 6,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2460,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 6,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 3,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2371,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 3,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 125,
+        "tasks": 3
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 2239,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 1156,
+      "elapsed": 385.62,
+      "phase": "trigger-2",
+      "gateway_host_cpu_percent": 9.48,
+      "gateway_host_memory_available_mb": 1886,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 6,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2465,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 6,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 5,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2433,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 5,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 6,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2460,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 6,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 2,
+          "cpu_percent": 0.6172839506172839,
+          "memory_used_mb": 2330,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 2,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 124,
+        "tasks": 3
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 1956,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 1163,
+      "elapsed": 395.89,
+      "phase": "trigger-2",
+      "gateway_host_cpu_percent": 9.78,
+      "gateway_host_memory_available_mb": 1911,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 1,
+          "cpu_percent": 1.5151515151515151,
+          "memory_used_mb": 2288,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 1,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 3,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2358,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 3,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 2,
+          "cpu_percent": 0.6134969325153374,
+          "memory_used_mb": 2331,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 2,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 2,
+          "cpu_percent": 0.6172839506172839,
+          "memory_used_mb": 2330,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 2,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 105,
+        "tasks": 3
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 1957,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 1154,
+      "elapsed": 408.62,
+      "phase": "trigger-2",
+      "gateway_host_cpu_percent": 6.32,
+      "gateway_host_memory_available_mb": 1913,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 1,
+          "cpu_percent": 1.5151515151515151,
+          "memory_used_mb": 2288,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 1,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 3,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2358,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 3,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 2,
+          "cpu_percent": 0.6134969325153374,
+          "memory_used_mb": 2331,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 2,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 1,
+          "cpu_percent": 1.8518518518518516,
+          "memory_used_mb": 2289,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 1,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 105,
+        "tasks": 3
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 1958,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 1154,
+      "elapsed": 420.35,
+      "phase": "trigger-2",
+      "gateway_host_cpu_percent": 7.33,
+      "gateway_host_memory_available_mb": 1918,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2261,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 3,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2353,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 3,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 2,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2330,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 2,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 1,
+          "cpu_percent": 1.8518518518518516,
+          "memory_used_mb": 2289,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 1,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 106,
+        "tasks": 3
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 1958,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 1151,
+      "elapsed": 430.65,
+      "phase": "trigger-2",
+      "gateway_host_cpu_percent": 9.6,
+      "gateway_host_memory_available_mb": 1915,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2261,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 3,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2353,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 3,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 2,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2330,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 2,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 1,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2284,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 1,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 106,
+        "tasks": 3
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 1956,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 1152,
+      "elapsed": 441.88,
+      "phase": "trigger-2",
+      "gateway_host_cpu_percent": 6.59,
+      "gateway_host_memory_available_mb": 1924,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2260,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 3,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2354,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 3,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 2,
+          "cpu_percent": 2.5,
+          "memory_used_mb": 2323,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 2,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 1,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2318,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 1,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 106,
+        "tasks": 3
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 1957,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 1171,
+      "elapsed": 455.58,
+      "phase": "trigger-2",
+      "gateway_host_cpu_percent": 7.21,
+      "gateway_host_memory_available_mb": 1924,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2260,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 3,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2354,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 3,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 2,
+          "cpu_percent": 2.5,
+          "memory_used_mb": 2323,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 2,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 1,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2318,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 1,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 106,
+        "tasks": 3
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 1958,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 1167,
+      "elapsed": 467.08,
+      "phase": "trigger-2",
+      "gateway_host_cpu_percent": 9.15,
+      "gateway_host_memory_available_mb": 1796,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 1.4285714285714286,
+          "memory_used_mb": 2262,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 1,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2301,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 1,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 1,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2283,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 1,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 1,
+          "cpu_percent": 1.8518518518518516,
+          "memory_used_mb": 2291,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 1,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 106,
+        "tasks": 3
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 1958,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 1167,
+      "elapsed": 477.32,
+      "phase": "trigger-2",
+      "gateway_host_cpu_percent": 5.78,
+      "gateway_host_memory_available_mb": 1801,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 1.4285714285714286,
+          "memory_used_mb": 2262,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 1,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2301,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 1,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 1,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2283,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 1,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 1,
+          "cpu_percent": 1.8518518518518516,
+          "memory_used_mb": 2291,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 1,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 106,
+        "tasks": 3
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 1959,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 1162,
+      "elapsed": 490.25,
+      "phase": "trigger-2",
+      "gateway_host_cpu_percent": 6.7,
+      "gateway_host_memory_available_mb": 1810,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2260,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2256,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2256,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2255,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 106,
+        "tasks": 3
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 1957,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 1162,
+      "elapsed": 501.76,
+      "phase": "trigger-2",
+      "gateway_host_cpu_percent": 6.08,
+      "gateway_host_memory_available_mb": 1811,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2260,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2256,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2256,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2255,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 106,
+        "tasks": 3
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 1959,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 1176,
+      "elapsed": 513.87,
+      "phase": "trigger-2",
+      "gateway_host_cpu_percent": 8.37,
+      "gateway_host_memory_available_mb": 1807,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2265,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2255,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2256,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2264,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 107,
+        "tasks": 3
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 1959,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 1170,
+      "elapsed": 525.43,
+      "phase": "trigger-2",
+      "gateway_host_cpu_percent": 6.96,
+      "gateway_host_memory_available_mb": 1810,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2265,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2255,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2273,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2264,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 107,
+        "tasks": 3
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 1957,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 778,
+      "elapsed": 537.48,
+      "phase": "forward-wake-tools-2",
+      "gateway_host_cpu_percent": 54.83,
+      "gateway_host_memory_available_mb": 1691,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 1,
+          "cpu_percent": 6.875000000000001,
+          "memory_used_mb": 2353,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 3,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 0,
+          "cpu_percent": 0.0,
+          "memory_used_mb": 2249,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 0,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 2,
+          "cpu_percent": 2.0618556701030926,
+          "memory_used_mb": 2355,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 2,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 1,
+          "cpu_percent": 2.4691358024691357,
+          "memory_used_mb": 2297,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 1,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 130,
+        "tasks": 22
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 2022,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 776,
+      "elapsed": 551.32,
+      "phase": "forward-wake-tools-2",
+      "gateway_host_cpu_percent": 98.98,
+      "gateway_host_memory_available_mb": 1801,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 1,
+          "cpu_percent": 6.875000000000001,
+          "memory_used_mb": 2353,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 3,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 34,
+          "cpu_percent": 6.976744186046512,
+          "memory_used_mb": 3352,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 34,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 2,
+          "cpu_percent": 2.0618556701030926,
+          "memory_used_mb": 2355,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 2,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 1,
+          "cpu_percent": 2.4691358024691357,
+          "memory_used_mb": 2297,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 1,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 127,
+        "tasks": 21
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 1892,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 766,
+      "elapsed": 568.6,
+      "phase": "forward-wake-tools-2",
+      "gateway_host_cpu_percent": 99.04,
+      "gateway_host_memory_available_mb": 1767,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 27,
+          "cpu_percent": 3.75,
+          "memory_used_mb": 3122,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 1,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 28,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 34,
+          "cpu_percent": 6.976744186046512,
+          "memory_used_mb": 3352,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 34,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 28,
+          "cpu_percent": 4.375,
+          "memory_used_mb": 3150,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 28,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 35,
+          "cpu_percent": 3.7267080745341614,
+          "memory_used_mb": 3401,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 35,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 132,
+        "tasks": 21
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 1901,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 757,
+      "elapsed": 581.25,
+      "phase": "forward-wake-tools-2",
+      "gateway_host_cpu_percent": 99.16,
+      "gateway_host_memory_available_mb": 1851,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 61,
+          "cpu_percent": 6.0606060606060606,
+          "memory_used_mb": 4126,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 61,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 58,
+          "cpu_percent": 0.625,
+          "memory_used_mb": 4060,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 58,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 65,
+          "cpu_percent": 1.875,
+          "memory_used_mb": 4298,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 65,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 69,
+          "cpu_percent": 0.625,
+          "memory_used_mb": 4425,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 69,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 132,
+        "tasks": 22
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 1802,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 742,
+      "elapsed": 595.74,
+      "phase": "forward-wake-tools-2",
+      "gateway_host_cpu_percent": 98.05,
+      "gateway_host_memory_available_mb": 1686,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 88,
+          "cpu_percent": 15.286624203821656,
+          "memory_used_mb": 5006,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 90,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 88,
+          "cpu_percent": 1.7241379310344827,
+          "memory_used_mb": 4957,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 88,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 92,
+          "cpu_percent": 6.369426751592357,
+          "memory_used_mb": 5063,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 93,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 97,
+          "cpu_percent": 0.6329113924050633,
+          "memory_used_mb": 5257,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 97,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 125,
+        "tasks": 21
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 1991,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 719,
+      "elapsed": 610.0,
+      "phase": "forward-wake-tools-2",
+      "gateway_host_cpu_percent": 96.62,
+      "gateway_host_memory_available_mb": 1419,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 88,
+          "cpu_percent": 15.286624203821656,
+          "memory_used_mb": 5006,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 90,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 88,
+          "cpu_percent": 1.7241379310344827,
+          "memory_used_mb": 4957,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 88,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 92,
+          "cpu_percent": 6.369426751592357,
+          "memory_used_mb": 5063,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 93,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 97,
+          "cpu_percent": 0.6329113924050633,
+          "memory_used_mb": 5257,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 97,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 119,
+        "tasks": 20
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 2308,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 650,
+      "elapsed": 625.31,
+      "phase": "forward-wake-tools-2",
+      "gateway_host_cpu_percent": 95.71,
+      "gateway_host_memory_available_mb": 1509,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 115,
+          "cpu_percent": 15.723270440251572,
+          "memory_used_mb": 5822,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 116,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 113,
+          "cpu_percent": 3.79746835443038,
+          "memory_used_mb": 5711,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 113,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 112,
+          "cpu_percent": 7.027027027027027,
+          "memory_used_mb": 5726,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 113,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 116,
+          "cpu_percent": 5.660377358490567,
+          "memory_used_mb": 5815,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 116,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 136,
+        "tasks": 21
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 2204,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 520,
+      "elapsed": 640.58,
+      "phase": "forward-wake-tools-2",
+      "gateway_host_cpu_percent": 92.13,
+      "gateway_host_memory_available_mb": 1376,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 128,
+          "cpu_percent": 3.821656050955414,
+          "memory_used_mb": 6246,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 128,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 126,
+          "cpu_percent": 6.289308176100629,
+          "memory_used_mb": 6161,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 126,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 128,
+          "cpu_percent": 5.228758169934641,
+          "memory_used_mb": 6251,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 128,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 128,
+          "cpu_percent": 6.918238993710692,
+          "memory_used_mb": 6239,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 128,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 133,
+        "tasks": 19
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 2349,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 422,
+      "elapsed": 651.32,
+      "phase": "forward-wake-tools-2",
+      "gateway_host_cpu_percent": 41.63,
+      "gateway_host_memory_available_mb": 1475,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 128,
+          "cpu_percent": 3.821656050955414,
+          "memory_used_mb": 6246,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 128,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 126,
+          "cpu_percent": 6.289308176100629,
+          "memory_used_mb": 6161,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 126,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 128,
+          "cpu_percent": 5.228758169934641,
+          "memory_used_mb": 6251,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 128,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 128,
+          "cpu_percent": 6.918238993710692,
+          "memory_used_mb": 6239,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 128,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 133,
+        "tasks": 3
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 2240,
+        "tasks": 68
+      }
+    },
+    {
+      "runner_open_descriptors": 256,
+      "elapsed": 661.61,
+      "phase": "cleanup",
+      "gateway_host_cpu_percent": 34.81,
+      "gateway_host_memory_available_mb": 1481,
+      "workers": [
+        {
+          "job_id": "12396331",
+          "version": "0.5.42",
+          "active": 71,
+          "cpu_percent": 7.096774193548387,
+          "memory_used_mb": 4659,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 2,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 74,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396332",
+          "version": "0.5.42",
+          "active": 96,
+          "cpu_percent": 1.2903225806451613,
+          "memory_used_mb": 5223,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 96,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396333",
+          "version": "0.5.42",
+          "active": 56,
+          "cpu_percent": 13.375796178343949,
+          "memory_used_mb": 4023,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 2,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 56,
+          "storage_error_volumes": 0
+        },
+        {
+          "job_id": "12396334",
+          "version": "0.5.42",
+          "active": 45,
+          "cpu_percent": 5.806451612903226,
+          "memory_used_mb": 3766,
+          "swap_used_mb": 0,
+          "memory_psi_full_avg10": 0.0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_ublk_active_devices": 45,
+          "storage_error_volumes": 0
+        }
+      ],
+      "ucloud-sandbox-gateway": {
+        "memory_mb": 122,
+        "tasks": 18
+      },
+      "ucloud-sandbox-relay": {
+        "memory_mb": 2240,
+        "tasks": 68
+      }
+    }
+  ],
+  "total_seconds": 664.23,
+  "server_version": "0.5.42",
+  "server_commit": "71c0018150421e5cc14c9f13ab8c557b06c28839",
+  "sdk_commit": "b59c959edf7b106e7cc9b1fadafb6fc62aea60ad",
+  "sdk_wheel_sha256": "5de58b4ce2101503ce27dcbe3aeca5299e466fa86d2beac27c9fc0fbc2eedcb6",
+  "observed_events": [
+    {
+      "name": "all-parked",
+      "elapsed": 202.713,
+      "cycle": 1,
+      "seconds": 9.558,
+      "inventory": [
+        [
+          "12396331",
+          "parked",
+          128
+        ],
+        [
+          "12396332",
+          "parked",
+          128
+        ],
+        [
+          "12396333",
+          "parked",
+          128
+        ],
+        [
+          "12396334",
+          "parked",
+          128
+        ]
+      ]
+    },
+    {
+      "name": "all-upstreams-concurrent",
+      "elapsed": 202.715,
+      "cycle": 1,
+      "count": 512,
+      "seconds": 0.0
+    },
+    {
+      "name": "all-parked",
+      "elapsed": 466.967,
+      "cycle": 2,
+      "seconds": 137.225,
+      "inventory": [
+        [
+          "12396331",
+          "parked",
+          128
+        ],
+        [
+          "12396332",
+          "parked",
+          128
+        ],
+        [
+          "12396333",
+          "parked",
+          128
+        ],
+        [
+          "12396334",
+          "parked",
+          128
+        ]
+      ]
+    },
+    {
+      "name": "all-upstreams-concurrent",
+      "elapsed": 530.92,
+      "cycle": 2,
+      "count": 512,
+      "seconds": 63.951
+    },
+    {
+      "name": "failed",
+      "elapsed": 651.397,
+      "error": "KeyboardInterrupt: "
+    }
+  ],
+  "qualification_note": "Stopped by operator after first cycle took 118.3 seconds and the next park/upstream barrier took 201.2 seconds. Diagnosed long server idle keepalive: 1024 proxy connections, 531 silent >60 seconds; local pinned aiohttp default 3630 seconds. Cleanup completed normally. Not a passing qualification."
+}

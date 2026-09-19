@@ -1282,7 +1282,9 @@
     "aefde667aacbe5070ec7a5a7fc876b6e",
     "fd60c835cbb1d8da0c67fc95696f6f27"
   ],
-  "cause_of_initial_poweroff": "User confirmed worker was intentionally stopped or restarted",
+  "cause_of_initial_poweroff": "User clarified known UCloud VM-loss bug; platform root-cause investigation out of scope",
   "autoscaler_evidence": "Cycle 164: RUNNING, 103 sandboxes, no stop intents. Cycle 165: SUSPENDED, destructive node loss, stop issued.",
-  "current_route_count_at_1318": 0
+  "current_route_count_at_1318": 0,
+  "confirmation_correction": "Earlier yes-answer was incorrectly interpreted as an intentional user stop; superseded by clarification.",
+  "handling_release": "0.5.54"
 }

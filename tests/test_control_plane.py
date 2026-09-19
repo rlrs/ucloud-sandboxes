@@ -358,6 +358,52 @@ def _store_build_context(server, archive: bytes) -> dict[str, object]:
 
 
 class ControlPlaneTests(unittest.TestCase):
+    def test_lost_sandbox_returns_terminal_reason_for_status_and_lifecycle(
+        self,
+    ) -> None:
+        with _temporary_root() as root:
+            route_file = root / "routes.sqlite"
+            routing = RoutingStore(route_file)
+            routing.upsert_sandbox(
+                _sandbox_route(
+                    sandbox_id="lost",
+                    node_id="node",
+                    job_id="job",
+                    node_url="http://node.invalid",
+                    state="running",
+                )
+            )
+            routing.delete_sandboxes_for_jobs_with_error(
+                ["job"], terminal_error="node_lost"
+            )
+            gateway = _gateway_server(root, routing_file=route_file)
+            with _running_server(gateway) as base:
+                for method, path in [
+                    ("GET", "/v1/sandboxes/lost"),
+                    ("GET", "/v1/sandboxes/lost/jobs/job-1"),
+                    ("POST", "/v1/sandboxes/lost/wake"),
+                    ("POST", "/v1/sandboxes/lost/park"),
+                ]:
+                    with self.subTest(method=method, path=path):
+                        result = self._json_request(
+                            base + path,
+                            method=method,
+                            payload={} if method == "POST" else None,
+                            allow_error=True,
+                        )
+                        self.assertEqual(result["status"], 410)
+                        self.assertEqual(result["body"]["error_code"], "node_lost")
+                        self.assertFalse(result["body"]["retryable"])
+                        self.assertEqual(result["body"]["sandbox_generation"], 1)
+                deleted = self._json_request(
+                    base + "/v1/sandboxes/lost", method="DELETE"
+                )
+                self.assertFalse(deleted["deleted"])
+                missing = self._json_request(
+                    base + "/v1/sandboxes/unknown", allow_error=True
+                )
+                self.assertEqual(missing["status"], 404)
+
     def test_exec_signal_is_available_to_the_public_sdk_route(self) -> None:
         self.assertTrue(
             control_plane._is_sdk_api_request(  # noqa: SLF001

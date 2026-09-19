@@ -318,7 +318,7 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
 
             async def wake(_request):
                 attempts.append(1)
-                raise RelayCallerUnavailable(404)
+                raise RelayCallerUnavailable(410)
 
             class FakeRequest:
                 app = {STATE_KEY: state, RESULT_NOTIFIER_KEY: wake}

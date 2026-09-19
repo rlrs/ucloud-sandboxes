@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.54
+
+- Retain generation-fenced node-loss records for seven days. Requests for a lost
+  sandbox return HTTP 410 with `error_code: node_lost` and `retryable: false`,
+  instead of a generic missing-route response. Existing retained program failures
+  are backfilled; a newer sandbox incarnation is never labeled with an old loss.
+- Preserve the existing relay behavior: acknowledge retained model responses for
+  unavailable callers without replaying model work or claiming a successful wake.
+
 ## Unreleased
 
 ## 0.5.53 - 2026-09-19

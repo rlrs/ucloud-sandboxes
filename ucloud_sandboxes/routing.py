@@ -635,6 +635,28 @@ class RoutingStore:
         with self._connect() as conn:
             return self._get_sandbox_unlocked(conn, sandbox_id)
 
+    def get_sandbox_loss(self, sandbox_id: str) -> dict[str, Any] | None:
+        """Return terminal loss only for the latest, still-absent incarnation."""
+        cutoff = (
+            utc_now() - timedelta(seconds=PROGRAM_TERMINAL_RETENTION_SECONDS)
+        ).isoformat()
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT loss.sandbox_id, loss.generation, loss.job_id,
+                       loss.reason, loss.lost_at
+                FROM sandbox_losses AS loss
+                JOIN sandbox_generation_hwm AS hwm USING (sandbox_id)
+                WHERE loss.sandbox_id = ? AND loss.generation = hwm.generation
+                  AND loss.lost_at > ?
+                  AND NOT EXISTS (
+                      SELECT 1 FROM sandboxes WHERE sandbox_id = loss.sandbox_id
+                  )
+                """,
+                (sandbox_id, cutoff),
+            ).fetchone()
+        return dict(row) if row is not None else None
+
     def get_managed_process(
         self,
         sandbox_id: str,
@@ -2187,6 +2209,23 @@ class RoutingStore:
             removed = conn.execute(
                 "DELETE FROM sandboxes WHERE sandbox_id = ?", (sandbox_id,)
             ).rowcount
+        if removed and terminal_error and isinstance(route, SandboxRoute):
+            conn.execute(
+                """
+                INSERT INTO sandbox_losses VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(sandbox_id) DO UPDATE SET
+                    generation = excluded.generation, job_id = excluded.job_id,
+                    reason = excluded.reason, lost_at = excluded.lost_at
+                WHERE excluded.generation >= sandbox_losses.generation
+                """,
+                (
+                    sandbox_id,
+                    route.generation,
+                    route.job_id,
+                    terminal_error,
+                    utc_now().isoformat(),
+                ),
+            )
         conn.execute(
             "DELETE FROM sandbox_storage_dependencies WHERE sandbox_id = ?",
             (sandbox_id,),
@@ -2912,6 +2951,9 @@ class RoutingStore:
             now - timedelta(seconds=PROGRAM_TERMINAL_RETENTION_SECONDS)
         ).isoformat()
         conn.execute(
+            "DELETE FROM sandbox_losses WHERE lost_at <= ?", (terminal_cutoff,)
+        )
+        conn.execute(
             """
             DELETE FROM program_requests
             WHERE state = 'terminal' AND updated_at <= ?
@@ -3297,6 +3339,41 @@ class RoutingStore:
                 ON program_requests(sandbox_id, sandbox_generation)
                 """
             )
+            # Additive diagnostic state: existing route/lease contracts and
+            # schema-3 readers remain compatible. Backfill once from retained
+            # program failures so already-lost callers gain the same response.
+            has_losses = (
+                conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sandbox_losses'"
+                ).fetchone()
+                is not None
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS sandbox_losses (
+                    sandbox_id TEXT PRIMARY KEY,
+                    generation INTEGER NOT NULL CHECK (generation > 0),
+                    job_id TEXT NOT NULL,
+                    reason TEXT NOT NULL,
+                    lost_at TEXT NOT NULL
+                ) STRICT
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS sandbox_losses_time ON sandbox_losses(lost_at)"
+            )
+            if not has_losses:
+                conn.execute(
+                    """
+                    INSERT INTO sandbox_losses
+                    SELECT p.sandbox_id, p.sandbox_generation, '', 'node_lost', MAX(p.updated_at)
+                    FROM program_requests AS p
+                    JOIN sandbox_generation_hwm AS h ON p.sandbox_id = h.sandbox_id
+                        AND p.sandbox_generation = h.generation
+                    WHERE p.state = 'terminal' AND p.last_error = 'node_lost'
+                    GROUP BY p.sandbox_id, p.sandbox_generation
+                    """
+                )
             conn.execute(f"PRAGMA user_version={ROUTING_SCHEMA_VERSION}")
             conn.commit()
 

@@ -1101,10 +1101,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 raise ValueError("sandbox detach payload must be an empty object")
             route = self.routing_store.get_sandbox_readonly(sandbox_id)
             if route is None:
-                self._write_json(
-                    {"error": "sandbox route not found"},
-                    status=HTTPStatus.NOT_FOUND,
-                )
+                self._write_missing_sandbox_route(sandbox_id)
                 return
             if route.worker_state == "detached":
                 self._write_json({"ok": True, "sandbox": route.to_dict()})
@@ -1309,10 +1306,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     if migration is None:
                         source = self.routing_store.get_sandbox_readonly(sandbox_id)
                         if source is None:
-                            self._write_json(
-                                {"error": "sandbox route not found"},
-                                status=HTTPStatus.NOT_FOUND,
-                            )
+                            self._write_missing_sandbox_route(sandbox_id)
                             return
                         destination = self._select_migration_destination(
                             source,
@@ -4085,6 +4079,25 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         else:
             self._route_sandbox_request_admitted(sandbox_id, path)
 
+    def _write_missing_sandbox_route(self, sandbox_id: str) -> None:
+        loss = self.routing_store.get_sandbox_loss(sandbox_id)
+        if loss is not None:
+            self._write_json(
+                {
+                    "error": "sandbox worker was lost; this sandbox incarnation cannot resume",
+                    "error_code": loss["reason"],
+                    "retryable": False,
+                    "sandbox_id": sandbox_id,
+                    "sandbox_generation": loss["generation"],
+                    "lost_at": loss["lost_at"],
+                },
+                status=HTTPStatus.GONE,
+            )
+            return
+        self._write_json(
+            {"error": "sandbox route not found"}, status=HTTPStatus.NOT_FOUND
+        )
+
     def _route_sandbox_request_admitted(self, sandbox_id: str, path: str) -> None:
         route = self.routing_store.get_sandbox(sandbox_id)
         if route is None:
@@ -4098,9 +4111,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 )
                 self._write_json({"ok": True, "deleted": False})
                 return
-            self._write_json(
-                {"error": "sandbox route not found"}, status=HTTPStatus.NOT_FOUND
-            )
+            self._write_missing_sandbox_route(sandbox_id)
             return
 
         if self.command != "DELETE" and route.delete_operation_id:
@@ -4363,10 +4374,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     ) -> tuple[SandboxRoute, bool] | None:
         current = self.routing_store.get_sandbox_readonly(route.sandbox_id)
         if current is None:
-            self._write_json(
-                {"error": "sandbox route not found"},
-                status=HTTPStatus.NOT_FOUND,
-            )
+            self._write_missing_sandbox_route(route.sandbox_id)
             return None
         if (current.state or "unknown").lower() != "parked":
             return current, False
@@ -5078,10 +5086,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         with _GATEWAY_SCHEDULING_LOCK, _gateway_placement_lock(self.routing_store.path):
             current = self.routing_store.get_sandbox_readonly(route.sandbox_id)
             if current is None:
-                self._write_json(
-                    {"error": "sandbox route not found"},
-                    status=HTTPStatus.NOT_FOUND,
-                )
+                self._write_missing_sandbox_route(route.sandbox_id)
                 return None
             if (current.state or "unknown").lower() in {"waking", "running"}:
                 return current

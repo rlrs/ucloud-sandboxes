@@ -3,8 +3,8 @@
 The `super-park-harness-*` run lost worker **12396482**, which owned **103
 sandbox routes** immediately before loss. UCloud's job history reports the VM
 powered off at **13:10:09.018 UTC**, then transitioned to SUCCESS at
-13:10:10.298. The user subsequently confirmed the worker was intentionally stopped or
-restarted.
+13:10:10.298. The user clarified that this is the known UCloud VM-loss behavior and that
+our responsibility is to handle the loss, not investigate the platform bug.
 
 Autoscaler cycle 164 still observed the job RUNNING with 103 sandboxes and no
 stop intent. Cycle 165 observed SUSPENDED, classified it as destructive node
@@ -36,9 +36,24 @@ worker's loss and remain to be diagnosed.
 
 At the final routing snapshot around 13:18 UTC, zero sandbox routes remained.
 The investigation performed no sandbox cleanup, service restart, or runtime
-change. The user confirmation establishes the intentional stop/restart as the trigger
-for this batch of missing routes. It does not make fast local checkpoints
+change. The earlier interpretation of a confirmation as an intentional user stop was
+incorrect and is superseded by that clarification. It does not make fast local checkpoints
 survive node loss, or establish that the separate admission-pressure errors
 are resolved.
 
 [Structured evidence](../benchmarks/prod-worker-loss-2026-09-19.json).
+
+## Handling in 0.5.54
+
+The gateway retains a loss record for seven days, fenced to the sandbox's latest
+allocated generation. Lost sandbox requests now return HTTP 410 with
+`error_code: node_lost`, `retryable: false`, the sandbox generation and loss time.
+The record is committed atomically with removal of the route. Existing retained
+terminal program losses are backfilled. Unknown IDs remain 404, deletion remains
+idempotent, and a recreated ID cannot inherit the earlier generation's loss.
+
+The relay already treats 410 as a permanently unavailable caller: it releases
+the delivery hold and acknowledges the existing model result without rerunning
+the model or recording a successful wake. Regression coverage checks retained
+response replay across restart. The runner must replace/retry the failed agent
+attempt; retrying operations on the lost incarnation cannot recover its state.

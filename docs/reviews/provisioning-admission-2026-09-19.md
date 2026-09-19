@@ -90,3 +90,21 @@ sandboxes, registrations and reservation and cleared its drain token.
 A separate `super-park-harness` workload started after this run and was left
 untouched. This qualification covers the reported 64-way provisioning
 failure; the earlier 512 relay results remain a separate, narrower test.
+
+## Subsequent workload observation
+
+A separate 64-sandbox `super-park-harness` run started after qualification.
+All 64 reached parked state. At 10:01:44 UTC, 30 wake demands were waiting;
+at 10:02:37, 16 remained, labelled `wake_snapshot_publication_pending`.
+The pending queue was empty by 10:03:33. Worker 12396406's last heartbeat
+was temporarily stuck at 10:00:49 before recovering. Its node HTTP health
+still responded during inspection; it had ample free disk/RAM, no swap use
+and no reported storage-error volumes. The node journal contained delayed
+publication/heartbeat responses whose clients had disconnected.
+
+This is a separate performance concern, not proof of a terminal provisioning
+failure or an established root cause. At 10:04:30, both workers and the builder
+reported 0.5.46 with fresh, open-admission heartbeats, both public services
+were healthy, and pending demand was zero. The independent run's full result
+was not available, so this report does not claim it passed end to end or that
+snapshot publication latency is fixed.

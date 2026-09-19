@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.5.37 - 2026-09-19
+
+- Preserve structured HTTP overload rejections while clients finish sending a
+  request body. Rejected connections now half-close the response and drain
+  incoming data with bounded time, bytes, and sockets, without blocking the
+  accept loop or consuming request threads. This fixes broken-pipe failures
+  seen during a 256-way park burst.
+
 ## 0.5.36 - 2026-09-18
 
 - Isolate relay journal work from lifecycle HTTP calls so saturated park/wake

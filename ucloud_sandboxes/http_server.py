@@ -4,8 +4,10 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from functools import wraps
 import json
+import selectors
 import socket
 from threading import BoundedSemaphore
+from time import monotonic
 from typing import Any, Callable
 from urllib.parse import unquote, urlparse
 
@@ -20,6 +22,8 @@ DEFAULT_HTTP_CLIENT_SOCKET_TIMEOUT_SECONDS = 60.0
 DEFAULT_MAX_HTTP_REQUEST_THREADS = 256
 DEFAULT_MAX_JSON_BODY_BYTES = 16 * 1024 * 1024
 HTTP_OVERLOAD_RETRY_AFTER_SECONDS = 1
+HTTP_OVERLOAD_DRAIN_SECONDS = 2.0
+HTTP_OVERLOAD_DRAIN_BYTES = DEFAULT_MAX_JSON_BODY_BYTES + 64 * 1024
 
 
 class RequestBodyTooLargeError(ValueError):
@@ -247,6 +251,8 @@ class HighBacklogThreadingHTTPServer(ThreadingHTTPServer):
         self.max_request_threads = int(max_request_threads)
         self._request_slots = BoundedSemaphore(self.max_request_threads)
         super().__init__(*args, **kwargs)
+        self._overload_selector = selectors.DefaultSelector()
+        self._overload_drains: dict[socket.socket, tuple[float, int]] = {}
 
     def get_request(self) -> tuple[socket.socket, Any]:
         client, address = super().get_request()
@@ -255,23 +261,66 @@ class HighBacklogThreadingHTTPServer(ThreadingHTTPServer):
 
     def process_request(self, request: socket.socket, client_address: Any) -> None:
         if not self._request_slots.acquire(blocking=False):
-            # Never make an upstream proxy infer service unavailability from a
-            # bare connection close. UCloud renders that transport failure as
-            # an HTML "Job is unavailable" 503, which callers cannot classify
-            # or retry reliably. A small best-effort response keeps overload in
-            # the API protocol while the accept loop continues draining the
-            # kernel backlog.
-            try:
-                request.sendall(HTTP_OVERLOAD_RESPONSE)
-            except OSError:
-                pass
-            self.shutdown_request(request)
+            self._reject_overload(request)
             return
         try:
             super().process_request(request, client_address)
         except BaseException:
             self._request_slots.release()
             raise
+
+    def _reject_overload(self, request: socket.socket) -> None:
+        # Closing a socket with an unread POST body can reset the connection
+        # before the caller sees our safe-retry response. Half-close the reply,
+        # then discard incoming bytes without blocking the accept loop or
+        # allocating another request thread. Time, bytes and sockets are bounded.
+        if len(self._overload_drains) >= self.request_queue_size:
+            self.shutdown_request(request)
+            return
+        try:
+            request.setblocking(False)
+            request.sendall(HTTP_OVERLOAD_RESPONSE)
+            request.shutdown(socket.SHUT_WR)
+            self._overload_selector.register(request, selectors.EVENT_READ)
+            self._overload_drains[request] = (
+                monotonic() + HTTP_OVERLOAD_DRAIN_SECONDS, 0,
+            )
+        except OSError:
+            self.shutdown_request(request)
+
+    def _close_overload_drain(self, request: socket.socket) -> None:
+        self._overload_selector.unregister(request)
+        self._overload_drains.pop(request, None)
+        self.close_request(request)
+
+    def service_actions(self) -> None:
+        super().service_actions()
+        for key, _events in self._overload_selector.select(timeout=0):
+            request = key.fileobj
+            deadline, received = self._overload_drains[request]
+            try:
+                chunk = request.recv(64 * 1024)
+            except BlockingIOError:
+                continue
+            except OSError:
+                chunk = b""
+            received += len(chunk)
+            if not chunk or received >= HTTP_OVERLOAD_DRAIN_BYTES:
+                self._close_overload_drain(request)
+            else:
+                self._overload_drains[request] = (deadline, received)
+        now = monotonic()
+        for request, (deadline, _received) in list(self._overload_drains.items()):
+            if now >= deadline:
+                self._close_overload_drain(request)
+
+    def server_close(self) -> None:
+        # HTTPServer.__init__ also calls server_close if bind/activate fails.
+        if hasattr(self, "_overload_selector"):
+            for request in list(self._overload_drains):
+                self._close_overload_drain(request)
+            self._overload_selector.close()
+        super().server_close()
 
     def process_request_thread(
         self,

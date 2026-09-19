@@ -1,0 +1,238 @@
+{
+  "name": "result",
+  "elapsed": 106.87,
+  "prefix": "qualify-256-8a676f8d",
+  "started_at": "2026-09-19T04:44:08.625784+00:00",
+  "count": 256,
+  "concurrency": 256,
+  "image": "release-0534-989b03553a-image",
+  "shape": {
+    "cpus": 0.5,
+    "memory_mb": 512,
+    "disk_mb": 4096
+  },
+  "phases": [
+    {
+      "name": "cold-create",
+      "seconds": 78.363,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 45.276,
+        "p50": 60.349,
+        "p95": 75.433,
+        "max": 78.011
+      }
+    },
+    {
+      "name": "initialize-and-tools",
+      "seconds": 15.602,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 1.378,
+        "p50": 10.391,
+        "p95": 14.78,
+        "max": 15.242
+      }
+    },
+    {
+      "name": "park-1",
+      "seconds": 7.704,
+      "passed": 236,
+      "failed": 20,
+      "latency": {
+        "min": 1.151,
+        "p50": 4.285,
+        "p95": 7.402,
+        "max": 7.599
+      }
+    }
+  ],
+  "errors": [
+    {
+      "id": "qualify-256-8a676f8d-125",
+      "ok": false,
+      "seconds": 1.287493655923754,
+      "error": "SandboxApiError: node-agent request failed: <urlopen error [Errno 32] Broken pipe>"
+    },
+    {
+      "id": "qualify-256-8a676f8d-127",
+      "ok": false,
+      "seconds": 1.4553593129385263,
+      "error": "SandboxApiError: node-agent request failed: <urlopen error [Errno 32] Broken pipe>"
+    },
+    {
+      "id": "qualify-256-8a676f8d-138",
+      "ok": false,
+      "seconds": 1.4508572691120207,
+      "error": "SandboxApiError: node-agent request failed: <urlopen error [Errno 32] Broken pipe>"
+    },
+    {
+      "id": "qualify-256-8a676f8d-143",
+      "ok": false,
+      "seconds": 2.598923576064408,
+      "error": "SandboxApiError: node-agent request failed: <urlopen error [Errno 32] Broken pipe>"
+    },
+    {
+      "id": "qualify-256-8a676f8d-152",
+      "ok": false,
+      "seconds": 1.329415376065299,
+      "error": "SandboxApiError: node-agent request failed: <urlopen error [Errno 32] Broken pipe>"
+    },
+    {
+      "id": "qualify-256-8a676f8d-156",
+      "ok": false,
+      "seconds": 3.6654378378298134,
+      "error": "SandboxApiError: node-agent request failed: <urlopen error [Errno 32] Broken pipe>"
+    },
+    {
+      "id": "qualify-256-8a676f8d-159",
+      "ok": false,
+      "seconds": 1.3292600410059094,
+      "error": "SandboxApiError: node-agent request failed: <urlopen error [Errno 32] Broken pipe>"
+    },
+    {
+      "id": "qualify-256-8a676f8d-175",
+      "ok": false,
+      "seconds": 1.328659744001925,
+      "error": "SandboxApiError: node-agent request failed: <urlopen error [Errno 32] Broken pipe>"
+    },
+    {
+      "id": "qualify-256-8a676f8d-179",
+      "ok": false,
+      "seconds": 1.1769118700176477,
+      "error": "SandboxApiError: node-agent request failed: <urlopen error [Errno 32] Broken pipe>"
+    },
+    {
+      "id": "qualify-256-8a676f8d-180",
+      "ok": false,
+      "seconds": 1.1736447410658002,
+      "error": "SandboxApiError: node-agent request failed: <urlopen error [Errno 32] Broken pipe>"
+    },
+    {
+      "id": "qualify-256-8a676f8d-181",
+      "ok": false,
+      "seconds": 1.3220939880702645,
+      "error": "SandboxApiError: node-agent request failed: <urlopen error [Errno 32] Broken pipe>"
+    },
+    {
+      "id": "qualify-256-8a676f8d-185",
+      "ok": false,
+      "seconds": 1.3324167020618916,
+      "error": "SandboxApiError: node-agent request failed: <urlopen error [Errno 32] Broken pipe>"
+    },
+    {
+      "id": "qualify-256-8a676f8d-190",
+      "ok": false,
+      "seconds": 1.3220738391391933,
+      "error": "SandboxApiError: node-agent request failed: <urlopen error [Errno 32] Broken pipe>"
+    },
+    {
+      "id": "qualify-256-8a676f8d-202",
+      "ok": false,
+      "seconds": 2.2865242990665138,
+      "error": "SandboxApiError: node-agent request failed: <urlopen error [Errno 32] Broken pipe>"
+    },
+    {
+      "id": "qualify-256-8a676f8d-204",
+      "ok": false,
+      "seconds": 1.3227259430568665,
+      "error": "SandboxApiError: node-agent request failed: <urlopen error [Errno 32] Broken pipe>"
+    },
+    {
+      "id": "qualify-256-8a676f8d-216",
+      "ok": false,
+      "seconds": 2.1738643620628864,
+      "error": "SandboxApiError: node-agent request failed: <urlopen error [Errno 32] Broken pipe>"
+    },
+    {
+      "id": "qualify-256-8a676f8d-218",
+      "ok": false,
+      "seconds": 1.24311507306993,
+      "error": "SandboxApiError: node-agent request failed: <urlopen error [Errno 32] Broken pipe>"
+    },
+    {
+      "id": "qualify-256-8a676f8d-235",
+      "ok": false,
+      "seconds": 1.1509477118961513,
+      "error": "SandboxApiError: node-agent request failed: <urlopen error [Errno 32] Broken pipe>"
+    },
+    {
+      "id": "qualify-256-8a676f8d-236",
+      "ok": false,
+      "seconds": 2.3965587401762605,
+      "error": "SandboxApiError: node-agent request failed: <urlopen error [Errno 32] Broken pipe>"
+    },
+    {
+      "id": "qualify-256-8a676f8d-252",
+      "ok": false,
+      "seconds": 1.3095919899642467,
+      "error": "SandboxApiError: node-agent request failed: <urlopen error [Errno 32] Broken pipe>"
+    }
+  ],
+  "placement": [
+    [
+      "12396297",
+      "running",
+      128
+    ],
+    [
+      "12396298",
+      "running",
+      128
+    ]
+  ],
+  "success": false,
+  "fatal": "RuntimeError: park-1: 20 failures",
+  "cleanup_errors": [],
+  "remaining": [],
+  "http_rejections": [
+    {
+      "phase": "cold-create",
+      "code": "gateway_startup_busy",
+      "count": 4099
+    },
+    {
+      "phase": "cold-create",
+      "code": "image_warmup_pending",
+      "count": 24
+    },
+    {
+      "phase": "cold-create",
+      "code": "no_ready_node",
+      "count": 4359
+    },
+    {
+      "phase": "cold-create",
+      "code": "node_active_admission_deferred",
+      "count": 200
+    },
+    {
+      "phase": "initialize-and-tools",
+      "code": "gateway_startup_busy",
+      "count": 1935
+    },
+    {
+      "phase": "initialize-and-tools",
+      "code": "node_startup_busy",
+      "count": 20
+    },
+    {
+      "phase": "park-1",
+      "code": "http_request_capacity_exhausted",
+      "count": 391
+    }
+  ],
+  "health": {
+    "count": 99,
+    "failures": [],
+    "latency": {
+      "min": 0.019,
+      "p50": 0.033,
+      "p95": 0.105,
+      "max": 3.745
+    }
+  },
+  "total_seconds": 106.868
+}

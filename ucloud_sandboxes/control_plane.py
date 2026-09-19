@@ -23,6 +23,7 @@ from uuid import uuid4
 
 import urllib3
 from urllib3.exceptions import HTTPError as Urllib3HTTPError
+from urllib3.exceptions import EmptyPoolError
 
 from .network_policy import SandboxNetworkPolicy
 from .capabilities import (
@@ -612,6 +613,14 @@ _NODE_HTTP_POOL = urllib3.PoolManager(
     block=True,
     retries=False,
 )
+# Long-lived agent/tool event polls must not consume the connections needed to
+# upload files, launch tools, or perform lifecycle calls on the same worker.
+_NODE_EXEC_EVENT_HTTP_POOL = urllib3.PoolManager(
+    num_pools=NODE_HTTP_POOL_ORIGINS,
+    maxsize=256,
+    block=True,
+    retries=False,
+)
 
 
 def _open_node_request(
@@ -632,7 +641,15 @@ def _open_node_request(
                 # the next request line. Keep hot bodyless polling pooled, but
                 # make every request with a body self-contained.
                 headers["Connection"] = "close"
-            return _NODE_HTTP_POOL.request(
+            path = urlparse(req.full_url).path
+            pool = (
+                _NODE_EXEC_EVENT_HTTP_POOL
+                if req.get_method() == "GET"
+                and path.startswith("/v1/exec/")
+                and path.endswith("/events")
+                else _NODE_HTTP_POOL
+            )
+            return pool.request(
                 req.get_method(),
                 req.full_url,
                 body=req.data,
@@ -8129,6 +8146,18 @@ def _node_create_rejection_reason(response: ProxiedResponse) -> str | None:
 
 
 def _node_transport_error_response(reason: object) -> ProxiedResponse:
+    if isinstance(reason, EmptyPoolError):
+        # urllib3 failed to acquire a connection: no request bytes were sent.
+        # Preserve that certainty so mutations can retry safely.
+        return ProxiedResponse(
+            HTTPStatus.SERVICE_UNAVAILABLE,
+            {"Content-Type": "application/json", "Retry-After": "1"},
+            json.dumps({
+                "error": "sandbox node HTTP connection capacity is exhausted",
+                "error_code": "http_request_capacity_exhausted",
+                "retryable": True,
+            }).encode("utf-8"),
+        )
     message = str(reason)
     lowered = message.lower()
     if isinstance(reason, socket.gaierror) or any(

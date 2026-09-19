@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.5.40 - 2026-09-19
+
+- Isolate gateway-to-node exec event polling in its own bounded connection pool,
+  preserving connections for tools, uploads, and lifecycle operations.
+- Report connection-pool admission exhaustion as a safe pre-dispatch 503 instead
+  of an ambiguous node transport 502.
+
 ## 0.5.39 - 2026-09-19
 
 - Provide HTTP thread headroom for 256 live agent streams and concurrent tools:

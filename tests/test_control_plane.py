@@ -1985,7 +1985,7 @@ class ControlPlaneTests(unittest.TestCase):
         )
         with _running_server(node) as node_url:
             try:
-                with patch.object(control_plane, "_NODE_HTTP_POOL", pool):
+                with patch.object(control_plane, "_NODE_EXEC_EVENT_HTTP_POOL", pool):
                     for _ in range(2):
                         req = request.Request(
                             f"{node_url}/v1/exec/session/events",

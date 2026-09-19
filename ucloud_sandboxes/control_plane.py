@@ -1392,13 +1392,14 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         require_active_resources: bool = False,
         consolidation_source: NodeHeartbeat | None = None,
     ) -> NodeHeartbeat | None:
-        routes = self._placement_routes()
-        active_migrations = self.routing_store.sandbox_migrations(active_only=True)
         if consolidation_source is not None and (
-            active_migrations
-            or time.monotonic() < self.wake_consolidation_next_at
+            time.monotonic() < self.wake_consolidation_next_at
             or not is_portable_parked_route(source)
         ):
+            return None
+        routes = self._placement_routes()
+        active_migrations = self.routing_store.sandbox_migrations(active_only=True)
+        if consolidation_source is not None and active_migrations:
             return None
         ready_heartbeats = self._ready_sandbox_heartbeats()
         source_heartbeat = next(
@@ -4297,6 +4298,21 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         )
         if action != "wake" or program is None or not became_ready:
             return
+        if not is_portable_parked_route(route):
+            # An unpublished checkpoint can only wake on its current owner.
+            # Shadow telemetry must not decode every other worker's inventory.
+            owner = self._heartbeat_for_route(job_id=route.job_id)
+            ready = bool(
+                owner is not None and owner.node_url and not owner.draining
+                and "sandbox" in owner.capabilities
+                and owner.is_fresh(utc_now(), self.heartbeat_ttl_seconds)
+            )
+            self._record_program_wake_shadow_plan(
+                payload, program,
+                self._placement_routes_for_node(owner) if ready else [route],
+                heartbeats=[owner] if ready else [],
+            )
+            return
         self._record_program_wake_shadow_plan(
             payload,
             program,
@@ -4805,6 +4821,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         lifecycle_payload: dict[str, Any],
         program: ProgramRequestState,
         routes: list[PlacementRecord],
+        *,
+        heartbeats: list[NodeHeartbeat] | None = None,
     ) -> None:
         """Observe every response-ready event without changing wake behavior."""
 
@@ -4824,7 +4842,10 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                         pressure=node_pressure_score(heartbeat),
                         heartbeat=heartbeat,
                     )
-                    for heartbeat in self._ready_sandbox_heartbeats()
+                    for heartbeat in (
+                        self._ready_sandbox_heartbeats()
+                        if heartbeats is None else heartbeats
+                    )
                     if heartbeat.admission_open
                     and agent_version_is_schedulable(heartbeat.agent_version)
                 ],
@@ -4917,7 +4938,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         """Refresh a full owner before publishing/moving freshly parked work."""
         previous = self._heartbeat_for_route(job_id=route.job_id)
         if previous is None or _node_has_storage_device_capacity(
-            previous, self._placement_routes(),
+            previous, self._placement_routes_for_node(previous),
         ):
             return False
         key = (str(self.routing_store.path), route.job_id, previous.node_epoch)
@@ -5036,17 +5057,23 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 )
                 return None
             route = current
-            routes = self._placement_routes()
             source_heartbeat = self._heartbeat_for_route(
                 job_id=route.job_id,
+            )
+            routes = (
+                self._placement_routes_for_node(source_heartbeat)
+                if source_heartbeat is not None else []
             )
             active_request = ResourceQuantity(
                 vcpu=route.resources.vcpu,
                 memory_mb=route.resources.memory_mb,
             )
-            ready_source_ids = {
-                heartbeat.node_id for heartbeat in self._ready_sandbox_heartbeats()
-            }
+            source_ready = bool(
+                source_heartbeat is not None and source_heartbeat.node_url
+                and not source_heartbeat.draining
+                and "sandbox" in source_heartbeat.capabilities
+                and source_heartbeat.is_fresh(utc_now(), self.heartbeat_ttl_seconds)
+            )
             active_migration = next(
                 (
                     migration
@@ -5061,7 +5088,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             local_can_wake = (
                 route.worker_state == "attached"
                 and source_heartbeat is not None
-                and source_heartbeat.node_id in ready_source_ids
+                and source_ready
                 and _node_has_storage_device_capacity(source_heartbeat, routes)
                 and _node_can_fit_available(
                     source_heartbeat,
@@ -5595,6 +5622,44 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     image=str(source.spec.get("image") or ""),
                 )
             )
+        return routes
+
+    def _placement_routes_for_node(
+        self, heartbeat: NodeHeartbeat,
+    ) -> list[PlacementRecord]:
+        """Read fresh owner admission state, including incoming migrations."""
+
+        routes: list[PlacementRecord] = list(
+            self.routing_store.sandbox_routes_matching_node_identity(
+                node_id=heartbeat.node_id, job_id=heartbeat.job_id,
+                node_url=heartbeat.node_url or "",
+            )
+        )
+        by_id = {route.sandbox_id: route for route in routes}
+        for migration in self.routing_store.sandbox_migrations(active_only=True):
+            destination = PlacementReservation(
+                reservation_id=migration.migration_id,
+                node_id=migration.destination_node_id,
+                job_id=migration.destination_job_id,
+                node_url=migration.destination_node_url,
+                resources=ResourceQuantity(), image="",
+            )
+            if not _route_targets_node(destination, heartbeat):
+                continue
+            source = by_id.get(migration.sandbox_id)
+            if source is None:
+                source = self.routing_store.get_sandbox_readonly(migration.sandbox_id)
+            if source is None:
+                continue
+            resources = source.resources
+            if migration.phase in {"routed", "activated"}:
+                resources = ResourceQuantity(
+                    vcpu=resources.vcpu, memory_mb=resources.memory_mb,
+                )
+            routes.append(replace(
+                destination, resources=resources,
+                image=str(source.spec.get("image") or ""),
+            ))
         return routes
 
     def _select_and_reserve_node(

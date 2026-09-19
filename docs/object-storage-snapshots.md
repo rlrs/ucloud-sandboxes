@@ -181,10 +181,11 @@ Registry lease database.
 
 The same publication gate, phase spans, and metric keys apply to Registry and
 S3 backends. `sandbox.storage_native_max_ublk_devices` independently bounds
-active runtime owners plus pending allocations; its default is 128. Idle pool
-devices are reusable and do not consume these admission slots. The warm pool's
-separate high watermark defaults to 16, so 128 running sandboxes can coexist
-with up to 16 additional idle kernel devices. Immutable Docker image layers do
+active runtime owners plus pending allocations when explicitly positive. Its
+default is zero (no optional count ceiling); disk quotas, memory admission and
+bounded lifecycle concurrency still apply. Idle pool devices are reusable and
+do not consume these admission slots. The warm pool's separate high watermark
+defaults to 16. Immutable Docker image layers do
 not consume ublk devices. Retired devices still owned by the backend retain
 their admission slots until kernel teardown completes.
 

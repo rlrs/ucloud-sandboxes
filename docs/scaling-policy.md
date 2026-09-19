@@ -151,16 +151,18 @@ every cycle. The fleet and provisioning caps still apply. Once ordinary host
 pressure is also sustained, the existing pressure-confirmed pending-demand
 path can grow the fleet toward `max_nodes`.
 
-The gateway's existing `gateway_max_concurrent_sandbox_creates` limit now
-covers creates and sandbox operations that can wake a sandbox, including file
-uploads. Admission precedes reading request bodies; rejected connections are
-closed so unread bytes cannot be parsed as a later request. Heartbeats, health,
-status polling and deletion remain outside that startup budget.
+`gateway_max_concurrent_sandbox_creates` is an optional fleet-wide create
+override, disabled by default (`0`). A positive override queues creates in FIFO
+order. Wakes, streamed reads and small control operations bypass it. Buffered
+uploads reserve bytes against a separate memory budget before their bodies are
+read. Expired admission closes the connection with explicit retryable
+backpressure so unread bytes cannot become another request.
 
 New workers receive `policy.create_target_concurrency_per_node` as their
-`--max-concurrent-startups` limit. It is shared by creates, restores and file
-operations. Nested restore during an admitted file operation reuses one slot.
-The independent restore limit still caps restores when configured lower.
+`--max-concurrent-startups` limit. Creates/uploads, restores and buffered reads
+use independent FIFO queues, so bulk startup cannot consume restore capacity.
+A restore does not also need a startup slot. Admission waits are deadline-bound;
+physical disk reservations and live memory/resource checks remain authoritative.
 Same-sandbox lifecycle contention in interactive create/wake/exec paths returns
 backpressure instead of waiting indefinitely for a lifecycle lock. Long-running
 user commands do not hold a startup slot merely because they are running.

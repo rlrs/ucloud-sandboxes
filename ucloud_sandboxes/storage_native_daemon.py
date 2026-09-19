@@ -3017,8 +3017,20 @@ class _StorageNativeRequestHandler(socketserver.BaseRequestHandler):
             attributes=attributes,
             parent_context=self.server.telemetry.extracted_context(trace_context),
         ) as span:
-            if operation in {"GetFeatures", "GetMetrics"}:
+            # Metadata must stay available while lifecycle or upload work is
+            # saturated. These bounded journal reads do not acquire devices or
+            # mutate ownership; the journal supplies its own read consistency.
+            if operation in {"GetFeatures", "GetMetrics", "GetVolume", "ListVolumes", "ListVolumesPage"}:
+                span.set_attribute("storage.admission.class", "metadata")
                 return {"status": "ok", "result": self.server.dispatch(request)}
+            # Publication already has a backend-specific gate. Holding a local
+            # lifecycle slot while waiting for that gate (or remote I/O) starves
+            # mounts/releases and used to starve heartbeat inventory as well.
+            # Per-volume transition fencing still serializes conflicting work.
+            if operation == "EnsurePublished":
+                span.set_attribute("storage.admission.class", "publication")
+                return {"status": "ok", "result": self.server.dispatch(request)}
+            span.set_attribute("storage.admission.class", "lifecycle")
             waiting_started = time.monotonic()
             self.server.operation_waiting()
             with self.server.operation_slots:

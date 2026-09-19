@@ -4956,10 +4956,16 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             return None
 
     def _refresh_wake_capacity(self, route: SandboxRoute) -> bool:
-        """Refresh a full owner before publishing/moving freshly parked work."""
+        """Refresh blocked owner admission before publishing/moving parked work."""
         previous = self._heartbeat_for_route(job_id=route.job_id)
-        if previous is None or _node_has_storage_device_capacity(
-            previous, self._placement_routes_for_node(previous),
+        if previous is None:
+            return False
+        routes = self._placement_routes_for_node(previous)
+        requested = ResourceQuantity(vcpu=route.resources.vcpu, memory_mb=route.resources.memory_mb)
+        if (
+            previous.is_fresh(utc_now(), self.heartbeat_ttl_seconds)
+            and _node_has_storage_device_capacity(previous, routes)
+            and _node_can_fit_available(previous, requested, _node_available_resources(previous, routes))
         ):
             return False
         key = (str(self.routing_store.path), route.job_id, previous.node_epoch)

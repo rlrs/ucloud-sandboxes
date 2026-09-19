@@ -1002,7 +1002,7 @@ wheels = [
 
 [[package]]
 name = "ucloud-sandboxes"
-version = "0.5.46"
+version = "0.5.47"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },

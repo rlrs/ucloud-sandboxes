@@ -2799,6 +2799,10 @@ class ControlPlaneTests(unittest.TestCase):
                 return False
 
             handler._prepare_migration_destination_image = slow_prepare
+            # This case intentionally exercises remote placement. The source
+            # admission refresh fails promptly rather than contacting a real
+            # host named "source" before the controlled slow image pull.
+            handler._proxy_request = lambda *_args, **_kwargs: control_plane.ProxiedResponse(503, {}, b"{}")
             wake_thread = Thread(
                 target=handler._ensure_parked_sandbox_wake_placement,
                 args=(parked,),

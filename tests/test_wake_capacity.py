@@ -226,3 +226,29 @@ class WakeCapacityTests(unittest.TestCase):
                 self.assertEqual(thread.call_count, 16)
                 service._start_storage_publication(SimpleNamespace(sandbox_id="0", sandbox_generation=1), operation_id="publish:retry")
                 self.assertEqual(thread.call_count, 16)
+
+    def test_cpu_and_storage_pressure_are_refreshed_before_remote_wake(self):
+        for pressure in ({'cpu_percent': 95}, {'storage_max_concurrent_operations': 8, 'storage_waiting_operations': 8}):
+            with self.subTest(pressure=pressure), TemporaryDirectory() as directory:
+                root = Path(directory)
+                handler = object.__new__(control_plane.ControlPlaneHandler)
+                handler.routing_store = RoutingStore(root / 'routes.sqlite')
+                handler.store = ControlStateStore(root / 'control-state.sqlite')
+                handler.heartbeat_ttl_seconds = 120
+                healthy = self.heartbeat(active=0)
+                pressured = replace(healthy, runtime_metrics=replace(healthy.runtime_metrics, **pressure))
+                handler.store.upsert_heartbeat(pressured)
+                route = handler.routing_store.upsert_sandbox(self.route())
+                handler._write_json = Mock()
+                handler._select_migration_destination = Mock(return_value=None)
+                import json
+                handler._proxy_request = Mock(return_value=control_plane.ProxiedResponse(200, {}, json.dumps({
+                    'heartbeat': heartbeat_to_dict(healthy),
+                }).encode()))
+                result = handler._ensure_parked_sandbox_wake_placement(route)
+                self.assertEqual(result.state, 'waking')
+                self.assertEqual(result.job_id, route.job_id)
+                self.assertEqual(handler.routing_store.sandbox_migrations(), [])
+                handler._write_json.assert_not_called()
+                self.assertEqual(handler._proxy_request.call_count, 1)
+                self.assertEqual(handler._proxy_request.call_args.args[1], '/v1/heartbeat')

@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from tests import test_storage_native_daemon as fixtures
 from ucloud_sandboxes.storage_native_daemon import (
-    StorageNativeNodeClient, StorageNativeNodeServer, StorageVolumeOwner, StorageVolumeState,
+    StorageNativeConflictError, StorageNativeNodeClient, StorageNativeNodeServer, StorageVolumeOwner, StorageVolumeState,
 )
 
 
@@ -36,7 +36,7 @@ class StorageAdmissionIsolationTests(unittest.TestCase):
                         raise TimeoutError('test did not release publication')
                     return original(**kwargs)
                 with patch.object(service.publisher, 'publish', side_effect=slow_publish), ThreadPoolExecutor(max_workers=1) as pool:
-                    pending = pool.submit(client.ensure_published, StorageVolumeOwner('publishing', 'publishing', 1), operation_id='publish:one')
+                    pending = pool.submit(client.ensure_published, StorageVolumeOwner('publishing', 'publishing', 1), operation_id='publish:one', expected_revision=client.get_volume('publishing').revision)
                     try:
                         self.assertTrue(entered.wait(2))
                         self.assertEqual(client.get_metrics()['active_operations'], 0)
@@ -50,9 +50,13 @@ class StorageAdmissionIsolationTests(unittest.TestCase):
                         restored = client.ensure_mounted(StorageVolumeOwner('restoring', 'restoring', 1), operation_id='wake:other')
                         self.assertEqual(restored.state, StorageVolumeState.MOUNTED)
                         self.assertFalse(pending.done())
+                        resumed = client.ensure_mounted(StorageVolumeOwner('publishing', 'publishing', 1), operation_id='wake:same')
+                        self.assertEqual(resumed.state, StorageVolumeState.MOUNTED)
                     finally:
                         release.set()
-                    self.assertEqual(pending.result(timeout=2).state, StorageVolumeState.PUBLISHED)
+                    with self.assertRaises(StorageNativeConflictError):
+                        pending.result(timeout=2)
+                    self.assertEqual(client.get_volume('publishing'), resumed)
             finally:
                 release.set()
                 server.shutdown()

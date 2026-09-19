@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 import threading
 import time
-from typing import Iterator
+from typing import Callable, Iterator
 
 from .telemetry import Telemetry
 
@@ -26,7 +26,7 @@ class PublicationGate:
         self._wait_ms_max = 0
 
     @contextmanager
-    def acquire(self, telemetry: Telemetry) -> Iterator[int]:
+    def acquire(self, telemetry: Telemetry, check_current: Callable[[], None] | None = None) -> Iterator[int]:
         started = time.monotonic()
         acquired = False
         active_counted = False
@@ -41,8 +41,15 @@ class PublicationGate:
                     "snapshot.publication.waiting": waiting,
                 },
             ) as span:
-                self._semaphore.acquire()
+                if check_current is None:
+                    self._semaphore.acquire()
+                else:
+                    check_current()
+                    while not self._semaphore.acquire(timeout=0.25):
+                        check_current()
                 acquired = True
+                if check_current is not None:
+                    check_current()
                 wait_ms = max(0, int((time.monotonic() - started) * 1000))
                 span.set_attribute("snapshot.queue.wait_ms", wait_ms)
             with self._lock:

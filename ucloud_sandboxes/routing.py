@@ -657,6 +657,20 @@ class RoutingStore:
             ).fetchone()
         return dict(row) if row is not None else None
 
+    def lost_sandbox_incarnations(self) -> frozenset[tuple[str, int]]:
+        """Batch terminal identities for relay cleanup, including replaced callers."""
+        cutoff = (
+            utc_now() - timedelta(seconds=PROGRAM_TERMINAL_RETENTION_SECONDS)
+        ).isoformat()
+        with self._connect() as conn:
+            return frozenset(
+                (str(row[0]), int(row[1]))
+                for row in conn.execute(
+                    "SELECT sandbox_id, generation FROM sandbox_losses WHERE lost_at > ?",
+                    (cutoff,),
+                )
+            )
+
     def get_managed_process(
         self,
         sandbox_id: str,

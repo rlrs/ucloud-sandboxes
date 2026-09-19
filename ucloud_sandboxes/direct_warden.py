@@ -491,15 +491,21 @@ class DirectRunscWarden:
                 return record
             if record.state == StorageVolumeState.MOUNTED:
                 self.rootfs_lifecycle.park_sandbox(sandbox)
-            record = self.storage.ensure_published(
-                self._storage_owner(sandbox),
-                operation_id=operation_id,
+                record = self._storage_record(sandbox)
+            revision = record.revision
+        # The sealed layers are immutable. Do not hold the Warden lock across
+        # remote uploads: local wake/delete can supersede publication. Fence the
+        # request so a delayed publisher cannot seal a newly resumed filesystem.
+        record = self.storage.ensure_published(
+            self._storage_owner(sandbox),
+            operation_id=operation_id,
+            expected_revision=revision,
+        )
+        if record.state != StorageVolumeState.PUBLISHED:
+            raise DirectWardenError(
+                "storage-native publication returned an invalid record"
             )
-            if record.state != StorageVolumeState.PUBLISHED:
-                raise DirectWardenError(
-                    "storage-native publication returned an invalid record"
-                )
-            return record
+        return record
 
     def running_process_alive(self, sandbox: DirectSandbox) -> bool:
         """Prove that a RUNNING journal still owns the recorded sentry."""

@@ -1208,6 +1208,10 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
         config.gateway_token_file(), "gateway bearer token"
     )
     lifecycle = _RelayLifecycleDispatcher(gateway_url, gateway_token)
+    routes = RoutingStore(config.routing_file())
+
+    async def lost_callers() -> frozenset[tuple[str, int]]:
+        return await asyncio.to_thread(routes.lost_sandbox_incarnations)
 
     async def accepted_notifier(relay_request: RelayRequest) -> str | None:
         return await lifecycle.notify(relay_request, action="park")
@@ -1235,6 +1239,7 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
         state_path=config.relay_state_file(),
         accepted_notifier=accepted_notifier,
         result_notifier=result_notifier,
+        lost_callers=lost_callers,
         telemetry=telemetry,
     )
 

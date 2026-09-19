@@ -1086,6 +1086,36 @@ class ModelRelayState:
             await self._expire_requests_locked(now)
             await self._requeue_expired_leases_locked(now)
 
+    async def reconcile_lost_callers(self, losses: frozenset[tuple[str, int]]) -> None:
+        """Retire known lost incarnations without discarding committed model results."""
+        if not losses:
+            return
+        async with self._lock:
+            await self._ensure_loaded_locked()
+            # Release completed results first, also freeing pinned response capacity
+            # before recording terminal errors for work that has not completed.
+            for request in tuple(self._completed.values()):
+                if request.delivery_pending and (request.sandbox_id, request.sandbox_generation) in losses:
+                    await _finish_before_cancellation(self._release_completed_locked(request))
+            pending = tuple(
+                request for request in self._requests.values()
+                if (request.sandbox_id, request.sandbox_generation) in losses
+            )
+            if pending:
+                await _finish_before_cancellation(
+                    self._complete_requests_locked(
+                        pending,
+                        completed_at=time.time(),
+                        response=RelayWorkerResponse(
+                            410, _openai_error("sandbox caller was lost with its worker", "node_lost"),
+                        ),
+                        defer_delivery=False,
+                    ),
+                    publish=lambda results: self._counters.__setitem__(
+                        "canceled", self._counters["canceled"] + len(results),
+                    ),
+                )
+
     async def mark_wake_notified(self, request_id: str) -> None:
         async with self._lock:
             await self._ensure_loaded_locked()
@@ -2227,6 +2257,7 @@ def create_model_relay_app(
     state_path: Path | None = None,
     accepted_notifier: Callable[[RelayRequest], Awaitable[str | None]] | None = None,
     result_notifier: Callable[[RelayRequest], Awaitable[str | None]] | None = None,
+    lost_callers: Callable[[], Awaitable[frozenset[tuple[str, int]]]] | None = None,
     telemetry: Telemetry | None = None,
 ) -> web.Application:
     # Base64 expands worker response bodies by 4/3 inside the JSON control API.
@@ -2263,7 +2294,7 @@ def create_model_relay_app(
     async def maintain_state(_app: web.Application):
         interval = max(0.01, maintenance_interval_seconds)
         task = asyncio.create_task(
-            _model_relay_maintenance_loop(_app[STATE_KEY], interval)
+            _model_relay_maintenance_loop(_app[STATE_KEY], interval, lost_callers)
         )
         try:
             yield
@@ -2319,10 +2350,13 @@ def create_model_relay_app(
 async def _model_relay_maintenance_loop(
     state: ModelRelayState,
     interval_seconds: float,
+    lost_callers: Callable[[], Awaitable[frozenset[tuple[str, int]]]] | None = None,
 ) -> None:
     while True:
         try:
             await state.maintain()
+            if lost_callers is not None:
+                await state.reconcile_lost_callers(await lost_callers())
         except asyncio.CancelledError:
             raise
         except Exception:

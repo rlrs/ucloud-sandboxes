@@ -160,12 +160,14 @@ class RoutingStoreTests(unittest.TestCase):
             self.assertEqual(loss["reason"], "node_lost")
             self.assertEqual(loss["generation"], 1)
             self.assertEqual(loss["job_id"], "job")
+            self.assertEqual(reopened.lost_sandbox_incarnations(), frozenset({("lost", 1)}))
             reopened.delete_sandbox("lost")  # Idempotent cleanup keeps the diagnosis.
             self.assertEqual(reopened.get_sandbox_loss("lost"), loss)
             reopened.upsert_sandbox(
                 replace(route, generation=2, create_operation_id="new")
             )
             self.assertIsNone(reopened.get_sandbox_loss("lost"))
+            self.assertEqual(reopened.lost_sandbox_incarnations(), frozenset({("lost", 1)}))
             reopened.delete_sandbox("lost")
             self.assertIsNone(reopened.get_sandbox_loss("lost"))
 

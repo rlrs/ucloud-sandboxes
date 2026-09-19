@@ -246,6 +246,40 @@ async def enqueue_and_poll(
 
 
 class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
+    async def test_node_loss_retires_pending_and_leased_callers_and_retains_results(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "relay.sqlite3"
+            state = ModelRelayState(state_path=path)
+            requests = {}
+            for name in ("pending", "leased", "completed", "replacement"):
+                generation = 2 if name == "replacement" else 1
+                token = str((await state.register_rollout(name, _agent_metadata("sandbox", generation)))["registration_token"])
+                request = await state.enqueue(rollout_id=name, endpoint="/v1/responses", body={}, headers={}, idempotency_key="request")
+                requests[name] = request
+                if name in {"leased", "completed"}:
+                    delivery = (await state.poll(rollout_id=name, registration_token=token, worker_id="worker", limit=1, timeout_seconds=0, lease_seconds=600))[0]
+                    if name == "completed":
+                        await state.respond(request_id=delivery.request_id, registration_token=token, lease_id=delivery.lease_id, response=RelayWorkerResponse(200, {"sample": "keep-me"}), defer_delivery=True)
+            losses = frozenset({("sandbox", 1)})
+            await state.reconcile_lost_callers(losses)
+            await state.reconcile_lost_callers(losses)
+            for name in ("pending", "leased"):
+                self.assertEqual(requests[name].future.result().status, 410)
+                self.assertEqual(requests[name].future.result().body["error"]["type"], "node_lost")
+            completed = requests["completed"]
+            self.assertEqual(completed.future.result().body, {"sample": "keep-me"})
+            self.assertIsNone(completed.wake_notified_at)
+            self.assertFalse(completed.delivery_pending)
+            self.assertFalse(requests["replacement"].future.done())
+            self.assertEqual((await state.stats())["counters"]["canceled"], 2)
+            await state.aclose()
+            restored = ModelRelayState(state_path=path)
+            await restored.maintain()
+            self.assertEqual(restored._completed[completed.request_id].completed_response.body, {"sample": "keep-me"})
+            self.assertIn(requests["replacement"].request_id, restored._requests)
+            self.assertFalse(restored._completed[completed.request_id].delivery_pending)
+            await restored.aclose()
+
     async def test_journal_progresses_when_lifecycle_executor_is_saturated(self):
         loop = asyncio.get_running_loop()
         loop.set_default_executor(ThreadPoolExecutor(max_workers=1))

@@ -47,6 +47,7 @@ class SnapshotPublisher(Protocol):
         existing_layers: tuple[PublishedStorageLayer, ...] = (),
         existing_repo_blob_url: str = "",
         global_config_path: Path | None = None,
+        check_current: Callable[[], None] | None = None,
     ) -> "StorageSnapshotPublication": ...
 
     def verify(
@@ -219,6 +220,7 @@ class RegistrySnapshotPublisher:
         existing_layers: tuple[PublishedStorageLayer, ...] = (),
         existing_repo_blob_url: str = "",
         global_config_path: Path | None = None,
+        check_current: Callable[[], None] | None = None,
     ) -> StorageSnapshotPublication:
         started = time.monotonic()
         with self.telemetry.span(
@@ -230,7 +232,7 @@ class RegistrySnapshotPublisher:
                 "snapshot.virtual_size": virtual_size,
             },
         ) as span:
-            with self._publication_gate.acquire(self.telemetry) as queue_wait_ms:
+            with self._publication_gate.acquire(self.telemetry, check_current) as queue_wait_ms:
                 span.set_attribute("snapshot.queue.wait_ms", queue_wait_ms)
                 publication, compacted, uploaded_bytes = self._publish_locked(
                     exporter=exporter,

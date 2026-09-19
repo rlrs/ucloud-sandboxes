@@ -20,7 +20,7 @@ import shutil
 import tempfile
 import threading
 import time
-from typing import Any, Literal, Protocol
+from typing import Any, Callable, Literal, Protocol
 
 from opentelemetry.trace import SpanKind
 
@@ -424,6 +424,7 @@ class StorageSnapshotPublisher(Protocol):
         existing_layers: tuple[PublishedStorageLayer, ...] = (),
         existing_repo_blob_url: str = "",
         global_config_path: Path | None = None,
+        check_current: Callable[[], None] | None = None,
     ) -> StorageSnapshotPublication: ...
 
     def verify(
@@ -924,6 +925,34 @@ class StorageNativeJournal:
 
     def finish(self, record: StorageVolumeRecord) -> None:
         self._complete_operation(record, record, status="completed")
+
+    def supersede_publication(self, owner: StorageVolumeOwner) -> StorageVolumeRecord:
+        """Keep local checkpoint authority and fence out a slow uploader."""
+
+        with self._write_connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            current = self._load(connection, owner.volume_id)
+            if current.owner != owner:
+                raise StorageNativeConflictError(
+                    "storage-native volume belongs to another owner"
+                )
+            if current.state != StorageVolumeState.PUBLISHING:
+                return current
+            connection.execute(
+                "UPDATE operations SET status = 'failed', error = ? "
+                "WHERE operation_id = ? AND status = 'pending'",
+                ("publication superseded by local lifecycle operation", current.operation_id),
+            )
+            record = replace(
+                current,
+                revision=current.revision + 1,
+                state=StorageVolumeState.RELEASED,
+                error="",
+                updated_ns=time.time_ns(),
+            )
+            self._upsert_record(connection, record)
+            connection.commit()
+            return record
 
     def fail(self, record: StorageVolumeRecord, error: str) -> None:
         terminal = replace(
@@ -1976,6 +2005,16 @@ class StorageNativeNodeService:
             )
             for layer in pending.published_layers
         )
+
+        def check_current() -> None:
+            current = self.journal.load(volume_id)
+            if current is None or (
+                current.revision != pending.revision
+                or current.operation_id != pending.operation_id
+                or current.state != StorageVolumeState.PUBLISHING
+            ):
+                raise StorageNativeConflictError("publication superseded by local lifecycle operation")
+
         try:
             publication = self.publisher.publish(
                 exporter=self.backend,
@@ -1984,6 +2023,7 @@ class StorageNativeNodeService:
                 existing_layers=existing_layers,
                 existing_repo_blob_url=pending.published_repo_blob_url,
                 global_config_path=self.global_config_path,
+                check_current=check_current,
             )
             record = replace(
                 pending,
@@ -2006,11 +2046,16 @@ class StorageNativeNodeService:
             self._remove_local_layers(local_paths)
             return record
         except BaseException as exc:
-            self.journal.fail_transition(
-                pending,
-                failure_state=StorageVolumeState.RELEASED,
-                error=f"{type(exc).__name__}: {exc}",
-            )
+            try:
+                self.journal.fail_transition(
+                    pending,
+                    failure_state=StorageVolumeState.RELEASED,
+                    error=f"{type(exc).__name__}: {exc}",
+                )
+            except StorageNativeConflictError:
+                # A local wake/delete may have superseded this immutable upload.
+                # Its new authority must survive both upload success and failure.
+                pass
             raise
 
     @_storage_mutation
@@ -2068,6 +2113,7 @@ class StorageNativeNodeService:
         publication: StorageSnapshotPublication | None = None,
         virtual_size: int | None = None,
         expected_accounting_id: int | None = None,
+        expected_revision: int | None = None,
     ) -> StorageVolumeRecord:
         if action not in {
             "delete",
@@ -2116,6 +2162,15 @@ class StorageNativeNodeService:
                 publication.virtual_size if publication is not None else virtual_size
             ),
         )
+        if expected_revision is not None and (
+            record.revision != expected_revision
+            or (action == "publish" and record.state not in {
+                StorageVolumeState.RELEASED, StorageVolumeState.PUBLISHED,
+            })
+        ):
+            raise StorageNativeConflictError("storage-native snapshot changed before publication")
+        if action in {"mount", "discard", "delete"} and record.state == StorageVolumeState.PUBLISHING:
+            record = self.journal.supersede_publication(owner)
         if (
             publication is not None
             and record.published_manifest_digest != publication.manifest_digest
@@ -2805,8 +2860,12 @@ class StorageNativeNodeClient:
         owner: StorageVolumeOwner,
         *,
         operation_id: str,
+        expected_revision: int,
     ) -> StorageVolumeRecord:
-        return self._record_call("EnsurePublished", owner, operation_id=operation_id)
+        return self._record_call(
+            "EnsurePublished", owner, operation_id=operation_id,
+            expected_revision=expected_revision,
+        )
 
     def discard_resume(
         self,
@@ -3119,7 +3178,10 @@ class _StorageNativeUnixServer(
         operation = request.get("operation")
         if not isinstance(operation, str) or operation not in _PROTOCOL_EXTRA_FIELDS:
             raise ValueError("unknown storage-native operation")
-        if set(request) != {"operation", "schema", *_PROTOCOL_EXTRA_FIELDS[operation]}:
+        expected_fields = {"operation", "schema", *_PROTOCOL_EXTRA_FIELDS[operation]}
+        if operation == "EnsurePublished" and "expected_revision" in request:
+            expected_fields.add("expected_revision")
+        if set(request) != expected_fields:
             raise ValueError("storage-native request has an invalid schema")
         if operation == "GetFeatures":
             return {
@@ -3185,6 +3247,7 @@ class _StorageNativeUnixServer(
                     owner,
                     action=action,
                     operation_id=operation_id,
+                    expected_revision=_optional_positive_int_field(request, "expected_revision"),
                 )
             return self.service._record_result(record)
         if operation == "GetVolume":

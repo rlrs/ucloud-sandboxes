@@ -10,6 +10,7 @@ from tempfile import TemporaryDirectory
 import threading
 import time
 import unittest
+from typing import Callable
 
 from ucloud_sandboxes.storage_native import (
     StorageNativeDevice,
@@ -202,7 +203,10 @@ class FakePublisher:
         existing_layers: tuple[PublishedStorageLayer, ...] = (),
         existing_repo_blob_url: str = "",
         global_config_path: Path | None = None,
+        check_current: Callable[[], None] | None = None,
     ) -> StorageSnapshotPublication:
+        if check_current is not None:
+            check_current()
         if global_config_path is None:
             raise AssertionError("service did not supply its global config")
         new_layers = tuple(
@@ -1055,6 +1059,69 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
             )
             self.assertEqual(len(source["lowers"]), 1)
             self.assertEqual(backend.create_calls, 2)
+
+    def test_local_lifecycle_supersedes_slow_publication_without_losing_authority(self):
+        from unittest.mock import patch
+
+        for action in ("mount", "discard", "delete"):
+            for upload_fails in (False, True):
+                with self.subTest(action=action, upload_fails=upload_fails), TemporaryDirectory() as raw:
+                    service, _, _ = self._service(Path(raw), publisher=True)
+                    owner = StorageVolumeOwner(sandbox_id="sandbox-1", sandbox_generation=1, volume_id="volume-1")
+                    service.converge_volume(owner, action="prepare", operation_id="create", virtual_size=1 << 30)
+                    released = service.converge_volume(owner, action="release", operation_id="park")
+                    paths = tuple(Path(p) for p in released.sealed_layer_paths)
+                    entered, finish = threading.Event(), threading.Event()
+                    publish = service.publisher.publish
+
+                    def slow_publish(**kwargs):
+                        # Export has read the immutable inputs before its network stall.
+                        result = publish(**kwargs)
+                        entered.set()
+                        if not finish.wait(5):
+                            raise TimeoutError("test did not release upload")
+                        if upload_fails:
+                            raise OSError("upload failed")
+                        return result
+
+                    with patch.object(service.publisher, "publish", side_effect=slow_publish), ThreadPoolExecutor(max_workers=1) as pool:
+                        future = pool.submit(service.converge_volume, owner, action="publish", operation_id="upload", expected_revision=released.revision)
+                        try:
+                            self.assertTrue(entered.wait(5))
+                            with self.assertRaises(StorageNativeConflictError):
+                                service.converge_volume(StorageVolumeOwner(sandbox_id="other", sandbox_generation=1, volume_id="volume-1"), action=action, operation_id="wrong-owner")
+                            current = service.converge_volume(owner, action=action, operation_id="local")
+                            self.assertEqual(current.state, {
+                                "mount": StorageVolumeState.MOUNTED,
+                                "discard": StorageVolumeState.RELEASED,
+                                "delete": StorageVolumeState.DELETED,
+                            }[action])
+                            if action != "delete":
+                                self.assertTrue(all(p.exists() for p in paths))
+                            if action == "mount":
+                                source = json.loads(Path(current.source_image_config).read_text())
+                                self.assertEqual(source["lowers"], [{"file": str(p)} for p in paths])
+                        finally:
+                            finish.set()
+                        with self.assertRaises((OSError, StorageNativeConflictError)):
+                            future.result(timeout=5)
+                    self.assertEqual(service.journal.load(owner.volume_id), current)
+                    if action != "delete":
+                        self.assertTrue(all(p.exists() for p in paths))
+
+    def test_delayed_publication_cannot_seal_resumed_or_reparked_volume(self):
+        with TemporaryDirectory() as raw:
+            service, backend, _ = self._service(Path(raw), publisher=True)
+            owner = StorageVolumeOwner(sandbox_id="sandbox-1", sandbox_generation=1, volume_id="volume-1")
+            service.converge_volume(owner, action="prepare", operation_id="create", virtual_size=1 << 30)
+            released = service.converge_volume(owner, action="release", operation_id="park")
+            for action in ("mount", "release"):
+                current = service.converge_volume(owner, action=action, operation_id=action)
+                calls = backend.restack_calls
+                with self.assertRaisesRegex(StorageNativeConflictError, "changed before publication"):
+                    service.converge_volume(owner, action="publish", operation_id="stale-upload", expected_revision=released.revision)
+                self.assertEqual(backend.restack_calls, calls)
+                self.assertEqual(service.journal.load(owner.volume_id), current)
 
     def test_reconcile_deletes_orphans_and_terminally_fences_missing_device(
         self,

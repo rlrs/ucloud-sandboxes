@@ -1,6 +1,8 @@
 import json
 import os
 import shutil
+from concurrent.futures import ThreadPoolExecutor
+import threading
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -460,6 +462,30 @@ class DirectRunscWardenTests(unittest.TestCase):
                 "application_memory.active",
             ),
         )
+
+    def test_background_upload_does_not_hold_wake_lock(self):
+        self.warden.create(self.sandbox, operation_id="create:1")
+        self.warden.park(self.sandbox, operation_id="park:1")
+        revision = self.storage._typed().revision
+        entered, finish = threading.Event(), threading.Event()
+
+        def upload(owner, *, operation_id, expected_revision):
+            self.assertEqual(expected_revision, revision)
+            entered.set()
+            if not finish.wait(5):
+                raise TimeoutError("test did not release upload")
+            raise StorageNativeConflictError("superseded publication")
+
+        with patch.object(self.storage, "ensure_published", side_effect=upload, create=True), ThreadPoolExecutor(max_workers=2) as pool:
+            publication = pool.submit(self.warden.publish_storage_snapshot, self.sandbox, operation_id="publish:1")
+            try:
+                self.assertTrue(entered.wait(5))
+                wake = pool.submit(self.warden.resume, self.sandbox, operation_id="wake:1")
+                self.assertEqual(wake.result(timeout=2).state, HibernationState.RUNNING)
+            finally:
+                finish.set()
+            with self.assertRaisesRegex(StorageNativeConflictError, "superseded"):
+                publication.result(timeout=5)
 
     def _assert_interrupted_park_reconciles(
         self,

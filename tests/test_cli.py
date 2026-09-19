@@ -246,7 +246,8 @@ class CliTests(unittest.TestCase):
             (404, b"not found", True),
             (410, b"gone", True),
             (409, b'{"retryable":false}', True),
-            (503, b'{"retryable":true}', False),
+            (503, b'{"retryable":false}', False),
+            (503, b'upstream unavailable', False),
             (504, b"upstream timeout", False),
             (403, b"forbidden", False),
         ):
@@ -266,6 +267,77 @@ class CliTests(unittest.TestCase):
                 self.assertTrue(stream.closed)
                 self.assertEqual(post.call_count, 1)
                 sleep.assert_not_called()
+
+    def test_relay_wake_waits_for_capacity_without_recommitting_result(self) -> None:
+        request = SimpleNamespace(
+            sandbox_id="sandbox", sandbox_generation=3, request_id="request",
+            rollout_id="rollout", created_at=1.0, expires_at=1000.0,
+        )
+        # More admission failures than the SDK's default 60 commit attempts.
+        errors = [HTTPError(
+            "http://gateway", 503, "Service Unavailable", {"Retry-After": "1"},
+            io.BytesIO(b'{"retryable":true,"error_code":"node_startup_busy"}'),
+        ) for _ in range(80)]
+        clock = [0.0]
+        with (
+            patch.object(cli, "_post_bounded_json", side_effect=[
+                *errors, ({}, {"X-UCloud-Sandbox-Transport-Epoch": "restored"}),
+            ]) as post,
+            patch.object(cli.time, "time", return_value=0.0),
+            patch.object(cli.time, "monotonic", side_effect=lambda: clock[0]),
+            patch.object(cli.time, "sleep", side_effect=lambda delay: clock.__setitem__(0, clock[0] + delay)),
+            patch.object(cli.random, "uniform", return_value=0.0),
+        ):
+            epoch = cli._post_gateway_sandbox_lifecycle(
+                "http://gateway", "token", request, action="wake",
+            )
+        self.assertEqual(epoch, "restored")
+        self.assertEqual(post.call_count, 81)
+        self.assertTrue(all(error.fp.closed for error in errors))
+        self.assertTrue(all(call.args == post.call_args_list[0].args for call in post.call_args_list))
+        self.assertEqual(post.call_args.kwargs["timeout_seconds"], 520.0)
+
+    def test_relay_wake_capacity_retry_respects_request_deadline(self) -> None:
+        for retry_after in ("1", "invalid"):
+            with self.subTest(retry_after=retry_after):
+                request = SimpleNamespace(
+                    sandbox_id="sandbox", sandbox_generation=1, request_id="request",
+                    rollout_id="rollout", created_at=1.0, expires_at=12.0,
+                )
+                errors = [HTTPError(
+                    "http://gateway", 503, "Service Unavailable", {"Retry-After": retry_after},
+                    io.BytesIO(b'{"retryable":true,"error_code":"node_startup_busy"}'),
+                ) for _ in range(2)]
+                clock = [0.0]
+                with (
+                    patch.object(cli, "_post_bounded_json", side_effect=errors) as post,
+                    patch.object(cli.time, "time", return_value=10.0),
+                    patch.object(cli.time, "monotonic", side_effect=lambda: clock[0]),
+                    patch.object(cli.time, "sleep", side_effect=lambda delay: clock.__setitem__(0, clock[0] + delay)) as sleep,
+                    patch.object(cli.random, "uniform", return_value=0.0),
+                    self.assertRaisesRegex(HTTPError, "node_startup_busy"),
+                ):
+                    cli._post_gateway_sandbox_lifecycle(
+                        "http://gateway", "token", request, action="wake",
+                    )
+                self.assertEqual(post.call_count, 2)
+                sleep.assert_called_once_with(1.0)
+                self.assertTrue(all(error.fp.closed for error in errors))
+
+    def test_relay_park_does_not_wait_for_wake_capacity(self) -> None:
+        request = SimpleNamespace(
+            sandbox_id="sandbox", sandbox_generation=1, request_id="request",
+            rollout_id="rollout", created_at=1.0,
+        )
+        error = HTTPError("http://gateway", 503, "busy", {}, io.BytesIO(b'{"retryable":true}'))
+        with (
+            patch.object(cli, "_post_bounded_json", side_effect=error) as post,
+            patch.object(cli.time, "sleep") as sleep,
+            self.assertRaises(HTTPError),
+        ):
+            cli._post_gateway_sandbox_lifecycle("http://gateway", "token", request, action="park")
+        self.assertEqual(post.call_count, 1)
+        sleep.assert_not_called()
 
     def test_dashboard_policy_exposes_every_scale_policy_field(self) -> None:
         policy = ScalePolicy()

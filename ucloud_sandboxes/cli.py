@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import json
 import os
 from pathlib import Path, PurePosixPath
+import random
 import sys
 from threading import Event
 import time
@@ -19,6 +20,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from uuid import uuid4
 
 from opentelemetry.propagate import inject
+from opentelemetry.trace import get_current_span
 
 from .gvisor_distribution import distribution_files
 
@@ -1385,7 +1387,16 @@ def _post_gateway_sandbox_lifecycle(
         return
     if relay_request.sandbox_generation is None:
         raise ValueError("relay sandbox lifecycle binding has no generation")
-    for attempt in range(101):
+    # The model result is durable before wake. Capacity backpressure must not
+    # require the worker to recommit it (or abort the other rollouts it owns).
+    # Keep retries inside the bounded wake dispatcher, with the same lifecycle
+    # operation ID, and never extend the original request's lifetime.
+    wake_budget = 600.0
+    expires_at = getattr(relay_request, "expires_at", None)
+    if expires_at is not None:
+        wake_budget = max(0.0, min(wake_budget, expires_at - time.time()))
+    deadline = time.monotonic() + wake_budget
+    for attempt in range(601 if action == "wake" else 101):
         try:
             _payload, headers = _post_bounded_json(
                 gateway_url,
@@ -1400,7 +1411,10 @@ def _post_gateway_sandbox_lifecycle(
                 bearer_token=bearer_token,
                 invalid_url_error="gateway URL is invalid",
                 empty_token_error="gateway bearer token cannot be empty",
-                timeout_seconds=600.0,
+                timeout_seconds=(
+                    max(0.001, deadline - time.monotonic())
+                    if action == "wake" else 600.0
+                ),
                 response_name="gateway lifecycle",
             )
             break
@@ -1425,12 +1439,44 @@ def _post_gateway_sandbox_lifecycle(
             )
             if action == "wake" and permanent:
                 raise RelayCallerUnavailable(exc.code) from exc
+            # Only retry positively identified admission failures here. An
+            # unclassified 5xx still reaches the worker's existing retry path.
+            capacity_pending = (
+                action == "wake"
+                and exc.code in {429, 503}
+                and isinstance(failure, dict)
+                and failure.get("retryable") is True
+            )
+            if isinstance(failure, dict) and failure.get("error_code"):
+                exc.msg = f"{exc.msg} ({str(failure['error_code'])[:160]})"
+            if capacity_pending:
+                try:
+                    retry_after = float(exc.headers.get("Retry-After", "1"))
+                except (TypeError, ValueError):
+                    retry_after = 1.0
+                delay = max(1.0, min(5.0, retry_after)) + random.uniform(0, 0.25)
+                if attempt >= 600 or time.monotonic() + delay >= deadline:
+                    raise
+                get_current_span().add_event(
+                    "relay.wake.capacity_retry",
+                    {
+                        "gateway.lifecycle.status_code": exc.code,
+                        "gateway.lifecycle.error_code": str(failure.get("error_code", "")),
+                        "retry.attempt": attempt + 1,
+                        "retry.delay_seconds": delay,
+                    },
+                )
+                time.sleep(delay)
+                continue
             # Another lifecycle request can win the fence between enqueue and
             # this explicit park, and a concurrent status/log read can briefly
             # hold the same activity fence. The bounded idempotent retry
             # observes the stable result without giving transient reads a
             # separate failure policy.
-            if permanent or exc.code != 409 or attempt >= 100:
+            if (
+                permanent or exc.code != 409 or attempt >= 100
+                or (action == "wake" and time.monotonic() + 0.05 >= deadline)
+            ):
                 raise
             time.sleep(0.05)
     transport_epoch = headers.get("X-UCloud-Sandbox-Transport-Epoch", "").strip()

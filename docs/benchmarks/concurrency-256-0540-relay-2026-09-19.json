@@ -1,0 +1,298 @@
+{
+  "sdk_version": "0.4.21",
+  "transport": "per-sandbox AsyncSandboxClient, matching Verifiers",
+  "prefix": "relay-worker-256-64d53cde",
+  "started_at": "2026-09-19T06:23:24.063929+00:00",
+  "count": 256,
+  "concurrency": 256,
+  "image": "release-0534-989b03553a-image",
+  "shape": {
+    "cpus": 2,
+    "memory_mb": 1024,
+    "disk_mb": 5184
+  },
+  "phases": [
+    {
+      "name": "create",
+      "seconds": 26.602,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 0.989,
+        "p50": 11.227,
+        "p95": 24.731,
+        "max": 26.579
+      }
+    },
+    {
+      "name": "initialize-relay-agents",
+      "seconds": 5.518,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 0.238,
+        "p50": 2.701,
+        "p95": 5.167,
+        "max": 5.452
+      }
+    },
+    {
+      "name": "trigger-1",
+      "seconds": 6.681,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 0.457,
+        "p50": 2.585,
+        "p95": 5.385,
+        "max": 6.627
+      }
+    },
+    {
+      "name": "forward-wake-tools-1",
+      "seconds": 52.414,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 2.332,
+        "p50": 27.321,
+        "p95": 31.485,
+        "max": 52.26
+      }
+    },
+    {
+      "name": "trigger-2",
+      "seconds": 7.906,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 0.178,
+        "p50": 1.974,
+        "p95": 5.526,
+        "max": 7.766
+      }
+    },
+    {
+      "name": "forward-wake-tools-2",
+      "seconds": 43.009,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 1.477,
+        "p50": 27.447,
+        "p95": 33.889,
+        "max": 42.812
+      }
+    },
+    {
+      "name": "trigger-3",
+      "seconds": 7.605,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 0.166,
+        "p50": 2.747,
+        "p95": 6.317,
+        "max": 7.493
+      }
+    },
+    {
+      "name": "forward-wake-tools-3",
+      "seconds": 34.119,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 2.118,
+        "p50": 28.275,
+        "p95": 33.168,
+        "max": 33.982
+      }
+    },
+    {
+      "name": "trigger-4",
+      "seconds": 6.578,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 0.176,
+        "p50": 1.903,
+        "p95": 5.124,
+        "max": 6.442
+      }
+    },
+    {
+      "name": "forward-wake-tools-4",
+      "seconds": 42.688,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 4.002,
+        "p50": 28.015,
+        "p95": 34.104,
+        "max": 42.555
+      }
+    },
+    {
+      "name": "trigger-5",
+      "seconds": 6.83,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 0.169,
+        "p50": 2.745,
+        "p95": 5.304,
+        "max": 6.691
+      }
+    },
+    {
+      "name": "forward-wake-tools-5",
+      "seconds": 49.429,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 1.779,
+        "p50": 28.422,
+        "p95": 33.669,
+        "max": 49.331
+      }
+    }
+  ],
+  "errors": [],
+  "kind": "shared-relay-run-worker-forwarding",
+  "relay_cycles": 5,
+  "placement": [
+    [
+      "12396314",
+      "running",
+      128
+    ],
+    [
+      "12396315",
+      "running",
+      128
+    ]
+  ],
+  "final_relay_states": {
+    "completed": 1280
+  },
+  "final_delivery_pending": 0,
+  "success": true,
+  "worker_errors": [],
+  "upstream_counts": {
+    "1": 256,
+    "2": 256,
+    "3": 256,
+    "4": 256,
+    "5": 256
+  },
+  "relay_cleanup_errors": [],
+  "cleanup_errors": [],
+  "remaining": [],
+  "http_rejections": [],
+  "health": {
+    "count": 482,
+    "failures": [],
+    "latency": {
+      "min": 0.012,
+      "p50": 0.016,
+      "p95": 0.117,
+      "max": 0.595
+    }
+  },
+  "total_seconds": 500.305,
+  "server_version": "0.5.40",
+  "server_commit": "d2fb9aaac0f6292990737d89362d1df6e3421470",
+  "sdk_commit": "ed9240d071990f932a9db01cfc0c4e76692ac52c",
+  "sdk_wheel_sha256": "9a459bb0c50edf8efb49b23d9083f603db73a58c24e64a7359651d7b1eb9cf6b",
+  "measurement_notes": [
+    "Phase failures count requests that remained unsuccessful after SDK retries. The http_rejections observer wraps synchronous urllib and does not measure retryable admissions on the asynchronous SDK path.",
+    "The upstream is a controlled HTTP echo service. This tests SDK request forwarding, commit, park/wake and execution without external model generation."
+  ],
+  "park_cycles": [
+    {
+      "elapsed": 51.164,
+      "cycle": 1,
+      "seconds": 12.058,
+      "inventory": [
+        [
+          "12396314",
+          "parked",
+          128
+        ],
+        [
+          "12396315",
+          "parked",
+          128
+        ]
+      ]
+    },
+    {
+      "elapsed": 165.498,
+      "cycle": 2,
+      "seconds": 54.006,
+      "inventory": [
+        [
+          "12396314",
+          "parked",
+          128
+        ],
+        [
+          "12396315",
+          "parked",
+          128
+        ]
+      ]
+    },
+    {
+      "elapsed": 240.463,
+      "cycle": 3,
+      "seconds": 24.345,
+      "inventory": [
+        [
+          "12396314",
+          "parked",
+          128
+        ],
+        [
+          "12396315",
+          "parked",
+          128
+        ]
+      ]
+    },
+    {
+      "elapsed": 320.308,
+      "cycle": 4,
+      "seconds": 39.141,
+      "inventory": [
+        [
+          "12396314",
+          "parked",
+          128
+        ],
+        [
+          "12396315",
+          "parked",
+          128
+        ]
+      ]
+    },
+    {
+      "elapsed": 426.801,
+      "cycle": 5,
+      "seconds": 56.969,
+      "inventory": [
+        [
+          "12396314",
+          "parked",
+          128
+        ],
+        [
+          "12396315",
+          "parked",
+          128
+        ]
+      ]
+    }
+  ]
+}

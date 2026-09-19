@@ -20,6 +20,7 @@ from ucloud_sandboxes.providers.ucloud.bootstrap import (
 from ucloud_sandboxes.vm_init import (
     BUILDER_RUNTIME_PACKAGES,
     PINNED_STORAGE_NATIVE_AGENTENV_COMMIT,
+    PINNED_STORAGE_NATIVE_PATCHES,
     RUNTIME_KERNEL_MODULES,
     SANDBOX_RUNTIME_PACKAGES,
     VmInitOptions,
@@ -75,11 +76,11 @@ def write_bundle(root: Path, role: str) -> dict:
     if role == "sandbox":
         backend = artifact("runtime/storage-native/backend")
         license_metadata = artifact("runtime/storage-native/LICENSE")
-        patch_names = ("agentenv-streaming-dense-export.patch", "agentenv-pooled-delete.patch", "agentenv-owner-identity.patch")
+        patch_names = PINNED_STORAGE_NATIVE_PATCHES
         build = {  # fmt: skip
             "schema": 3, "agentenv_commit": PINNED_STORAGE_NATIVE_AGENTENV_COMMIT,
             "artifact_sha256": backend["sha256"], "host_architecture": HOST_ARCHITECTURE, "license": "MIT",
-            "patches": [{"name": name, "sha256": character * 64} for name, character in zip(patch_names, "abc", strict=True)],
+            "patches": [{"name": name, "sha256": "a" * 64} for name in patch_names],
         }
         build_metadata = artifact("runtime/storage-native/build-manifest.json", (json.dumps(build) + "\n").encode())
         runtime.update(

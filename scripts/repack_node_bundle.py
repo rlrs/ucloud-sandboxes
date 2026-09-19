@@ -27,7 +27,10 @@ import tarfile
 import tempfile
 import zipfile
 
-from ucloud_sandboxes.vm_init import PINNED_STORAGE_NATIVE_AGENTENV_COMMIT
+from ucloud_sandboxes.vm_init import (
+    PINNED_STORAGE_NATIVE_AGENTENV_COMMIT,
+    PINNED_STORAGE_NATIVE_PATCHES,
+)
 from ucloud_sandboxes.gvisor_distribution import (
     GVISOR_COMMIT,
     GVISOR_SIDECARS,
@@ -35,12 +38,7 @@ from ucloud_sandboxes.gvisor_distribution import (
 )
 
 
-EXPECTED_STORAGE_PATCHES = [
-    "agentenv-streaming-dense-export.patch",
-    "agentenv-pooled-delete.patch",
-    "agentenv-owner-identity.patch",
-    "agentenv-owner-transitions.patch",
-]
+EXPECTED_STORAGE_PATCHES = list(PINNED_STORAGE_NATIVE_PATCHES)
 
 
 def canonical_distribution_name(value: str) -> str:

@@ -68,6 +68,12 @@ DEFAULT_STORAGE_NATIVE_MAX_UBLK_DEVICES = 0
 DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_LAYERS = 8
 DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_BYTES = 4 * 1024 * 1024 * 1024
 PINNED_STORAGE_NATIVE_AGENTENV_COMMIT = "db1492b7915a408b37f863c9e3a34b2ccb2fb1b0"
+PINNED_STORAGE_NATIVE_PATCHES = (
+    "agentenv-streaming-dense-export.patch",
+    "agentenv-pooled-delete.patch",
+    "agentenv-owner-identity.patch",
+    "agentenv-owner-transitions.patch",
+)
 DEFAULT_DIRECT_DISK_HEADROOM_MB = 16 * 1024
 DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES = 8
 
@@ -874,11 +880,7 @@ if runtime.get("role") == "sandbox":
         raise SystemExit("storage-native license checksum mismatch")
     build = json.loads(paths["manifest_file"].read_text(encoding="utf-8"))
     patches = build.get("patches")
-    expected_patches = [
-        "agentenv-streaming-dense-export.patch",
-        "agentenv-pooled-delete.patch",
-        "agentenv-owner-identity.patch",
-    ]
+    expected_patches = {list(PINNED_STORAGE_NATIVE_PATCHES)!r}
     if (
         build.get("schema") != 3
         or build.get("agentenv_commit") != storage["agentenv_commit"]

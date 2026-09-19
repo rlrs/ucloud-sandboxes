@@ -14,7 +14,7 @@ import math
 from pathlib import Path
 import sqlite3
 import socket
-from threading import BoundedSemaphore, Event, RLock, Thread
+from threading import Event, RLock, Thread
 import time
 from typing import Any, Callable
 from urllib import error, request
@@ -26,6 +26,7 @@ from urllib3.exceptions import HTTPError as Urllib3HTTPError
 from urllib3.exceptions import EmptyPoolError
 
 from .network_policy import SandboxNetworkPolicy
+from .admission import FairCapacity
 from .capabilities import (
     ENVIRONMENT_CONTRACT_CAPABILITY,
     STATIC_FILE_MANAGEMENT_CAPABILITY,
@@ -693,7 +694,9 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     metrics_response_lock: RLock
     registry_layer_cache: RegistryLayerMetadataCache | None
     registry_usage_store: RegistryUsageStore | None
-    sandbox_create_limiter: BoundedSemaphore | None
+    sandbox_create_limiter: FairCapacity | None
+    upload_memory_limiter: FairCapacity
+    admission_wait_seconds = 30.0
     create_image_pull_tasks: CreateImagePullTasks
     sandbox_create_busy_sampler: GatewayBusySampler
     max_concurrent_sandbox_creates: int
@@ -2811,11 +2814,13 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         return updated
 
     @contextmanager
-    def _startup_request_admission(self, *, creating: bool = False):
-        # Bulk startup work shares the create budget; status, heartbeats and
-        # deletion stay outside it. Reject before buffering an upload body.
-        limiter = getattr(self, "sandbox_create_limiter", None)
-        if limiter is not None and not limiter.acquire(blocking=False):
+    def _startup_request_admission(self, *, creating: bool = False, weight: int = 1):
+        # Queue before reading a body. Uploads reserve bytes independently of
+        # creates; wakes and streamed/control requests do not use either lane.
+        limiter = (self.sandbox_create_limiter if creating else self.upload_memory_limiter)
+        if limiter is not None and not limiter.acquire(
+            timeout=self.admission_wait_seconds, weight=weight
+        ):
             if creating:
                 self.sandbox_create_busy_sampler.record(
                     max_concurrent_sandbox_creates=self.max_concurrent_sandbox_creates,
@@ -2825,7 +2830,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             self.close_connection = True
             self._write_json(
                 {
-                    "error": "gateway startup concurrency is exhausted",
+                    "error": "gateway admission wait deadline exceeded",
                     "error_code": "gateway_startup_busy",
                     "retryable": True,
                     "max_concurrent_sandbox_creates": self.max_concurrent_sandbox_creates,
@@ -2839,7 +2844,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             yield True
         finally:
             if limiter is not None:
-                limiter.release()
+                limiter.release(weight=weight)
 
     def _create_sandbox_on_node(self) -> None:
         with self._startup_request_admission(creating=True) as admitted:
@@ -4061,8 +4066,20 @@ class ControlPlaneHandler(BuildContextHttpHandler):
 
     def _route_sandbox_request(self, sandbox_id: str, path: str) -> None:
         action = match_sandbox_http_route(self.command, path)
-        if action is not None and action.wakes:
-            with self._startup_request_admission() as admitted:
+        try:
+            weight = max(1, int(self.headers.get("Content-Length", "0")))
+            if weight > DEFAULT_MAX_PROXY_BODY_BYTES:
+                raise ValueError("request exceeds gateway body limit")
+        except ValueError as exc:
+            self.close_connection = True
+            self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            return
+        buffered_bulk = self.command in {"POST", "PUT", "PATCH"} and (
+            weight > 64 * 1024
+            or (action is not None and action.action == "files")
+        )
+        if buffered_bulk:
+            with self._startup_request_admission(weight=weight) as admitted:
                 if admitted:
                     self._route_sandbox_request_admitted(sandbox_id, path)
         else:
@@ -6905,10 +6922,11 @@ def build_server(
         max_sandbox_resources or ScalePolicy().default_node_resources
     )
     BoundHandler.sandbox_create_limiter = (
-        BoundedSemaphore(BoundHandler.max_concurrent_sandbox_creates)
+        FairCapacity(BoundHandler.max_concurrent_sandbox_creates)
         if BoundHandler.max_concurrent_sandbox_creates > 0
         else None
     )
+    BoundHandler.upload_memory_limiter = FairCapacity(DEFAULT_MAX_PROXY_BODY_BYTES)
     BoundHandler.sandbox_create_busy_sampler = GatewayBusySampler(metrics_store)
     BoundHandler.create_image_pull_tasks = CreateImagePullTasks()
     BoundHandler.telemetry = resolved_telemetry

@@ -15,6 +15,7 @@ import time
 from typing import Callable, Iterator, Sequence
 from uuid import uuid4
 
+from .admission import FairCapacity
 from .direct_provisioner import DirectSandboxProvisioner
 from .storage_native_migration import (
     StorageNativeSandboxManifest,
@@ -271,8 +272,10 @@ class DirectSandboxService:
         self.warden = provisioner.warden
         self.process_runner = process_runner or DirectProcessRunner()
         self.telemetry = telemetry or Telemetry.disabled("direct-sandbox-service")
-        self._restore_slots = threading.Semaphore(max_concurrent_restores)
-        self._startup_slots = threading.BoundedSemaphore(max_concurrent_startups)
+        self._restore_slots = FairCapacity(max_concurrent_restores)
+        self._startup_slots = FairCapacity(max_concurrent_startups)
+        self._file_read_slots = FairCapacity(max_concurrent_startups)
+        self.admission_wait_seconds = 30.0
         self._startup_admission_state = threading.local()
         self._active_capacity: ResourceQuantity | None = None
         self._runtime_metrics_provider: (
@@ -1431,13 +1434,19 @@ class DirectSandboxService:
         command = ("/bin/cat", "--", path)
         if registration.spec.filesystem.management_helper == "static":
             command = ("/.ucloud-job-init", "files", "read", path, str(max_bytes))
-        with self.startup_admission():
+        # The node buffers file output. Bound those buffers independently of
+        # cold starts; an implicit wake uses the separate restore queue.
+        if not self._file_read_slots.acquire(timeout=self.admission_wait_seconds):
+            raise SandboxStartupBusyError("node file read admission wait deadline exceeded")
+        try:
             result = self.exec(
                 sandbox_id,
                 command,
                 max_stdout_bytes=max_bytes,
                 max_stderr_bytes=64 * 1024,
             )
+        finally:
+            self._file_read_slots.release()
         if result.exit_code != 0:
             raise DirectWardenError(
                 f"sandbox file read failed with exit {result.exit_code}"
@@ -1495,18 +1504,17 @@ class DirectSandboxService:
 
     @contextmanager
     def startup_admission(self):
-        """Share one nonblocking budget across creates, restores and file I/O.
+        """Queue cold creates and buffered uploads before allocating resources.
 
-        A file request can restore its sandbox on the same thread. Reentrant
-        calls reuse that request's slot rather than requiring a second slot.
-        Running user commands and lightweight inventory do not consume slots.
+        Reentrant upload helpers reuse the outer request's reservation.
+        Restores and resident reads make progress independently of this queue.
         """
 
         if getattr(self._startup_admission_state, "admitted", False):
             yield
             return
-        if not self._startup_slots.acquire(blocking=False):
-            raise SandboxStartupBusyError("node startup concurrency is exhausted")
+        if not self._startup_slots.acquire(timeout=self.admission_wait_seconds):
+            raise SandboxStartupBusyError("node startup admission wait deadline exceeded")
         self._startup_admission_state.admitted = True
         try:
             yield
@@ -1516,13 +1524,12 @@ class DirectSandboxService:
 
     @contextmanager
     def _restore_slot(self):
-        # Waiting here occupies a request thread and a sandbox lifecycle lock.
-        # Reject before side effects so the caller can retry with backoff.
-        if not self._restore_slots.acquire(blocking=False):
-            raise SandboxRestoreBusyError("node restore concurrency is exhausted")
+        # FIFO admission prevents a retrying wake from repeatedly losing to new
+        # arrivals. Only this sandbox's lifecycle lock is held while waiting.
+        if not self._restore_slots.acquire(timeout=self.admission_wait_seconds):
+            raise SandboxRestoreBusyError("node restore admission wait deadline exceeded")
         try:
-            with self.startup_admission():
-                yield
+            yield
         finally:
             self._restore_slots.release()
 

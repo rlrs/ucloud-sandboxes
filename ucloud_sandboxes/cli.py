@@ -10,13 +10,14 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import random
+import ssl
 import sys
-from threading import Event
+from threading import Event, Lock, local
 import time
 from typing import Any, Callable, Iterable
 from urllib.error import HTTPError
 from urllib.parse import quote, urlparse
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 from uuid import uuid4
 
 from opentelemetry.propagate import inject
@@ -1294,6 +1295,29 @@ class _RejectControlRedirects(HTTPRedirectHandler):
         return None
 
 
+_CONTROL_HTTP = local()
+_CONTROL_TLS_LOCK = Lock()
+_CONTROL_TLS_CONTEXT: ssl.SSLContext | None = None
+
+
+def _control_opener():
+    # urllib handlers reference their opener, forming cycles. Constructing a
+    # fresh HTTPSHandler for every retry retains native certificate stores
+    # until cyclic GC runs; Python's object counts miss their large native cost.
+    # The immutable TLS configuration is shared, the mutable opener is per thread.
+    global _CONTROL_TLS_CONTEXT
+    opener = getattr(_CONTROL_HTTP, "opener", None)
+    if opener is None:
+        with _CONTROL_TLS_LOCK:
+            if _CONTROL_TLS_CONTEXT is None:
+                _CONTROL_TLS_CONTEXT = ssl.create_default_context()
+                _CONTROL_TLS_CONTEXT.set_alpn_protocols(["http/1.1"])
+            context = _CONTROL_TLS_CONTEXT
+        opener = build_opener(_RejectControlRedirects(), HTTPSHandler(context=context))
+        _CONTROL_HTTP.opener = opener
+    return opener
+
+
 def _post_bounded_json(
     base_url: str,
     path: str,
@@ -1322,7 +1346,7 @@ def _post_bounded_json(
         headers=headers,
         method="POST",
     )
-    with build_opener(_RejectControlRedirects()).open(
+    with _control_opener().open(
         req,
         timeout=timeout_seconds,
     ) as response:
@@ -1361,7 +1385,7 @@ def _delete_bounded_json(
         headers=headers,
         method="DELETE",
     )
-    with build_opener(_RejectControlRedirects()).open(
+    with _control_opener().open(
         req,
         timeout=timeout_seconds,
     ) as response:

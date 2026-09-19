@@ -1,4 +1,4 @@
-"""Cold-start work must yield capacity without blocking control traffic."""
+"""Bulk work queues fairly without starving wakes or control requests."""
 
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
@@ -6,25 +6,67 @@ from http.client import HTTPConnection
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Event, Lock
-from types import SimpleNamespace
-from urllib.parse import urlparse
 import json
+import time
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from tests import test_control_plane as gateway_fixtures
 from tests import test_direct_provisioner as direct_fixtures
+from ucloud_sandboxes.admission import FairCapacity
 from ucloud_sandboxes.direct_service import DirectSandboxService
-from ucloud_sandboxes.node_agent import NodeAgentHandler
-from ucloud_sandboxes.sandbox import SandboxStartupBusyError
+
+
+def wait_queued(limiter, count):
+    deadline = time.monotonic() + 3
+    while len(limiter._waiters) != count:
+        if time.monotonic() > deadline:
+            raise AssertionError("admission did not queue")
+        time.sleep(0.005)
 
 
 class StartupAdmissionTests(unittest.TestCase):
-    def test_create_restore_and_upload_share_budget_without_blocking_inventory(self):
+    def test_weighted_fifo_timeout_and_no_barging(self):
+        limiter = FairCapacity(10)
+        limiter.acquire(weight=6)
+        order = []
+        release = Event()
+
+        def large():
+            self.assertTrue(limiter.acquire(timeout=2, weight=8))
+            order.append("large")
+            release.wait(2)
+            limiter.release(weight=8)
+
+        def small():
+            self.assertTrue(limiter.acquire(timeout=2, weight=1))
+            order.append("small")
+            limiter.release()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(large)
+            wait_queued(limiter, 1)
+            self.assertFalse(limiter.acquire(blocking=False))
+            self.assertFalse(limiter.acquire(timeout=0.01))
+            second = pool.submit(small)
+            wait_queued(limiter, 2)
+            limiter.release(weight=6)
+            release.set()
+            first.result(3)
+            second.result(3)
+        self.assertEqual(order, ["large", "small"])
+        self.assertTrue(limiter.acquire(weight=10, blocking=False))
+        limiter.release(weight=10)
+
+    def test_create_does_not_block_restore_or_resident_read(self):
         with TemporaryDirectory() as directory:
             fixture = direct_fixtures.DirectProvisionerTests()
             provisioner, *_ = fixture.make(Path(directory).resolve())
-            service = DirectSandboxService(provisioner, max_concurrent_startups=1)
+            service = DirectSandboxService(
+                provisioner,
+                max_concurrent_startups=1,
+                process_runner=direct_fixtures.FakeProcessRunner(),
+            )
             fixture.create(service, fixture.spec())
             service.park("sandbox", operation_id="park:test")
             entered, release = Event(), Event()
@@ -32,116 +74,74 @@ class StartupAdmissionTests(unittest.TestCase):
 
             def slow_create(**kwargs):
                 entered.set()
-                if not release.wait(5):
+                if not release.wait(3):
                     raise TimeoutError("test did not release create")
                 return original(**kwargs)
 
-            with patch.object(provisioner, "create", side_effect=slow_create):
-                with ThreadPoolExecutor(max_workers=1) as pool:
-                    future = pool.submit(
-                        fixture.create, service, replace(fixture.spec(), id="cold")
+            with (
+                patch.object(provisioner, "create", side_effect=slow_create),
+                ThreadPoolExecutor(max_workers=1) as pool,
+            ):
+                future = pool.submit(
+                    fixture.create, service, replace(fixture.spec(), id="cold")
+                )
+                try:
+                    self.assertTrue(entered.wait(3))
+                    service.wake("sandbox", generation=7, operation_id="wake:test")
+                    self.assertEqual(
+                        service.read_file("sandbox", "/marker", max_bytes=1024), b"ok\n"
                     )
-                    try:
-                        self.assertTrue(entered.wait(5))
-                        with self.assertRaises(SandboxStartupBusyError):
-                            service.wake(
-                                "sandbox", generation=7, operation_id="wake:test"
-                            )
-                        with self.assertRaises(SandboxStartupBusyError):
-                            service.write_file("sandbox", "/tmp/test", b"data")
-                        self.assertEqual(
-                            service.get_snapshot("sandbox").state, "parked"
-                        )
-                        handler = SimpleNamespace(
-                            manager=SimpleNamespace(
-                                service=service,
-                                upload_file=Mock(side_effect=AssertionError),
-                            ),
-                            _read_raw_body=Mock(
-                                side_effect=AssertionError(
-                                    "must reject before body buffering"
-                                )
-                            ),
-                            _write_json=Mock(),
-                        )
-                        handler._write_exception = lambda exc: (
-                            NodeAgentHandler._write_exception(handler, exc)
-                        )
-                        NodeAgentHandler._upload_file(
-                            handler,
-                            urlparse("/v1/sandboxes/sandbox/files?path=/tmp/test"),
-                        )
-                        self.assertEqual(
-                            handler._write_json.call_args.args[0]["error_code"],
-                            "node_startup_busy",
-                        )
-                    finally:
-                        release.set()
-                    self.assertEqual(future.result(timeout=5).state, "running")
-            # An admitted upload can restore without needing a second permit.
-            with service.startup_admission():
-                service.wake("sandbox", generation=7, operation_id="wake:retry")
-            self.assertEqual(service.get_snapshot("sandbox").state, "running")
-            # Same-sandbox contention is also rejected before command execution.
-            with service._lock("sandbox", 7):
-                with self.assertRaises(SandboxStartupBusyError):
-                    service.write_file("sandbox", "/tmp/test", b"data")
-            with service.startup_admission():
-                pass
+                    self.assertFalse(future.done())
+                finally:
+                    release.set()
+                self.assertEqual(future.result(3).state, "running")
 
-    def test_256_request_burst_bounds_work_and_releases_permits(self):
+    def test_256_requests_queue_and_release_permits_on_failure(self):
         with TemporaryDirectory() as directory:
             fixture = direct_fixtures.DirectProvisionerTests()
             provisioner, *_ = fixture.make(Path(directory).resolve())
             service = DirectSandboxService(provisioner, max_concurrent_startups=8)
-            release, rejected_all = Event(), Event()
+            release, full = Event(), Event()
             lock = Lock()
-            active = peak = rejected = 0
+            active = peak = 0
 
             def work(index):
-                nonlocal active, peak, rejected
+                nonlocal active, peak
                 try:
                     with service.startup_admission():
                         with lock:
                             active += 1
                             peak = max(peak, active)
+                            if active == 8:
+                                full.set()
                         try:
                             with service.startup_admission():
-                                if not release.wait(5):
-                                    raise TimeoutError("test did not release work")
+                                if not release.wait(3):
+                                    raise TimeoutError("test gate")
                             if index == 0:
-                                raise RuntimeError("injected operation failure")
+                                raise ValueError("injected failure")
                         finally:
                             with lock:
                                 active -= 1
                     return "done"
-                except SandboxStartupBusyError:
-                    with lock:
-                        rejected += 1
-                        if rejected == 248:
-                            rejected_all.set()
-                    return "deferred"
-                except RuntimeError:
+                except ValueError:
                     return "failed"
 
             with ThreadPoolExecutor(max_workers=32) as pool:
-                futures = [pool.submit(work, index) for index in range(256)]
+                futures = [pool.submit(work, i) for i in range(256)]
                 try:
-                    self.assertTrue(rejected_all.wait(5))
-                    self.assertEqual(peak, 8)
+                    self.assertTrue(full.wait(3))
                 finally:
                     release.set()
-                outcomes = [future.result(timeout=5) for future in futures]
-            self.assertEqual(outcomes.count("deferred"), 248)
+                outcomes = [f.result(5) for f in futures]
+            self.assertEqual(peak, 8)
+            self.assertEqual(outcomes.count("done"), 255)
+            self.assertEqual(outcomes.count("failed"), 1)
             self.assertEqual(active, 0)
-            # Every successful/failed request releases its permit.
-            self.assertTrue(
-                all(service._startup_slots.acquire(blocking=False) for _ in range(8))
-            )
-            for _ in range(8):
-                service._startup_slots.release()
+            self.assertTrue(service._startup_slots.acquire(weight=8, blocking=False))
+            service._startup_slots.release(weight=8)
 
-    def test_gateway_rejects_unread_upload_but_serves_health_and_delete(self):
+    def test_gateway_queues_create_but_wake_read_and_health_progress(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)
             gateway = gateway_fixtures._gateway_server(
@@ -149,41 +149,61 @@ class StartupAdmissionTests(unittest.TestCase):
                 routing_file=root / "routes.sqlite",
                 max_concurrent_sandbox_creates=1,
             )
-            with gateway_fixtures._running_server(gateway):
+            handler = gateway.RequestHandlerClass
+
+            def created(self):
+                self._write_json({"ok": True}, status=201)
+
+            with (
+                gateway_fixtures._running_server(gateway),
+                patch.object(handler, "_create_sandbox_admitted", created),
+                ThreadPoolExecutor(max_workers=1) as pool,
+            ):
                 host, port = gateway.server_address
-                limiter = gateway.RequestHandlerClass.sandbox_create_limiter
+
+                def request(method, path, body=b"{}"):
+                    connection = HTTPConnection(host, port, timeout=3)
+                    try:
+                        connection.request(method, path, body=body)
+                        response = connection.getresponse()
+                        return response.status, response.read()
+                    finally:
+                        connection.close()
+
+                limiter = handler.sandbox_create_limiter
                 limiter.acquire()
+                future = pool.submit(request, "POST", "/v1/sandboxes")
                 try:
-                    for method, path in (
-                        ("PUT", "/v1/sandboxes/sandbox/files?path=/tmp/test"),
-                        ("POST", "/v1/sandboxes"),
-                        ("POST", "/v1/sandboxes/sandbox/wake"),
-                    ):
-                        connection = HTTPConnection(host, port, timeout=2)
-                        try:
-                            connection.putrequest(method, path)
-                            connection.putheader("Content-Length", "4096")
-                            connection.endheaders()  # Deliberately send no body.
-                            response = connection.getresponse()
-                            self.assertEqual(response.status, 503)
-                            self.assertEqual(
-                                json.loads(response.read())["error_code"],
-                                "gateway_startup_busy",
-                            )
-                            self.assertEqual(response.getheader("Connection"), "close")
-                        finally:
-                            connection.close()
-                    for method, path in (
-                        ("GET", "/healthz"),
-                        ("DELETE", "/v1/sandboxes/missing"),
-                    ):
-                        connection = HTTPConnection(host, port, timeout=2)
-                        try:
-                            connection.request(method, path)
-                            response = connection.getresponse()
-                            self.assertEqual(response.status, 200)
-                            response.read()
-                        finally:
-                            connection.close()
+                    wait_queued(limiter, 1)
+                    self.assertFalse(future.done())
+                    for method, path, status in [
+                        ("POST", "/v1/sandboxes/missing/wake", 404),
+                        ("GET", "/v1/sandboxes/missing/files?path=/marker", 404),
+                        ("GET", "/healthz", 200),
+                        ("DELETE", "/v1/sandboxes/missing", 200),
+                    ]:
+                        self.assertEqual(request(method, path)[0], status)
                 finally:
                     limiter.release()
+                self.assertEqual(future.result(3)[0], 201)
+                # Upload byte pressure is isolated, and times out before body read.
+                uploads = handler.upload_memory_limiter
+                uploads.acquire(weight=uploads.capacity)
+                handler.admission_wait_seconds = 0.01
+                connection = HTTPConnection(host, port, timeout=2)
+                try:
+                    connection.putrequest(
+                        "PUT", "/v1/sandboxes/missing/files?path=/marker"
+                    )
+                    connection.putheader("Content-Length", "4096")
+                    connection.endheaders()
+                    response = connection.getresponse()
+                    self.assertEqual(response.status, 503)
+                    self.assertEqual(
+                        json.loads(response.read())["error_code"],
+                        "gateway_startup_busy",
+                    )
+                    self.assertEqual(response.getheader("Connection"), "close")
+                finally:
+                    connection.close()
+                    uploads.release(weight=uploads.capacity)

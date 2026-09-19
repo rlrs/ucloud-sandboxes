@@ -142,6 +142,7 @@ class LifecycleBoundaryTests(unittest.TestCase):
                 fixture = direct_fixtures.DirectProvisionerTests()
                 provisioner, *_ = fixture.make(Path(directory).resolve())
                 service = DirectSandboxService(provisioner, max_concurrent_restores=1)
+                service.admission_wait_seconds = .01
                 fixture.create(service, fixture.spec())
                 service.park("sandbox", operation_id="park:test")
                 sandbox = provisioner.registry.get("sandbox").to_direct_sandbox()

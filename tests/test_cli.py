@@ -361,7 +361,7 @@ class CliTests(unittest.TestCase):
             return opener, response
 
         opener, response = opener_for(b'{"drain":{"ready":true}}')
-        with patch.object(cli, "build_opener", return_value=opener) as build_opener:
+        with patch.object(cli, "_control_opener", return_value=opener):
             payload = cli._post_node_drain(
                 "https://node.example/",
                 "drain-1",
@@ -374,9 +374,6 @@ class CliTests(unittest.TestCase):
         self.assertEqual(request.get_header("Authorization"), "Bearer secret")
         self.assertEqual(opener.open.call_args.kwargs["timeout"], 7.0)
         response.read.assert_called_once_with(cli._MAX_CONTROL_RESPONSE_BYTES + 1)
-        self.assertIsInstance(
-            build_opener.call_args.args[0], cli._RejectControlRedirects
-        )
 
         with self.assertRaisesRegex(ValueError, "invalid node URL"):
             cli._post_node_drain("file:///tmp/node", "drain-1")
@@ -387,7 +384,7 @@ class CliTests(unittest.TestCase):
 
         invalid_opener, _response = opener_for(b"[]")
         with (
-            patch.object(cli, "build_opener", return_value=invalid_opener),
+            patch.object(cli, "_control_opener", return_value=invalid_opener),
             self.assertRaisesRegex(
                 ValueError, "migration response must be a JSON object"
             ),
@@ -407,7 +404,7 @@ class CliTests(unittest.TestCase):
             b"x" * (cli._MAX_CONTROL_RESPONSE_BYTES + 1)
         )
         with (
-            patch.object(cli, "build_opener", return_value=oversized_opener),
+            patch.object(cli, "_control_opener", return_value=oversized_opener),
             self.assertRaisesRegex(ValueError, "lifecycle response exceeds 1 MiB"),
         ):
             cli._post_gateway_sandbox_lifecycle(

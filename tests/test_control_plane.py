@@ -3667,6 +3667,7 @@ class ControlPlaneTests(unittest.TestCase):
                 routing_file=raw_path / "routes.sqlite",
                 max_concurrent_sandbox_creates=8,
             )
+            gateway.RequestHandlerClass.admission_wait_seconds = .01
             with _running_server(gateway) as base:
 
                 def create(index: int) -> dict:
@@ -3708,6 +3709,7 @@ class ControlPlaneTests(unittest.TestCase):
                 routing_file=root / "routes.sqlite",
                 max_concurrent_sandbox_creates=1,
             )
+            gateway.RequestHandlerClass.admission_wait_seconds = .01
             with _running_server(gateway):
                 host, port = gateway.server_address
                 limiter = gateway.RequestHandlerClass.sandbox_create_limiter

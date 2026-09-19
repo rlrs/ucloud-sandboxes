@@ -36,7 +36,9 @@ _EXEC_ROUTE_CACHE_SANDBOX_INDEXES: defaultdict[Path, dict[str, set[str]]] = defa
     dict
 )
 PENDING_DEMAND_TTL_SECONDS = 300
-MAX_PREPARED_CAPACITY_COUNT = 100
+# SQLite stores the durable demand count as a signed 64-bit integer. This is a
+# representation bound, not an admission limit; fleet policy governs capacity.
+MAX_PREPARED_CAPACITY_COUNT = (1 << 63) - 1
 EXEC_ROUTE_CACHE_MAX_ENTRIES = 65_536
 PROGRAM_TERMINAL_RETENTION_SECONDS = 7 * 24 * 60 * 60
 ROUTING_SCHEMA_VERSION = 3

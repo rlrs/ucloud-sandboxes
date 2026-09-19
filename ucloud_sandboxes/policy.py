@@ -771,7 +771,7 @@ def _nodes_for_unplaced_requests(
     now: datetime,
     oldest_pending_seconds: int,
 ) -> int:
-    """Bin-pack accepted request shapes so aggregate free space cannot lie."""
+    """Bin-pack shapes, batching repeated demand and stopping beyond fleet size."""
 
     if not requests:
         return 0
@@ -830,7 +830,8 @@ def _nodes_for_unplaced_requests(
     for placement in sorted(requests, key=pressure, reverse=True):
         requested = placement.resources
         excluded = set(placement.excluded_job_ids)
-        for _ in range(placement.count):
+        remaining = placement.count
+        while remaining > 0:
             fitting: list[tuple[int, str, ResourceQuantity, ResourceQuantity]] = []
             for index, (job_id, available, total) in enumerate(bins):
                 if job_id in excluded:
@@ -852,13 +853,30 @@ def _nodes_for_unplaced_requests(
                         item[2].vcpu - requested.vcpu,
                     ),
                 )
+                # CPU/RAM are reusable; only disk is reserved per placement.
+                # Consume identical demand together instead of expanding a
+                # reservation into one planner iteration per future sandbox.
+                batch = (
+                    min(remaining, available.disk_mb // requested.disk_mb)
+                    if requested.disk_mb > 0
+                    else remaining
+                )
+                if job_id == placement.owned_job_id and placement.owned_disk_mb > 0:
+                    batch = 1
                 bins[index] = (
                     job_id,
-                    reserve_dynamic_resources(available, requested),
+                    reserve_dynamic_resources(
+                        available, replace(requested, disk_mb=requested.disk_mb * batch)
+                    ),
                     total,
                 )
+                remaining -= batch
                 continue
             missing += 1
+            # Additional hypothetical nodes cannot change this cycle's create
+            # budget, or the answer to whether existing capacity suffices.
+            if missing > policy.max_nodes:
+                return missing
             bins.append(
                 (
                     "",
@@ -868,6 +886,7 @@ def _nodes_for_unplaced_requests(
                     default_bin,
                 )
             )
+            remaining -= 1
     return missing
 
 

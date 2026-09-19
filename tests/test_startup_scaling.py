@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from tests.test_policy import node
+from tests import test_control_plane as gateway_fixtures
 from ucloud_sandboxes.cli import vm_init_options_for_job
 from ucloud_sandboxes.config import DeploymentConfig
 from ucloud_sandboxes.vm_init import render_vm_init_script
@@ -19,11 +20,66 @@ from ucloud_sandboxes.models import (
     ScalePolicy,
     utc_now,
 )
-from ucloud_sandboxes.policy import evaluate_scale
+from ucloud_sandboxes.policy import _nodes_for_unplaced_requests, evaluate_scale
 from ucloud_sandboxes.routing import RoutingStore, sandbox_demand_from_routing_state
 
 
 class StartupScalingTests(unittest.TestCase):
+    def test_batched_placement_preserves_fragmented_disk_and_reusable_memory(self):
+        policy = replace(
+            self.policy,
+            default_node_resources=ResourceQuantity(vcpu=4, memory_mb=4096, disk_mb=100),
+        )
+        requests = (
+            SandboxPlacementRequest(
+                resources=ResourceQuantity(vcpu=2, memory_mb=1024, disk_mb=30), count=6
+            ),
+            SandboxPlacementRequest(
+                resources=ResourceQuantity(vcpu=2, memory_mb=1024, disk_mb=10), count=2
+            ),
+            SandboxPlacementRequest(
+                resources=ResourceQuantity(vcpu=2, memory_mb=1024), count=1_000_000_000
+            ),
+        )
+        self.assertEqual(
+            _nodes_for_unplaced_requests(
+                [], requests, policy, now=utc_now(), oldest_pending_seconds=0
+            ),
+            2,
+        )
+
+    def test_large_reservation_is_durable_and_policy_bounds_scale_out(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            gateway = gateway_fixtures._gateway_server(
+                root, routing_file=root / "routes.sqlite"
+            )
+            fixture = gateway_fixtures.ControlPlaneTests()
+            with gateway_fixtures._running_server(gateway) as base:
+                for count in (256, 512, 1_000_000_000):
+                    result = fixture._json_request(
+                        base + "/v1/capacity/prepare",
+                        method="POST",
+                        payload={
+                            "id": "large-reservation", "count": count,
+                            "cpus": 2, "memory_mb": 1024, "disk_mb": 5184,
+                        },
+                    )
+                    self.assertEqual(result["prepare"]["count"], count)
+                    store = RoutingStore(root / "routes.sqlite")
+                    self.assertEqual(store.prepared_capacity()[0].count, count)
+                    # Planner effort must follow fleet capacity, not the
+                    # caller's potentially enormous future workload count.
+                    from ucloud_sandboxes import policy as policy_module
+                    with patch.object(
+                        policy_module, "dynamic_request_fits",
+                        wraps=policy_module.dynamic_request_fits,
+                    ) as fits:
+                        decision = evaluate_scale([], store.pending_demand(), self.policy)
+                    self.assertLess(fits.call_count, 100)
+                    self.assertLessEqual(decision.creates, self.policy.max_create_per_cycle)
+                    self.assertGreater(decision.creates, 0)
+
     def setUp(self):
         self.resources = ResourceQuantity(vcpu=32, memory_mb=98304, disk_mb=1_449_984)
         self.shape = ResourceQuantity(vcpu=2, memory_mb=1024, disk_mb=5184)

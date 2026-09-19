@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from contextvars import copy_context
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta
 import json
@@ -103,6 +104,7 @@ from .model_relay import (
     DEFAULT_MAX_INFLIGHT_REQUESTS_PER_ROLLOUT,
     RelayCallerUnavailable,
     RelayRequest,
+    _finish_before_cancellation,
     create_model_relay_app,
 )
 from .models import (
@@ -1202,24 +1204,13 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
     gateway_token = read_required_token_file(
         config.gateway_token_file(), "gateway bearer token"
     )
+    lifecycle = _RelayLifecycleDispatcher(gateway_url, gateway_token)
 
     async def accepted_notifier(relay_request: RelayRequest) -> str | None:
-        return await asyncio.to_thread(
-            _post_gateway_sandbox_lifecycle,
-            gateway_url,
-            gateway_token,
-            relay_request,
-            action="park",
-        )
+        return await lifecycle.notify(relay_request, action="park")
 
     async def result_notifier(relay_request: RelayRequest) -> str | None:
-        return await asyncio.to_thread(
-            _post_gateway_sandbox_lifecycle,
-            gateway_url,
-            gateway_token,
-            relay_request,
-            action="wake",
-        )
+        return await lifecycle.notify(relay_request, action="wake")
 
     app = create_model_relay_app(
         sandbox_bearer_token=read_required_token_file(
@@ -1245,12 +1236,55 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
     )
 
     async def shutdown_telemetry(_app: object) -> None:
+        await lifecycle.close()
         await asyncio.to_thread(telemetry.shutdown)
 
     app.on_cleanup.append(shutdown_telemetry)
     print(f"Serving model relay on http://{args.host}:{config.relay_port}")
     web.run_app(app, host=args.host, port=config.relay_port, print=None)
     return 0
+
+
+class _RelayLifecycleDispatcher:
+    """Bound lifecycle I/O independently of the CPU-sized default executor."""
+
+    def __init__(self, gateway_url: str, bearer_token: str) -> None:
+        self.gateway_url = gateway_url
+        self.bearer_token = bearer_token
+        # Four 32-vCPU workers can restore twelve sandboxes each. Keep park
+        # calls independent so pending checkpoints cannot hold up ready replies.
+        limits = {"park": 16, "wake": 48}
+        self._pools = {
+            action: ThreadPoolExecutor(max_workers=limit, thread_name_prefix=f"relay-{action}")
+            for action, limit in limits.items()
+        }
+        self._slots = {action: asyncio.Semaphore(limit) for action, limit in limits.items()}
+        self._closed = False
+
+    async def notify(self, request: RelayRequest, *, action: str) -> str | None:
+        if action not in self._pools:
+            raise ValueError("unsupported relay sandbox lifecycle action")
+        async with self._slots[action]:
+            if self._closed:
+                raise RuntimeError("relay lifecycle dispatcher is closed")
+            context = copy_context()
+            future = asyncio.get_running_loop().run_in_executor(
+                self._pools[action],
+                lambda: context.run(
+                    _post_gateway_sandbox_lifecycle,
+                    self.gateway_url, self.bearer_token, request, action=action,
+                ),
+            )
+            # A cancelled caller must not release admission while its blocking
+            # HTTP operation still runs, or repeated cancellation could queue
+            # unbounded work in the executor.
+            return await _finish_before_cancellation(future)
+
+    async def close(self) -> None:
+        self._closed = True
+        await asyncio.gather(*(
+            asyncio.to_thread(pool.shutdown, wait=True) for pool in self._pools.values()
+        ))
 
 
 class _RejectControlRedirects(HTTPRedirectHandler):

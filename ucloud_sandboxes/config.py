@@ -435,7 +435,7 @@ class DeploymentConfig:
             gateway_port=8090,
             gateway_heartbeat_ttl_seconds=120,
             gateway_max_concurrent_sandbox_creates=64,
-            gateway_max_http_request_threads=768,
+            gateway_max_http_request_threads=1536,
             relay_port=8092,
             relay_request_timeout_seconds=7200,
             relay_worker_lease_seconds=600,

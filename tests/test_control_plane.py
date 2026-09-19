@@ -3745,8 +3745,10 @@ class ControlPlaneTests(unittest.TestCase):
                 oversized_status = response.status
                 connection.close()
 
-                # Bad input must release admission for the next request.
-                self.assertTrue(limiter.acquire(blocking=False))
+                # The response can arrive before the handler's finally block
+                # releases admission. Wait for cleanup, while still detecting
+                # a leaked slot with a bounded deadline.
+                self.assertTrue(limiter.acquire(timeout=2))
                 limiter.release()
 
         self.assertEqual(busy_body["retryable"], True)

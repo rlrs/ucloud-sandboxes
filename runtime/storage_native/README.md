@@ -16,7 +16,7 @@ from an exact, clean checkout:
 ```
 
 The build applies the dense/compacted-stream export, pooled-exclusive-delete, and
-owner-identity patches, runs targeted compaction regressions plus the daemon
+owner-identity and owner-transition patches, runs targeted compaction regressions plus the daemon
 protocol tests, and emits a
 content-addressed binary, license, and schema-3 build manifest with every patch
 digest. A production package must use that manifest and must not fetch or build
@@ -72,7 +72,11 @@ pooled device after uncertain mount cleanup; it refuses shared pooled devices.
 The owner-identity patch makes runtime-device acquisition idempotent and
 reports active owner bindings separately from idle devices, allowing the
 UCloud journal to recover an acquisition interrupted before the device id was
-recorded.
+recorded. The owner-transition patch makes the forward/reverse ownership index
+atomic, fences late release/delete completions to their captured owner, and
+serializes retries only for the same owner. Registry locks never span device
+I/O; unrelated acquisitions remain concurrent. Its regressions reproduce a
+release completing after the pool has reassigned the same numeric device ID.
 
 ## Destructive volume qualification
 

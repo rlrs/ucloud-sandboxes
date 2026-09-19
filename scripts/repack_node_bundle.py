@@ -39,6 +39,7 @@ EXPECTED_STORAGE_PATCHES = [
     "agentenv-streaming-dense-export.patch",
     "agentenv-pooled-delete.patch",
     "agentenv-owner-identity.patch",
+    "agentenv-owner-transitions.patch",
 ]
 
 

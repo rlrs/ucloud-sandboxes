@@ -9,6 +9,7 @@ readonly PATCH_PATHS=(
   "${SCRIPT_DIR}/agentenv-streaming-dense-export.patch"
   "${SCRIPT_DIR}/agentenv-pooled-delete.patch"
   "${SCRIPT_DIR}/agentenv-owner-identity.patch"
+  "${SCRIPT_DIR}/agentenv-owner-transitions.patch"
 )
 
 usage() {
@@ -53,6 +54,7 @@ done
   cargo test --locked --release -p overlaybd --lib \
     lsmt::file::tests::test_create_mappings_from_sparse_large_region_split
   cargo test --locked --release -p "${PACKAGE}" --lib protocol::tests
+  cargo test --locked --release -p "${PACKAGE}" --lib runtime_owner_tests
   cargo build --locked --release -p "${PACKAGE}" --bin "${BINARY}"
 )
 
@@ -62,6 +64,7 @@ readonly BINARY_SHA256="$(sha256sum "${BUILT_BINARY}" | awk '{print $1}')"
 readonly DENSE_PATCH_SHA256="$(sha256sum "${PATCH_PATHS[0]}" | awk '{print $1}')"
 readonly POOLED_DELETE_PATCH_SHA256="$(sha256sum "${PATCH_PATHS[1]}" | awk '{print $1}')"
 readonly OWNER_IDENTITY_PATCH_SHA256="$(sha256sum "${PATCH_PATHS[2]}" | awk '{print $1}')"
+readonly OWNER_TRANSITIONS_PATCH_SHA256="$(sha256sum "${PATCH_PATHS[3]}" | awk '{print $1}')"
 readonly ARTIFACT_NAME="${BINARY}-${BINARY_SHA256}"
 install -m 0755 "${BUILT_BINARY}" "${OUTPUT_DIR}/${ARTIFACT_NAME}"
 install -m 0644 "${SOURCE_DIR}/LICENSE" "${OUTPUT_DIR}/${ARTIFACT_NAME}.LICENSE"
@@ -90,6 +93,10 @@ payload = {
         {
             "name": "$(basename "${PATCH_PATHS[2]}")",
             "sha256": "${OWNER_IDENTITY_PATCH_SHA256}",
+        },
+        {
+            "name": "$(basename "${PATCH_PATHS[3]}")",
+            "sha256": "${OWNER_TRANSITIONS_PATCH_SHA256}",
         },
     ],
     "schema": 3,

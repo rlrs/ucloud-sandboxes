@@ -57,3 +57,19 @@ the delivery hold and acknowledges the existing model result without rerunning
 the model or recording a successful wake. Regression coverage checks retained
 response replay across restart. The runner must replace/retry the failed agent
 attempt; retrying operations on the lost incarnation cannot recover its state.
+
+## Deployment verification
+
+Server 0.5.54, commit `7fe61b3305876be2cb1f9809e06431428b478517`, was
+installed on the gateway at 13:27:38 UTC. Both future worker bundles passed
+production boot validation; existing workers did not require a restart for
+this gateway-only behavior change. The relay process was preserved.
+
+All 924 server tests (six platform skips), 118 SDK tests, canonical lint/build
+checks, and CI run 35445756458 passed. Public job-status requests for all
+103 incident sandbox IDs returned HTTP 410, `error_code: node_lost`, and
+`retryable: false`. Both sync and async SDK 0.4.23 exposed that terminal error.
+An unknown sandbox ID still returned 404. Public gateway and relay health
+returned 200; gateway, relay and autoscaler services were active. The initial
+verification probe used an operator-only GET endpoint with an SDK key and
+correctly received 403; the successful checks used the public job-status path.

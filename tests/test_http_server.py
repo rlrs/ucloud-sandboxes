@@ -66,6 +66,31 @@ class _NoKeepAliveJsonHandler(JsonHttpHandler):
 
 
 class HttpServerTests(unittest.TestCase):
+    def test_handler_rejection_keeps_delayed_upload_writable_until_response_is_read(self):
+        server = HighBacklogThreadingHTTPServer(
+            ("127.0.0.1", 0), _EarlyRejectingJsonHandler,
+        )
+        thread = Thread(target=server.serve_forever, kwargs={"poll_interval": .01}, daemon=True)
+        thread.start()
+        connection = HTTPConnection(*server.server_address, timeout=2)
+        try:
+            connection.putrequest("POST", "/upload")
+            connection.putheader("Content-Length", "8192")
+            connection.endheaders()
+            self.assertIn(b"503", connection.sock.recv(4096, socket.MSG_PEEK))
+            time.sleep(.05)
+            connection.send(b"x" * 4096)
+            time.sleep(.05)
+            connection.send(b"x" * 4096)
+            response = connection.getresponse()
+            self.assertEqual(response.status, 503)
+            self.assertTrue(json.loads(response.read())["retryable"])
+        finally:
+            connection.close()
+            server.shutdown()
+            thread.join(timeout=1)
+            server.server_close()
+
     def test_overload_allows_delayed_post_body_without_reset_or_blocking_accept(self) -> None:
         _BlockingHandler.started.clear()
         _BlockingHandler.release.clear()

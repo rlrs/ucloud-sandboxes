@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.5.38 - 2026-09-19
+
+- Preserve early handler rejection responses when clients are still sending
+  upload bodies, using the same bounded socket drain as thread-cap rejections.
+- Keep device reservations for newly running sandboxes until a heartbeat
+  observes their restored devices, preventing concurrent wakes from overbooking.
+- Coalesce live capacity refreshes before migrating work away from an apparently
+  full owner, avoiding unnecessary publication after a full worker parks.
+
 ## 0.5.37 - 2026-09-19
 
 - Preserve structured HTTP overload rejections while clients finish sending a

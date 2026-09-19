@@ -896,7 +896,12 @@ class NodeAgentHandler(BuildContextHttpHandler):
                     payload["lifecycle_state"] = current.state
             except (RuntimeError, ValueError):
                 pass
-            self._write_json(payload, status=HTTPStatus.SERVICE_UNAVAILABLE)
+            if isinstance(exc, SandboxCapacityUnavailableError) and payload.get("lifecycle_state") == "parked":
+                # Wake failed before the caller's upload/exec was dispatched.
+                # Only a positively parked lifecycle makes this safe to replay.
+                self._write_exception(SandboxRestoreBusyError(str(exc)))
+            else:
+                self._write_json(payload, status=HTTPStatus.SERVICE_UNAVAILABLE)
             return
         except ValueError as exc:
             self._write_exception(exc)

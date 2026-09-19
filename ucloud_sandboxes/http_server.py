@@ -6,7 +6,7 @@ from functools import wraps
 import json
 import selectors
 import socket
-from threading import BoundedSemaphore
+from threading import BoundedSemaphore, RLock
 from time import monotonic
 from typing import Any, Callable
 from urllib.parse import unquote, urlparse
@@ -253,6 +253,8 @@ class HighBacklogThreadingHTTPServer(ThreadingHTTPServer):
         super().__init__(*args, **kwargs)
         self._overload_selector = selectors.DefaultSelector()
         self._overload_drains: dict[socket.socket, tuple[float, int]] = {}
+        self._overload_lock = RLock()
+        self._closing = False
 
     def get_request(self) -> tuple[socket.socket, Any]:
         client, address = super().get_request()
@@ -274,19 +276,30 @@ class HighBacklogThreadingHTTPServer(ThreadingHTTPServer):
         # before the caller sees our safe-retry response. Half-close the reply,
         # then discard incoming bytes without blocking the accept loop or
         # allocating another request thread. Time, bytes and sockets are bounded.
-        if len(self._overload_drains) >= self.request_queue_size:
-            self.shutdown_request(request)
-            return
         try:
             request.setblocking(False)
             request.sendall(HTTP_OVERLOAD_RESPONSE)
-            request.shutdown(socket.SHUT_WR)
-            self._overload_selector.register(request, selectors.EVENT_READ)
-            self._overload_drains[request] = (
-                monotonic() + HTTP_OVERLOAD_DRAIN_SECONDS, 0,
-            )
         except OSError:
-            self.shutdown_request(request)
+            super().shutdown_request(request)
+            return
+        self.shutdown_request(request)
+
+    def shutdown_request(self, request: socket.socket) -> None:
+        # Handler-level admission can also reject an unread upload. Apply the
+        # same close discipline after handlers finish, not only at thread cap.
+        with self._overload_lock:
+            if self._closing or len(self._overload_drains) >= self.request_queue_size:
+                super().shutdown_request(request)
+                return
+            try:
+                request.setblocking(False)
+                request.shutdown(socket.SHUT_WR)
+                self._overload_selector.register(request, selectors.EVENT_READ)
+                self._overload_drains[request] = (
+                    monotonic() + HTTP_OVERLOAD_DRAIN_SECONDS, 0,
+                )
+            except OSError:
+                super().shutdown_request(request)
 
     def _close_overload_drain(self, request: socket.socket) -> None:
         self._overload_selector.unregister(request)
@@ -295,6 +308,10 @@ class HighBacklogThreadingHTTPServer(ThreadingHTTPServer):
 
     def service_actions(self) -> None:
         super().service_actions()
+        with self._overload_lock:
+            self._drain_closed_requests()
+
+    def _drain_closed_requests(self) -> None:
         for key, _events in self._overload_selector.select(timeout=0):
             request = key.fileobj
             deadline, received = self._overload_drains[request]
@@ -317,9 +334,11 @@ class HighBacklogThreadingHTTPServer(ThreadingHTTPServer):
     def server_close(self) -> None:
         # HTTPServer.__init__ also calls server_close if bind/activate fails.
         if hasattr(self, "_overload_selector"):
-            for request in list(self._overload_drains):
-                self._close_overload_drain(request)
-            self._overload_selector.close()
+            with self._overload_lock:
+                self._closing = True
+                for request in list(self._overload_drains):
+                    self._close_overload_drain(request)
+                self._overload_selector.close()
         super().server_close()
 
     def process_request_thread(

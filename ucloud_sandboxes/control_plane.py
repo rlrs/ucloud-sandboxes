@@ -132,6 +132,8 @@ _IMAGE_PULL_LOCKS: dict[tuple[str, str], RLock] = {}
 _IMAGE_WARMUP_TASKS_GUARD = RLock()
 _IMAGE_WARMUP_TASKS: set[tuple[str, str]] = set()
 _GATEWAY_SCHEDULING_LOCK = RLock()
+_WAKE_CAPACITY_REFRESH_LOCK = RLock()
+_WAKE_CAPACITY_REFRESHES: dict[tuple[str, str, str], tuple[float, bool]] = {}
 _MIGRATION_OPERATION_LOCKS_GUARD = RLock()
 _MIGRATION_OPERATION_LOCKS: dict[str, tuple[RLock, int]] = {}
 _REGISTRY_LEASE_COORDINATION_LOCK = RLock()
@@ -495,6 +497,10 @@ class _WakeSnapshotPublicationRequired(Exception):
     def __init__(self, route: SandboxRoute, pending_resources: ResourceQuantity):
         self.route = route
         self.pending_resources = pending_resources
+
+
+class _WakeCapacityRefreshPending(Exception):
+    pass
 
 
 class SandboxShapeUnschedulableError(ValueError):
@@ -4848,6 +4854,17 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         route: SandboxRoute,
     ) -> SandboxRoute | None:
         try:
+            if route.worker_state == "attached":
+                self._refresh_wake_capacity(route)
+        except _WakeCapacityRefreshPending:
+            self._write_json(
+                {"error": "source node capacity is being refreshed",
+                 "error_code": "node_active_exec_deferred", "retryable": True},
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+                headers={"Retry-After": "1", "X-UCloud-Sandbox-Retryable": "true"},
+            )
+            return None
+        try:
             return self._reserve_parked_sandbox_wake(route)
         except _WakeSnapshotPublicationRequired as pending:
             # Explicit relay parks need not publish every checkpoint. Request
@@ -4878,6 +4895,56 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 headers={"Retry-After": "1", "X-UCloud-Sandbox-Retryable": "true"},
             )
             return None
+
+    def _refresh_wake_capacity(self, route: SandboxRoute) -> bool:
+        """Refresh a full owner before publishing/moving freshly parked work."""
+        previous = self._heartbeat_for_route(job_id=route.job_id)
+        if previous is None or _node_has_storage_device_capacity(
+            previous, self._placement_routes(),
+        ):
+            return False
+        key = (str(self.routing_store.path), route.job_id, previous.node_epoch)
+        now = time.monotonic()
+        with _WAKE_CAPACITY_REFRESH_LOCK:
+            for old_key, (finished, active) in list(_WAKE_CAPACITY_REFRESHES.items()):
+                if not active and now - finished > 120:
+                    del _WAKE_CAPACITY_REFRESHES[old_key]
+            finished, active = _WAKE_CAPACITY_REFRESHES.get(key, (0, False))
+            if active:
+                raise _WakeCapacityRefreshPending()
+            if now - finished < 2:
+                return False
+            _WAKE_CAPACITY_REFRESHES[key] = (now, True)
+        try:
+            response = self._proxy_request(
+                route.node_url, "/v1/heartbeat", method="GET", timeout_seconds=2,
+            )
+            if response.status != HTTPStatus.OK:
+                return False
+            raw = response.json().get("heartbeat")
+            if not isinstance(raw, dict):
+                return False
+            current = heartbeat_from_dict(raw)
+            if current is None or (
+                current.node_id, current.job_id, current.node_epoch,
+                current.deployment_id, current.agent_version,
+            ) != (
+                previous.node_id, previous.job_id, previous.node_epoch,
+                previous.deployment_id, previous.agent_version,
+            ):
+                return False
+            received_at = utc_now()
+            self.store.receive_heartbeat(replace(
+                current, node_url=previous.node_url, received_at=received_at,
+                updated_at=received_at, reported_at=current.reported_at or current.updated_at,
+                idle_since=None,
+            ))
+            return True
+        except (OSError, ValueError, TypeError):
+            return False
+        finally:
+            with _WAKE_CAPACITY_REFRESH_LOCK:
+                _WAKE_CAPACITY_REFRESHES[key] = (time.monotonic(), False)
 
     def _refresh_wake_publication(
         self, route: SandboxRoute, payload: dict[str, Any],
@@ -7388,7 +7455,7 @@ def _node_reserved_storage_device_slots(
                 # A parked inventory entry has no active device. A wake
                 # reserved after that observation must charge one until the
                 # worker reports the restored owner in its next heartbeat.
-                if route.state.lower() == "waking" and observed.state == "parked":
+                if route.state.lower() in {"waking", "running"} and observed.state == "parked":
                     reserved += 1
                 continue
             if route.resources.disk_mb > 0:

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.5.53 - 2026-09-19
+
+- Remove default fleet-wide create and per-worker active-device count ceilings.
+  Worker admission queues, disk quota, memory checks, and gateway HTTP/body
+  budgets continue to provide backpressure. Explicit operator count overrides
+  remain supported; zero disables those optional count ceilings.
+
 ## 0.5.40 - 2026-09-19
 
 - Isolate gateway-to-node exec event polling in its own bounded connection pool,

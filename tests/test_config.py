@@ -152,6 +152,18 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "cannot exceed"):
             DeploymentConfig.from_dict(raw)
 
+    def test_device_count_override_is_optional_and_nonnegative(self) -> None:
+        raw = self._raw()
+        sandbox = raw["sandbox"]
+        sandbox["storage_native_max_ublk_devices"] = 0
+        sandbox["storage_native_pool_high_watermark"] = 16
+        config = DeploymentConfig.from_dict(raw)
+        self.assertEqual(config.sandbox.storage_native_max_ublk_devices, 0)
+        self.assertEqual(DeploymentConfig.from_dict(config.to_dict()), config)
+        sandbox["storage_native_max_ublk_devices"] = -1
+        with self.assertRaises(ValueError):
+            DeploymentConfig.from_dict(raw)
+
     def test_sqlite_and_registry_roots_are_independent(self) -> None:
         raw = self._raw()
         raw["data_root"] = "/srv/ucloud/state"

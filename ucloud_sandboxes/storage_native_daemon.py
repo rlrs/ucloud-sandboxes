@@ -2520,7 +2520,7 @@ class StorageNativeNodeService:
 
     @contextmanager
     def _device_allocation_slot(self):
-        """Fence the provider's hard ublk-device ceiling before journaling.
+        """Fence an optional operator ublk-device ceiling before journaling.
 
         Idle pooled devices are reusable and therefore do not consume an
         admission slot. Active backend owners plus allocations currently

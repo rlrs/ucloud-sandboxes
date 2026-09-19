@@ -264,7 +264,9 @@ class SandboxPoolConfig:
     storage_native_cache_gb: int = 32
     storage_native_pool_low_watermark: int = 2
     storage_native_pool_high_watermark: int = 16
-    storage_native_max_ublk_devices: int = 128
+    # Optional operator override. Disk quota and live memory admission provide
+    # the default capacity bounds; a fixed device count ignores machine size.
+    storage_native_max_ublk_devices: int = 0
     storage_native_max_concurrent_publications: int = (
         DEFAULT_MAX_CONCURRENT_PUBLICATIONS
     )
@@ -312,14 +314,16 @@ class SandboxPoolConfig:
             "docker_quota_image_gb",
             "storage_native_cache_gb",
             "storage_native_pool_high_watermark",
-            "storage_native_max_ublk_devices",
             "storage_native_max_concurrent_publications",
             "direct_disk_headroom_mb",
             "direct_max_concurrent_restores",
             "max_concurrent_image_pulls",
         ):
             _require_int(f"sandbox.{name}", getattr(result, name), minimum=1)
-        for name in ("swap_gb", "storage_native_pool_low_watermark"):
+        for name in (
+            "swap_gb", "storage_native_pool_low_watermark",
+            "storage_native_max_ublk_devices",
+        ):
             _require_int(f"sandbox.{name}", getattr(result, name), minimum=0)
         _require_float(
             "sandbox.direct_idle_park_seconds",
@@ -335,7 +339,8 @@ class SandboxPoolConfig:
                 "sandbox.storage_native_pool_high_watermark"
             )
         if (
-            result.storage_native_pool_high_watermark
+            result.storage_native_max_ublk_devices > 0
+            and result.storage_native_pool_high_watermark
             > result.storage_native_max_ublk_devices
         ):
             raise ValueError(
@@ -434,7 +439,7 @@ class DeploymentConfig:
             registry_private_ip="",
             gateway_port=8090,
             gateway_heartbeat_ttl_seconds=120,
-            gateway_max_concurrent_sandbox_creates=64,
+            gateway_max_concurrent_sandbox_creates=0,
             gateway_max_http_request_threads=1536,
             relay_port=8092,
             relay_request_timeout_seconds=7200,

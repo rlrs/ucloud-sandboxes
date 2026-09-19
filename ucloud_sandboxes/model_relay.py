@@ -2233,6 +2233,10 @@ def create_model_relay_app(
     resolved_telemetry = telemetry or Telemetry.disabled("model-relay")
     app = web.Application(
         client_max_size=48 * 1024**2,
+        # aiohttp otherwise retains idle HTTP connections for about an hour.
+        # Repeated park/resume cycles must release ingress connection capacity;
+        # this timeout only applies between requests, never to active model calls.
+        handler_args={"keepalive_timeout": 5.0},
         middlewares=[_telemetry_middleware] if resolved_telemetry.enabled else (),
     )
     app[TELEMETRY_KEY] = resolved_telemetry

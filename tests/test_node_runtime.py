@@ -7,7 +7,6 @@ from ucloud_sandboxes.node_runtime import DirectNodeRuntime
 from ucloud_sandboxes.sandbox import (
     NodeDrainState,
     SandboxBusyError,
-    SandboxSnapshotPublicationPendingError,
 )
 
 
@@ -164,19 +163,19 @@ class DirectNodeRuntimeTests(unittest.TestCase):
 
         self.assertFalse(service.park_calls)
 
-    def test_wake_publication_fence_is_owned_by_the_runtime(self) -> None:
+    def test_local_wake_reaches_storage_while_publication_is_pending(self) -> None:
         service = _WakeService()
         service.publication_pending = True
         manager = DirectNodeRuntime(service)  # type: ignore[arg-type]
 
-        with self.assertRaises(SandboxSnapshotPublicationPendingError):
-            manager.wake(
-                "agent",
-                generation=1,
-                operation_id="relay-wake:request-3",
-            )
-
-        self.assertFalse(service.wake_calls)
+        record, revision = manager.wake_with_activity_revision(
+            "agent",
+            generation=1,
+            operation_id="relay-wake:request-3",
+        )
+        self.assertEqual(record.state, "running")
+        self.assertEqual(revision, 101)
+        self.assertEqual(service.wake_calls, [("agent", 1, "relay-wake:request-3")])
 
     def test_idle_parking_uses_lifecycle_and_skips_managed_agents(self) -> None:
         registrations = (

@@ -72,3 +72,20 @@ Linux kernel (one unrelated cache test is marked ignored upstream). The canonica
 repository check passed 929 server tests (six platform skips), 118 SDK tests,
 lint, package checks and Go tests. Applying all five pinned native patches to a
 clean upstream tree reproduced all 13 modified source files exactly.
+
+## Complete the wake path (0.5.57)
+
+Release 0.5.56 passed 16 concurrent sandboxes through eight publication/wake
+cycles with preserved files and process identity, zero gateway health failures,
+and gateway health p95 45 ms. Its timing exposed an outer guard in
+`DirectNodeRuntime.wake_with_activity_revision`: it rejected wakes while any
+publication thread was alive, before the storage journal could supersede that
+publication. The first wake cycle took up to 21.6 seconds and later cycles
+roughly 4.5–4.9 seconds, with repeated `snapshot_publication_pending` responses.
+
+Release 0.5.57 removes that redundant thread-level veto while preserving the
+exclusive lifecycle transition and the storage journal's owner/revision fencing.
+The runtime regression now verifies a wake reaches storage and advances its
+activity revision even with publication pending. The blocked-upload concurrency
+tests continue to verify that stale uploads cannot replace resumed authority or
+delete its checkpoint.

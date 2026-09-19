@@ -26,7 +26,6 @@ from .sandbox import (
     SandboxConflictError,
     SandboxLifecycleCoordinator,
     SandboxOperation,
-    SandboxSnapshotPublicationPendingError,
     SandboxRecord,
     SandboxSpec,
     _atomic_write_json,
@@ -477,10 +476,9 @@ class DirectNodeRuntime:
             join_transition=True,
             transition_timeout_seconds=60.0,
         ):
-            if self.service.storage_native_publication_pending(sandbox_id):
-                raise SandboxSnapshotPublicationPendingError(
-                    "parked snapshot publication is still in progress"
-                )
+            # Local wake takes precedence over background publication. The
+            # storage journal supersedes/fences the upload while retaining the
+            # sealed checkpoint; an uploader thread is not an admission limit.
             record = self.service.wake(
                 sandbox_id,
                 generation=generation,

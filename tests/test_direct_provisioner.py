@@ -1373,8 +1373,8 @@ class DirectProvisionerTests(unittest.TestCase):
             ):
                 self.create(service, self.spec())
 
-    def test_wake_and_exec_wait_for_a_fresh_cpu_sample(self) -> None:
-        for action in ("wake", "exec", "implicit_wake"):
+    def test_wake_waits_for_a_fresh_cpu_sample(self) -> None:
+        for action in ("wake", "implicit_wake"):
             with self.subTest(action=action), TemporaryDirectory() as raw:
                 provisioner, _, _, _, _ = self.make(Path(raw).resolve())
                 service = DirectSandboxService(
@@ -1549,8 +1549,8 @@ class DirectProvisionerTests(unittest.TestCase):
             self.assertEqual(calls[0], 2)
             self.assertEqual(service.activity_snapshot().active_operations, 0)
 
-    def test_drain_interrupts_cpu_wait_before_any_create_or_exec_lease(self) -> None:
-        for action in ("create", "wake", "exec"):
+    def test_drain_interrupts_cpu_wait_before_create_or_wake(self) -> None:
+        for action in ("create", "wake"):
             with self.subTest(action=action), TemporaryDirectory() as raw:
                 provisioner, _, images_storage, images, _ = self.make(
                     Path(raw).resolve()
@@ -1613,7 +1613,7 @@ class DirectProvisionerTests(unittest.TestCase):
                     self.assertEqual(service.get(record.spec.id).state, "parked")
 
     def test_cpu_retry_rechecks_current_shape_and_owner_generation(self) -> None:
-        for action in ("shape", "wake", "exec"):
+        for action in ("shape", "wake"):
             with self.subTest(action=action), TemporaryDirectory() as raw:
                 provisioner, registry, _, _, warden = self.make(Path(raw).resolve())
                 service = DirectSandboxService(provisioner)
@@ -1874,14 +1874,15 @@ class DirectProvisionerTests(unittest.TestCase):
             self.assertEqual(activity.active_operations, 3)
 
             runtime_metrics[0] = replace(runtime_metrics[0], cpu_percent=95.0)
-            with self.assertRaisesRegex(
-                SandboxCapacityUnavailableError,
-                "CPU pressure",
-            ):
-                service.acquire_exec_capacity(
-                    records[0].spec.id,
-                    records[0].generation,
-                )
+            token = service.acquire_exec_capacity(
+                records[0].spec.id, records[0].generation
+            )
+            service.release_exec_capacity(token)
+            self.assertEqual(
+                service.read_file(records[0].spec.id, "/marker", max_bytes=1024), b"ok\n"
+            )
+            service.write_file(records[0].spec.id, "/marker", b"next")
+            self.assertEqual(service.exec(records[0].spec.id, ("true",)).exit_code, 0)
 
             runtime_metrics[0] = replace(
                 runtime_metrics[0],
@@ -1903,6 +1904,43 @@ class DirectProvisionerTests(unittest.TestCase):
             activity = service.activity_snapshot()
             self.assertEqual(activity.resource_reservations, {})
             self.assertEqual(activity.active_operations, 0)
+
+    def test_exec_checks_drain_and_owner_after_sampling_without_cpu_wait(self) -> None:
+        for changed in ("drain", "owner"):
+            with self.subTest(changed=changed), TemporaryDirectory() as raw:
+                provisioner, registry, _, _, _ = self.make(Path(raw).resolve())
+                service = DirectSandboxService(provisioner)
+                record = self.create(service, self.spec())
+                original_get = registry.get
+                sampled = []
+
+                def get(sandbox_id):
+                    result = original_get(sandbox_id)
+                    if sampled and changed == "owner":
+                        return replace(result, sandbox_generation=record.generation + 1)
+                    return result
+
+                def sample():
+                    sampled.append(True)
+                    if changed == "drain":
+                        service.close_admission()
+                    return NodeRuntimeMetrics(
+                        collected_at=utc_now(), cpu_percent=100.0,
+                        cpu_count=4, memory_total_mb=8192, memory_available_mb=8192,
+                    )
+
+                service.configure_active_capacity(
+                    ResourceQuantity(vcpu=4, memory_mb=8192),
+                    runtime_metrics_provider=sample,
+                )
+                expected = (
+                    SandboxAdmissionClosedError if changed == "drain"
+                    else SandboxConflictError
+                )
+                with patch.object(registry, "get", side_effect=get):
+                    with self.assertRaises(expected):
+                        service.acquire_exec_capacity(record.spec.id, record.generation)
+                self.assertEqual(service.activity_snapshot().active_operations, 0)
 
     def test_exec_capacity_samples_live_pressure_in_parallel(self) -> None:
         with TemporaryDirectory() as raw:

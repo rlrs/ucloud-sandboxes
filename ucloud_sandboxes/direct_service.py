@@ -1598,6 +1598,7 @@ class DirectSandboxService:
         requested: ResourceQuantity,
         *,
         check_shape: bool,
+        check_cpu: bool = True,
         validate_owner: Callable[[], None] | None = None,
     ):
         """Yield the capacity lock only to publish an admitted operation's lease.
@@ -1633,7 +1634,7 @@ class DirectSandboxService:
             # Production samples single-flight; never invalidate the shared
             # cache or hold up other sandboxes/drain while /proc is sampled.
             metrics = metrics_provider() if metrics_provider is not None else None
-            if previous_error is not None and validate_owner is not None:
+            if validate_owner is not None:
                 validate_owner()
             with self._capacity_guard:
                 capacity = check_capacity()
@@ -1645,7 +1646,7 @@ class DirectSandboxService:
                         "direct node runtime metrics provider changed during admission"
                     )
                 pressure_error = (
-                    dynamic_pressure_error(metrics, requested)
+                    dynamic_pressure_error(metrics, requested, check_cpu=check_cpu)
                     if capacity is not None
                     else None
                 )
@@ -1692,7 +1693,7 @@ class DirectSandboxService:
                 self._activity_epoch += 1
 
     def acquire_exec_capacity(self, sandbox_id: str, generation: int) -> str:
-        """Admit an exec from live node pressure and track its lifetime."""
+        """Fence an existing sandbox's exec and retain the memory safety floor."""
 
         registration = self._require_registration(sandbox_id)
         if registration.sandbox_generation != generation:
@@ -1707,10 +1708,15 @@ class DirectSandboxService:
                     "exec generation does not own direct sandbox"
                 )
 
-        # Limits bound the sandbox, not its next command. A zero-resource lease
-        # retains dynamic pressure checks and full-lifetime activity fencing.
+        # An existing sandbox already shares CPU through its cgroup. Rejecting
+        # commands (including file reads) at a sampled CPU percentage prevents
+        # that workload from making progress without adding physical capacity.
+        # Retain memory safety, generation ownership and full-lifetime fencing.
         with self._active_admission_guard(
-            ResourceQuantity(), check_shape=False, validate_owner=validate_owner
+            ResourceQuantity(),
+            check_shape=False,
+            check_cpu=False,
+            validate_owner=validate_owner,
         ):
             # Keep a zero-resource lease so drain fencing, idle parking and
             # active-operation telemetry still cover the full exec lifetime.

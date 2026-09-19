@@ -86,12 +86,16 @@ def node_accepts_dynamic_request(
 def dynamic_pressure_error(
     metrics: NodeRuntimeMetrics | None,
     requested: ResourceQuantity,
+    *,
+    check_cpu: bool = True,
 ) -> str | None:
     """Return the shared create, wake, and exec pressure rejection reason."""
 
     if metrics is None:
         return "direct node has no fresh runtime metrics for dynamic admission"
-    return _cpu_pressure_error(metrics) or _memory_pressure_error(metrics, requested)
+    return (
+        _cpu_pressure_error(metrics) if check_cpu else None
+    ) or _memory_pressure_error(metrics, requested)
 
 
 def dynamic_cpu_pressure_retryable(

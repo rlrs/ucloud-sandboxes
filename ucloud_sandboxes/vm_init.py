@@ -73,6 +73,7 @@ PINNED_STORAGE_NATIVE_PATCHES = (
     "agentenv-pooled-delete.patch",
     "agentenv-owner-identity.patch",
     "agentenv-owner-transitions.patch",
+    "agentenv-premerged-identity.patch",
 )
 DEFAULT_DIRECT_DISK_HEADROOM_MB = 16 * 1024
 DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES = 8

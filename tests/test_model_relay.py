@@ -251,18 +251,19 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             path = Path(directory) / "relay.sqlite3"
             state = ModelRelayState(state_path=path)
             requests = {}
-            for name in ("pending", "leased", "completed", "replacement"):
+            for name in ("pending", "leased", "completed", "replacement", "deleted"):
                 generation = 2 if name == "replacement" else 1
-                token = str((await state.register_rollout(name, _agent_metadata("sandbox", generation)))["registration_token"])
+                sandbox = "deleted-sandbox" if name == "deleted" else "sandbox"
+                token = str((await state.register_rollout(name, _agent_metadata(sandbox, generation)))["registration_token"])
                 request = await state.enqueue(rollout_id=name, endpoint="/v1/responses", body={}, headers={}, idempotency_key="request")
                 requests[name] = request
                 if name in {"leased", "completed"}:
                     delivery = (await state.poll(rollout_id=name, registration_token=token, worker_id="worker", limit=1, timeout_seconds=0, lease_seconds=600))[0]
                     if name == "completed":
                         await state.respond(request_id=delivery.request_id, registration_token=token, lease_id=delivery.lease_id, response=RelayWorkerResponse(200, {"sample": "keep-me"}), defer_delivery=True)
-            losses = frozenset({("sandbox", 1)})
-            await state.reconcile_lost_callers(losses)
-            await state.reconcile_lost_callers(losses)
+            losses = {("sandbox", 1): "node_lost", ("deleted-sandbox", 1): "sandbox_deleted"}
+            await state.reconcile_unavailable_callers(losses)
+            await state.reconcile_unavailable_callers(losses)
             for name in ("pending", "leased"):
                 self.assertEqual(requests[name].future.result().status, 410)
                 self.assertEqual(requests[name].future.result().body["error"]["type"], "node_lost")
@@ -271,7 +272,9 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(completed.wake_notified_at)
             self.assertFalse(completed.delivery_pending)
             self.assertFalse(requests["replacement"].future.done())
-            self.assertEqual((await state.stats())["counters"]["canceled"], 2)
+            self.assertEqual(requests["deleted"].future.result().status, 410)
+            self.assertEqual(requests["deleted"].future.result().body["error"]["type"], "sandbox_deleted")
+            self.assertEqual((await state.stats())["counters"]["canceled"], 3)
             await state.aclose()
             restored = ModelRelayState(state_path=path)
             await restored.maintain()

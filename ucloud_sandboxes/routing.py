@@ -657,19 +657,29 @@ class RoutingStore:
             ).fetchone()
         return dict(row) if row is not None else None
 
-    def lost_sandbox_incarnations(self) -> frozenset[tuple[str, int]]:
-        """Batch terminal identities for relay cleanup, including replaced callers."""
+    def terminal_sandbox_incarnations(self) -> dict[tuple[str, int], str]:
+        """Batch proven worker losses and explicit deletions for relay cleanup."""
         cutoff = (
             utc_now() - timedelta(seconds=PROGRAM_TERMINAL_RETENTION_SECONDS)
         ).isoformat()
         with self._connect() as conn:
-            return frozenset(
-                (str(row[0]), int(row[1]))
+            terminal = {
+                (str(row[0]), int(row[1])): "sandbox_deleted"
+                for row in conn.execute(
+                    "SELECT sandbox_id, sandbox_generation FROM program_requests "
+                    "WHERE state = 'terminal' AND last_error = 'sandbox deletion requested' "
+                    "AND updated_at > ?",
+                    (cutoff,),
+                )
+            }
+            terminal.update(
+                ((str(row[0]), int(row[1])), "node_lost")
                 for row in conn.execute(
                     "SELECT sandbox_id, generation FROM sandbox_losses WHERE lost_at > ?",
                     (cutoff,),
                 )
             )
+            return terminal
 
     def get_managed_process(
         self,

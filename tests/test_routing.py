@@ -160,14 +160,14 @@ class RoutingStoreTests(unittest.TestCase):
             self.assertEqual(loss["reason"], "node_lost")
             self.assertEqual(loss["generation"], 1)
             self.assertEqual(loss["job_id"], "job")
-            self.assertEqual(reopened.lost_sandbox_incarnations(), frozenset({("lost", 1)}))
+            self.assertEqual(reopened.terminal_sandbox_incarnations(), {("lost", 1): "node_lost"})
             reopened.delete_sandbox("lost")  # Idempotent cleanup keeps the diagnosis.
             self.assertEqual(reopened.get_sandbox_loss("lost"), loss)
             reopened.upsert_sandbox(
                 replace(route, generation=2, create_operation_id="new")
             )
             self.assertIsNone(reopened.get_sandbox_loss("lost"))
-            self.assertEqual(reopened.lost_sandbox_incarnations(), frozenset({("lost", 1)}))
+            self.assertEqual(reopened.terminal_sandbox_incarnations(), {("lost", 1): "node_lost"})
             reopened.delete_sandbox("lost")
             self.assertIsNone(reopened.get_sandbox_loss("lost"))
 
@@ -195,11 +195,23 @@ class RoutingStoreTests(unittest.TestCase):
                 )
             reopened = RoutingStore(store.path)
             self.assertEqual(reopened.get_sandbox_loss("lost")["reason"], "node_lost")
+            with sqlite3.connect(store.path) as conn:
+                conn.execute(
+                    """INSERT INTO program_requests
+                    (request_id, rollout_id, sandbox_id, sandbox_generation,
+                     state, resources_json, updated_at, last_error)
+                    VALUES ('deleted', 'rollout', 'deleted', 4, 'terminal', '{}', ?, 'sandbox deletion requested')""",
+                    (utc_now().isoformat(),),
+                )
+            self.assertEqual(reopened.terminal_sandbox_incarnations(), {
+                ("lost", 1): "node_lost", ("deleted", 4): "sandbox_deleted",
+            })
             with patch(
                 "ucloud_sandboxes.routing.utc_now",
                 return_value=utc_now() + timedelta(days=8),
             ):
                 self.assertIsNone(reopened.get_sandbox_loss("lost"))
+                self.assertEqual(reopened.terminal_sandbox_incarnations(), {})
                 reopened.load()
             with sqlite3.connect(store.path) as conn:
                 self.assertEqual(

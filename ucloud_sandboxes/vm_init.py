@@ -1635,7 +1635,9 @@ User=$UCLOUD_SERVICE_USER
 Group=$UCLOUD_SERVICE_GROUP
 SupplementaryGroups=docker
 EnvironmentFile={env_file}
-WorkingDirectory={work_dir}
+# Python -m adds its working directory to the import search path. Keep the
+# periodic heartbeat off shared virtiofs directory scans during memory pressure.
+WorkingDirectory=/
 ExecStart={agent_bin} agent-heartbeat --from-node-agent-url http://127.0.0.1:${{UCLOUD_NODE_AGENT_PORT}} --post-url ${{UCLOUD_HEARTBEAT_URL}}{deployment_flag}{node_control_auth_flag} {heartbeat_auth_flag} {label_args}
 HEARTBEAT_SERVICE
 

@@ -74,6 +74,7 @@ PINNED_STORAGE_NATIVE_PATCHES = (
     "agentenv-owner-identity.patch",
     "agentenv-owner-transitions.patch",
     "agentenv-premerged-identity.patch",
+    "agentenv-device-reuse.patch",
 )
 DEFAULT_DIRECT_DISK_HEADROOM_MB = 16 * 1024
 DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES = 8
@@ -1161,6 +1162,15 @@ if [ "$UCLOUD_SWAP_GB" -gt 0 ]; then
   $SUDO sysctl -q -p /etc/sysctl.d/90-ucloud-sandbox-swap.conf
 fi
 log_init_phase "swap"
+
+if [ "$UCLOUD_NODE_ROLE" = sandbox ]; then
+  # Buffered snapshot/rootfs I/O can fill page cache while MemAvailable stays
+  # high. Give background reclaim headroom before allocations stall in direct
+  # reclaim/compaction. This is a free-page watermark, not an admission cap.
+  echo "vm.watermark_scale_factor=100" \
+    | $SUDO tee /etc/sysctl.d/90-ucloud-sandbox-reclaim.conf >/dev/null
+  $SUDO sysctl -q -p /etc/sysctl.d/90-ucloud-sandbox-reclaim.conf
+fi
 
 if [ "$UCLOUD_DOCKER_QUOTA_IMAGE_GB" -gt 0 ]; then
   echo "Preparing XFS/project-quota Docker data root"

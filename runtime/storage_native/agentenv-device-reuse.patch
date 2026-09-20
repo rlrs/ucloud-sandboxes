@@ -1,0 +1,360 @@
+diff --git a/storage/ublk-daemon/src/idle_pool.rs b/storage/ublk-daemon/src/idle_pool.rs
+new file mode 100644
+--- /dev/null
++++ b/storage/ublk-daemon/src/idle_pool.rs
+@@ -0,0 +1,173 @@
++//! Retain recently returned devices across park/resume bursts. The high water
++//! mark is a steady-state cache target, never an active-device admission limit.
++use std::collections::VecDeque;
++use std::sync::Mutex;
++use std::time::{Duration, Instant};
++
++pub(crate) const DEVICE_IDLE_GRACE: Duration = Duration::from_secs(60);
++
++struct Entry<T> {
++    value: T,
++    returned_at: Instant,
++}
++struct State<T> {
++    entries: VecDeque<Entry<T>>,
++    closed: bool,
++}
++pub(crate) struct IdleDevicePool<T> {
++    state: Mutex<State<T>>,
++    low: usize,
++    high: usize,
++}
++impl<T> IdleDevicePool<T> {
++    pub(crate) fn new(low: usize, high: usize) -> Self {
++        Self {
++            state: Mutex::new(State {
++                entries: VecDeque::new(),
++                closed: false,
++            }),
++            low: low.min(high),
++            high,
++        }
++    }
++    pub(crate) fn len(&self) -> usize {
++        self.state.lock().unwrap().entries.len()
++    }
++    pub(crate) fn refill_needed(&self) -> usize {
++        let state = self.state.lock().unwrap();
++        if state.closed {
++            0
++        } else {
++            self.low.saturating_sub(state.entries.len())
++        }
++    }
++    pub(crate) fn acquire(&self, matches: impl Fn(&T) -> bool, allow_resize: bool) -> Option<T> {
++        let mut state = self.state.lock().unwrap();
++        // Prefer the most recently used exact-size device, avoiding UPDATE_SIZE.
++        let index = state
++            .entries
++            .iter()
++            .rposition(|entry| matches(&entry.value))
++            .or_else(|| {
++                allow_resize
++                    .then(|| state.entries.len().checked_sub(1))
++                    .flatten()
++            })?;
++        state.entries.remove(index).map(|entry| entry.value)
++    }
++    pub(crate) fn release(&self, value: T, now: Instant) -> Result<(), T> {
++        let mut state = self.state.lock().unwrap();
++        if state.closed {
++            return Err(value);
++        }
++        state.entries.push_back(Entry {
++            value,
++            returned_at: now,
++        });
++        Ok(())
++    }
++    pub(crate) fn retain_prewarmed(&self, value: T, now: Instant) -> Result<(), T> {
++        let mut state = self.state.lock().unwrap();
++        // Concurrent returns satisfy reserve demand before speculative devices.
++        if state.closed || state.entries.len() >= self.low {
++            return Err(value);
++        }
++        state.entries.push_back(Entry {
++            value,
++            returned_at: now,
++        });
++        Ok(())
++    }
++    pub(crate) fn expired_excess(&self, now: Instant) -> Vec<T> {
++        let mut state = self.state.lock().unwrap();
++        let mut retired = Vec::new();
++        while state.entries.len() > self.high {
++            if state.entries.front().is_none_or(|entry| {
++                now.saturating_duration_since(entry.returned_at) < DEVICE_IDLE_GRACE
++            }) {
++                break;
++            }
++            retired.push(state.entries.pop_front().unwrap().value);
++        }
++        retired
++    }
++    pub(crate) fn drain_all(&self) -> Vec<T> {
++        let mut state = self.state.lock().unwrap();
++        state.closed = true;
++        state.entries.drain(..).map(|entry| entry.value).collect()
++    }
++}
++
++pub(crate) fn refill_retry_delay(failures: u32) -> Duration {
++    Duration::from_secs(1u64 << failures.saturating_sub(1).min(5))
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    #[test]
++    fn repeated_bursts_reuse_all_devices_above_steady_target() {
++        let pool = IdleDevicePool::new(2, 16);
++        let start = Instant::now();
++        for i in 0..64 {
++            pool.release(i, start).unwrap();
++        }
++        for cycle in 0..10 {
++            let now = start + Duration::from_secs(cycle * 5);
++            assert!(pool.expired_excess(now).is_empty());
++            let mut active = (0..64)
++                .map(|_| pool.acquire(|_| true, false).unwrap())
++                .collect::<Vec<_>>();
++            active.sort_unstable();
++            assert_eq!(active, (0..64).collect::<Vec<_>>());
++            for device in active {
++                pool.release(device, now).unwrap();
++            }
++        }
++        assert_eq!(pool.len(), 64);
++    }
++    #[test]
++    fn trims_only_expired_excess_and_keeps_new_returns() {
++        let pool = IdleDevicePool::new(1, 2);
++        let start = Instant::now();
++        for i in 0..4 {
++            pool.release(i, start).unwrap();
++        }
++        pool.release(4, start + DEVICE_IDLE_GRACE).unwrap();
++        assert_eq!(
++            pool.expired_excess(start + DEVICE_IDLE_GRACE),
++            vec![0, 1, 2]
++        );
++        assert_eq!(pool.len(), 2);
++    }
++    #[test]
++    fn exact_size_preferred_over_resize_and_unsupported_resize_refused() {
++        let pool = IdleDevicePool::new(1, 2);
++        let start = Instant::now();
++        pool.release(10, start).unwrap();
++        pool.release(20, start).unwrap();
++        assert_eq!(pool.acquire(|size| *size == 10, true), Some(10));
++        assert_eq!(pool.acquire(|size| *size == 10, false), None);
++        assert_eq!(pool.acquire(|size| *size == 10, true), Some(20));
++    }
++    #[test]
++    fn returned_devices_satisfy_refill_and_shutdown_rejects_late_returns() {
++        let pool = IdleDevicePool::new(2, 16);
++        let start = Instant::now();
++        assert_eq!(pool.refill_needed(), 2);
++        pool.release(1, start).unwrap();
++        pool.release(2, start).unwrap();
++        assert_eq!(pool.retain_prewarmed(3, start), Err(3));
++        assert_eq!(pool.refill_needed(), 0);
++        assert_eq!(pool.drain_all(), vec![1, 2]);
++        assert_eq!(pool.release(4, start), Err(4));
++        assert_eq!(pool.retain_prewarmed(5, start), Err(5));
++        assert_eq!(pool.refill_needed(), 0);
++    }
++    #[test]
++    fn allocation_failure_retry_is_delayed_and_bounded() {
++        assert_eq!(refill_retry_delay(1), Duration::from_secs(1));
++        assert_eq!(refill_retry_delay(2), Duration::from_secs(2));
++        assert_eq!(refill_retry_delay(u32::MAX), Duration::from_secs(32));
++    }
++}
+diff --git a/storage/ublk-daemon/src/lib.rs b/storage/ublk-daemon/src/lib.rs
+--- a/storage/ublk-daemon/src/lib.rs
++++ b/storage/ublk-daemon/src/lib.rs
+@@ -1,3 +1,4 @@
++mod idle_pool;
+ pub mod client;
+ pub mod protocol;
+ pub(crate) mod runtime;
+diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.rs
+--- a/storage/ublk-daemon/src/server.rs
++++ b/storage/ublk-daemon/src/server.rs
+@@ -3,7 +3,7 @@
+ use std::path::{Path, PathBuf};
+ use std::sync::atomic::{AtomicBool, Ordering};
+ use std::sync::Arc;
+-use std::time::Duration;
++use std::time::{Duration, Instant};
+ 
+ use anyhow::{bail, Context, Result};
+ use async_trait::async_trait;
+@@ -20,7 +20,8 @@
+ use tokio::io::AsyncWriteExt;
+ use tokio::net::{UnixListener, UnixStream};
+ use tokio::sync::{Mutex, Notify, RwLock};
+-use warm_pool::{PoolConfig, PoolMaintenanceAction, WarmPool};
++use warm_pool::PoolConfig;
++use crate::idle_pool::{IdleDevicePool, refill_retry_delay};
+ 
+ use storage_util::io_ring::IoRingHandle;
+ use uvm_ublk::{
+@@ -188,7 +189,7 @@
+ 
+ struct PoolState {
+     /// Idle warm devices ready for reuse.
+-    idle: WarmPool<PooledDevice>,
++    idle: IdleDevicePool<PooledDevice>,
+     /// Active exclusive-mode devices (rootfs, snapshot resume).
+     active_exclusive: DashMap<u32, ActiveExclusive>,
+     /// Active shared-mode devices (memory snapshot, refcounted).
+@@ -225,7 +226,7 @@
+         placeholder_dir: PathBuf,
+     ) -> Self {
+         Self {
+-            idle: WarmPool::new(config.clone()),
++            idle: IdleDevicePool::new(config.low_watermark, config.high_watermark),
+             active_exclusive: DashMap::new(),
+             active_shared: DashMap::new(),
+             shared_by_dev_id: DashMap::new(),
+@@ -453,6 +454,19 @@
+             "ublk daemon listening"
+         );
+         signal_ready()?;
++        if let Some(pool) = &self.pool_state {
++            let weak = Arc::downgrade(pool);
++            let ctrl = self.ctrl_ring.clone();
++            tokio::spawn(async move {
++                loop {
++                    tokio::time::sleep(Duration::from_secs(5)).await;
++                    let Some(pool) = weak.upgrade() else { break; };
++                    for pooled in pool.idle.expired_excess(Instant::now()) {
++                        stop_excess_idle_device(&pool, ctrl.clone(), pooled).await;
++                    }
++                }
++            });
++        }
+ 
+         // Note: spawned connection handlers may outlive the accept loop when
+         // shutdown fires. This is acceptable — DashMap operations are individually
+@@ -1806,12 +1820,7 @@
+ // ── Helper functions ────────────────────────────────────────────────────────
+ 
+ fn take_idle_device(pool: &PoolState, dev_sectors: u64) -> Option<PooledDevice> {
+-    if pool.supports_update_size() {
+-        return pool.idle.try_acquire();
+-    }
+-
+-    pool.idle
+-        .try_acquire_where(|pooled| pooled.dev_sectors == dev_sectors)
++    pool.idle.acquire(|pooled| pooled.dev_sectors == dev_sectors, pool.supports_update_size())
+ }
+ 
+ async fn return_or_stop_idle_device(
+@@ -1826,7 +1835,7 @@
+         _placeholder_image: placeholder_image,
+     };
+ 
+-    if let Err(pooled) = pool.idle.try_push_bounded(pooled) {
++    if let Err(pooled) = pool.idle.release(pooled, Instant::now()) {
+         stop_excess_idle_device(pool, ctrl_ring, pooled).await;
+         return false;
+     }
+@@ -1847,13 +1856,22 @@
+     }
+ 
+     tokio::spawn(async move {
+-        refill_idle_pool_best_effort(&pool, ctrl_ring.clone(), virtual_size).await;
++        let mut failures = 0u32;
++        while pool.idle.refill_needed() > 0 {
++            match refill_idle_pool(&pool, ctrl_ring.clone(), virtual_size).await {
++                Ok(()) => failures = 0,
++                Err(error) => {
++                    failures = failures.saturating_add(1);
++                    let delay = refill_retry_delay(failures);
++                    tracing::warn!(?error, ?delay, "delaying failed idle device refill");
++                    // Hold the single-flight flag during backoff so new callers
++                    // cannot turn persistent allocation pressure into a hot loop.
++                    tokio::time::sleep(delay).await;
++                }
++            }
++        }
+         pool.refill_inflight.store(false, Ordering::Release);
+-
+-        if matches!(
+-            pool.idle.compute_maintenance_action(pool.idle.len()),
+-            PoolMaintenanceAction::Fill(_)
+-        ) {
++        if pool.idle.refill_needed() > 0 {
+             schedule_idle_pool_refill(pool, ctrl_ring, virtual_size);
+         }
+     });
+@@ -1864,11 +1882,8 @@
+     ctrl_ring: IoRingHandle<io_uring::squeue::Entry128>,
+     virtual_size: u64,
+ ) -> Result<()> {
+-    let PoolMaintenanceAction::Fill(to_create) =
+-        pool.idle.compute_maintenance_action(pool.idle.len())
+-    else {
+-        return Ok(());
+-    };
++    let to_create = pool.idle.refill_needed();
++    if to_create == 0 { return Ok(()); }
+ 
+     let (placeholder_config, placeholder_image) = pool
+         .placeholder_for(virtual_size)
+@@ -1876,6 +1891,7 @@
+         .context("build pool placeholder for prewarm")?;
+ 
+     for _ in 0..to_create {
++        if pool.idle.refill_needed() == 0 { break; }
+         let dev = create_new_device(ctrl_ring.clone(), &placeholder_config, &placeholder_image)
+             .await
+             .context("prewarm overlaybd pool device")?;
+@@ -1884,27 +1900,13 @@
+             dev_sectors: placeholder_image.num_lbas(),
+             _placeholder_image: Arc::clone(&placeholder_image),
+         };
+-        if let Err(pooled) = pool.idle.try_push_bounded(pooled) {
++        if let Err(pooled) = pool.idle.retain_prewarmed(pooled, Instant::now()) {
+             stop_excess_idle_device(pool, ctrl_ring.clone(), pooled).await;
+             break;
+         }
+     }
+ 
+     Ok(())
+-}
+-
+-async fn refill_idle_pool_best_effort(
+-    pool: &PoolState,
+-    ctrl_ring: IoRingHandle<io_uring::squeue::Entry128>,
+-    virtual_size: u64,
+-) {
+-    if let Err(err) = refill_idle_pool(pool, ctrl_ring, virtual_size).await {
+-        tracing::warn!(
+-            error = %err,
+-            virtual_size,
+-            "failed to refill idle overlaybd pool"
+-        );
+-    }
+ }
+ 
+ async fn stop_excess_idle_device(
+@@ -1915,8 +1917,8 @@
+     let dev_id = pooled.dev.dev_id();
+     tracing::info!(
+         dev_id,
+-        high_watermark = pool.idle.config().high_watermark,
+-        "idle overlaybd pool is full; stopping returned device"
++        high_watermark = pool.config.high_watermark,
++        "retiring unused idle overlaybd device"
+     );
+     stop_overlaybd_device(ctrl_ring, pooled.dev).await;
+ }

@@ -15,9 +15,9 @@ from an exact, clean checkout:
 ./build_pinned.sh /path/to/AgentENV /path/to/artifacts
 ```
 
-The build applies the dense/compacted-stream export, pooled-exclusive-delete, and
-owner-identity and owner-transition patches, runs targeted compaction regressions plus the daemon
-protocol tests, and emits a
+The build applies the dense/compacted-stream export, pooled-exclusive-delete,
+owner-identity, owner-transition, premerged-identity, and device-reuse patches.
+It runs targeted compaction, cache, ownership, device-pool, and protocol tests and emits a
 content-addressed binary, license, and schema-3 build manifest with every patch
 digest. A production package must use that manifest and must not fetch or build
 an unpinned branch during node startup.
@@ -28,6 +28,21 @@ configs backed by sibling `remote-blocks` and `resize-blocks` directories.
 They must remain isolated: the offline C++ resize cache has destructive
 eviction semantics that are not compatible with the shared Rust runtime cache.
 Background download remains disabled in both configs.
+
+The device-reuse patch treats the pool high watermark as a steady-state idle
+cache target, not a bound on active devices or recently returned devices.
+Returns stay reusable for 60 seconds; a five-second maintenance task retires
+only expired surplus. Acquisitions prefer exact-size devices before resizing.
+Prewarming maintains the low watermark and defers to concurrent returns;
+allocation failures retain the single-flight guard during exponential backoff
+from one to 32 seconds. Shutdown rejects late returns. Mount ownership,
+exclusive-use checks, and quarantine remain prerequisites for safe reuse.
+
+Sandbox VM init also sets `vm.watermark_scale_factor=100` so background reclaim
+starts with more free-page headroom during buffered snapshot/rootfs I/O. This
+does not cap sandbox memory or disable compaction. The isolated UCloud
+[qualification](../../docs/reviews/device-reuse-memory-2026-09-20.md) records
+the measured reduction in churn and compaction, including its limitations.
 
 ## Published snapshot-chain compaction
 

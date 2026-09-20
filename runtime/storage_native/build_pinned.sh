@@ -11,6 +11,7 @@ readonly PATCH_PATHS=(
   "${SCRIPT_DIR}/agentenv-owner-identity.patch"
   "${SCRIPT_DIR}/agentenv-owner-transitions.patch"
   "${SCRIPT_DIR}/agentenv-premerged-identity.patch"
+  "${SCRIPT_DIR}/agentenv-device-reuse.patch"
 )
 
 usage() {
@@ -58,6 +59,7 @@ done
   cargo test --locked --release -p overlaybd --lib test_file_cache_startup_preserves_sibling_cache_directories
   cargo test --locked --release -p "${PACKAGE}" --lib protocol::tests
   cargo test --locked --release -p "${PACKAGE}" --lib runtime_owner_tests
+  cargo test --locked --release -p "${PACKAGE}" --lib idle_pool::tests
   cargo build --locked --release -p "${PACKAGE}" --bin "${BINARY}"
 )
 
@@ -69,6 +71,7 @@ readonly POOLED_DELETE_PATCH_SHA256="$(sha256sum "${PATCH_PATHS[1]}" | awk '{pri
 readonly OWNER_IDENTITY_PATCH_SHA256="$(sha256sum "${PATCH_PATHS[2]}" | awk '{print $1}')"
 readonly OWNER_TRANSITIONS_PATCH_SHA256="$(sha256sum "${PATCH_PATHS[3]}" | awk '{print $1}')"
 readonly PREMERGED_IDENTITY_PATCH_SHA256="$(sha256sum "${PATCH_PATHS[4]}" | awk '{print $1}')"
+readonly DEVICE_REUSE_PATCH_SHA256="$(sha256sum "${PATCH_PATHS[5]}" | awk '{print $1}')"
 readonly ARTIFACT_NAME="${BINARY}-${BINARY_SHA256}"
 install -m 0755 "${BUILT_BINARY}" "${OUTPUT_DIR}/${ARTIFACT_NAME}"
 install -m 0644 "${SOURCE_DIR}/LICENSE" "${OUTPUT_DIR}/${ARTIFACT_NAME}.LICENSE"
@@ -105,6 +108,10 @@ payload = {
         {
             "name": "$(basename "${PATCH_PATHS[4]}")",
             "sha256": "${PREMERGED_IDENTITY_PATCH_SHA256}",
+        },
+        {
+            "name": "$(basename "${PATCH_PATHS[5]}")",
+            "sha256": "${DEVICE_REUSE_PATCH_SHA256}",
         },
     ],
     "schema": 3,

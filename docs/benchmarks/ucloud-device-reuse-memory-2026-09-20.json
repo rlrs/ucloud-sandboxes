@@ -1,0 +1,429 @@
+{
+  "date": "2026-09-20",
+  "worker_job": "12397076",
+  "vcpu": 32,
+  "memory_gb": 90,
+  "device_test": {
+    "sandboxes": 64,
+    "cycles": 6,
+    "concurrency": 16,
+    "create_concurrency": 8,
+    "resident_mb": 64,
+    "dirty_mb": 16,
+    "memory_mb": 512,
+    "baseline_version": "0.5.65",
+    "candidate": "agentenv-device-reuse.patch",
+    "reports": [
+      {
+        "name": "baseline",
+        "errors": [],
+        "cleanup_errors": [],
+        "slo_violations": [
+          "wake_0: service p95 exceeds 3000 ms",
+          "park_2: service p95 exceeds 2000 ms"
+        ],
+        "devices_before": 0,
+        "devices_after": 16,
+        "discarded": 448,
+        "capacity_changes": 0,
+        "boot_unchanged": true,
+        "allocstalls": 2372,
+        "compaction_stalls": 105,
+        "phases": [
+          {
+            "name": "single_create",
+            "seconds": 1.4840434708166867,
+            "p95_ms": 1483.257
+          },
+          {
+            "name": "single_act",
+            "seconds": 1.5118246958591044,
+            "p95_ms": 555.858
+          },
+          {
+            "name": "create",
+            "seconds": 15.39534781803377,
+            "p95_ms": 2768.363
+          },
+          {
+            "name": "act_0",
+            "seconds": 1.7921296840067953,
+            "p95_ms": 477.261
+          },
+          {
+            "name": "park_0",
+            "seconds": 3.1856168750673532,
+            "p95_ms": 1205.052
+          },
+          {
+            "name": "wake_0",
+            "seconds": 7.216855919919908,
+            "p95_ms": 3104.309
+          },
+          {
+            "name": "act_1",
+            "seconds": 1.6040545229334384,
+            "p95_ms": 471.261
+          },
+          {
+            "name": "park_1",
+            "seconds": 3.0331841169390827,
+            "p95_ms": 1002.75
+          },
+          {
+            "name": "wake_1",
+            "seconds": 5.80337975313887,
+            "p95_ms": 1686.665
+          },
+          {
+            "name": "act_2",
+            "seconds": 1.725980550982058,
+            "p95_ms": 508.786
+          },
+          {
+            "name": "park_2",
+            "seconds": 4.383707343833521,
+            "p95_ms": 2220.926
+          },
+          {
+            "name": "wake_2",
+            "seconds": 5.527126409113407,
+            "p95_ms": 1597.721
+          },
+          {
+            "name": "act_3",
+            "seconds": 1.6846391879953444,
+            "p95_ms": 506.21
+          },
+          {
+            "name": "park_3",
+            "seconds": 3.1162083870731294,
+            "p95_ms": 997.172
+          },
+          {
+            "name": "wake_3",
+            "seconds": 6.0737252028193325,
+            "p95_ms": 2298.647
+          },
+          {
+            "name": "act_4",
+            "seconds": 1.6312567531131208,
+            "p95_ms": 471.109
+          },
+          {
+            "name": "park_4",
+            "seconds": 2.9740901980549097,
+            "p95_ms": 886.886
+          },
+          {
+            "name": "wake_4",
+            "seconds": 6.8344271189998835,
+            "p95_ms": 2546.762
+          },
+          {
+            "name": "act_5",
+            "seconds": 1.644193457905203,
+            "p95_ms": 463.455
+          },
+          {
+            "name": "park_5",
+            "seconds": 2.979970013955608,
+            "p95_ms": 863.158
+          },
+          {
+            "name": "wake_5",
+            "seconds": 5.572627697139978,
+            "p95_ms": 1600.418
+          }
+        ]
+      },
+      {
+        "name": "candidate",
+        "errors": [],
+        "cleanup_errors": [],
+        "slo_violations": [],
+        "devices_before": 0,
+        "devices_after": 66,
+        "discarded": 2,
+        "capacity_changes": 0,
+        "boot_unchanged": true,
+        "allocstalls": 0,
+        "compaction_stalls": 0,
+        "phases": [
+          {
+            "name": "single_create",
+            "seconds": 1.2197468020021915,
+            "p95_ms": 1219.122
+          },
+          {
+            "name": "single_act",
+            "seconds": 0.542478415183723,
+            "p95_ms": 198.389
+          },
+          {
+            "name": "create",
+            "seconds": 13.704732157057151,
+            "p95_ms": 2497.708
+          },
+          {
+            "name": "act_0",
+            "seconds": 1.7320650278124958,
+            "p95_ms": 496.304
+          },
+          {
+            "name": "park_0",
+            "seconds": 2.9450355998706073,
+            "p95_ms": 831.707
+          },
+          {
+            "name": "wake_0",
+            "seconds": 7.0309106428176165,
+            "p95_ms": 2909.046
+          },
+          {
+            "name": "act_1",
+            "seconds": 1.8214150620624423,
+            "p95_ms": 506.88
+          },
+          {
+            "name": "park_1",
+            "seconds": 2.936972711002454,
+            "p95_ms": 844.195
+          },
+          {
+            "name": "wake_1",
+            "seconds": 5.695298452163115,
+            "p95_ms": 1712.189
+          },
+          {
+            "name": "act_2",
+            "seconds": 1.8115321728400886,
+            "p95_ms": 514.937
+          },
+          {
+            "name": "park_2",
+            "seconds": 3.2253053018357605,
+            "p95_ms": 1204.046
+          },
+          {
+            "name": "wake_2",
+            "seconds": 5.597093583084643,
+            "p95_ms": 1586.795
+          },
+          {
+            "name": "act_3",
+            "seconds": 1.787906819023192,
+            "p95_ms": 500.476
+          },
+          {
+            "name": "park_3",
+            "seconds": 2.956715553998947,
+            "p95_ms": 894.013
+          },
+          {
+            "name": "wake_3",
+            "seconds": 6.8067107510287315,
+            "p95_ms": 2521.935
+          },
+          {
+            "name": "act_4",
+            "seconds": 1.729087837971747,
+            "p95_ms": 501.12
+          },
+          {
+            "name": "park_4",
+            "seconds": 2.9256137071643025,
+            "p95_ms": 838.955
+          },
+          {
+            "name": "wake_4",
+            "seconds": 5.6544293409679085,
+            "p95_ms": 1609.235
+          },
+          {
+            "name": "act_5",
+            "seconds": 1.6591186879668385,
+            "p95_ms": 482.119
+          },
+          {
+            "name": "park_5",
+            "seconds": 4.050535341957584,
+            "p95_ms": 1801.71
+          },
+          {
+            "name": "wake_5",
+            "seconds": 5.500685126986355,
+            "p95_ms": 1553.877
+          }
+        ]
+      }
+    ],
+    "devices_after_idle_grace": 16
+  },
+  "memory_test": {
+    "fio": "4 jobs, 32 GiB per job, fresh files each phase, buffered io_uring, iodepth16, 1 MiB sequential writes, end_fsync=1",
+    "filesystem": "XFS loop image on guest ext4 virtio disk",
+    "reports": [
+      {
+        "name": "prefill",
+        "scale_factor": 10,
+        "elapsed": 53.702,
+        "vm_delta": {
+          "allocstall_dma": 0,
+          "allocstall_dma32": 0,
+          "allocstall_normal": 0,
+          "allocstall_movable": 4179,
+          "allocstall_device": 0,
+          "pgsteal_direct": 2148221,
+          "pgscan_direct": 2149126,
+          "pgscan_direct_throttle": 0,
+          "kswapd_inodesteal": 418,
+          "kswapd_low_wmark_hit_quickly": 1024,
+          "kswapd_high_wmark_hit_quickly": 0,
+          "compact_migrate_scanned": 132600697,
+          "compact_free_scanned": 1340982,
+          "compact_isolated": 518700,
+          "compact_stall": 8058,
+          "compact_fail": 3141,
+          "compact_success": 4917,
+          "compact_daemon_wake": 147,
+          "compact_daemon_migrate_scanned": 662513,
+          "compact_daemon_free_scanned": 996683
+        },
+        "read_MBps": 0.0,
+        "write_MBps": 2581.837459,
+        "read_p99_ms": 0.0,
+        "write_p99_ms": 88.604672
+      },
+      {
+        "name": "baseline-1",
+        "scale_factor": 10,
+        "elapsed": 53.711,
+        "vm_delta": {
+          "allocstall_dma": 0,
+          "allocstall_dma32": 0,
+          "allocstall_normal": 0,
+          "allocstall_movable": 3344,
+          "allocstall_device": 0,
+          "pgsteal_direct": 1736631,
+          "pgscan_direct": 1736631,
+          "pgscan_direct_throttle": 0,
+          "kswapd_inodesteal": 0,
+          "kswapd_low_wmark_hit_quickly": 1184,
+          "kswapd_high_wmark_hit_quickly": 2,
+          "compact_migrate_scanned": 125479459,
+          "compact_free_scanned": 516240,
+          "compact_isolated": 101384,
+          "compact_stall": 7295,
+          "compact_fail": 2880,
+          "compact_success": 4415,
+          "compact_daemon_wake": 176,
+          "compact_daemon_migrate_scanned": 1399840,
+          "compact_daemon_free_scanned": 402158
+        },
+        "read_MBps": 0.0,
+        "write_MBps": 2575.499465,
+        "read_p99_ms": 0.0,
+        "write_p99_ms": 106.430464
+      },
+      {
+        "name": "headroom-1",
+        "scale_factor": 100,
+        "elapsed": 55.648,
+        "vm_delta": {
+          "allocstall_dma": 0,
+          "allocstall_dma32": 0,
+          "allocstall_normal": 0,
+          "allocstall_movable": 2842,
+          "allocstall_device": 0,
+          "pgsteal_direct": 1479154,
+          "pgscan_direct": 1479154,
+          "pgscan_direct_throttle": 0,
+          "kswapd_inodesteal": 4566,
+          "kswapd_low_wmark_hit_quickly": 64,
+          "kswapd_high_wmark_hit_quickly": 3,
+          "compact_migrate_scanned": 58350825,
+          "compact_free_scanned": 405533,
+          "compact_isolated": 72842,
+          "compact_stall": 5032,
+          "compact_fail": 2755,
+          "compact_success": 2277,
+          "compact_daemon_wake": 82,
+          "compact_daemon_migrate_scanned": 632278,
+          "compact_daemon_free_scanned": 302876
+        },
+        "read_MBps": 0.0,
+        "write_MBps": 2480.355046,
+        "read_p99_ms": 0.0,
+        "write_p99_ms": 160.432128
+      },
+      {
+        "name": "baseline-2",
+        "scale_factor": 10,
+        "elapsed": 43.597,
+        "vm_delta": {
+          "allocstall_dma": 0,
+          "allocstall_dma32": 0,
+          "allocstall_normal": 0,
+          "allocstall_movable": 5959,
+          "allocstall_device": 0,
+          "pgsteal_direct": 2971103,
+          "pgscan_direct": 2971103,
+          "pgscan_direct_throttle": 0,
+          "kswapd_inodesteal": 0,
+          "kswapd_low_wmark_hit_quickly": 1203,
+          "kswapd_high_wmark_hit_quickly": 5,
+          "compact_migrate_scanned": 251354831,
+          "compact_free_scanned": 1192279,
+          "compact_isolated": 81639,
+          "compact_stall": 9974,
+          "compact_fail": 4297,
+          "compact_success": 5677,
+          "compact_daemon_wake": 194,
+          "compact_daemon_migrate_scanned": 2776318,
+          "compact_daemon_free_scanned": 874276
+        },
+        "read_MBps": 0.0,
+        "write_MBps": 3174.549671,
+        "read_p99_ms": 0.0,
+        "write_p99_ms": 143.654912
+      },
+      {
+        "name": "headroom-2",
+        "scale_factor": 100,
+        "elapsed": 39.661,
+        "vm_delta": {
+          "allocstall_dma": 0,
+          "allocstall_dma32": 0,
+          "allocstall_normal": 0,
+          "allocstall_movable": 3028,
+          "allocstall_device": 0,
+          "pgsteal_direct": 1571488,
+          "pgscan_direct": 1571488,
+          "pgscan_direct_throttle": 0,
+          "kswapd_inodesteal": 6491,
+          "kswapd_low_wmark_hit_quickly": 74,
+          "kswapd_high_wmark_hit_quickly": 57,
+          "compact_migrate_scanned": 34966821,
+          "compact_free_scanned": 183425,
+          "compact_isolated": 16225,
+          "compact_stall": 5645,
+          "compact_fail": 2747,
+          "compact_success": 2898,
+          "compact_daemon_wake": 62,
+          "compact_daemon_migrate_scanned": 533225,
+          "compact_daemon_free_scanned": 182784
+        },
+        "read_MBps": 0.0,
+        "write_MBps": 3488.829605,
+        "read_p99_ms": 0.0,
+        "write_p99_ms": 143.654912
+      }
+    ]
+  },
+  "limitations": [
+    "One isolated VM; fixed baseline/candidate order, warm cache and service restart confound speed attribution.",
+    "Memory test alternating settings reduces but does not eliminate ordering effects.",
+    "Tests did not reproduce VM poweroff; no claim of fixing unexplained worker loss."
+  ]
+}

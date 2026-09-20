@@ -88,6 +88,7 @@ def dynamic_pressure_error(
     requested: ResourceQuantity,
     *,
     check_cpu: bool = True,
+    check_memory_pressure: bool = True,
 ) -> str | None:
     """Return the shared create, wake, and exec pressure rejection reason."""
 
@@ -95,7 +96,7 @@ def dynamic_pressure_error(
         return "direct node has no fresh runtime metrics for dynamic admission"
     return (
         _cpu_pressure_error(metrics) if check_cpu else None
-    ) or _memory_pressure_error(metrics, requested)
+    ) or _memory_pressure_error(metrics, requested, check_psi=check_memory_pressure)
 
 
 def dynamic_cpu_pressure_retryable(
@@ -136,9 +137,12 @@ def _cpu_pressure_error(metrics: NodeRuntimeMetrics) -> str | None:
 def _memory_pressure_error(
     metrics: NodeRuntimeMetrics,
     requested: ResourceQuantity,
+    *,
+    check_psi: bool = True,
 ) -> str | None:
     if (
-        metrics.memory_psi_full_avg10 is not None
+        check_psi
+        and metrics.memory_psi_full_avg10 is not None
         and metrics.memory_psi_full_avg10 >= 10.0
     ):
         return "direct node memory pressure blocks active admission"

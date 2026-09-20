@@ -19,6 +19,22 @@ from ucloud_sandboxes.resource_admission import (
 
 
 class DynamicResourceAdmissionTests(unittest.TestCase):
+    def test_resident_exec_ignores_psi_but_retains_physical_memory_safety(self):
+        metrics = self.heartbeat(memory_psi_full_avg10=25.0).runtime_metrics
+        self.assertIn("memory pressure", dynamic_pressure_error(metrics, ResourceQuantity()) or "")
+        self.assertIsNone(dynamic_pressure_error(
+            metrics, ResourceQuantity(), check_cpu=False, check_memory_pressure=False,
+        ))
+        for available in (0, 2047):
+            with self.subTest(available=available):
+                self.assertIn("physical live memory headroom", dynamic_pressure_error(
+                    replace(metrics, memory_available_mb=available, swap_total_mb=100000, swap_free_mb=100000),
+                    ResourceQuantity(), check_cpu=False, check_memory_pressure=False,
+                ) or "")
+        self.assertIsNotNone(dynamic_pressure_error(
+            None, ResourceQuantity(), check_cpu=False, check_memory_pressure=False,
+        ))
+
     def heartbeat(self, **metric_overrides: object) -> NodeHeartbeat:
         metrics = {
             "collected_at": utc_now(),

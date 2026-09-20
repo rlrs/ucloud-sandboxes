@@ -41,6 +41,7 @@ from ucloud_sandboxes.sandbox import (
     SandboxCapacityUnavailableError,
     SandboxConflictError,
     SandboxExecAdmissionDeferredError,
+    SandboxRestoreBusyError,
     SandboxOperation,
     SandboxSecuritySpec,
     SandboxSpec,
@@ -1188,8 +1189,8 @@ class DirectProvisionerTests(unittest.TestCase):
                     samples.append(True)
                     return NodeRuntimeMetrics(
                         collected_at=utc_now(), cpu_percent=10, cpu_count=4,
-                        memory_total_mb=8192, memory_available_mb=4096,
-                        memory_psi_full_avg10=20 if len(samples) == 1 else 0,
+                        memory_total_mb=8192,
+                        memory_available_mb=1024 if len(samples) == 1 else 4096,
                     )
 
                 service.configure_active_capacity(
@@ -1256,6 +1257,33 @@ class DirectProvisionerTests(unittest.TestCase):
                 self.assertEqual(run.call_count, 1)
             self.assertEqual(service.activity_snapshot().active_operations, 0)
 
+    def test_restore_admission_is_retryable_but_resume_errors_are_not(self):
+        with TemporaryDirectory() as raw:
+            provisioner, _, _, _, _ = self.make(Path(raw).resolve())
+            service = DirectSandboxService(provisioner)
+            record = self.create(service, self.spec())
+            service.park(record.spec.id, operation_id="park:restore-admission")
+            metrics = NodeRuntimeMetrics(
+                collected_at=utc_now(), cpu_percent=10, cpu_count=4,
+                memory_total_mb=8192, memory_available_mb=8192,
+                memory_psi_full_avg10=25,
+            )
+            service.configure_active_capacity(
+                ResourceQuantity(vcpu=4, memory_mb=8192), runtime_metrics_provider=lambda: metrics,
+            )
+            with patch.object(service.warden, "resume") as resume:
+                with self.assertRaises(SandboxRestoreBusyError):
+                    service.wake(record.spec.id, generation=record.generation, operation_id="wake:admission")
+                resume.assert_not_called()
+            self.assertEqual(service.activity_snapshot().active_operations, 0)
+            self.assertEqual(service.get(record.spec.id).state, "parked")
+            metrics = replace(metrics, memory_psi_full_avg10=0)
+            with patch.object(service.warden, "resume", side_effect=SandboxCapacityUnavailableError("after resume dispatch")):
+                with self.assertRaises(SandboxCapacityUnavailableError) as caught:
+                    service.wake(record.spec.id, generation=record.generation, operation_id="wake:dispatched")
+                self.assertNotIsInstance(caught.exception, SandboxRestoreBusyError)
+            self.assertEqual(service.activity_snapshot().active_operations, 0)
+
     def test_file_http_pressure_deadline_is_safe_to_retry(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
@@ -1269,7 +1297,7 @@ class DirectProvisionerTests(unittest.TestCase):
                 job_id="job", node_id="node", total_resources=ResourceQuantity(vcpu=4, memory_mb=8192),
                 runtime_metrics_provider=lambda: NodeRuntimeMetrics(
                     collected_at=utc_now(), cpu_percent=10, cpu_count=4,
-                    memory_total_mb=8192, memory_available_mb=4096,
+                    memory_total_mb=8192, memory_available_mb=1024,
                     memory_psi_full_avg10=20,
                 ),
             )
@@ -2009,6 +2037,15 @@ class DirectProvisionerTests(unittest.TestCase):
             )
             service.write_file(records[0].spec.id, "/marker", b"next")
             self.assertEqual(service.exec(records[0].spec.id, ("true",)).exit_code, 0)
+
+            runtime_metrics[0] = replace(runtime_metrics[0], memory_psi_full_avg10=25.0)
+            # Cache reclaim is a placement signal, not a reason to veto every
+            # command in resident sandboxes with physical memory headroom.
+            token = service.acquire_exec_capacity(records[0].spec.id, records[0].generation)
+            service.release_exec_capacity(token)
+            self.assertEqual(service.exec(records[0].spec.id, ("true",)).exit_code, 0)
+            service.write_file(records[0].spec.id, "/marker", b"under-psi")
+            self.assertEqual(service.read_file(records[0].spec.id, "/marker", max_bytes=1024), b"ok\n")
 
             runtime_metrics[0] = replace(
                 runtime_metrics[0],

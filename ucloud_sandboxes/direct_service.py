@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -871,15 +871,12 @@ class DirectSandboxService:
                 record = self.warden.reconcile(sandbox)
             if record.state == HibernationState.PARKED:
                 timings: dict[str, float] = {}
-                with (
-                    self._restore_slot(),
-                    self._reserve_active_capacity(
-                        sandbox_id,
-                        generation,
-                        ResourceQuantity(
-                            vcpu=registration.spec.cpus or 0,
-                            memory_mb=registration.spec.memory_mb or 0,
-                        ),
+                with self._restore_admission(
+                    sandbox_id,
+                    generation,
+                    ResourceQuantity(
+                        vcpu=registration.spec.cpus or 0,
+                        memory_mb=registration.spec.memory_mb or 0,
                     ),
                 ):
                     current = self._require_registration(sandbox_id)
@@ -1630,6 +1627,18 @@ class DirectSandboxService:
         finally:
             self._restore_slots.release()
 
+    @contextmanager
+    def _restore_admission(self, sandbox_id: str, generation: int, requested: ResourceQuantity):
+        # Only admission failures before resume begins are safe to replay.
+        # Do not infer that guarantee from a later, fallible inventory read.
+        with ExitStack() as stack:
+            try:
+                stack.enter_context(self._restore_slot())
+                stack.enter_context(self._reserve_active_capacity(sandbox_id, generation, requested))
+            except SandboxCapacityUnavailableError as exc:
+                raise SandboxRestoreBusyError(str(exc)) from exc
+            yield
+
     def ensure_running_with_timings(self, sandbox) -> dict[str, float]:
         started = time.monotonic()
         phase = started
@@ -1654,15 +1663,12 @@ class DirectSandboxService:
         if record.state == HibernationState.PARKED:
             registration = self._require_registration(sandbox.sandbox_id)
             phase = time.monotonic()
-            with (
-                self._restore_slot(),
-                self._reserve_active_capacity(
-                    sandbox.sandbox_id,
-                    registration.sandbox_generation,
-                    ResourceQuantity(
-                        vcpu=registration.spec.cpus or 0,
-                        memory_mb=registration.spec.memory_mb or 0,
-                    ),
+            with self._restore_admission(
+                sandbox.sandbox_id,
+                registration.sandbox_generation,
+                ResourceQuantity(
+                    vcpu=registration.spec.cpus or 0,
+                    memory_mb=registration.spec.memory_mb or 0,
                 ),
             ):
                 timings["restore_queue"] = (time.monotonic() - phase) * 1000
@@ -1703,6 +1709,7 @@ class DirectSandboxService:
         *,
         check_shape: bool,
         check_cpu: bool = True,
+        check_memory_pressure: bool = True,
         validate_owner: Callable[[], None] | None = None,
     ):
         """Yield the capacity lock only to publish an admitted operation's lease.
@@ -1750,7 +1757,10 @@ class DirectSandboxService:
                         "direct node runtime metrics provider changed during admission"
                     )
                 pressure_error = (
-                    dynamic_pressure_error(metrics, requested, check_cpu=check_cpu)
+                    dynamic_pressure_error(
+                        metrics, requested, check_cpu=check_cpu,
+                        check_memory_pressure=check_memory_pressure,
+                    )
                     if capacity is not None
                     else None
                 )
@@ -1815,11 +1825,15 @@ class DirectSandboxService:
         # An existing sandbox already shares CPU through its cgroup. Rejecting
         # commands (including file reads) at a sampled CPU percentage prevents
         # that workload from making progress without adding physical capacity.
-        # Retain memory safety, generation ownership and full-lifetime fencing.
+        # PSI includes cache reclaim and stalls inside limited sandboxes. It is
+        # a placement signal, not proof that a resident sandbox cannot run its
+        # next command. Let cgroups govern its workload; retain the physical
+        # memory floor, generation ownership and full-lifetime fencing.
         with self._active_admission_guard(
             ResourceQuantity(),
             check_shape=False,
             check_cpu=False,
+            check_memory_pressure=False,
             validate_owner=validate_owner,
         ):
             # Keep a zero-resource lease so drain fencing, idle parking and

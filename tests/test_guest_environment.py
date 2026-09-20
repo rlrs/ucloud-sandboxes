@@ -200,7 +200,7 @@ class GuestEnvironmentTests(unittest.TestCase):
             completed = subprocess.run(argv, input=input_bytes, capture_output=True)
             return Mock(exit_code=completed.returncode)
 
-        service.exec.side_effect = execute
+        service._file_exec.side_effect = execute
         with TemporaryDirectory() as raw:
             target = Path(raw) / "a space ü ' $file"
             DirectSandboxService.write_file(
@@ -214,9 +214,9 @@ class GuestEnvironmentTests(unittest.TestCase):
     def test_root_level_upload_selects_root_parent(self):
         service = Mock()
         service.startup_admission = nullcontext
-        service.exec.return_value = Mock(exit_code=0)
+        service._file_exec.return_value = Mock(exit_code=0)
         DirectSandboxService.write_file(service, "test", "/eval.sh", b"echo ok")
-        script = service.exec.call_args.args[1][2]
+        script = service._file_exec.call_args.args[1][2]
         # Execute the actual parent-selection prefix without writing to host /.
         prefix = script.split('mkdir -p -- "$dir"')[0]
         completed = subprocess.run(

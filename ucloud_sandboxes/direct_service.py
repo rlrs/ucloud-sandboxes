@@ -47,6 +47,7 @@ from .sandbox import (
     SandboxAdmissionClosedError,
     SandboxCapacityUnavailableError,
     SandboxConflictError,
+    SandboxExecAdmissionDeferredError,
     SandboxFileTooLargeError,
     SandboxOperation,
     SandboxRecord,
@@ -65,6 +66,9 @@ _LOG = logging.getLogger(__name__)
 # before resampling. Keep a deadline; sustained pressure still rejects work.
 _CPU_ADMISSION_RETRY_SECONDS = 0.21
 _CPU_ADMISSION_DEADLINE_SECONDS = 1.0
+# Leave room in the SDK's default 30-second HTTP deadline for transport and a
+# safe retry response. This bounds one wait, not the number of admitted tools.
+_FILE_ADMISSION_RETRY_WINDOW_SECONDS = 5.0
 
 
 def sandbox_file_write_script() -> str:
@@ -1181,18 +1185,29 @@ class DirectSandboxService:
         timeout_seconds: float | None = None,
         max_stdout_bytes: int = 256 * 1024 * 1024,
         max_stderr_bytes: int = 16 * 1024 * 1024,
+        expected_generation: int | None = None,
     ) -> DirectExecResult:
         if max_stdout_bytes < 1 or max_stderr_bytes < 1:
             raise ValueError("direct exec output limits must be positive")
         registration = self._require_registration(sandbox_id)
         with self._request_lock(sandbox_id, registration.sandbox_generation):
+            if expected_generation is not None and (
+                registration.sandbox_generation != expected_generation
+                or self._require_registration(sandbox_id).sandbox_generation != expected_generation
+            ):
+                raise SandboxConflictError("file operation no longer owns direct sandbox generation")
             self.mark_activity(sandbox_id, registration.sandbox_generation)
             sandbox = registration.to_direct_sandbox()
-            self._ensure_running(sandbox)
-            token = self.acquire_exec_capacity(
-                sandbox_id,
-                registration.sandbox_generation,
-            )
+            try:
+                self._ensure_running(sandbox)
+                token = self.acquire_exec_capacity(
+                    sandbox_id,
+                    registration.sandbox_generation,
+                )
+            except SandboxCapacityUnavailableError as exc:
+                # This fence covers only admission, never the command runner.
+                # File helpers may safely retry without repeating a write.
+                raise SandboxExecAdmissionDeferredError(str(exc)) from exc
             try:
                 with self.warden.exec_lease(
                     sandbox,
@@ -1439,9 +1454,10 @@ class DirectSandboxService:
         if not self._file_read_slots.acquire(timeout=self.admission_wait_seconds):
             raise SandboxStartupBusyError("node file read admission wait deadline exceeded")
         try:
-            result = self.exec(
+            result = self._file_exec(
                 sandbox_id,
                 command,
+                expected_generation=registration.sandbox_generation,
                 max_stdout_bytes=max_bytes,
                 max_stderr_bytes=64 * 1024,
             )
@@ -1471,9 +1487,10 @@ class DirectSandboxService:
                 str(max(1, len(payload))),
             )
         with self.startup_admission():
-            result = self.exec(
+            result = self._file_exec(
                 sandbox_id,
                 command,
+                expected_generation=registration.sandbox_generation,
                 input_bytes=payload,
                 max_stdout_bytes=64 * 1024,
                 max_stderr_bytes=64 * 1024,
@@ -1482,6 +1499,43 @@ class DirectSandboxService:
             raise DirectWardenError(
                 f"sandbox file write failed with exit {result.exit_code}"
             )
+
+    def _file_exec(
+        self,
+        sandbox_id: str,
+        command: Sequence[str],
+        *,
+        expected_generation: int,
+        max_stdout_bytes: int,
+        max_stderr_bytes: int,
+        input_bytes: bytes | None = None,
+    ) -> DirectExecResult:
+        """Absorb transient admission pressure without replaying dispatched work.
+
+        Each attempt releases the sandbox lock and has no exec reservation while
+        waiting, so park, delete and drain can progress. The original generation
+        remains pinned by the caller across every attempt.
+        """
+        deadline = time.monotonic() + min(
+            self.admission_wait_seconds, _FILE_ADMISSION_RETRY_WINDOW_SECONDS
+        )
+        while True:
+            try:
+                return self.exec(
+                    sandbox_id, command, expected_generation=expected_generation,
+                    input_bytes=input_bytes, max_stdout_bytes=max_stdout_bytes,
+                    max_stderr_bytes=max_stderr_bytes,
+                )
+            except SandboxExecAdmissionDeferredError:
+                with self._capacity_guard:
+                    if not self._admission_open:
+                        raise SandboxAdmissionClosedError("direct node admission is closed")
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise
+                    self._admission_changed.wait(min(_CPU_ADMISSION_RETRY_SECONDS, remaining))
+                if time.monotonic() >= deadline:
+                    raise
 
     def close_admission(self) -> None:
         # Once this returns, every admitted create is present in the transient

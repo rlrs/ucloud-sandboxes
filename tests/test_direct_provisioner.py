@@ -10,7 +10,7 @@ from threading import Event, Lock, Thread
 from time import monotonic, sleep
 from types import SimpleNamespace
 from unittest.mock import patch
-from urllib import request
+from urllib import error, request
 
 from ucloud_sandboxes.capabilities import HIBERNATE_LOCAL_CAPABILITY
 from ucloud_sandboxes.direct_oci import DirectOciConfigBuilder
@@ -40,6 +40,7 @@ from ucloud_sandboxes.sandbox import (
     SandboxBusyError,
     SandboxCapacityUnavailableError,
     SandboxConflictError,
+    SandboxExecAdmissionDeferredError,
     SandboxOperation,
     SandboxSecuritySpec,
     SandboxSpec,
@@ -1171,6 +1172,131 @@ class DirectProvisionerTests(unittest.TestCase):
                 HibernationState.RUNNING.value,
             )
             self.assertEqual(runner.calls[-1][1], b"\0binary")
+
+    def test_file_operations_wait_for_memory_and_dispatch_once(self) -> None:
+        for action, parked in (("read", False), ("write", False), ("read", True), ("write", True)):
+            with self.subTest(action=action, parked=parked), TemporaryDirectory() as raw:
+                provisioner, _, _, _, _ = self.make(Path(raw).resolve())
+                runner = FakeProcessRunner()
+                service = DirectSandboxService(provisioner, process_runner=runner)
+                record = self.create(service, self.spec())
+                if parked:
+                    service.park(record.spec.id, operation_id="park:file-pressure")
+                samples = []
+
+                def sample():
+                    samples.append(True)
+                    return NodeRuntimeMetrics(
+                        collected_at=utc_now(), cpu_percent=10, cpu_count=4,
+                        memory_total_mb=8192, memory_available_mb=4096,
+                        memory_psi_full_avg10=20 if len(samples) == 1 else 0,
+                    )
+
+                service.configure_active_capacity(
+                    ResourceQuantity(vcpu=4, memory_mb=8192),
+                    runtime_metrics_provider=sample,
+                )
+                if action == "write":
+                    service.write_file(record.spec.id, "/marker", b"\0payload")
+                    self.assertEqual(runner.calls[0][1], b"\0payload")
+                else:
+                    self.assertEqual(service.read_file(record.spec.id, "/marker", max_bytes=1024), b"ok\n")
+                self.assertEqual(len(samples), 3 if parked else 2)
+                self.assertEqual(len(runner.calls), 1)
+                self.assertEqual(service.activity_snapshot().active_operations, 0)
+
+    def test_file_wait_releases_owner_lock_and_fences_replacement_and_drain(self) -> None:
+        for change in ("generation", "drain"):
+            with self.subTest(change=change), TemporaryDirectory() as raw:
+                provisioner, registry, _, _, _ = self.make(Path(raw).resolve())
+                runner = FakeProcessRunner()
+                service = DirectSandboxService(provisioner, process_runner=runner)
+                record = self.create(service, self.spec())
+                original_get = registry.get
+                replaced = []
+
+                def wait(_timeout):
+                    # Match Condition.wait: release its lock during the wait.
+                    service._capacity_guard.release()
+                    try:
+                        with service._try_lock(record.spec.id, record.generation) as acquired:
+                            self.assertTrue(acquired)
+                        self.assertEqual(service.activity_snapshot().active_operations, 0)
+                        if change == "drain":
+                            service.close_admission()
+                        else:
+                            replaced.append(True)
+                    finally:
+                        service._capacity_guard.acquire()
+
+                def get(sandbox_id):
+                    result = original_get(sandbox_id)
+                    return replace(result, sandbox_generation=result.sandbox_generation + 1) if replaced else result
+
+                expected = SandboxConflictError if change == "generation" else SandboxAdmissionClosedError
+                with (
+                    patch.object(service, "acquire_exec_capacity", side_effect=SandboxCapacityUnavailableError("memory pressure")),
+                    patch.object(service._admission_changed, "wait", side_effect=wait),
+                    patch.object(registry, "get", side_effect=get),
+                    self.assertRaises(expected),
+                ):
+                    service.write_file(record.spec.id, "/marker", b"payload")
+                self.assertEqual(runner.calls, [])
+
+    def test_file_operation_never_replays_error_after_dispatch(self) -> None:
+        with TemporaryDirectory() as raw:
+            provisioner, _, _, _, _ = self.make(Path(raw).resolve())
+            runner = FakeProcessRunner()
+            service = DirectSandboxService(provisioner, process_runner=runner)
+            record = self.create(service, self.spec())
+            with patch.object(runner, "run", side_effect=SandboxCapacityUnavailableError("after dispatch")) as run:
+                with self.assertRaises(SandboxCapacityUnavailableError) as caught:
+                    service.write_file(record.spec.id, "/marker", b"payload")
+                self.assertNotIsInstance(caught.exception, SandboxExecAdmissionDeferredError)
+                self.assertEqual(run.call_count, 1)
+            self.assertEqual(service.activity_snapshot().active_operations, 0)
+
+    def test_file_http_pressure_deadline_is_safe_to_retry(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, _ = self.make(root)
+            runner = FakeProcessRunner()
+            service = DirectSandboxService(provisioner, process_runner=runner)
+            record = self.create(service, self.spec())
+            service.admission_wait_seconds = 0.02
+            server = build_direct_node_agent_server(
+                "127.0.0.1", 0, service=service, image_file=root / "images.json",
+                job_id="job", node_id="node", total_resources=ResourceQuantity(vcpu=4, memory_mb=8192),
+                runtime_metrics_provider=lambda: NodeRuntimeMetrics(
+                    collected_at=utc_now(), cpu_percent=10, cpu_count=4,
+                    memory_total_mb=8192, memory_available_mb=4096,
+                    memory_psi_full_avg10=20,
+                ),
+            )
+            thread = Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
+            thread.start()
+            try:
+                for method in ("PUT", "GET"):
+                    with self.subTest(method=method):
+                        req = request.Request(
+                            f"http://127.0.0.1:{server.server_port}/v1/sandboxes/{record.spec.id}/files?path=/marker",
+                            method=method, data=b"payload" if method == "PUT" else None,
+                        )
+                        with self.assertRaises(error.HTTPError) as rejected:
+                            request.urlopen(req, timeout=5)
+                        with rejected.exception as response:
+                            self.assertEqual(response.code, 503)
+                            body = json.load(response)
+                            self.assertEqual(body["error_code"], "node_active_exec_deferred")
+                            self.assertTrue(body["retryable"])
+                            self.assertNotIn("lifecycle_state", body)
+                            self.assertEqual(response.headers["X-UCloud-Sandbox-Retryable"], "true")
+                self.assertEqual(runner.calls, [])
+                self.assertEqual(service.activity_snapshot().active_operations, 0)
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=5)
 
     def test_evict_published_requires_exact_parked_registry_authority(self) -> None:
         with TemporaryDirectory() as raw:

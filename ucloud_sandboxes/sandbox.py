@@ -98,6 +98,10 @@ class SandboxCapacityUnavailableError(RuntimeError):
     """The node cannot currently admit the requested sandbox resources."""
 
 
+class SandboxExecAdmissionDeferredError(SandboxCapacityUnavailableError):
+    """Capacity deferred an exec before its command could be dispatched."""
+
+
 class SandboxRestoreBusyError(SandboxCapacityUnavailableError):
     """Restore admission rejected the request before any restore or tool work."""
 

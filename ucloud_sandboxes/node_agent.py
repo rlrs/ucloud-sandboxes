@@ -58,6 +58,7 @@ from .sandbox import (
     SandboxAdmissionClosedError,
     SandboxBusyError,
     SandboxCapacityUnavailableError,
+    SandboxExecAdmissionDeferredError,
     SandboxConflictError,
     SandboxFileTooLargeError,
     SandboxFilesystemSpec,
@@ -1529,6 +1530,17 @@ class NodeAgentHandler(BuildContextHttpHandler):
         return False
 
     def _write_exception(self, exc: RuntimeError | ValueError) -> None:
+        if isinstance(exc, SandboxExecAdmissionDeferredError):
+            self._write_json(
+                {
+                    "error": str(exc),
+                    "error_code": "node_active_exec_deferred",
+                    "retryable": True,
+                },
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+                headers={"Retry-After": "1", "X-UCloud-Sandbox-Retryable": "true"},
+            )
+            return
         if isinstance(exc, ImageBuildCapacityError):
             self._write_json(
                 {"error": str(exc), "error_code": "builder_busy", "retryable": True},

@@ -155,7 +155,7 @@ class EnvironmentContractTests(unittest.TestCase):
         service._file_read_slots = Mock()
         service.admission_wait_seconds = 1.0
         spec = self.spec(filesystem={"management_helper": "static"})
-        service._require_registration = Mock(return_value=SimpleNamespace(spec=spec))
+        service._require_registration = Mock(return_value=SimpleNamespace(spec=spec, sandbox_generation=1))
         service.exec = Mock(return_value=SimpleNamespace(exit_code=0, stdout=b"data"))
         self.assertEqual(service.read_file("probe", "/file ü", max_bytes=16), b"data")
         self.assertEqual(

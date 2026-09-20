@@ -72,3 +72,30 @@ The canonical local check passed: 969 server tests (six skipped), 118 SDK tests,
 Ruff, shell checks, Go tests, wheel builds and installed-wheel checks. The initial
 Linux subset passed 180 tests; release validation also exercises the final wheel
 on Linux before installation. No SDK or Verifiers behavior changes are required.
+
+## Deployment verification
+
+Commit `7ccee5046da6ae1206b66cfc6b81f8dee40fc330` was installed at
+12:59:38 UTC on September 20. Production retained its 120-second heartbeat
+freshness window and 180-second unreachable retirement deadline. The public
+health endpoint reports 0.5.63; gateway, relay and autoscaler were restarted.
+All 93 installed package files matched the release wheel. Both node bundles
+validated, and future production workers use the new release directory.
+Production had no sandbox routes, reservations or workers to roll at installation.
+
+The final wheel passed 435 Linux tests and
+[release CI](https://github.com/rlrs/ucloud-sandboxes/actions/runs/35512065729).
+The isolated worker was initialized from the packaged 0.5.63 sandbox bundle;
+its advertised version and installed ownership/controller module hashes matched
+this commit. Two batches of 64 creates, parks, restores and deletes completed
+without errors in those phases. The shutdown-test harness initially assumed
+that the signalling command must exit 137, then used an unsupported direct-node
+GET route; these assertions were replaced by a kernel-level process check.
+That final test confirmed 32 killed container runtimes exited while an untouched
+runtime survived, followed by 33 successful deletions.
+
+The worker's boot ID remained unchanged throughout the experiments. Final
+inspection found no live runtime processes or metadata from the release tests.
+The test VM was intentionally terminated at 13:09 UTC, its terminal provider
+state was confirmed, and its separate control-plane service and credentials
+were removed. No new production-scale load test was performed in this release.

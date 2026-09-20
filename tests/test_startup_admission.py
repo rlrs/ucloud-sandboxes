@@ -6,7 +6,6 @@ from http.client import HTTPConnection
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Event, Lock
-import json
 import time
 import unittest
 from unittest.mock import patch
@@ -186,7 +185,7 @@ class StartupAdmissionTests(unittest.TestCase):
                 finally:
                     limiter.release()
                 self.assertEqual(future.result(3)[0], 201)
-                # Upload byte pressure is isolated, and times out before body read.
+                # File routing no longer waits for a whole-body RAM reservation.
                 uploads = handler.upload_memory_limiter
                 uploads.acquire(weight=uploads.capacity)
                 handler.admission_wait_seconds = 0.01
@@ -198,11 +197,8 @@ class StartupAdmissionTests(unittest.TestCase):
                     connection.putheader("Content-Length", "4096")
                     connection.endheaders()
                     response = connection.getresponse()
-                    self.assertEqual(response.status, 503)
-                    self.assertEqual(
-                        json.loads(response.read())["error_code"],
-                        "gateway_startup_busy",
-                    )
+                    self.assertEqual(response.status, 404)
+                    response.read()
                     self.assertEqual(response.getheader("Connection"), "close")
                 finally:
                     connection.close()

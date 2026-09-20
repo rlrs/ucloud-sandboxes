@@ -50,8 +50,10 @@ from .storage_native_migration import (
 )
 from .hibernation import hibernation_disk_reservation_mb
 from .http_server import (
+    DEFAULT_MAX_HTTP_REQUEST_THREADS,
     DEFAULT_MAX_JSON_BODY_BYTES,
     HighBacklogThreadingHTTPServer,
+    RequestBodyStream,
     traced_http_request,
 )
 from .http_contract import SandboxHttpRoute, match_sandbox_http_route
@@ -622,6 +624,15 @@ _NODE_EXEC_EVENT_HTTP_POOL = urllib3.PoolManager(
     block=True,
     retries=False,
 )
+# Uploads spend most of their time moving bytes. Do not let them exhaust the
+# control/exec connection pool. maxsize here limits retained connections only;
+# the existing HTTP request admission bounds active transfer threads.
+_NODE_FILE_UPLOAD_HTTP_POOL = urllib3.PoolManager(
+    num_pools=NODE_HTTP_POOL_ORIGINS,
+    maxsize=DEFAULT_MAX_HTTP_REQUEST_THREADS,
+    block=False,
+    retries=False,
+)
 
 
 def _open_node_request(
@@ -644,7 +655,9 @@ def _open_node_request(
                 headers["Connection"] = "close"
             path = urlparse(req.full_url).path
             pool = (
-                _NODE_EXEC_EVENT_HTTP_POOL
+                _NODE_FILE_UPLOAD_HTTP_POOL
+                if isinstance(req.data, RequestBodyStream)
+                else _NODE_EXEC_EVENT_HTTP_POOL
                 if req.get_method() == "GET"
                 and path.startswith("/v1/exec/")
                 and path.endswith("/events")
@@ -4071,7 +4084,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         buffered_bulk = self.command in {"POST", "PUT", "PATCH"} and (
             weight > 64 * 1024
             or (action is not None and action.action == "files")
-        )
+        ) and not (self.command == "PUT" and action is not None and action.action == "files")
         if buffered_bulk:
             with self._startup_request_admission(weight=weight) as admitted:
                 if admitted:
@@ -4140,11 +4153,17 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 return
 
         try:
-            body = (
-                self._read_raw_body(max_bytes=DEFAULT_MAX_PROXY_BODY_BYTES)
-                if self.command in {"POST", "PUT", "PATCH"}
-                else None
-            )
+            if self.command == "PUT" and sandbox_http_route is not None and sandbox_http_route.action == "files":
+                body = RequestBodyStream(
+                    self.rfile,
+                    self._request_content_length(max_bytes=DEFAULT_MAX_PROXY_BODY_BYTES),
+                )
+            else:
+                body = (
+                    self._read_raw_body(max_bytes=DEFAULT_MAX_PROXY_BODY_BYTES)
+                    if self.command in {"POST", "PUT", "PATCH"}
+                    else None
+                )
         except ValueError as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             return
@@ -4226,9 +4245,13 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             if self.command == "DELETE"
             else None
         )
-        # Only downloads need a streamed response. Upload acknowledgements are
-        # small JSON responses and follow the same buffered proxy path as every
-        # other mutating sandbox request, which carries the already-read body.
+        if isinstance(body, RequestBodyStream):
+            extra_headers = {
+                "Content-Length": str(body.length),
+                SANDBOX_GENERATION_HEADER: str(route.generation),
+            }
+        # Downloads stream their response; uploads stream the request body and
+        # receive a small JSON acknowledgement after the worker commits it.
         if (
             sandbox_http_route is not None
             and sandbox_http_route.action == "files"
@@ -6508,16 +6531,22 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             extra_headers=extra_headers,
         )
         proxy_attributes = _node_proxy_span_attributes(method, path, node_url)
+        if isinstance(body, RequestBodyStream):
+            proxy_attributes.update({"upload.streaming": True, "upload.bytes": body.length})
         try:
             with self.telemetry.span(
                 "gateway.node_response_headers",
                 attributes=proxy_attributes,
             ) as headers_span:
-                response = _open_node_request(
-                    proxied,
-                    timeout=timeout_seconds,
-                    authenticated=True,
-                )
+                try:
+                    response = _open_node_request(
+                        proxied,
+                        timeout=timeout_seconds,
+                        authenticated=True,
+                    )
+                finally:
+                    if isinstance(body, RequestBodyStream):
+                        headers_span.set_attribute("upload.received_bytes", body.length - body.remaining)
                 headers_span.set_attribute("http.response.status_code", response.status)
             with response:
                 try:
@@ -6559,6 +6588,14 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             except ProxyResponseTooLargeError:
                 return _proxy_response_too_large(DEFAULT_MAX_PROXY_ERROR_BYTES)
             return ProxiedResponse(exc.code, exc.headers, response_body)
+        except ValueError as exc:
+            if not isinstance(body, RequestBodyStream):
+                raise
+            return ProxiedResponse(
+                HTTPStatus.BAD_REQUEST,
+                {"Content-Type": "application/json"},
+                json.dumps({"error": str(exc)}).encode(),
+            )
         except error.URLError as exc:
             return _node_transport_error_response(exc.reason)
         except OSError as exc:

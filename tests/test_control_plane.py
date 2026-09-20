@@ -5169,6 +5169,7 @@ class ControlPlaneTests(unittest.TestCase):
     def test_gateway_forwards_the_complete_file_upload_body(self) -> None:
         body = b"# /// script\n# dependencies = ['requests']\n# ///\nprint('visible')\n"
         forwarded_requests: list[request.Request] = []
+        forwarded_bodies: list[bytes] = []
         response_payload = json.dumps(
             {
                 "ok": True,
@@ -5203,6 +5204,8 @@ class ControlPlaneTests(unittest.TestCase):
             **_kwargs: object,
         ) -> UploadResponse:
             forwarded_requests.append(proxied)
+            self.assertIsInstance(proxied.data, control_plane.RequestBodyStream)
+            forwarded_bodies.append(b"".join(iter(lambda: proxied.data.read(65536), b"")))
             return UploadResponse()
 
         with _temporary_root() as root:
@@ -5235,7 +5238,8 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(response.status, 200)
         self.assertEqual(uploaded["size"], len(body))
         self.assertEqual(len(forwarded_requests), 1)
-        self.assertEqual(forwarded_requests[0].data, body)
+        self.assertEqual(forwarded_bodies, [body])
+        self.assertEqual(forwarded_requests[0].get_header("Content-length"), str(len(body)))
         self.assertEqual(
             forwarded_requests[0].get_header("Content-type"),
             "application/octet-stream",

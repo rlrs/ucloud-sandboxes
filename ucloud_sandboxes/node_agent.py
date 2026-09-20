@@ -32,7 +32,9 @@ from .deployment import service_health
 from .http_server import (
     DEFAULT_MAX_JSON_BODY_BYTES,
     HighBacklogThreadingHTTPServer,
+    RequestBodyStream,
     RequestBodyTooLargeError,
+    TRANSFER_CHUNK_BYTES,
     traced_http_request,
 )
 from .http_contract import match_sandbox_http_route
@@ -1206,9 +1208,43 @@ class NodeAgentHandler(BuildContextHttpHandler):
             )
             return
         try:
-            with self.manager.service.startup_admission():
-                content = self._read_raw_body(max_bytes=self.max_file_body_bytes)
-                self.manager.upload_file(sandbox_id, container_path, content)
+            size = self._request_content_length(max_bytes=self.max_file_body_bytes)
+            registration = self.manager.service._require_registration(sandbox_id)
+            generation = registration.sandbox_generation
+            supplied_generation = self.headers.get(SANDBOX_GENERATION_HEADER)
+            if supplied_generation is not None and int(supplied_generation) != generation:
+                raise SandboxConflictError("file operation no longer owns direct sandbox generation")
+            with self.telemetry.span(
+                "node.file_upload", attributes={"sandbox.id": sandbox_id, "upload.bytes": size},
+            ) as span:
+                receiving = time.monotonic()
+                if size <= TRANSFER_CHUNK_BYTES:
+                    content = self._read_raw_body(max_bytes=TRANSFER_CHUNK_BYTES)
+                    span.set_attribute("upload.receive_ms", _elapsed_ms(receiving))
+                    with self.telemetry.span("node.file_upload.write"):
+                        self.manager.upload_file(
+                            sandbox_id, container_path, content, expected_generation=generation,
+                        )
+                else:
+                    stream = RequestBodyStream(self.rfile, size)
+                    try:
+                        with self.manager.service.upload_spool.receive(stream, size) as staged:
+                            span.set_attribute("upload.receive_ms", _elapsed_ms(receiving))
+                            with self.telemetry.span("node.file_upload.write"):
+                                self.manager.upload_file_from_file(
+                                    sandbox_id, container_path, staged, size,
+                                    expected_generation=generation,
+                                )
+                    except SandboxStartupBusyError:
+                        # Finish consuming the bounded stream before returning
+                        # a safe admission retry. Otherwise an early disk-space
+                        # rejection can reset a sender still writing its body.
+                        while stream.read():
+                            pass
+                        raise
+        except SandboxConflictError as exc:
+            self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
+            return
         except (RuntimeError, ValueError) as exc:
             self._write_exception(exc)
             return
@@ -1217,7 +1253,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 "ok": True,
                 "sandbox_id": sandbox_id,
                 "path": container_path,
-                "size": len(content),
+                "size": size,
             }
         )
 

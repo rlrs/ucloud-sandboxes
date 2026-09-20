@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
 from threading import Event, Lock, RLock, Thread, local
-from typing import Iterator
+from typing import BinaryIO, Iterator
 from uuid import uuid4
 
 from .direct_service import DirectSandboxService
@@ -569,8 +569,18 @@ class DirectNodeRuntime:
         sandbox_id: str,
         path: str,
         content: bytes,
+        *,
+        expected_generation: int | None = None,
     ) -> None:
-        self.service.write_file(sandbox_id, path, content)
+        self.service.write_file(sandbox_id, path, content, expected_generation=expected_generation)
+
+    def upload_file_from_file(
+        self, sandbox_id: str, path: str, source: BinaryIO, size: int,
+        *, expected_generation: int,
+    ) -> None:
+        self.service.write_file_from_file(
+            sandbox_id, path, source, size, expected_generation=expected_generation,
+        )
 
     def download_file(
         self,

@@ -23,6 +23,7 @@ DEFAULT_HTTP_CLIENT_SOCKET_TIMEOUT_SECONDS = 60.0
 # Reserve room beyond those sleeping requests for lifecycle and health traffic.
 DEFAULT_MAX_HTTP_REQUEST_THREADS = 512
 DEFAULT_MAX_JSON_BODY_BYTES = 16 * 1024 * 1024
+TRANSFER_CHUNK_BYTES = 64 * 1024
 HTTP_OVERLOAD_RETRY_AFTER_SECONDS = 1
 HTTP_OVERLOAD_DRAIN_SECONDS = 2.0
 HTTP_OVERLOAD_DRAIN_BYTES = DEFAULT_MAX_JSON_BODY_BYTES + 64 * 1024
@@ -30,6 +31,29 @@ HTTP_OVERLOAD_DRAIN_BYTES = DEFAULT_MAX_JSON_BODY_BYTES + 64 * 1024
 
 class RequestBodyTooLargeError(ValueError):
     pass
+
+
+class RequestBodyStream:
+    """Read exactly one framed body in bounded chunks, without owning the socket."""
+
+    def __init__(self, source: Any, length: int) -> None:
+        if length < 0:
+            raise ValueError("request body length cannot be negative")
+        self.source = source
+        self.remaining = length
+        self.length = length
+
+    def read(self, size: int = -1) -> bytes:
+        if not self.remaining or size == 0:
+            return b""
+        amount = min(self.remaining, TRANSFER_CHUNK_BYTES)
+        if size > 0:
+            amount = min(amount, size)
+        chunk = self.source.read(amount)
+        if not chunk:
+            raise ValueError("request body ended before Content-Length bytes were read")
+        self.remaining -= len(chunk)
+        return chunk
 
 
 class JsonHttpHandler(BaseHTTPRequestHandler):

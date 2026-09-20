@@ -12,7 +12,7 @@ import signal
 import subprocess
 import threading
 import time
-from typing import Callable, Iterator, Sequence
+from typing import BinaryIO, Callable, Iterator, Sequence
 from uuid import uuid4
 
 from .admission import FairCapacity
@@ -58,6 +58,7 @@ from .sandbox import (
     validate_container_path,
 )
 from .telemetry import Telemetry
+from .upload_spool import UploadSpool
 
 
 _LOG = logging.getLogger(__name__)
@@ -149,14 +150,18 @@ class DirectProcessRunner:
         timeout_seconds: float | None,
         max_stdout_bytes: int,
         max_stderr_bytes: int,
+        input_file: BinaryIO | None = None,
     ) -> DirectExecResult:
+        if input_file is not None and input_bytes is not None:
+            raise ValueError("exec stdin must be bytes or a file, not both")
         command = tuple(str(item) for item in argv)
         deadline = (
             None if timeout_seconds is None else time.monotonic() + timeout_seconds
         )
         process = subprocess.Popen(
             command,
-            stdin=subprocess.PIPE if input_bytes is not None else subprocess.DEVNULL,
+            stdin=(input_file if input_file is not None else
+                   subprocess.PIPE if input_bytes is not None else subprocess.DEVNULL),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             bufsize=0,
@@ -279,6 +284,7 @@ class DirectSandboxService:
         self._restore_slots = FairCapacity(max_concurrent_restores)
         self._startup_slots = FairCapacity(max_concurrent_startups)
         self._file_read_slots = FairCapacity(max_concurrent_startups)
+        self.upload_spool = UploadSpool(provisioner.registry.path.parent / "upload-staging")
         self.admission_wait_seconds = 30.0
         self._startup_admission_state = threading.local()
         self._active_capacity: ResourceQuantity | None = None
@@ -1186,6 +1192,7 @@ class DirectSandboxService:
         max_stdout_bytes: int = 256 * 1024 * 1024,
         max_stderr_bytes: int = 16 * 1024 * 1024,
         expected_generation: int | None = None,
+        input_file: BinaryIO | None = None,
     ) -> DirectExecResult:
         if max_stdout_bytes < 1 or max_stderr_bytes < 1:
             raise ValueError("direct exec output limits must be positive")
@@ -1222,6 +1229,7 @@ class DirectSandboxService:
                         timeout_seconds=timeout_seconds,
                         max_stdout_bytes=max_stdout_bytes,
                         max_stderr_bytes=max_stderr_bytes,
+                        **({"input_file": input_file} if input_file is not None else {}),
                     )
             finally:
                 self.release_exec_capacity(token)
@@ -1474,6 +1482,37 @@ class DirectSandboxService:
         sandbox_id: str,
         path: str,
         payload: bytes,
+        *,
+        expected_generation: int | None = None,
+    ) -> None:
+        self._write_file(
+            sandbox_id, path, len(payload), input_bytes=payload,
+            expected_generation=expected_generation,
+        )
+
+    def write_file_from_file(
+        self,
+        sandbox_id: str,
+        path: str,
+        source: BinaryIO,
+        size: int,
+        *,
+        expected_generation: int,
+    ) -> None:
+        self._write_file(
+            sandbox_id, path, size, input_file=source,
+            expected_generation=expected_generation,
+        )
+
+    def _write_file(
+        self,
+        sandbox_id: str,
+        path: str,
+        size: int,
+        *,
+        input_bytes: bytes | None = None,
+        input_file: BinaryIO | None = None,
+        expected_generation: int | None = None,
     ) -> None:
         validate_container_path("sandbox file path", path)
         registration = self._require_registration(sandbox_id)
@@ -1484,17 +1523,19 @@ class DirectSandboxService:
                 "files",
                 "write",
                 path,
-                str(max(1, len(payload))),
+                str(max(1, size)),
             )
-        with self.startup_admission():
-            result = self._file_exec(
-                sandbox_id,
-                command,
-                expected_generation=registration.sandbox_generation,
-                input_bytes=payload,
-                max_stdout_bytes=64 * 1024,
-                max_stderr_bytes=64 * 1024,
-            )
+        # File payloads are now either small or disk-backed. They need no cold
+        # start slot and do not prevent tools on other sandboxes from running.
+        result = self._file_exec(
+            sandbox_id,
+            command,
+            expected_generation=(registration.sandbox_generation if expected_generation is None else expected_generation),
+            input_bytes=input_bytes,
+            input_file=input_file,
+            max_stdout_bytes=64 * 1024,
+            max_stderr_bytes=64 * 1024,
+        )
         if result.exit_code != 0:
             raise DirectWardenError(
                 f"sandbox file write failed with exit {result.exit_code}"
@@ -1509,6 +1550,7 @@ class DirectSandboxService:
         max_stdout_bytes: int,
         max_stderr_bytes: int,
         input_bytes: bytes | None = None,
+        input_file: BinaryIO | None = None,
     ) -> DirectExecResult:
         """Absorb transient admission pressure without replaying dispatched work.
 
@@ -1525,6 +1567,7 @@ class DirectSandboxService:
                     sandbox_id, command, expected_generation=expected_generation,
                     input_bytes=input_bytes, max_stdout_bytes=max_stdout_bytes,
                     max_stderr_bytes=max_stderr_bytes,
+                    **({"input_file": input_file} if input_file is not None else {}),
                 )
             except SandboxExecAdmissionDeferredError:
                 with self._capacity_guard:

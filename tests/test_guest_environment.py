@@ -193,7 +193,9 @@ class GuestEnvironmentTests(unittest.TestCase):
         self.assertEqual(result.stdout, "/custom/conda/bin:/bin")
 
     def test_file_upload_handles_linux_filenames_and_directory_targets(self):
-        service = Mock()
+        service = object.__new__(DirectSandboxService)
+        service._require_registration = Mock()
+        service._file_exec = Mock()
         service.startup_admission = nullcontext
 
         def execute(sandbox_id, argv, *, input_bytes, **kwargs):
@@ -212,7 +214,9 @@ class GuestEnvironmentTests(unittest.TestCase):
             self.assertEqual(os.listdir(raw), [target.name])
 
     def test_root_level_upload_selects_root_parent(self):
-        service = Mock()
+        service = object.__new__(DirectSandboxService)
+        service._require_registration = Mock()
+        service._file_exec = Mock()
         service.startup_admission = nullcontext
         service._file_exec.return_value = Mock(exit_code=0)
         DirectSandboxService.write_file(service, "test", "/eval.sh", b"echo ok")

@@ -46,17 +46,17 @@ class UCloudProvider:
     # guest. The ordered update history is therefore required to establish
     # continuity; the current state alone is not authoritative.
     requires_continuity_history = True
-    # A UCloud guest that disappears after reaching RUNNING cannot be recovered.
-    # Once its heartbeat lease expires, retaining the provider job cannot preserve
-    # its sandbox inventory and must not block replacement capacity.
+    # Prolonged silence plus a failed direct probe authorizes deliberate
+    # retirement. It does not establish that the guest was already destroyed.
     unreachable_lease_expiry_loss = DestructiveInstanceLoss(
-        reason="ucloud_unreachable_lease_expired",
+        reason="ucloud_unreachable_retirement",
         evidence_kind="unreachable_lease_expired",
         required_evidence_fields=(
             "unreachableLeaseExpired",
             "unreachableReference",
+            "directProbeFailed",
         ),
-        evidence=(("unreachableLeaseExpired", True),),
+        evidence=(("unreachableLeaseExpired", True), ("directProbeFailed", True)),
     )
     _post_start_instance_loss = DestructiveInstanceLoss(
         reason="post_start_suspension",

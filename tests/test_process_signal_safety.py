@@ -17,6 +17,13 @@ from ucloud_sandboxes.direct_warden import (
 
 
 class ProcessFenceSignalTests(unittest.TestCase):
+    def test_system_and_group_pids_are_rejected_before_open(self):
+        with patch.object(os, "pidfd_open", create=True) as open_pidfd:
+            for pid in (0, 1, -1, -42, True):
+                with self.subTest(pid=pid), self.assertRaises(DirectWardenError):
+                    LinuxPidfdFencer().open(pid, 123)
+            open_pidfd.assert_not_called()
+
     def test_stale_identity_never_opens_a_pidfd(self):
         with (
             patch(

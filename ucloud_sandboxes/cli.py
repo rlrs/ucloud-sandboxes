@@ -15,7 +15,7 @@ import sys
 from threading import Event, Lock, local
 import time
 from typing import Any, Callable, Iterable
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlparse
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 from uuid import uuid4
@@ -3040,9 +3040,42 @@ class _ProviderObservation:
     destructive_node_loss_job_ids: tuple[str, ...]
     loss_latched_evidence: dict[str, dict[str, Any]]
     unreachable_loss_evidence: dict[str, dict[str, Any]]
+    unreachable_probe_results: list[dict[str, Any]]
     final_heartbeat_job_ids: tuple[str, ...]
     fenced_heartbeat_job_ids: tuple[str, ...]
     orphaned_stale_heartbeat_job_ids: tuple[str, ...]
+
+
+def _probe_unreachable_node(
+    heartbeat: NodeHeartbeat,
+    bearer_token: str | None,
+    heartbeat_ttl_seconds: int = 60,
+) -> tuple[NodeHeartbeat | None, bool]:
+    """Recover a lost push path; only transport failure supports retirement."""
+    if not heartbeat.node_url:
+        return None, False
+    try:
+        fresh = fetch_node_agent_heartbeat(
+            heartbeat.node_url,
+            bearer_token=bearer_token,
+            timeout_seconds=3.0,
+        )
+    except Exception as exc:
+        reason = exc.__cause__ or exc
+        # HTTP/auth/schema failures prove contact, not VM loss. Do not turn a
+        # token or protocol misconfiguration into destructive VM retirement.
+        return None, isinstance(reason, (URLError, OSError)) and not isinstance(
+            reason, HTTPError
+        )
+    if (fresh.job_id, fresh.node_id, fresh.deployment_id) != (
+        heartbeat.job_id,
+        heartbeat.node_id,
+        heartbeat.deployment_id,
+    ):
+        return None, False
+    if not fresh.is_fresh(utc_now(), heartbeat_ttl_seconds):
+        return None, False
+    return replace(fresh, received_at=utc_now()), False
 
 
 def _observe_provider_nodes(
@@ -3056,6 +3089,7 @@ def _observe_provider_nodes(
     route_reservations: dict[str, tuple[SandboxRoute, ...]],
     execution_authorized: bool,
     retrieve_history: bool,
+    node_control_bearer_token: str | None = None,
 ) -> _ProviderObservation:
     """Normalize provider continuity and heartbeat evidence into node state."""
 
@@ -3160,33 +3194,71 @@ def _observe_provider_nodes(
         policy,
     )
     unreachable_loss_evidence: dict[str, dict[str, Any]] = {}
+    unreachable_probe_results: list[dict[str, Any]] = []
     unreachable_lease_loss = getattr(provider, "unreachable_lease_expiry_loss", None)
     if unreachable_lease_loss is not None:
-        for node in observed_nodes:
-            if (
-                not is_managed_compute_instance(node.job, deployment_id)
-                or node.job_id in destructive_loss_dispositions
-                or not unreachable_node_lease_expired(node, policy)
-            ):
-                continue
-            reference = unreachable_node_reference(node)
-            if reference is None:
-                continue
-            disposition = replace(
-                unreachable_lease_loss,
-                evidence=(
-                    ("unreachableLeaseExpired", True),
-                    ("unreachableReference", reference.isoformat()),
-                ),
-            )
-            if not unreachable_lease_loss.matches(disposition):
-                continue
-            destructive_loss_dispositions[node.job_id] = disposition
-            unreachable_loss_evidence[node.job_id] = {
-                "unreachableReference": reference.isoformat(),
-                "lastHeartbeatPresent": node.heartbeat is not None,
-                "lastKnownActiveSandboxes": node.active_sandboxes,
-            }
+        expired = [
+            node
+            for node in observed_nodes
+            if is_managed_compute_instance(node.job, deployment_id)
+            and node.job_id not in destructive_loss_dispositions
+            and unreachable_node_lease_expired(node, policy)
+            and node.heartbeat is not None
+        ]
+        if expired:
+            with ThreadPoolExecutor(max_workers=min(8, len(expired))) as pool:
+                probes = {
+                    pool.submit(
+                        _probe_unreachable_node,
+                        node.heartbeat,
+                        node_control_bearer_token,
+                        policy.heartbeat_ttl_seconds,
+                    ): node
+                    for node in expired
+                }
+                for future in as_completed(probes):
+                    node = probes[future]
+                    fresh, transport_failed = future.result()
+                    unreachable_probe_results.append(
+                        {
+                            "jobId": node.job_id,
+                            "status": "healthy"
+                            if fresh is not None
+                            else ("unreachable" if transport_failed else "unverified"),
+                        }
+                    )
+                    if fresh is not None:
+                        heartbeats[node.job_id] = fresh
+                        if execution_authorized:
+                            control_state.upsert_heartbeat(fresh)
+                        continue
+                    if not transport_failed:
+                        # Invalid credentials/schema are not an empty-worker
+                        # proof either. Keep the node unschedulable, without
+                        # letting the ordinary stale-empty path bypass probing.
+                        heartbeats[node.job_id] = replace(
+                            node.heartbeat, inventory_complete=False
+                        )
+                        continue
+                    reference = unreachable_node_reference(node)
+                    if reference is None:
+                        continue
+                    disposition = replace(
+                        unreachable_lease_loss,
+                        evidence=(
+                            ("unreachableLeaseExpired", True),
+                            ("unreachableReference", reference.isoformat()),
+                            ("directProbeFailed", True),
+                        ),
+                    )
+                    if not unreachable_lease_loss.matches(disposition):
+                        continue
+                    destructive_loss_dispositions[node.job_id] = disposition
+                    unreachable_loss_evidence[node.job_id] = {
+                        "unreachableReference": reference.isoformat(),
+                        "lastHeartbeatPresent": True,
+                        "lastKnownActiveSandboxes": node.active_sandboxes,
+                    }
 
     destructive_loss_reasons = {
         job_id: disposition.reason
@@ -3232,6 +3304,7 @@ def _observe_provider_nodes(
         destructive_node_loss_job_ids=destructive_node_loss_job_ids,
         loss_latched_evidence=loss_latched_evidence,
         unreachable_loss_evidence=unreachable_loss_evidence,
+        unreachable_probe_results=unreachable_probe_results,
         final_heartbeat_job_ids=final_heartbeat_job_ids,
         fenced_heartbeat_job_ids=fenced_heartbeat_job_ids,
         orphaned_stale_heartbeat_job_ids=orphaned_stale_heartbeat_job_ids,
@@ -3308,6 +3381,10 @@ def run_reconcile_cycle(
         route_reservations=route_reservations or {},
         execution_authorized=execution_authorized,
         retrieve_history=not bool(getattr(args, "jobs_file", None)),
+        node_control_bearer_token=read_required_token_file(
+            config.node_control_token_file(),
+            "node control bearer token",
+        ),
     )
     jobs = observation.jobs
     nodes = observation.nodes
@@ -4119,6 +4196,7 @@ def run_reconcile_cycle(
             node.job_id for node in (*sandbox_nodes, *builder_nodes) if node.job.is_lost
         ),
         "destructive_node_loss_job_ids": list(destructive_node_loss_job_ids),
+        "unreachableNodeProbes": observation.unreachable_probe_results,
         "unreachable_permanent_loss_job_ids": sorted(
             job_id
             for job_id in destructive_loss_reasons

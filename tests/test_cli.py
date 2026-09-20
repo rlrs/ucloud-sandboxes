@@ -808,6 +808,11 @@ class CliTests(unittest.TestCase):
                 patch.object(cli, "UCloudClient", ReplacementClient),
                 patch.object(
                     cli,
+                    "fetch_node_agent_heartbeat",
+                    side_effect=TimeoutError("node is unreachable"),
+                ),
+                patch.object(
+                    cli,
                     "_delete_gateway_sandbox",
                     side_effect=AssertionError(
                         "lost UCloud guest must not receive sandbox deletes"
@@ -2030,6 +2035,11 @@ class CliTests(unittest.TestCase):
                 patch.object(cli, "UCloudClient", SuccessfulStopClient),
                 patch.object(
                     cli,
+                    "fetch_node_agent_heartbeat",
+                    side_effect=TimeoutError("node is unreachable"),
+                ),
+                patch.object(
+                    cli,
                     "_post_node_drain",
                     side_effect=AssertionError("unreachable node must not be drained"),
                 ),
@@ -2046,7 +2056,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(stop_operation.request["destructiveNodeLoss"], True)
         self.assertEqual(
             stop_operation.request["lossReason"],
-            "ucloud_unreachable_lease_expired",
+            "ucloud_unreachable_retirement",
         )
         self.assertEqual(
             stop_operation.request["lossEvidenceKind"],
@@ -2055,12 +2065,131 @@ class CliTests(unittest.TestCase):
         self.assertEqual(stop_operation.request["providerKind"], "ucloud")
         loss_evidence = stop_operation.request["lossEvidence"]
         self.assertEqual(loss_evidence["unreachableLeaseExpired"], True)
+        self.assertEqual(loss_evidence["directProbeFailed"], True)
         self.assertTrue(str(loss_evidence["unreachableReference"]).strip())
         self.assertEqual(stop_operation.request["routeCount"], 0)
         self.assertEqual(result["drainReadyStopJobIds"], [])
         self.assertEqual(result["drainIntents"], [])
         self.assertEqual(result["bootstrapIntents"], [])
         self.assertEqual(result["definitelyTerminatedJobIds"], ["owned"])
+
+    def test_ucloud_heartbeat_partition_preserves_occupied_worker(self) -> None:
+        # A provider-confirmed RUNNING worker is not proven dead by silence.
+        # Exercise both heartbeat inventory and gateway-only route ownership.
+        for active, inventory_complete in ((1, False), (0, True)):
+            with self.subTest(active=active), temporary_root() as root:
+                jobs_file = write_jobs(root, owned_node_job())
+                heartbeat_file = root / "control-state.sqlite"
+                save_heartbeats(
+                    heartbeat_file,
+                    {
+                        "owned": owned_heartbeat(
+                            updated_at=utc_now() - timedelta(hours=1),
+                            active_sandboxes=active,
+                            inventory_complete=inventory_complete,
+                            used_resources=ResourceQuantity(
+                                vcpu=active, memory_mb=512 * active
+                            ),
+                        )
+                    },
+                )
+                config = ucloud_config(
+                    project_id="project-1",
+                    deployment_id="prod-a",
+                    ucloud_session_file=str(root / "session.json"),
+                    data_root=str(root),
+                    policy=ScalePolicy(
+                        max_stop_per_cycle=1, unreachable_stop_after_seconds=1800
+                    ),
+                )
+                route = sandbox_route(
+                    "partition-survivor",
+                    updated_at=utc_now() - timedelta(hours=1),
+                    node_id="node-owned",
+                    job_id="owned",
+                    resources=ResourceQuantity(vcpu=1, memory_mb=512),
+                )
+                RoutingStore(config.routing_file()).upsert_sandbox(route)
+                state = AutoscalerStateStore(root / "autoscaler-state.sqlite")
+                with (
+                    patch.object(cli, "UCloudClient") as client,
+                    patch.object(
+                        cli,
+                        "fetch_node_agent_heartbeat",
+                        return_value=owned_heartbeat(
+                            updated_at=utc_now(),
+                            active_sandboxes=1,
+                            inventory_complete=True,
+                        ),
+                    ),
+                    patch.object(
+                        cli, "_post_node_drain", side_effect=TimeoutError("partition")
+                    ),
+                ):
+                    for _ in range(2):
+                        result = reconcile(
+                            config,
+                            autoscaler_args(jobs_file, heartbeat_file),
+                            state,
+                            route_reservations={"owned": (route,)},
+                            sandbox_routes=(route,),
+                        )
+                        self.assertEqual(result["destructive_node_loss_job_ids"], [])
+                        self.assertEqual(result["definitelyTerminatedJobIds"], [])
+                        self.assertEqual(state.list_operations(kind="stop"), [])
+                    client.return_value.terminate_jobs.assert_not_called()
+
+    def test_unreachable_probe_distinguishes_transport_from_auth_and_identity(self):
+        heartbeat = owned_heartbeat()
+        for error in (TimeoutError("timeout"), OSError("connection refused")):
+            with (
+                self.subTest(error=error),
+                patch.object(cli, "fetch_node_agent_heartbeat", side_effect=error),
+            ):
+                self.assertEqual(
+                    cli._probe_unreachable_node(heartbeat, "test-token"), (None, True)
+                )
+        for error in (
+            cli.HTTPError(heartbeat.node_url, 401, "unauthorized", {}, None),
+            ValueError("invalid schema"),
+        ):
+            with (
+                self.subTest(error=error),
+                patch.object(cli, "fetch_node_agent_heartbeat", side_effect=error),
+            ):
+                self.assertEqual(
+                    cli._probe_unreachable_node(heartbeat, "test-token"), (None, False)
+                )
+        for foreign in (
+            replace(heartbeat, job_id="another-job"),
+            replace(heartbeat, deployment_id="another-deployment"),
+        ):
+            with (
+                self.subTest(foreign=foreign.job_id),
+                patch.object(cli, "fetch_node_agent_heartbeat", return_value=foreign),
+            ):
+                self.assertEqual(
+                    cli._probe_unreachable_node(heartbeat, "test-token"), (None, False)
+                )
+
+    def test_legacy_unprobed_retirement_is_no_longer_a_valid_stop_proof(self):
+        request = {
+            "destructiveNodeLoss": True,
+            "providerKind": "ucloud",
+            "lossReason": "ucloud_unreachable_lease_expired",
+            "lossEvidenceKind": "unreachable_lease_expired",
+            "lossEvidence": {
+                "unreachableLeaseExpired": True,
+                "unreachableReference": utc_now().isoformat(),
+            },
+        }
+        self.assertIsNone(
+            UCloudProvider.unreachable_lease_expiry_loss.from_operation_request(request)
+        )
+        request["lossReason"] = "ucloud_unreachable_retirement"
+        self.assertIsNone(
+            UCloudProvider.unreachable_lease_expiry_loss.from_operation_request(request)
+        )
 
     def test_demand_rise_durably_cancels_drain_before_ambiguous_undrain(self) -> None:
         terminate_calls: list[tuple[str, ...]] = []

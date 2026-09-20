@@ -4576,6 +4576,22 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 expected_states={"waking"},
                 state="parked",
             )
+        if response.transport_error_kind:
+            # Only the internal wake was attempted. The caller's exec, upload
+            # or job mutation has not been dispatched, even if the wake reply
+            # timed out after resume began. Certify that boundary for existing
+            # SDKs without claiming the sandbox is still parked.
+            self._write_json(
+                {
+                    "error": "sandbox wake is unavailable; requested operation has not started",
+                    "error_code": "node_restore_busy",
+                    "cause_code": response.json().get("code", "node_transport_error"),
+                    "retryable": True,
+                },
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+                headers={"Retry-After": "1", "X-UCloud-Sandbox-Retryable": "true"},
+            )
+            return None
         self._send_proxied_response(response)
         return None
 
@@ -5493,6 +5509,9 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 status=HTTPStatus.NOT_FOUND,
             )
             return
+        if not self._route_worker_is_fresh(route):
+            self._write_route_worker_unreachable(route)
+            return
         try:
             body = (
                 self._read_raw_body(max_bytes=DEFAULT_MAX_PROXY_BODY_BYTES)
@@ -5532,7 +5551,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         # scanning unrelated node inventories cannot make the route current.
         return self.store.get_heartbeat(job_id)
 
-    def _route_worker_is_fresh(self, route: SandboxRoute) -> bool:
+    def _route_worker_is_fresh(self, route: SandboxRoute | ExecRoute) -> bool:
         heartbeat = self._heartbeat_for_route(
             job_id=route.job_id,
         )
@@ -5542,7 +5561,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             and heartbeat.is_fresh(utc_now(), self.heartbeat_ttl_seconds)
         )
 
-    def _write_route_worker_unreachable(self, route: SandboxRoute) -> None:
+    def _write_route_worker_unreachable(self, route: SandboxRoute | ExecRoute) -> None:
         self._write_json(
             {
                 "error": "sandbox worker heartbeat is stale or unavailable",

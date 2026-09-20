@@ -359,6 +359,67 @@ def _store_build_context(server, archive: bytes) -> dict[str, object]:
 
 
 class ControlPlaneTests(unittest.TestCase):
+    def test_exec_requests_wait_for_missing_worker_without_proxying(self) -> None:
+        with _temporary_root() as root:
+            routing = RoutingStore(root / "routes.sqlite")
+            routing.upsert_exec(ExecRoute(
+                session_id="accepted", sandbox_id="sandbox", node_id="node",
+                job_id="job", node_url="http://node.invalid",
+            ))
+            gateway = _gateway_server(root, routing_file=routing.path)
+            with patch.object(gateway.RequestHandlerClass, "_proxy_request") as proxy:
+                with _running_server(gateway) as base:
+                    result = self._json_request(base + "/v1/exec/accepted/events", allow_error=True)
+                proxy.assert_not_called()
+            self.assertEqual(result["status"], 503)
+            self.assertEqual(result["body"]["error_code"], "sandbox_worker_unreachable")
+            self.assertIsNotNone(routing.get_exec("accepted"))
+            self.assertIsNone(routing.get_exec_loss("accepted"))
+
+    def test_implicit_wake_transport_errors_fence_original_command_only(self) -> None:
+        for failure in ("dns", "timeout", "transport"):
+            for failed_phase in ("wake", "exec"):
+                with self.subTest(failure=failure, failed_phase=failed_phase), _temporary_root() as root:
+                    routing = RoutingStore(root / "routes.sqlite")
+                    route = routing.upsert_sandbox(_sandbox_route(
+                        sandbox_id="sandbox", node_id="node", job_id="job",
+                        node_url="http://node.invalid", state="parked",
+                    ))
+                    gateway = _gateway_server(root, routing_file=routing.path)
+                    handler = gateway.RequestHandlerClass
+                    proxied = []
+                    def proxy(_handler, _url, path, **kwargs):
+                        proxied.append(path.rsplit("/", 1)[-1])
+                        if proxied[-1] == failed_phase:
+                            return control_plane.ProxiedResponse(
+                                504 if failure == "timeout" else 503,
+                                {"Content-Type": "application/json"},
+                                json.dumps({"code": "node_" + failure, "retryable": True}).encode(),
+                                transport_error_kind=failure,
+                            )
+                        return control_plane.ProxiedResponse(200, {}, b'{}')
+                    with (
+                        patch.object(handler, "_prepare_wake_placement", return_value=(route, False)),
+                        patch.object(handler, "_route_worker_is_fresh", return_value=True),
+                        patch.object(handler, "_commit_successful_wake", return_value=replace(route, state="running")),
+                        patch.object(handler, "_proxy_request", proxy),
+                        _running_server(gateway) as base,
+                    ):
+                        result = self._json_request(
+                            base + "/v1/sandboxes/sandbox/exec", method="POST",
+                            payload={"command": ["side-effecting-command"]}, allow_error=True,
+                        )
+                    if failed_phase == "wake":
+                        self.assertEqual(proxied, ["wake"])
+                        self.assertEqual(result["status"], 503)
+                        self.assertEqual(result["body"]["error_code"], "node_restore_busy")
+                        self.assertEqual(result["body"]["cause_code"], "node_" + failure)
+                        self.assertTrue(result["body"]["retryable"])
+                        self.assertNotIn("lifecycle_state", result["body"])
+                    else:
+                        self.assertEqual(proxied, ["wake", "exec"])
+                        self.assertNotIn("error_code", result["body"])
+
     def test_lost_exec_returns_terminal_reason_without_contacting_worker(self) -> None:
         with _temporary_root() as root:
             route_file = root / "routes.sqlite"

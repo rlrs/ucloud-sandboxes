@@ -2341,16 +2341,12 @@ class RoutingStore:
         ).rowcount
 
     def get_exec(self, session_id: str) -> ExecRoute | None:
-        with self._lock:
-            cached = self._exec_route_cache.pop(session_id, None)
-            if cached is not None:
-                self._exec_route_cache[session_id] = cached
-                return cached
-            with self._connect() as conn:
-                route = self._get_exec_unlocked(conn, session_id)
-            if route is not None:
-                self._cache_exec_route_unlocked(route)
-            return route
+        # The autoscaler retires routes in another process. Its commit cannot
+        # invalidate this process's cache, so routing must read the indexed
+        # durable row. Do not serialize these independent reads on the writer
+        # lock: SQLite WAL supplies a consistent snapshot.
+        with self._connect() as conn:
+            return self._get_exec_unlocked(conn, session_id)
 
     def get_pending(self, sandbox_id: str) -> PendingSandboxDemand | None:
         with self._lock:

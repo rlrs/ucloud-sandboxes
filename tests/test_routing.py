@@ -7,6 +7,8 @@ from tempfile import TemporaryDirectory
 from pathlib import Path
 import json
 import sqlite3
+import subprocess
+import sys
 from threading import Event
 import unittest
 from unittest.mock import patch
@@ -141,6 +143,28 @@ def seed_routing_state(store: RoutingStore, state: RoutingState) -> None:
 
 
 class RoutingStoreTests(unittest.TestCase):
+    def test_exec_read_observes_worker_loss_from_another_process(self) -> None:
+        with routing_store() as store:
+            route = store.upsert_sandbox(sandbox_route(
+                sandbox_id="lost", node_id="node", job_id="job",
+                node_url="http://node", state="running",
+            ))
+            store.upsert_exec(ExecRoute(
+                session_id="accepted", sandbox_id=route.sandbox_id,
+                node_id=route.node_id, job_id=route.job_id, node_url=route.node_url,
+            ))
+            self.assertIsNotNone(store.get_exec("accepted"))
+            subprocess.run([
+                sys.executable, "-c",
+                "from pathlib import Path; import sys; "
+                "from ucloud_sandboxes.routing import RoutingStore; "
+                "RoutingStore(Path(sys.argv[1])).delete_sandboxes_for_jobs_with_error"
+                "(['job'], terminal_error='node_lost')",
+                str(store.path),
+            ], check=True)
+            self.assertIsNone(store.get_exec("accepted"))
+            self.assertEqual(store.get_exec_loss("accepted")["job_id"], "job")
+
     def test_exec_loss_survives_restart_and_sandbox_reuse_then_expires(self) -> None:
         with routing_store() as store:
             route = store.upsert_sandbox(sandbox_route(

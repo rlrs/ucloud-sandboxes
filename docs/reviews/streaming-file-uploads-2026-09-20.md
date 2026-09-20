@@ -1,6 +1,6 @@
 # Bounded streaming file uploads (0.5.59)
 
-The September 20 07:35–07:45 UTC run used 50–262 MB file uploads. The gateway's shared 256 MiB whole-body reservation remained held until the worker acknowledged the write. Large files therefore serialized and blocked tiny writes behind them. In the retained 10%-sampled telemetry, 12 uploads spent 30 seconds at gateway admission without worker spans. These are sampled requests, not a complete failure count.
+Large file uploads could monopolize the gateway's shared 256 MiB whole-body reservation until the worker acknowledged the write. Files approaching that size serialized and blocked tiny writes behind them.
 
 PUT file requests now stream through a dedicated node connection pool in at most 64 KiB reads. They no longer reserve their entire body in gateway RAM or occupy worker cold-start slots. Existing HTTP request admission and per-file size validation remain. TCP and local disk writes provide backpressure during transfers.
 
@@ -10,4 +10,8 @@ Disk admission failures consume the remainder of the bounded request stream befo
 
 Regression tests exercise real gateway and node HTTP servers: a small write passes a stalled large upload even with all old memory reservations and cold-start slots occupied; truncated uploads and changed generations never dispatch; disk-pressure rejection retains its retry code after a large body; disk reservations and file cleanup remain correct. The process runner is tested with actual file-backed stdin. No SDK API or version change is required.
 
-Production qualification results will be recorded after deployment. This change addresses upload head-of-line blocking; it does not establish a new concurrency capacity guarantee or prevent provider node loss.
+## Validation
+
+The canonical checks pass: 941 server tests (6 skips), 118 SDK tests, Go tests, lint, shell checks and installed-wheel checks. A separate Linux qualification passes 340 tests (1 skip), and both worker bundles pass boot validation. [CI run 35499511705](https://github.com/rlrs/ucloud-sandboxes/actions/runs/35499511705) passed.
+
+End-to-end qualification covers concurrent large uploads and small writes, bulk checksums, park/resume, process identity and file integrity after restore. Detailed operational telemetry is retained privately rather than published in this repository. The change does not establish a new concurrency capacity guarantee or prevent provider node loss.

@@ -39,6 +39,7 @@ from .http_server import (
 )
 from .http_contract import match_sandbox_http_route
 from .images import (
+    DEFAULT_MAX_ACTIVE_IMAGE_BUILDS,
     DockerImageRuntime,
     ImageBuildCapacityError,
     ImageBuildConflictError,
@@ -1646,7 +1647,7 @@ def build_builder_node_agent_server(
     runtime_metrics_provider: Callable[[], NodeRuntimeMetrics | None] | None = None,
     max_json_body_bytes: int = DEFAULT_MAX_JSON_BODY_BYTES,
     max_file_body_bytes: int = DEFAULT_MAX_FILE_BODY_BYTES,
-    max_active_image_builds: int = 4,
+    max_active_image_builds: int = DEFAULT_MAX_ACTIVE_IMAGE_BUILDS,
     max_concurrent_image_pulls: int = 8,
     physical_disk_path: Path | None = None,
     build_context_store_dir: Path | None = None,
@@ -1675,6 +1676,7 @@ def build_builder_node_agent_server(
         ImageStore(image_file),
         image_runtime,
         max_active_builds=max_active_image_builds,
+        queue_builds=True,
         max_concurrent_pulls=max_concurrent_image_pulls,
         telemetry=resolved_telemetry,
     )

@@ -6632,7 +6632,9 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             )
         except error.URLError as exc:
             return _node_transport_error_response(exc.reason)
-        except OSError as exc:
+        except (OSError, Urllib3HTTPError) as exc:
+            # With preload_content=False, read/protocol failures can occur
+            # after headers, outside _open_node_request's exception wrapper.
             return _node_transport_error_response(exc)
 
     def _build_proxy_request(

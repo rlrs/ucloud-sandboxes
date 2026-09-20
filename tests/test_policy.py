@@ -1290,6 +1290,22 @@ class ScalePolicyTests(unittest.TestCase):
                     (creates, stops, pressured, grace),
                 )
 
+    def test_builder_backlog_scales_beyond_one_node(self) -> None:
+        decision = evaluate_builder_scale(
+            [node("busy", active_image_builds=4)],
+            pending_builds=12,
+            policy=ScalePolicy(max_create_per_cycle=4),
+            max_builder_nodes=4,
+        )
+        self.assertEqual(decision.creates, 3)
+        queued = evaluate_builder_scale(
+            [node("busy", active_image_builds=16)],
+            pending_builds=0,
+            policy=ScalePolicy(max_create_per_cycle=4),
+            max_builder_nodes=4,
+        )
+        self.assertEqual(queued.creates, 3)
+
     def test_prepared_builder_count_scales_builder_pool(self) -> None:
         decision = evaluate_builder_scale(
             [],

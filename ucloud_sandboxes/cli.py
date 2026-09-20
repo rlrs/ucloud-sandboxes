@@ -78,7 +78,7 @@ from .deploy import (
     run_remote_script_over_ssh,
     stage_file_over_ssh,
 )
-from .images import DockerImageRuntime, ImageRecord, ImageStore
+from .images import DEFAULT_MAX_ACTIVE_IMAGE_BUILDS, DockerImageRuntime, ImageRecord, ImageStore
 from .managed_registry import (
     RegistryClient,
     RegistryRequestError,
@@ -154,6 +154,7 @@ from .program_scheduler import (
 from .reconcile import (
     build_create_intents,
     evaluate_builder_scale,
+    requested_builder_nodes,
     node_drain_ready,
     partition_safe_stop_job_ids,
     with_provider_operation_label,
@@ -468,7 +469,7 @@ def build_parser() -> argparse.ArgumentParser:
     builder_agent.add_argument("--docker-binary", default="docker")
     builder_agent.add_argument("--buildx-direct-push", action="store_true")
     builder_agent.add_argument("--buildx-cache-ref")
-    builder_agent.add_argument("--max-active-image-builds", type=int, default=4)
+    builder_agent.add_argument("--max-active-image-builds", type=int, default=DEFAULT_MAX_ACTIVE_IMAGE_BUILDS)
     builder_agent.add_argument(
         "--max-concurrent-image-pulls",
         type=int,
@@ -4322,7 +4323,9 @@ def run_reconcile_cycle(
         effective_policy.default_node_resources,
     )
     desired_builders = min(
-        max(1 if builder_pending > 0 else 0, builder_prepared),
+        requested_builder_nodes(
+            builder_nodes, pending_builds=builder_pending, prepared_builders=builder_prepared,
+        ),
         config.builder.max_nodes,
     )
     result["builderCapacityOperationSucceeded"] = _builder_capacity_operation_succeeded(

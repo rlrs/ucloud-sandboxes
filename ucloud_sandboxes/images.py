@@ -10,6 +10,7 @@ import subprocess
 import tarfile
 import tempfile
 import time
+from collections import deque
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
@@ -36,6 +37,7 @@ COMMAND_OUTPUT_TAIL_CHARS = 64 * 1024
 COMMAND_OUTPUT_READ_CHARS = 16 * 1024
 COMMAND_OUTPUT_TRUNCATION_MARKER = "[output truncated; showing retained tail]\n"
 DEFAULT_TERMINAL_BUILD_HISTORY = 256
+DEFAULT_MAX_ACTIVE_IMAGE_BUILDS = 4
 BUILD_LOG_FLUSH_CHARS = 16 * 1024
 BUILD_LOG_FLUSH_INTERVAL_SECONDS = 0.25
 MAX_BUILD_CONTEXT_EXTRACTED_BYTES = 2 * 1024**3
@@ -598,7 +600,7 @@ class ImageBuildStore(_ImageStateStore[ImageBuildRecord]):
         self,
         record: ImageBuildRecord,
         *,
-        max_active_builds: int,
+        max_active_builds: int | None,
     ) -> tuple[ImageBuildRecord, bool]:
         with self._transaction(write=True) as conn:
             records = self._load(conn)
@@ -628,7 +630,7 @@ class ImageBuildStore(_ImageStateStore[ImageBuildRecord]):
             active_count = sum(
                 1 for existing in records.values() if not existing.terminal
             )
-            if active_count >= max_active_builds:
+            if max_active_builds is not None and active_count >= max_active_builds:
                 raise ImageBuildCapacityError(
                     f"image build capacity reached ({max_active_builds})"
                 )
@@ -693,7 +695,8 @@ class ImageManager:
         runtime: DockerImageRuntime,
         *,
         build_store: ImageBuildStore | None = None,
-        max_active_builds: int = 4,
+        max_active_builds: int = DEFAULT_MAX_ACTIVE_IMAGE_BUILDS,
+        queue_builds: bool = False,
         max_concurrent_pulls: int = 8,
         telemetry: Telemetry | None = None,
     ) -> None:
@@ -701,6 +704,8 @@ class ImageManager:
         self.runtime = runtime
         self.build_store = build_store or ImageBuildStore(store.path)
         self.max_active_builds = max(1, max_active_builds)
+        self.queue_builds = queue_builds
+        self._queued_builds: deque[tuple[ImageBuildRecord, Thread, Callable[[], None] | None]] = deque()
         self.max_concurrent_pulls = max(1, max_concurrent_pulls)
         self.telemetry = telemetry or Telemetry.disabled("image-manager")
         self._build_lock = RLock()
@@ -832,7 +837,7 @@ class ImageManager:
                 self._retry_terminal_builds_locked()
                 record, build_started = self.build_store.reserve_build(
                     record,
-                    max_active_builds=self.max_active_builds,
+                    max_active_builds=None if self.queue_builds else self.max_active_builds,
                 )
                 if not build_started:
                     if cleanup is not None:
@@ -905,6 +910,9 @@ class ImageManager:
         )
         try:
             with self._build_lock:
+                if self.queue_builds and len(self._active_threads) >= self.max_active_builds:
+                    self._queued_builds.append((record, thread, effective_cleanup))
+                    return record, True
                 self._active_threads[build_id] = thread
                 try:
                     thread.start()
@@ -916,6 +924,22 @@ class ImageManager:
                 effective_cleanup()
             raise
         return record, True
+
+    def _start_queued_builds_locked(self) -> None:
+        # Queued requests own immutable contexts and durable running records.
+        # Only executing work gets a thread; saturation never rejects a build.
+        while self._queued_builds and len(self._active_threads) < self.max_active_builds:
+            record, thread, cleanup = self._queued_builds.popleft()
+            self._active_threads[record.build_id] = thread
+            try:
+                thread.start()
+            except Exception as exc:
+                if cleanup is not None:
+                    try:
+                        cleanup()
+                    except Exception as cleanup_error:
+                        exc = RuntimeError(f"{exc}; build context cleanup failed: {cleanup_error}")
+                self._fail_reserved_build_locked(record, exc)
 
     def _fail_reserved_build_locked(
         self,
@@ -1117,6 +1141,7 @@ class ImageManager:
                     condition = self._build_conditions.pop(build_id, None)
                     if condition is not None:
                         condition.notify_all()
+                    self._start_queued_builds_locked()
 
     def _append_build_log(self, build_id: str, stream: str, chunk: str) -> None:
         if not chunk:

@@ -105,3 +105,45 @@ and storage variability remain limitations.
 These changes address observed guest-side allocation pressure and device churn.
 They do not establish the cause of the earlier unexplained VM poweroffs, which
 still require host-side termination evidence.
+
+
+## Release and production verification
+
+Commit `d12aba7920bd3f1bb91aa6110c4771350cf0c734` passed
+[CI](https://github.com/rlrs/ucloud-sandboxes/actions/runs/35526815897).
+The canonical clean-checkout build produced native backend SHA-256
+`75a20bd1ab96e2dff63ff877d0abe63383092e34c8fabdba927128eae062a7f7`,
+with all six patch hashes in its schema-3 manifest. Both sandbox and builder
+bundles validated, and 78 additional Linux storage/init/CLI tests passed.
+The exact bundle was installed on the isolated worker before the larger tests.
+
+Both 256-sandbox runs completed creation, tool execution, park/resume, state
+verification, and cleanup with **zero operation errors**. They did **not** pass
+all latency targets; the machine-readable reports retain `status: failed` and
+the complete SLO violations. Each used concurrency 32, create concurrency 16,
+64 MiB resident data, 16 MiB dirtied per action, and a 256 MiB memory limit.
+
+| Per-sandbox CPU quota | Cycles | Create wave | Act p95 | Park p95 | Resume p95 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 0.125 CPU | 3 | 171.72 s | 2.01–2.19 s | 4.03–4.61 s | 6.90–8.01 s |
+| 1 CPU | 1 | 53.44 s | 0.99 s | 4.51 s | 6.53 s |
+
+The low-CPU run showed cgroup throttling in 3,812 of 4,629 sampled periods across
+79 live fixture cgroups. Raising the quota improved create and execution times,
+but did not materially improve the park/resume wave durations (about 30 and
+44 seconds). CPU quota is therefore not a sufficient explanation for the
+remaining park/resume latency. These fixed-order runs are correctness and
+capacity evidence, not a controlled before/after comparison of runtime versions.
+
+Production deployment completed at **17:55:16 UTC** with no routes or capacity
+reservations present. All 93 installed package files matched the release wheel;
+the gateway and relay restarted healthy, and autoscaler package selection now
+uses the 0.5.66 sandbox/builder bundles. Existing workers 12397040 and 12397041
+had already completed around 17:26 UTC, so no live worker was left on the older
+runtime by this deployment.
+
+Fresh production worker **12397089** reported 0.5.66 and the exact canonical
+backend hash, `vm.watermark_scale_factor=100`, and heartbeat working directory
+`/`. Through the production gateway, SDK 0.4.23 completed three detached
+park/resume cycles with wake triggered by SDK exec; state verification and
+cleanup passed. No SDK or Verifiers upgrade is required for these changes.

@@ -425,5 +425,173 @@
     "One isolated VM; fixed baseline/candidate order, warm cache and service restart confound speed attribution.",
     "Memory test alternating settings reduces but does not eliminate ordering effects.",
     "Tests did not reproduce VM poweroff; no claim of fixing unexplained worker loss."
-  ]
+  ],
+  "release_density_tests": [
+    {
+      "cpus": 0.125,
+      "cycles": 3,
+      "count": 256,
+      "concurrency": 32,
+      "create_concurrency": 16,
+      "memory_mb": 256,
+      "resident_mb": 64,
+      "dirty_mb": 16,
+      "disk_mb": 1024,
+      "status": "failed",
+      "errors": [],
+      "cleanup_errors": [],
+      "slo_violations": [
+        "act_0: service p95 exceeds 2000 ms",
+        "act_0: completion p95 exceeds 10000 ms",
+        "park_0: service p95 exceeds 2000 ms",
+        "park_0: completion p95 exceeds 10000 ms",
+        "park_0: burst exceeds 15000 ms",
+        "wake_0: service p95 exceeds 3000 ms",
+        "wake_0: completion p95 exceeds 10000 ms",
+        "wake_0: burst exceeds 15000 ms",
+        "act_1: service p95 exceeds 2000 ms",
+        "act_1: completion p95 exceeds 10000 ms",
+        "park_1: service p95 exceeds 2000 ms",
+        "park_1: completion p95 exceeds 10000 ms",
+        "park_1: burst exceeds 15000 ms",
+        "wake_1: service p95 exceeds 3000 ms",
+        "wake_1: completion p95 exceeds 10000 ms",
+        "wake_1: burst exceeds 15000 ms",
+        "act_2: service p95 exceeds 2000 ms",
+        "act_2: completion p95 exceeds 10000 ms",
+        "park_2: service p95 exceeds 2000 ms",
+        "park_2: completion p95 exceeds 10000 ms",
+        "park_2: burst exceeds 15000 ms",
+        "wake_2: service p95 exceeds 3000 ms",
+        "wake_2: completion p95 exceeds 10000 ms",
+        "wake_2: burst exceeds 15000 ms"
+      ],
+      "phases": [
+        {
+          "name": "single_create",
+          "seconds": 9.787351130973548,
+          "p95_ms": 9786.599
+        },
+        {
+          "name": "single_act",
+          "seconds": 6.598843771964312,
+          "p95_ms": 2504.681
+        },
+        {
+          "name": "create",
+          "seconds": 171.72408532584086,
+          "p95_ms": 12179.024
+        },
+        {
+          "name": "act_0",
+          "seconds": 12.702295553172007,
+          "p95_ms": 2007.169
+        },
+        {
+          "name": "park_0",
+          "seconds": 30.504359633894637,
+          "p95_ms": 4612.909
+        },
+        {
+          "name": "wake_0",
+          "seconds": 44.95936052617617,
+          "p95_ms": 7003.136
+        },
+        {
+          "name": "act_1",
+          "seconds": 14.117873934097588,
+          "p95_ms": 2188.821
+        },
+        {
+          "name": "park_1",
+          "seconds": 30.401362155098468,
+          "p95_ms": 4375.712
+        },
+        {
+          "name": "wake_1",
+          "seconds": 44.381013629958034,
+          "p95_ms": 8007.382
+        },
+        {
+          "name": "act_2",
+          "seconds": 14.692706758156419,
+          "p95_ms": 2012.028
+        },
+        {
+          "name": "park_2",
+          "seconds": 29.72989134094678,
+          "p95_ms": 4029.342
+        },
+        {
+          "name": "wake_2",
+          "seconds": 43.23819582280703,
+          "p95_ms": 6900.863
+        }
+      ]
+    },
+    {
+      "cpus": 1,
+      "cycles": 1,
+      "count": 256,
+      "concurrency": 32,
+      "create_concurrency": 16,
+      "memory_mb": 256,
+      "resident_mb": 64,
+      "dirty_mb": 16,
+      "disk_mb": 1024,
+      "status": "failed",
+      "errors": [],
+      "cleanup_errors": [],
+      "slo_violations": [
+        "park_0: service p95 exceeds 2000 ms",
+        "park_0: completion p95 exceeds 10000 ms",
+        "park_0: burst exceeds 15000 ms",
+        "wake_0: service p95 exceeds 3000 ms",
+        "wake_0: completion p95 exceeds 10000 ms",
+        "wake_0: burst exceeds 15000 ms"
+      ],
+      "phases": [
+        {
+          "name": "single_create",
+          "seconds": 1.218625081004575,
+          "p95_ms": 1217.959
+        },
+        {
+          "name": "single_act",
+          "seconds": 2.5926659300457686,
+          "p95_ms": 2223.214
+        },
+        {
+          "name": "create",
+          "seconds": 53.435713353101164,
+          "p95_ms": 5198.47
+        },
+        {
+          "name": "act_0",
+          "seconds": 6.957639130065218,
+          "p95_ms": 993.507
+        },
+        {
+          "name": "park_0",
+          "seconds": 30.7475518588908,
+          "p95_ms": 4505.29
+        },
+        {
+          "name": "wake_0",
+          "seconds": 44.17720436793752,
+          "p95_ms": 6526.59
+        }
+      ]
+    }
+  ],
+  "production_smoke": {
+    "worker_job": "12397089",
+    "version": "0.5.66",
+    "backend_sha256": "75a20bd1ab96e2dff63ff877d0abe63383092e34c8fabdba927128eae062a7f7",
+    "watermark_scale_factor": 100,
+    "heartbeat_working_directory": "/",
+    "detached_park_resume_cycles": 3,
+    "wake_via_sdk_exec": true,
+    "passed": true
+  }
 }

@@ -929,6 +929,11 @@ def build_live_scale_signals(
         if event_epoch < pressure_cutoff:
             continue
         data = event.data
+        # Builder pressure needs builder capacity; adding sandbox workers cannot
+        # relieve it. Older observations did not include capabilities.
+        capabilities = data.get("capabilities")
+        if capabilities is not None and "sandbox" not in capabilities:
+            continue
         actual = data.get("actual_usage")
         if not isinstance(actual, dict):
             continue

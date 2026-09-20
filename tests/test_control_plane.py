@@ -54,6 +54,7 @@ from ucloud_sandboxes.node_agent import (
     build_builder_node_agent_server as _build_builder_node_agent_server,
 )
 from ucloud_sandboxes.routing import (
+    ExecRoute,
     RoutingStore,
     SandboxRoute,
     SandboxRouteAllocation,
@@ -358,6 +359,34 @@ def _store_build_context(server, archive: bytes) -> dict[str, object]:
 
 
 class ControlPlaneTests(unittest.TestCase):
+    def test_lost_exec_returns_terminal_reason_without_contacting_worker(self) -> None:
+        with _temporary_root() as root:
+            route_file = root / "routes.sqlite"
+            routing = RoutingStore(route_file)
+            route = routing.upsert_sandbox(_sandbox_route(
+                sandbox_id="lost", node_id="node", job_id="job",
+                node_url="http://node.invalid", state="running",
+            ))
+            routing.upsert_exec(ExecRoute(
+                session_id="accepted", sandbox_id=route.sandbox_id,
+                node_id=route.node_id, job_id=route.job_id, node_url=route.node_url,
+            ))
+            routing.delete_sandboxes_for_jobs_with_error(["job"], terminal_error="node_lost")
+            gateway = _gateway_server(root, routing_file=route_file)
+            with _running_server(gateway) as base:
+                for method, suffix in [("GET", ""), ("GET", "/events"), ("POST", "/stdin"), ("POST", "/signal")]:
+                    with self.subTest(method=method, suffix=suffix):
+                        result = self._json_request(
+                            base + "/v1/exec/accepted" + suffix, method=method,
+                            payload={} if method == "POST" else None, allow_error=True,
+                        )
+                        self.assertEqual(result["status"], 410)
+                        self.assertEqual(result["body"]["error_code"], "exec_worker_lost")
+                        self.assertFalse(result["body"]["retryable"])
+                        self.assertEqual(result["body"]["sandbox_generation"], 1)
+                result = self._json_request(base + "/v1/exec/unknown/events", allow_error=True)
+                self.assertEqual(result["status"], 404)
+
     def test_lost_sandbox_returns_terminal_reason_for_status_and_lifecycle(
         self,
     ) -> None:

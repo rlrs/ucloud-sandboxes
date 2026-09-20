@@ -9,3 +9,5 @@ Restore admission now reports its safe-retry guarantee at the point where admiss
 Tests cover resident exec and file operations under PSI, physical-memory exhaustion despite free swap, missing metrics, unchanged create/restore pressure rejection, lease cleanup, and distinguishing admission failures from errors after resume begins.
 
 Validation: 943 server tests (6 skips), 118 SDK tests, Go tests, lint and installed-wheel checks passed. The release also passed 350 Linux tests (1 skip) and boot validation for both node bundles. [CI run 35503069097](https://github.com/rlrs/ucloud-sandboxes/actions/runs/35503069097) passed.
+
+The deployed 0.5.60 release passed a live 64-sandbox check with SDK 0.4.23: all creates, 32 concurrent large uploads plus 320 small writes, park/resume operations, and restored checksums passed. Small-write p95 was 1.909 seconds during the upload burst; resume-and-tool p95 was 11.747 seconds. Health probes and cleanup passed. Cold creation included worker provisioning and SDK retries for unavailable capacity. This check does not establish 256- or 512-agent capacity.

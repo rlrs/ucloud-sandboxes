@@ -657,6 +657,18 @@ class RoutingStore:
             ).fetchone()
         return dict(row) if row is not None else None
 
+    def get_exec_loss(self, session_id: str) -> dict[str, Any] | None:
+        """Keep an accepted process's loss distinct from an unknown session ID."""
+        cutoff = (
+            utc_now() - timedelta(seconds=PROGRAM_TERMINAL_RETENTION_SECONDS)
+        ).isoformat()
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM exec_losses WHERE session_id = ? AND lost_at > ?",
+                (session_id, cutoff),
+            ).fetchone()
+        return dict(row) if row is not None else None
+
     def terminal_sandbox_incarnations(self) -> dict[tuple[str, int], str]:
         """Batch proven worker losses and explicit deletions for relay cleanup."""
         cutoff = (
@@ -2039,7 +2051,9 @@ class RoutingStore:
                         )
                         removed_sandbox_ids.append(sandbox_id)
                         continue
-                    if not self._delete_sandbox_unlocked(conn, route):
+                    if not self._delete_sandbox_unlocked(
+                        conn, route, terminal_error="node_lost" if replaced_boot else ""
+                    ):
                         continue
                     removed_routes.append(route)
                     removed_sandbox_ids.append(sandbox_id)
@@ -2199,11 +2213,28 @@ class RoutingStore:
             updated_at=updated_at,
         )
         self._write_sandbox(conn, detached)
+        self._record_exec_losses_unlocked(conn, route)
         conn.execute(
             "DELETE FROM exec_sessions WHERE sandbox_id = ?",
             (route.sandbox_id,),
         )
         return detached
+
+    @staticmethod
+    def _record_exec_losses_unlocked(
+        conn: sqlite3.Connection, route: SandboxRoute
+    ) -> None:
+        # Exec sessions belong to the worker process, even when a portable
+        # sandbox snapshot survives. Never redirect or replay an accepted exec.
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO exec_losses
+                (session_id, sandbox_id, generation, job_id, lost_at)
+            SELECT session_id, sandbox_id, ?, job_id, ?
+            FROM exec_sessions WHERE sandbox_id = ? AND job_id = ?
+            """,
+            (route.generation, utc_now().isoformat(), route.sandbox_id, route.job_id),
+        )
 
     def _delete_sandbox_unlocked(
         self,
@@ -2234,6 +2265,7 @@ class RoutingStore:
                 "DELETE FROM sandboxes WHERE sandbox_id = ?", (sandbox_id,)
             ).rowcount
         if removed and terminal_error and isinstance(route, SandboxRoute):
+            self._record_exec_losses_unlocked(conn, route)
             conn.execute(
                 """
                 INSERT INTO sandbox_losses VALUES (?, ?, ?, ?, ?)
@@ -2978,6 +3010,9 @@ class RoutingStore:
             "DELETE FROM sandbox_losses WHERE lost_at <= ?", (terminal_cutoff,)
         )
         conn.execute(
+            "DELETE FROM exec_losses WHERE lost_at <= ?", (terminal_cutoff,)
+        )
+        conn.execute(
             """
             DELETE FROM program_requests
             WHERE state = 'terminal' AND updated_at <= ?
@@ -3366,6 +3401,20 @@ class RoutingStore:
             # Additive diagnostic state: existing route/lease contracts and
             # schema-3 readers remain compatible. Backfill once from retained
             # program failures so already-lost callers gain the same response.
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS exec_losses (
+                    session_id TEXT PRIMARY KEY,
+                    sandbox_id TEXT NOT NULL,
+                    generation INTEGER NOT NULL CHECK (generation > 0),
+                    job_id TEXT NOT NULL,
+                    lost_at TEXT NOT NULL
+                ) STRICT
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS exec_losses_time ON exec_losses(lost_at)"
+            )
             has_losses = (
                 conn.execute(
                     "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sandbox_losses'"

@@ -5459,6 +5459,21 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     def _route_exec_request(self, session_id: str) -> None:
         route = self.routing_store.get_exec(session_id)
         if route is None:
+            loss = self.routing_store.get_exec_loss(session_id)
+            if loss is not None:
+                self._write_json(
+                    {
+                        "error": "exec worker was lost; the accepted command cannot resume",
+                        "error_code": "exec_worker_lost",
+                        "retryable": False,
+                        "session_id": session_id,
+                        "sandbox_id": loss["sandbox_id"],
+                        "sandbox_generation": loss["generation"],
+                        "lost_at": loss["lost_at"],
+                    },
+                    status=HTTPStatus.GONE,
+                )
+                return
             self._write_json(
                 {
                     "error": "exec route not found",

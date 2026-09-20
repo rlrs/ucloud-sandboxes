@@ -157,6 +157,49 @@ class MetricsTests(unittest.TestCase):
         self.assertGreaterEqual(signals.provisioning_p95_seconds or 0, 49)
         self.assertEqual(signals.scale_up_wait_p95_seconds, 72.0)
 
+    def test_builder_pressure_does_not_drive_sandbox_scaling(self) -> None:
+        now = utc_now()
+        for capabilities in (["sandbox"], ["sandbox", "image-build"], None):
+            with self.subTest(capabilities=capabilities):
+                worker = {
+                    "active_workloads": 4,
+                    "actual_usage": {"cpu_percent": 25, "memory_percent": 30},
+                }
+                if capabilities is not None:
+                    worker["capabilities"] = capabilities
+                events = [
+                    MetricEvent(
+                        timestamp=(now - timedelta(seconds=1)).isoformat(),
+                        kind="node_heartbeat",
+                        data=worker,
+                    ),
+                    MetricEvent(
+                        timestamp=now.isoformat(),
+                        kind="node_heartbeat",
+                        data={
+                            "capabilities": ["image-build"],
+                            "active_workloads": 4,
+                            "actual_usage": {
+                                "cpu_percent": 99,
+                                "memory_percent": 95,
+                                "memory_psi_full_avg10": 30,
+                                "image_materialization_waiting_operations": 8,
+                                "image_materialization_max_concurrent_operations": 4,
+                            },
+                        },
+                    ),
+                ]
+                signals = build_live_scale_signals(events, ScalePolicy())
+                self.assertEqual(signals.observation_samples, 1)
+                self.assertEqual(signals.pressure_samples, 0)
+                self.assertEqual(signals.cpu_utilization, 0.25)
+                self.assertEqual(signals.memory_utilization, 0.3)
+
+                worker["actual_usage"]["cpu_percent"] = 99
+                signals = build_live_scale_signals(events, ScalePolicy())
+                self.assertEqual(signals.pressure_samples, 1)
+                self.assertEqual(signals.cpu_utilization, 0.99)
+
     def test_image_materialization_queue_is_live_pressure(self) -> None:
         now = utc_now()
         events = [

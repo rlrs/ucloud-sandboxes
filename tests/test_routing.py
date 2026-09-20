@@ -141,6 +141,32 @@ def seed_routing_state(store: RoutingStore, state: RoutingState) -> None:
 
 
 class RoutingStoreTests(unittest.TestCase):
+    def test_exec_loss_survives_restart_and_sandbox_reuse_then_expires(self) -> None:
+        with routing_store() as store:
+            route = store.upsert_sandbox(sandbox_route(
+                sandbox_id="lost", node_id="node", job_id="job",
+                node_url="http://node", state="running",
+            ))
+            store.upsert_exec(ExecRoute(
+                session_id="accepted", sandbox_id=route.sandbox_id,
+                node_id=route.node_id, job_id=route.job_id, node_url=route.node_url,
+            ))
+            store.delete_sandboxes_for_jobs_with_error(["job"], terminal_error="node_lost")
+            reopened = RoutingStore(store.path)
+            self.assertIsNone(reopened.get_exec("accepted"))
+            loss = reopened.get_exec_loss("accepted")
+            self.assertEqual(loss["generation"], 1)
+            self.assertEqual(loss["job_id"], "job")
+            reopened.delete_sandbox("lost")
+            reopened.upsert_sandbox(replace(route, generation=2, create_operation_id="new"))
+            self.assertEqual(reopened.get_exec_loss("accepted"), loss)
+            self.assertIsNone(reopened.get_exec_loss("unknown"))
+            with patch("ucloud_sandboxes.routing.utc_now", return_value=utc_now() + timedelta(days=8)):
+                self.assertIsNone(reopened.get_exec_loss("accepted"))
+                reopened.load()
+            with sqlite3.connect(store.path) as conn:
+                self.assertEqual(conn.execute("SELECT COUNT(*) FROM exec_losses").fetchone()[0], 0)
+
     def test_node_loss_survives_restart_but_not_a_new_incarnation(self) -> None:
         with routing_store() as store:
             route = store.upsert_sandbox(
@@ -1379,6 +1405,9 @@ class RoutingStoreTests(unittest.TestCase):
                 terminal_error="node_lost",
             )
             state = store.load()
+            for route in (live, portable, local_park, deleting_portable):
+                loss = store.get_exec_loss(f"exec-{route.sandbox_id}")
+                self.assertEqual(loss["generation"], route.generation)
 
         self.assertTrue(is_portable_parked_route(portable))
         self.assertEqual(

@@ -54,3 +54,35 @@ PID 1 to the gateway. Ordinary SIGCHLD notifications must not be interpreted as
 shutdown signals. No absence of events in a later healthy interval proves what
 happened on an earlier lost VM. Provider-side QEMU/Kubernetes exit, OOM, and
 power-control records are still needed to establish the original loss cause.
+
+## Qualification and deployment
+
+Commit `2b2f5e429c8e7a319bd74d55d98d954deb3b8828` passed the canonical
+`scripts/check.sh`: 974 server tests (six platform skips), 118 SDK tests,
+Ruff, shell checks, managed-process Go tests, wheel builds, and installation
+checks. The live comparison above exercised the actual Linux import behavior.
+
+Applied as a configuration hotfix at approximately 15:24 UTC, without changing
+the 0.5.65 runtime or 0.4.23 SDK versions:
+
+- All five workers still running received a heartbeat-only systemd drop-in
+  setting `WorkingDirectory=/`. Each heartbeat then exited successfully.
+- The gateway's installed `vm_init.py` renderer received the exact committed
+  file after verifying its previous SHA-256 against the parent commit. The
+  original file and commit/hash receipt were retained on the gateway. Only the
+  autoscaler was restarted to load it, so replacement workers receive the fix.
+  This is a recorded hotfix to the installed renderer, not a rebuilt 0.5.65
+  release artifact; a subsequent package installation must include this commit.
+- Gateway and relay stayed active; worker runtimes were not restarted. The
+  final readback found five responding workers and no pending creates.
+
+The approximately 15:14:50–15:24:50 capture recorded no guest reboot syscall
+or non-SIGCHLD signal to guest PID 1. One empty worker was terminated by a
+recorded idle scale-down during capture, and four idle builders were also
+intentionally stopped. There was no additional unexplained worker loss in the
+provider inventory through the final readback. The four earlier power-offs
+remain unresolved; this healthy observation window is not a reproduction test.
+
+Private job-specific provider histories, stop-intent times, profiles, the full
+allocation warning, off-node traces, and deployment/check logs were retained
+with a SHA-256 manifest. They are not committed to the public repository.

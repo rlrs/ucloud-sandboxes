@@ -131,6 +131,11 @@ from .consolidation import can_consolidate_wake, consolidation_rank
 from .sandbox import SandboxSpec, sandbox_spec_fingerprint, sandbox_specs_match
 
 
+_BUILDER_DISPATCH_GUARD = RLock()
+_BUILDER_DISPATCH_COUNTS: dict[str, int] = {}
+_BUILDER_DISPATCH_INFLIGHT: dict[str, int] = {}
+_BUILDER_IMAGE_LOCKS_GUARD = RLock()
+_BUILDER_IMAGE_LOCKS: dict[str, tuple[RLock, int]] = {}
 _IMAGE_PULL_LOCKS_GUARD = RLock()
 _IMAGE_PULL_LOCKS: dict[tuple[str, str], RLock] = {}
 _IMAGE_WARMUP_TASKS_GUARD = RLock()
@@ -3791,6 +3796,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         return None
 
     def _route_image_build(self) -> None:
+        reserved_job_id = ""
         try:
             body = self._read_raw_body(max_bytes=self.max_json_body_bytes)
             raw = json.loads(body.decode("utf-8")) if body else None
@@ -3824,127 +3830,129 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             raw["tag"] = spec.tag
             raw["push"] = push
             body = json.dumps(raw, separators=(",", ":")).encode("utf-8")
-            with self.telemetry.span(
-                "gateway.image_build",
-                attributes={
-                    "image.id": spec.id,
-                    "container.image.name": spec.tag,
-                    "image.push": push,
-                },
-            ) as root:
+            with _builder_image_dispatch_lock(spec.id):
                 with self.telemetry.span(
-                    "gateway.image_build_select_builder",
-                ) as span:
-                    heartbeat = self._select_builder_node(image_id=spec.id)
-                    span.set_attribute(
-                        "selected_node_id", heartbeat.node_id if heartbeat else ""
-                    )
-                    span.set_attribute(
-                        "selected_job_id", heartbeat.job_id if heartbeat else ""
-                    )
-                if heartbeat is None:
-                    self.routing_store.upsert_pending_image_build(spec.id, spec.tag)
-                    pending_builds = self.routing_store.pending_image_build_count()
-                    root.status = "error"
-                    root.set_attribute("outcome", "queued_no_builder")
-                    root.set_attribute("pending_image_builds", pending_builds)
-                    self._write_json(
-                        {
-                            "error": "no ready builder node is available",
-                            "error_code": "builder_not_ready",
-                            "retryable": True,
-                            "pending_image_builds": pending_builds,
-                        },
-                        status=HTTPStatus.SERVICE_UNAVAILABLE,
-                        headers={"Retry-After": "2", "X-UCloud-Sandbox-Retryable": "true"},
-                    )
-                    return
-                with self.telemetry.span(
-                    "gateway.image_build_enqueue",
-                    attributes={"node.id": heartbeat.node_id},
-                ):
-                    self.routing_store.upsert_pending_image_build(spec.id, spec.tag)
-                with self.telemetry.span(
-                    "gateway.image_build_context_sync",
-                    attributes={"node.id": heartbeat.node_id},
-                ) as span:
-                    context_response = self._ensure_node_build_context(
-                        heartbeat.node_url or "", context_reference
-                    )
-                    span.set_attribute("status_code", int(context_response.status))
-                    context_payload = context_response.json()
-                    if "deduplicated" in context_payload:
+                    "gateway.image_build",
+                    attributes={
+                        "image.id": spec.id,
+                        "container.image.name": spec.tag,
+                        "image.push": push,
+                    },
+                ) as root:
+                    with self.telemetry.span(
+                        "gateway.image_build_select_builder",
+                    ) as span:
+                        heartbeat = self._select_builder_node(image_id=spec.id, reserve=True)
+                        reserved_job_id = heartbeat.job_id if heartbeat else ""
                         span.set_attribute(
-                            "deduplicated",
-                            bool(context_payload["deduplicated"]),
+                            "selected_node_id", heartbeat.node_id if heartbeat else ""
                         )
-                if not 200 <= context_response.status < 300:
-                    root.status = "error"
-                    root.set_attribute("outcome", "context_proxy_failed")
-                    root.set_attribute("status_code", int(context_response.status))
-                    self._send_proxied_response(context_response)
-                    return
-                self._protect_registry_image_build_target(
-                    spec,
-                    push=push,
-                )
-                with self.telemetry.span(
-                    "gateway.image_build_proxy_builder",
-                    attributes={"node.id": heartbeat.node_id},
-                ) as span:
-                    response = self._proxy_request(
-                        heartbeat.node_url or "",
-                        "/v1/images/build",
-                        method="POST",
-                        body=body,
-                        timeout_seconds=IMAGE_BUILD_PROXY_TIMEOUT_SECONDS,
-                    )
-                    span.set_attribute("status_code", int(response.status))
-                    response_payload = response.json()
-                    raw_image = response_payload.get("image")
-                    if isinstance(
-                        raw_image, dict
-                    ) and _image_record_available_to_sandboxes(raw_image):
-                        raw_image = self._image_record_with_registry_digest(raw_image)
-                        response_payload["image"] = raw_image
-                        raw_build = response_payload.get("build")
-                        if isinstance(raw_build, dict):
-                            raw_build["image"] = raw_image
-                        response.body = json.dumps(response_payload).encode("utf-8")
-                    node_timings = response_payload.get("timings")
-                    if isinstance(node_timings, dict):
-                        span.add_event("node.timings", node_timings)
-                accepted_build_response = 200 <= response.status < 300
-                terminal_build_response = _image_build_response_terminal(
-                    response_payload
-                ) or (
-                    not 200 <= response.status < 300
-                    and response.status < 500
-                    and response.status not in {408, 425, 429}
-                )
-                if accepted_build_response or terminal_build_response:
-                    self.routing_store.clear_pending_image_build(spec.id)
-                if 200 <= response.status < 300:
-                    raw_image = response_payload.get("image")
-                    if isinstance(
-                        raw_image, dict
-                    ) and _image_record_available_to_sandboxes(raw_image):
-                        try:
-                            self.image_manager.store.upsert(
-                                ImageRecord.from_dict(raw_image)
+                        span.set_attribute(
+                            "selected_job_id", heartbeat.job_id if heartbeat else ""
+                        )
+                    if heartbeat is None:
+                        self.routing_store.upsert_pending_image_build(spec.id, spec.tag)
+                        pending_builds = self.routing_store.pending_image_build_count()
+                        root.status = "error"
+                        root.set_attribute("outcome", "queued_no_builder")
+                        root.set_attribute("pending_image_builds", pending_builds)
+                        self._write_json(
+                            {
+                                "error": "no ready builder node is available",
+                                "error_code": "builder_not_ready",
+                                "retryable": True,
+                                "pending_image_builds": pending_builds,
+                            },
+                            status=HTTPStatus.SERVICE_UNAVAILABLE,
+                            headers={"Retry-After": "2", "X-UCloud-Sandbox-Retryable": "true"},
+                        )
+                        return
+                    with self.telemetry.span(
+                        "gateway.image_build_enqueue",
+                        attributes={"node.id": heartbeat.node_id},
+                    ):
+                        self.routing_store.upsert_pending_image_build(spec.id, spec.tag)
+                    with self.telemetry.span(
+                        "gateway.image_build_context_sync",
+                        attributes={"node.id": heartbeat.node_id},
+                    ) as span:
+                        context_response = self._ensure_node_build_context(
+                            heartbeat.node_url or "", context_reference
+                        )
+                        span.set_attribute("status_code", int(context_response.status))
+                        context_payload = context_response.json()
+                        if "deduplicated" in context_payload:
+                            span.set_attribute(
+                                "deduplicated",
+                                bool(context_payload["deduplicated"]),
                             )
-                        except ValueError:
-                            pass
-                        self._invalidate_image_inventory_cache()
-                if 200 <= response.status < 300:
-                    root.set_attribute("outcome", "builder_completed")
-                    root.set_attribute("node_id", heartbeat.node_id)
-                else:
-                    root.status = "error"
-                    root.set_attribute("outcome", "builder_failed")
-                    root.set_attribute("status_code", int(response.status))
-                self._send_proxied_response(response)
-                return
+                    if not 200 <= context_response.status < 300:
+                        root.status = "error"
+                        root.set_attribute("outcome", "context_proxy_failed")
+                        root.set_attribute("status_code", int(context_response.status))
+                        self._send_proxied_response(context_response)
+                        return
+                    self._protect_registry_image_build_target(
+                        spec,
+                        push=push,
+                    )
+                    with self.telemetry.span(
+                        "gateway.image_build_proxy_builder",
+                        attributes={"node.id": heartbeat.node_id},
+                    ) as span:
+                        response = self._proxy_request(
+                            heartbeat.node_url or "",
+                            "/v1/images/build",
+                            method="POST",
+                            body=body,
+                            timeout_seconds=IMAGE_BUILD_PROXY_TIMEOUT_SECONDS,
+                        )
+                        span.set_attribute("status_code", int(response.status))
+                        response_payload = response.json()
+                        raw_image = response_payload.get("image")
+                        if isinstance(
+                            raw_image, dict
+                        ) and _image_record_available_to_sandboxes(raw_image):
+                            raw_image = self._image_record_with_registry_digest(raw_image)
+                            response_payload["image"] = raw_image
+                            raw_build = response_payload.get("build")
+                            if isinstance(raw_build, dict):
+                                raw_build["image"] = raw_image
+                            response.body = json.dumps(response_payload).encode("utf-8")
+                        node_timings = response_payload.get("timings")
+                        if isinstance(node_timings, dict):
+                            span.add_event("node.timings", node_timings)
+                    accepted_build_response = 200 <= response.status < 300
+                    terminal_build_response = _image_build_response_terminal(
+                        response_payload
+                    ) or (
+                        not 200 <= response.status < 300
+                        and response.status < 500
+                        and response.status not in {408, 425, 429}
+                    )
+                    if accepted_build_response or terminal_build_response:
+                        self.routing_store.clear_pending_image_build(spec.id)
+                    if 200 <= response.status < 300:
+                        raw_image = response_payload.get("image")
+                        if isinstance(
+                            raw_image, dict
+                        ) and _image_record_available_to_sandboxes(raw_image):
+                            try:
+                                self.image_manager.store.upsert(
+                                    ImageRecord.from_dict(raw_image)
+                                )
+                            except ValueError:
+                                pass
+                            self._invalidate_image_inventory_cache()
+                    if 200 <= response.status < 300:
+                        root.set_attribute("outcome", "builder_completed")
+                        root.set_attribute("node_id", heartbeat.node_id)
+                    else:
+                        root.status = "error"
+                        root.set_attribute("outcome", "builder_failed")
+                        root.set_attribute("status_code", int(response.status))
+                    self._send_proxied_response(response)
+                    return
         except (json.JSONDecodeError, ValueError) as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             return
@@ -3954,6 +3962,11 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         except RuntimeError as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             return
+
+        finally:
+            if reserved_job_id:
+                with _BUILDER_DISPATCH_GUARD:
+                    _BUILDER_DISPATCH_INFLIGHT[reserved_job_id] -= 1
 
     def _ensure_node_build_context(
         self,
@@ -6053,7 +6066,9 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             ),
         )
 
-    def _select_builder_node(self, *, image_id: str = "") -> NodeHeartbeat | None:
+    def _select_builder_node(
+        self, *, image_id: str = "", reserve: bool = False,
+    ) -> NodeHeartbeat | None:
         candidates = [
             heartbeat
             for heartbeat in self._ready_heartbeats()
@@ -6063,6 +6078,17 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         ]
         if not candidates:
             return None
+        with _BUILDER_DISPATCH_GUARD:
+            live_ids = {h.job_id for h in candidates}
+            for job_id in list(_BUILDER_DISPATCH_COUNTS):
+                if job_id not in live_ids and not _BUILDER_DISPATCH_INFLIGHT.get(job_id):
+                    _BUILDER_DISPATCH_COUNTS.pop(job_id, None)
+                    _BUILDER_DISPATCH_INFLIGHT.pop(job_id, None)
+            baseline = {
+                h.job_id: _BUILDER_DISPATCH_COUNTS.get(h.job_id, 0)
+                - _BUILDER_DISPATCH_INFLIGHT.get(h.job_id, 0)
+                for h in candidates
+            }
         # A retry must reach the active build's owner even when that node is
         # busier than its peers. Probe before balancing new work so node-local
         # build deduplication and conflicting-spec checks still apply.
@@ -6086,7 +6112,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 }:
                     return None
                 if build["status"] == "running":
-                    return heartbeat
+                    return _reserve_builder_candidate([heartbeat], baseline, reserve=reserve)
         if len(candidates) > 1:
             # Periodic heartbeats can lag an entire burst of build submissions.
             # Refresh load from the authenticated node before choosing a peer.
@@ -6125,17 +6151,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             candidates = refreshed
             if not candidates:
                 return None
-        return sorted(
-            candidates,
-            key=lambda heartbeat: (
-                heartbeat.active_image_builds,
-                -heartbeat.physical_disk_free_mb,
-                -heartbeat.free_resources.disk_mb,
-                -heartbeat.free_resources.memory_mb,
-                -heartbeat.free_resources.vcpu,
-                heartbeat.node_id,
-            ),
-        )[0]
+        return _reserve_builder_candidate(candidates, baseline, reserve=reserve)
 
     def _nodes_with_image(
         self,
@@ -7813,6 +7829,57 @@ def _cold_image_placement_cost_for_state(
         0,
         missing_bytes + pressure * COLD_PULL_PRESSURE_PENALTY_BYTES,
     )
+
+
+def _reserve_builder_candidate(
+    candidates: list[NodeHeartbeat], baseline: dict[str, int], *, reserve: bool,
+) -> NodeHeartbeat:
+    # Account for dispatches committed since the live-load sample began, even
+    # if their HTTP response already returned. A stale simultaneous sample
+    # must not make every request choose the same previously idle builder.
+    with _BUILDER_DISPATCH_GUARD:
+        def rank(heartbeat: NodeHeartbeat):
+            additions = (
+                _BUILDER_DISPATCH_COUNTS.get(heartbeat.job_id, 0)
+                - baseline.get(heartbeat.job_id, 0)
+                if reserve else 0
+            )
+            return (
+                heartbeat.active_image_builds + max(0, additions),
+                -heartbeat.physical_disk_free_mb,
+                -heartbeat.free_resources.disk_mb,
+                -heartbeat.free_resources.memory_mb,
+                -heartbeat.free_resources.vcpu,
+                heartbeat.node_id,
+            )
+        selected = min(candidates, key=rank)
+        if reserve:
+            job_id = selected.job_id
+            _BUILDER_DISPATCH_COUNTS[job_id] = _BUILDER_DISPATCH_COUNTS.get(job_id, 0) + 1
+            _BUILDER_DISPATCH_INFLIGHT[job_id] = _BUILDER_DISPATCH_INFLIGHT.get(job_id, 0) + 1
+        return selected
+
+
+@contextmanager
+def _builder_image_dispatch_lock(image_id: str):
+    """Serialize one image submission without retaining an unbounded keyed-lock cache."""
+
+    key = image_id.strip()
+    with _BUILDER_IMAGE_LOCKS_GUARD:
+        lock, users = _BUILDER_IMAGE_LOCKS.get(key, (RLock(), 0))
+        _BUILDER_IMAGE_LOCKS[key] = (lock, users + 1)
+    try:
+        with lock:
+            yield
+    finally:
+        with _BUILDER_IMAGE_LOCKS_GUARD:
+            current = _BUILDER_IMAGE_LOCKS.get(key)
+            if current is not None and current[0] is lock:
+                remaining = current[1] - 1
+                if remaining <= 0:
+                    _BUILDER_IMAGE_LOCKS.pop(key, None)
+                else:
+                    _BUILDER_IMAGE_LOCKS[key] = (lock, remaining)
 
 
 def _image_pull_lock(node_url: str, image: str) -> RLock:

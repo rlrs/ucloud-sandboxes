@@ -1,7 +1,11 @@
 import json
 import unittest
 from dataclasses import replace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+from collections import Counter
+from ucloud_sandboxes import control_plane
 
 from ucloud_sandboxes.control_plane import ControlPlaneHandler, ProxiedResponse
 from ucloud_sandboxes.deployment import package_version
@@ -102,3 +106,45 @@ class BuilderSelectionTests(unittest.TestCase):
                 self.assertEqual(
                     self.handler._select_builder_node(image_id="new"), self.busy
                 )
+
+    def test_simultaneous_live_samples_reserve_distinct_builder_capacity(self):
+        nodes = [
+            replace(self.idle, node_id=f"node-{i}", job_id=f"job-{i}", node_url=f"http://node-{i}")
+            for i in range(4)
+        ]
+        sampled = Barrier(16)
+        self.handler._ready_heartbeats.return_value = nodes
+
+        def probe(url, path, **kwargs):
+            current = next(h for h in nodes if h.node_url == url)
+            if current == nodes[-1]:
+                sampled.wait(5)
+            return self.response(200, {"heartbeat": heartbeat_to_dict(current)})
+
+        self.handler._proxy_request.side_effect = probe
+        with (
+            patch.dict(control_plane._BUILDER_DISPATCH_COUNTS, {}, clear=True),
+            patch.dict(control_plane._BUILDER_DISPATCH_INFLIGHT, {}, clear=True),
+        ):
+            def dispatch(_):
+                chosen = self.handler._select_builder_node(reserve=True)
+                # A response may finish before another stale sample chooses.
+                with control_plane._BUILDER_DISPATCH_GUARD:
+                    control_plane._BUILDER_DISPATCH_INFLIGHT[chosen.job_id] -= 1
+                return chosen.job_id
+
+            with ThreadPoolExecutor(max_workers=16) as pool:
+                selected = list(pool.map(dispatch, range(16)))
+            self.assertEqual(Counter(selected), {h.job_id: 4 for h in nodes})
+            self.assertTrue(all(v == 0 for v in control_plane._BUILDER_DISPATCH_INFLIGHT.values()))
+
+    def test_selection_counts_dispatch_still_waiting_for_builder_acceptance(self):
+        self.handler._ready_heartbeats.return_value = [self.idle, replace(self.idle, job_id="3", node_id="c-idle", node_url="http://third")]
+        self.handler._proxy_request.side_effect = lambda url, path, **kw: self.response(
+            200, {"heartbeat": heartbeat_to_dict(next(h for h in self.handler._ready_heartbeats() if h.node_url == url))},
+        )
+        with (
+            patch.dict(control_plane._BUILDER_DISPATCH_COUNTS, {"2": 1}, clear=True),
+            patch.dict(control_plane._BUILDER_DISPATCH_INFLIGHT, {"2": 1}, clear=True),
+        ):
+            self.assertEqual(self.handler._select_builder_node(reserve=True).job_id, "3")

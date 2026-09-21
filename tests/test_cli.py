@@ -247,7 +247,7 @@ class CliTests(unittest.TestCase):
             (410, b"gone", True),
             (409, b'{"retryable":false}', True),
             (503, b'{"retryable":false}', False),
-            (503, b'upstream unavailable', False),
+            (503, b"upstream unavailable", False),
             (504, b"upstream timeout", False),
             (403, b"forbidden", False),
         ):
@@ -671,12 +671,12 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(
             result["destructive_node_loss_job_ids"],
-            ["replaced-job"],
+            [],
         )
-        self.assertEqual(result["lost_sandbox_ids"], ["lost-sandbox"])
+        self.assertEqual(result["lost_sandbox_ids"], [])
 
     @allow_fixture_mutations
-    def test_ucloud_expired_lease_fences_nonempty_node_without_guest_cleanup(
+    def test_ucloud_expired_lease_preserves_nonempty_node_and_routes(
         self,
     ) -> None:
         submitted: list[dict] = []
@@ -840,20 +840,15 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(submitted, [])
-        self.assertEqual(terminated, [("lost-job",)])
-        self.assertEqual(
-            payload["unreachable_permanent_loss_job_ids"],
-            ["lost-job"],
-        )
-        self.assertEqual(payload["destructive_node_loss_job_ids"], ["lost-job"])
+        self.assertEqual(terminated, [])
+        self.assertEqual(payload["unreachable_permanent_loss_job_ids"], [])
+        self.assertEqual(payload["destructive_node_loss_job_ids"], [])
+        self.assertEqual(payload["quarantined_job_ids"], ["lost-job"])
         self.assertEqual(payload["lost_sandbox_ids"], [])
         self.assertEqual(payload["unreachableReadyStopJobIds"], [])
-        self.assertEqual(routes, [])
-        self.assertEqual(registry_leases, {})
-        self.assertEqual(
-            [item["sandbox_id"] for item in payload["removedRoutes"]],
-            ["lost-sandbox"],
-        )
+        self.assertEqual([r.sandbox_id for r in routes], ["lost-sandbox"])
+        self.assertTrue(registry_leases)
+        self.assertEqual(payload["removedRoutes"], [])
         self.assertEqual(payload["persistedNodeLossDemand"], [])
 
     @allow_fixture_mutations
@@ -961,7 +956,7 @@ class CliTests(unittest.TestCase):
         self.assertIsNotNone(route)
         self.assertIsNotNone(invalid_after)
         assert invalid_after is not None
-        self.assertEqual(invalid_after.state, "prepared")
+        self.assertEqual(invalid_after.state, "failed")
 
     def test_external_provider_loss_evidence_is_serialized_generically(self) -> None:
         prototype = DestructiveInstanceLoss(
@@ -1065,8 +1060,13 @@ class CliTests(unittest.TestCase):
                 )
 
                 self.assertIsNone(
-                    UCloudProvider._post_start_instance_loss.from_operation_request(
-                        operation.request
+                    cli._provider_destructive_loss_disposition(
+                        SimpleNamespace(
+                            kind="ucloud",
+                            destructive_instance_losses=(),
+                            unreachable_lease_expiry_loss=None,
+                        ),
+                        operation,
                     )
                 )
         numeric_prototype = DestructiveInstanceLoss(
@@ -1905,7 +1905,8 @@ class CliTests(unittest.TestCase):
                             drain_token=token,
                             activity_epoch=7,
                             drain_activity_epoch=7 if token else 0,
-                            inventory_complete=bool(token),
+                            inventory_complete=True,
+                            node_epoch="boot-1",
                             reserved_resources=reserved,
                         )
                     },
@@ -1945,8 +1946,19 @@ class CliTests(unittest.TestCase):
                     }
                 }
 
+            def probe(previous, *_args):
+                current = ControlStateStore(heartbeat_file).get_heartbeat(
+                    previous.job_id
+                )
+                if not current.is_fresh(utc_now(), config.policy.heartbeat_ttl_seconds):
+                    return None, True
+                return replace(
+                    current, admission_open=not current.draining, received_at=utc_now()
+                ), False
+
             with (
                 patch.object(cli, "UCloudClient", SuccessfulStopClient),
+                patch.object(cli, "_probe_unreachable_node", side_effect=probe),
                 patch.object(cli, "_post_node_drain", side_effect=post_drain),
             ):
                 failed_request = reconcile(config, args, state)
@@ -1991,7 +2003,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(mismatch["stopJobIds"], ["owned"])
         self.assertEqual(mismatch["drainingJobIds"], ["owned"])
 
-    def test_ucloud_unreachable_node_uses_durable_loss_proof_without_drain(
+    def test_ucloud_unreachable_node_is_quarantined_without_termination(
         self,
     ) -> None:
         terminate_calls: list[tuple[str, ...]] = []
@@ -2046,32 +2058,13 @@ class CliTests(unittest.TestCase):
             ):
                 result = reconcile(config, args, state)
                 retried = reconcile(config, args, state)
-                (stop_operation,) = state.list_operations(kind="stop")
+                self.assertEqual(state.list_operations(kind="stop"), [])
 
-        self.assertEqual(terminate_calls, [("owned",)])
-        self.assertEqual(result["unreachableReadyStopJobIds"], [])
-        self.assertEqual(result["destructive_node_loss_job_ids"], ["owned"])
-        self.assertEqual(retried["destructive_node_loss_job_ids"], ["owned"])
-        self.assertEqual(result["unreachable_permanent_loss_job_ids"], ["owned"])
-        self.assertEqual(stop_operation.request["destructiveNodeLoss"], True)
-        self.assertEqual(
-            stop_operation.request["lossReason"],
-            "ucloud_unreachable_retirement",
-        )
-        self.assertEqual(
-            stop_operation.request["lossEvidenceKind"],
-            "unreachable_lease_expired",
-        )
-        self.assertEqual(stop_operation.request["providerKind"], "ucloud")
-        loss_evidence = stop_operation.request["lossEvidence"]
-        self.assertEqual(loss_evidence["unreachableLeaseExpired"], True)
-        self.assertEqual(loss_evidence["directProbeFailed"], True)
-        self.assertTrue(str(loss_evidence["unreachableReference"]).strip())
-        self.assertEqual(stop_operation.request["routeCount"], 0)
-        self.assertEqual(result["drainReadyStopJobIds"], [])
-        self.assertEqual(result["drainIntents"], [])
-        self.assertEqual(result["bootstrapIntents"], [])
-        self.assertEqual(result["definitelyTerminatedJobIds"], ["owned"])
+        self.assertEqual(terminate_calls, [])
+        self.assertEqual(result["destructive_node_loss_job_ids"], [])
+        self.assertEqual(retried["destructive_node_loss_job_ids"], [])
+        self.assertEqual(result["quarantined_job_ids"], ["owned"])
+        self.assertEqual(result["definitelyTerminatedJobIds"], [])
 
     def test_ucloud_heartbeat_partition_preserves_occupied_worker(self) -> None:
         # A provider-confirmed RUNNING worker is not proven dead by silence.
@@ -2172,24 +2165,9 @@ class CliTests(unittest.TestCase):
                     cli._probe_unreachable_node(heartbeat, "test-token"), (None, False)
                 )
 
-    def test_legacy_unprobed_retirement_is_no_longer_a_valid_stop_proof(self):
-        request = {
-            "destructiveNodeLoss": True,
-            "providerKind": "ucloud",
-            "lossReason": "ucloud_unreachable_lease_expired",
-            "lossEvidenceKind": "unreachable_lease_expired",
-            "lossEvidence": {
-                "unreachableLeaseExpired": True,
-                "unreachableReference": utc_now().isoformat(),
-            },
-        }
-        self.assertIsNone(
-            UCloudProvider.unreachable_lease_expiry_loss.from_operation_request(request)
-        )
-        request["lossReason"] = "ucloud_unreachable_retirement"
-        self.assertIsNone(
-            UCloudProvider.unreachable_lease_expiry_loss.from_operation_request(request)
-        )
+    def test_ucloud_declares_no_status_or_silence_deletion_authority(self):
+        self.assertEqual(UCloudProvider.destructive_instance_losses, ())
+        self.assertIsNone(UCloudProvider.unreachable_lease_expiry_loss)
 
     def test_demand_rise_durably_cancels_drain_before_ambiguous_undrain(self) -> None:
         terminate_calls: list[tuple[str, ...]] = []

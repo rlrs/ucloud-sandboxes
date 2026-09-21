@@ -2075,6 +2075,7 @@ class RoutingStore:
         job_ids: Iterable[str],
         *,
         terminal_error: str = "",
+        retired_node_epoch: str | None = None,
     ) -> list[SandboxRoute]:
         """Forget non-portable sandboxes owned by terminated VM jobs.
 
@@ -2110,7 +2111,10 @@ class RoutingStore:
                     ).fetchall()
                     for row in rows:
                         route = _sandbox_route_from_row(row)
-                        if route is not None:
+                        if route is not None and (
+                            retired_node_epoch is None
+                            or route.node_epoch == retired_node_epoch
+                        ):
                             if (
                                 sandbox_owner_loss_disposition(route)
                                 is SandboxOwnerLossDisposition.RECOVER_DETACHED

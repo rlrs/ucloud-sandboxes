@@ -58,7 +58,7 @@ from .bootstrap import (
     prune_bootstrap_records,
 )
 from .config import DeploymentConfig
-from .control_state import ControlStateStore
+from .control_state import ControlStateStore, QUARANTINE_REASON, QUARANTINE_EPOCH
 from .control_plane import build_server, release_registry_route_references
 from .deployment import (
     AGENT_VERSION_LABEL,
@@ -111,6 +111,7 @@ from .model_relay import (
     create_model_relay_app,
 )
 from .models import (
+    InstancePhase,
     NodeHeartbeat,
     ResourceQuantity,
     SandboxDemand,
@@ -2987,6 +2988,17 @@ def _reconcile_provider_operation_inventory(
     if not execution_authorized or provider_state is None:
         return [], [], set()
     results = list(provider_state.reconcile_provider_inventory(jobs))
+    for operation in provider_state.list_operations(kind="stop", states={"prepared"}):
+        if _stop_operation_is_destructive_node_loss(
+            operation
+        ) and not _stop_operation_has_safety_proof(provider_state, provider, operation):
+            suppressed = provider_state.suppress_prepared_operation(
+                operation.operation_id,
+                reason="obsolete destructive stop authorization; automatic retry disabled",
+            )
+            results.append(
+                ProviderOperationOutcome.from_operation(suppressed, source="journal")
+            )
     # Stops are replayed only after this cycle refreshes every active drain.
     replay_results = apply_prepared_provider_operations(
         provider_state,
@@ -3077,6 +3089,128 @@ def _probe_unreachable_node(
     if not fresh.is_fresh(utc_now(), heartbeat_ttl_seconds):
         return None, False
     return replace(fresh, received_at=utc_now()), False
+
+
+def _guest_continuity_matches(
+    previous: NodeHeartbeat,
+    fresh: NodeHeartbeat,
+    routes: tuple[SandboxRoute, ...],
+) -> bool:
+    """A reachable endpoint alone cannot restore placement authority."""
+    if (
+        not fresh.node_epoch
+        or not fresh.inventory_complete
+        or fresh.active_sandbox_creates
+        or fresh.node_epoch in previous.retired_node_epochs
+    ):
+        return False
+    anchor = previous.labels.get(QUARANTINE_EPOCH, previous.node_epoch)
+    if anchor != fresh.node_epoch and (
+        routes or fresh.inventory or fresh.active_workloads
+    ):
+        return False
+    inventory = {item.sandbox_id: item for item in fresh.inventory}
+    if len(inventory) != len(fresh.inventory):
+        return False
+    for route in routes:
+        item = inventory.get(route.sandbox_id)
+        if (
+            item is None
+            or route.node_epoch != fresh.node_epoch
+            or route.node_id != fresh.node_id
+            or (route.generation, route.create_operation_id, route.spec_hash)
+            != (item.generation, item.operation_id, item.spec_hash)
+        ):
+            return False
+    return True
+
+
+def _quarantine_unverified_guests(
+    jobs: list[ProviderInstance],
+    heartbeats: dict[str, NodeHeartbeat],
+    *,
+    control_state: ControlStateStore,
+    policy: ScalePolicy,
+    deployment_id: str,
+    route_reservations: dict[str, tuple[SandboxRoute, ...]],
+    execution_authorized: bool,
+    bearer_token: str | None,
+) -> tuple[list[ProviderInstance], dict[str, NodeHeartbeat]]:
+    candidates = {}
+    for job in jobs:
+        previous = heartbeats.get(job.id)
+        if job.is_final or not is_managed_compute_instance(job, deployment_id):
+            continue
+        if previous is None:
+            continue
+        if not (
+            job.is_unavailable
+            or previous.labels.get(QUARANTINE_REASON)
+            or not previous.is_fresh(utc_now(), policy.heartbeat_ttl_seconds)
+        ):
+            continue
+        reason = (
+            "provider_readiness_unverified"
+            if job.is_unavailable
+            else "heartbeat_continuity_unverified"
+        )
+        if execution_authorized:
+            guarded = control_state.quarantine_node(job.id, reason)
+            if guarded is None:
+                continue
+        else:
+            guarded = replace(
+                previous,
+                admission_open=False,
+                labels={
+                    **previous.labels,
+                    QUARANTINE_REASON: reason,
+                    QUARANTINE_EPOCH: previous.labels.get(
+                        QUARANTINE_EPOCH, previous.node_epoch
+                    ),
+                },
+            )
+        heartbeats[job.id] = guarded
+        # An authenticated guest may still serve existing work while UCloud
+        # readiness is false. Do not reopen placement until both agree.
+        if job.state == "RUNNING":
+            candidates[job.id] = guarded
+    recovered = set()
+    if candidates:
+        with ThreadPoolExecutor(max_workers=min(8, len(candidates))) as pool:
+            probes = {
+                pool.submit(
+                    _probe_unreachable_node,
+                    previous,
+                    bearer_token,
+                    policy.heartbeat_ttl_seconds,
+                ): jid
+                for jid, previous in candidates.items()
+            }
+            for future in as_completed(probes):
+                jid = probes[future]
+                fresh, _transport_failed = future.result()
+                if fresh is None or not _guest_continuity_matches(
+                    candidates[jid], fresh, route_reservations.get(jid, ())
+                ):
+                    continue
+                if execution_authorized and not control_state.recover_quarantined_node(
+                    fresh
+                ):
+                    continue
+                heartbeats[jid] = fresh
+                recovered.add(jid)
+    jobs = [
+        replace(job, phase=InstancePhase.RUNNING)
+        if job.id in recovered
+        else replace(job, phase=InstancePhase.UNAVAILABLE)
+        if job.id in heartbeats
+        and heartbeats[job.id].labels.get(QUARANTINE_REASON)
+        and not job.is_final
+        else job
+        for job in jobs
+    ]
+    return jobs, heartbeats
 
 
 def _observe_provider_nodes(
@@ -3175,6 +3309,18 @@ def _observe_provider_nodes(
             for job_id, heartbeat in heartbeats.items()
             if job_id not in orphaned_stale_heartbeat_job_ids
         }
+
+    if getattr(provider, "requires_guest_continuity", False):
+        jobs, heartbeats = _quarantine_unverified_guests(
+            jobs,
+            heartbeats,
+            control_state=control_state,
+            policy=policy,
+            deployment_id=deployment_id,
+            route_reservations=route_reservations,
+            execution_authorized=execution_authorized,
+            bearer_token=node_control_bearer_token,
+        )
 
     destructive_loss_dispositions: dict[str, DestructiveInstanceLoss] = {}
     for job in jobs:
@@ -3400,6 +3546,7 @@ def run_reconcile_cycle(
     fenced_heartbeat_job_ids = observation.fenced_heartbeat_job_ids
     orphaned_stale_heartbeat_job_ids = observation.orphaned_stale_heartbeat_job_ids
     destructive_job_id_set = set(destructive_node_loss_job_ids)
+    quarantined_job_ids = {node.job_id for node in nodes if node.job.is_unavailable}
     builder_pending = max(
         0,
         int(
@@ -3734,6 +3881,7 @@ def run_reconcile_cycle(
                 for route in sandbox_routes
                 if route.delete_operation_id
                 and route.job_id not in destructive_job_id_set
+                and route.job_id not in quarantined_job_ids
             ),
             key=lambda route: (route.updated_at, route.sandbox_id),
         )
@@ -3822,6 +3970,10 @@ def run_reconcile_cycle(
                 and intent.job_id in unreachable_stop_job_id_set
             ):
                 error = "unreachable stale-node stop proof selected"
+            elif intent.state == "active" and intent.job_id in quarantined_job_ids:
+                error = (
+                    "guest continuity is unverified; drain cannot authorize termination"
+                )
             elif not node_url:
                 error = "fresh node heartbeat has no node URL"
             else:
@@ -4197,6 +4349,7 @@ def run_reconcile_cycle(
             node.job_id for node in (*sandbox_nodes, *builder_nodes) if node.job.is_lost
         ),
         "destructive_node_loss_job_ids": list(destructive_node_loss_job_ids),
+        "quarantined_job_ids": sorted(quarantined_job_ids),
         "unreachableNodeProbes": observation.unreachable_probe_results,
         "unreachable_permanent_loss_job_ids": sorted(
             job_id

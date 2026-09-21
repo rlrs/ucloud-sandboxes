@@ -437,6 +437,7 @@ class NodeRuntimeMetrics:
 class InstancePhase(str, Enum):
     PROVISIONING = "provisioning"
     RUNNING = "running"
+    UNAVAILABLE = "unavailable"
     LOST = "lost"
     TERMINAL = "terminal"
 
@@ -486,6 +487,10 @@ class ProviderInstance:
     @property
     def is_lost(self) -> bool:
         return self.phase is InstancePhase.LOST
+
+    @property
+    def is_unavailable(self) -> bool:
+        return self.phase is InstancePhase.UNAVAILABLE
 
 
 @dataclass(frozen=True)

@@ -23,6 +23,30 @@ from .registry import (
 _APPLICATION_ID = 0x55435331  # UCS1
 _SCHEMA_VERSION = 1
 _ERROR = "control state is unreadable"
+# Controller-owned metadata uses the existing extensible heartbeat labels so
+# workers and the durable heartbeat schema remain wire-compatible.
+QUARANTINE_REASON = "ucloud-sandboxes/controller-quarantine"
+QUARANTINE_EPOCH = "ucloud-sandboxes/controller-quarantine-epoch"
+_QUARANTINE_KEYS = {QUARANTINE_REASON, QUARANTINE_EPOCH}
+
+
+def _placement_heartbeat(heartbeat: NodeHeartbeat) -> NodeHeartbeat:
+    return (
+        replace(heartbeat, admission_open=False)
+        if heartbeat.labels.get(QUARANTINE_REASON)
+        else heartbeat
+    )
+
+
+def _controller_labels(heartbeat: NodeHeartbeat, previous: NodeHeartbeat | None):
+    labels = {k: v for k, v in heartbeat.labels.items() if k not in _QUARANTINE_KEYS}
+    if previous is not None:
+        labels.update(
+            {k: v for k, v in previous.labels.items() if k in _QUARANTINE_KEYS}
+        )
+    return replace(heartbeat, labels=labels)
+
+
 _TABLE_SQL = """CREATE TABLE control_records (
     namespace TEXT NOT NULL CHECK (namespace IN ('heartbeat', 'bootstrap')),
     record_id TEXT NOT NULL CHECK (length(record_id) > 0),
@@ -72,7 +96,10 @@ class ControlStateStore:
 
     def load_heartbeats(self) -> dict[str, NodeHeartbeat]:
         with self._transaction(write=False) as connection:
-            return self._load_heartbeats(connection)
+            return {
+                k: _placement_heartbeat(v)
+                for k, v in self._load_heartbeats(connection).items()
+            }
 
     def get_heartbeat(self, job_id: str) -> NodeHeartbeat | None:
         """Load one heartbeat without decoding every node inventory."""
@@ -87,7 +114,44 @@ class ControlStateStore:
             ).fetchone()
             if row is None:
                 return None
-            return self._decode_heartbeat(job_id, row[0])
+            return _placement_heartbeat(self._decode_heartbeat(job_id, row[0]))
+
+    def quarantine_node(self, job_id: str, reason: str) -> NodeHeartbeat | None:
+        """Close placement durably without discarding authenticated inventory."""
+        with self._transaction(write=True) as connection:
+            current = self._load_heartbeats(connection).get(job_id)
+            if current is None:
+                return None
+            labels = dict(current.labels)
+            labels.setdefault(QUARANTINE_EPOCH, current.node_epoch)
+            labels[QUARANTINE_REASON] = reason
+            stored, payload = _encode_heartbeat(replace(current, labels=labels))
+            self._upsert(connection, "heartbeat", job_id, payload)
+            return _placement_heartbeat(stored)
+
+    def recover_quarantined_node(self, heartbeat: NodeHeartbeat) -> bool:
+        """Commit verified continuity only if no newer boot/revision intervened."""
+        with self._transaction(write=True) as connection:
+            current = self._load_heartbeats(connection).get(heartbeat.job_id)
+            if current is None or (
+                (current.node_id, current.node_epoch, current.deployment_id)
+                != (heartbeat.node_id, heartbeat.node_epoch, heartbeat.deployment_id)
+                or current.activity_epoch > heartbeat.activity_epoch
+                or current.freshness_at > heartbeat.freshness_at
+            ):
+                return False
+            labels = {
+                k: v for k, v in heartbeat.labels.items() if k not in _QUARANTINE_KEYS
+            }
+            stored, payload = _encode_heartbeat(
+                replace(
+                    heartbeat,
+                    labels=labels,
+                    retired_node_epochs=current.retired_node_epochs,
+                )
+            )
+            self._upsert(connection, "heartbeat", stored.job_id, payload)
+            return True
 
     def upsert_heartbeat(self, heartbeat: NodeHeartbeat) -> None:
         with self._transaction(write=True) as connection:
@@ -95,7 +159,7 @@ class ControlStateStore:
             _assert_heartbeat_binding(heartbeats, heartbeat)
             stored, payload = _encode_heartbeat(
                 normalize_idle_since(
-                    heartbeat,
+                    _controller_labels(heartbeat, heartbeats.get(heartbeat.job_id)),
                     previous=heartbeats.get(heartbeat.job_id),
                 )
             )
@@ -136,14 +200,14 @@ class ControlStateStore:
             stored, payload = _encode_heartbeat(
                 normalize_idle_since(
                     replace(
-                        heartbeat,
+                        _controller_labels(heartbeat, previous),
                         retired_node_epochs=tuple(sorted(retired_epochs)),
                     ),
                     previous=previous,
                 )
             )
             self._upsert(connection, "heartbeat", stored.job_id, payload)
-            return HeartbeatReceiptResult(stored, previous, True)
+            return HeartbeatReceiptResult(_placement_heartbeat(stored), previous, True)
 
     def remove_heartbeats(
         self,

@@ -1043,8 +1043,8 @@ def _counts_as_unreachable(
     oldest_pending_seconds: int,
 ) -> bool:
     return bool(
-        node.job.is_running
-        and not node.heartbeat_fresh
+        (node.job.is_running or node.job.is_unavailable)
+        and (not node.heartbeat_fresh or node.job.is_unavailable)
         and not _counts_as_active_provisioning(
             node,
             policy,

@@ -105,7 +105,7 @@ class VmJobParsingTests(unittest.TestCase):
         self.assertEqual(job.queue_status, "FULL")
         self.assertFalse(job.ssh_enabled)
 
-    def test_only_post_start_suspension_is_destructive(self) -> None:
+    def test_post_start_suspension_is_unavailable_not_destructive(self) -> None:
         def job_with_updates(updates, *, state="RUNNING"):
             return instance_from_payload(
                 {
@@ -136,8 +136,8 @@ class VmJobParsingTests(unittest.TestCase):
         currently_suspended = job_with_updates([], state="SUSPENDED")
 
         self.assertEqual(initial_boot.phase, InstancePhase.RUNNING)
-        self.assertEqual(power_cycled.phase, InstancePhase.LOST)
-        self.assertEqual(currently_suspended.phase, InstancePhase.LOST)
+        self.assertEqual(power_cycled.phase, InstancePhase.UNAVAILABLE)
+        self.assertEqual(currently_suspended.phase, InstancePhase.UNAVAILABLE)
 
 
 class HeartbeatContractTests(unittest.TestCase):

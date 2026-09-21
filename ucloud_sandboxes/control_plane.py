@@ -107,7 +107,7 @@ from .program_scheduler import (
     plan_shadow_wake_queue,
 )
 from .resource_admission import node_accepts_dynamic_request
-from .control_state import ControlStateStore
+from .control_state import ControlStateStore, QUARANTINE_REASON
 from .registry import (
     HeartbeatIdentityError,
     heartbeat_from_dict,
@@ -899,7 +899,22 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             )
             if self.registry_layer_cache is not None:
                 self.registry_layer_cache.hydrate_async(stored_heartbeat.cached_images)
-            if stored_heartbeat.inventory_complete and stored_heartbeat.node_url:
+            # Authenticated boot identity, unlike provider readiness, proves
+            # that a previous guest process namespace no longer exists. Replay
+            # cleanup after every heartbeat so a routing-store failure cannot
+            # strand old routes after the new epoch was already persisted.
+            for retired_epoch in stored_heartbeat.retired_node_epochs:
+                for route in self.routing_store.delete_sandboxes_for_jobs_with_error(
+                    (stored_heartbeat.job_id,),
+                    terminal_error="node_lost",
+                    retired_node_epoch=retired_epoch,
+                ):
+                    self._release_registry_route_reference(route)
+            if (
+                stored_heartbeat.inventory_complete
+                and stored_heartbeat.node_url
+                and not stored_heartbeat.labels.get(QUARANTINE_REASON)
+            ):
                 reconciled_inventory: list[SandboxInventoryEntry] = []
                 prepared_snapshot_routes: list[SandboxRoute] = []
                 for item in stored_heartbeat.inventory:
@@ -975,6 +990,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 node_epoch=heartbeat.node_epoch,
                 activity_epoch=heartbeat.activity_epoch,
                 inventory_complete=True,
+                allow_node_epoch_adoption=False,
             )
         finally:
             # A failed SQLite commit is ambiguous. A successful read-back tells
@@ -7533,7 +7549,7 @@ def _heartbeat_proves_route_absent(
     route_updated_at: str,
     heartbeat_ttl_seconds: int,
 ) -> bool:
-    if heartbeat is None:
+    if heartbeat is None or heartbeat.labels.get(QUARANTINE_REASON):
         return False
     if not heartbeat.is_fresh(utc_now(), heartbeat_ttl_seconds):
         return False

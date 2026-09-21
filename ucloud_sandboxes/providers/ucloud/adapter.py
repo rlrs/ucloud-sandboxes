@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 import time
 from typing import Any, Callable, Sequence
@@ -42,29 +42,12 @@ class UCloudProvider:
     """Translate the provider-neutral autoscaler contract to SDU UCloud."""
 
     kind = "ucloud"
-    # UCloud may report a job RUNNING again after destroying and replacing its
-    # guest. The ordered update history is therefore required to establish
-    # continuity; the current state alone is not authoritative.
+    # Readiness-derived SUSPENDED is ambiguous, including after RUNNING.
+    # Recover capacity through authenticated guest continuity, never deletion.
     requires_continuity_history = True
-    # Prolonged silence plus a failed direct probe authorizes deliberate
-    # retirement. It does not establish that the guest was already destroyed.
-    unreachable_lease_expiry_loss = DestructiveInstanceLoss(
-        reason="ucloud_unreachable_retirement",
-        evidence_kind="unreachable_lease_expired",
-        required_evidence_fields=(
-            "unreachableLeaseExpired",
-            "unreachableReference",
-            "directProbeFailed",
-        ),
-        evidence=(("unreachableLeaseExpired", True), ("directProbeFailed", True)),
-    )
-    _post_start_instance_loss = DestructiveInstanceLoss(
-        reason="post_start_suspension",
-        evidence_kind="post_start_suspension",
-        required_evidence_fields=("postStartSuspensionObserved",),
-        evidence=(("postStartSuspensionObserved", True),),
-    )
-    destructive_instance_losses = (_post_start_instance_loss,)
+    requires_guest_continuity = True
+    unreachable_lease_expiry_loss = None
+    destructive_instance_losses: tuple[DestructiveInstanceLoss, ...] = ()
     _active_job_states = ("IN_QUEUE", "RUNNING", "SUSPENDED")
 
     def __init__(
@@ -250,12 +233,9 @@ class UCloudProvider:
         self,
         instance: ProviderInstance,
     ) -> DestructiveInstanceLoss | None:
-        if not instance.is_lost:
-            return None
-        return replace(
-            self._post_start_instance_loss,
-            evidence=(("postStartSuspensionObserved", True),),
-        )
+        # Neither provider readiness nor heartbeat silence proves guest loss.
+        # Removing the old dispositions also invalidates their journal proofs.
+        return None
 
     def render_create_request(
         self,

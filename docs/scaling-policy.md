@@ -288,31 +288,37 @@ against the hard provider and `max_provisioning_nodes` limits until the adapter
 reports it final. This prevents duplicate submissions from bypassing the cap
 while a billed or provider-visible job still exists.
 
-This weighting applies only to the initial pre-start `SUSPENDED` state. A
-post-start suspension is destructive node loss, contributes neither capacity
-nor a provider-limit slot to replacement planning, and is terminated directly.
-UCloud's current job state cannot prove VM continuity, so the UCloud adapter
-checks ordered lifecycle history for every managed running instance. Provider
-lifecycle evidence and the operation journal keep the loss classification
-latched if inventory later reports the destroyed instance as running again. A
-lost guest is never drained or sent sandbox/storage cleanup requests; its routes
-are fenced as `node_lost` and its provider job is stopped immediately. Hetzner
-does not enable this UCloud-specific history probe and retains its native server
-lifecycle semantics.
+This weighting applies only to the initial pre-start `SUSPENDED` state. For
+UCloud, a post-start suspension or a historical RUNNING → SUSPENDED → RUNNING
+sequence means **unavailable**, not safe to destroy. Provider readiness can
+change without loss of the guest. The controller quarantines the node from new
+placement while retaining its routes and inventory. A quarantine persists
+across heartbeats and controller restarts. Recovery requires current provider
+RUNNING state plus a fresh authenticated direct heartbeat with a verified guest
+boot identity and complete inventory matching the assigned route generations,
+create operations, and specifications. A plain RUNNING status or heartbeat
+arrival cannot clear quarantine.
 
-`unreachable_stop_after_seconds` is a separate, conservative eviction lease for
-a running VM whose heartbeat has disappeared. After the lease expires, the VM
-is normally eligible for provider termination only when it owns no gateway
-routes and its last complete heartbeat inventory was empty, or when it never
-produced a heartbeat at all. UCloud is the explicit exception: a guest lost
-after reaching `RUNNING` cannot be recovered, and UCloud may expose no later
-suspension update. An expired UCloud heartbeat lease therefore fences the node
-as permanent loss even when its last inventory or gateway routes were non-empty.
-The controller stops the provider job directly, marks those routes `node_lost`,
-and requests replacement capacity; it does not attempt cleanup against the lost
-guest. Hetzner retains the recoverable-host, empty-inventory safeguard. Set the
-timeout to `0` to disable unreachable-node eviction. Fresh nodes continue to use
-the normal drain-token handshake described below.
+An authenticated changed guest boot retires routes from the old incarnation;
+fully published portable snapshots remain recoverable. It does not authorize
+termination of the new guest. Old UCloud destructive stop authorizations are
+invalidated before replay; already submitted calls remain recorded as such.
+
+`unreachable_stop_after_seconds` retains the other providers' conservative
+empty-worker eviction behavior. UCloud does not treat elapsed heartbeat silence,
+even combined with a failed direct probe, as authority to delete an occupied VM.
+Workers that have reported a heartbeat must recover continuity and complete the
+ordinary drain handshake before automatic idle termination. A never-heartbeating
+VM with no assigned routes can still be retired under the existing unreachable
+startup policy. Quarantined jobs retain their provider/billing slots; replacement
+planning does not pretend those VMs have ceased to exist. A persistently
+unavailable VM may therefore need operator investigation and explicit cleanup.
+
+For controlled incident reproduction, use a disposable pre-provisioned pool
+with the executing autoscaler stopped. `max_stop_per_cycle=0` is not a global
+provider-mutation kill switch. Preserve guest boot IDs, provider history, and
+stop-journal evidence before cleanup; provider SUSPENDED timestamps alone cannot
+establish an unrecoverable guest failure.
 
 `scale_down_idle_seconds` prevents the controller from stopping a VM immediately
 after its last sandbox exits. The control plane records when a heartbeat first

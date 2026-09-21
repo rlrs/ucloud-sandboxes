@@ -1,10 +1,15 @@
 # Worker losses and heartbeat virtiofs failure
 
-Four workers in the production run powered off between 14:57 and 15:07 UTC.
-For each worker, the provider's post-start power-off event preceded the durable
-creation of our autoscaler's stop intent by 2–5 seconds. This excludes those
-particular stop requests as the initiating action; it does not establish the
-cause of the power-offs or exclude a workload-triggered failure. Earlier
+**Interpretation corrected 2026-09-21:** see the
+[controller termination review](controller-termination-review-2026-09-21.md).
+UCloud reported four workers SUSPENDED with a powered-off message between
+14:57 and 15:07 UTC. For each worker, that provider report preceded the durable
+creation of our autoscaler's stop intent by 2–5 seconds. This shows that those
+stop intents followed the provider report; it does not establish an actual
+guest power-off or that its state was already irrecoverable. The cited public
+UCloud implementation emits that same message when VM readiness is false.
+Our subsequent termination could have converted a transient readiness problem
+into permanent loss. Earlier
 pre-start SUSPENDED events are ordinary startup transitions, not worker losses.
 
 The last retained samples did not show exhausted guest RAM: approximately
@@ -48,7 +53,7 @@ underlying memory fragmentation or claim to prevent VM power-offs.
 
 ## Investigation limits
 
-The four lost VMs were already gone before tracing began. Bounded live traces
+The four VMs had already been terminated before tracing began. Bounded live traces
 on six survivors export kernel logs, reboot syscalls, and signals generated for
 PID 1 to the gateway. Ordinary SIGCHLD notifications must not be interpreted as
 shutdown signals. No absence of events in a later healthy interval proves what
@@ -82,6 +87,8 @@ recorded idle scale-down during capture, and four idle builders were also
 intentionally stopped. There was no additional unexplained worker loss in the
 provider inventory through the final readback. The four earlier power-offs
 remain unresolved; this healthy observation window is not a reproduction test.
+Here, those earlier power-offs refer to provider reports, not independently
+verified guest shutdowns.
 
 Private job-specific provider histories, stop-intent times, profiles, the full
 allocation warning, off-node traces, and deployment/check logs were retained

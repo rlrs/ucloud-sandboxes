@@ -502,6 +502,21 @@ class AutoscalerStateStore:
             row = self._operation_row(conn, str(operation_id), required=False)
         return _operation_from_row(row) if row is not None else None
 
+    def suppress_prepared_operation(
+        self, operation_id: str, *, reason: str
+    ) -> ProviderOperation:
+        """Retain the audit record while disabling an obsolete authorization.
+
+        Response/providerCallStarted evidence remains intact: suppression does
+        not claim that an earlier uncertain submission never reached a provider.
+        """
+        return self._transition_operation(
+            operation_id,
+            expected_states={"prepared"},
+            new_state="failed",
+            last_error=reason,
+        )
+
     def list_operations(
         self,
         *,

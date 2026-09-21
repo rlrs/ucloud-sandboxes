@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from concurrent.futures import Future, TimeoutError as FutureTimeoutError
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from http import HTTPStatus
@@ -4348,7 +4348,9 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             response_headers = {
                 SANDBOX_TRANSPORT_EPOCH_HEADER: _sandbox_transport_epoch(
                     route,
-                    self.routing_store.sandbox_migrations(active_only=False),
+                    self.routing_store.sandbox_migrations(
+                        active_only=False, sandbox_id=route.sandbox_id,
+                    ),
                 )
             }
             if transport_reset:
@@ -5134,6 +5136,19 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 return None
             return self.routing_store.upsert_sandbox(_route_with_sandbox_record(current, record))
 
+    @contextmanager
+    def _wake_placement_reservation(self):
+        observation = (
+            self.telemetry.span("gateway.wake.reserve_placement")
+            if self.telemetry is not None else nullcontext()
+        )
+        with observation as span:
+            started = time.monotonic()
+            with _GATEWAY_SCHEDULING_LOCK, _gateway_placement_lock(self.routing_store.path):
+                if span is not None:
+                    span.set_attribute("gateway.placement.lock_wait_seconds", time.monotonic() - started)
+                yield
+
     def _reserve_parked_sandbox_wake(
         self, route: SandboxRoute,
     ) -> SandboxRoute | None:
@@ -5158,7 +5173,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 return None
             route = detached
 
-        with _GATEWAY_SCHEDULING_LOCK, _gateway_placement_lock(self.routing_store.path):
+        with self._wake_placement_reservation():
             current = self.routing_store.get_sandbox_readonly(route.sandbox_id)
             if current is None:
                 self._write_missing_sandbox_route(route.sandbox_id)

@@ -852,7 +852,13 @@ class ControlPlaneTests(unittest.TestCase):
                 )
 
             gateway.RequestHandlerClass._proxy_request = fake_proxy_request
-            with _running_server(gateway) as gateway_url:
+            with (
+                patch.object(
+                    gateway.RequestHandlerClass.routing_store, "sandbox_migrations",
+                    wraps=gateway.RequestHandlerClass.routing_store.sandbox_migrations,
+                ) as migrations,
+                _running_server(gateway) as gateway_url,
+            ):
                 base = f"{gateway_url}/v1/sandboxes/{route.sandbox_id}"
                 identity = {
                     "generation": route.generation,
@@ -885,6 +891,11 @@ class ControlPlaneTests(unittest.TestCase):
                     ),
                 )
 
+        epoch_lookups = [call.kwargs for call in migrations.call_args_list
+                         if call.kwargs.get("active_only") is False]
+        self.assertEqual(epoch_lookups, [
+            {"active_only": False, "sandbox_id": route.sandbox_id},
+        ] * 3)
         self.assertEqual(len(records), 1)
         self.assertEqual(explicit_wake_race_states, ["parked"])
         self.assertEqual(

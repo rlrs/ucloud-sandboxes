@@ -14,6 +14,7 @@ import unittest
 from unittest.mock import patch
 
 from ucloud_sandboxes import routing as routing_module
+from ucloud_sandboxes.control_plane import _sandbox_transport_epoch
 from ucloud_sandboxes.models import SandboxInventoryEntry, ResourceQuantity, utc_now
 from ucloud_sandboxes.managed_process import ManagedProcessRecord
 from ucloud_sandboxes.routing import (
@@ -144,6 +145,29 @@ def seed_routing_state(store: RoutingStore, state: RoutingState) -> None:
 
 
 class RoutingStoreTests(unittest.TestCase):
+    def test_scoped_epoch_history_preserves_completed_handoffs(self) -> None:
+        with routing_store() as store:
+            for name in ("one", "two"):
+                route = store.upsert_sandbox(sandbox_route(
+                    sandbox_id=name, node_id="node", job_id="job",
+                    node_url="http://node", state="parked",
+                ))
+                moved = move_sandbox_with_journal(
+                    store, route, destination_node_id="dest",
+                    destination_job_id="dest-job", destination_node_url="http://dest",
+                )
+                store.advance_sandbox_migration(
+                    "migration-" + name, expected_phases={"routed"}, phase="complete",
+                )
+            history = store.sandbox_migrations(active_only=False)
+            with patch("ucloud_sandboxes.routing._sandbox_migration_from_row",
+                       wraps=routing_module._sandbox_migration_from_row) as decode:
+                scoped = store.sandbox_migrations(active_only=False, sandbox_id=moved.sandbox_id)
+                self.assertEqual(decode.call_count, 1)
+            self.assertEqual(scoped[0].phase, "complete")
+            self.assertEqual(_sandbox_transport_epoch(moved, scoped), _sandbox_transport_epoch(moved, history))
+            self.assertNotEqual(_sandbox_transport_epoch(moved, scoped), _sandbox_transport_epoch(moved, []))
+
     def test_active_migration_lookup_is_scoped_to_sandbox(self) -> None:
         with routing_store() as store:
             for name in ("one", "two"):

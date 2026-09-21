@@ -16,6 +16,11 @@ import unittest
 from unittest.mock import patch
 
 from aiohttp import ClientSession, web
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+from ucloud_sandboxes.telemetry import Telemetry
 
 from ucloud_sandboxes.model_relay import (
     ACCEPTED_NOTIFIER_KEY,
@@ -28,6 +33,7 @@ from ucloud_sandboxes.model_relay import (
     RelaySqliteStore,
     RelayWorkerResponse,
     STATE_KEY,
+    TELEMETRY_KEY,
     _notify_accepted,
     _notify_result,
     create_model_relay_app,
@@ -509,6 +515,12 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
         await state.aclose()
 
     async def test_result_wake_joins_in_progress_park_notification(self) -> None:
+        exporter = InMemorySpanExporter()
+        provider = TracerProvider()
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+        self.addCleanup(provider.shutdown)
+        telemetry = Telemetry.disabled("relay-lock-test")
+        telemetry.tracer = provider.get_tracer("relay-lock-test")
         state = ModelRelayState()
         token = str(
             (
@@ -554,6 +566,7 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                 STATE_KEY: state,
                 ACCEPTED_NOTIFIER_KEY: park,
                 RESULT_NOTIFIER_KEY: wake,
+                TELEMETRY_KEY: telemetry,
             }
 
         park_task = asyncio.create_task(
@@ -584,6 +597,9 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.gather(park_task, wake_task)
 
         self.assertEqual(order, ["park-start", "park-finish", "wake"])
+        spans = {span.name: span for span in exporter.get_finished_spans()}
+        for name in ("relay.park_caller", "relay.wake_caller"):
+            self.assertGreaterEqual(spans[name].attributes["relay.lifecycle.lock_wait_seconds"], 0)
         self.assertIsNotNone(relay_request.accepted_notified_at)
         self.assertIsNotNone(relay_request.wake_notified_at)
         await state.aclose()

@@ -1,0 +1,18 @@
+{
+  "platform": "macOS-26.5.1-arm64-arm-64bit",
+  "python": "3.10.13",
+  "history_rows": 268,
+  "relevant_rows": 1,
+  "epoch_all_history_ms": 3.4371775001636706,
+  "epoch_scoped_history_ms": 0.8478820798336528,
+  "permission_chmod_calls_per_100_reads": {
+    "RoutingStore": {
+      "before": 600,
+      "after": 0
+    },
+    "ControlStateStore": {
+      "before": 300,
+      "after": 0
+    }
+  }
+}

@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+import stat
 from threading import RLock
 from typing import Any, Iterable, Iterator
 from uuid import uuid4
@@ -4143,7 +4144,11 @@ class RoutingStore:
 def _chmod_sqlite_state_files(path: Path) -> None:
     for candidate in (path, Path(f"{path}-wal"), Path(f"{path}-shm")):
         try:
-            os.chmod(candidate, 0o600)
+            # chmod dirties filesystem metadata even when the mode is unchanged.
+            # Check on every access so newly created sidecars and permission
+            # changes are still repaired, without making normal reads writes.
+            if stat.S_IMODE(candidate.stat().st_mode) != 0o600:
+                os.chmod(candidate, 0o600)
         except FileNotFoundError:
             continue
 

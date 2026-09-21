@@ -1,0 +1,2837 @@
+{
+  "run_start_utc": "2026-09-21T13:32:58Z",
+  "run_end_utc": "2026-09-21T14:01:02Z",
+  "run_version": "0.5.70",
+  "current_deployed_version": "0.5.73",
+  "program_requests": 3603,
+  "distinct_sandbox_ids": 208,
+  "current_routes": 0,
+  "retained_migrations": 268,
+  "retained_migration_phase": "complete",
+  "histogram_query_time_utc": "2026-09-21T13:59:00Z",
+  "histogram_window_minutes": 20,
+  "sample_selection": "Search 13:00\u201314:02 UTC; limit 30 per category; slowest four wake, three create, two park results. Biased diagnostic sample, not latency distribution.",
+  "metrics": {
+    "counts": [
+      {
+        "metric": {
+          "operation": "autoscaler.reconcile",
+          "service_name": "ucloud-sandboxes-autoscaler",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "552"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.image_build",
+          "service_name": "ucloud-sandboxes-gateway",
+          "status": "error"
+        },
+        "value": [
+          1789999140,
+          "183"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.image_build",
+          "service_name": "ucloud-sandboxes-gateway",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "23"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.image_build_context_sync",
+          "service_name": "ucloud-sandboxes-gateway",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "23"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.image_build_enqueue",
+          "service_name": "ucloud-sandboxes-gateway",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "23"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.image_build_proxy_builder",
+          "service_name": "ucloud-sandboxes-gateway",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "23"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.image_build_select_builder",
+          "service_name": "ucloud-sandboxes-gateway",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "206"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.node_response_body",
+          "service_name": "ucloud-sandboxes-gateway",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "86642"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.node_response_headers",
+          "service_name": "ucloud-sandboxes-gateway",
+          "status": "error"
+        },
+        "value": [
+          1789999140,
+          "1"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.node_response_headers",
+          "service_name": "ucloud-sandboxes-gateway",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "86642"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.sandbox_create",
+          "service_name": "ucloud-sandboxes-gateway",
+          "status": "error"
+        },
+        "value": [
+          1789999140,
+          "3021"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.sandbox_create",
+          "service_name": "ucloud-sandboxes-gateway",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "2576"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.sandbox_ensure_image",
+          "service_name": "ucloud-sandboxes-gateway",
+          "status": "error"
+        },
+        "value": [
+          1789999140,
+          "181"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.sandbox_ensure_image",
+          "service_name": "ucloud-sandboxes-gateway",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "28"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.sandbox_existing_route_check",
+          "service_name": "ucloud-sandboxes-gateway",
+          "status": "error"
+        },
+        "value": [
+          1789999140,
+          "207"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.sandbox_existing_route_check",
+          "service_name": "ucloud-sandboxes-gateway",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "5390"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.sandbox_proxy_create",
+          "service_name": "ucloud-sandboxes-gateway",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "28"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.sandbox_resolve_image",
+          "service_name": "ucloud-sandboxes-gateway",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "5596"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.sandbox_resolve_layers",
+          "service_name": "ucloud-sandboxes-gateway",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "3209"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.sandbox_select_node",
+          "service_name": "ucloud-sandboxes-gateway",
+          "status": "error"
+        },
+        "value": [
+          1789999140,
+          "308"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.sandbox_select_node",
+          "service_name": "ucloud-sandboxes-gateway",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "2901"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "http.server.request",
+          "service_name": "ucloud-sandboxes-builder",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "6424"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "http.server.request",
+          "service_name": "ucloud-sandboxes-gateway",
+          "status": "error"
+        },
+        "value": [
+          1789999140,
+          "397"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "http.server.request",
+          "service_name": "ucloud-sandboxes-gateway",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "117128"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "http.server.request",
+          "service_name": "ucloud-sandboxes-model-relay",
+          "status": "error"
+        },
+        "value": [
+          1789999140,
+          "527"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "http.server.request",
+          "service_name": "ucloud-sandboxes-model-relay",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "24903"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "http.server.request",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "error"
+        },
+        "value": [
+          1789999140,
+          "1047"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "http.server.request",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "80667"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "image.build.worker",
+          "service_name": "ucloud-sandboxes-builder",
+          "status": "error"
+        },
+        "value": [
+          1789999140,
+          "1"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "image.build.worker",
+          "service_name": "ucloud-sandboxes-builder",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "22"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "node.file_upload",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "error"
+        },
+        "value": [
+          1789999140,
+          "24"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "node.file_upload",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "1063"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "node.file_upload.write",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "error"
+        },
+        "value": [
+          1789999140,
+          "24"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "node.file_upload.write",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "1063"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "node.sandbox_exec_start",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "error"
+        },
+        "value": [
+          1789999140,
+          "6"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "node.sandbox_exec_start",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "3261"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "provider.create",
+          "service_name": "ucloud-sandboxes-autoscaler",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "14"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "provider.list_instances",
+          "service_name": "ucloud-sandboxes-autoscaler",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "553"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "provider.stop",
+          "service_name": "ucloud-sandboxes-autoscaler",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "6"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "relay.park_caller",
+          "service_name": "ucloud-sandboxes-model-relay",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "3443"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "relay.wait_for_worker",
+          "service_name": "ucloud-sandboxes-model-relay",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "3448"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "relay.wake_caller",
+          "service_name": "ucloud-sandboxes-model-relay",
+          "status": "error"
+        },
+        "value": [
+          1789999140,
+          "1"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "relay.wake_caller",
+          "service_name": "ucloud-sandboxes-model-relay",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "3398"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "sandbox.exec.session",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "error"
+        },
+        "value": [
+          1789999140,
+          "97"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "sandbox.exec.session",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "3160"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "sandbox.park",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "error"
+        },
+        "value": [
+          1789999140,
+          "1"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "sandbox.park",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "3431"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "sandbox.park.commit_artifact",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "3434"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "sandbox.park.commit_journal",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "3431"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "sandbox.park.prepare",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "3436"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "sandbox.park.release_storage",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "3431"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "sandbox.park.runsc_checkpoint",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "error"
+        },
+        "value": [
+          1789999140,
+          "1"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "sandbox.park.runsc_checkpoint",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "3434"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "sandbox.park.stop_runtime",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "3433"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "sandbox.storage_publication.background",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "error"
+        },
+        "value": [
+          1789999140,
+          "84"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "sandbox.wake",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "2842"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "sandbox.wake.ensure_network",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "2847"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "snapshot.commit_metadata",
+          "service_name": "ucloud-sandboxes-storage",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "42"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "snapshot.compact_and_upload",
+          "service_name": "ucloud-sandboxes-storage",
+          "status": "error"
+        },
+        "value": [
+          1789999140,
+          "1"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "snapshot.compact_and_upload",
+          "service_name": "ucloud-sandboxes-storage",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "32"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "snapshot.export_and_upload",
+          "service_name": "ucloud-sandboxes-storage",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "10"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "snapshot.publish",
+          "service_name": "ucloud-sandboxes-storage",
+          "status": "error"
+        },
+        "value": [
+          1789999140,
+          "42"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "snapshot.publish",
+          "service_name": "ucloud-sandboxes-storage",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "42"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "snapshot.queue_wait",
+          "service_name": "ucloud-sandboxes-storage",
+          "status": "error"
+        },
+        "value": [
+          1789999140,
+          "41"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "snapshot.queue_wait",
+          "service_name": "ucloud-sandboxes-storage",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "47"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "snapshot.verify",
+          "service_name": "ucloud-sandboxes-storage",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "0"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.client.DeleteVolume",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "101"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.client.DiscardResume",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "0"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.client.EnsureMounted",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "3396"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.client.EnsurePublished",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "error"
+        },
+        "value": [
+          1789999140,
+          "83"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.client.EnsurePublished",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "1"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.client.EnsureReleased",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "3431"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.client.GetFeatures",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "6"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.client.GetMetrics",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "533"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.client.GetVolume",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "3634"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.client.ListVolumesPage",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "2202"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.client.PrepareImport",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "0"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.client.PrepareVolume",
+          "service_name": "ucloud-sandboxes-worker",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "208"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.server.DeleteVolume",
+          "service_name": "ucloud-sandboxes-storage",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "101"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.server.DiscardResume",
+          "service_name": "ucloud-sandboxes-storage",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "0"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.server.EnsureMounted",
+          "service_name": "ucloud-sandboxes-storage",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "3392"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.server.EnsurePublished",
+          "service_name": "ucloud-sandboxes-storage",
+          "status": "error"
+        },
+        "value": [
+          1789999140,
+          "83"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.server.EnsurePublished",
+          "service_name": "ucloud-sandboxes-storage",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "1"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.server.EnsureReleased",
+          "service_name": "ucloud-sandboxes-storage",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "3428"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.server.GetFeatures",
+          "service_name": "ucloud-sandboxes-storage",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "6"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.server.GetMetrics",
+          "service_name": "ucloud-sandboxes-storage",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "533"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.server.GetVolume",
+          "service_name": "ucloud-sandboxes-storage",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "3630"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.server.ListVolumesPage",
+          "service_name": "ucloud-sandboxes-storage",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "2202"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.server.PrepareImport",
+          "service_name": "ucloud-sandboxes-storage",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "0"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.server.PrepareVolume",
+          "service_name": "ucloud-sandboxes-storage",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "208"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "vm.bootstrap",
+          "service_name": "ucloud-sandboxes-autoscaler",
+          "status": "ok"
+        },
+        "value": [
+          1789999140,
+          "14"
+        ]
+      }
+    ],
+    "p95": [
+      {
+        "metric": {
+          "operation": "autoscaler.reconcile",
+          "service_name": "ucloud-sandboxes-autoscaler"
+        },
+        "value": [
+          1789999140,
+          "4.508333333333331"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.image_build",
+          "service_name": "ucloud-sandboxes-gateway"
+        },
+        "value": [
+          1789999140,
+          "4.437499999999999"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.image_build_context_sync",
+          "service_name": "ucloud-sandboxes-gateway"
+        },
+        "value": [
+          1789999140,
+          "0.07749999999999997"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.image_build_enqueue",
+          "service_name": "ucloud-sandboxes-gateway"
+        },
+        "value": [
+          1789999140,
+          "1.824999999999999"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.image_build_proxy_builder",
+          "service_name": "ucloud-sandboxes-gateway"
+        },
+        "value": [
+          1789999140,
+          "0.038749999999999986"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.image_build_select_builder",
+          "service_name": "ucloud-sandboxes-gateway"
+        },
+        "value": [
+          1789999140,
+          "0.47187499999999993"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.node_response_body",
+          "service_name": "ucloud-sandboxes-gateway"
+        },
+        "value": [
+          1789999140,
+          "0.044871532555949875"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.node_response_headers",
+          "service_name": "ucloud-sandboxes-gateway"
+        },
+        "value": [
+          1789999140,
+          "4.643738879003554"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.sandbox_create",
+          "service_name": "ucloud-sandboxes-gateway"
+        },
+        "value": [
+          1789999140,
+          "4.703241895261843"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.sandbox_ensure_image",
+          "service_name": "ucloud-sandboxes-gateway"
+        },
+        "value": [
+          1789999140,
+          "2.399662162162162"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.sandbox_existing_route_check",
+          "service_name": "ucloud-sandboxes-gateway"
+        },
+        "value": [
+          1789999140,
+          "4.172413793103447"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.sandbox_proxy_create",
+          "service_name": "ucloud-sandboxes-gateway"
+        },
+        "value": [
+          1789999140,
+          "6.874999999999997"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.sandbox_resolve_image",
+          "service_name": "ucloud-sandboxes-gateway"
+        },
+        "value": [
+          1789999140,
+          "1.4379464285714247"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.sandbox_resolve_layers",
+          "service_name": "ucloud-sandboxes-gateway"
+        },
+        "value": [
+          1789999140,
+          "0.0009547658862876255"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "gateway.sandbox_select_node",
+          "service_name": "ucloud-sandboxes-gateway"
+        },
+        "value": [
+          1789999140,
+          "0.49052385008517885"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "http.server.request",
+          "service_name": "ucloud-sandboxes-builder"
+        },
+        "value": [
+          1789999140,
+          "0.019959369794013946"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "http.server.request",
+          "service_name": "ucloud-sandboxes-gateway"
+        },
+        "value": [
+          1789999140,
+          "7.9908179012345535"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "http.server.request",
+          "service_name": "ucloud-sandboxes-model-relay"
+        },
+        "value": [
+          1789999140,
+          "57.2045770728993"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "http.server.request",
+          "service_name": "ucloud-sandboxes-worker"
+        },
+        "value": [
+          1789999140,
+          "4.798652792866394"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "image.build.worker",
+          "service_name": "ucloud-sandboxes-builder"
+        },
+        "value": [
+          1789999140,
+          "552.0963021085097"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "node.file_upload",
+          "service_name": "ucloud-sandboxes-worker"
+        },
+        "value": [
+          1789999140,
+          "6.164620335286541"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "node.file_upload.write",
+          "service_name": "ucloud-sandboxes-worker"
+        },
+        "value": [
+          1789999140,
+          "0.4147570386056219"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "node.sandbox_exec_start",
+          "service_name": "ucloud-sandboxes-worker"
+        },
+        "value": [
+          1789999140,
+          "0.2156616446865835"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "provider.create",
+          "service_name": "ucloud-sandboxes-autoscaler"
+        },
+        "value": [
+          1789999140,
+          "0.04875"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "provider.list_instances",
+          "service_name": "ucloud-sandboxes-autoscaler"
+        },
+        "value": [
+          1789999140,
+          "0.11363636363636319"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "provider.stop",
+          "service_name": "ucloud-sandboxes-autoscaler"
+        },
+        "value": [
+          1789999140,
+          "0.095"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "relay.park_caller",
+          "service_name": "ucloud-sandboxes-model-relay"
+        },
+        "value": [
+          1789999140,
+          "56.382178217821775"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "relay.wait_for_worker",
+          "service_name": "ucloud-sandboxes-model-relay"
+        },
+        "value": [
+          1789999140,
+          "55.76435185185187"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "relay.wake_caller",
+          "service_name": "ucloud-sandboxes-model-relay"
+        },
+        "value": [
+          1789999140,
+          "97.03416149068318"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "sandbox.exec.session",
+          "service_name": "ucloud-sandboxes-worker"
+        },
+        "value": [
+          1789999140,
+          "8.48793713972244"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "sandbox.park",
+          "service_name": "ucloud-sandboxes-worker"
+        },
+        "value": [
+          1789999140,
+          "13.876769448800259"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "sandbox.park.commit_artifact",
+          "service_name": "ucloud-sandboxes-worker"
+        },
+        "value": [
+          1789999140,
+          "2.11697552704078"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "sandbox.park.commit_journal",
+          "service_name": "ucloud-sandboxes-worker"
+        },
+        "value": [
+          1789999140,
+          "0.2472947521446617"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "sandbox.park.prepare",
+          "service_name": "ucloud-sandboxes-worker"
+        },
+        "value": [
+          1789999140,
+          "0.4264093136255035"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "sandbox.park.release_storage",
+          "service_name": "ucloud-sandboxes-worker"
+        },
+        "value": [
+          1789999140,
+          "5.389557250831868"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "sandbox.park.runsc_checkpoint",
+          "service_name": "ucloud-sandboxes-worker"
+        },
+        "value": [
+          1789999140,
+          "5.923050999785713"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "sandbox.park.stop_runtime",
+          "service_name": "ucloud-sandboxes-worker"
+        },
+        "value": [
+          1789999140,
+          "1.5205611465315951"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "sandbox.storage_publication.background",
+          "service_name": "ucloud-sandboxes-worker"
+        },
+        "value": [
+          1789999140,
+          "113.0344078238691"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "sandbox.wake",
+          "service_name": "ucloud-sandboxes-worker"
+        },
+        "value": [
+          1789999140,
+          "17.41869623276122"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "sandbox.wake.ensure_network",
+          "service_name": "ucloud-sandboxes-worker"
+        },
+        "value": [
+          1789999140,
+          "0.8246697542915584"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "snapshot.commit_metadata",
+          "service_name": "ucloud-sandboxes-storage"
+        },
+        "value": [
+          1789999140,
+          "0.4907274644590802"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "snapshot.compact_and_upload",
+          "service_name": "ucloud-sandboxes-storage"
+        },
+        "value": [
+          1789999140,
+          "114.953596050765"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "snapshot.export_and_upload",
+          "service_name": "ucloud-sandboxes-storage"
+        },
+        "value": [
+          1789999140,
+          "58.25"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "snapshot.publish",
+          "service_name": "ucloud-sandboxes-storage"
+        },
+        "value": [
+          1789999140,
+          "106.44735052035173"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "snapshot.queue_wait",
+          "service_name": "ucloud-sandboxes-storage"
+        },
+        "value": [
+          1789999140,
+          "24.334073355111716"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.client.DeleteVolume",
+          "service_name": "ucloud-sandboxes-worker"
+        },
+        "value": [
+          1789999140,
+          "4.624087571820459"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.client.EnsureMounted",
+          "service_name": "ucloud-sandboxes-worker"
+        },
+        "value": [
+          1789999140,
+          "6.882001336631703"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.client.EnsurePublished",
+          "service_name": "ucloud-sandboxes-worker"
+        },
+        "value": [
+          1789999140,
+          "113.14178776889324"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.client.EnsureReleased",
+          "service_name": "ucloud-sandboxes-worker"
+        },
+        "value": [
+          1789999140,
+          "5.312062916419943"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.client.GetMetrics",
+          "service_name": "ucloud-sandboxes-worker"
+        },
+        "value": [
+          1789999140,
+          "0.024110739205284233"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.client.GetVolume",
+          "service_name": "ucloud-sandboxes-worker"
+        },
+        "value": [
+          1789999140,
+          "0.01779079023345406"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.client.ListVolumesPage",
+          "service_name": "ucloud-sandboxes-worker"
+        },
+        "value": [
+          1789999140,
+          "0.00914885564752239"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.client.PrepareVolume",
+          "service_name": "ucloud-sandboxes-worker"
+        },
+        "value": [
+          1789999140,
+          "4.0901209000727885"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.server.DeleteVolume",
+          "service_name": "ucloud-sandboxes-storage"
+        },
+        "value": [
+          1789999140,
+          "4.639219627889978"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.server.EnsureMounted",
+          "service_name": "ucloud-sandboxes-storage"
+        },
+        "value": [
+          1789999140,
+          "6.891573437640586"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.server.EnsurePublished",
+          "service_name": "ucloud-sandboxes-storage"
+        },
+        "value": [
+          1789999140,
+          "113.13772895094212"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.server.EnsureReleased",
+          "service_name": "ucloud-sandboxes-storage"
+        },
+        "value": [
+          1789999140,
+          "5.325387866835469"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.server.GetMetrics",
+          "service_name": "ucloud-sandboxes-storage"
+        },
+        "value": [
+          1789999140,
+          "0.018338897783134044"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.server.GetVolume",
+          "service_name": "ucloud-sandboxes-storage"
+        },
+        "value": [
+          1789999140,
+          "0.005992339591521005"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.server.ListVolumesPage",
+          "service_name": "ucloud-sandboxes-storage"
+        },
+        "value": [
+          1789999140,
+          "0.004416523021001014"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "storage.server.PrepareVolume",
+          "service_name": "ucloud-sandboxes-storage"
+        },
+        "value": [
+          1789999140,
+          "4.15770887712408"
+        ]
+      },
+      {
+        "metric": {
+          "operation": "vm.bootstrap",
+          "service_name": "ucloud-sandboxes-autoscaler"
+        },
+        "value": [
+          1789999140,
+          "58.25"
+        ]
+      }
+    ],
+    "cpu_seconds": []
+  },
+  "traces": [
+    {
+      "trace_id": "5c7693f4c092108a06d3001e169aa995",
+      "spans": [
+        {
+          "name": "gateway.node_response_headers",
+          "span_id": "DOjO8O0dnnQ=",
+          "parent_id": "WvEu3VyS9OI=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 103.52743913,
+          "duration_seconds": 0.017548751,
+          "http_status": "200"
+        },
+        {
+          "name": "gateway.node_response_body",
+          "span_id": "EBo7Dk4KTl4=",
+          "parent_id": "WvEu3VyS9OI=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 103.545133411,
+          "duration_seconds": 0.000127973,
+          "http_status": "200"
+        },
+        {
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "span_id": "WvEu3VyS9OI=",
+          "parent_id": "ma4pOKJxXyg=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 69.386429499,
+          "duration_seconds": 35.518894198,
+          "http_status": "200"
+        },
+        {
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "span_id": "fqX0OZI9WJY=",
+          "parent_id": "WvEu3VyS9OI=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397961",
+          "offset_seconds": 103.530461296,
+          "duration_seconds": 0.012292081,
+          "http_status": "200"
+        },
+        {
+          "name": "relay.wake_caller",
+          "span_id": "ma4pOKJxXyg=",
+          "parent_id": "EWd8Yp7xq5A=",
+          "service": "ucloud-sandboxes-model-relay",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 0.001917779,
+          "duration_seconds": 104.904038904,
+          "http_status": null
+        },
+        {
+          "name": "POST /worker/respond",
+          "span_id": "EWd8Yp7xq5A=",
+          "parent_id": null,
+          "service": "ucloud-sandboxes-model-relay",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 0.0,
+          "duration_seconds": 104.908224302,
+          "http_status": "200"
+        }
+      ]
+    },
+    {
+      "trace_id": "de9cdbb76d871c40175ab92ffb22656",
+      "spans": [
+        {
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "span_id": "y/CKIIyGbjw=",
+          "parent_id": "9Cyv03sTlGw=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 61.327630257,
+          "duration_seconds": 41.606755937,
+          "http_status": "200"
+        },
+        {
+          "name": "gateway.node_response_headers",
+          "span_id": "hsVQgQqlaSI=",
+          "parent_id": "y/CKIIyGbjw=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 97.089673819,
+          "duration_seconds": 3.11431602,
+          "http_status": "200"
+        },
+        {
+          "name": "gateway.node_response_body",
+          "span_id": "HElRI30XS3c=",
+          "parent_id": "y/CKIIyGbjw=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 100.204110673,
+          "duration_seconds": 0.000869544,
+          "http_status": "200"
+        },
+        {
+          "name": "storage.server.EnsureMounted",
+          "span_id": "PhmsJrcvT5g=",
+          "parent_id": "SdfbF0v4vRs=",
+          "service": "ucloud-sandboxes-storage",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 97.195058057,
+          "duration_seconds": 0.028936125,
+          "http_status": null
+        },
+        {
+          "name": "sandbox.wake.ensure_network",
+          "span_id": "GFgzvhD6sAg=",
+          "parent_id": "OVmstP+XavY=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397995",
+          "offset_seconds": 97.151535165,
+          "duration_seconds": 0.041986171,
+          "http_status": null
+        },
+        {
+          "name": "storage.client.EnsureMounted",
+          "span_id": "SdfbF0v4vRs=",
+          "parent_id": "OVmstP+XavY=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397995",
+          "offset_seconds": 97.194097763,
+          "duration_seconds": 0.030207256,
+          "http_status": null
+        },
+        {
+          "name": "sandbox.wake",
+          "span_id": "OVmstP+XavY=",
+          "parent_id": "z+YrHvBWT+I=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397995",
+          "offset_seconds": 97.151503518,
+          "duration_seconds": 3.043321128,
+          "http_status": null
+        },
+        {
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "span_id": "z+YrHvBWT+I=",
+          "parent_id": "y/CKIIyGbjw=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397995",
+          "offset_seconds": 97.097951245,
+          "duration_seconds": 3.101929995,
+          "http_status": "200"
+        },
+        {
+          "name": "relay.wake_caller",
+          "span_id": "9Cyv03sTlGw=",
+          "parent_id": "3zSfk//qW0g=",
+          "service": "ucloud-sandboxes-model-relay",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 0.001257992,
+          "duration_seconds": 102.936147196,
+          "http_status": null
+        },
+        {
+          "name": "POST /worker/respond",
+          "span_id": "3zSfk//qW0g=",
+          "parent_id": null,
+          "service": "ucloud-sandboxes-model-relay",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 0.0,
+          "duration_seconds": 102.938264207,
+          "http_status": "200"
+        }
+      ]
+    },
+    {
+      "trace_id": "53c865dbb0c580ea1825114209b34f79",
+      "spans": [
+        {
+          "name": "gateway.node_response_headers",
+          "span_id": "o7uHvJOO6Nk=",
+          "parent_id": "xtkCL/tq2GQ=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 76.279857043,
+          "duration_seconds": 0.019176892,
+          "http_status": "200"
+        },
+        {
+          "name": "gateway.node_response_body",
+          "span_id": "s50o7W6YtNw=",
+          "parent_id": "xtkCL/tq2GQ=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 76.299192154,
+          "duration_seconds": 0.000222527,
+          "http_status": "200"
+        },
+        {
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "span_id": "xtkCL/tq2GQ=",
+          "parent_id": "GTOW4ZArYcw=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 75.494365025,
+          "duration_seconds": 0.935878335,
+          "http_status": "200"
+        },
+        {
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "span_id": "+fyE83cS+20=",
+          "parent_id": "xtkCL/tq2GQ=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397962",
+          "offset_seconds": 76.284296728,
+          "duration_seconds": 0.014833606,
+          "http_status": "200"
+        },
+        {
+          "name": "relay.wake_caller",
+          "span_id": "GTOW4ZArYcw=",
+          "parent_id": "7sPJzAlMv9E=",
+          "service": "ucloud-sandboxes-model-relay",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 0.002046524,
+          "duration_seconds": 76.429195165,
+          "http_status": null
+        },
+        {
+          "name": "POST /worker/respond",
+          "span_id": "7sPJzAlMv9E=",
+          "parent_id": null,
+          "service": "ucloud-sandboxes-model-relay",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 0.0,
+          "duration_seconds": 76.433043763,
+          "http_status": "200"
+        }
+      ]
+    },
+    {
+      "trace_id": "3087a7229f16bf00080e6552f1635fe1",
+      "spans": [
+        {
+          "name": "POST /worker/respond",
+          "span_id": "guoIYlVJ+ig=",
+          "parent_id": null,
+          "service": "ucloud-sandboxes-model-relay",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 0.0,
+          "duration_seconds": 64.165269476,
+          "http_status": "200"
+        },
+        {
+          "name": "relay.wake_caller",
+          "span_id": "2hw+5tpqwTo=",
+          "parent_id": "guoIYlVJ+ig=",
+          "service": "ucloud-sandboxes-model-relay",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 0.002506099,
+          "duration_seconds": 64.161806289,
+          "http_status": null
+        },
+        {
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "span_id": "OpxC9cfkov0=",
+          "parent_id": "2hw+5tpqwTo=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 28.96269549,
+          "duration_seconds": 2.780252146,
+          "http_status": "503"
+        },
+        {
+          "name": "gateway.node_response_headers",
+          "span_id": "BkcJnaq+DkA=",
+          "parent_id": "OpxC9cfkov0=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 30.210486088,
+          "duration_seconds": 0.089060763,
+          "http_status": "200"
+        },
+        {
+          "name": "gateway.node_response_body",
+          "span_id": "u6BMK6w1YOI=",
+          "parent_id": "OpxC9cfkov0=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 30.299646002,
+          "duration_seconds": 0.000590603,
+          "http_status": "200"
+        },
+        {
+          "name": "gateway.node_response_headers",
+          "span_id": "lfck5Kf5iB4=",
+          "parent_id": "OpxC9cfkov0=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 31.723147062,
+          "duration_seconds": 0.013749326,
+          "http_status": "202"
+        },
+        {
+          "name": "gateway.node_response_body",
+          "span_id": "4wiuTEQn+Ro=",
+          "parent_id": "OpxC9cfkov0=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 31.737197584,
+          "duration_seconds": 0.003041648,
+          "http_status": "202"
+        },
+        {
+          "name": "GET /v1/heartbeat",
+          "span_id": "+YL5JEJ6xXo=",
+          "parent_id": "OpxC9cfkov0=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397996",
+          "offset_seconds": 30.214376769,
+          "duration_seconds": 0.085764771,
+          "http_status": "200"
+        },
+        {
+          "name": "storage.client.ListVolumesPage",
+          "span_id": "W8dRe8sTv8o=",
+          "parent_id": "+YL5JEJ6xXo=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397996",
+          "offset_seconds": 30.222415086,
+          "duration_seconds": 0.003277198,
+          "http_status": null
+        },
+        {
+          "name": "storage.client.ListVolumesPage",
+          "span_id": "13Rfgq5Nslc=",
+          "parent_id": "+YL5JEJ6xXo=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397996",
+          "offset_seconds": 30.226021251,
+          "duration_seconds": 0.000943644,
+          "http_status": null
+        },
+        {
+          "name": "storage.client.GetMetrics",
+          "span_id": "Ur4MGmbzeJo=",
+          "parent_id": "+YL5JEJ6xXo=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397996",
+          "offset_seconds": 30.278499414,
+          "duration_seconds": 0.02112149,
+          "http_status": null
+        },
+        {
+          "name": "POST /v1/sandboxes/{sandbox_id}/snapshot/publish",
+          "span_id": "dkW5OXewfUE=",
+          "parent_id": "OpxC9cfkov0=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397996",
+          "offset_seconds": 31.731828201,
+          "duration_seconds": 0.004799376,
+          "http_status": "202"
+        },
+        {
+          "name": "storage.server.ListVolumesPage",
+          "span_id": "JRyxpTqhIAw=",
+          "parent_id": "W8dRe8sTv8o=",
+          "service": "ucloud-sandboxes-storage",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 30.223510369,
+          "duration_seconds": 0.001730724,
+          "http_status": null
+        },
+        {
+          "name": "storage.server.ListVolumesPage",
+          "span_id": "/XJejtQ/gG8=",
+          "parent_id": "13Rfgq5Nslc=",
+          "service": "ucloud-sandboxes-storage",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 30.226406662,
+          "duration_seconds": 0.000453004,
+          "http_status": null
+        },
+        {
+          "name": "storage.server.GetMetrics",
+          "span_id": "7XrErc2z8bw=",
+          "parent_id": "Ur4MGmbzeJo=",
+          "service": "ucloud-sandboxes-storage",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 30.281500325,
+          "duration_seconds": 0.017901267,
+          "http_status": null
+        },
+        {
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "span_id": "qVmNTrwcWSQ=",
+          "parent_id": "2hw+5tpqwTo=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 34.181740971,
+          "duration_seconds": 24.652762233,
+          "http_status": "503"
+        },
+        {
+          "name": "gateway.node_response_headers",
+          "span_id": "HSnaMpS5iqY=",
+          "parent_id": "qVmNTrwcWSQ=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 53.134316015,
+          "duration_seconds": 4.834104141,
+          "http_status": "200"
+        },
+        {
+          "name": "gateway.node_response_body",
+          "span_id": "ks8ot6ccCsQ=",
+          "parent_id": "qVmNTrwcWSQ=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 57.96910373,
+          "duration_seconds": 0.010466093,
+          "http_status": "200"
+        },
+        {
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "span_id": "B89inf7r/sk=",
+          "parent_id": "2hw+5tpqwTo=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 59.944264337,
+          "duration_seconds": 4.211599559,
+          "http_status": "200"
+        },
+        {
+          "name": "gateway.node_response_headers",
+          "span_id": "oz35LykQP1c=",
+          "parent_id": "B89inf7r/sk=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 63.055260207,
+          "duration_seconds": 0.010094962,
+          "http_status": "200"
+        },
+        {
+          "name": "gateway.node_response_body",
+          "span_id": "R4wmbhneeqM=",
+          "parent_id": "B89inf7r/sk=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 63.065438144,
+          "duration_seconds": 0.000595671,
+          "http_status": "200"
+        },
+        {
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "span_id": "wZh1b8nR+mM=",
+          "parent_id": "qVmNTrwcWSQ=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397996",
+          "offset_seconds": 53.136727902,
+          "duration_seconds": 4.825483274,
+          "http_status": "200"
+        },
+        {
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "span_id": "SR8ZdzuCf7k=",
+          "parent_id": "B89inf7r/sk=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397996",
+          "offset_seconds": 63.057424498,
+          "duration_seconds": 0.008277738,
+          "http_status": "200"
+        }
+      ]
+    },
+    {
+      "trace_id": "175166be27d9a056040c00504a27df44",
+      "spans": [
+        {
+          "name": "GET /v1/sandboxes",
+          "span_id": "NRWpI7J4FtM=",
+          "parent_id": "3gBkLCUIddI=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397961",
+          "offset_seconds": 2.688292403,
+          "duration_seconds": 0.001518004,
+          "http_status": "200"
+        },
+        {
+          "name": "gateway.sandbox_resolve_image",
+          "span_id": "Awkkcx0gYmw=",
+          "parent_id": "wpaawtdMuPM=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 0.000396289,
+          "duration_seconds": 2.493207017,
+          "http_status": null
+        },
+        {
+          "name": "gateway.node_response_headers",
+          "span_id": "Ju3D3bP9prk=",
+          "parent_id": "3gBkLCUIddI=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 2.64760561,
+          "duration_seconds": 0.057781695,
+          "http_status": "200"
+        },
+        {
+          "name": "gateway.node_response_body",
+          "span_id": "pCdlKQsEDLo=",
+          "parent_id": "3gBkLCUIddI=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 2.705484792,
+          "duration_seconds": 9.6836e-05,
+          "http_status": "200"
+        },
+        {
+          "name": "gateway.sandbox_existing_route_check",
+          "span_id": "3gBkLCUIddI=",
+          "parent_id": "wpaawtdMuPM=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 2.493680072,
+          "duration_seconds": 3.895733178,
+          "http_status": "503"
+        },
+        {
+          "name": "gateway.sandbox_create",
+          "span_id": "wpaawtdMuPM=",
+          "parent_id": "slcwnm/7HTM=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 0.000373534,
+          "duration_seconds": 6.389113628,
+          "http_status": null
+        },
+        {
+          "name": "POST /v1/sandboxes",
+          "span_id": "slcwnm/7HTM=",
+          "parent_id": null,
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 0.0,
+          "duration_seconds": 6.389549377,
+          "http_status": null
+        }
+      ]
+    },
+    {
+      "trace_id": "3ad3fee0d9af716301f89016a86317a3",
+      "spans": [
+        {
+          "name": "GET /v1/sandboxes",
+          "span_id": "mdu/6qYH9IU=",
+          "parent_id": "pfwLoHao7jE=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397962",
+          "offset_seconds": 0.044353168,
+          "duration_seconds": 0.022585001,
+          "http_status": "200"
+        },
+        {
+          "name": "gateway.sandbox_resolve_image",
+          "span_id": "fUj233riWQo=",
+          "parent_id": "mR/yY3Rnnf8=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 0.001269537,
+          "duration_seconds": 0.001387526,
+          "http_status": null
+        },
+        {
+          "name": "gateway.node_response_headers",
+          "span_id": "gZfixq+wo98=",
+          "parent_id": "pfwLoHao7jE=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 0.032036469,
+          "duration_seconds": 0.039751569,
+          "http_status": "200"
+        },
+        {
+          "name": "gateway.node_response_body",
+          "span_id": "VNmQr4lB/YI=",
+          "parent_id": "pfwLoHao7jE=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 0.07188855,
+          "duration_seconds": 0.058681176,
+          "http_status": "200"
+        },
+        {
+          "name": "gateway.sandbox_existing_route_check",
+          "span_id": "pfwLoHao7jE=",
+          "parent_id": "mR/yY3Rnnf8=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 0.002707799,
+          "duration_seconds": 6.094813147,
+          "http_status": "503"
+        },
+        {
+          "name": "gateway.sandbox_create",
+          "span_id": "mR/yY3Rnnf8=",
+          "parent_id": "pIhH1H8c/ao=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 0.000695671,
+          "duration_seconds": 6.097003294,
+          "http_status": null
+        },
+        {
+          "name": "POST /v1/sandboxes",
+          "span_id": "pIhH1H8c/ao=",
+          "parent_id": null,
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 0.0,
+          "duration_seconds": 6.097811275,
+          "http_status": null
+        }
+      ]
+    },
+    {
+      "trace_id": "150f97240f7d3e2808d651cd9f888764",
+      "spans": [
+        {
+          "name": "gateway.sandbox_resolve_image",
+          "span_id": "AhHuQMnm87g=",
+          "parent_id": "KyLl8ShWM1M=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 0.000494196,
+          "duration_seconds": 0.000610112,
+          "http_status": null
+        },
+        {
+          "name": "gateway.node_response_headers",
+          "span_id": "J6E34vCquZs=",
+          "parent_id": "cju8hOarjgQ=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 0.167338532,
+          "duration_seconds": 0.05110146,
+          "http_status": "200"
+        },
+        {
+          "name": "gateway.node_response_body",
+          "span_id": "MnmPRwSyLNo=",
+          "parent_id": "cju8hOarjgQ=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 0.218546332,
+          "duration_seconds": 0.000106681,
+          "http_status": "200"
+        },
+        {
+          "name": "gateway.sandbox_existing_route_check",
+          "span_id": "cju8hOarjgQ=",
+          "parent_id": "KyLl8ShWM1M=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 0.00114523,
+          "duration_seconds": 5.567989679,
+          "http_status": "503"
+        },
+        {
+          "name": "gateway.sandbox_create",
+          "span_id": "KyLl8ShWM1M=",
+          "parent_id": "pAjd+ajPcb4=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 0.000469449,
+          "duration_seconds": 5.56871864,
+          "http_status": null
+        },
+        {
+          "name": "POST /v1/sandboxes",
+          "span_id": "pAjd+ajPcb4=",
+          "parent_id": null,
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 0.0,
+          "duration_seconds": 5.569243934,
+          "http_status": null
+        },
+        {
+          "name": "GET /v1/sandboxes",
+          "span_id": "Ifd2OOXiLXs=",
+          "parent_id": "cju8hOarjgQ=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397997",
+          "offset_seconds": 0.186539441,
+          "duration_seconds": 0.001101283,
+          "http_status": "200"
+        }
+      ]
+    },
+    {
+      "trace_id": "936f893a20600ded06c69173382d764a",
+      "spans": [
+        {
+          "name": "POST /tunnels/{rollout_id}/_relay/{registration_token}/{tunnel_path}",
+          "span_id": "4yo0Fd3Y1dE=",
+          "parent_id": null,
+          "service": "ucloud-sandboxes-model-relay",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 0.0,
+          "duration_seconds": 77.767854471,
+          "http_status": "200"
+        },
+        {
+          "name": "relay.wait_for_worker",
+          "span_id": "lq2FJOicHOY=",
+          "parent_id": "4yo0Fd3Y1dE=",
+          "service": "ucloud-sandboxes-model-relay",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 33.649092227,
+          "duration_seconds": 44.118657386,
+          "http_status": null
+        },
+        {
+          "name": "relay.park_caller",
+          "span_id": "C0zg6bM3R/Y=",
+          "parent_id": "4yo0Fd3Y1dE=",
+          "service": "ucloud-sandboxes-model-relay",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 0.00348312,
+          "duration_seconds": 33.645058555,
+          "http_status": null
+        },
+        {
+          "name": "POST /v1/sandboxes/{sandbox_id}/park",
+          "span_id": "eYF9rkUYO4I=",
+          "parent_id": "C0zg6bM3R/Y=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 18.030862037,
+          "duration_seconds": 15.621233285,
+          "http_status": "200"
+        },
+        {
+          "name": "gateway.node_response_headers",
+          "span_id": "enHDL5FsgU8=",
+          "parent_id": "eYF9rkUYO4I=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 20.420516305,
+          "duration_seconds": 9.870382082,
+          "http_status": "200"
+        },
+        {
+          "name": "gateway.node_response_body",
+          "span_id": "RhCBQcMSuwY=",
+          "parent_id": "eYF9rkUYO4I=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 30.290981002,
+          "duration_seconds": 0.000287374,
+          "http_status": "200"
+        },
+        {
+          "name": "POST /v1/sandboxes/{sandbox_id}/park",
+          "span_id": "hrhp21DyhAc=",
+          "parent_id": "eYF9rkUYO4I=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397962",
+          "offset_seconds": 20.420920237,
+          "duration_seconds": 9.86915409,
+          "http_status": "200"
+        },
+        {
+          "name": "sandbox.park",
+          "span_id": "wl50En7qino=",
+          "parent_id": "hrhp21DyhAc=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397962",
+          "offset_seconds": 20.425520905,
+          "duration_seconds": 9.850491816,
+          "http_status": null
+        },
+        {
+          "name": "sandbox.park.prepare",
+          "span_id": "Q5wSu3S2MfU=",
+          "parent_id": "wl50En7qino=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397962",
+          "offset_seconds": 20.42612884,
+          "duration_seconds": 0.325093632,
+          "http_status": null
+        },
+        {
+          "name": "sandbox.park.runsc_checkpoint",
+          "span_id": "MRcjjfE5KNE=",
+          "parent_id": "wl50En7qino=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397962",
+          "offset_seconds": 20.75133396,
+          "duration_seconds": 0.667629389,
+          "http_status": null
+        },
+        {
+          "name": "sandbox.park.commit_artifact",
+          "span_id": "aJa0dAdZa8g=",
+          "parent_id": "wl50En7qino=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397962",
+          "offset_seconds": 21.419259636,
+          "duration_seconds": 3.012867265,
+          "http_status": null
+        },
+        {
+          "name": "sandbox.park.stop_runtime",
+          "span_id": "RbTiHwHhq6o=",
+          "parent_id": "wl50En7qino=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397962",
+          "offset_seconds": 24.432291509,
+          "duration_seconds": 1.496451416,
+          "http_status": null
+        },
+        {
+          "name": "sandbox.park.release_storage",
+          "span_id": "Ji1Gt2NMSvE=",
+          "parent_id": "wl50En7qino=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397962",
+          "offset_seconds": 25.928873802,
+          "duration_seconds": 4.25669805,
+          "http_status": null
+        },
+        {
+          "name": "storage.client.EnsureReleased",
+          "span_id": "2h8SZR1a9CM=",
+          "parent_id": "Ji1Gt2NMSvE=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397962",
+          "offset_seconds": 26.097931513,
+          "duration_seconds": 4.087496172,
+          "http_status": null
+        },
+        {
+          "name": "sandbox.park.commit_journal",
+          "span_id": "+kefvN8noVs=",
+          "parent_id": "wl50En7qino=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397962",
+          "offset_seconds": 30.185652543,
+          "duration_seconds": 0.090247478,
+          "http_status": null
+        },
+        {
+          "name": "storage.client.GetVolume",
+          "span_id": "zzv2GMNtrHw=",
+          "parent_id": "hrhp21DyhAc=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397962",
+          "offset_seconds": 30.288301817,
+          "duration_seconds": 0.001459058,
+          "http_status": null
+        },
+        {
+          "name": "storage.server.EnsureReleased",
+          "span_id": "lgvW4aTlTKQ=",
+          "parent_id": "2h8SZR1a9CM=",
+          "service": "ucloud-sandboxes-storage",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 26.098969786,
+          "duration_seconds": 4.086043696,
+          "http_status": null
+        },
+        {
+          "name": "storage.server.GetVolume",
+          "span_id": "Or3Xt8itGvQ=",
+          "parent_id": "zzv2GMNtrHw=",
+          "service": "ucloud-sandboxes-storage",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 30.289017895,
+          "duration_seconds": 0.000561827,
+          "http_status": null
+        }
+      ]
+    },
+    {
+      "trace_id": "25216ae8b49c4b3a12768343cc005121",
+      "spans": [
+        {
+          "name": "POST /tunnels/{rollout_id}/_relay/{registration_token}/{tunnel_path}",
+          "span_id": "7/f2+/OtpBI=",
+          "parent_id": null,
+          "service": "ucloud-sandboxes-model-relay",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 0.0,
+          "duration_seconds": 74.751713574,
+          "http_status": "200"
+        },
+        {
+          "name": "relay.wait_for_worker",
+          "span_id": "gnMjAiIKXcc=",
+          "parent_id": "7/f2+/OtpBI=",
+          "service": "ucloud-sandboxes-model-relay",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 49.251817531,
+          "duration_seconds": 25.49952327,
+          "http_status": null
+        },
+        {
+          "name": "relay.park_caller",
+          "span_id": "S0Y3hVgZTc4=",
+          "parent_id": "7/f2+/OtpBI=",
+          "service": "ucloud-sandboxes-model-relay",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 0.001383239,
+          "duration_seconds": 49.250330355,
+          "http_status": null
+        },
+        {
+          "name": "POST /v1/sandboxes/{sandbox_id}/park",
+          "span_id": "TTCkJhXjD1k=",
+          "parent_id": "S0Y3hVgZTc4=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 42.139454472,
+          "duration_seconds": 7.11003975,
+          "http_status": "200"
+        },
+        {
+          "name": "gateway.node_response_headers",
+          "span_id": "1Jsa+1gwj6I=",
+          "parent_id": "TTCkJhXjD1k=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 42.901501304,
+          "duration_seconds": 5.572816418,
+          "http_status": "200"
+        },
+        {
+          "name": "gateway.node_response_body",
+          "span_id": "xWGLY/T5xqM=",
+          "parent_id": "TTCkJhXjD1k=",
+          "service": "ucloud-sandboxes-gateway",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 48.47443588,
+          "duration_seconds": 0.000127754,
+          "http_status": "200"
+        },
+        {
+          "name": "POST /v1/sandboxes/{sandbox_id}/park",
+          "span_id": "WfJs9ReA294=",
+          "parent_id": "TTCkJhXjD1k=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397962",
+          "offset_seconds": 42.902843227,
+          "duration_seconds": 5.57079733,
+          "http_status": "200"
+        },
+        {
+          "name": "sandbox.park",
+          "span_id": "Pt755aoSRX4=",
+          "parent_id": "WfJs9ReA294=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397962",
+          "offset_seconds": 42.906599205,
+          "duration_seconds": 5.534039073,
+          "http_status": null
+        },
+        {
+          "name": "sandbox.park.prepare",
+          "span_id": "/HhNduxiKfE=",
+          "parent_id": "Pt755aoSRX4=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397962",
+          "offset_seconds": 42.907387672,
+          "duration_seconds": 0.003823771,
+          "http_status": null
+        },
+        {
+          "name": "sandbox.park.runsc_checkpoint",
+          "span_id": "og1ha4rtRt0=",
+          "parent_id": "Pt755aoSRX4=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397962",
+          "offset_seconds": 42.91133547,
+          "duration_seconds": 0.774236509,
+          "http_status": null
+        },
+        {
+          "name": "sandbox.park.commit_artifact",
+          "span_id": "zHk5j+Uapzs=",
+          "parent_id": "Pt755aoSRX4=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397962",
+          "offset_seconds": 43.686509071,
+          "duration_seconds": 0.426633635,
+          "http_status": null
+        },
+        {
+          "name": "sandbox.park.stop_runtime",
+          "span_id": "GUae0wQ1V3E=",
+          "parent_id": "Pt755aoSRX4=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397962",
+          "offset_seconds": 44.113290358,
+          "duration_seconds": 0.327927522,
+          "http_status": null
+        },
+        {
+          "name": "sandbox.park.release_storage",
+          "span_id": "3DQk4uKI4Us=",
+          "parent_id": "Pt755aoSRX4=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397962",
+          "offset_seconds": 44.441322167,
+          "duration_seconds": 3.952219819,
+          "http_status": null
+        },
+        {
+          "name": "storage.client.EnsureReleased",
+          "span_id": "KrtifJCHIX8=",
+          "parent_id": "3DQk4uKI4Us=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397962",
+          "offset_seconds": 44.508917321,
+          "duration_seconds": 3.8844354,
+          "http_status": null
+        },
+        {
+          "name": "sandbox.park.commit_journal",
+          "span_id": "uQlsx7tRH0s=",
+          "parent_id": "Pt755aoSRX4=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397962",
+          "offset_seconds": 48.393626983,
+          "duration_seconds": 0.046879997,
+          "http_status": null
+        },
+        {
+          "name": "storage.client.GetVolume",
+          "span_id": "qL4fufg8V0I=",
+          "parent_id": "WfJs9ReA294=",
+          "service": "ucloud-sandboxes-worker",
+          "version": "0.5.70",
+          "worker_job_id": "12397962",
+          "offset_seconds": 48.470594107,
+          "duration_seconds": 0.002419846,
+          "http_status": null
+        },
+        {
+          "name": "storage.server.EnsureReleased",
+          "span_id": "AjtbnbW0JUo=",
+          "parent_id": "KrtifJCHIX8=",
+          "service": "ucloud-sandboxes-storage",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 44.525394084,
+          "duration_seconds": 3.86446272,
+          "http_status": null
+        },
+        {
+          "name": "storage.server.GetVolume",
+          "span_id": "NgY189m6CG8=",
+          "parent_id": "qL4fufg8V0I=",
+          "service": "ucloud-sandboxes-storage",
+          "version": "0.5.70",
+          "worker_job_id": null,
+          "offset_seconds": 48.471415655,
+          "duration_seconds": 0.000998204,
+          "http_status": null
+        }
+      ]
+    }
+  ],
+  "storage_queue_events": [
+    {
+      "trace_id": "de9cdbb76d871c40175ab92ffb22656",
+      "span": "storage.server.EnsureMounted",
+      "event": "storage.queue.acquired",
+      "attrs": {
+        "storage.queue.wait_seconds": 8.813000022200868e-06
+      }
+    },
+    {
+      "trace_id": "936f893a20600ded06c69173382d764a",
+      "span": "storage.server.EnsureReleased",
+      "event": "storage.queue.acquired",
+      "attrs": {
+        "storage.queue.wait_seconds": 2.6302091969998855
+      }
+    },
+    {
+      "trace_id": "25216ae8b49c4b3a12768343cc005121",
+      "span": "storage.server.EnsureReleased",
+      "event": "storage.queue.acquired",
+      "attrs": {
+        "storage.queue.wait_seconds": 8.59300007505226e-06
+      }
+    }
+  ]
+}

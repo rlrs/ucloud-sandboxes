@@ -2824,7 +2824,9 @@ async def _notify_accepted(
         return
 
     async def notify_and_persist() -> None:
+        lock_started = time.monotonic()
         async with relay_request.lifecycle_lock:
+            span.set_attribute("relay.lifecycle.lock_wait_seconds", time.monotonic() - lock_started)
             # A fast worker may commit the result before this task wins the
             # lifecycle lock. Never park after a result is already ready.
             if (
@@ -2859,7 +2861,7 @@ async def _notify_accepted(
             "relay.request.id": relay_request.request_id,
             "sandbox.id": relay_request.sandbox_id,
         },
-    ):
+    ) as span:
         await _finish_before_cancellation(notify_and_persist())
 
 
@@ -2887,7 +2889,9 @@ async def _notify_result(
         },
         links=((original_request_link,) if original_request_link is not None else ()),
     ) as span:
+        lock_started = time.monotonic()
         async with relay_request.lifecycle_lock:
+            span.set_attribute("relay.lifecycle.lock_wait_seconds", time.monotonic() - lock_started)
             if (
                 relay_request.wake_notified_at is not None
                 or not relay_request.delivery_pending

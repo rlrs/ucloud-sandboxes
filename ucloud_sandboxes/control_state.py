@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+import stat
 from threading import Lock
 import time
 from typing import Any, Iterable, Iterator
@@ -395,7 +396,8 @@ class ControlStateStore:
         for suffix in ("", "-wal", "-shm"):
             path = Path(f"{self.path}{suffix}")
             try:
-                os.chmod(path, 0o600, follow_symlinks=False)
+                if stat.S_IMODE(path.lstat().st_mode) != 0o600:
+                    os.chmod(path, 0o600, follow_symlinks=False)
             except FileNotFoundError:
                 pass
 

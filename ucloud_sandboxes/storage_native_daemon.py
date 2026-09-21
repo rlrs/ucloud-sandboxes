@@ -668,6 +668,14 @@ class StorageNativeJournal:
                 "CREATE INDEX IF NOT EXISTS volumes_live_inventory "
                 "ON volumes(volume_id) WHERE state != 'deleted'"
             )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS volumes_live_capacity "
+                "ON volumes(state, volume_id, virtual_size) WHERE state != 'deleted'"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS retired_devices_volume "
+                "ON retired_devices(volume_id)"
+            )
 
     @staticmethod
     def _require_schema(
@@ -771,13 +779,7 @@ class StorageNativeJournal:
             ).fetchone()
             if existing is not None:
                 raise StorageNativeConflictError("volume_id already exists")
-            reserved = connection.execute(
-                (
-                    "SELECT COALESCE(SUM(virtual_size), 0) FROM volumes "
-                    f"WHERE state IN ({','.join('?' for _ in _ACTIVE_CAPACITY_STATES)})"
-                ),
-                tuple(sorted(_ACTIVE_CAPACITY_STATES)),
-            ).fetchone()[0]
+            reserved = self._active_reserved_bytes(connection)
             if (
                 int(reserved) + self._retired_bytes(connection) + record.virtual_size
                 > hard_capacity_bytes
@@ -883,14 +885,7 @@ class StorageNativeJournal:
             if reserve_capacity:
                 if hard_capacity_bytes <= 0:
                     raise ValueError("hard capacity is required for reservation")
-                reserved = connection.execute(
-                    (
-                        "SELECT COALESCE(SUM(virtual_size), 0) FROM volumes "
-                        f"WHERE state IN ({','.join('?' for _ in _ACTIVE_CAPACITY_STATES)}) "
-                        "AND volume_id != ?"
-                    ),
-                    (*sorted(_ACTIVE_CAPACITY_STATES), record.volume_id),
-                ).fetchone()[0]
+                reserved = self._active_reserved_bytes(connection, exclude_volume_id=record.volume_id)
                 if (
                     int(reserved)
                     + self._retired_bytes(connection)
@@ -1050,6 +1045,18 @@ class StorageNativeJournal:
                 "FROM volumes ORDER BY volume_id"
             ).fetchall()
         return tuple(self._decode_record_row(row) for row in rows)
+
+    def metrics_inventory(self) -> tuple[tuple[StorageVolumeRecord, ...], int]:
+        # Keep the historical volume_count metric, but do not read and decode
+        # deleted checkpoint records on every heartbeat. Use one read snapshot.
+        with closing(self._connect()) as connection:
+            connection.execute("BEGIN")
+            count = connection.execute("SELECT COUNT(*) FROM volumes").fetchone()[0]
+            rows = connection.execute(
+                "SELECT volume_id, state, virtual_size, accounting_id, record_json "
+                "FROM volumes WHERE state != 'deleted'"
+            ).fetchall()
+        return tuple(self._decode_record_row(row) for row in rows), count
 
     def is_failed_snapshot_mount(self, record: StorageVolumeRecord) -> bool:
         with closing(self._connect()) as connection:
@@ -1253,6 +1260,18 @@ class StorageNativeJournal:
             )
 
     @staticmethod
+    def _active_reserved_bytes(connection: sqlite3.Connection, *, exclude_volume_id: str = "") -> int:
+        # The explicit deleted predicate lets SQLite use the covering partial
+        # index even though the active state values are bound parameters.
+        return int(connection.execute(
+            "SELECT COALESCE(SUM(virtual_size), 0) FROM volumes "
+            "WHERE state != 'deleted' "
+            f"AND state IN ({','.join('?' for _ in _ACTIVE_CAPACITY_STATES)}) "
+            "AND volume_id != ?",
+            (*sorted(_ACTIVE_CAPACITY_STATES), exclude_volume_id),
+        ).fetchone()[0])
+
+    @staticmethod
     def _retired_bytes(connection: sqlite3.Connection) -> int:
         return int(
             connection.execute(
@@ -1279,6 +1298,12 @@ class StorageNativeJournal:
             return connection.execute(
                 "SELECT owner_id, device_id, volume_id, virtual_size FROM retired_devices"
             ).fetchall()
+
+    def has_retired_devices(self, volume_id: str) -> bool:
+        with closing(self._connect()) as connection:
+            return connection.execute(
+                "SELECT 1 FROM retired_devices WHERE volume_id = ? LIMIT 1", (volume_id,)
+            ).fetchone() is not None
 
     def forget_retired_device(self, owner_id: str) -> None:
         with self._write_connection() as connection:
@@ -1434,7 +1459,7 @@ class StorageNativeNodeService:
     def metrics(self) -> dict[str, Any]:
         self._reap_retired_devices()
         self._published_local_cache.maintain()
-        records = self.journal.list()
+        records, volume_count = self.journal.metrics_inventory()
         reserved = sum(
             record.virtual_size
             for record in records
@@ -1489,7 +1514,7 @@ class StorageNativeNodeService:
             "published_volumes": sum(
                 record.state == StorageVolumeState.PUBLISHED for record in records
             ),
-            "volume_count": len(records),
+            "volume_count": volume_count,
             **(self.publisher.metrics() if self.publisher is not None else {}),
             **pool_metrics,
             **(self._local_compactor.metrics() if self._local_compactor is not None else {}),
@@ -2500,9 +2525,7 @@ class StorageNativeNodeService:
             # against a device that is already idle in the warm pool.
             self.journal.update_pending(released)
         volume_root = self._volume_root(record.volume_id)
-        has_retired = any(
-            row[2] == record.volume_id for row in self.journal.retired_devices()
-        )
+        has_retired = self.journal.has_retired_devices(record.volume_id)
         if volume_root.exists() and not has_retired:
             if volume_root.is_symlink() or not volume_root.is_dir():
                 raise StorageNativeTerminalError("volume root is not a real directory")
@@ -2800,9 +2823,7 @@ class StorageNativeNodeService:
                 record = self.journal.load(volume_id)
                 if (
                     record is not None
-                    and not any(
-                        row[2] == volume_id for row in self.journal.retired_devices()
-                    )
+                    and not self.journal.has_retired_devices(volume_id)
                 ):
                     if record.state == StorageVolumeState.DELETED:
                         shutil.rmtree(self._volume_root(volume_id), ignore_errors=True)
@@ -2818,11 +2839,17 @@ class StorageNativeNodeService:
             self._retirement_lock.release()
 
     def _remove_local_layers(self, paths: tuple[Path, ...]) -> None:
+        if not paths:
+            return
+        volume_roots = {
+            parent for path in paths for parent in path.parents
+            if parent.parent == self.config.runtime_root
+        }
         retained_roots = {
-            self._volume_root(row[2]) for row in self.journal.retired_devices()
+            root for root in volume_roots if self.journal.has_retired_devices(root.name)
         }
         for path in paths:
-            if any(root in path.parents for root in retained_roots):
+            if any(parent in retained_roots for parent in path.parents):
                 continue
             if path.name.startswith("published-local-"):
                 current = self.journal.load(path.parent.name)

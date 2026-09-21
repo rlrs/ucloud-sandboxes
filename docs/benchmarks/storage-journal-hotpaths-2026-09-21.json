@@ -1,0 +1,60 @@
+{
+  "fixture": {
+    "deleted_volumes": 20000,
+    "live_volumes": 512,
+    "retired_devices": 10000
+  },
+  "timing_scope": "local warm-cache journal queries; not production end-to-end latency",
+  "capacity": {
+    "before": {
+      "median_ms": 9.584145489498042,
+      "min_ms": 9.155583014944568,
+      "iterations": 12
+    },
+    "after": {
+      "median_ms": 0.7746664923615754,
+      "min_ms": 0.5985420139040798,
+      "iterations": 12
+    },
+    "before_plan": [
+      [
+        3,
+        0,
+        0,
+        "SCAN volumes"
+      ]
+    ],
+    "after_plan": [
+      [
+        3,
+        0,
+        0,
+        "SEARCH volumes USING COVERING INDEX volumes_live_capacity (state=?)"
+      ]
+    ]
+  },
+  "metrics_inventory": {
+    "before": {
+      "median_ms": 477.32737549813464,
+      "min_ms": 466.4959160145372,
+      "iterations": 12
+    },
+    "after": {
+      "median_ms": 14.89800050330814,
+      "min_ms": 14.633332990342751,
+      "iterations": 12
+    }
+  },
+  "retired_volume_lookup": {
+    "before": {
+      "median_ms": 8.09697899967432,
+      "min_ms": 7.897708012023941,
+      "iterations": 12
+    },
+    "after": {
+      "median_ms": 0.5123959999764338,
+      "min_ms": 0.4429580003488809,
+      "iterations": 12
+    }
+  }
+}

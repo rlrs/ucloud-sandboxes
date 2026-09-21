@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from contextlib import closing, contextmanager, suppress
+from contextlib import closing, contextmanager, nullcontext, suppress
 from dataclasses import asdict, dataclass, fields, replace
 from enum import Enum
 from functools import wraps
@@ -2606,20 +2606,22 @@ class StorageNativeNodeService:
             if self.config.device_pool_enabled
             else set()
         )
-        with self._device_slot_guard:
-            owners = self._backend_ownership()
-            existing_owner = owners.get(owner_id)
-            demand = len(owners) + self._pending_device_allocations
-            if allocation_slot is not None and allocation_slot.pending:
-                demand -= 1
-            if (
-                self.config.max_ublk_devices > 0
-                and existing_owner is None
-                and demand >= self.config.max_ublk_devices
-            ):
-                raise StorageNativeCapacityError(
-                    "storage-native ublk device capacity is exhausted"
-                )
+        # Only an explicit device ceiling needs atomic reservation-to-owner
+        # transfer. In the normal uncapped path, let independent volumes acquire
+        # concurrently; the native backend already fences each owner identity.
+        # Avoid an otherwise unused full owner inventory on that path as well.
+        capped = self.config.max_ublk_devices > 0
+        with self._device_slot_guard if capped else nullcontext():
+            if capped:
+                owners = self._backend_ownership()
+                existing_owner = owners.get(owner_id)
+                demand = len(owners) + self._pending_device_allocations
+                if allocation_slot is not None and allocation_slot.pending:
+                    demand -= 1
+                if existing_owner is None and demand >= self.config.max_ublk_devices:
+                    raise StorageNativeCapacityError(
+                        "storage-native ublk device capacity is exhausted"
+                    )
             device = self.backend.create_runtime_device(
                 source_image_config=source_image_config,
                 global_config=self.global_config_path,

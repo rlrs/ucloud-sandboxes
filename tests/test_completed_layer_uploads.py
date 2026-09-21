@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
@@ -6,12 +7,58 @@ from unittest.mock import patch
 from tests.storage_native_publisher_support import FakeExporter, digest
 from tests.test_storage_native_registry import FakeRegistry
 from tests.test_storage_native_s3 import FakeS3
-from ucloud_sandboxes.storage_native_publication import CompletedLayerUploads
+from ucloud_sandboxes.storage_native_publication import CompletedLayerUploads, local_layer_identity
 from ucloud_sandboxes.storage_native_registry import PublishedStorageLayer, RegistrySnapshotPublisher
 from ucloud_sandboxes.storage_native_s3 import S3SnapshotPublisher
 
 
 class CompletedUploadTests(unittest.TestCase):
+    def test_hardlink_pins_during_export_and_retry_preserve_completed_upload(self):
+        for backend in ("registry", "s3"):
+            for compact in (False, True):
+                with self.subTest(backend=backend, compact=compact), TemporaryDirectory() as raw:
+                    publisher, _, exporter, kwargs = self.fixture(Path(raw), backend, compact)
+                    source = kwargs["source_layer_paths"][0]
+                    pin = source.with_suffix(".pin")
+                    method = "export_compacted_image" if compact else "export_dense_layer"
+                    original = getattr(exporter, method)
+
+                    def pin_during_export(**request):
+                        # Background compaction and the published-local cache
+                        # pin immutable inputs without changing their contents.
+                        os.link(source, pin)
+                        return original(**request)
+
+                    with patch.object(exporter, method, side_effect=pin_during_export):
+                        publication = publisher.publish(**kwargs)
+                    pin.unlink()
+                    with patch.object(exporter, method, side_effect=AssertionError("re-exported")):
+                        reused = publisher.publish(**kwargs)
+                    self.assertEqual(reused, publication)
+                    self.assertEqual(publisher.verify(reused), publication)
+                    self.assertEqual(publisher.metrics()["snapshot_reused_layers"], 1)
+                    if not compact:
+                        self.assertEqual(publisher._completed_uploads.completed_dense_sources((source,)),
+                                         {publication.layers[0].digest: source})
+
+    def test_content_mutation_during_export_is_still_rejected(self):
+        with TemporaryDirectory() as raw:
+            source = Path(raw) / "sealed.commit"
+            source.write_bytes(b"old")
+            # Make detection independent of the filesystem's clock resolution.
+            os.utime(source, ns=(1_000_000_000, 1_000_000_000))
+            cache = CompletedLayerUploads()
+            layer = PublishedStorageLayer("sha256:" + "1" * 64, 3)
+
+            def upload():
+                source.write_bytes(b"new")
+                return layer
+
+            with self.assertRaisesRegex(ValueError, "inputs changed during upload"):
+                cache.publish(identity=lambda: local_layer_identity(source), upload=upload,
+                              exists=lambda _: True, check_current=None)
+            self.assertEqual(cache.completed_dense_sources((source,)), {})
+
     def fixture(self, root, backend, compact=False):
         source, config = root / "sealed.commit", root / "global.json"
         source.write_bytes(b"old layer")

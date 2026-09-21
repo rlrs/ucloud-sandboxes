@@ -23,11 +23,17 @@ LayerT = TypeVar("LayerT", bound=_Layer)
 
 
 def local_layer_identity(path: Path) -> tuple:
-    """Metadata identity of an immutable sealed input, without reading its data."""
+    """Content-change guard for trusted immutable inputs, without reading data.
+
+    Compaction and the local layer cache create/remove hardlinks to pin sealed
+    files. Those operations change ctime, but not inode, size or mtime; treating
+    ctime as content would reject valid uploads and repeatedly export old layers.
+    This is not a content digest: callers must keep sealed inputs immutable.
+    """
     info = path.stat(follow_symlinks=False)
     if not stat.S_ISREG(info.st_mode):
         raise ValueError("publication input must be a regular file")
-    return (str(path), info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+    return (str(path), info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
 
 
 class CompletedLayerUploads(Generic[LayerT]):

@@ -694,6 +694,42 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
                 )
             self.assertIsNone(service.journal.load("volume-129"))
 
+    def test_uncapped_device_acquisition_does_not_serialize_independent_volumes(self):
+        for pooled in (False, True):
+            with self.subTest(pooled=pooled), TemporaryDirectory() as raw:
+                service, backend, _ = self._service(Path(raw), pooled=pooled)
+                acquiring = threading.Event()
+                finish_acquire = threading.Event()
+                original = backend.create_runtime_device
+
+                def acquire(**kwargs):
+                    if kwargs["runtime_dir"].parent.name == "volume-1":
+                        acquiring.set()
+                        if not finish_acquire.wait(5):
+                            raise TimeoutError("test did not release acquisition")
+                    return original(**kwargs)
+
+                backend.create_runtime_device = acquire
+
+                def create(index):
+                    return service.create_volume(
+                        sandbox_id=f"sandbox-{index}", sandbox_generation=1,
+                        volume_id=f"volume-{index}", operation_id=f"create:{index}",
+                        virtual_size=1 << 30,
+                    )
+
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    first = pool.submit(create, 1)
+                    try:
+                        self.assertTrue(acquiring.wait(2))
+                        second = pool.submit(create, 2).result(timeout=2)
+                        self.assertEqual(second.state, StorageVolumeState.MOUNTED)
+                    finally:
+                        finish_acquire.set()
+                    self.assertNotEqual(first.result(timeout=2).device_id, second.device_id)
+                self.assertEqual(len(backend.owners), 2)
+                self.assertEqual(service._pending_device_allocations, 0)
+
     def test_acquired_device_is_not_counted_twice_during_slow_format(self) -> None:
         with TemporaryDirectory() as raw:
             service, backend, host = self._service(

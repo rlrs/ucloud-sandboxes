@@ -79,5 +79,7 @@ The canonical `scripts/check.sh` completed successfully: 992 server tests (six
 platform skips), 118 SDK tests, Ruff, shell syntax checks, Go tests, wheel builds
 and isolated install verification. Shellcheck is unavailable on this host and
 was explicitly skipped using the check script's supported override. The
-standalone benchmark also completed a smoke run. Production has not been
-restarted, upgraded or load-tested with these changes.
+standalone benchmark also completed a smoke run. These changes were subsequently
+deployed in release 0.5.69; see the [production qualification](release-0.5.69-production-2026-09-21.md)
+for live smoke and production-host component measurements. A comparable loaded
+production run remains outstanding.

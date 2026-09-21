@@ -2,8 +2,9 @@
 
 These changes address avoidable snapshot I/O and placement concentration. They
 are implemented in the shared Python control plane and storage publishers; the
-native storage and gVisor binaries are unchanged. They are not yet deployed or
-qualified with a new production load run.
+native storage and gVisor binaries are unchanged. They were deployed in release 0.5.69; see the
+[production qualification](release-0.5.69-production-2026-09-21.md). A comparable
+production load run is still needed.
 
 ## Evidence and scope
 
@@ -89,5 +90,5 @@ consolidation direction.
 The canonical repository check passed: 999 server tests (six platform skips),
 118 SDK tests, Ruff, shell syntax checks, Go tests, wheel builds and isolated
 install checks. Shellcheck is unavailable on this host and was explicitly
-skipped through the supported check-script override. Production impact remains
-to be measured after gateway-first deployment and worker rollout.
+skipped through the supported check-script override. The gateway-first deployment and small live smoke passed; loaded production
+impact remains to be measured.

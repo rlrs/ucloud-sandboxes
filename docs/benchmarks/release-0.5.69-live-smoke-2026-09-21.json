@@ -1,0 +1,109 @@
+{
+  "release": "0.5.69",
+  "commit": "8a803c0a2d0915e73fb6829d46b425314c664bca",
+  "worker": "12397818",
+  "correctness": {
+    "counter_advanced_after_every_wake": true,
+    "every_detach_reached_detached": true,
+    "every_park_reached_parked": true,
+    "every_wake_reached_running": true,
+    "process_identity_preserved": true,
+    "sandbox_scoped_sdk_exec_succeeded": true
+  },
+  "performance": {
+    "detach_max_seconds": 7.218227189965546,
+    "detach_median_seconds": 0.41219759604427963,
+    "detach_min_seconds": 0.3884424290154129,
+    "park_max_seconds": 0.2893682799767703,
+    "park_median_seconds": 0.16625111643224955,
+    "park_min_seconds": 0.1513206628151238,
+    "total_lifecycle_retries": 0,
+    "wake_max_seconds": 1.334094560937956,
+    "wake_median_seconds": 0.774493619450368,
+    "wake_min_seconds": 0.7203435548581183
+  },
+  "cycles": [
+    {
+      "cycle": 1,
+      "detach_retries": 0,
+      "detach_seconds": 2.021475428948179,
+      "park_retries": 0,
+      "park_seconds": 0.18753909203223884,
+      "wake_retries": 0,
+      "wake_seconds": 1.334094560937956
+    },
+    {
+      "cycle": 2,
+      "detach_retries": 0,
+      "detach_seconds": 0.6571101518347859,
+      "park_retries": 0,
+      "park_seconds": 0.16539754602126777,
+      "wake_retries": 0,
+      "wake_seconds": 0.8821001960895956
+    },
+    {
+      "cycle": 3,
+      "detach_retries": 0,
+      "detach_seconds": 0.3884424290154129,
+      "park_retries": 0,
+      "park_seconds": 0.2893682799767703,
+      "wake_retries": 0,
+      "wake_seconds": 0.7456214618869126
+    },
+    {
+      "cycle": 4,
+      "detach_retries": 0,
+      "detach_seconds": 0.4068323140963912,
+      "park_retries": 0,
+      "park_seconds": 0.16354045807383955,
+      "wake_retries": 0,
+      "wake_seconds": 0.7349733330775052
+    },
+    {
+      "cycle": 5,
+      "detach_retries": 0,
+      "detach_seconds": 0.41295754513703287,
+      "park_retries": 0,
+      "park_seconds": 0.16710468684323132,
+      "wake_retries": 0,
+      "wake_seconds": 0.7514887440484017
+    },
+    {
+      "cycle": 6,
+      "detach_retries": 0,
+      "detach_seconds": 0.4071329180151224,
+      "park_retries": 0,
+      "park_seconds": 0.1513206628151238,
+      "wake_retries": 0,
+      "wake_seconds": 0.7203435548581183
+    },
+    {
+      "cycle": 7,
+      "detach_retries": 0,
+      "detach_seconds": 0.4114376469515264,
+      "park_retries": 0,
+      "park_seconds": 0.22822369309142232,
+      "wake_retries": 0,
+      "wake_seconds": 0.7974984948523343
+    },
+    {
+      "cycle": 8,
+      "detach_retries": 0,
+      "detach_seconds": 7.218227189965546,
+      "park_retries": 0,
+      "park_seconds": 0.16377282002940774,
+      "wake_retries": 0,
+      "wake_seconds": 0.9278904071543366
+    }
+  ],
+  "final_worker_counters": {
+    "publications": 9,
+    "compactions": 1,
+    "uploaded_bytes": 522600448
+  },
+  "first_continuity_probe": "No result from the 3-second probe; exact cause was not captured. Subsequent direct fetch and complete continuity recheck succeeded.",
+  "continuity_recheck_probe_seconds": [
+    0.06820338708348572,
+    0.01598326419480145
+  ]
+}

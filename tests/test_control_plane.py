@@ -3026,6 +3026,11 @@ class ControlPlaneTests(unittest.TestCase):
                     total_resources=ResourceQuantity(
                         vcpu=4, memory_mb=8192, disk_mb=100_000
                     ),
+                    runtime_metrics=NodeRuntimeMetrics(
+                        collected_at=utc_now(), cpu_percent=0, cpu_count=4,
+                        memory_total_mb=8192, memory_available_mb=8192,
+                        storage_hard_capacity_mb=100_000,
+                    ),
                 ),
             ):
                 heartbeats.upsert_heartbeat(heartbeat)

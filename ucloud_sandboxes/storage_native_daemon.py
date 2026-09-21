@@ -7,6 +7,7 @@ from functools import wraps
 import errno
 import hashlib
 import json
+import logging
 import os
 from pathlib import Path
 import re
@@ -32,7 +33,12 @@ from .storage_native_registry import (
     PublishedStorageLayer,
     StorageSnapshotPublication,
 )
+from .storage_native_compaction import LocalCheckpointCompactor
+from .storage_native_local_cache import PublishedLocalCache
 from .telemetry import Telemetry
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 _SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,239}\Z")
@@ -170,6 +176,9 @@ class StorageNativeNodeConfig:
     device_pool_low_watermark: int = 2
     device_pool_high_watermark: int = 16
     max_ublk_devices: int = 0
+    local_compact_after_layers: int = 8
+    local_compact_after_bytes: int = 4 * 1024**3
+    published_local_cache_bytes: int = 4 * 1024**3
 
     def __post_init__(self) -> None:
         for label, path in (
@@ -199,6 +208,10 @@ class StorageNativeNodeConfig:
             raise ValueError("device pool low watermark cannot exceed high watermark")
         if self.max_ublk_devices < 0:
             raise ValueError("maximum ublk devices must be non-negative")
+        if self.local_compact_after_layers < 2 or self.local_compact_after_bytes <= 0:
+            raise ValueError("local compaction requires at least two layers and a positive byte threshold")
+        if self.published_local_cache_bytes < 0:
+            raise ValueError("published local cache size must be non-negative")
         if (
             self.max_ublk_devices > 0
             and self.device_pool_high_watermark > self.max_ublk_devices
@@ -1406,9 +1419,21 @@ class StorageNativeNodeService:
         self._pending_device_allocations = 0
         self._retirement_lock = threading.Lock()
         self._ensure_roots()
+        self._published_local_cache = PublishedLocalCache(
+            config.runtime_root / ".published-cache",
+            capacity_bytes=min(config.published_local_cache_bytes, config.hard_capacity_bytes // 10),
+        )
+        self._local_compactor = LocalCheckpointCompactor(
+            root=config.runtime_root, global_config=global_config_path, exporter=backend,
+            load=self.journal.load, remove_layers=self._remove_local_layers,
+            max_layers=config.local_compact_after_layers,
+            max_delta_bytes=config.local_compact_after_bytes,
+            timeout_seconds=config.command_timeout_seconds,
+        ) if callable(getattr(backend, "export_compacted_image", None)) else None
 
     def metrics(self) -> dict[str, Any]:
         self._reap_retired_devices()
+        self._published_local_cache.maintain()
         records = self.journal.list()
         reserved = sum(
             record.virtual_size
@@ -1419,12 +1444,19 @@ class StorageNativeNodeService:
         retired_bytes = sum(row[3] for row in retired)
         reserved += retired_bytes
         cache_bytes = 0
-        for record in records:
-            for raw_path in record.cached_layer_paths:
-                try:
-                    cache_bytes += Path(raw_path).stat().st_size
-                except OSError:
-                    continue
+        cache_inodes = set()
+        for path in (
+            *self._published_local_cache.paths(),
+            *(Path(raw) for record in records for raw in record.cached_layer_paths),
+        ):
+            try:
+                info = path.stat()
+                identity = (info.st_dev, info.st_ino)
+                if identity not in cache_inodes:
+                    cache_inodes.add(identity)
+                    cache_bytes += min(info.st_size, info.st_blocks * 512)
+            except OSError:
+                continue
         live_device_ids = self.host.ublk_device_ids()
         active_device_ids = {
             owner.device_id for owner in self._backend_ownership().values()
@@ -1460,6 +1492,8 @@ class StorageNativeNodeService:
             "volume_count": len(records),
             **(self.publisher.metrics() if self.publisher is not None else {}),
             **pool_metrics,
+            **(self._local_compactor.metrics() if self._local_compactor is not None else {}),
+            **self._published_local_cache.metrics(),
         }
 
     @_storage_mutation
@@ -1803,11 +1837,30 @@ class StorageNativeNodeService:
             ),
             updated_ns=time.time_ns(),
         )
-        self.journal.update_pending(pending)
         try:
+            if self._local_compactor is not None:
+                pending = self._local_compactor.adopt(pending, self.journal.update_pending)
+            local_lowers = []
+            cached_paths = list(pending.cached_layer_paths)
+            for layer in pending.published_layers:
+                pinned = self._published_local_cache.pin(
+                    pending.published_repo_blob_url, str(layer["digest"]), volume_root,
+                    mount_revision=pending.revision,
+                )
+                if pinned is None:
+                    local_lowers.append(dict(layer))
+                else:
+                    cached_paths.append(str(pinned))
+                    local_lowers.append({"file": str(pinned)})
+            # Persist mount pins before handing paths to the native backend.
+            # The remote published descriptors remain the recovery authority.
+            cached_paths = tuple(path for path in cached_paths if Path(path).exists())
+            if cached_paths != pending.cached_layer_paths:
+                pending = replace(pending, cached_layer_paths=cached_paths)
+            self.journal.update_pending(pending)
             source_config = {
                 "lowers": [
-                    *(dict(layer) for layer in pending.published_layers),
+                    *local_lowers,
                     *({"file": path} for path in pending.sealed_layer_paths),
                 ],
                 "resultFile": "",
@@ -1957,6 +2010,12 @@ class StorageNativeNodeService:
                 updated_ns=time.time_ns(),
             )
             self.journal.finish(record)
+            if self._local_compactor is not None:
+                self._local_compactor.submit(record)
+            self._remove_local_layers(tuple(
+                Path(path) for path in record.cached_layer_paths
+                if path not in record.sealed_layer_paths
+            ))
             return record
         except BaseException as exc:
             self.journal.fail(pending, f"{type(exc).__name__}: {exc}")
@@ -1997,7 +2056,6 @@ class StorageNativeNodeService:
             raise StorageNativeConflictError(
                 "released volume has no unpublished sealed layer"
             )
-        local_paths = tuple(Path(path) for path in pending.sealed_layer_paths)
         existing_layers = tuple(
             PublishedStorageLayer(
                 digest=str(layer["digest"]),
@@ -2016,6 +2074,9 @@ class StorageNativeNodeService:
                 raise StorageNativeConflictError("publication superseded by local lifecycle operation")
 
         try:
+            if self._local_compactor is not None:
+                pending = self._local_compactor.adopt(pending, self.journal.update_pending)
+            local_paths = tuple(Path(path) for path in pending.sealed_layer_paths)
             publication = self.publisher.publish(
                 exporter=self.backend,
                 source_layer_paths=local_paths,
@@ -2043,6 +2104,15 @@ class StorageNativeNodeService:
                 updated_ns=time.time_ns(),
             )
             self.journal.finish(record)
+            lookup = getattr(self.publisher, "local_layer_sources", None)
+            if lookup is not None:
+                try:
+                    published = {layer.digest for layer in publication.layers}
+                    for digest, path in lookup(local_paths).items():
+                        if digest in published and path in local_paths:
+                            self._published_local_cache.remember(publication.repo_blob_url, digest, path)
+                except Exception:
+                    LOGGER.warning("published local layer retention skipped", exc_info=True)
             self._remove_local_layers(local_paths)
             return record
         except BaseException as exc:
@@ -2263,6 +2333,17 @@ class StorageNativeNodeService:
     def _reconcile_exclusive(self) -> dict[str, Any]:
         self._reap_retired_devices()
         records = list(self.journal.list())
+        for record in records:
+            retained = set((*record.cached_layer_paths, *record.sealed_layer_paths))
+            # A crash after pin creation but before journaling cannot have
+            # exposed these paths to the backend. Exclusive reconciliation
+            # prevents racing a new mount while removing abandoned pins.
+            for path in self._volume_root(record.volume_id).glob("published-local-*.commit"):
+                if str(path) not in retained:
+                    path.unlink(missing_ok=True)
+        if self._local_compactor is not None:
+            for record in records:
+                self._local_compactor.cleanup_abandoned(record)
         live_devices = self.host.ublk_device_ids()
         backend_owners = self._backend_ownership()
         expected_owner_ids = {
@@ -2717,12 +2798,19 @@ class StorageNativeNodeService:
                 record = self.journal.load(volume_id)
                 if (
                     record is not None
-                    and record.state == StorageVolumeState.DELETED
                     and not any(
                         row[2] == volume_id for row in self.journal.retired_devices()
                     )
                 ):
-                    shutil.rmtree(self._volume_root(volume_id), ignore_errors=True)
+                    if record.state == StorageVolumeState.DELETED:
+                        shutil.rmtree(self._volume_root(volume_id), ignore_errors=True)
+                    else:
+                        # Compaction/publication kept these names while a
+                        # retired device could still be reading its old stack.
+                        self._remove_local_layers(tuple(
+                            Path(path) for path in record.cached_layer_paths
+                            if path not in record.sealed_layer_paths
+                        ))
             return reclaimed
         finally:
             self._retirement_lock.release()
@@ -2734,6 +2822,18 @@ class StorageNativeNodeService:
         for path in paths:
             if any(root in path.parents for root in retained_roots):
                 continue
+            if path.name.startswith("published-local-"):
+                current = self.journal.load(path.parent.name)
+                if current is not None and current.state in {
+                    StorageVolumeState.ACQUIRING, StorageVolumeState.MOUNTED,
+                    StorageVolumeState.SEALING, StorageVolumeState.SEALED,
+                    StorageVolumeState.RELEASING,
+                }:
+                    # The source filename records the mount revision even when
+                    # later seal/release transitions advance the journal fence.
+                    mount_revision = Path(current.source_image_config).stem.removeprefix("source-")
+                    if path.name.startswith(f"published-local-{mount_revision}-"):
+                        continue
             try:
                 path.unlink(missing_ok=True)
             except OSError:

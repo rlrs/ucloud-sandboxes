@@ -15,8 +15,10 @@ from .managed_registry import RegistryClient
 from .storage_native import StorageNativeLayer
 from .storage_native_publication import (
     DEFAULT_MAX_CONCURRENT_PUBLICATIONS,
+    CompletedLayerUploads,
     PublicationGate,
     local_layer_data_bytes,
+    local_layer_identity,
     snapshot_compaction_start,
 )
 from .telemetry import Telemetry
@@ -198,6 +200,7 @@ class RegistrySnapshotPublisher:
         self.compact_after_bytes = compact_after_bytes
         self.telemetry = telemetry or Telemetry.disabled("registry-snapshot-publisher")
         self._publication_gate = PublicationGate(max_concurrent_publications)
+        self._completed_uploads = CompletedLayerUploads[PublishedStorageLayer]()
         self._metrics_lock = threading.Lock()
         self._publications = 0
         self._compactions = 0
@@ -212,6 +215,9 @@ class RegistrySnapshotPublisher:
     def repo_blob_url(self) -> str:
         repository = quote(self.repository, safe="/")
         return f"{self.registry.base_url}/v2/{repository}/blobs"
+
+    def local_layer_sources(self, paths: tuple[Path, ...]) -> dict[str, Path]:
+        return self._completed_uploads.completed_dense_sources(paths)
 
     def publish(
         self,
@@ -243,6 +249,7 @@ class RegistrySnapshotPublisher:
                     existing_layers=existing_layers,
                     existing_repo_blob_url=existing_repo_blob_url,
                     global_config_path=global_config_path,
+                    check_current=check_current,
                 )
             span.set_attributes(
                 {
@@ -276,6 +283,7 @@ class RegistrySnapshotPublisher:
                 "snapshot_compact_after_layers": self.compact_after_layers,
                 "snapshot_compact_after_bytes": self.compact_after_bytes,
                 **self._publication_gate.metrics(),
+                **self._completed_uploads.metrics(),
             }
 
     def verify(
@@ -358,6 +366,7 @@ class RegistrySnapshotPublisher:
         existing_layers: tuple[PublishedStorageLayer, ...],
         existing_repo_blob_url: str,
         global_config_path: Path | None,
+        check_current: Callable[[], None] | None = None,
     ) -> tuple[StorageSnapshotPublication, bool, int]:
         if virtual_size <= 0:
             raise ValueError("snapshot virtual size must be positive")
@@ -394,29 +403,44 @@ class RegistrySnapshotPublisher:
                     "snapshot.retained_base_bytes": sum(layer.size for layer in retained_layers),
                 },
             ):
-                layers = (
-                    *retained_layers,
-                    self._publish_compacted_layer(
+                layer, uploaded_bytes = self._completed_uploads.publish(
+                    identity=lambda: (
+                        "compact", existing_repo_blob_url,
+                        tuple((item.digest, item.size) for item in existing_layers[compact_start:]),
+                        local_layer_identity(global_config_path),
+                        tuple(local_layer_identity(path) for path in source_layer_paths),
+                    ),
+                    exists=lambda item: self.registry.blob_exists(self.repository, item.digest),
+                    check_current=check_current,
+                    upload=lambda: self._publish_compacted_layer(
                         exporter,
                         existing_layers=existing_layers[compact_start:],
                         existing_repo_blob_url=existing_repo_blob_url,
                         source_layer_paths=source_layer_paths,
                         global_config_path=global_config_path,
+                        check_current=check_current,
                     ),
                 )
-            uploaded_bytes = layers[-1].size
+                layers = (*retained_layers, layer)
         else:
             with self.telemetry.span(
                 "snapshot.export_and_upload",
                 attributes={"snapshot.source_layer_count": len(source_layer_paths)},
             ):
-                new_layers = tuple(
-                    self._publish_dense_layer(exporter, source)
-                    for source in source_layer_paths
-                )
+                results = []
+                for source in source_layer_paths:
+                    results.append(self._completed_uploads.publish(
+                        identity=lambda: ("dense", local_layer_identity(source)),
+                        exists=lambda item: self.registry.blob_exists(self.repository, item.digest),
+                        check_current=check_current,
+                        upload=lambda: self._publish_dense_layer(exporter, source, check_current=check_current),
+                    ))
+                new_layers = tuple(layer for layer, _ in results)
             layers = (*existing_layers, *new_layers)
-            uploaded_bytes = sum(layer.size for layer in new_layers)
+            uploaded_bytes = sum(size for _, size in results)
         with self.telemetry.span("snapshot.commit_metadata"):
+            if check_current is not None:
+                check_current()
             config = self._snapshot_config(virtual_size=virtual_size, layers=layers)
             config_digest = self._upload_bytes(config)
             tag = f"ucloud-storage-v1-{config_digest.removeprefix('sha256:')}"
@@ -425,6 +449,8 @@ class RegistrySnapshotPublisher:
                 config_size=len(config),
                 layers=layers,
             )
+            if check_current is not None:
+                check_current()
             manifest_digest = self.registry.put_manifest(
                 self.repository,
                 tag,
@@ -451,6 +477,7 @@ class RegistrySnapshotPublisher:
         self,
         exporter: DenseLayerExporter,
         source_layer_path: Path,
+        *, check_current: Callable[[], None] | None = None,
     ) -> PublishedStorageLayer:
         if not source_layer_path.is_absolute():
             raise ValueError("sealed layer path must be absolute")
@@ -458,7 +485,8 @@ class RegistrySnapshotPublisher:
             lambda stream_socket_path: exporter.export_dense_layer(
                 source_layer_path=source_layer_path,
                 stream_socket_path=stream_socket_path,
-            )
+            ),
+            check_current=check_current,
         )
 
     def _publish_compacted_layer(
@@ -469,6 +497,7 @@ class RegistrySnapshotPublisher:
         existing_repo_blob_url: str,
         source_layer_paths: tuple[Path, ...],
         global_config_path: Path,
+        check_current: Callable[[], None] | None = None,
     ) -> PublishedStorageLayer:
         self.stream_socket_root.mkdir(mode=0o700, parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(
@@ -503,32 +532,51 @@ class RegistrySnapshotPublisher:
                     source_image_config=source_config,
                     global_config=global_config_path,
                     stream_socket_path=stream_socket_path,
-                )
+                ),
+                check_current=check_current,
             )
 
     def _publish_stream(
         self,
         export_layer: Callable[[Path], StorageNativeLayer],
+        *, check_current: Callable[[], None] | None = None,
     ) -> PublishedStorageLayer:
+        if check_current is not None:
+            check_current()
         upload_location_holder = [self.registry.start_blob_upload(self.repository)]
+        completed = False
 
         def consume(chunk: bytes) -> None:
+            if check_current is not None:
+                check_current()
             upload_location_holder[0] = self.registry.upload_blob_chunk(
                 upload_location_holder[0], chunk
             )
 
-        observed = consume_export_stream(
-            export_layer,
-            stream_socket_root=self.stream_socket_root,
-            chunk_bytes=self.upload_chunk_bytes,
-            timeout_seconds=self.stream_timeout_seconds,
-            consume=consume,
-        )
-        upload_location = upload_location_holder[0]
-        self.registry.finish_blob_upload(upload_location, observed.digest)
-        if not self.registry.blob_exists(self.repository, observed.digest):
-            raise ValueError("registry did not retain the uploaded dense layer")
-        return PublishedStorageLayer(digest=observed.digest, size=observed.size)
+        try:
+            observed = consume_export_stream(
+                export_layer,
+                stream_socket_root=self.stream_socket_root,
+                chunk_bytes=self.upload_chunk_bytes,
+                timeout_seconds=self.stream_timeout_seconds,
+                consume=consume,
+                check_current=check_current,
+            )
+            if check_current is not None:
+                check_current()
+            self.registry.finish_blob_upload(upload_location_holder[0], observed.digest)
+            completed = True
+            if not self.registry.blob_exists(self.repository, observed.digest):
+                raise ValueError("registry did not retain the uploaded dense layer")
+            return PublishedStorageLayer(digest=observed.digest, size=observed.size)
+        finally:
+            if not completed:
+                try:
+                    self.registry.abort_blob_upload(upload_location_holder[0])
+                except Exception:
+                    # Preserve the original cancellation/transport error. The
+                    # registry's normal upload purge handles failed cleanup.
+                    pass
 
     def _upload_bytes(self, payload: bytes) -> str:
         digest = f"sha256:{hashlib.sha256(payload).hexdigest()}"
@@ -620,6 +668,7 @@ class SnapshotPublisherRouter:
         existing_layers: tuple[PublishedStorageLayer, ...] = (),
         existing_repo_blob_url: str = "",
         global_config_path: Path | None = None,
+        check_current: Callable[[], None] | None = None,
     ) -> StorageSnapshotPublication:
         return self.primary.publish(
             exporter=exporter,
@@ -628,6 +677,7 @@ class SnapshotPublisherRouter:
             existing_layers=existing_layers,
             existing_repo_blob_url=existing_repo_blob_url,
             global_config_path=global_config_path,
+            check_current=check_current,
         )
 
     def verify(
@@ -643,6 +693,10 @@ class SnapshotPublisherRouter:
     def metrics(self) -> dict[str, int]:
         return self.primary.metrics()
 
+    def local_layer_sources(self, paths: tuple[Path, ...]) -> dict[str, Path]:
+        lookup = getattr(self.primary, "local_layer_sources", None)
+        return lookup(paths) if lookup is not None else {}
+
 
 def consume_export_stream(
     export_layer: Callable[[Path], StorageNativeLayer],
@@ -651,9 +705,12 @@ def consume_export_stream(
     chunk_bytes: int,
     timeout_seconds: float,
     consume: Callable[[bytes], None],
+    check_current: Callable[[], None] | None = None,
 ) -> StorageNativeLayer:
     """Validate an AgentEnv export while forwarding bounded chunks."""
 
+    if check_current is not None:
+        check_current()
     stream_socket_root.mkdir(mode=0o700, parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(
         prefix="dense-", dir=stream_socket_root
@@ -677,10 +734,16 @@ def consume_export_stream(
             thread.start()
             hasher = hashlib.sha256()
             byte_count = 0
-            pending = bytearray()
+            # Receive directly into one reusable upload buffer. Appending recv
+            # results and slicing a bytearray copied each layer several times.
+            pending = bytearray(chunk_bytes)
+            pending_view = memoryview(pending)
+            pending_size = 0
             try:
                 accept_deadline = time.monotonic() + timeout_seconds
                 while True:
+                    if check_current is not None:
+                        check_current()
                     try:
                         connection, _ = listener.accept()
                         break
@@ -695,20 +758,39 @@ def consume_export_stream(
                         if time.monotonic() >= accept_deadline:
                             raise TimeoutError("dense layer exporter did not connect")
                 with connection:
-                    connection.settimeout(timeout_seconds)
+                    connection.settimeout(min(0.25, timeout_seconds))
+                    read_deadline = time.monotonic() + timeout_seconds
+                    next_check = 0.0
                     while True:
-                        chunk = connection.recv(chunk_bytes)
-                        if not chunk:
+                        now = time.monotonic()
+                        if check_current is not None and now >= next_check:
+                            check_current()
+                            next_check = now + 0.25
+                        try:
+                            received = connection.recv_into(pending_view[pending_size:])
+                        except socket.timeout:
+                            if time.monotonic() >= read_deadline:
+                                raise TimeoutError("dense layer exporter stopped streaming")
+                            continue
+                        read_deadline = time.monotonic() + timeout_seconds
+                        if not received:
                             break
-                        hasher.update(chunk)
-                        byte_count += len(chunk)
-                        pending.extend(chunk)
-                        while len(pending) >= chunk_bytes:
-                            consume(bytes(pending[:chunk_bytes]))
-                            del pending[:chunk_bytes]
-                    if pending:
-                        consume(bytes(pending))
+                        byte_count += received
+                        pending_size += received
+                        if pending_size == chunk_bytes:
+                            hasher.update(pending_view)
+                            # Consumers may retain chunks for asynchronous S3
+                            # uploads, so hand off immutable, independent bytes.
+                            consume(bytes(pending))
+                            pending_size = 0
+                            read_deadline = time.monotonic() + timeout_seconds
+                    if pending_size:
+                        tail = pending_view[:pending_size]
+                        hasher.update(tail)
+                        consume(bytes(tail))
             finally:
+                # Refuse a late exporter connection after cancellation.
+                listener.close()
                 thread.join(timeout=timeout_seconds)
             if thread.is_alive():
                 raise TimeoutError("dense layer exporter did not finish")

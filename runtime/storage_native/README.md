@@ -74,6 +74,17 @@ An export, upload, or manifest failure therefore leaves a resumable attached
 park rather than deleting its last valid state. Registry garbage collection can
 later reclaim any unreferenced upload created by a failed attempt.
 
+Publishers retain a bounded in-memory index of completed layer uploads, including
+compacted exports. If a later layer or final metadata commit fails, a retry can
+reuse those blobs without rereading or uploading their immutable inputs. Reuse
+requires the same input file identities, compaction context and remote blob
+presence; missing blobs are exported again. The index is scoped to the publisher
+and is lost on restart. It does not retain partial uploads or make an incomplete
+snapshot authoritative. `snapshot_reused_layers` and `snapshot_reused_layer_bytes`
+count reused outputs; these bytes are excluded from `snapshot_uploaded_bytes`
+for successful publication attempts. As before, that uploaded-byte metric does
+not account for failed attempts.
+
 Force the threshold to one layer to exercise compaction in the real node
 service qualifier:
 
@@ -184,3 +195,76 @@ holes, and native restacking of the retained base plus the merged delta. It uses
 temporary local layers and export RPCs only, with no device creation, mount,
 production journal changes, or provider lifecycle operations. Results exclude
 network upload and concurrent application traffic.
+
+## Unpublished local checkpoint compaction
+
+The node service also compacts local sealed layers independently of remote
+publication. Maintenance starts when local depth exceeds eight layers or
+accumulated delta data exceeds 4 GiB, configurable with
+`--local-compact-after-layers` and `--local-compact-after-bytes`. These trigger
+background work; they do not reject sandbox operations or guarantee an immediate
+chain-depth bound. One background export runs per node, with pending requests
+coalesced by volume and physical disk headroom checked during export.
+
+A wake can continue while compaction runs. The next journaled mount or publication
+adopts a completed replacement if its immutable source prefix still matches,
+preserving newer deltas. Depth-only maintenance retains a dominant local base;
+delta-byte pressure merges the entire local chain. Existing remote layers remain
+unchanged. Compaction does not make a checkpoint portable to another node.
+
+Storage-native metrics expose `local_compaction_active`, `local_compaction_waiting`,
+`local_compaction_completed`, `local_compaction_adopted`, `local_compaction_failed`,
+`local_compaction_deferred`, `local_compaction_input_bytes`, and
+`local_compaction_output_bytes`. Counters reset with the service process.
+
+Qualify the local path using an isolated backend process and temporary files:
+
+```bash
+sudo env PYTHONPATH=/path/to/repository python3 qualify_local_compaction.py \
+  --backend /path/to/pinned/uvm-ublk-daemon
+```
+
+This creates no block devices or mounts and leaves production journals unchanged.
+It checks a 29-layer chain, a wake and appended delta during export, and 24 more
+cycles against expected logical contents. See the
+[qualification report](../../docs/reviews/local-checkpoint-compaction-2026-09-21.md)
+for results and measurement limits.
+
+## Local reuse after publication
+
+Successful ordinary dense uploads can retain their immutable sealed input as a
+local logical equivalent of the published layer. Retention and mount pinning use
+hardlinks, with no data copy. The next same-worker wake substitutes that local
+file for the remote descriptor in the native source configuration. The journal
+continues to store the remote published descriptors as checkpoint authority.
+
+The default retained cache budget is 4 GiB, capped at ten percent of configured
+hard storage capacity. Set `--published-local-cache-bytes` to change the budget
+or zero to disable it. LRU eviction and physical free-space headroom protect disk
+capacity; the reserve is the smaller of 1 GiB and five percent of the filesystem.
+Active mount pins can outlive cache eviction and are released after safe device
+release, including retired-device cleanup. Those active pins are not part of the
+idle cache budget. Low space prevents new cache retention and hits; misses and
+cache failures fall back to remote layers.
+
+The index is process-local; restarting the storage service removes idle cache
+links while journaled mount pins remain valid. Cache reuse is restricted to
+confirmed dense exports and their exact source identity. Compacted uploads that
+have no equivalent single local file continue to use the remote path. A local
+compaction result subsequently uploaded as a dense layer is eligible.
+
+Native `GetMetrics` exposes `published_local_cache_bytes`,
+`published_local_cache_entries`, `published_local_cache_hits`,
+`published_local_cache_misses`, and `published_local_cache_evictions`.
+The existing `cache_bytes` metric counts unique allocated cached/pinned inodes,
+including these files, rather than their sparse virtual sizes.
+
+```bash
+sudo env PYTHONPATH=/path/to/repository python3 qualify_published_local_cache.py \
+  --backend /path/to/pinned/uvm-ublk-daemon
+```
+
+The qualifier uses an isolated backend and temporary files without creating block
+devices. It compares native restacking of local pins and dense exported layers,
+with the original names removed, cache entries evicted and the remote origin
+unreachable. See the [qualification report](../../docs/reviews/published-local-cache-2026-09-21.md).

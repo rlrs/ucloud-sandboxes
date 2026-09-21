@@ -5,7 +5,7 @@ import json
 import os
 import unittest
 
-from ucloud_sandboxes.managed_registry import RegistryClient
+from ucloud_sandboxes.managed_registry import RegistryClient, RegistryRequestError
 
 
 REGISTRY_URL = os.environ.get("UCLOUD_TEST_REGISTRY_URL", "").rstrip("/")
@@ -44,6 +44,16 @@ class RegistryDistributionContractTests(unittest.TestCase):
             self.assertEqual(client.finish_blob_upload(location, digest), digest)
             self.assertTrue(client.blob_exists(repository, digest))
             self.assertEqual(client.blob_bytes(repository, digest), payload)
+
+        # Cancellation must release the incomplete upload, while leaving the
+        # independently completed blobs above available for the manifest.
+        abandoned = client.start_blob_upload(repository)
+        abandoned = client.upload_blob_chunk(abandoned, b"abandoned export")
+        client.abort_blob_upload(abandoned)
+        with self.assertRaises(RegistryRequestError) as caught:
+            client.finish_blob_upload(abandoned, _digest(b"abandoned export"))
+        self.assertEqual(caught.exception.status_code, 404)
+        self.assertTrue(client.blob_exists(repository, layer_digest))
 
         manifest = json.dumps(
             {

@@ -26,8 +26,10 @@ from .storage_native_registry import (
 )
 from .storage_native_publication import (
     DEFAULT_MAX_CONCURRENT_PUBLICATIONS,
+    CompletedLayerUploads,
     PublicationGate,
     local_layer_data_bytes,
+    local_layer_identity,
     snapshot_compaction_start,
 )
 from .telemetry import Telemetry
@@ -348,6 +350,7 @@ class S3SnapshotPublisher:
             )
         )
         self._publication_gate = PublicationGate(max_concurrent_publications)
+        self._completed_uploads = CompletedLayerUploads[PublishedStorageLayer]()
         self._metrics_lock = threading.Lock()
         self._publications = 0
         self._compactions = 0
@@ -358,6 +361,9 @@ class S3SnapshotPublisher:
     @property
     def repo_blob_url(self) -> str:
         return f"s3://{self.bucket}/{self.prefix}/managed-layers"
+
+    def local_layer_sources(self, paths: tuple[Path, ...]) -> dict[str, Path]:
+        return self._completed_uploads.completed_dense_sources(paths)
 
     def publish(
         self,
@@ -390,6 +396,7 @@ class S3SnapshotPublisher:
                     existing_layers=existing_layers,
                     existing_repo_blob_url=existing_repo_blob_url,
                     global_config_path=global_config_path,
+                    check_current=check_current,
                 )
             span.set_attributes(
                 {
@@ -498,6 +505,7 @@ class S3SnapshotPublisher:
                 "snapshot_upload_part_bytes": self.upload_chunk_bytes,
                 "snapshot_verification_concurrency": self.verification_concurrency,
                 **self._publication_gate.metrics(),
+                **self._completed_uploads.metrics(),
             }
 
     def _publish_locked(
@@ -510,6 +518,7 @@ class S3SnapshotPublisher:
         existing_layers: tuple[PublishedStorageLayer, ...],
         existing_repo_blob_url: str,
         global_config_path: Path | None,
+        check_current: Callable[[], None] | None = None,
     ) -> tuple[StorageSnapshotPublication, bool, int]:
         if virtual_size <= 0:
             raise ValueError("snapshot virtual size must be positive")
@@ -534,6 +543,11 @@ class S3SnapshotPublisher:
         should_compact = compact_start is not None
         retained_layers = existing_layers[:compact_start] if should_compact else ()
         uploaded_bytes = 0
+
+        def retained(item: PublishedStorageLayer) -> bool:
+            remote = client.stat(self._layer_key(item.digest))
+            return remote is not None and remote.size == item.size
+
         if should_compact:
             if global_config_path is None or not global_config_path.is_absolute():
                 raise ValueError("compacted publication requires a global config")
@@ -544,29 +558,44 @@ class S3SnapshotPublisher:
                     "snapshot.retained_base_bytes": sum(layer.size for layer in retained_layers),
                 },
             ):
-                layer = self._publish_compacted_layer(
-                    client,
-                    exporter,
-                    existing_layers=existing_layers[compact_start:],
-                    existing_repo_blob_url=existing_repo_blob_url,
-                    source_layer_paths=source_layer_paths,
-                    global_config_path=global_config_path,
+                layer, uploaded_bytes = self._completed_uploads.publish(
+                    identity=lambda: (
+                        "compact", existing_repo_blob_url,
+                        tuple((item.digest, item.size) for item in existing_layers[compact_start:]),
+                        local_layer_identity(global_config_path),
+                        tuple(local_layer_identity(path) for path in source_layer_paths),
+                    ),
+                    exists=retained, check_current=check_current,
+                    upload=lambda: self._publish_compacted_layer(
+                        client,
+                        exporter,
+                        existing_layers=existing_layers[compact_start:],
+                        existing_repo_blob_url=existing_repo_blob_url,
+                        source_layer_paths=source_layer_paths,
+                        global_config_path=global_config_path,
+                        check_current=check_current,
+                    ),
                 )
             layers = (*retained_layers, layer)
-            uploaded_bytes += layer.size
         else:
             with self.telemetry.span(
                 "snapshot.export_and_upload",
                 attributes={"snapshot.input_bytes": input_bytes},
             ):
-                new_layers = tuple(
-                    self._publish_dense_layer(client, exporter, path)
-                    for path in source_layer_paths
-                )
+                results = []
+                for path in source_layer_paths:
+                    results.append(self._completed_uploads.publish(
+                        identity=lambda: ("dense", local_layer_identity(path)),
+                        exists=retained, check_current=check_current,
+                        upload=lambda: self._publish_dense_layer(client, exporter, path, check_current=check_current),
+                    ))
+                new_layers = tuple(layer for layer, _ in results)
             layers = (*existing_layers, *new_layers)
-            uploaded_bytes += sum(layer.size for layer in new_layers)
+            uploaded_bytes = sum(size for _, size in results)
 
         with self.telemetry.span("snapshot.commit_metadata"):
+            if check_current is not None:
+                check_current()
             config = RegistrySnapshotPublisher._snapshot_config(
                 virtual_size=virtual_size, layers=layers
             )
@@ -581,6 +610,8 @@ class S3SnapshotPublisher:
                 layers=layers,
             )
             manifest_digest = _digest(manifest)
+            if check_current is not None:
+                check_current()
             self._put_content_addressed(
                 client,
                 self._manifest_key(manifest_digest),
@@ -606,6 +637,7 @@ class S3SnapshotPublisher:
         client: S3ObjectClient,
         exporter: DenseLayerExporter,
         source: Path,
+        *, check_current: Callable[[], None] | None = None,
     ) -> PublishedStorageLayer:
         return self._publish_stream(
             client,
@@ -613,6 +645,7 @@ class S3SnapshotPublisher:
                 source_layer_path=source,
                 stream_socket_path=socket_path,
             ),
+            check_current=check_current,
         )
 
     def _publish_compacted_layer(
@@ -624,6 +657,7 @@ class S3SnapshotPublisher:
         existing_repo_blob_url: str,
         source_layer_paths: tuple[Path, ...],
         global_config_path: Path,
+        check_current: Callable[[], None] | None = None,
     ) -> PublishedStorageLayer:
         self.stream_socket_root.mkdir(mode=0o700, parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(
@@ -659,13 +693,17 @@ class S3SnapshotPublisher:
                     global_config=global_config_path,
                     stream_socket_path=socket_path,
                 ),
+                check_current=check_current,
             )
 
     def _publish_stream(
         self,
         client: S3ObjectClient,
         export_layer: Callable[[Path], StorageNativeLayer],
+        *, check_current: Callable[[], None] | None = None,
     ) -> PublishedStorageLayer:
+        if check_current is not None:
+            check_current()
         temporary_key = f"{self.prefix}/.uploads/{uuid4().hex}"
         upload_id = client.create_multipart_upload(temporary_key)
         parts: list[tuple[int, str]] = []
@@ -686,6 +724,8 @@ class S3SnapshotPublisher:
 
                 def consume(payload: bytes) -> None:
                     nonlocal next_part_number
+                    if check_current is not None:
+                        check_current()
                     if len(pending) >= self.upload_part_concurrency:
                         finish_oldest()
                     part_number = next_part_number
@@ -709,9 +749,12 @@ class S3SnapshotPublisher:
                     chunk_bytes=self.upload_chunk_bytes,
                     timeout_seconds=self.stream_timeout_seconds,
                     consume=consume,
+                    check_current=check_current,
                 )
                 while pending:
                     finish_oldest()
+            if check_current is not None:
+                check_current()
             try:
                 client.complete_multipart_upload(
                     temporary_key,
@@ -731,6 +774,8 @@ class S3SnapshotPublisher:
             temporary = client.stat(temporary_key)
             if temporary is None or temporary.size != observed.size:
                 raise ValueError("S3 did not retain the complete streamed layer")
+            if check_current is not None:
+                check_current()
             destination_key = self._layer_key(observed.digest)
             destination = client.stat(destination_key)
             if destination is None:

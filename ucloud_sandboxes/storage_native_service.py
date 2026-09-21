@@ -45,6 +45,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--device-pool-low-watermark", default=2, type=int)
     parser.add_argument("--device-pool-high-watermark", default=16, type=int)
     parser.add_argument("--max-ublk-devices", default=0, type=int)
+    parser.add_argument("--local-compact-after-layers", default=8, type=int)
+    parser.add_argument("--local-compact-after-bytes", default=4 * 1024**3, type=int)
+    parser.add_argument("--published-local-cache-bytes", default=4 * 1024**3, type=int)
     parser.add_argument("--snapshot-registry-url")
     parser.add_argument("--snapshot-repository")
     parser.add_argument(
@@ -208,6 +211,9 @@ def main(argv: list[str] | None = None) -> int:
             device_pool_low_watermark=args.device_pool_low_watermark,
             device_pool_high_watermark=args.device_pool_high_watermark,
             max_ublk_devices=args.max_ublk_devices,
+            local_compact_after_layers=args.local_compact_after_layers,
+            local_compact_after_bytes=args.local_compact_after_bytes,
+            published_local_cache_bytes=args.published_local_cache_bytes,
         ),
         backend=backend,
         global_config_path=args.backend_global_config.resolve(),

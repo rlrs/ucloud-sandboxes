@@ -1,0 +1,24 @@
+{
+  "virtual_bytes": 9437184,
+  "published_layer_bytes": 8425472,
+  "locally_reused_layers": 2,
+  "copied_cache_data_bytes": 0,
+  "checks": {
+    "same_inode": true,
+    "original_names_removed": true,
+    "evicted_cache_pins_survive": true,
+    "native_restack_matches_dense": true,
+    "overwrites_zeros_discards_holes_preserved": true,
+    "remote_origin_unreachable": true,
+    "created_devices": 0
+  },
+  "metrics": {
+    "published_local_cache_bytes": 0,
+    "published_local_cache_entries": 0,
+    "published_local_cache_hits": 2,
+    "published_local_cache_misses": 0,
+    "published_local_cache_evictions": 2
+  },
+  "backend_sha256": "75a20bd1ab96e2dff63ff877d0abe63383092e34c8fabdba927128eae062a7f7",
+  "environment": "isolated native process on idle gateway; temporary files; no service replacement or block devices"
+}

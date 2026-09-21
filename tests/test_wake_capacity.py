@@ -83,7 +83,14 @@ class WakeCapacityTests(unittest.TestCase):
             handler.routing_store = RoutingStore(root / "routes.sqlite")
             handler.store = ControlStateStore(root / "control-state.sqlite")
             handler.heartbeat_ttl_seconds = 120
-            handler.store.upsert_heartbeat(self.heartbeat(active=64))
+            source = replace(self.heartbeat(active=64), capabilities=(
+                *self.heartbeat().capabilities, "sandbox-migrate-storage-native-v1",
+            ))
+            handler.store.upsert_heartbeat(source)
+            handler.store.upsert_heartbeat(replace(
+                source, node_id="destination", job_id="destination-job", node_url="http://dest:8090",
+                runtime_metrics=replace(source.runtime_metrics, storage_ublk_active_devices=0),
+            ))
             route = handler.routing_store.upsert_sandbox(self.route())
             handler._write_json = Mock()
             handler._refresh_wake_capacity = Mock(return_value=False)
@@ -107,6 +114,67 @@ class WakeCapacityTests(unittest.TestCase):
             self.assertEqual(acquired, [True])
             self.assertEqual(handler._write_json.call_args.args[0]["error_code"], "snapshot_publication_pending")
             self.assertEqual(handler.routing_store.get_sandbox_readonly("parked").state, "parked")
+
+    def test_full_fleet_defers_export_but_keeps_wake_demand(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            handler = object.__new__(control_plane.ControlPlaneHandler)
+            handler.routing_store = RoutingStore(root / "routes.sqlite")
+            handler.store = ControlStateStore(root / "control-state.sqlite")
+            handler.heartbeat_ttl_seconds = 120
+            source = replace(self.heartbeat(active=64), capabilities=(
+                *self.heartbeat().capabilities, "sandbox-migrate-storage-native-v1",
+            ))
+            handler.store.upsert_heartbeat(source)
+            destination = replace(source, node_id="destination", job_id="dest-job", node_url="http://dest:8090")
+            handler.store.upsert_heartbeat(destination)
+            route = handler.routing_store.upsert_sandbox(self.route())
+            handler._write_json = Mock()
+            handler._refresh_wake_capacity = Mock(return_value=False)
+            handler._proxy_request = Mock(return_value=control_plane.ProxiedResponse(202, {}, b"{}"))
+            self.assertIsNone(handler._ensure_parked_sandbox_wake_placement(route))
+            handler._proxy_request.assert_not_called()
+            self.assertEqual(handler._write_json.call_args.args[0]["error_code"], "wake_destination_unavailable")
+            pending = handler.routing_store.get_pending(control_plane._wake_pending_demand_id(route.sandbox_id))
+            self.assertEqual(pending.resources, route.resources)
+            self.assertEqual(pending.failure_reason, "wake_destination_unavailable")
+            handler.store.upsert_heartbeat(replace(destination, runtime_metrics=replace(
+                destination.runtime_metrics, storage_ublk_active_devices=0,
+            )))
+            self.assertIsNone(handler._ensure_parked_sandbox_wake_placement(route))
+            self.assertEqual(handler._proxy_request.call_count, 1)
+            self.assertTrue(handler._proxy_request.call_args.args[1].endswith("/snapshot/publish"))
+
+    def test_closed_source_can_offload_but_closed_destination_cannot_admit(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            handler = object.__new__(control_plane.ControlPlaneHandler)
+            handler.routing_store = RoutingStore(root / "routes.sqlite")
+            handler.store = ControlStateStore(root / "control-state.sqlite")
+            handler.heartbeat_ttl_seconds = 120
+            source = replace(self.heartbeat(active=64), admission_open=False, draining=True, capabilities=(
+                *self.heartbeat().capabilities, "sandbox-migrate-storage-native-v1",
+            ))
+            handler.store.upsert_heartbeat(source)
+            destination = replace(
+                source, node_id="destination", job_id="dest-job", node_url="http://dest:8090",
+                admission_open=True, draining=False,
+                runtime_metrics=replace(source.runtime_metrics, storage_ublk_active_devices=0),
+            )
+            handler.store.upsert_heartbeat(destination)
+            route = handler.routing_store.upsert_sandbox(self.route())
+            selected = handler._select_migration_destination(route, requested_node_id="", require_active_resources=True)
+            self.assertEqual(selected.node_id, "destination")
+            # Even if runtime metrics look healthy, a closed admission gate
+            # must not be bypassed by reserving a local wake.
+            handler.store.upsert_heartbeat(replace(
+                source, draining=False, runtime_metrics=destination.runtime_metrics,
+            ))
+            with self.assertRaises(control_plane._WakeSnapshotPublicationRequired):
+                handler._reserve_parked_sandbox_wake(route)
+            self.assertEqual(handler.routing_store.get_sandbox(route.sandbox_id).state, "parked")
+            handler.store.upsert_heartbeat(replace(destination, admission_open=False))
+            self.assertIsNone(handler._select_migration_destination(route, requested_node_id="", require_active_resources=True))
 
     def test_fresh_capacity_avoids_publication_after_a_full_worker_parks(self):
         with TemporaryDirectory() as directory:

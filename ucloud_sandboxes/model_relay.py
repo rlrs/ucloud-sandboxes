@@ -133,6 +133,9 @@ class RelayRequest:
         repr=False,
         compare=False,
     )
+    response_committed: asyncio.Event = field(
+        default_factory=asyncio.Event, repr=False, compare=False,
+    )
     expires_at: float | None = None
     payload_bytes: int = 0
     delivered_at: float | None = None
@@ -2052,6 +2055,9 @@ class ModelRelayState:
             request.headers = durable.headers
             request.payload_bytes = durable.payload_bytes
             request.delivery_pending = durable.delivery_pending
+            # Wake queued park dispatchers only after the response is durable.
+            # The caller future may deliberately remain unresolved until wake.
+            request.response_committed.set()
             if request.request_id in retained_ids:
                 self._completed[request.request_id] = request
                 self._completed_bytes += request.completed_bytes

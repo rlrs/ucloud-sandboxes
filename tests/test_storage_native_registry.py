@@ -34,6 +34,9 @@ class FakeRegistry:
         self.uploads[location].extend(chunk)
         return location
 
+    def abort_blob_upload(self, location: str) -> None:
+        self.uploads.pop(location, None)
+
     def finish_blob_upload(self, location: str, digest: str) -> str:
         payload = bytes(self.uploads.pop(location))
         observed = f"sha256:{hashlib.sha256(payload).hexdigest()}"

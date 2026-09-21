@@ -718,6 +718,7 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             failed = await state.stats()
             self.assertEqual(failed["leased"]["commit-failure"], 1)
             self.assertEqual(failed["counters"]["completed"], 0)
+            self.assertFalse(request.response_committed.is_set())
 
             store.commit_request_batch = original_commit  # type: ignore[method-assign]
             await state.respond(
@@ -728,6 +729,7 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             )
             response = await state.wait_for_response(request, timeout_seconds=1)
             self.assertEqual((response.status, response.body), (200, {"ok": True}))
+            self.assertTrue(request.response_committed.is_set())
             await state.aclose()
 
     async def test_cancellation_after_terminal_commit_restores_memory_invariants(

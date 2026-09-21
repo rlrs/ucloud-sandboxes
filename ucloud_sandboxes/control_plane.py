@@ -1446,6 +1446,15 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             ),
             None,
         )
+        if source_heartbeat is None and source.worker_state == "attached":
+            # Closed admission/draining excludes a destination, not a source.
+            # Busy workers must still be able to export their parked state.
+            owner = self._heartbeat_for_route(job_id=source.job_id)
+            if (
+                owner is not None and owner.node_id == source.node_id
+                and owner.is_fresh(utc_now(), self.heartbeat_ttl_seconds)
+            ):
+                source_heartbeat = owner
         source_storage_native = bool(
             source_heartbeat is not None
             and STORAGE_NATIVE_CAPABILITY in source_heartbeat.capabilities
@@ -2074,10 +2083,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         if store is None:
             return ""
         try:
-            # RegistryUsageStore is SQLite-backed. Opening it as the JSON file
-            # used by the retired implementation made healthy gateways report
-            # 503 whenever managed-registry accounting was configured.
-            store.snapshot()
+            store.check_readable()
         except (OSError, sqlite3.DatabaseError, RegistryUsageStateError, ValueError):
             return "state file is unavailable"
         return ""
@@ -4144,7 +4150,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         route = self.routing_store.get_sandbox(sandbox_id)
         if route is None:
             if self.command == "DELETE":
-                pending_before = self.routing_store.load().pending.get(sandbox_id)
+                pending_before = self.routing_store.get_pending(sandbox_id)
                 self.routing_store.delete_sandbox(sandbox_id)
                 record_sandbox_pending_deleted(
                     self.metrics_store,
@@ -5057,6 +5063,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         requested = ResourceQuantity(vcpu=route.resources.vcpu, memory_mb=route.resources.memory_mb)
         if (
             previous.is_fresh(utc_now(), self.heartbeat_ttl_seconds)
+            and previous.admission_open and not previous.draining
             and _node_has_storage_device_capacity(previous, routes)
             and _node_can_fit_available(previous, requested, _node_available_resources(previous, routes))
         ):
@@ -5188,17 +5195,14 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             source_ready = bool(
                 source_heartbeat is not None and source_heartbeat.node_url
                 and not source_heartbeat.draining
+                and source_heartbeat.admission_open
                 and "sandbox" in source_heartbeat.capabilities
                 and source_heartbeat.is_fresh(utc_now(), self.heartbeat_ttl_seconds)
             )
             active_migration = next(
-                (
-                    migration
-                    for migration in self.routing_store.sandbox_migrations(
-                        active_only=True
-                    )
-                    if migration.sandbox_id == route.sandbox_id
-                ),
+                iter(self.routing_store.sandbox_migrations(
+                    active_only=True, sandbox_id=route.sandbox_id,
+                )),
                 None,
             )
             consolidation_destination = None
@@ -5258,6 +5262,24 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                         },
                     )
                     return None
+                if self._select_migration_destination(
+                    route, requested_node_id="", require_active_resources=True,
+                ) is None:
+                    # Exporting a multi-GB checkpoint cannot relieve pressure
+                    # when no other worker can admit it. Keep demand visible
+                    # and re-evaluate placement on the next wake attempt.
+                    _pending, demand = self.routing_store.upsert_pending_with_demand(
+                        _wake_pending_demand_id(route.sandbox_id), route.resources,
+                        failure_reason="wake_destination_unavailable",
+                    )
+                    self._write_json(
+                        {"error": "waiting for local or destination wake capacity",
+                         "error_code": "wake_destination_unavailable", "retryable": True,
+                         "pending_resources": demand.pending_resources.to_dict()},
+                        status=HTTPStatus.SERVICE_UNAVAILABLE,
+                        headers={"Retry-After": "1", "X-UCloud-Sandbox-Retryable": "true"},
+                    )
+                    return None
                 # Background park publication is deliberately asynchronous.
                 # Do not turn a transiently busy local source into a blocking
                 # migration/EnsurePublished call. The node heartbeat will
@@ -5270,16 +5292,6 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 )
                 raise _WakeSnapshotPublicationRequired(route, demand.pending_resources)
 
-            active_migration = next(
-                (
-                    migration
-                    for migration in self.routing_store.sandbox_migrations(
-                        active_only=True
-                    )
-                    if migration.sandbox_id == route.sandbox_id
-                ),
-                None,
-            )
             if active_migration is None:
                 destination = (
                     consolidation_destination
@@ -8051,8 +8063,7 @@ def _persist_registry_image_protection(
             if len(touched) != len(usage_refs):
                 raise ValueError("private-registry image could not be recorded")
         timestamp = now or utc_now()
-        snapshot = store.snapshot(now=timestamp)
-        existing = snapshot.leases.get((repository, tag, owner))
+        existing = store.get_lease(repository, tag, owner, now=timestamp)
         digest_matches = not digest or (
             existing is not None and existing.digest == digest
         )

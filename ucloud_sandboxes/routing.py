@@ -627,9 +627,10 @@ class RoutingStore:
             )
 
     def get_sandbox(self, sandbox_id: str) -> SandboxRoute | None:
-        with self._lock:
-            with self._connect() as conn:
-                return self._get_sandbox_unlocked(conn, sandbox_id)
+        # Single-row routing reads can use the last committed WAL snapshot
+        # while heartbeat reconciliation holds the process's writer lock.
+        # Mutations still revalidate their generation in a write transaction.
+        return self.get_sandbox_readonly(sandbox_id)
 
     def get_sandbox_readonly(self, sandbox_id: str) -> SandboxRoute | None:
         with self._connect() as conn:
@@ -1514,8 +1515,14 @@ class RoutingStore:
         self,
         *,
         active_only: bool = False,
+        sandbox_id: str | None = None,
     ) -> list[SandboxMigration]:
-        where = "WHERE phase != 'complete'" if active_only else ""
+        clauses = ["phase != 'complete'"] if active_only else []
+        parameters: list[str] = []
+        if sandbox_id is not None:
+            clauses.append("sandbox_id = ?")
+            parameters.append(sandbox_id)
+        where = "WHERE " + " AND ".join(clauses) if clauses else ""
         with self._connect() as conn:
             return [
                 _sandbox_migration_from_row(row)
@@ -1532,7 +1539,7 @@ class RoutingStore:
                     FROM sandbox_migrations
                     {where}
                     ORDER BY created_at, migration_id
-                    """
+                    """, parameters,
                 )
             ]
 
@@ -2353,9 +2360,8 @@ class RoutingStore:
             return self._get_exec_unlocked(conn, session_id)
 
     def get_pending(self, sandbox_id: str) -> PendingSandboxDemand | None:
-        with self._lock:
-            with self._connect() as conn:
-                return self._get_pending_unlocked(conn, sandbox_id)
+        with self._connect() as conn:
+            return self._get_pending_unlocked(conn, sandbox_id)
 
     def upsert_exec(self, route: ExecRoute) -> None:
         with self._lock:

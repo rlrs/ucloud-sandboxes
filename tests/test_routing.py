@@ -13,6 +13,7 @@ from threading import Event
 import unittest
 from unittest.mock import patch
 
+from ucloud_sandboxes import routing as routing_module
 from ucloud_sandboxes.models import SandboxInventoryEntry, ResourceQuantity, utc_now
 from ucloud_sandboxes.managed_process import ManagedProcessRecord
 from ucloud_sandboxes.routing import (
@@ -143,6 +144,45 @@ def seed_routing_state(store: RoutingStore, state: RoutingState) -> None:
 
 
 class RoutingStoreTests(unittest.TestCase):
+    def test_active_migration_lookup_is_scoped_to_sandbox(self) -> None:
+        with routing_store() as store:
+            for name in ("one", "two"):
+                route = store.upsert_sandbox(sandbox_route(
+                    sandbox_id=name, node_id="node", job_id="job",
+                    node_url="http://node", state="parked",
+                ))
+                store.begin_sandbox_migration(
+                    route, migration_id="move-" + name, destination_node_id="dest",
+                    destination_job_id="dest-job", destination_node_url="http://dest",
+                )
+            with patch("ucloud_sandboxes.routing._sandbox_migration_from_row",
+                       wraps=routing_module._sandbox_migration_from_row) as decode:
+                result = store.sandbox_migrations(active_only=True, sandbox_id="one")
+                self.assertEqual([migration.migration_id for migration in result], ["move-one"])
+                self.assertEqual(decode.call_count, 1)
+                self.assertEqual(store.sandbox_migrations(active_only=True, sandbox_id="absent"), [])
+                self.assertEqual(decode.call_count, 1)
+
+    def test_single_route_reads_do_not_wait_for_reconciliation_writer(self) -> None:
+        with routing_store() as store, ThreadPoolExecutor(max_workers=2) as executor:
+            route = store.upsert_sandbox(sandbox_route(
+                sandbox_id="active", node_id="node", job_id="job",
+                node_url="http://node", state="running",
+            ))
+            store.upsert_pending("waiting", ResourceQuantity(1, 512, 1024))
+            pending = store.get_pending("waiting")
+            # Hold both the reconciliation mutex and an uncommitted WAL write.
+            # Readers must see committed rows, then observe the later commit.
+            with store._lock, store._transaction() as writer:
+                writer.execute("UPDATE sandboxes SET state = 'parked'")
+                writer.execute("DELETE FROM pending")
+                route_read = executor.submit(store.get_sandbox, "active")
+                pending_read = executor.submit(store.get_pending, "waiting")
+                self.assertEqual(route_read.result(timeout=2), route)
+                self.assertEqual(pending_read.result(timeout=2), pending)
+            self.assertEqual(store.get_sandbox("active").state, "parked")
+            self.assertIsNone(store.get_pending("waiting"))
+
     def test_exec_read_observes_worker_loss_from_another_process(self) -> None:
         with routing_store() as store:
             route = store.upsert_sandbox(sandbox_route(

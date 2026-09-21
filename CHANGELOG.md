@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.5.71 - 2026-09-21
+
+- Keep bounded local equivalents of successfully published layers using
+  hardlinks. Same-worker wakes can read those files without downloading the
+  published blobs; eviction preserves active and retired-device pins. Remote
+  descriptors remain authoritative, and cache misses use the existing remote
+  path. Count cache allocation once per inode instead of sparse logical sizes.
+- Reuse completed Registry/S3 layer uploads after a later layer or snapshot
+  metadata commit fails. Check immutable input identity and remote blob presence
+  before reuse; retry missing blobs normally. Repeated compacted exports can
+  also reuse their completed upload without rereading the source stack.
+- Compact unpublished local checkpoint layers in the background, independently
+  of remote publication. Reuse a dominant local base, retain completed work
+  across wakes and appended deltas, and adopt it during a journaled mount or
+  publication. Preserve retired-device inputs until release and clean up
+  abandoned export hardlinks during reconciliation.
+- Stop superseded snapshot exports during streaming for both Registry and S3,
+  clean up incomplete uploads, and forward publication ownership checks through
+  the backend router. Preserve immutable source layers and final revision fences.
+- Remove whole-registry scans from image touches and lease updates. Check registry
+  availability without a maintenance write transaction; retain full validation
+  and expired-lease cleanup in maintenance snapshots.
+- Use indexed lease lookups in gateway image protection, and let sandbox route
+  reads proceed during heartbeat writes using committed SQLite snapshots.
+  Deleting an absent sandbox no longer loads the entire routing database.
+- Receive snapshot uploads into a reusable buffer to reduce copying and temporary
+  memory, preserving immutable upload chunks, digest checks, and cancellation.
+- Skip queued or retrying relay parks as soon as the model response is durably
+  committed; keep already-dispatched parks fenced through completion. Trace
+  dispatch queue time separately from lifecycle execution.
+- Defer wake-triggered snapshot exports when no destination can admit the
+  sandbox, retaining autoscaler demand. Allow busy/draining source workers to
+  offload while keeping destination and local-wake admission checks intact.
+  Use indexed per-sandbox migration lookup during wake placement.
+
+
 ## 0.5.70 - 2026-09-21
 
 - Retain a dominant published base during depth-only snapshot compaction and
@@ -24,8 +60,6 @@
   are backfilled; a newer sandbox incarnation is never labeled with an old loss.
 - Preserve the existing relay behavior: acknowledge retained model responses for
   unavailable callers without replaying model work or claiming a successful wake.
-
-## Unreleased
 
 ## 0.5.53 - 2026-09-19
 

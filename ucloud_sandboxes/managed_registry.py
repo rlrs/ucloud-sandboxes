@@ -480,6 +480,12 @@ class RegistryClient:
         finally:
             response.close()
 
+    def abort_blob_upload(self, location: str) -> None:
+        response = self._request(
+            self._validate_upload_location(location), method="DELETE",
+        )
+        response.close()
+
     def finish_blob_upload(self, location: str, digest: str) -> str:
         normalized = _validate_lease_digest(digest)
         path = self._validate_upload_location(location)
@@ -712,8 +718,63 @@ class RegistryUsageStore:
         finally:
             conn.close()
 
+    def check_readable(self) -> None:
+        """Check availability without taking the maintenance writer lock.
+
+        Health polling must not enumerate every lease or prune the registry.
+        Full row validation and expiry cleanup remain in maintenance snapshots.
+        Opening read-only also avoids recreating a missing state file.
+        """
+        try:
+            conn = sqlite3.connect(
+                self.path.resolve().as_uri() + "?mode=ro", uri=True, timeout=1,
+            )
+            try:
+                conn.execute("BEGIN")
+                if conn.execute("PRAGMA user_version").fetchone()[0] != 1:
+                    raise ValueError("unsupported registry usage schema")
+                self._generation_unlocked(conn)
+                for table, columns in self._COLUMNS.items():
+                    conn.execute(f"SELECT {', '.join(columns.split())} FROM {table} LIMIT 0")
+            finally:
+                conn.close()
+        except sqlite3.Error as exc:
+            raise RegistryUsageStateError(_REGISTRY_USAGE_ERROR) from exc
+
     def load(self) -> dict[tuple[str, str], RegistryImageUsage]:
         return self.snapshot().records
+
+    def get_lease(
+        self,
+        repository: str,
+        tag: str,
+        owner: str,
+        *,
+        now: datetime | None = None,
+    ) -> RegistryImageLease | None:
+        """Read one active identity without scanning or pruning other leases.
+
+        Acquisition still rechecks the identity in its write transaction. This
+        read only lets callers avoid renewing an already sufficient lease.
+        """
+        key = _validate_lease_identity(repository, tag, owner)
+        timestamp = _as_utc(now or datetime.now(timezone.utc))
+        try:
+            conn = sqlite3.connect(
+                self.path.resolve().as_uri() + "?mode=ro", uri=True, timeout=60,
+            )
+            try:
+                row = conn.execute(
+                    "SELECT repository, tag, owner, acquired_at, renewed_at, "
+                    "expires_at, digest FROM registry_leases "
+                    "WHERE repository = ? AND tag = ? AND owner = ?", key,
+                ).fetchone()
+            finally:
+                conn.close()
+        except sqlite3.Error as exc:
+            raise RegistryUsageStateError(_REGISTRY_USAGE_ERROR) from exc
+        lease = self._lease_from_row(row) if row is not None else None
+        return lease if lease is not None and lease.is_active(timestamp) else None
 
     def snapshot(self, *, now: datetime | None = None) -> RegistryUsageSnapshot:
         with self._transaction() as conn:
@@ -767,7 +828,8 @@ class RegistryUsageStore:
         if not records:
             return ()
         with self._transaction() as conn:
-            self._prune_expired_unlocked(conn, now=timestamp)
+            # Expiry is maintenance work; touching one image must not decode
+            # every image and lease under the registry writer lock.
             conn.executemany(self._USAGE_UPSERT, map(astuple, records))
             self._advance_generation_unlocked(conn)
         return tuple(records)
@@ -869,10 +931,19 @@ class RegistryUsageStore:
         key = (repository, tag, owner)
         lease = None
         with self._transaction() as conn:
-            previous = self._prune_expired_unlocked(
-                conn,
-                now=timestamp,
-            ).leases.get(key)
+            row = conn.execute(
+                "SELECT repository, tag, owner, acquired_at, renewed_at, "
+                "expires_at, digest FROM registry_leases "
+                "WHERE repository = ? AND tag = ? AND owner = ?", key,
+            ).fetchone()
+            previous = self._lease_from_row(row) if row is not None else None
+            if previous is not None and not previous.is_active(timestamp):
+                conn.execute(
+                    "DELETE FROM registry_leases "
+                    "WHERE repository = ? AND tag = ? AND owner = ?", key,
+                )
+                self._advance_generation_unlocked(conn)
+                previous = None
             if previous is not None and previous.digest != digest:
                 raise ValueError("registry lease/reference digest is immutable")
             if previous is not None or not require_existing:

@@ -1,0 +1,143 @@
+{
+  "baseline": "4175036eb97cbdb41c5410742b5785e2c9ae91b1",
+  "python": "3.10.13",
+  "platform": "Darwin",
+  "repeat": 3,
+  "registry": {
+    "leases": 5000,
+    "images": 500,
+    "operations": {
+      "reference_read": {
+        "samples": {
+          "before": [
+            {
+              "cpu_seconds": 0.663221,
+              "wall_seconds": 0.6700250419962686,
+              "count": 20
+            },
+            {
+              "cpu_seconds": 0.661797,
+              "wall_seconds": 0.6695207090233453,
+              "count": 20
+            },
+            {
+              "cpu_seconds": 0.6538469999999998,
+              "wall_seconds": 0.6573762090119999,
+              "count": 20
+            }
+          ],
+          "after": [
+            {
+              "cpu_seconds": 0.0040320000000000356,
+              "wall_seconds": 0.0040745419973973185,
+              "count": 20
+            },
+            {
+              "cpu_seconds": 0.0034089999999999954,
+              "wall_seconds": 0.00341204198775813,
+              "count": 20
+            },
+            {
+              "cpu_seconds": 0.004176999999999875,
+              "wall_seconds": 0.004211374995065853,
+              "count": 20
+            }
+          ]
+        },
+        "median_seconds_per_call": {
+          "before": 0.033476035451167264,
+          "after": 0.0002037270998698659
+        },
+        "speedup": 164.31802873820243
+      },
+      "reference_with_touch": {
+        "samples": {
+          "before": [
+            {
+              "cpu_seconds": 1.352878,
+              "wall_seconds": 1.3822654160030652,
+              "count": 20
+            },
+            {
+              "cpu_seconds": 1.3277689999999995,
+              "wall_seconds": 1.3493982079962734,
+              "count": 20
+            },
+            {
+              "cpu_seconds": 1.3659860000000004,
+              "wall_seconds": 1.42071649999707,
+              "count": 20
+            }
+          ],
+          "after": [
+            {
+              "cpu_seconds": 0.016796000000000255,
+              "wall_seconds": 0.019498083012877032,
+              "count": 20
+            },
+            {
+              "cpu_seconds": 0.016039000000000136,
+              "wall_seconds": 0.01903758299886249,
+              "count": 20
+            },
+            {
+              "cpu_seconds": 0.016879999999999562,
+              "wall_seconds": 0.01927145800436847,
+              "count": 20
+            }
+          ]
+        },
+        "median_seconds_per_call": {
+          "before": 0.06911327080015325,
+          "after": 0.0009635729002184235
+        },
+        "speedup": 71.72604250751199
+      }
+    }
+  },
+  "stream": {
+    "bytes_per_sample": 134217728,
+    "chunk_bytes": 8388608,
+    "retained_upload_chunks": 2,
+    "samples": {
+      "before": [
+        {
+          "cpu_seconds": 0.19833700000000043,
+          "wall_seconds": 0.16640725001343526,
+          "count": 1
+        },
+        {
+          "cpu_seconds": 0.20784000000000002,
+          "wall_seconds": 0.2016417089907918,
+          "count": 1
+        },
+        {
+          "cpu_seconds": 0.2009129999999999,
+          "wall_seconds": 0.19455516699235886,
+          "count": 1
+        }
+      ],
+      "after": [
+        {
+          "cpu_seconds": 0.18046000000000006,
+          "wall_seconds": 0.18480041599832475,
+          "count": 1
+        },
+        {
+          "cpu_seconds": 0.18033500000000036,
+          "wall_seconds": 0.1762142500083428,
+          "count": 1
+        },
+        {
+          "cpu_seconds": 0.16991399999999945,
+          "wall_seconds": 0.16190416700555943,
+          "count": 1
+        }
+      ]
+    },
+    "separate_tracemalloc_peak_bytes": {
+      "before": 42073878,
+      "after": 33559759
+    }
+  }
+}

@@ -1292,6 +1292,10 @@ class _RelayLifecycleDispatcher:
         while True:
             if self._closed:
                 raise RuntimeError("relay lifecycle dispatcher is closed")
+            if action == "park" and getattr(request, "completed_at", None) is not None:
+                get_current_span().add_event("relay.park.skipped", {"reason": "response_committed"})
+                return None
+            queued_at = time.monotonic()
             if action == "wake":
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
@@ -1301,10 +1305,23 @@ class _RelayLifecycleDispatcher:
                 except asyncio.TimeoutError as exc:
                     raise TimeoutError("relay wake deadline exceeded") from exc
             else:
-                await self._slots[action].acquire()
+                if not await self._acquire_park_slot(request):
+                    get_current_span().add_event("relay.park.skipped", {
+                        "reason": "response_committed_while_queued",
+                        "relay.lifecycle.queue_seconds": time.monotonic() - queued_at,
+                    })
+                    return None
             try:
                 if self._closed:
                     raise RuntimeError("relay lifecycle dispatcher is closed")
+                if action == "park" and getattr(request, "completed_at", None) is not None:
+                    get_current_span().add_event("relay.park.skipped", {"reason": "response_committed"})
+                    return None
+                get_current_span().add_event("relay.lifecycle.admitted", {
+                    "relay.lifecycle.action": action,
+                    "relay.lifecycle.queue_seconds": time.monotonic() - queued_at,
+                    "retry.attempt": attempt,
+                })
                 context = copy_context()
                 future = asyncio.get_running_loop().run_in_executor(
                     self._pools[action],
@@ -1322,8 +1339,44 @@ class _RelayLifecycleDispatcher:
                 self._slots[action].release()
             # A capacity-blocked owner must not occupy fleet-wide dispatch
             # capacity while unrelated, ready workers could make progress.
-            await asyncio.sleep(delay)
+            committed = getattr(request, "response_committed", None)
+            if action == "park" and committed is not None:
+                try:
+                    await asyncio.wait_for(committed.wait(), timeout=delay)
+                    get_current_span().add_event("relay.park.skipped", {
+                        "reason": "response_committed_during_backoff",
+                    })
+                    return None
+                except asyncio.TimeoutError:
+                    pass
+            else:
+                await asyncio.sleep(delay)
             attempt += 1
+
+    async def _acquire_park_slot(self, request: RelayRequest) -> bool:
+        committed = getattr(request, "response_committed", None)
+        if committed is None:
+            await self._slots["park"].acquire()
+            return True
+        slot_wait = asyncio.create_task(self._slots["park"].acquire())
+        result_wait = asyncio.create_task(committed.wait())
+        keep_slot = False
+        try:
+            await asyncio.wait((slot_wait, result_wait), return_when=asyncio.FIRST_COMPLETED)
+            if committed.is_set():
+                return False
+            await slot_wait
+            keep_slot = True
+            return True
+        finally:
+            for task in (slot_wait, result_wait):
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(slot_wait, result_wait, return_exceptions=True)
+            # Completion and admission can win on the same event-loop turn.
+            # Return any acquired slot when skipping park or being canceled.
+            if not keep_slot and not slot_wait.cancelled() and slot_wait.exception() is None:
+                self._slots["park"].release()
 
     async def close(self) -> None:
         self._closed = True

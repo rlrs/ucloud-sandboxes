@@ -17,7 +17,7 @@ from .storage_native_publication import (
     DEFAULT_MAX_CONCURRENT_PUBLICATIONS,
     PublicationGate,
     local_layer_data_bytes,
-    snapshot_chain_needs_compaction,
+    snapshot_compaction_start,
 )
 from .telemetry import Telemetry
 
@@ -370,18 +370,17 @@ class RegistrySnapshotPublisher:
         layer_sizes = tuple(layer.size for layer in existing_layers) + tuple(
             local_layer_data_bytes(path) for path in source_layer_paths
         )
-        input_bytes = sum(layer_sizes)
-        should_compact = (
-            snapshot_chain_needs_compaction(
-                layer_sizes, max_layers=self.compact_after_layers,
-                max_delta_bytes=self.compact_after_bytes,
-            )
-            or bool(
-                existing_layers
-                and existing_repo_blob_url
+        compact_start = snapshot_compaction_start(
+            layer_sizes, max_layers=self.compact_after_layers,
+            max_delta_bytes=self.compact_after_bytes,
+            reusable_base=bool(existing_layers),
+            origin_changed=bool(
+                existing_layers and existing_repo_blob_url
                 and existing_repo_blob_url.rstrip("/") != self.repo_blob_url.rstrip("/")
-            )
+            ),
         )
+        should_compact = compact_start is not None
+        retained_layers = existing_layers[:compact_start] if should_compact else ()
         if should_compact:
             if global_config_path is None or not global_config_path.is_absolute():
                 raise ValueError(
@@ -390,20 +389,22 @@ class RegistrySnapshotPublisher:
             with self.telemetry.span(
                 "snapshot.compact_and_upload",
                 attributes={
-                    "snapshot.input_layer_count": input_layers,
-                    "snapshot.input_bytes": input_bytes,
+                    "snapshot.input_layer_count": input_layers - len(retained_layers),
+                    "snapshot.input_bytes": sum(layer_sizes[compact_start:]),
+                    "snapshot.retained_base_bytes": sum(layer.size for layer in retained_layers),
                 },
             ):
                 layers = (
+                    *retained_layers,
                     self._publish_compacted_layer(
                         exporter,
-                        existing_layers=existing_layers,
+                        existing_layers=existing_layers[compact_start:],
                         existing_repo_blob_url=existing_repo_blob_url,
                         source_layer_paths=source_layer_paths,
                         global_config_path=global_config_path,
                     ),
                 )
-            uploaded_bytes = layers[0].size
+            uploaded_bytes = layers[-1].size
         else:
             with self.telemetry.span(
                 "snapshot.export_and_upload",
@@ -441,9 +442,9 @@ class RegistrySnapshotPublisher:
         )
         with self._metrics_lock:
             if should_compact:
-                self._compaction_input_layers += input_layers
-                self._compaction_input_bytes += input_bytes
-                self._compaction_output_bytes += layers[0].size
+                self._compaction_input_layers += input_layers - len(retained_layers)
+                self._compaction_input_bytes += sum(layer_sizes[compact_start:])
+                self._compaction_output_bytes += layers[-1].size
         return publication, should_compact, uploaded_bytes
 
     def _publish_dense_layer(

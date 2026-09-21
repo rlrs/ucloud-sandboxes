@@ -56,9 +56,18 @@ small update. These are compaction triggers, not snapshot size limits. They boun
 lookup depth and Registry metadata without putting a
 large temporary flattened file on the worker's constrained local disk.
 
-Compaction opens the complete old-remote-plus-new-local image through
-AgentEnv's shared bounded cache, flattens it with ordered writes, and streams
-one content-addressed sealed layer directly into the Registry. Publication is
+When only depth triggers maintenance and the published base is larger than all
+newer layers combined, the publisher retains that immutable base and merges only
+the newer layers into one delta. The result has two layers and avoids reading or
+uploading the base. This applies with a depth threshold of at least two; an
+explicit one-layer threshold still forces a full merge. Accumulated delta bytes
+above the byte threshold, a non-dominant base, or a blob-origin change triggers a
+full merge. Thus delta growth eventually reclaims obsolete base data.
+
+Compaction opens the selected remote-plus-local layers through AgentEnv's shared
+bounded cache, flattens them with ordered writes, and streams one content-addressed
+layer directly into the durable backend. Partial merges must preserve explicit
+zero/discard mappings and unmapped holes, since an older base remains underneath. Publication is
 transactional at the control-plane boundary: the old Registry descriptor and
 local sealed delta remain authoritative until the new OCI manifest is durable.
 An export, upload, or manifest failure therefore leaves a resumable attached
@@ -159,3 +168,19 @@ sequential wake-plus-release p50 by about 38%, reduced eight-way release p50 by
 about 65%, and reused a warm device for all 189 measured acquisitions. The
 stock high watermark of 64 eagerly created 64 idle devices and provided no
 eight-way throughput benefit, so production defaults to 16.
+
+## Delta-compaction qualification
+
+On an idle Linux qualification worker with the pinned backend already running:
+
+```bash
+sudo env PYTHONPATH=/path/to/repository python3 benchmark_delta_compaction.py \
+  --backend-socket /run/ucloud-sandboxes/storage-native/backend.sock
+```
+
+This compares full and delta-only native exports for a 128-MiB base and eight
+small deltas. It checks repeated overwrites, explicit zero writes, discards,
+holes, and native restacking of the retained base plus the merged delta. It uses
+temporary local layers and export RPCs only, with no device creation, mount,
+production journal changes, or provider lifecycle operations. Results exclude
+network upload and concurrent application traffic.

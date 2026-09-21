@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.70 - 2026-09-21
+
+- Retain a dominant published base during depth-only snapshot compaction and
+  merge the newer deltas instead. Registry and S3 preserve the existing depth
+  and accumulated-delta bounds, with full merges for byte pressure and origin
+  changes. This reduces full-base reads and uploads on repeated small updates.
+
 ## 0.5.69 - 2026-09-21
 
 - Release relay lifecycle slots during retry backoff, cache validated heartbeat

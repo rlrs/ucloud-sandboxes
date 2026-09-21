@@ -1,0 +1,49 @@
+{
+  "base_mib": 128,
+  "deltas": 8,
+  "runs": {
+    "full": [
+      {
+        "seconds": 0.30898106799999425,
+        "bytes": 134225920
+      },
+      {
+        "seconds": 0.25350785099999484,
+        "bytes": 134225920
+      },
+      {
+        "seconds": 0.3326481050000041,
+        "bytes": 134225920
+      }
+    ],
+    "delta": [
+      {
+        "seconds": 0.003734625000006986,
+        "bytes": 24576
+      },
+      {
+        "seconds": 0.0031894609999909562,
+        "bytes": 24576
+      },
+      {
+        "seconds": 0.0028934949999950277,
+        "bytes": 24576
+      }
+    ]
+  },
+  "median_seconds": {
+    "full": 0.30898106799999425,
+    "delta": 0.0031894609999909562
+  },
+  "correctness": {
+    "overwrites": true,
+    "zero_writes": true,
+    "discards": true,
+    "holes": true,
+    "native_restack": true
+  },
+  "scope": "Local warm export only; excludes network upload and concurrent sandbox traffic.",
+  "worker": "12397867",
+  "native_sha256": "75a20bd1ab96e2dff63ff877d0abe63383092e34c8fabdba927128eae062a7f7",
+  "runtime_change_deployed": false
+}

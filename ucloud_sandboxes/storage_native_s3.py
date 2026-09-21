@@ -28,7 +28,7 @@ from .storage_native_publication import (
     DEFAULT_MAX_CONCURRENT_PUBLICATIONS,
     PublicationGate,
     local_layer_data_bytes,
-    snapshot_chain_needs_compaction,
+    snapshot_compaction_start,
 )
 from .telemetry import Telemetry
 
@@ -522,34 +522,37 @@ class S3SnapshotPublisher:
             local_layer_data_bytes(path) for path in source_layer_paths
         )
         input_bytes = sum(layer_sizes)
-        should_compact = (
-            snapshot_chain_needs_compaction(
-                layer_sizes, max_layers=self.compact_after_layers,
-                max_delta_bytes=self.compact_after_bytes,
-            )
-            or bool(
-                existing_layers
-                and existing_repo_blob_url
+        compact_start = snapshot_compaction_start(
+            layer_sizes, max_layers=self.compact_after_layers,
+            max_delta_bytes=self.compact_after_bytes,
+            reusable_base=bool(existing_layers),
+            origin_changed=bool(
+                existing_layers and existing_repo_blob_url
                 and existing_repo_blob_url.rstrip("/") != self.repo_blob_url.rstrip("/")
-            )
+            ),
         )
+        should_compact = compact_start is not None
+        retained_layers = existing_layers[:compact_start] if should_compact else ()
         uploaded_bytes = 0
         if should_compact:
             if global_config_path is None or not global_config_path.is_absolute():
                 raise ValueError("compacted publication requires a global config")
             with self.telemetry.span(
                 "snapshot.compact_and_upload",
-                attributes={"snapshot.input_bytes": input_bytes},
+                attributes={
+                    "snapshot.input_bytes": sum(layer_sizes[compact_start:]),
+                    "snapshot.retained_base_bytes": sum(layer.size for layer in retained_layers),
+                },
             ):
                 layer = self._publish_compacted_layer(
                     client,
                     exporter,
-                    existing_layers=existing_layers,
+                    existing_layers=existing_layers[compact_start:],
                     existing_repo_blob_url=existing_repo_blob_url,
                     source_layer_paths=source_layer_paths,
                     global_config_path=global_config_path,
                 )
-            layers = (layer,)
+            layers = (*retained_layers, layer)
             uploaded_bytes += layer.size
         else:
             with self.telemetry.span(

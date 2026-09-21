@@ -35,6 +35,32 @@ def snapshot_chain_needs_compaction(
     return len(layer_sizes) > max_layers or sum(layer_sizes[1:]) > max_delta_bytes
 
 
+def snapshot_compaction_start(
+    layer_sizes: tuple[int, ...], *, max_layers: int, max_delta_bytes: int,
+    reusable_base: bool, origin_changed: bool = False,
+) -> int | None:
+    """Return the first layer to merge, or None when append alone suffices.
+
+    Depth-only maintenance can retain a dominant immutable base and merge its
+    deltas. This avoids at least half the input bytes while returning two layers.
+    Delta growth still forces a full merge so obsolete base data is eventually
+    reclaimed. A changed blob origin must copy every referenced layer.
+    """
+    if origin_changed:
+        return 0
+    if not snapshot_chain_needs_compaction(
+        layer_sizes, max_layers=max_layers, max_delta_bytes=max_delta_bytes,
+    ):
+        return None
+    delta_bytes = sum(layer_sizes[1:])
+    if (
+        reusable_base and max_layers >= 2 and len(layer_sizes) >= 3
+        and delta_bytes <= max_delta_bytes and layer_sizes[0] > delta_bytes
+    ):
+        return 1
+    return 0
+
+
 class PublicationGate:
     """One concurrency and queue-observability contract for snapshot backends."""
 

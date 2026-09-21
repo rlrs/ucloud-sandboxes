@@ -1,5 +1,7 @@
 # Independent local checkpoint compaction
 
+Subsequently deployed and verified as [release 0.5.71](release-0.5.71-production-2026-09-21.md).
+
 Implemented locally on September 21, 2026; not committed or deployed. This is a
 follow-up to the [production performance investigation](production-performance-2026-09-21-afternoon.md).
 

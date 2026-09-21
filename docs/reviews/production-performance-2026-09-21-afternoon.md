@@ -1,5 +1,7 @@
 # Production performance investigation — September 21, 2026, afternoon
 
+Subsequently deployed and verified as [release 0.5.71](release-0.5.71-production-2026-09-21.md).
+
 Read-only inspection of DFM Pretraining (`4827bd3a-4e74-4393-9b82-49f71636c141`),
 starting at 13:45 UTC (15:45 Copenhagen). Gateway and all nine fresh worker/builder
 heartbeats reported release 0.5.70. No services were restarted, resource policies

@@ -1,0 +1,1055 @@
+{
+  "deployment": {
+    "version": "0.5.71",
+    "commit": "59f95b68a153930d4fc2327f052c88d9301f4458",
+    "installed_at": "2026-09-21T15:24:41.255342+00:00",
+    "matched_package_files": 95,
+    "health": {
+      "ok": true,
+      "service": "control-plane",
+      "version": "0.5.71"
+    },
+    "relay_restarted": true,
+    "node_package_root": "/work/ucloud-sandboxes/release/0.5.71"
+  },
+  "canary": {
+    "worker": "12398091",
+    "version": "0.5.71",
+    "runtime": {
+      "backend_sha256": "75a20bd1ab96e2dff63ff877d0abe63383092e34c8fabdba927128eae062a7f7",
+      "watermark_scale_factor": "100",
+      "heartbeat_cwd": "/"
+    },
+    "compaction": {
+      "layer_counts": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        2,
+        3
+      ],
+      "base_retained_every_cycle": true,
+      "compaction_cycles": [
+        8,
+        15
+      ],
+      "last_delta_bytes": 9830400,
+      "retained_base_bytes": 241238016
+    },
+    "smoke": {
+      "correctness": {
+        "counter_advanced_after_every_wake": true,
+        "every_detach_reached_detached": true,
+        "every_park_reached_parked": true,
+        "every_wake_reached_running": true,
+        "process_identity_preserved": true,
+        "sandbox_scoped_sdk_exec_succeeded": true
+      },
+      "cycles": [
+        {
+          "counter_after": 12,
+          "counter_before": 3,
+          "cycle": 1,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 1.813912503886968,
+          "detached_worker_state": "detached",
+          "park_retries": 0,
+          "park_seconds": 0.17341580102220178,
+          "parked_pid": 19,
+          "parked_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "snapshot_manifest_digest": "sha256:bcdeaf75c690bdc1dc6e43903b6d75d2f658d790d50e878a02f9b8621dd5f638",
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.9787828361149877,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.1270810000022493,
+              "inspect": 0.1864089999941143,
+              "total": 0.6642839999955186
+            },
+            "start_ms": 59
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 24,
+          "counter_before": 12,
+          "cycle": 2,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.439364766003564,
+          "detached_worker_state": "detached",
+          "park_retries": 0,
+          "park_seconds": 0.17897629621438682,
+          "parked_pid": 19,
+          "parked_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "snapshot_manifest_digest": "sha256:190025938fd94f2c08cc249ad6e31fb841c0d1c6afd8ff0b85ef758eaa1b2c92",
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.7136366551276296,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.12786199999936798,
+              "inspect": 0.19666400000062367,
+              "total": 0.7080690000123013
+            },
+            "start_ms": 59
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 34,
+          "counter_before": 24,
+          "cycle": 3,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.41505790408700705,
+          "detached_worker_state": "detached",
+          "park_retries": 0,
+          "park_seconds": 0.1730189099907875,
+          "parked_pid": 19,
+          "parked_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "snapshot_manifest_digest": "sha256:a6e9caf190d1c66c48e492cc48086e82f948ffe67b0ad037349bf6f2955e2efd",
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.6558951989281923,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.12850200000968925,
+              "inspect": 0.22359599999788315,
+              "total": 0.7155020000055856
+            },
+            "start_ms": 60
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 44,
+          "counter_before": 34,
+          "cycle": 4,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.48287827195599675,
+          "detached_worker_state": "detached",
+          "park_retries": 0,
+          "park_seconds": 0.1755119301378727,
+          "parked_pid": 19,
+          "parked_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "snapshot_manifest_digest": "sha256:c43cce37e403503c5a3ad91239c07468f2e8006930cd3d3553e8a7c6d7649609",
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.7099496407900006,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.11987899999610363,
+              "inspect": 0.19653399999697285,
+              "total": 0.7338479999958736
+            },
+            "start_ms": 59
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 54,
+          "counter_before": 44,
+          "cycle": 5,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.42170523200184107,
+          "detached_worker_state": "detached",
+          "park_retries": 0,
+          "park_seconds": 0.17717056698165834,
+          "parked_pid": 19,
+          "parked_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "snapshot_manifest_digest": "sha256:bf931953663d07b014dd6337c002b20f3833df27250bed294225ae37e43aafd0",
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.6706416918896139,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.12410600000123395,
+              "inspect": 0.11572300000750602,
+              "total": 0.47538100000110717
+            },
+            "start_ms": 57
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 65,
+          "counter_before": 54,
+          "cycle": 6,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.5032306788489223,
+          "detached_worker_state": "detached",
+          "park_retries": 0,
+          "park_seconds": 0.2116541820578277,
+          "parked_pid": 19,
+          "parked_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "snapshot_manifest_digest": "sha256:033d16115e8a9bcc3d2bcdfbcad6969d7b957b13715c65d5b896d24e006f645c",
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.6861986189614981,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.139438999980257,
+              "inspect": 0.19076600000289545,
+              "total": 0.7038629999840396
+            },
+            "start_ms": 59
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 76,
+          "counter_before": 65,
+          "cycle": 7,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.47789372806437314,
+          "detached_worker_state": "detached",
+          "park_retries": 0,
+          "park_seconds": 0.1682729860767722,
+          "parked_pid": 19,
+          "parked_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "snapshot_manifest_digest": "sha256:35290580973df0b793f8784cd8246b8c2f00309c996542585b8c45bb0540cba0",
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.7029363689944148,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.13284899998211586,
+              "inspect": 0.24826099999586404,
+              "total": 0.8300209999845265
+            },
+            "start_ms": 60
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 84,
+          "counter_before": 76,
+          "cycle": 8,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.8511424618773162,
+          "detached_worker_state": "detached",
+          "park_retries": 0,
+          "park_seconds": 0.17938338196836412,
+          "parked_pid": 19,
+          "parked_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "snapshot_manifest_digest": "sha256:ba5ec109754413652851665a50206dead6ca2fd2498ed845989ff85bd9981abc",
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.7907459451816976,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.13220799999658084,
+              "inspect": 0.18367499998817038,
+              "total": 0.682351999984121
+            },
+            "start_ms": 59
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 95,
+          "counter_before": 84,
+          "cycle": 9,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.406135646160692,
+          "detached_worker_state": "detached",
+          "park_retries": 0,
+          "park_seconds": 0.17479562596417964,
+          "parked_pid": 19,
+          "parked_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "snapshot_manifest_digest": "sha256:f005dde6c5af33565c070b1fd8667e8de543bfa6d644a3dfe443d5942c5cb110",
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.6936549779493362,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.12807199999542718,
+              "inspect": 0.20204200001217032,
+              "total": 0.7136469999977635
+            },
+            "start_ms": 59
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 106,
+          "counter_before": 95,
+          "cycle": 10,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.40026030503213406,
+          "detached_worker_state": "detached",
+          "park_retries": 0,
+          "park_seconds": 0.1678635380230844,
+          "parked_pid": 19,
+          "parked_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "snapshot_manifest_digest": "sha256:2365449845982d646d861db183ad77dfe37f24e28a9bda0d90e53032a9368ea2",
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.740705210948363,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.12277400000471062,
+              "inspect": 0.20686900001010144,
+              "total": 0.7443540000053872
+            },
+            "start_ms": 60
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 118,
+          "counter_before": 106,
+          "cycle": 11,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.4240688148420304,
+          "detached_worker_state": "detached",
+          "park_retries": 0,
+          "park_seconds": 0.1709842651616782,
+          "parked_pid": 19,
+          "parked_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "snapshot_manifest_digest": "sha256:136d5ea5cb28593b548af081f2310a5dfd606bdf295f9b35a2a2eeebd48ba903",
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.7290798490867019,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.1521370000148181,
+              "inspect": 0.1740099999949507,
+              "total": 0.6606180000119366
+            },
+            "start_ms": 59
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 128,
+          "counter_before": 118,
+          "cycle": 12,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.3994182129390538,
+          "detached_worker_state": "detached",
+          "park_retries": 0,
+          "park_seconds": 0.16071566194295883,
+          "parked_pid": 19,
+          "parked_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "snapshot_manifest_digest": "sha256:baf7848f82ecd23b43665c274789668d189e793d231f2cc726c56ab2a2f2de69",
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.6801734089385718,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.14655999999035885,
+              "inspect": 0.22849199999086522,
+              "total": 0.9447339999724136
+            },
+            "start_ms": 61
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 138,
+          "counter_before": 128,
+          "cycle": 13,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.3973310680594295,
+          "detached_worker_state": "detached",
+          "park_retries": 0,
+          "park_seconds": 0.17343686195090413,
+          "parked_pid": 19,
+          "parked_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "snapshot_manifest_digest": "sha256:23c68e4485462326b809ed1bbda69265b221cdef5f66eb2cbcd35e000609b3e6",
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.6680136781651527,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.15029600001525978,
+              "inspect": 0.195883000003505,
+              "total": 0.6909239999970396
+            },
+            "start_ms": 59
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 149,
+          "counter_before": 138,
+          "cycle": 14,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.44910964788869023,
+          "detached_worker_state": "detached",
+          "park_retries": 0,
+          "park_seconds": 0.19261685479432344,
+          "parked_pid": 19,
+          "parked_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "snapshot_manifest_digest": "sha256:d06e4b023800bc7f2b3f69ef5896e1b5d484c64e4fd47fdce05bfd3dafa84c0e",
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.694144848966971,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.128612999986899,
+              "inspect": 0.19780600001695348,
+              "total": 0.6911840000043412
+            },
+            "start_ms": 59
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 158,
+          "counter_before": 149,
+          "cycle": 15,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.8303664559498429,
+          "detached_worker_state": "detached",
+          "park_retries": 0,
+          "park_seconds": 0.21995423920452595,
+          "parked_pid": 19,
+          "parked_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "snapshot_manifest_digest": "sha256:56161a4a6cd62412e4843a36b52908ed4a07e1dec0d739e0f81831c44506333a",
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.8059859829954803,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.14328399998930763,
+              "inspect": 0.10876200002485348,
+              "total": 0.46908200002349076
+            },
+            "start_ms": 58
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 168,
+          "counter_before": 158,
+          "cycle": 16,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.402192355832085,
+          "detached_worker_state": "detached",
+          "park_retries": 0,
+          "park_seconds": 0.16173305991105735,
+          "parked_pid": 19,
+          "parked_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "1a1ab0941396bd0bfd70609780531a29858c2c3a7a8e8bda80c64fe56d51b892",
+          "snapshot_manifest_digest": "sha256:033befad47a642edc6f53890d91c3120e4d975ca1bcb846447e8588021092249",
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.7399963110219687,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.13464099998827805,
+              "inspect": 0.18630900001426198,
+              "total": 0.664693999993915
+            },
+            "start_ms": 59
+          },
+          "woke_state": "running"
+        }
+      ],
+      "elapsed_seconds": 26.51886354992166,
+      "final_counter": 168,
+      "generation": 1,
+      "ok": true,
+      "performance": {
+        "detach_max_seconds": 1.813912503886968,
+        "detach_median_seconds": 0.4317167904227972,
+        "detach_min_seconds": 0.3973310680594295,
+        "park_max_seconds": 0.21995423920452595,
+        "park_median_seconds": 0.17411624395754188,
+        "park_min_seconds": 0.16071566194295883,
+        "total_lifecycle_retries": 0,
+        "wake_max_seconds": 0.9787828361149877,
+        "wake_median_seconds": 0.7064430048922077,
+        "wake_min_seconds": 0.6558951989281923
+      },
+      "sandbox_id": "park-bench-9685adbe8c",
+      "trace_id": "120033f4e6574d20aff47e0cd14e2cf5"
+    },
+    "local_smoke": {
+      "correctness": {
+        "counter_advanced_after_every_wake": true,
+        "every_park_reached_parked": true,
+        "every_wake_reached_running": true,
+        "process_identity_preserved": true,
+        "sandbox_scoped_sdk_exec_succeeded": true
+      },
+      "cycles": [
+        {
+          "counter_after": 10,
+          "counter_before": 1,
+          "cycle": 1,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.0,
+          "detached_worker_state": null,
+          "park_retries": 0,
+          "park_seconds": 0.21163434209302068,
+          "parked_pid": 19,
+          "parked_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "snapshot_manifest_digest": null,
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.42445941595360637,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.1885620000052768,
+              "inspect": 0.22610800002098586,
+              "total": 0.7935880000218276
+            },
+            "start_ms": 63
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 21,
+          "counter_before": 10,
+          "cycle": 2,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.0,
+          "detached_worker_state": null,
+          "park_retries": 0,
+          "park_seconds": 0.23953411704860628,
+          "parked_pid": 19,
+          "parked_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "snapshot_manifest_digest": null,
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.45711597008630633,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.13685499999382955,
+              "inspect": 0.20521700000131204,
+              "total": 0.7436229999768784
+            },
+            "start_ms": 59
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 31,
+          "counter_before": 21,
+          "cycle": 3,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.0,
+          "detached_worker_state": null,
+          "park_retries": 0,
+          "park_seconds": 0.16275419387966394,
+          "parked_pid": 19,
+          "parked_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "snapshot_manifest_digest": null,
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.42638221313245595,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.1311369999825729,
+              "inspect": 0.1995089999979882,
+              "total": 0.6982250000078238
+            },
+            "start_ms": 59
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 42,
+          "counter_before": 31,
+          "cycle": 4,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.0,
+          "detached_worker_state": null,
+          "park_retries": 0,
+          "park_seconds": 0.16977575793862343,
+          "parked_pid": 19,
+          "parked_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "snapshot_manifest_digest": null,
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.4725492100697011,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.13167800000246643,
+              "inspect": 0.19629299998769056,
+              "total": 0.7058659999756856
+            },
+            "start_ms": 59
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 53,
+          "counter_before": 42,
+          "cycle": 5,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.0,
+          "detached_worker_state": null,
+          "park_retries": 0,
+          "park_seconds": 0.2535025109536946,
+          "parked_pid": 19,
+          "parked_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "snapshot_manifest_digest": null,
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.45086484984494746,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.14680999998972766,
+              "inspect": 0.142603000000463,
+              "total": 0.5018809999910445
+            },
+            "start_ms": 58
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 63,
+          "counter_before": 53,
+          "cycle": 6,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.0,
+          "detached_worker_state": null,
+          "park_retries": 0,
+          "park_seconds": 0.17067308421246707,
+          "parked_pid": 19,
+          "parked_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "snapshot_manifest_digest": null,
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.4548628251068294,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.1247360000036224,
+              "inspect": 0.1166849999947317,
+              "total": 0.4816109999978835
+            },
+            "start_ms": 57
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 73,
+          "counter_before": 63,
+          "cycle": 7,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.0,
+          "detached_worker_state": null,
+          "park_retries": 0,
+          "park_seconds": 0.15803920780308545,
+          "parked_pid": 19,
+          "parked_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "snapshot_manifest_digest": null,
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.42253491608425975,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.13733600002296953,
+              "inspect": 0.21811700000284873,
+              "total": 0.72063900000785
+            },
+            "start_ms": 60
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 84,
+          "counter_before": 73,
+          "cycle": 8,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.0,
+          "detached_worker_state": null,
+          "park_retries": 0,
+          "park_seconds": 0.17131485510617495,
+          "parked_pid": 19,
+          "parked_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "snapshot_manifest_digest": null,
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.4126505439635366,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.12844200000472483,
+              "inspect": 0.1995080000085636,
+              "total": 0.6897320000120999
+            },
+            "start_ms": 59
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 94,
+          "counter_before": 84,
+          "cycle": 9,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.0,
+          "detached_worker_state": null,
+          "park_retries": 0,
+          "park_seconds": 0.1719471700489521,
+          "parked_pid": 19,
+          "parked_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "snapshot_manifest_digest": null,
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.41608519782312214,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.14774999999644933,
+              "inspect": 0.125788000019611,
+              "total": 0.49630300000558236
+            },
+            "start_ms": 58
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 104,
+          "counter_before": 94,
+          "cycle": 10,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.0,
+          "detached_worker_state": null,
+          "park_retries": 0,
+          "park_seconds": 0.17055282299406826,
+          "parked_pid": 19,
+          "parked_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "snapshot_manifest_digest": null,
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.45761469402350485,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.16659500002447203,
+              "inspect": 0.21960800000897507,
+              "total": 0.7149479999952746
+            },
+            "start_ms": 59
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 114,
+          "counter_before": 104,
+          "cycle": 11,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.0,
+          "detached_worker_state": null,
+          "park_retries": 0,
+          "park_seconds": 0.1678931729402393,
+          "parked_pid": 19,
+          "parked_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "snapshot_manifest_digest": null,
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.4550045100040734,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.1329329999748552,
+              "inspect": 0.23634300001162956,
+              "total": 0.8125669999969887
+            },
+            "start_ms": 60
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 124,
+          "counter_before": 114,
+          "cycle": 12,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.0,
+          "detached_worker_state": null,
+          "park_retries": 0,
+          "park_seconds": 0.1764934230595827,
+          "parked_pid": 19,
+          "parked_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "snapshot_manifest_digest": null,
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.46351974993012846,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.12959899999032132,
+              "inspect": 0.19185399997923014,
+              "total": 0.6989319999775034
+            },
+            "start_ms": 59
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 134,
+          "counter_before": 124,
+          "cycle": 13,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.0,
+          "detached_worker_state": null,
+          "park_retries": 0,
+          "park_seconds": 0.1687528509646654,
+          "parked_pid": 19,
+          "parked_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "snapshot_manifest_digest": null,
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.4071937659755349,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.13151100000641236,
+              "inspect": 0.1992249999887008,
+              "total": 0.6955079999784175
+            },
+            "start_ms": 58
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 144,
+          "counter_before": 134,
+          "cycle": 14,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.0,
+          "detached_worker_state": null,
+          "park_retries": 0,
+          "park_seconds": 0.16765286889858544,
+          "parked_pid": 19,
+          "parked_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "snapshot_manifest_digest": null,
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.4096776710357517,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.1299079999910191,
+              "inspect": 0.12668499999790583,
+              "total": 0.5113450000067132
+            },
+            "start_ms": 58
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 155,
+          "counter_before": 144,
+          "cycle": 15,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.0,
+          "detached_worker_state": null,
+          "park_retries": 0,
+          "park_seconds": 0.19652076717466116,
+          "parked_pid": 19,
+          "parked_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "snapshot_manifest_digest": null,
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.46158742997795343,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.14206800000238218,
+              "inspect": 0.21680199998286298,
+              "total": 0.7221689999994396
+            },
+            "start_ms": 59
+          },
+          "woke_state": "running"
+        },
+        {
+          "counter_after": 166,
+          "counter_before": 155,
+          "cycle": 16,
+          "destination_node_id": "sandbox-node-d947d0ed43-1",
+          "detach_retries": 0,
+          "detach_seconds": 0.0,
+          "detached_worker_state": null,
+          "park_retries": 0,
+          "park_seconds": 0.1689639010000974,
+          "parked_pid": 19,
+          "parked_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "parked_state": "parked",
+          "running_pid": 19,
+          "running_spec_sha256": "f6dce9538a48aca1c7b3548d384b6e7fb2b7870f30402c1a9c573b975f84f89a",
+          "snapshot_manifest_digest": null,
+          "source_node_id": "sandbox-node-d947d0ed43-1",
+          "wake_retries": 0,
+          "wake_seconds": 0.4389526539016515,
+          "wake_timings": {
+            "manager": {
+              "exec_lease": 0.13474700000415396,
+              "inspect": 0.20187999999166095,
+              "total": 0.7275959999901715
+            },
+            "start_ms": 59
+          },
+          "woke_state": "running"
+        }
+      ],
+      "elapsed_seconds": 12.82209660904482,
+      "final_counter": 166,
+      "generation": 1,
+      "ok": true,
+      "performance": {
+        "detach_max_seconds": 0.0,
+        "detach_median_seconds": 0.0,
+        "detach_min_seconds": 0.0,
+        "park_max_seconds": 0.2535025109536946,
+        "park_median_seconds": 0.17061295360326767,
+        "park_min_seconds": 0.15803920780308545,
+        "total_lifecycle_retries": 0,
+        "wake_max_seconds": 0.4725492100697011,
+        "wake_median_seconds": 0.4449087518732995,
+        "wake_min_seconds": 0.4071937659755349
+      },
+      "sandbox_id": "park-bench-de6a41ee34",
+      "trace_id": "122f46f21b664c488d47ff3eec71572e"
+    },
+    "storage_metrics": {
+      "local_compaction_active": 0,
+      "local_compaction_adopted": 2,
+      "local_compaction_completed": 2,
+      "local_compaction_deferred": 0,
+      "local_compaction_failed": 0,
+      "local_compaction_input_bytes": 98258944,
+      "local_compaction_output_bytes": 17915904,
+      "local_compaction_waiting": 0,
+      "published_local_cache_bytes": 604073984,
+      "published_local_cache_entries": 23,
+      "published_local_cache_evictions": 0,
+      "published_local_cache_hits": 203,
+      "published_local_cache_misses": 18,
+      "snapshot_reused_layer_bytes": 0,
+      "snapshot_reused_layers": 0
+    }
+  }
+}

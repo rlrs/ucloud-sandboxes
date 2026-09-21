@@ -1,5 +1,7 @@
 # Avoiding publish-then-refetch
 
+Subsequently deployed and verified as [release 0.5.71](release-0.5.71-production-2026-09-21.md).
+
 Implemented locally on September 21, 2026; not committed or deployed. This
 continues the [I/O opportunity review](storage-io-reduction-2026-09-21.md).
 

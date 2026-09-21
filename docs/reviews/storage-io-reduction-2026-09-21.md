@@ -1,5 +1,7 @@
 # Further storage I/O reduction
 
+Subsequently deployed and verified as [release 0.5.71](release-0.5.71-production-2026-09-21.md).
+
 Source review and local implementation on September 21, 2026. These changes are
 not committed or deployed. The production bottleneck evidence remains the
 [earlier measurement](production-performance-2026-09-21-afternoon.md); this pass

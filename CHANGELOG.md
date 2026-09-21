@@ -1,6 +1,109 @@
 # Changelog
 
+## 0.5.70 - 2026-09-21
+
+- Retain a dominant published base during depth-only snapshot compaction and
+  merge the newer deltas instead. Registry and S3 preserve the existing depth
+  and accumulated-delta bounds, with full merges for byte pressure and origin
+  changes. This reduces full-base reads and uploads on repeated small updates.
+
+## 0.5.69 - 2026-09-21
+
+- Release relay lifecycle slots during retry backoff, cache validated heartbeat
+  decoding, and keep best-effort metrics cleanup from waiting on SQLite readers.
+- Avoid repeatedly compacting large snapshot bases; count accumulated delta data
+  and allocated sparse-layer bytes while retaining the chain-depth bound.
+- Include worker I/O pressure in placement and avoid optional consolidation onto
+  more heavily stalled workers. Upgrade the gateway before workers.
+
+## 0.5.54
+
+- Retain generation-fenced node-loss records for seven days. Requests for a lost
+  sandbox return HTTP 410 with `error_code: node_lost` and `retryable: false`,
+  instead of a generic missing-route response. Existing retained program failures
+  are backfilled; a newer sandbox incarnation is never labeled with an old loss.
+- Preserve the existing relay behavior: acknowledge retained model responses for
+  unavailable callers without replaying model work or claiming a successful wake.
+
 ## Unreleased
+
+## 0.5.53 - 2026-09-19
+
+- Remove default fleet-wide create and per-worker active-device count ceilings.
+  Worker admission queues, disk quota, memory checks, and gateway HTTP/body
+  budgets continue to provide backpressure. Explicit operator count overrides
+  remain supported; zero disables those optional count ceilings.
+
+## 0.5.40 - 2026-09-19
+
+- Isolate gateway-to-node exec event polling in its own bounded connection pool,
+  preserving connections for tools, uploads, and lifecycle operations.
+- Report connection-pool admission exhaustion as a safe pre-dispatch 503 instead
+  of an ambiguous node transport 502.
+
+## 0.5.39 - 2026-09-19
+
+- Provide HTTP thread headroom for 256 live agent streams and concurrent tools:
+  768 gateway request threads and 512 per node, with startup admission unchanged.
+- Allow 1024 bounded exec sessions per node, so resident agent processes leave
+  room for tool commands and retained results.
+- Retain completed exec results for at least 30 seconds under capacity pressure;
+  reject new commands before dispatch with safe retry information instead of
+  evicting results before their callers can read them.
+
+## 0.5.38 - 2026-09-19
+
+- Preserve early handler rejection responses when clients are still sending
+  upload bodies, using the same bounded socket drain as thread-cap rejections.
+- Keep device reservations for newly running sandboxes until a heartbeat
+  observes their restored devices, preventing concurrent wakes from overbooking.
+- Coalesce live capacity refreshes before migrating work away from an apparently
+  full owner, avoiding unnecessary publication after a full worker parks.
+
+## 0.5.37 - 2026-09-19
+
+- Preserve structured HTTP overload rejections while clients finish sending a
+  request body. Rejected connections now half-close the response and drain
+  incoming data with bounded time, bytes, and sockets, without blocking the
+  accept loop or consuming request threads. This fixes broken-pipe failures
+  seen during a 256-way park burst.
+
+## 0.5.36 - 2026-09-18
+
+- Isolate relay journal work from lifecycle HTTP calls so saturated park/wake
+  threads cannot hold up durable responses, leases, and unrelated rollouts.
+- Reserve device slots for in-flight wakes and migration destinations before
+  heartbeats reflect them; include those reservations in local wake admission.
+- Publish local-only parked checkpoints on demand when an owner cannot wake
+  them, enabling migration to spare workers without publishing every relay park.
+- Bound background checkpoint publication work and consume completed publication
+  metadata immediately, with generation and placement fences intact.
+
+## 0.5.35 - 2026-09-18
+
+- Share startup admission across creates, restores and file transfers; reject
+  before buffering uploads and keep gateway status/control traffic independent.
+- Request bounded early worker headroom for sustained capacity queues, excluding
+  reservation age and non-capacity failures, with provisioning credit intact.
+- Use targeted sandbox inventory snapshots and cached publication metadata to
+  avoid full-node storage RPC amplification during startup polling.
+- Return explicit retryable restore/startup rejections before tool execution,
+  and pass the scheduler's startup concurrency limit through worker bootstrap.
+- Include the deployed relay descriptor-limit and terminal caller-loss fixes.
+
+## 0.5.34 - 2026-09-18
+
+- Balance image builds across live builder load while preserving active-build
+  ownership and retry deduplication; report configured builder capacity caps.
+- Bound cold-image preparation waits and node connection/pool acquisition so
+  provisioning retries release gateway request and create-admission capacity.
+- Refresh activity after wake and recheck idle parking under the sandbox lock
+  to prevent immediate re-parking before a resumed command starts.
+- Add optional consolidation of published parked sandboxes onto occupied
+  workers at wake, with pressure/headroom checks, durable migration fencing,
+  stable placement order, and a cooldown. Legacy configurations stay disabled.
+- Report mixed operation errors and successes without implying recovery, and
+  document the production health, capacity, and live restoration checks.
 
 ## 0.5.27 - 2026-09-04
 

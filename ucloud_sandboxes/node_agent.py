@@ -19,6 +19,8 @@ from .build_context_store import (
     build_context_digest_from_path,
 )
 from .capabilities import (
+    ENVIRONMENT_CONTRACT_CAPABILITY,
+    STATIC_FILE_MANAGEMENT_CAPABILITY,
     DISK_QUOTA_CAPABILITY,
     HIBERNATE_LOCAL_CAPABILITY,
     MANAGED_PRIMARY_CAPABILITY,
@@ -30,12 +32,16 @@ from .deployment import service_health
 from .http_server import (
     DEFAULT_MAX_JSON_BODY_BYTES,
     HighBacklogThreadingHTTPServer,
+    RequestBodyStream,
     RequestBodyTooLargeError,
+    TRANSFER_CHUNK_BYTES,
     traced_http_request,
 )
 from .http_contract import match_sandbox_http_route
 from .images import (
+    DEFAULT_MAX_ACTIVE_IMAGE_BUILDS,
     DockerImageRuntime,
+    ImageBuildCapacityError,
     ImageBuildConflictError,
     ImageBuildSpec,
     ImageManager,
@@ -55,14 +61,18 @@ from .sandbox import (
     SandboxAdmissionClosedError,
     SandboxBusyError,
     SandboxCapacityUnavailableError,
+    SandboxExecAdmissionDeferredError,
     SandboxConflictError,
     SandboxFileTooLargeError,
+    SandboxFilesystemSpec,
     SandboxOperation,
+    SandboxRestoreBusyError,
     SandboxSnapshotPublicationPendingError,
     SandboxSpec,
+    SandboxStartupBusyError,
     sandbox_spec_fingerprint,
 )
-from .sandbox_exec import ExecSessionManager, SandboxExecSpec
+from .sandbox_exec import ExecSessionCapacityError, ExecSessionManager, SandboxExecSpec
 from .storage_native_migration import (
     STORAGE_NATIVE_MIGRATION_SCHEMA,
     StorageNativeMigration,
@@ -228,10 +238,12 @@ class NodeAgentHandler(BuildContextHttpHandler):
             self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
             return
         if parsed.path == "/v1/sandboxes":
-            records = sorted(
-                self.manager.list(),
-                key=lambda item: item.spec.id,
-            )
+            sandbox_ids = parse_qs(parsed.query).get("sandbox_id")
+            if sandbox_ids:
+                record = self.manager.service.get_snapshot(sandbox_ids[0])
+                records = [] if record is None else [record]
+            else:
+                records = sorted(self.manager.list(), key=lambda item: item.spec.id)
             self._write_json(
                 {
                     "sandboxes": [
@@ -241,6 +253,17 @@ class NodeAgentHandler(BuildContextHttpHandler):
             )
             return
         sandbox_route = match_sandbox_http_route("GET", parsed.path)
+        if sandbox_route is not None and sandbox_route.action == "environment":
+            from .environment_contract import describe_environment
+
+            record = self.manager.get(sandbox_route.sandbox_id)
+            if record is None:
+                self._write_json(
+                    {"error": "sandbox not found"}, status=HTTPStatus.NOT_FOUND
+                )
+            else:
+                self._write_json({"environment": describe_environment(record.spec)})
+            return
         if sandbox_route is not None and sandbox_route.action == "files":
             self._download_file(parsed)
             return
@@ -336,6 +359,9 @@ class NodeAgentHandler(BuildContextHttpHandler):
             return
         if parsed.path == "/v1/sandboxes":
             self._create_sandbox()
+            return
+        if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith("/snapshot/publish"):
+            self._request_snapshot_publication(parsed.path)
             return
         if parsed.path == "/v1/migrations/import":
             self._import_migration()
@@ -583,7 +609,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 headers={"Retry-After": "1"},
             )
             return
-        except SandboxCapacityUnavailableError as exc:
+        except (SandboxCapacityUnavailableError, ExecSessionCapacityError) as exc:
             self._write_json(
                 {
                     "error": str(exc),
@@ -753,19 +779,35 @@ class NodeAgentHandler(BuildContextHttpHandler):
             return
         self._write_json(payload)
 
+    def _request_snapshot_publication(self, path: str) -> None:
+        try:
+            raw = self._read_json_body()
+            if not isinstance(raw, dict) or set(raw) != {"generation"}:
+                raise ValueError("publication requires a generation")
+            generation = raw["generation"]
+            if type(generation) is not int or generation <= 0:
+                raise ValueError("publication generation must be a positive integer")
+            sandbox_id = _sandbox_id_from_path(path, suffix="/snapshot/publish")
+            self.manager.service.request_storage_publication(sandbox_id, generation=generation)
+        except (RuntimeError, ValueError) as exc:
+            self._write_exception(exc)
+            return
+        record = self.manager.service.get_snapshot(sandbox_id)
+        self._write_json(
+            {"accepted": True, "sandbox": self._sandbox_inventory_payload(record) if record else None},
+            status=HTTPStatus.ACCEPTED,
+        )
+
     def _sandbox_inventory_payload(self, record: Any) -> dict[str, Any]:
         payload = record.to_dict()
         if str(payload.get("state") or "").lower() != "parked":
             return payload
-        service = self.manager.service
-        warden = service.warden
-        try:
-            registration = service._require_registration(record.spec.id)
-            storage_record = warden._storage_record(registration.to_direct_sandbox())
-            if storage_record.state.value != "published":
-                return payload
-            snapshot = service.describe_storage_native_snapshot(record.spec.id)
-        except (RuntimeError, ValueError):
+        # Inventory must remain usable while storage is busy. Publication and
+        # startup hydration populate this generation-fenced cache separately.
+        snapshot = self.manager.service.cached_storage_native_snapshot(
+            record.spec.id, record.generation
+        )
+        if snapshot is None:
             return payload
         payload.update(
             {
@@ -830,6 +872,9 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 generation=generation,
                 operation_id=operation_id,
             )
+        except (SandboxRestoreBusyError, SandboxStartupBusyError) as exc:
+            self._write_exception(exc)
+            return
         except SandboxSnapshotPublicationPendingError as exc:
             self._write_json(
                 {
@@ -856,7 +901,12 @@ class NodeAgentHandler(BuildContextHttpHandler):
                     payload["lifecycle_state"] = current.state
             except (RuntimeError, ValueError):
                 pass
-            self._write_json(payload, status=HTTPStatus.SERVICE_UNAVAILABLE)
+            if isinstance(exc, SandboxCapacityUnavailableError) and payload.get("lifecycle_state") == "parked":
+                # Wake failed before the caller's upload/exec was dispatched.
+                # Only a positively parked lifecycle makes this safe to replay.
+                self._write_exception(SandboxRestoreBusyError(str(exc)))
+            else:
+                self._write_json(payload, status=HTTPStatus.SERVICE_UNAVAILABLE)
             return
         except ValueError as exc:
             self._write_exception(exc)
@@ -1159,8 +1209,43 @@ class NodeAgentHandler(BuildContextHttpHandler):
             )
             return
         try:
-            content = self._read_raw_body(max_bytes=self.max_file_body_bytes)
-            self.manager.upload_file(sandbox_id, container_path, content)
+            size = self._request_content_length(max_bytes=self.max_file_body_bytes)
+            registration = self.manager.service._require_registration(sandbox_id)
+            generation = registration.sandbox_generation
+            supplied_generation = self.headers.get(SANDBOX_GENERATION_HEADER)
+            if supplied_generation is not None and int(supplied_generation) != generation:
+                raise SandboxConflictError("file operation no longer owns direct sandbox generation")
+            with self.telemetry.span(
+                "node.file_upload", attributes={"sandbox.id": sandbox_id, "upload.bytes": size},
+            ) as span:
+                receiving = time.monotonic()
+                if size <= TRANSFER_CHUNK_BYTES:
+                    content = self._read_raw_body(max_bytes=TRANSFER_CHUNK_BYTES)
+                    span.set_attribute("upload.receive_ms", _elapsed_ms(receiving))
+                    with self.telemetry.span("node.file_upload.write"):
+                        self.manager.upload_file(
+                            sandbox_id, container_path, content, expected_generation=generation,
+                        )
+                else:
+                    stream = RequestBodyStream(self.rfile, size)
+                    try:
+                        with self.manager.service.upload_spool.receive(stream, size) as staged:
+                            span.set_attribute("upload.receive_ms", _elapsed_ms(receiving))
+                            with self.telemetry.span("node.file_upload.write"):
+                                self.manager.upload_file_from_file(
+                                    sandbox_id, container_path, staged, size,
+                                    expected_generation=generation,
+                                )
+                    except SandboxStartupBusyError:
+                        # Finish consuming the bounded stream before returning
+                        # a safe admission retry. Otherwise an early disk-space
+                        # rejection can reset a sender still writing its body.
+                        while stream.read():
+                            pass
+                        raise
+        except SandboxConflictError as exc:
+            self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
+            return
         except (RuntimeError, ValueError) as exc:
             self._write_exception(exc)
             return
@@ -1169,7 +1254,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 "ok": True,
                 "sandbox_id": sandbox_id,
                 "path": container_path,
-                "size": len(content),
+                "size": size,
             }
         )
 
@@ -1328,6 +1413,9 @@ class NodeAgentHandler(BuildContextHttpHandler):
                     materialize_ms = int(
                         max(0.0, time.monotonic() - pull_finished) * 1000
                     )
+        except SandboxAdmissionClosedError as exc:
+            self._write_exception(exc)
+            return
         except RuntimeError as exc:
             self._write_json(
                 {
@@ -1479,6 +1567,57 @@ class NodeAgentHandler(BuildContextHttpHandler):
         return False
 
     def _write_exception(self, exc: RuntimeError | ValueError) -> None:
+        if isinstance(exc, SandboxExecAdmissionDeferredError):
+            self._write_json(
+                {
+                    "error": str(exc),
+                    "error_code": "node_active_exec_deferred",
+                    "retryable": True,
+                },
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+                headers={"Retry-After": "1", "X-UCloud-Sandbox-Retryable": "true"},
+            )
+            return
+        if isinstance(exc, ImageBuildCapacityError):
+            self._write_json(
+                {"error": str(exc), "error_code": "builder_busy", "retryable": True},
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+                headers={"Retry-After": "2", "X-UCloud-Sandbox-Retryable": "true"},
+            )
+            return
+        if isinstance(exc, SandboxAdmissionClosedError):
+            self._write_json(
+                {"error": str(exc), "error_code": "node_admission_closed", "retryable": True},
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+                headers={"Retry-After": "1", "X-UCloud-Sandbox-Retryable": "true"},
+            )
+            return
+        if isinstance(exc, SandboxStartupBusyError):
+            self._write_json(
+                {
+                    "error": str(exc),
+                    "error_code": "node_startup_busy",
+                    "retryable": True,
+                },
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+                headers={"Retry-After": "1", "X-UCloud-Sandbox-Retryable": "true"},
+            )
+            return
+        if isinstance(exc, SandboxRestoreBusyError):
+            self._write_json(
+                {
+                    "error": str(exc),
+                    "error_code": "node_restore_busy",
+                    "retryable": True,
+                    "lifecycle_state": "parked",
+                },
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+                headers={
+                    "Retry-After": "1",
+                    "X-UCloud-Sandbox-Retryable": "true",
+                },
+            )
+            return
         if isinstance(exc, (RequestBodyTooLargeError, SandboxFileTooLargeError)):
             status = HTTPStatus.REQUEST_ENTITY_TOO_LARGE
         elif isinstance(exc, ImageBuildConflictError):
@@ -1508,7 +1647,7 @@ def build_builder_node_agent_server(
     runtime_metrics_provider: Callable[[], NodeRuntimeMetrics | None] | None = None,
     max_json_body_bytes: int = DEFAULT_MAX_JSON_BODY_BYTES,
     max_file_body_bytes: int = DEFAULT_MAX_FILE_BODY_BYTES,
-    max_active_image_builds: int = 4,
+    max_active_image_builds: int = DEFAULT_MAX_ACTIVE_IMAGE_BUILDS,
     max_concurrent_image_pulls: int = 8,
     physical_disk_path: Path | None = None,
     build_context_store_dir: Path | None = None,
@@ -1537,6 +1676,7 @@ def build_builder_node_agent_server(
         ImageStore(image_file),
         image_runtime,
         max_active_builds=max_active_image_builds,
+        queue_builds=True,
         max_concurrent_pulls=max_concurrent_image_pulls,
         telemetry=resolved_telemetry,
     )
@@ -1650,14 +1790,33 @@ def build_direct_node_agent_server(
     DirectBoundHandler.init_version = init_version
     DirectBoundHandler.total_resources = configured_resources
     direct_capabilities = [
+        ENVIRONMENT_CONTRACT_CAPABILITY,
         "sandbox",
         "image-cache",
         DISK_QUOTA_CAPABILITY,
         HIBERNATE_LOCAL_CAPABILITY,
         "direct-runsc-v1",
     ]
+    if service.provisioner.network_manager is not None:
+        direct_capabilities.extend(
+            relay.capability
+            for relay in service.provisioner.network_manager.relays.values()
+        )
     if service.provisioner.oci.managed_init_binary is not None:
         direct_capabilities.append(MANAGED_PRIMARY_CAPABILITY)
+        try:
+            service.provisioner.oci.validate_management_helper(
+                SandboxSpec(
+                    id="file-helper-probe",
+                    image="unresolved",
+                    filesystem=SandboxFilesystemSpec(management_helper="static"),
+                )
+            )
+        except ValueError:
+            # An older supervisor remains valid for legacy managed jobs.
+            pass
+        else:
+            direct_capabilities.append(STATIC_FILE_MANAGEMENT_CAPABILITY)
     direct_capabilities.extend(
         (
             STORAGE_NATIVE_CAPABILITY,

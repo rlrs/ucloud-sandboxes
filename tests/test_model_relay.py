@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 from contextlib import asynccontextmanager
+from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
 import sqlite3
@@ -22,6 +23,7 @@ from ucloud_sandboxes.model_relay import (
     MANAGED_AGENT_LIFECYCLE,
     ModelRelayState,
     RESULT_NOTIFIER_KEY,
+    RelayCallerUnavailable,
     RelayRespondResult,
     RelaySqliteStore,
     RelayWorkerResponse,
@@ -244,6 +246,193 @@ async def enqueue_and_poll(
 
 
 class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
+    async def test_node_loss_retires_pending_and_leased_callers_and_retains_results(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "relay.sqlite3"
+            state = ModelRelayState(state_path=path)
+            requests = {}
+            for name in ("pending", "leased", "completed", "replacement", "deleted"):
+                generation = 2 if name == "replacement" else 1
+                sandbox = "deleted-sandbox" if name == "deleted" else "sandbox"
+                token = str((await state.register_rollout(name, _agent_metadata(sandbox, generation)))["registration_token"])
+                request = await state.enqueue(rollout_id=name, endpoint="/v1/responses", body={}, headers={}, idempotency_key="request")
+                requests[name] = request
+                if name in {"leased", "completed"}:
+                    delivery = (await state.poll(rollout_id=name, registration_token=token, worker_id="worker", limit=1, timeout_seconds=0, lease_seconds=600))[0]
+                    if name == "completed":
+                        await state.respond(request_id=delivery.request_id, registration_token=token, lease_id=delivery.lease_id, response=RelayWorkerResponse(200, {"sample": "keep-me"}), defer_delivery=True)
+            losses = {("sandbox", 1): "node_lost", ("deleted-sandbox", 1): "sandbox_deleted"}
+            await state.reconcile_unavailable_callers(losses)
+            await state.reconcile_unavailable_callers(losses)
+            for name in ("pending", "leased"):
+                self.assertEqual(requests[name].future.result().status, 410)
+                self.assertEqual(requests[name].future.result().body["error"]["type"], "node_lost")
+            completed = requests["completed"]
+            self.assertEqual(completed.future.result().body, {"sample": "keep-me"})
+            self.assertIsNone(completed.wake_notified_at)
+            self.assertFalse(completed.delivery_pending)
+            self.assertFalse(requests["replacement"].future.done())
+            self.assertEqual(requests["deleted"].future.result().status, 410)
+            self.assertEqual(requests["deleted"].future.result().body["error"]["type"], "sandbox_deleted")
+            self.assertEqual((await state.stats())["counters"]["canceled"], 3)
+            await state.aclose()
+            restored = ModelRelayState(state_path=path)
+            await restored.maintain()
+            self.assertEqual(restored._completed[completed.request_id].completed_response.body, {"sample": "keep-me"})
+            self.assertIn(requests["replacement"].request_id, restored._requests)
+            self.assertFalse(restored._completed[completed.request_id].delivery_pending)
+            await restored.aclose()
+
+    async def test_journal_progresses_when_lifecycle_executor_is_saturated(self):
+        loop = asyncio.get_running_loop()
+        loop.set_default_executor(ThreadPoolExecutor(max_workers=1))
+        entered, release = Event(), Event()
+        with tempfile.TemporaryDirectory() as directory:
+            state = ModelRelayState(state_path=Path(directory) / "relay.sqlite3")
+            token = str((await state.register_rollout("busy"))["registration_token"])
+            original, delivery = await enqueue_and_poll(state, "busy", token)
+
+            def blocked_lifecycle():
+                entered.set()
+                release.wait(timeout=5)
+
+            blocked = asyncio.create_task(asyncio.to_thread(blocked_lifecycle))
+            while not entered.is_set():
+                await asyncio.sleep(0.001)
+            response = asyncio.create_task(state.respond(
+                request_id=delivery.request_id, registration_token=token,
+                lease_id=delivery.lease_id,
+                response=RelayWorkerResponse(200, {"result": "committed"}),
+            ))
+            try:
+                done, _ = await asyncio.wait({response}, timeout=1)
+                self.assertIn(response, done, "journal queued behind lifecycle HTTP")
+                await response
+                self.assertEqual(original.future.result().body, {"result": "committed"})
+                # Other callers can still take the shared state lock, too.
+                await asyncio.wait_for(state.register_rollout("unrelated"), timeout=1)
+            finally:
+                release.set()
+                await blocked
+                await response
+                await state.aclose()
+
+
+    async def test_terminal_wake_releases_result_durably_without_claiming_wake(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "relay.sqlite3"
+            state = ModelRelayState(state_path=path)
+            token = (
+                await state.register_rollout(
+                    "deleted-caller", _agent_metadata("sandbox", 1)
+                )
+            )["registration_token"]
+            caller = await state.enqueue(
+                rollout_id="deleted-caller",
+                endpoint="/v1/responses",
+                body={"model": "m"},
+                headers={},
+            )
+            delivery = (
+                await state.poll(
+                    rollout_id="deleted-caller",
+                    registration_token=token,
+                    timeout_seconds=0,
+                    lease_seconds=30,
+                )
+            )[0]
+            response = RelayWorkerResponse(200, {"sample": "preserve-me"})
+            result = await state.respond(
+                request_id=delivery.request_id,
+                registration_token=token,
+                lease_id=delivery.lease_id,
+                response=response,
+                defer_delivery=True,
+            )
+            attempts = []
+
+            async def wake(_request):
+                attempts.append(1)
+                raise RelayCallerUnavailable(410)
+
+            class FakeRequest:
+                app = {STATE_KEY: state, RESULT_NOTIFIER_KEY: wake}
+
+            await asyncio.gather(
+                *[_notify_result(FakeRequest(), result) for _ in range(3)]
+            )
+            self.assertEqual(attempts, [1])
+            self.assertEqual((await caller.future).body, response.body)
+            self.assertIsNone(caller.wake_notified_at)
+            self.assertFalse(caller.delivery_pending)
+            self.assertEqual((await state.stats())["counters"]["wake_notifications"], 0)
+            await state.aclose()
+
+            recovered = ModelRelayState(state_path=path)
+            replay = await recovered.respond(
+                request_id=caller.request_id,
+                registration_token=token,
+                lease_id=delivery.lease_id,
+                response=RelayWorkerResponse(200, {"wrong": True}),
+                defer_delivery=True,
+            )
+            FakeRequest.app[STATE_KEY] = recovered
+            await _notify_result(FakeRequest(), replay)
+            self.assertEqual(attempts, [1])
+            self.assertEqual(replay.request.completed_response.body, response.body)
+            self.assertEqual((await recovered.stats())["delivery_pending"], 0)
+            await recovered.aclose()
+
+    async def test_transient_wake_failure_keeps_result_pending_for_retry(self) -> None:
+        state = ModelRelayState()
+        token = (
+            await state.register_rollout("busy-caller", _agent_metadata("sandbox", 1))
+        )["registration_token"]
+        caller = await state.enqueue(
+            rollout_id="busy-caller",
+            endpoint="/v1/responses",
+            body={},
+            headers={},
+        )
+        delivery = (
+            await state.poll(
+                rollout_id="busy-caller",
+                registration_token=token,
+                timeout_seconds=0,
+                lease_seconds=30,
+            )
+        )[0]
+        result = await state.respond(
+            request_id=caller.request_id,
+            registration_token=token,
+            lease_id=delivery.lease_id,
+            response=RelayWorkerResponse(200, {"ok": True}),
+            defer_delivery=True,
+        )
+
+        async def wake(_request):
+            raise TimeoutError("temporary gateway timeout")
+
+        class FakeRequest:
+            app = {STATE_KEY: state, RESULT_NOTIFIER_KEY: wake}
+
+        with self.assertRaises(web.HTTPServiceUnavailable):
+            await _notify_result(FakeRequest(), result)
+        self.assertTrue(caller.delivery_pending)
+        self.assertFalse(caller.future.done())
+
+        async def recovered_wake(_request):
+            return "same-owner"
+
+        FakeRequest.app[RESULT_NOTIFIER_KEY] = recovered_wake
+        await _notify_result(FakeRequest(), result)
+        await state.release_completed_response(caller.request_id)
+        self.assertEqual((await caller.future).body, {"ok": True})
+        self.assertIsNotNone(caller.wake_notified_at)
+        await state.aclose()
+
     async def test_maintenance_requeues_expired_lease_without_api_traffic(
         self,
     ) -> None:
@@ -378,6 +567,10 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             response=RelayWorkerResponse(200, {"ok": True}),
             defer_delivery=True,
         )
+        stats = await state.stats()
+        self.assertEqual(stats["inflight"], 0)
+        self.assertEqual(stats["delivery_pending"], 1)
+        self.assertGreaterEqual(stats["oldest_delivery_pending_seconds"], 0)
         wake_task = asyncio.create_task(
             _notify_result(  # type: ignore[arg-type]
                 FakeRequest(),

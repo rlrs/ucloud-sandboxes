@@ -172,6 +172,30 @@ def minimum_additional_disk_bins(
 
 
 class ScalePolicyTests(unittest.TestCase):
+    def test_storage_error_capacity_cannot_suppress_replacement(self):
+        broken = node(
+            "broken",
+            total_resources=ResourceQuantity(vcpu=32, memory_mb=98304, disk_mb=100000),
+            capabilities=("disk-quota", "storage-native-v1"),
+            runtime_metrics=NodeRuntimeMetrics(
+                collected_at=utc_now(),
+                storage_hard_capacity_mb=100000,
+                storage_error_volumes=1,
+            ),
+        )
+        decision = evaluate_scale(
+            [broken],
+            demand(
+                pending_resources=ResourceQuantity(
+                    vcpu=1, memory_mb=1024, disk_mb=4096
+                ),
+                pending_count=1,
+            ),
+            ScalePolicy(),
+        )
+        self.assertEqual(decision.projected_free_resources, ResourceQuantity())
+        self.assertTrue(any(action.kind == "create" for action in decision.actions))
+
     @settings(max_examples=100, deadline=None, derandomize=True)
     @given(
         free_disk_chunks=st.lists(
@@ -1266,6 +1290,22 @@ class ScalePolicyTests(unittest.TestCase):
                     (creates, stops, pressured, grace),
                 )
 
+    def test_builder_backlog_scales_beyond_one_node(self) -> None:
+        decision = evaluate_builder_scale(
+            [node("busy", active_image_builds=4)],
+            pending_builds=12,
+            policy=ScalePolicy(max_create_per_cycle=4),
+            max_builder_nodes=4,
+        )
+        self.assertEqual(decision.creates, 3)
+        queued = evaluate_builder_scale(
+            [node("busy", active_image_builds=16)],
+            pending_builds=0,
+            policy=ScalePolicy(max_create_per_cycle=4),
+            max_builder_nodes=4,
+        )
+        self.assertEqual(queued.creates, 3)
+
     def test_prepared_builder_count_scales_builder_pool(self) -> None:
         decision = evaluate_builder_scale(
             [],
@@ -1298,6 +1338,22 @@ class ScalePolicyTests(unittest.TestCase):
         )
 
         self.assertEqual(decision.stops, ())
+
+    def test_builder_cap_reports_unmet_prepared_demand(self) -> None:
+        for cap in (0, 1):
+            with self.subTest(cap=cap):
+                decision = evaluate_builder_scale(
+                    [node("builder-1", active_image_builds=4)],
+                    pending_builds=5,
+                    prepared_builders=16,
+                    policy=ScalePolicy(),
+                    max_builder_nodes=cap,
+                )
+                self.assertEqual(decision.creates, 0)
+                self.assertIn(
+                    f"builder demand requests 16 node(s), capped by max_builder_nodes={cap}",
+                    decision.reasons,
+                )
 
 
 if __name__ == "__main__":

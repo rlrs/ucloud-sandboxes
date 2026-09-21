@@ -234,6 +234,111 @@ def allow_fixture_mutations(test):
 
 
 class CliTests(unittest.TestCase):
+    def test_relay_lifecycle_closes_errors_and_classifies_terminal_wakes(self) -> None:
+        request = SimpleNamespace(
+            sandbox_id="sandbox",
+            sandbox_generation=1,
+            request_id="request",
+            rollout_id="rollout",
+            created_at=1.0,
+        )
+        for status, body, terminal in (
+            (404, b"not found", True),
+            (410, b"gone", True),
+            (409, b'{"retryable":false}', True),
+            (503, b'{"retryable":false}', False),
+            (503, b"upstream unavailable", False),
+            (504, b"upstream timeout", False),
+            (403, b"forbidden", False),
+        ):
+            with self.subTest(status=status):
+                stream = io.BytesIO(body)
+                error = HTTPError("http://gateway", status, "failure", {}, stream)
+                with (
+                    patch.object(cli, "_post_bounded_json", side_effect=error) as post,
+                    patch.object(cli.time, "sleep") as sleep,
+                    self.assertRaises(
+                        cli.RelayCallerUnavailable if terminal else HTTPError
+                    ),
+                ):
+                    cli._post_gateway_sandbox_lifecycle(
+                        "http://gateway", "token", request, action="wake"
+                    )
+                self.assertTrue(stream.closed)
+                self.assertEqual(post.call_count, 1)
+                sleep.assert_not_called()
+
+    def test_relay_wake_waits_for_capacity_without_recommitting_result(self) -> None:
+        request = SimpleNamespace(
+            sandbox_id="sandbox", sandbox_generation=3, request_id="request",
+            rollout_id="rollout", created_at=1.0, expires_at=1000.0,
+        )
+        # More admission failures than the SDK's default 60 commit attempts.
+        errors = [HTTPError(
+            "http://gateway", 503, "Service Unavailable", {"Retry-After": "1"},
+            io.BytesIO(b'{"retryable":true,"error_code":"node_startup_busy"}'),
+        ) for _ in range(80)]
+        clock = [0.0]
+        with (
+            patch.object(cli, "_post_bounded_json", side_effect=[
+                *errors, ({}, {"X-UCloud-Sandbox-Transport-Epoch": "restored"}),
+            ]) as post,
+            patch.object(cli.time, "time", return_value=0.0),
+            patch.object(cli.time, "monotonic", side_effect=lambda: clock[0]),
+            patch.object(cli.time, "sleep", side_effect=lambda delay: clock.__setitem__(0, clock[0] + delay)),
+            patch.object(cli.random, "uniform", return_value=0.0),
+        ):
+            epoch = cli._post_gateway_sandbox_lifecycle(
+                "http://gateway", "token", request, action="wake",
+            )
+        self.assertEqual(epoch, "restored")
+        self.assertEqual(post.call_count, 81)
+        self.assertTrue(all(error.fp.closed for error in errors))
+        self.assertTrue(all(call.args == post.call_args_list[0].args for call in post.call_args_list))
+        self.assertEqual(post.call_args.kwargs["timeout_seconds"], 520.0)
+
+    def test_relay_wake_capacity_retry_respects_request_deadline(self) -> None:
+        for retry_after in ("1", "invalid"):
+            with self.subTest(retry_after=retry_after):
+                request = SimpleNamespace(
+                    sandbox_id="sandbox", sandbox_generation=1, request_id="request",
+                    rollout_id="rollout", created_at=1.0, expires_at=12.0,
+                )
+                errors = [HTTPError(
+                    "http://gateway", 503, "Service Unavailable", {"Retry-After": retry_after},
+                    io.BytesIO(b'{"retryable":true,"error_code":"node_startup_busy"}'),
+                ) for _ in range(2)]
+                clock = [0.0]
+                with (
+                    patch.object(cli, "_post_bounded_json", side_effect=errors) as post,
+                    patch.object(cli.time, "time", return_value=10.0),
+                    patch.object(cli.time, "monotonic", side_effect=lambda: clock[0]),
+                    patch.object(cli.time, "sleep", side_effect=lambda delay: clock.__setitem__(0, clock[0] + delay)) as sleep,
+                    patch.object(cli.random, "uniform", return_value=0.0),
+                    self.assertRaisesRegex(HTTPError, "node_startup_busy"),
+                ):
+                    cli._post_gateway_sandbox_lifecycle(
+                        "http://gateway", "token", request, action="wake",
+                    )
+                self.assertEqual(post.call_count, 2)
+                sleep.assert_called_once_with(1.0)
+                self.assertTrue(all(error.fp.closed for error in errors))
+
+    def test_relay_park_does_not_wait_for_wake_capacity(self) -> None:
+        request = SimpleNamespace(
+            sandbox_id="sandbox", sandbox_generation=1, request_id="request",
+            rollout_id="rollout", created_at=1.0,
+        )
+        error = HTTPError("http://gateway", 503, "busy", {}, io.BytesIO(b'{"retryable":true}'))
+        with (
+            patch.object(cli, "_post_bounded_json", side_effect=error) as post,
+            patch.object(cli.time, "sleep") as sleep,
+            self.assertRaises(HTTPError),
+        ):
+            cli._post_gateway_sandbox_lifecycle("http://gateway", "token", request, action="park")
+        self.assertEqual(post.call_count, 1)
+        sleep.assert_not_called()
+
     def test_dashboard_policy_exposes_every_scale_policy_field(self) -> None:
         policy = ScalePolicy()
 
@@ -256,7 +361,7 @@ class CliTests(unittest.TestCase):
             return opener, response
 
         opener, response = opener_for(b'{"drain":{"ready":true}}')
-        with patch.object(cli, "build_opener", return_value=opener) as build_opener:
+        with patch.object(cli, "_control_opener", return_value=opener):
             payload = cli._post_node_drain(
                 "https://node.example/",
                 "drain-1",
@@ -269,9 +374,6 @@ class CliTests(unittest.TestCase):
         self.assertEqual(request.get_header("Authorization"), "Bearer secret")
         self.assertEqual(opener.open.call_args.kwargs["timeout"], 7.0)
         response.read.assert_called_once_with(cli._MAX_CONTROL_RESPONSE_BYTES + 1)
-        self.assertIsInstance(
-            build_opener.call_args.args[0], cli._RejectControlRedirects
-        )
 
         with self.assertRaisesRegex(ValueError, "invalid node URL"):
             cli._post_node_drain("file:///tmp/node", "drain-1")
@@ -282,7 +384,7 @@ class CliTests(unittest.TestCase):
 
         invalid_opener, _response = opener_for(b"[]")
         with (
-            patch.object(cli, "build_opener", return_value=invalid_opener),
+            patch.object(cli, "_control_opener", return_value=invalid_opener),
             self.assertRaisesRegex(
                 ValueError, "migration response must be a JSON object"
             ),
@@ -302,7 +404,7 @@ class CliTests(unittest.TestCase):
             b"x" * (cli._MAX_CONTROL_RESPONSE_BYTES + 1)
         )
         with (
-            patch.object(cli, "build_opener", return_value=oversized_opener),
+            patch.object(cli, "_control_opener", return_value=oversized_opener),
             self.assertRaisesRegex(ValueError, "lifecycle response exceeds 1 MiB"),
         ):
             cli._post_gateway_sandbox_lifecycle(
@@ -569,12 +671,12 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(
             result["destructive_node_loss_job_ids"],
-            ["replaced-job"],
+            [],
         )
-        self.assertEqual(result["lost_sandbox_ids"], ["lost-sandbox"])
+        self.assertEqual(result["lost_sandbox_ids"], [])
 
     @allow_fixture_mutations
-    def test_ucloud_expired_lease_fences_nonempty_node_without_guest_cleanup(
+    def test_ucloud_expired_lease_preserves_nonempty_node_and_routes(
         self,
     ) -> None:
         submitted: list[dict] = []
@@ -706,6 +808,11 @@ class CliTests(unittest.TestCase):
                 patch.object(cli, "UCloudClient", ReplacementClient),
                 patch.object(
                     cli,
+                    "fetch_node_agent_heartbeat",
+                    side_effect=TimeoutError("node is unreachable"),
+                ),
+                patch.object(
+                    cli,
                     "_delete_gateway_sandbox",
                     side_effect=AssertionError(
                         "lost UCloud guest must not receive sandbox deletes"
@@ -733,20 +840,15 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(submitted, [])
-        self.assertEqual(terminated, [("lost-job",)])
-        self.assertEqual(
-            payload["unreachable_permanent_loss_job_ids"],
-            ["lost-job"],
-        )
-        self.assertEqual(payload["destructive_node_loss_job_ids"], ["lost-job"])
+        self.assertEqual(terminated, [])
+        self.assertEqual(payload["unreachable_permanent_loss_job_ids"], [])
+        self.assertEqual(payload["destructive_node_loss_job_ids"], [])
+        self.assertEqual(payload["quarantined_job_ids"], ["lost-job"])
         self.assertEqual(payload["lost_sandbox_ids"], [])
         self.assertEqual(payload["unreachableReadyStopJobIds"], [])
-        self.assertEqual(routes, [])
-        self.assertEqual(registry_leases, {})
-        self.assertEqual(
-            [item["sandbox_id"] for item in payload["removedRoutes"]],
-            ["lost-sandbox"],
-        )
+        self.assertEqual([r.sandbox_id for r in routes], ["lost-sandbox"])
+        self.assertTrue(registry_leases)
+        self.assertEqual(payload["removedRoutes"], [])
         self.assertEqual(payload["persistedNodeLossDemand"], [])
 
     @allow_fixture_mutations
@@ -854,7 +956,7 @@ class CliTests(unittest.TestCase):
         self.assertIsNotNone(route)
         self.assertIsNotNone(invalid_after)
         assert invalid_after is not None
-        self.assertEqual(invalid_after.state, "prepared")
+        self.assertEqual(invalid_after.state, "failed")
 
     def test_external_provider_loss_evidence_is_serialized_generically(self) -> None:
         prototype = DestructiveInstanceLoss(
@@ -958,8 +1060,13 @@ class CliTests(unittest.TestCase):
                 )
 
                 self.assertIsNone(
-                    UCloudProvider._post_start_instance_loss.from_operation_request(
-                        operation.request
+                    cli._provider_destructive_loss_disposition(
+                        SimpleNamespace(
+                            kind="ucloud",
+                            destructive_instance_losses=(),
+                            unreachable_lease_expiry_loss=None,
+                        ),
+                        operation,
                     )
                 )
         numeric_prototype = DestructiveInstanceLoss(
@@ -1798,7 +1905,8 @@ class CliTests(unittest.TestCase):
                             drain_token=token,
                             activity_epoch=7,
                             drain_activity_epoch=7 if token else 0,
-                            inventory_complete=bool(token),
+                            inventory_complete=True,
+                            node_epoch="boot-1",
                             reserved_resources=reserved,
                         )
                     },
@@ -1838,8 +1946,19 @@ class CliTests(unittest.TestCase):
                     }
                 }
 
+            def probe(previous, *_args):
+                current = ControlStateStore(heartbeat_file).get_heartbeat(
+                    previous.job_id
+                )
+                if not current.is_fresh(utc_now(), config.policy.heartbeat_ttl_seconds):
+                    return None, True
+                return replace(
+                    current, admission_open=not current.draining, received_at=utc_now()
+                ), False
+
             with (
                 patch.object(cli, "UCloudClient", SuccessfulStopClient),
+                patch.object(cli, "_probe_unreachable_node", side_effect=probe),
                 patch.object(cli, "_post_node_drain", side_effect=post_drain),
             ):
                 failed_request = reconcile(config, args, state)
@@ -1884,7 +2003,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(mismatch["stopJobIds"], ["owned"])
         self.assertEqual(mismatch["drainingJobIds"], ["owned"])
 
-    def test_ucloud_unreachable_node_uses_durable_loss_proof_without_drain(
+    def test_ucloud_unreachable_node_is_quarantined_without_termination(
         self,
     ) -> None:
         terminate_calls: list[tuple[str, ...]] = []
@@ -1928,37 +2047,127 @@ class CliTests(unittest.TestCase):
                 patch.object(cli, "UCloudClient", SuccessfulStopClient),
                 patch.object(
                     cli,
+                    "fetch_node_agent_heartbeat",
+                    side_effect=TimeoutError("node is unreachable"),
+                ),
+                patch.object(
+                    cli,
                     "_post_node_drain",
                     side_effect=AssertionError("unreachable node must not be drained"),
                 ),
             ):
                 result = reconcile(config, args, state)
                 retried = reconcile(config, args, state)
-                (stop_operation,) = state.list_operations(kind="stop")
+                self.assertEqual(state.list_operations(kind="stop"), [])
 
-        self.assertEqual(terminate_calls, [("owned",)])
-        self.assertEqual(result["unreachableReadyStopJobIds"], [])
-        self.assertEqual(result["destructive_node_loss_job_ids"], ["owned"])
-        self.assertEqual(retried["destructive_node_loss_job_ids"], ["owned"])
-        self.assertEqual(result["unreachable_permanent_loss_job_ids"], ["owned"])
-        self.assertEqual(stop_operation.request["destructiveNodeLoss"], True)
-        self.assertEqual(
-            stop_operation.request["lossReason"],
-            "ucloud_unreachable_lease_expired",
-        )
-        self.assertEqual(
-            stop_operation.request["lossEvidenceKind"],
-            "unreachable_lease_expired",
-        )
-        self.assertEqual(stop_operation.request["providerKind"], "ucloud")
-        loss_evidence = stop_operation.request["lossEvidence"]
-        self.assertEqual(loss_evidence["unreachableLeaseExpired"], True)
-        self.assertTrue(str(loss_evidence["unreachableReference"]).strip())
-        self.assertEqual(stop_operation.request["routeCount"], 0)
-        self.assertEqual(result["drainReadyStopJobIds"], [])
-        self.assertEqual(result["drainIntents"], [])
-        self.assertEqual(result["bootstrapIntents"], [])
-        self.assertEqual(result["definitelyTerminatedJobIds"], ["owned"])
+        self.assertEqual(terminate_calls, [])
+        self.assertEqual(result["destructive_node_loss_job_ids"], [])
+        self.assertEqual(retried["destructive_node_loss_job_ids"], [])
+        self.assertEqual(result["quarantined_job_ids"], ["owned"])
+        self.assertEqual(result["definitelyTerminatedJobIds"], [])
+
+    def test_ucloud_heartbeat_partition_preserves_occupied_worker(self) -> None:
+        # A provider-confirmed RUNNING worker is not proven dead by silence.
+        # Exercise both heartbeat inventory and gateway-only route ownership.
+        for active, inventory_complete in ((1, False), (0, True)):
+            with self.subTest(active=active), temporary_root() as root:
+                jobs_file = write_jobs(root, owned_node_job())
+                heartbeat_file = root / "control-state.sqlite"
+                save_heartbeats(
+                    heartbeat_file,
+                    {
+                        "owned": owned_heartbeat(
+                            updated_at=utc_now() - timedelta(hours=1),
+                            active_sandboxes=active,
+                            inventory_complete=inventory_complete,
+                            used_resources=ResourceQuantity(
+                                vcpu=active, memory_mb=512 * active
+                            ),
+                        )
+                    },
+                )
+                config = ucloud_config(
+                    project_id="project-1",
+                    deployment_id="prod-a",
+                    ucloud_session_file=str(root / "session.json"),
+                    data_root=str(root),
+                    policy=ScalePolicy(
+                        max_stop_per_cycle=1, unreachable_stop_after_seconds=1800
+                    ),
+                )
+                route = sandbox_route(
+                    "partition-survivor",
+                    updated_at=utc_now() - timedelta(hours=1),
+                    node_id="node-owned",
+                    job_id="owned",
+                    resources=ResourceQuantity(vcpu=1, memory_mb=512),
+                )
+                RoutingStore(config.routing_file()).upsert_sandbox(route)
+                state = AutoscalerStateStore(root / "autoscaler-state.sqlite")
+                with (
+                    patch.object(cli, "UCloudClient") as client,
+                    patch.object(
+                        cli,
+                        "fetch_node_agent_heartbeat",
+                        return_value=owned_heartbeat(
+                            updated_at=utc_now(),
+                            active_sandboxes=1,
+                            inventory_complete=True,
+                        ),
+                    ),
+                    patch.object(
+                        cli, "_post_node_drain", side_effect=TimeoutError("partition")
+                    ),
+                ):
+                    for _ in range(2):
+                        result = reconcile(
+                            config,
+                            autoscaler_args(jobs_file, heartbeat_file),
+                            state,
+                            route_reservations={"owned": (route,)},
+                            sandbox_routes=(route,),
+                        )
+                        self.assertEqual(result["destructive_node_loss_job_ids"], [])
+                        self.assertEqual(result["definitelyTerminatedJobIds"], [])
+                        self.assertEqual(state.list_operations(kind="stop"), [])
+                    client.return_value.terminate_jobs.assert_not_called()
+
+    def test_unreachable_probe_distinguishes_transport_from_auth_and_identity(self):
+        heartbeat = owned_heartbeat()
+        for error in (TimeoutError("timeout"), OSError("connection refused")):
+            with (
+                self.subTest(error=error),
+                patch.object(cli, "fetch_node_agent_heartbeat", side_effect=error),
+            ):
+                self.assertEqual(
+                    cli._probe_unreachable_node(heartbeat, "test-token"), (None, True)
+                )
+        for error in (
+            cli.HTTPError(heartbeat.node_url, 401, "unauthorized", {}, None),
+            ValueError("invalid schema"),
+        ):
+            with (
+                self.subTest(error=error),
+                patch.object(cli, "fetch_node_agent_heartbeat", side_effect=error),
+            ):
+                self.assertEqual(
+                    cli._probe_unreachable_node(heartbeat, "test-token"), (None, False)
+                )
+        for foreign in (
+            replace(heartbeat, job_id="another-job"),
+            replace(heartbeat, deployment_id="another-deployment"),
+        ):
+            with (
+                self.subTest(foreign=foreign.job_id),
+                patch.object(cli, "fetch_node_agent_heartbeat", return_value=foreign),
+            ):
+                self.assertEqual(
+                    cli._probe_unreachable_node(heartbeat, "test-token"), (None, False)
+                )
+
+    def test_ucloud_declares_no_status_or_silence_deletion_authority(self):
+        self.assertEqual(UCloudProvider.destructive_instance_losses, ())
+        self.assertIsNone(UCloudProvider.unreachable_lease_expiry_loss)
 
     def test_demand_rise_durably_cancels_drain_before_ambiguous_undrain(self) -> None:
         terminate_calls: list[tuple[str, ...]] = []

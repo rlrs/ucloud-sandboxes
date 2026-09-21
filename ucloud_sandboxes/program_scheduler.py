@@ -52,6 +52,17 @@ def node_pressure_score(heartbeat: NodeHeartbeat) -> float:
             min(1.0, float(metrics.memory_psi_full_avg10 or 0.0) / 100.0),
         ),
     ]
+    # "some" captures stalls affecting a subset of tasks, which can be severe
+    # for sandbox latency even while other host CPUs remain idle. I/O pressure
+    # is a relative ranking signal, not another admission/rejection threshold.
+    values.extend(
+        max(0.0, min(1.0, float(value or 0.0) / 100.0))
+        for value in (
+            metrics.memory_psi_some_avg10,
+            metrics.io_psi_some_avg10,
+            metrics.io_psi_full_avg10,
+        )
+    )
     if metrics.storage_max_concurrent_operations > 0:
         values.append(
             max(

@@ -20,7 +20,7 @@ import shutil
 import tempfile
 import threading
 import time
-from typing import Any, Literal, Protocol
+from typing import Any, Callable, Literal, Protocol
 
 from opentelemetry.trace import SpanKind
 
@@ -38,7 +38,7 @@ from .telemetry import Telemetry
 _SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,239}\Z")
 _PROTOCOL_SCHEMA = 4
 _JOURNAL_APPLICATION_ID = 0x55435342
-_JOURNAL_SCHEMA_VERSION = 2
+_JOURNAL_SCHEMA_VERSION = 3
 _PROTOCOL_MAX_BYTES = 1024 * 1024
 _OWNER_REQUEST_FIELDS = ("sandbox_generation", "sandbox_id", "volume_id")
 _PROTOCOL_EXTRA_FIELDS = {
@@ -424,6 +424,7 @@ class StorageSnapshotPublisher(Protocol):
         existing_layers: tuple[PublishedStorageLayer, ...] = (),
         existing_repo_blob_url: str = "",
         global_config_path: Path | None = None,
+        check_current: Callable[[], None] | None = None,
     ) -> StorageSnapshotPublication: ...
 
     def verify(
@@ -435,6 +436,8 @@ class StorageSnapshotPublisher(Protocol):
 
 
 class StorageHostOperations(Protocol):
+    def device_is_unused(self, device: Path) -> bool: ...
+
     def format_xfs(self, device: Path) -> None: ...
 
     def mount(self, device: Path, target: Path) -> None: ...
@@ -458,6 +461,19 @@ class LinuxStorageHostOperations:
     def __init__(self, *, timeout_seconds: float = 120.0) -> None:
         self.timeout_seconds = timeout_seconds
 
+    @staticmethod
+    def device_is_unused(device: Path) -> bool:
+        # Mountinfo cannot see detached mounts or filesystem references held by
+        # another overlay. Ask the block layer before permitting device reuse.
+        try:
+            fd = os.open(device, os.O_RDONLY | os.O_EXCL | os.O_CLOEXEC)
+        except OSError:
+            return False
+        try:
+            return stat.S_ISBLK(os.fstat(fd).st_mode)
+        finally:
+            os.close(fd)
+
     def format_xfs(self, device: Path) -> None:
         self._run(
             "mkfs.xfs",
@@ -470,7 +486,11 @@ class LinuxStorageHostOperations:
         )
 
     def mount(self, device: Path, target: Path) -> None:
-        self._run("mount", "-o", "noatime", str(device), str(target))
+        # Independently owned COW snapshots retain their parent filesystem UUID.
+        # Ownership is fenced by the volume journal and block backend, not UUID.
+        self._run(
+            "mount", "-t", "xfs", "-o", "noatime,nouuid", str(device), str(target)
+        )
 
     def sync(self, target: Path) -> None:
         self._run("sync", "-f", str(target))
@@ -531,6 +551,14 @@ class LinuxStorageHostOperations:
 
 
 class StorageNativeJournal:
+    _RETIREMENT_SCHEMA = """
+        CREATE TABLE retired_devices (
+            owner_id TEXT PRIMARY KEY,
+            device_id INTEGER NOT NULL,
+            volume_id TEXT NOT NULL,
+            virtual_size INTEGER NOT NULL CHECK(virtual_size > 0)
+        );
+    """
     _SCHEMA = f"""
         BEGIN IMMEDIATE;
         CREATE TABLE volumes (
@@ -554,6 +582,7 @@ class StorageNativeJournal:
         );
         INSERT INTO counters (name, next_value)
         VALUES ('accounting_id', 200000);
+        {_RETIREMENT_SCHEMA}
         PRAGMA application_id = {_JOURNAL_APPLICATION_ID};
         PRAGMA user_version = {_JOURNAL_SCHEMA_VERSION};
         COMMIT;
@@ -563,6 +592,7 @@ class StorageNativeJournal:
         if not path.is_absolute():
             raise ValueError("storage-native journal path must be absolute")
         self.path = path
+        self._writer_guard = threading.Lock()
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         mode = self.path.parent.stat().st_mode
         if mode & 0o022:
@@ -604,6 +634,14 @@ class StorageNativeJournal:
                         raise StorageNativeNodeError(
                             "storage-native journal initialization failed"
                         ) from exc
+            elif application_id == _JOURNAL_APPLICATION_ID and schema_version == 2:
+                self._require_schema(connection, legacy=True)
+                self._require_data(connection)
+                connection.executescript(
+                    "BEGIN IMMEDIATE;"
+                    + self._RETIREMENT_SCHEMA
+                    + f"PRAGMA user_version = {_JOURNAL_SCHEMA_VERSION}; COMMIT;"
+                )
             elif (
                 application_id != _JOURNAL_APPLICATION_ID
                 or schema_version != _JOURNAL_SCHEMA_VERSION
@@ -619,7 +657,9 @@ class StorageNativeJournal:
             )
 
     @staticmethod
-    def _require_schema(connection: sqlite3.Connection) -> None:
+    def _require_schema(
+        connection: sqlite3.Connection, *, legacy: bool = False
+    ) -> None:
         expected = {
             "volumes": (
                 "volume_id",
@@ -638,6 +678,13 @@ class StorageNativeJournal:
             ),
             "counters": ("name", "next_value"),
         }
+        if not legacy:
+            expected["retired_devices"] = (
+                "owner_id",
+                "device_id",
+                "volume_id",
+                "virtual_size",
+            )
         tables = {
             str(row[0])
             for row in connection.execute(
@@ -695,7 +742,7 @@ class StorageNativeJournal:
         hard_capacity_bytes: int,
     ) -> StorageVolumeRecord | OperationReplay:
         request_sha256 = _request_sha256(request)
-        with closing(self._connect()) as connection:
+        with self._write_connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             replay = self._operation_replay(
                 connection,
@@ -718,7 +765,10 @@ class StorageNativeJournal:
                 ),
                 tuple(sorted(_ACTIVE_CAPACITY_STATES)),
             ).fetchone()[0]
-            if int(reserved) + record.virtual_size > hard_capacity_bytes:
+            if (
+                int(reserved) + self._retired_bytes(connection) + record.virtual_size
+                > hard_capacity_bytes
+            ):
                 raise StorageNativeCapacityError(
                     "storage-native hard capacity is exhausted"
                 )
@@ -741,7 +791,7 @@ class StorageNativeJournal:
         record: StorageVolumeRecord,
     ) -> StorageVolumeRecord | OperationReplay:
         request_sha256 = _request_sha256(request)
-        with closing(self._connect()) as connection:
+        with self._write_connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             replay = self._operation_replay(
                 connection,
@@ -799,7 +849,7 @@ class StorageNativeJournal:
         hard_capacity_bytes: int = 0,
     ) -> StorageVolumeRecord | OperationReplay:
         request_sha256 = _request_sha256(request)
-        with closing(self._connect()) as connection:
+        with self._write_connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             replay = self._operation_replay(
                 connection,
@@ -828,7 +878,12 @@ class StorageNativeJournal:
                     ),
                     (*sorted(_ACTIVE_CAPACITY_STATES), record.volume_id),
                 ).fetchone()[0]
-                if int(reserved) + record.virtual_size > hard_capacity_bytes:
+                if (
+                    int(reserved)
+                    + self._retired_bytes(connection)
+                    + record.virtual_size
+                    > hard_capacity_bytes
+                ):
                     raise StorageNativeCapacityError(
                         "storage-native hard capacity is exhausted"
                     )
@@ -855,7 +910,7 @@ class StorageNativeJournal:
         self,
         record: StorageVolumeRecord,
     ) -> None:
-        with closing(self._connect()) as connection:
+        with self._write_connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             current = self._load(connection, record.volume_id)
             if (
@@ -870,6 +925,34 @@ class StorageNativeJournal:
 
     def finish(self, record: StorageVolumeRecord) -> None:
         self._complete_operation(record, record, status="completed")
+
+    def supersede_publication(self, owner: StorageVolumeOwner) -> StorageVolumeRecord:
+        """Keep local checkpoint authority and fence out a slow uploader."""
+
+        with self._write_connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            current = self._load(connection, owner.volume_id)
+            if current.owner != owner:
+                raise StorageNativeConflictError(
+                    "storage-native volume belongs to another owner"
+                )
+            if current.state != StorageVolumeState.PUBLISHING:
+                return current
+            connection.execute(
+                "UPDATE operations SET status = 'failed', error = ? "
+                "WHERE operation_id = ? AND status = 'pending'",
+                ("publication superseded by local lifecycle operation", current.operation_id),
+            )
+            record = replace(
+                current,
+                revision=current.revision + 1,
+                state=StorageVolumeState.RELEASED,
+                error="",
+                updated_ns=time.time_ns(),
+            )
+            self._upsert_record(connection, record)
+            connection.commit()
+            return record
 
     def fail(self, record: StorageVolumeRecord, error: str) -> None:
         terminal = replace(
@@ -906,7 +989,7 @@ class StorageNativeJournal:
         status: Literal["completed", "failed"],
         require_pending: bool = True,
     ) -> None:
-        with closing(self._connect()) as connection:
+        with self._write_connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             current = self._load(connection, pending.volume_id)
             if (
@@ -955,6 +1038,14 @@ class StorageNativeJournal:
             ).fetchall()
         return tuple(self._decode_record_row(row) for row in rows)
 
+    def is_failed_snapshot_mount(self, record: StorageVolumeRecord) -> bool:
+        with closing(self._connect()) as connection:
+            row = connection.execute(
+                "SELECT kind, status FROM operations WHERE operation_id = ? AND volume_id = ?",
+                (record.operation_id, record.volume_id),
+            ).fetchone()
+        return row is not None and tuple(row) == ("MountSnapshotCow", "failed")
+
     def list_live_page(
         self, after_volume_id: str, *, limit: int = 128
     ) -> tuple[StorageVolumeRecord, ...]:
@@ -980,7 +1071,7 @@ class StorageNativeJournal:
             error=error[:4096],
             updated_ns=time.time_ns(),
         )
-        with closing(self._connect()) as connection:
+        with self._write_connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             current = self._load(connection, record.volume_id)
             if current.revision != record.revision:
@@ -1148,6 +1239,56 @@ class StorageNativeJournal:
                 f"storage volume is {record.state.value}, not an allowed state"
             )
 
+    @staticmethod
+    def _retired_bytes(connection: sqlite3.Connection) -> int:
+        return int(
+            connection.execute(
+                "SELECT COALESCE(SUM(virtual_size), 0) FROM retired_devices"
+            ).fetchone()[0]
+        )
+
+    def retire_device(
+        self, owner: StorageNativeDeviceOwner, record: StorageVolumeRecord
+    ) -> None:
+        with self._write_connection() as connection:
+            connection.execute(
+                "INSERT OR IGNORE INTO retired_devices VALUES (?, ?, ?, ?)",
+                (
+                    owner.owner_id,
+                    owner.device_id,
+                    record.volume_id,
+                    record.virtual_size,
+                ),
+            )
+
+    def retired_devices(self) -> list[tuple[str, int, str, int]]:
+        with closing(self._connect()) as connection:
+            return connection.execute(
+                "SELECT owner_id, device_id, volume_id, virtual_size FROM retired_devices"
+            ).fetchall()
+
+    def forget_retired_device(self, owner_id: str) -> None:
+        with self._write_connection() as connection:
+            connection.execute(
+                "DELETE FROM retired_devices WHERE owner_id = ?", (owner_id,)
+            )
+
+    @contextmanager
+    def _write_connection(self):
+        # SQLite permits one writer. Coordinate this process's short journal
+        # transactions without SQLite's busy-handler retry/backoff competing
+        # with other local requests. Keep independent connections and SQLite's
+        # own cross-process fencing; reads do not acquire this guard.
+        with closing(self._connect()) as connection:
+            with self._writer_guard:
+                try:
+                    yield connection
+                finally:
+                    # Replay returns and failed fences may leave BEGIN open.
+                    # Roll back before handing the writer slot to another call.
+                    if connection.in_transaction:
+                        connection.rollback()
+
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(
             self.path,
@@ -1221,7 +1362,19 @@ def _storage_mutation(method):
     return guarded
 
 
+@dataclass
+class _DeviceAllocationSlot:
+    # Guarded by the service's _device_slot_guard. Once the backend owns the
+    # device, its owner record replaces this transient reservation atomically.
+    pending: bool = True
+
+
 class StorageNativeNodeService:
+    # Admission may wait for retirement already made safe by kernel teardown.
+    # Backend commands retain their own configured timeout; this bounds waits
+    # between attempts and for another reaper to relinquish its lock.
+    _DEVICE_RECLAIM_WAIT_SECONDS = 2.0
+
     def __init__(
         self,
         config: StorageNativeNodeConfig,
@@ -1251,15 +1404,20 @@ class StorageNativeNodeService:
         self._released_device_ids: set[int] = set()
         self._device_slot_guard = threading.Lock()
         self._pending_device_allocations = 0
+        self._retirement_lock = threading.Lock()
         self._ensure_roots()
 
     def metrics(self) -> dict[str, Any]:
+        self._reap_retired_devices()
         records = self.journal.list()
         reserved = sum(
             record.virtual_size
             for record in records
             if record.state.value in _ACTIVE_CAPACITY_STATES
         )
+        retired = self.journal.retired_devices()
+        retired_bytes = sum(row[3] for row in retired)
+        reserved += retired_bytes
         cache_bytes = 0
         for record in records:
             for raw_path in record.cached_layer_paths:
@@ -1281,6 +1439,8 @@ class StorageNativeNodeService:
                 "device_pool_discards": self._pool_discards,
             }
         return {
+            "retired_devices": len(retired),
+            "retired_reserved_bytes": retired_bytes,
             "cache_bytes": cache_bytes,
             "device_pool_enabled": self.config.device_pool_enabled,
             "device_pool_low_watermark": (self.config.device_pool_low_watermark),
@@ -1342,7 +1502,7 @@ class StorageNativeNodeService:
 
         existing = self.journal.load(volume_id)
         slot = self._device_allocation_slot() if existing is None else suppress()
-        with slot:
+        with slot as allocation_slot:
             reserved = self.journal.reserve_create(
                 request=request,
                 record=record,
@@ -1366,7 +1526,7 @@ class StorageNativeNodeService:
                     runtime_dir=runtime_dir,
                     virtual_size=virtual_size,
                     owner_id=record.device_owner_id,
-                    reserved_slot=True,
+                    allocation_slot=allocation_slot,
                 )
                 if device.virtual_size != virtual_size:
                     raise StorageNativeTerminalError(
@@ -1590,13 +1750,14 @@ class StorageNativeNodeService:
         operation_id: str,
         expected_revision: int,
     ) -> StorageVolumeRecord:
-        with self._device_allocation_slot():
+        with self._device_allocation_slot() as allocation_slot:
             return self._mount_snapshot_cow_with_reserved_device(
                 sandbox_id=sandbox_id,
                 sandbox_generation=sandbox_generation,
                 volume_id=volume_id,
                 operation_id=operation_id,
                 expected_revision=expected_revision,
+                allocation_slot=allocation_slot,
             )
 
     def _mount_snapshot_cow_with_reserved_device(
@@ -1607,6 +1768,7 @@ class StorageNativeNodeService:
         volume_id: str,
         operation_id: str,
         expected_revision: int,
+        allocation_slot: _DeviceAllocationSlot | None,
     ) -> StorageVolumeRecord:
         pending = self._begin_transition(
             kind="MountSnapshotCow",
@@ -1659,7 +1821,7 @@ class StorageNativeNodeService:
                 runtime_dir=runtime_dir,
                 virtual_size=pending.virtual_size,
                 owner_id=pending.device_owner_id,
-                reserved_slot=True,
+                allocation_slot=allocation_slot,
             )
             if device.virtual_size != pending.virtual_size:
                 raise StorageNativeTerminalError(
@@ -1698,6 +1860,13 @@ class StorageNativeNodeService:
     ) -> StorageVolumeRecord:
         """Drop an uncommitted writable upper and restore its parent authority."""
 
+        original = self.journal.load(volume_id)
+        recover_mount = bool(
+            original is not None
+            and original.state == StorageVolumeState.ERROR
+            and self.journal.is_failed_snapshot_mount(original)
+            and (original.sealed_layer_paths or original.published_layers)
+        )
         pending = self._begin_transition(
             kind="DiscardMountedCow",
             operation_id=operation_id,
@@ -1705,7 +1874,10 @@ class StorageNativeNodeService:
             sandbox_id=sandbox_id,
             sandbox_generation=sandbox_generation,
             expected_revision=expected_revision,
-            allowed_states={StorageVolumeState.MOUNTED},
+            allowed_states={
+                StorageVolumeState.MOUNTED,
+                *((StorageVolumeState.ERROR,) if recover_mount else ()),
+            },
             next_state=StorageVolumeState.RELEASING,
         )
         if isinstance(pending, OperationReplay):
@@ -1722,7 +1894,11 @@ class StorageNativeNodeService:
             mount_path = Path(pending.mount_path)
             if self.host.is_mounted(mount_path):
                 self.host.unmount(mount_path)
-            if pending.device_id is not None:
+            if recover_mount:
+                # A failed mount may already have returned its device to the pool.
+                # Resolve the exact owner before cleanup; never release a recycled ID.
+                self._best_effort_release(pending, require_backend=True)
+            elif pending.device_id is not None:
                 self._release_backend_device(pending.device_id)
             record = replace(
                 pending,
@@ -1829,6 +2005,16 @@ class StorageNativeNodeService:
             )
             for layer in pending.published_layers
         )
+
+        def check_current() -> None:
+            current = self.journal.load(volume_id)
+            if current is None or (
+                current.revision != pending.revision
+                or current.operation_id != pending.operation_id
+                or current.state != StorageVolumeState.PUBLISHING
+            ):
+                raise StorageNativeConflictError("publication superseded by local lifecycle operation")
+
         try:
             publication = self.publisher.publish(
                 exporter=self.backend,
@@ -1837,6 +2023,7 @@ class StorageNativeNodeService:
                 existing_layers=existing_layers,
                 existing_repo_blob_url=pending.published_repo_blob_url,
                 global_config_path=self.global_config_path,
+                check_current=check_current,
             )
             record = replace(
                 pending,
@@ -1859,11 +2046,16 @@ class StorageNativeNodeService:
             self._remove_local_layers(local_paths)
             return record
         except BaseException as exc:
-            self.journal.fail_transition(
-                pending,
-                failure_state=StorageVolumeState.RELEASED,
-                error=f"{type(exc).__name__}: {exc}",
-            )
+            try:
+                self.journal.fail_transition(
+                    pending,
+                    failure_state=StorageVolumeState.RELEASED,
+                    error=f"{type(exc).__name__}: {exc}",
+                )
+            except StorageNativeConflictError:
+                # A local wake/delete may have superseded this immutable upload.
+                # Its new authority must survive both upload success and failure.
+                pass
             raise
 
     @_storage_mutation
@@ -1921,6 +2113,7 @@ class StorageNativeNodeService:
         publication: StorageSnapshotPublication | None = None,
         virtual_size: int | None = None,
         expected_accounting_id: int | None = None,
+        expected_revision: int | None = None,
     ) -> StorageVolumeRecord:
         if action not in {
             "delete",
@@ -1969,6 +2162,15 @@ class StorageNativeNodeService:
                 publication.virtual_size if publication is not None else virtual_size
             ),
         )
+        if expected_revision is not None and (
+            record.revision != expected_revision
+            or (action == "publish" and record.state not in {
+                StorageVolumeState.RELEASED, StorageVolumeState.PUBLISHED,
+            })
+        ):
+            raise StorageNativeConflictError("storage-native snapshot changed before publication")
+        if action in {"mount", "discard", "delete"} and record.state == StorageVolumeState.PUBLISHING:
+            record = self.journal.supersede_publication(owner)
         if (
             publication is not None
             and record.published_manifest_digest != publication.manifest_digest
@@ -2014,7 +2216,10 @@ class StorageNativeNodeService:
                 operation_id=_storage_operation_id(owner, operation_id, "publish"),
                 expected_revision=record.revision,
             )
-        if action == "discard" and record.state == StorageVolumeState.MOUNTED:
+        if action == "discard" and record.state in {
+            StorageVolumeState.MOUNTED,
+            StorageVolumeState.ERROR,
+        }:
             record = self.discard_mounted_cow(
                 **owner.request_fields(),
                 operation_id=_storage_operation_id(owner, operation_id, "discard"),
@@ -2056,12 +2261,14 @@ class StorageNativeNodeService:
             return self._reconcile_exclusive()
 
     def _reconcile_exclusive(self) -> dict[str, Any]:
+        self._reap_retired_devices()
         records = list(self.journal.list())
         live_devices = self.host.ublk_device_ids()
         backend_owners = self._backend_ownership()
         expected_owner_ids = {
             record.device_owner_id for record in records if record.device_owner_id
         }
+        expected_owner_ids.update(row[0] for row in self.journal.retired_devices())
         orphan_devices = sorted(
             owner.device_id
             for owner_id, owner in backend_owners.items()
@@ -2212,7 +2419,10 @@ class StorageNativeNodeService:
             # against a device that is already idle in the warm pool.
             self.journal.update_pending(released)
         volume_root = self._volume_root(record.volume_id)
-        if volume_root.exists():
+        has_retired = any(
+            row[2] == record.volume_id for row in self.journal.retired_devices()
+        )
+        if volume_root.exists() and not has_retired:
             if volume_root.is_symlink() or not volume_root.is_dir():
                 raise StorageNativeTerminalError("volume root is not a real directory")
             shutil.rmtree(volume_root)
@@ -2307,7 +2517,7 @@ class StorageNativeNodeService:
         runtime_dir: Path,
         virtual_size: int,
         owner_id: str,
-        reserved_slot: bool = False,
+        allocation_slot: _DeviceAllocationSlot | None = None,
     ) -> StorageNativeDevice:
         idle_before = (
             self.host.ublk_device_ids()
@@ -2319,7 +2529,7 @@ class StorageNativeNodeService:
             owners = self._backend_ownership()
             existing_owner = owners.get(owner_id)
             demand = len(owners) + self._pending_device_allocations
-            if reserved_slot:
+            if allocation_slot is not None and allocation_slot.pending:
                 demand -= 1
             if (
                 self.config.max_ublk_devices > 0
@@ -2337,6 +2547,18 @@ class StorageNativeNodeService:
                 upper_mode=self.config.upper_mode,
                 owner_id=owner_id,
             )
+            # The owner is now visible to every later admission check. Keeping
+            # its transient reservation through format/mount double-counts it
+            # and rejects the last slots of a concurrent create/wake burst.
+            # Transfer accounting while still holding the same admission lock.
+            if allocation_slot is not None and allocation_slot.pending:
+                self._pending_device_allocations -= 1
+                allocation_slot.pending = False
+        if not self.host.device_is_unused(device.device_path):
+            self._discard_backend_device(device.device_id)
+            raise StorageNativeNodeError(
+                "block backend supplied a device still in use by the kernel"
+            )
         if self.config.device_pool_enabled:
             with self._pool_metrics_lock:
                 reused = (
@@ -2353,7 +2575,7 @@ class StorageNativeNodeService:
 
     @contextmanager
     def _device_allocation_slot(self):
-        """Fence the provider's hard ublk-device ceiling before journaling.
+        """Fence an optional operator ublk-device ceiling before journaling.
 
         Idle pooled devices are reusable and therefore do not consume an
         admission slot. Active backend owners plus allocations currently
@@ -2362,20 +2584,52 @@ class StorageNativeNodeService:
 
         maximum = self.config.max_ublk_devices
         if maximum <= 0:
-            yield
+            yield None
             return
-        with self._device_slot_guard:
-            active = len(self._backend_ownership())
-            if active + self._pending_device_allocations >= maximum:
-                raise StorageNativeCapacityError(
-                    "storage-native ublk device capacity is exhausted"
-                )
-            self._pending_device_allocations += 1
+        slot = _DeviceAllocationSlot()
+        deadline = time.monotonic() + self._DEVICE_RECLAIM_WAIT_SECONDS
+        while True:
+            with self._device_slot_guard:
+                active = len(self._backend_ownership())
+                if active + self._pending_device_allocations < maximum:
+                    self._pending_device_allocations += 1
+                    break
+            # Retired owners remain fully charged until their exact identity
+            # and an exclusive block-device open prove reclamation is safe.
+            # Metrics is not a reliable scheduler: its current scan may have
+            # started before the most recent park wave added retirements.
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or not self.journal.retired_devices():
+                # A concurrent reaper can remove the final retired row after
+                # our first owner snapshot. Make rejection, like admission,
+                # depend on a final capacity check under the allocation guard.
+                with self._device_slot_guard:
+                    active = len(self._backend_ownership())
+                    if active + self._pending_device_allocations < maximum:
+                        self._pending_device_allocations += 1
+                        break
+                    raise StorageNativeCapacityError(
+                        "storage-native ublk device capacity is exhausted"
+                    )
+            # Never wait for retirement while holding the allocation guard.
+            # Another allocator may already own a transient reservation, and
+            # its backend acquisition needs that guard to transfer ownership.
+            reclaimed = self._reap_retired_devices(
+                wait_seconds=min(0.05, remaining),
+                deadline=deadline,
+                max_releases=1,
+            )
+            if not reclaimed:
+                time.sleep(min(0.01, max(0.0, deadline - time.monotonic())))
         try:
-            yield
+            yield slot
         finally:
             with self._device_slot_guard:
-                self._pending_device_allocations -= 1
+                # Backend acquisition failures still own the reservation;
+                # successful acquisition already transferred it to an owner.
+                if slot.pending:
+                    self._pending_device_allocations -= 1
+                    slot.pending = False
 
     def _backend_ownership(self) -> dict[str, StorageNativeDeviceOwner]:
         owners = self.backend.list_runtime_device_owners()
@@ -2391,6 +2645,15 @@ class StorageNativeNodeService:
         return by_owner
 
     def _release_backend_device(self, device_id: int) -> None:
+        # Successful umount does not prove the block device can be rebound.
+        # Allow short deferred filesystem teardown, then retire the owned device
+        # rather than exposing its next owner to the previous filesystem.
+        deadline = time.monotonic() + 0.5
+        while not self.host.device_is_unused(Path(f"/dev/ublkb{device_id}")):
+            if time.monotonic() >= deadline:
+                self._quarantine_backend_device(device_id)
+                return
+            time.sleep(0.05)
         if not self.config.device_pool_enabled:
             self.backend.delete(device_id)
             return
@@ -2400,15 +2663,77 @@ class StorageNativeNodeService:
             self._released_device_ids.add(device_id)
 
     def _discard_backend_device(self, device_id: int) -> None:
+        if not self.host.device_is_unused(Path(f"/dev/ublkb{device_id}")):
+            self._quarantine_backend_device(device_id)
+            return
         self.backend.delete(device_id)
         if self.config.device_pool_enabled:
             with self._pool_metrics_lock:
                 self._pool_discards += 1
                 self._released_device_ids.discard(device_id)
 
-    @staticmethod
-    def _remove_local_layers(paths: tuple[Path, ...]) -> None:
+    def _quarantine_backend_device(self, device_id: int) -> None:
+        owners = [
+            o for o in self._backend_ownership().values() if o.device_id == device_id
+        ]
+        if not owners:
+            raise StorageNativeNodeError("cannot quarantine a device without its owner")
+        owner = owners[0]
+        volume_id = owner.image_config_path.relative_to(self.config.runtime_root).parts[
+            0
+        ]
+        record = self.journal.load(volume_id)
+        if record is None:
+            raise StorageNativeNodeError("cannot quarantine an unjournaled volume")
+        self.journal.retire_device(owner, record)
+
+    def _reap_retired_devices(
+        self,
+        *,
+        wait_seconds: float = 0.0,
+        deadline: float | None = None,
+        max_releases: int | None = None,
+    ) -> int:
+        if not self._retirement_lock.acquire(timeout=wait_seconds):
+            return 0
+        reclaimed = 0
+        try:
+            for owner_id, device_id, volume_id, _ in self.journal.retired_devices():
+                if deadline is not None and time.monotonic() >= deadline:
+                    break
+                if max_releases is not None and reclaimed >= max_releases:
+                    break
+                owner = self._backend_ownership().get(owner_id)
+                if owner is not None:
+                    if owner.device_id != device_id or not self.host.device_is_unused(
+                        owner.device_path
+                    ):
+                        continue
+                    # The identity still owns this device, and the kernel no
+                    # longer holds it. Never delete a recycled numeric ID.
+                    self.backend.delete(device_id)
+                self.journal.forget_retired_device(owner_id)
+                reclaimed += 1
+                record = self.journal.load(volume_id)
+                if (
+                    record is not None
+                    and record.state == StorageVolumeState.DELETED
+                    and not any(
+                        row[2] == volume_id for row in self.journal.retired_devices()
+                    )
+                ):
+                    shutil.rmtree(self._volume_root(volume_id), ignore_errors=True)
+            return reclaimed
+        finally:
+            self._retirement_lock.release()
+
+    def _remove_local_layers(self, paths: tuple[Path, ...]) -> None:
+        retained_roots = {
+            self._volume_root(row[2]) for row in self.journal.retired_devices()
+        }
         for path in paths:
+            if any(root in path.parents for root in retained_roots):
+                continue
             try:
                 path.unlink(missing_ok=True)
             except OSError:
@@ -2535,8 +2860,12 @@ class StorageNativeNodeClient:
         owner: StorageVolumeOwner,
         *,
         operation_id: str,
+        expected_revision: int,
     ) -> StorageVolumeRecord:
-        return self._record_call("EnsurePublished", owner, operation_id=operation_id)
+        return self._record_call(
+            "EnsurePublished", owner, operation_id=operation_id,
+            expected_revision=expected_revision,
+        )
 
     def discard_resume(
         self,
@@ -2747,8 +3076,20 @@ class _StorageNativeRequestHandler(socketserver.BaseRequestHandler):
             attributes=attributes,
             parent_context=self.server.telemetry.extracted_context(trace_context),
         ) as span:
-            if operation in {"GetFeatures", "GetMetrics"}:
+            # Metadata must stay available while lifecycle or upload work is
+            # saturated. These bounded journal reads do not acquire devices or
+            # mutate ownership; the journal supplies its own read consistency.
+            if operation in {"GetFeatures", "GetMetrics", "GetVolume", "ListVolumes", "ListVolumesPage"}:
+                span.set_attribute("storage.admission.class", "metadata")
                 return {"status": "ok", "result": self.server.dispatch(request)}
+            # Publication already has a backend-specific gate. Holding a local
+            # lifecycle slot while waiting for that gate (or remote I/O) starves
+            # mounts/releases and used to starve heartbeat inventory as well.
+            # Per-volume transition fencing still serializes conflicting work.
+            if operation == "EnsurePublished":
+                span.set_attribute("storage.admission.class", "publication")
+                return {"status": "ok", "result": self.server.dispatch(request)}
+            span.set_attribute("storage.admission.class", "lifecycle")
             waiting_started = time.monotonic()
             self.server.operation_waiting()
             with self.server.operation_slots:
@@ -2837,7 +3178,10 @@ class _StorageNativeUnixServer(
         operation = request.get("operation")
         if not isinstance(operation, str) or operation not in _PROTOCOL_EXTRA_FIELDS:
             raise ValueError("unknown storage-native operation")
-        if set(request) != {"operation", "schema", *_PROTOCOL_EXTRA_FIELDS[operation]}:
+        expected_fields = {"operation", "schema", *_PROTOCOL_EXTRA_FIELDS[operation]}
+        if operation == "EnsurePublished" and "expected_revision" in request:
+            expected_fields.add("expected_revision")
+        if set(request) != expected_fields:
             raise ValueError("storage-native request has an invalid schema")
         if operation == "GetFeatures":
             return {
@@ -2903,6 +3247,7 @@ class _StorageNativeUnixServer(
                     owner,
                     action=action,
                     operation_id=operation_id,
+                    expected_revision=_optional_positive_int_field(request, "expected_revision"),
                 )
             return self.service._record_result(record)
         if operation == "GetVolume":

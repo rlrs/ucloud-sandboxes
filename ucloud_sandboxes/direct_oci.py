@@ -2,19 +2,21 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
+import ipaddress
 from pathlib import Path
 import re
 import shutil
 import stat
+import subprocess
 import tempfile
 from typing import Any
 
 from .image_rootfs import DockerImageConfig, MaterializedRootfs
+from .guest_identity import resolve_identity, resolve_groups
 from .sandbox import SandboxSpec, linux_host_entrypoint_script
 
 
 _ENV_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
-_NUMERIC_USER = re.compile(r"([0-9]+)(?::([0-9]+))?\Z")
 _CAPABILITY = re.compile(r"(?:CAP_)?([A-Z0-9_]+)\Z")
 _LINUX_CAPABILITIES = {
     "AUDIT_CONTROL",
@@ -115,18 +117,51 @@ class DirectOciConfigBuilder:
             raise DirectOciConfigError(
                 "direct sandboxes require explicit memory_mb and disk_mb limits"
             )
+        self.validate_management_helper(spec)
         if spec.ssh.enabled:
             raise DirectOciConfigError(
                 "direct runtime SSH requires node network integration"
             )
 
         image_config = image.image_config
-        args = () if spec.managed_process else self._process_args(spec, image_config)
+        try:
+            identity = resolve_identity(
+                image.rootfs, spec.security.user or image_config.user or "0"
+            )
+        except ValueError as exc:
+            raise DirectOciConfigError(str(exc)) from exc
+        supplementary_gids = resolve_groups(
+            image.rootfs, spec.security.supplementary_groups
+        )
+        args = (
+            ()
+            if spec.managed_process or spec.profile in {"linux_host", "linux_session"}
+            else self._process_args(spec, image_config)
+        )
         environment = self._environment(spec, image_config)
-        if spec.profile == "linux_host":
+        environment.setdefault(
+            "PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        )
+        if identity.home.startswith("/"):
+            environment.setdefault("HOME", identity.home)
+        elif spec.profile == "linux_session":
+            environment.setdefault("HOME", spec.filesystem.workspace_path)
+        if identity.name:
+            environment.setdefault("USER", identity.name)
+            environment.setdefault("LOGNAME", identity.name)
+        if identity.shell.startswith("/"):
+            environment.setdefault("SHELL", identity.shell)
+        if spec.profile == "linux_session":
+            environment["HOME"] = spec.env.get(
+                "HOME",
+                identity.home
+                if identity.home.startswith("/")
+                else spec.filesystem.workspace_path,
+            )
+        if spec.profile in {"linux_host", "linux_session"}:
             args = (
                 "/bin/sh",
-                "-lc",
+                "-c",
                 linux_host_entrypoint_script(),
                 "ucloud-linux-host",
                 *spec.command,
@@ -141,9 +176,7 @@ class DirectOciConfigBuilder:
                     "managed_process requires a configured managed-process init binary"
                 )
             self._validate_init_binary(self.managed_init_binary)
-            managed_uid, managed_gid = self._numeric_user(
-                spec.security.user or image_config.user or "0"
-            )
+            managed_uid, managed_gid = identity.uid, identity.gid
             args = (
                 "/.ucloud-job-init",
                 "supervise",
@@ -158,7 +191,7 @@ class DirectOciConfigBuilder:
             self._validate_init_binary(self.init_binary)
             args = ("/.ucloud-init", "--", *args)
 
-        uid, gid = self._numeric_user(spec.security.user or image_config.user or "0")
+        uid, gid = identity.uid, identity.gid
         if spec.managed_process:
             uid, gid = 0, 0
         capabilities = self._capabilities(spec)
@@ -168,9 +201,10 @@ class DirectOciConfigBuilder:
         linux_resources: dict[str, Any] = {
             "memory": {
                 "limit": memory_bytes,
-                # One additional memory bound of swap, matching the existing
-                # product's 2x combined memory+swap admission.
-                "swap": memory_bytes,
+                # OCI expresses the combined memory+swap bound. Equal values
+                # disable swap (runsc subtracts limit for memory.swap.max).
+                # Permit one additional memory bound of swap.
+                "swap": memory_bytes * 2,
             }
         }
         if spec.cpus is not None:
@@ -186,6 +220,8 @@ class DirectOciConfigBuilder:
             "dev.ucloud-sandboxes.profile": spec.profile,
             "dev.ucloud-sandboxes.sandbox-id": spec.id,
         }
+        if spec.filesystem.management_helper == "static":
+            annotations["dev.ucloud-sandboxes.file-helper"] = "v1"
         if spec.managed_process:
             annotations.update(
                 {
@@ -273,13 +309,48 @@ class DirectOciConfigBuilder:
                     {"hard": 1_048_576, "soft": 1_048_576, "type": "RLIMIT_NOFILE"}
                 ],
                 "terminal": False,
-                "user": {"gid": gid, "uid": uid},
+                "user": {
+                    "gid": gid,
+                    "uid": uid,
+                    **(
+                        {"additionalGids": list(supplementary_gids)}
+                        if supplementary_gids
+                        else {}
+                    ),
+                },
             },
             "root": {
                 "path": "rootfs",
                 "readonly": spec.security.read_only_rootfs,
             },
         }
+
+    def validate_management_helper(self, spec: SandboxSpec) -> None:
+        if spec.filesystem.management_helper != "static":
+            return
+        binary = self.managed_init_binary
+        if binary is None:
+            raise DirectOciConfigError(
+                "static file management requires an updated managed-process binary"
+            )
+        # This is the trusted node artifact, never an executable from the image.
+        self._validate_init_binary(binary)
+        try:
+            result = subprocess.run(
+                [str(binary), "files", "ready"],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise DirectOciConfigError(
+                "static file helper protocol probe failed"
+            ) from exc
+        if result.returncode != 0:
+            raise DirectOciConfigError(
+                "configured binary does not support static file management"
+            )
 
     def install_init(self, rootfs: Path, *, enabled: bool) -> None:
         """Atomically install the trusted init into a prepared writable rootfs."""
@@ -371,18 +442,35 @@ class DirectOciConfigBuilder:
         contract before runsc starts because the overlay rootfs is otherwise
         populated entirely from the image and BusyBox has no /workspace.
         """
+        spec.filesystem.validate()
+        self._prepare_directory(rootfs, spec.filesystem.workspace_path, workspace=True)
+
+    def prepare_working_directory(self, rootfs: Path, *, directory: str) -> None:
+        """Create a missing OCI cwd; never rewrite existing image permissions."""
+        from .guest_paths import validate_guest_path
+
+        validate_guest_path("working_dir", directory)
+        if directory == "/":
+            return
+        self._prepare_directory(rootfs, directory, workspace=False)
+
+    def _prepare_directory(
+        self, rootfs: Path, directory: str, *, workspace: bool
+    ) -> None:
         if not rootfs.is_absolute() or not rootfs.is_dir() or rootfs.is_symlink():
             raise DirectOciConfigError(
                 "direct-runtime workspace target must be an absolute rootfs directory"
             )
         components = tuple(
             component
-            for component in Path(spec.filesystem.workspace_path).parts
-            if component != "/"
+            for component in directory.split("/")
+            if component not in {"", "."}
         )
-        if not components or any(
-            component in {"", ".", ".."} for component in components
-        ):
+        # Linux treats repeated leading slashes as root. Never pass a pathlib
+        # anchor such as "//" to openat: an absolute component ignores dir_fd.
+        if not components and not workspace:
+            return
+        if not components or ".." in components:
             raise DirectOciConfigError(
                 "direct-runtime workspace must name a directory below rootfs"
             )
@@ -393,7 +481,9 @@ class DirectOciConfigBuilder:
                 rootfs,
                 os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
             )
+            created = False
             for component in components:
+                created = False
                 try:
                     child_fd = os.open(
                         component,
@@ -407,12 +497,13 @@ class DirectOciConfigBuilder:
                         os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
                         dir_fd=directory_fd,
                     )
+                    created = True
                 os.close(directory_fd)
                 directory_fd = child_fd
-            # A workspace is private to one sandbox mount namespace. Making the
-            # directory writable avoids host uid mapping assumptions and
-            # matches the SDK contract for arbitrary numeric OCI users.
-            os.fchmod(directory_fd, 0o777)
+            # Preserve image ownership/modes. Only a newly created workspace is
+            # shared; the sticky bit protects entries from other guest users.
+            if created and workspace:
+                os.fchmod(directory_fd, 0o1777)
             os.fsync(directory_fd)
         except OSError as exc:
             raise DirectOciConfigError(
@@ -422,62 +513,83 @@ class DirectOciConfigBuilder:
             if directory_fd >= 0:
                 os.close(directory_fd)
 
-    def prepare_network_files(self, rootfs: Path, *, spec: SandboxSpec) -> None:
-        """Install a deterministic resolver without following image symlinks."""
+    def prepare_network_files(
+        self,
+        rootfs: Path,
+        *,
+        spec: SandboxSpec,
+        relay_hosts: dict[str, str] | None = None,
+    ) -> None:
+        """Install network files with openat/rename; never follow image symlinks.
+
+        Relay names map to stable virtual addresses. Resolution and destination
+        updates happen on the host, so no guest DNS traffic is necessary.
+        """
         if spec.network == "none":
             return
+        if spec.network_policy.egress == "relay":
+            if not relay_hosts:
+                raise DirectOciConfigError(
+                    "relay network requires host-provided name mappings"
+                )
+            contents = {
+                "resolv.conf": "# Relay-only network: external DNS is blocked.\n",
+                "hosts": "127.0.0.1 localhost\n::1 localhost\n"
+                + "".join(
+                    f"{ipaddress.IPv4Address(ip)} {host}\n"
+                    for host, ip in sorted(relay_hosts.items())
+                ),
+            }
+        else:
+            contents = {
+                "resolv.conf": "".join(
+                    f"nameserver {ipaddress.IPv4Address(server)}\n"
+                    for server in (spec.dns_servers or ("1.1.1.1", "8.8.8.8"))
+                )
+                + "options timeout:2 attempts:2\n"
+            }
         if not rootfs.is_absolute() or not rootfs.is_dir() or rootfs.is_symlink():
             raise DirectOciConfigError(
                 "direct-runtime network rootfs must be an absolute directory"
             )
-        root_fd = -1
-        etc_fd = -1
-        temporary = f".ucloud-resolv.{os.getpid()}"
-        descriptor = -1
+        root_fd = etc_fd = -1
         try:
-            root_fd = os.open(
-                rootfs,
-                os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
-            )
+            root_fd = os.open(rootfs, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                os.mkdir("etc", mode=0o755, dir_fd=root_fd)
+            except FileExistsError:
+                pass
             etc_fd = os.open(
                 "etc",
-                os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
+                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
                 dir_fd=root_fd,
             )
-            descriptor = os.open(
-                temporary,
-                os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
-                0o644,
-                dir_fd=etc_fd,
-            )
-            with os.fdopen(descriptor, "w", encoding="ascii") as handle:
-                descriptor = -1
-                handle.write(
-                    "nameserver 1.1.1.1\n"
-                    "nameserver 8.8.8.8\n"
-                    "options timeout:2 attempts:2\n"
+            for name, content in contents.items():
+                temporary = f".ucloud-network-{os.urandom(12).hex()}"
+                descriptor = os.open(
+                    temporary,
+                    os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                    0o644,
+                    dir_fd=etc_fd,
                 )
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.rename(
-                temporary,
-                "resolv.conf",
-                src_dir_fd=etc_fd,
-                dst_dir_fd=etc_fd,
-            )
+                try:
+                    with os.fdopen(descriptor, "w", encoding="ascii") as handle:
+                        handle.write(content)
+                        handle.flush()
+                        os.fsync(handle.fileno())
+                    os.rename(temporary, name, src_dir_fd=etc_fd, dst_dir_fd=etc_fd)
+                finally:
+                    try:
+                        os.unlink(temporary, dir_fd=etc_fd)
+                    except FileNotFoundError:
+                        pass
             os.fsync(etc_fd)
         except OSError as exc:
             raise DirectOciConfigError(
-                "failed to prepare direct-runtime resolver configuration"
+                "failed to prepare direct-runtime network configuration"
             ) from exc
         finally:
-            if descriptor >= 0:
-                os.close(descriptor)
             if etc_fd >= 0:
-                try:
-                    os.unlink(temporary, dir_fd=etc_fd)
-                except FileNotFoundError:
-                    pass
                 os.close(etc_fd)
             if root_fd >= 0:
                 os.close(root_fd)
@@ -515,23 +627,18 @@ class DirectOciConfigBuilder:
 
     @staticmethod
     def _working_directory(spec: SandboxSpec, image: DockerImageConfig) -> str:
-        directory = spec.working_dir or image.working_dir or "/"
+        directory = (
+            spec.working_dir
+            or image.working_dir
+            or (
+                spec.filesystem.workspace_path
+                if spec.profile == "linux_session"
+                else "/"
+            )
+        )
         if not directory.startswith("/") or "\0" in directory:
             raise DirectOciConfigError("sandbox working directory must be absolute")
         return directory
-
-    @staticmethod
-    def _numeric_user(value: str) -> tuple[int, int]:
-        match = _NUMERIC_USER.fullmatch(value)
-        if match is None:
-            raise DirectOciConfigError(
-                "direct runtime requires a numeric OCI user (uid or uid:gid)"
-            )
-        uid = int(match.group(1))
-        gid = int(match.group(2) or match.group(1))
-        if uid > 2**32 - 2 or gid > 2**32 - 2:
-            raise DirectOciConfigError("OCI uid/gid is out of range")
-        return uid, gid
 
     @staticmethod
     def _capabilities(spec: SandboxSpec) -> set[str]:
@@ -585,7 +692,13 @@ class DirectOciConfigBuilder:
             },
             {
                 "destination": "/dev/shm",
-                "options": ["nosuid", "noexec", "nodev", "mode=1777", "size=65536k"],
+                "options": [
+                    "nosuid",
+                    "noexec",
+                    "nodev",
+                    "mode=1777",
+                    f"size={spec.filesystem.shm_mb * 1024}k",
+                ],
                 "source": "shm",
                 "type": "tmpfs",
             },
@@ -624,7 +737,7 @@ class DirectOciConfigBuilder:
                 "type": "tmpfs",
             },
         ]
-        if spec.filesystem.enforce_disk_quota:
+        if spec.filesystem.workspace_is_tmpfs:
             assert spec.disk_mb is not None
             mounts.append(
                 {
@@ -650,7 +763,7 @@ class DirectOciConfigBuilder:
             ),
             "UCLOUD_SANDBOX_KEEP_ALIVE": ("1" if spec.linux_host.keep_alive else "0"),
             "UCLOUD_SANDBOX_LINUX_HOST_PATHS": ":".join(spec.linux_host.writable_paths),
-            "UCLOUD_SANDBOX_PROFILE": "linux_host",
+            "UCLOUD_SANDBOX_PROFILE": spec.profile,
             "UCLOUD_SANDBOX_SSH_PORT": str(spec.ssh.container_port),
             "UCLOUD_SANDBOX_SSH_USER": spec.ssh.user,
         }

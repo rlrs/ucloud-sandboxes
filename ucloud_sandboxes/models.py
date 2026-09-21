@@ -331,6 +331,8 @@ class NodeRuntimeMetrics:
     swap_free_mb: int = 0
     memory_psi_some_avg10: float | None = None
     memory_psi_full_avg10: float | None = None
+    io_psi_some_avg10: float | None = None
+    io_psi_full_avg10: float | None = None
     load_average_1m: float | None = None
     load_average_5m: float | None = None
     load_average_15m: float | None = None
@@ -380,6 +382,8 @@ class NodeRuntimeMetrics:
         # storage signals remain optional at that rolling-upgrade boundary.
         raw = dict(raw)
         raw.setdefault("storage_ublk_max_devices", 0)
+        raw.setdefault("io_psi_some_avg10", None)
+        raw.setdefault("io_psi_full_avg10", None)
         raw.setdefault("storage_publication_active", 0)
         raw.setdefault("storage_publication_waiting", 0)
         raw.setdefault("storage_publication_limit", 0)
@@ -401,6 +405,8 @@ class NodeRuntimeMetrics:
             "memory_percent",
             "memory_psi_some_avg10",
             "memory_psi_full_avg10",
+            "io_psi_some_avg10",
+            "io_psi_full_avg10",
             "load_average_1m",
             "load_average_5m",
             "load_average_15m",
@@ -437,6 +443,7 @@ class NodeRuntimeMetrics:
 class InstancePhase(str, Enum):
     PROVISIONING = "provisioning"
     RUNNING = "running"
+    UNAVAILABLE = "unavailable"
     LOST = "lost"
     TERMINAL = "terminal"
 
@@ -486,6 +493,10 @@ class ProviderInstance:
     @property
     def is_lost(self) -> bool:
         return self.phase is InstancePhase.LOST
+
+    @property
+    def is_unavailable(self) -> bool:
+        return self.phase is InstancePhase.UNAVAILABLE
 
 
 @dataclass(frozen=True)
@@ -671,6 +682,9 @@ class SandboxDemand:
     pending_count: int = 0
     suppressed_pending_count: int = 0
     oldest_pending_seconds: int = 0
+    # Unlike oldest_pending_seconds, excludes capacity preparations. A warm
+    # reservation's age must not make a new create look persistently queued.
+    oldest_capacity_pending_seconds: int = 0
     placement_requests: tuple[SandboxPlacementRequest, ...] = ()
     prepared_placement_requests: tuple[SandboxPlacementRequest, ...] = ()
 
@@ -817,6 +831,7 @@ class ScalePolicy:
     provisioning_latency_lookback_seconds: int = 7 * 24 * 60 * 60
     provisioning_scale_down_multiplier: float = 2.0
     program_aware_autoscaling_enabled: bool = False
+    parked_wake_consolidation_enabled: bool = False
     model_wait_capacity_weight: float = 0.10
     model_wait_max_headroom_nodes: int = 1
     default_node_resources: ResourceQuantity = ResourceQuantity(

@@ -40,6 +40,8 @@ def match_sandbox_http_route(method: str, path: str) -> SandboxHttpRoute | None:
 
     if not suffix and method == "DELETE":
         return SandboxHttpRoute("delete", sandbox_id, sdk_public=True)
+    if suffix == ["environment"] and method == "GET":
+        return SandboxHttpRoute("environment", sandbox_id, sdk_public=True)
     if suffix == ["files"] and method in {"GET", "PUT"}:
         return SandboxHttpRoute("files", sandbox_id, sdk_public=True, wakes=True)
     if suffix == ["ssh"] and method == "GET":

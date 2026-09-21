@@ -14,6 +14,7 @@ import zipfile
 
 from .config import DeploymentConfig
 from .deployment import PACKAGE_NAME
+from .gvisor_distribution import GVISOR_COMMIT, GVISOR_SIDECARS, distribution_files
 from .vm_init import (
     BUILDER_RUNTIME_PACKAGES,
     PINNED_STORAGE_NATIVE_AGENTENV_COMMIT,
@@ -276,6 +277,7 @@ class AllInOneDeployPlan:
         wheel_package_version(self.local_wheel)
         if self.local_direct_runsc is None or not self.local_direct_runsc.is_file():
             raise ValueError("deployment requires a local patched runsc binary")
+        distribution_files(self.local_direct_runsc, self.direct_runsc_commit)
         if self.local_managed_init is None or not self.local_managed_init.is_file():
             raise ValueError("deployment requires a local managed-process init binary")
         if self.local_storage_native_manifest is None:
@@ -400,6 +402,8 @@ def render_remote_deploy_script(
     script_parts = [
         "#!/usr/bin/env bash",
         "set -euo pipefail",
+        # Bundle payloads must be readable by the unprivileged VM initializer.
+        "umask 022",
         f"INSTALL_ROOT={shlex.quote(plan.install_root)}",
         f"PROJECT_MOUNT_DIR={shlex.quote(plan.project_mount_dir)}",
         f"DATA_ROOT={shlex.quote(plan.config.data_root)}",
@@ -471,6 +475,7 @@ def render_remote_deploy_script(
         '"$VENV_DIR/bin/pip" install --disable-pip-version-check '
         '--no-compile --target "$NODE_AGENT_RUNTIME_DIR/site-packages" "$REMOTE_WHEEL"',
         "tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner "
+        "--mode=\"u+rwX,go+rX,go-w\" "
         '-cf "$NODE_AGENT_RUNTIME_ARCHIVE" -C "$NODE_AGENT_RUNTIME_DIR" .',
         'RUNTIME_OS_ID="$(. /etc/os-release && printf \'%s\' "$ID")"',
         'RUNTIME_VERSION_ID="$(. /etc/os-release && printf \'%s\' "$VERSION_ID")"',
@@ -533,14 +538,14 @@ def render_remote_deploy_script(
         "  [ -s /etc/apt/sources.list.d/docker.sources ] || return 1",
         "  sudo apt-get update || return 1",
         "  for package in $OPTIONAL_SYSTEMD_RUNTIME_PACKAGES; do",
-        "    if apt-cache show \"$package\" >/dev/null 2>&1; then",
-        "      AVAILABLE_OPTIONAL_SYSTEMD_RUNTIME_PACKAGES+=(\"$package\")",
+        '    if apt-cache show "$package" >/dev/null 2>&1; then',
+        '      AVAILABLE_OPTIONAL_SYSTEMD_RUNTIME_PACKAGES+=("$package")',
         "    else",
-        "      echo \"Skipping unavailable optional runtime package: $package\"",
+        '      echo "Skipping unavailable optional runtime package: $package"',
         "    fi",
         "  done",
         "  collect_runtime_kernel_modules || return 1",
-        f"  download_runtime_packages runtime {node_runtime_packages} {bundled_host_runtime_packages} \"${{AVAILABLE_OPTIONAL_SYSTEMD_RUNTIME_PACKAGES[@]}}\" || return 1",
+        f'  download_runtime_packages runtime {node_runtime_packages} {bundled_host_runtime_packages} "${{AVAILABLE_OPTIONAL_SYSTEMD_RUNTIME_PACKAGES[@]}}" || return 1',
         '  sudo chmod -R a+rX "$NODE_PACKAGE_WORK/runtime" || return 1',
         "}",
         "build_runtime_bundle",
@@ -649,6 +654,22 @@ def render_remote_deploy_script(
         "        'sha256': sha256_file(direct_runsc),",
         "        'size': direct_runsc.stat().st_size,",
         "    }",
+        "    sidecars = []",
+        f"    if direct_runsc_commit == {GVISOR_COMMIT!r}:",
+        "        build = json.loads((direct_runsc.parent / 'build-manifest.json').read_text())",
+        "        if build.get('schema') != 2 or build.get('gvisor_commit') != direct_runsc_commit:",
+        "            raise SystemExit('gVisor distribution provenance mismatch')",
+        f"        expected = {{'runsc', *('gvisor-bin/' + name for name in {GVISOR_SIDECARS!r})}}",
+        "        if set(build.get('files', {})) != expected:",
+        "            raise SystemExit('gVisor distribution file set mismatch')",
+        "        for relative in sorted(expected):",
+        "            binary = direct_runsc if relative == 'runsc' else direct_runsc.parent / relative",
+        "            entry = build['files'][relative]",
+        "            if binary.is_symlink() or not binary.is_file() or binary.stat().st_size != entry.get('size') or sha256_file(binary) != entry.get('sha256'):",
+        "                raise SystemExit('gVisor distribution executable mismatch: ' + relative)",
+        "            if relative != 'runsc':",
+        "                sidecars.append({'file': 'runtime/direct/' + relative, 'size': binary.stat().st_size, 'sha256': sha256_file(binary)})",
+        "    manifest_payload['runtime']['direct_runsc']['sidecars'] = sidecars",
         "    manifest_payload['runtime']['managed_init'] = {",
         "        'file': 'runtime/direct/ucloud-sandbox-init',",
         "        'sha256': sha256_file(managed_init),",
@@ -709,6 +730,7 @@ def render_remote_deploy_script(
         "            )",
         "            if runtime_role == 'sandbox':",
         "                archive_paths.append((direct_runsc, 'runtime/direct/runsc'))",
+        "                archive_paths.extend((direct_runsc.parent / item['file'].removeprefix('runtime/direct/'), item['file']) for item in sidecars)",
         "                archive_paths.append((managed_init, 'runtime/direct/ucloud-sandbox-init'))",
         "                archive_paths.extend((",
         "                    (storage_backend, 'runtime/storage-native/backend'),",
@@ -717,6 +739,7 @@ def render_remote_deploy_script(
         "                ))",
         "            for path, arcname in archive_paths:",
         "                info = archive.gettarinfo(str(path), arcname=arcname)",
+        "                info.mode = 0o644 | (info.mode & 0o111)",
         "                info.uid = info.gid = 0",
         "                info.uname = info.gname = ''",
         "                info.mtime = 0",

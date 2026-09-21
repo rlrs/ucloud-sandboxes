@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,9 +12,10 @@ import signal
 import subprocess
 import threading
 import time
-from typing import Callable, Iterator, Sequence
+from typing import BinaryIO, Callable, Iterator, Sequence
 from uuid import uuid4
 
+from .admission import FairCapacity
 from .direct_provisioner import DirectSandboxProvisioner
 from .storage_native_migration import (
     StorageNativeSandboxManifest,
@@ -35,23 +36,53 @@ from .direct_registry import DirectSandboxRegistration
 from .direct_warden import DirectWardenError
 from .hibernation import HibernationState
 from .models import NodeRuntimeMetrics, ResourceQuantity
-from .resource_admission import dynamic_pressure_error, dynamic_request_fits
+from .resource_admission import (
+    dynamic_cpu_pressure_retryable,
+    dynamic_pressure_error,
+    dynamic_request_fits,
+)
+from .runtime_metrics import DEFAULT_CPU_SAMPLE_SECONDS
 from .sandbox import (
     OPERATION_ID_RE,
     SandboxAdmissionClosedError,
     SandboxCapacityUnavailableError,
     SandboxConflictError,
+    SandboxExecAdmissionDeferredError,
     SandboxFileTooLargeError,
     SandboxOperation,
     SandboxRecord,
+    SandboxRestoreBusyError,
     SandboxSpec,
+    SandboxStartupBusyError,
     compose_activity_revision,
     validate_container_path,
 )
 from .telemetry import Telemetry
+from .upload_spool import UploadSpool
 
 
 _LOG = logging.getLogger(__name__)
+
+# A short host spike must expire from the production sampler's 200 ms cache
+# before resampling. Keep a deadline; sustained pressure still rejects work.
+_CPU_ADMISSION_RETRY_SECONDS = 0.21
+_CPU_ADMISSION_DEADLINE_SECONDS = 1.0
+# Leave room in the SDK's default 30-second HTTP deadline for transport and a
+# safe retry response. This bounds one wait, not the number of admitted tools.
+_FILE_ADMISSION_RETRY_WINDOW_SECONDS = 5.0
+
+
+def sandbox_file_write_script() -> str:
+    return (
+        "set -eu; target=$1; dir=${target%/*}; "
+        '[ -n "$dir" ] || dir=/; '
+        '[ ! -d "$target" ] || { echo "file target is a directory" >&2; exit 1; }; '
+        'mkdir -p -- "$dir"; '
+        'tmp=$(mktemp "$dir/.ucloud-write.XXXXXX"); '
+        "trap 'rm -f -- \"$tmp\"' EXIT HUP INT TERM; "
+        'cat >"$tmp"; chmod 0600 "$tmp"; mv -f -- "$tmp" "$target"; '
+        "trap - EXIT HUP INT TERM"
+    )
 
 
 @contextmanager
@@ -119,14 +150,18 @@ class DirectProcessRunner:
         timeout_seconds: float | None,
         max_stdout_bytes: int,
         max_stderr_bytes: int,
+        input_file: BinaryIO | None = None,
     ) -> DirectExecResult:
+        if input_file is not None and input_bytes is not None:
+            raise ValueError("exec stdin must be bytes or a file, not both")
         command = tuple(str(item) for item in argv)
         deadline = (
             None if timeout_seconds is None else time.monotonic() + timeout_seconds
         )
         process = subprocess.Popen(
             command,
-            stdin=subprocess.PIPE if input_bytes is not None else subprocess.DEVNULL,
+            stdin=(input_file if input_file is not None else
+                   subprocess.PIPE if input_bytes is not None else subprocess.DEVNULL),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             bufsize=0,
@@ -226,6 +261,7 @@ class DirectSandboxService:
         *,
         process_runner: DirectProcessRunner | None = None,
         max_concurrent_restores: int = 8,
+        max_concurrent_startups: int = 8,
         idle_park_seconds: float = 0.0,
         deletion_reconcile_interval_seconds: float = 5.0,
         image_reconcile_interval_seconds: float = 300.0,
@@ -233,6 +269,8 @@ class DirectSandboxService:
     ) -> None:
         if max_concurrent_restores < 1:
             raise ValueError("max_concurrent_restores must be positive")
+        if max_concurrent_startups < 1:
+            raise ValueError("max_concurrent_startups must be positive")
         if idle_park_seconds < 0:
             raise ValueError("idle_park_seconds cannot be negative")
         if deletion_reconcile_interval_seconds <= 0:
@@ -243,7 +281,12 @@ class DirectSandboxService:
         self.warden = provisioner.warden
         self.process_runner = process_runner or DirectProcessRunner()
         self.telemetry = telemetry or Telemetry.disabled("direct-sandbox-service")
-        self._restore_slots = threading.Semaphore(max_concurrent_restores)
+        self._restore_slots = FairCapacity(max_concurrent_restores)
+        self._startup_slots = FairCapacity(max_concurrent_startups)
+        self._file_read_slots = FairCapacity(max_concurrent_startups)
+        self.upload_spool = UploadSpool(provisioner.registry.path.parent / "upload-staging")
+        self.admission_wait_seconds = 30.0
+        self._startup_admission_state = threading.local()
         self._active_capacity: ResourceQuantity | None = None
         self._runtime_metrics_provider: (
             Callable[[], NodeRuntimeMetrics | None] | None
@@ -259,6 +302,7 @@ class DirectSandboxService:
         # adjustment, and resets only when a new boot also changes node_epoch.
         self._activity_epoch = time.monotonic_ns()
         self._capacity_guard = threading.Lock()
+        self._admission_changed = threading.Condition(self._capacity_guard)
         self._locks: dict[tuple[str, int], _LifecycleLockEntry] = {}
         self._locks_guard = threading.Lock()
         self._admission_open = True
@@ -278,6 +322,7 @@ class DirectSandboxService:
         self._publication_threads: dict[tuple[str, int], threading.Thread] = {}
         self._publication_errors: dict[tuple[str, int], BaseException] = {}
         self._publication_guard = threading.Lock()
+        self._publication_slots = threading.BoundedSemaphore(16)
         self._published_snapshots: dict[tuple[str, int], StorageNativeMigration] = {}
         self._published_snapshots_guard = threading.Lock()
         self._snapshot_hydration_thread: threading.Thread | None = None
@@ -473,9 +518,9 @@ class DirectSandboxService:
             try:
                 network_manager.refresh_tcp_egress()
             except Exception:
-                # Keep the last exact /32 rules and retry. The initial
-                # reconciliation is synchronous and fails node startup if the
-                # endpoint has never resolved.
+                # Atomic firewall failures retain the preceding rules. Relay
+                # DNS failures are handled separately by installing deny-all.
+                _LOG.exception("network policy reconciliation failed; retrying")
                 continue
 
     def create(
@@ -485,7 +530,7 @@ class DirectSandboxService:
         operation: SandboxOperation,
     ) -> SandboxRecord:
         operation.validate_spec(spec)
-        with self._lock(spec.id, operation.generation):
+        with self.startup_admission(), self._request_lock(spec.id, operation.generation):
             with self._reserve_active_capacity(
                 spec.id,
                 operation.generation,
@@ -516,6 +561,14 @@ class DirectSandboxService:
     def get(self, sandbox_id: str) -> SandboxRecord | None:
         registration = self.provisioner.registry.get(sandbox_id)
         return None if registration is None else self._record(registration)
+
+    def get_snapshot(self, sandbox_id: str) -> SandboxRecord | None:
+        """Read one inventory record without storage RPCs or lifecycle waits."""
+
+        registration = self.provisioner.registry.get(sandbox_id)
+        if registration is None or registration.phase == "deleting":
+            return None
+        return self._record_snapshot(registration)
 
     def list(self) -> tuple[SandboxRecord, ...]:
         return tuple(
@@ -676,6 +729,16 @@ class DirectSandboxService:
                 raise DirectWardenError(
                     f"direct sandbox cannot park from {record.state.value}"
                 )
+            if (
+                background
+                and self._idle_park_seconds > 0
+                and self.idle_for_seconds(
+                    sandbox_id, registration.sandbox_generation
+                ) < self._idle_park_seconds
+            ):
+                # The timer's observation may precede a wake or exec. Check
+                # again under the sandbox lock before acting on that snapshot.
+                return self._record(registration)
             with self.telemetry.span(
                 "sandbox.park",
                 attributes={
@@ -699,6 +762,20 @@ class DirectSandboxService:
                 )
             return self._record(registration)
 
+    def request_storage_publication(self, sandbox_id: str, *, generation: int) -> None:
+        registration = self._require_registration(sandbox_id)
+        with self._request_lock(sandbox_id, generation):
+            registration = self._require_registration(sandbox_id)
+            if registration.sandbox_generation != generation:
+                raise DirectWardenError("publication generation does not own sandbox")
+            lifecycle = self.warden.inspect(registration.to_direct_sandbox())
+            if lifecycle is None or lifecycle.state != HibernationState.PARKED:
+                raise DirectWardenError("only parked sandboxes can publish a snapshot")
+            if self.cached_storage_native_snapshot(sandbox_id, generation) is None:
+                self._start_storage_publication(
+                    registration, operation_id=f"wake-publication:{uuid4().hex}"
+                )
+
     def storage_native_publication_pending(self, sandbox_id: str) -> bool:
         registration = self._require_registration(sandbox_id)
         key = (sandbox_id, registration.sandbox_generation)
@@ -719,6 +796,8 @@ class DirectSandboxService:
         with self._publication_guard:
             existing = self._publication_threads.get(key)
             if existing is not None and existing.is_alive():
+                return
+            if not self._publication_slots.acquire(blocking=False):
                 return
             self._publication_errors.pop(key, None)
             trace_context = self.telemetry.current_trace_headers()
@@ -742,6 +821,8 @@ class DirectSandboxService:
                         with self._publication_guard:
                             self._publication_errors[key] = exc
                         span.set_error(exc)
+                    finally:
+                        self._publication_slots.release()
 
             thread = threading.Thread(
                 target=publish,
@@ -752,7 +833,12 @@ class DirectSandboxService:
                 daemon=True,
             )
             self._publication_threads[key] = thread
-            thread.start()
+            try:
+                thread.start()
+            except BaseException:
+                self._publication_threads.pop(key, None)
+                self._publication_slots.release()
+                raise
 
     def wake(
         self,
@@ -768,7 +854,7 @@ class DirectSandboxService:
         registration = self._require_registration(sandbox_id)
         if registration.sandbox_generation != generation:
             raise DirectWardenError("wake generation does not own direct sandbox")
-        with self._lock(sandbox_id, registration.sandbox_generation):
+        with self._request_lock(sandbox_id, registration.sandbox_generation):
             sandbox = registration.to_direct_sandbox()
             record = self.warden.inspect(sandbox)
             if record is None:
@@ -779,22 +865,25 @@ class DirectSandboxService:
             ):
                 record = self.warden.reconcile(sandbox)
             if record.state == HibernationState.RUNNING:
+                self.mark_activity(sandbox_id, generation)
                 return self._record(registration)
             if record.state != HibernationState.PARKED:
                 record = self.warden.reconcile(sandbox)
             if record.state == HibernationState.PARKED:
                 timings: dict[str, float] = {}
-                with (
-                    self._reserve_active_capacity(
-                        sandbox_id,
-                        generation,
-                        ResourceQuantity(
-                            vcpu=registration.spec.cpus or 0,
-                            memory_mb=registration.spec.memory_mb or 0,
-                        ),
+                with self._restore_admission(
+                    sandbox_id,
+                    generation,
+                    ResourceQuantity(
+                        vcpu=registration.spec.cpus or 0,
+                        memory_mb=registration.spec.memory_mb or 0,
                     ),
-                    self._restore_slots,
                 ):
+                    current = self._require_registration(sandbox_id)
+                    if current.sandbox_generation != generation:
+                        raise DirectWardenError(
+                            "wake generation does not own direct sandbox"
+                        )
                     with self.telemetry.span(
                         "sandbox.wake",
                         attributes={
@@ -816,6 +905,10 @@ class DirectSandboxService:
                     f"direct sandbox cannot wake from {record.state.value}"
                 )
             self._forget_published_snapshot(sandbox_id, generation)
+            # A successful wake starts a fresh idle interval. Otherwise the
+            # idle parker can immediately checkpoint it before the triggering
+            # exec/file request acquires its activity lease.
+            self.mark_activity(sandbox_id, generation)
             return self._record(registration)
 
     def prepare_storage_native_move(
@@ -1095,18 +1188,30 @@ class DirectSandboxService:
         timeout_seconds: float | None = None,
         max_stdout_bytes: int = 256 * 1024 * 1024,
         max_stderr_bytes: int = 16 * 1024 * 1024,
+        expected_generation: int | None = None,
+        input_file: BinaryIO | None = None,
     ) -> DirectExecResult:
         if max_stdout_bytes < 1 or max_stderr_bytes < 1:
             raise ValueError("direct exec output limits must be positive")
         registration = self._require_registration(sandbox_id)
-        with self._lock(sandbox_id, registration.sandbox_generation):
+        with self._request_lock(sandbox_id, registration.sandbox_generation):
+            if expected_generation is not None and (
+                registration.sandbox_generation != expected_generation
+                or self._require_registration(sandbox_id).sandbox_generation != expected_generation
+            ):
+                raise SandboxConflictError("file operation no longer owns direct sandbox generation")
             self.mark_activity(sandbox_id, registration.sandbox_generation)
             sandbox = registration.to_direct_sandbox()
-            self._ensure_running(sandbox)
-            token = self.acquire_exec_capacity(
-                sandbox_id,
-                registration.sandbox_generation,
-            )
+            try:
+                self._ensure_running(sandbox)
+                token = self.acquire_exec_capacity(
+                    sandbox_id,
+                    registration.sandbox_generation,
+                )
+            except SandboxCapacityUnavailableError as exc:
+                # This fence covers only admission, never the command runner.
+                # File helpers may safely retry without repeating a write.
+                raise SandboxExecAdmissionDeferredError(str(exc)) from exc
             try:
                 with self.warden.exec_lease(
                     sandbox,
@@ -1121,6 +1226,7 @@ class DirectSandboxService:
                         timeout_seconds=timeout_seconds,
                         max_stdout_bytes=max_stdout_bytes,
                         max_stderr_bytes=max_stderr_bytes,
+                        **({"input_file": input_file} if input_file is not None else {}),
                     )
             finally:
                 self.release_exec_capacity(token)
@@ -1134,7 +1240,20 @@ class DirectSandboxService:
     ) -> ManagedProcessRecord:
         registration = self._require_managed_registration(sandbox_id)
         uid, gid = self._managed_workload_credentials(registration)
-        payload = spec.control_payload(uid=uid, gid=gid)
+        default_cwd = None
+        if spec.cwd is None:
+            try:
+                config = json.loads(
+                    (Path(registration.bundle) / "config.json").read_text()
+                )
+                default_cwd = config["annotations"][
+                    "dev.ucloud-sandboxes.managed-process.cwd"
+                ]
+            except (OSError, KeyError, TypeError, ValueError) as exc:
+                raise ManagedProcessError(
+                    "managed process default cwd is unavailable"
+                ) from exc
+        payload = spec.control_payload(uid=uid, gid=gid, default_cwd=default_cwd)
         raw = self._managed_control(registration, payload, retry_not_ready=True)
         return ManagedProcessRecord.from_control_response(
             raw,
@@ -1331,12 +1450,24 @@ class DirectSandboxService:
         max_bytes: int,
     ) -> bytes:
         validate_container_path("sandbox file path", path)
-        result = self.exec(
-            sandbox_id,
-            ("/bin/cat", "--", path),
-            max_stdout_bytes=max_bytes,
-            max_stderr_bytes=64 * 1024,
-        )
+        registration = self._require_registration(sandbox_id)
+        command = ("/bin/cat", "--", path)
+        if registration.spec.filesystem.management_helper == "static":
+            command = ("/.ucloud-job-init", "files", "read", path, str(max_bytes))
+        # The node buffers file output. Bound those buffers independently of
+        # cold starts; an implicit wake uses the separate restore queue.
+        if not self._file_read_slots.acquire(timeout=self.admission_wait_seconds):
+            raise SandboxStartupBusyError("node file read admission wait deadline exceeded")
+        try:
+            result = self._file_exec(
+                sandbox_id,
+                command,
+                expected_generation=registration.sandbox_generation,
+                max_stdout_bytes=max_bytes,
+                max_stderr_bytes=64 * 1024,
+            )
+        finally:
+            self._file_read_slots.release()
         if result.exit_code != 0:
             raise DirectWardenError(
                 f"sandbox file read failed with exit {result.exit_code}"
@@ -1348,20 +1479,57 @@ class DirectSandboxService:
         sandbox_id: str,
         path: str,
         payload: bytes,
+        *,
+        expected_generation: int | None = None,
+    ) -> None:
+        self._write_file(
+            sandbox_id, path, len(payload), input_bytes=payload,
+            expected_generation=expected_generation,
+        )
+
+    def write_file_from_file(
+        self,
+        sandbox_id: str,
+        path: str,
+        source: BinaryIO,
+        size: int,
+        *,
+        expected_generation: int,
+    ) -> None:
+        self._write_file(
+            sandbox_id, path, size, input_file=source,
+            expected_generation=expected_generation,
+        )
+
+    def _write_file(
+        self,
+        sandbox_id: str,
+        path: str,
+        size: int,
+        *,
+        input_bytes: bytes | None = None,
+        input_file: BinaryIO | None = None,
+        expected_generation: int | None = None,
     ) -> None:
         validate_container_path("sandbox file path", path)
-        script = (
-            "set -eu; target=$1; dir=${target%/*}; "
-            'mkdir -p -- "$dir"; '
-            'tmp=$(mktemp "$dir/.ucloud-write.XXXXXX"); '
-            "trap 'rm -f -- \"$tmp\"' EXIT HUP INT TERM; "
-            'cat >"$tmp"; chmod 0600 "$tmp"; mv -f -- "$tmp" "$target"; '
-            "trap - EXIT HUP INT TERM"
-        )
-        result = self.exec(
+        registration = self._require_registration(sandbox_id)
+        command = ("/bin/sh", "-c", sandbox_file_write_script(), "ucloud-write", path)
+        if registration.spec.filesystem.management_helper == "static":
+            command = (
+                "/.ucloud-job-init",
+                "files",
+                "write",
+                path,
+                str(max(1, size)),
+            )
+        # File payloads are now either small or disk-backed. They need no cold
+        # start slot and do not prevent tools on other sandboxes from running.
+        result = self._file_exec(
             sandbox_id,
-            ("/bin/sh", "-c", script, "ucloud-write", path),
-            input_bytes=payload,
+            command,
+            expected_generation=(registration.sandbox_generation if expected_generation is None else expected_generation),
+            input_bytes=input_bytes,
+            input_file=input_file,
             max_stdout_bytes=64 * 1024,
             max_stderr_bytes=64 * 1024,
         )
@@ -1370,11 +1538,51 @@ class DirectSandboxService:
                 f"sandbox file write failed with exit {result.exit_code}"
             )
 
+    def _file_exec(
+        self,
+        sandbox_id: str,
+        command: Sequence[str],
+        *,
+        expected_generation: int,
+        max_stdout_bytes: int,
+        max_stderr_bytes: int,
+        input_bytes: bytes | None = None,
+        input_file: BinaryIO | None = None,
+    ) -> DirectExecResult:
+        """Absorb transient admission pressure without replaying dispatched work.
+
+        Each attempt releases the sandbox lock and has no exec reservation while
+        waiting, so park, delete and drain can progress. The original generation
+        remains pinned by the caller across every attempt.
+        """
+        deadline = time.monotonic() + min(
+            self.admission_wait_seconds, _FILE_ADMISSION_RETRY_WINDOW_SECONDS
+        )
+        while True:
+            try:
+                return self.exec(
+                    sandbox_id, command, expected_generation=expected_generation,
+                    input_bytes=input_bytes, max_stdout_bytes=max_stdout_bytes,
+                    max_stderr_bytes=max_stderr_bytes,
+                    **({"input_file": input_file} if input_file is not None else {}),
+                )
+            except SandboxExecAdmissionDeferredError:
+                with self._capacity_guard:
+                    if not self._admission_open:
+                        raise SandboxAdmissionClosedError("direct node admission is closed")
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise
+                    self._admission_changed.wait(min(_CPU_ADMISSION_RETRY_SECONDS, remaining))
+                if time.monotonic() >= deadline:
+                    raise
+
     def close_admission(self) -> None:
         # Once this returns, every admitted create is present in the transient
         # reservation snapshot or has already finished.
         with self._capacity_guard:
             self._admission_open = False
+            self._admission_changed.notify_all()
 
     def open_admission(self) -> None:
         with self._capacity_guard:
@@ -1387,6 +1595,49 @@ class DirectSandboxService:
 
     def _ensure_running(self, sandbox) -> None:
         self.ensure_running_with_timings(sandbox)
+
+    @contextmanager
+    def startup_admission(self):
+        """Queue cold creates and buffered uploads before allocating resources.
+
+        Reentrant upload helpers reuse the outer request's reservation.
+        Restores and resident reads make progress independently of this queue.
+        """
+
+        if getattr(self._startup_admission_state, "admitted", False):
+            yield
+            return
+        if not self._startup_slots.acquire(timeout=self.admission_wait_seconds):
+            raise SandboxStartupBusyError("node startup admission wait deadline exceeded")
+        self._startup_admission_state.admitted = True
+        try:
+            yield
+        finally:
+            self._startup_admission_state.admitted = False
+            self._startup_slots.release()
+
+    @contextmanager
+    def _restore_slot(self):
+        # FIFO admission prevents a retrying wake from repeatedly losing to new
+        # arrivals. Only this sandbox's lifecycle lock is held while waiting.
+        if not self._restore_slots.acquire(timeout=self.admission_wait_seconds):
+            raise SandboxRestoreBusyError("node restore admission wait deadline exceeded")
+        try:
+            yield
+        finally:
+            self._restore_slots.release()
+
+    @contextmanager
+    def _restore_admission(self, sandbox_id: str, generation: int, requested: ResourceQuantity):
+        # Only admission failures before resume begins are safe to replay.
+        # Do not infer that guarantee from a later, fallible inventory read.
+        with ExitStack() as stack:
+            try:
+                stack.enter_context(self._restore_slot())
+                stack.enter_context(self._reserve_active_capacity(sandbox_id, generation, requested))
+            except SandboxCapacityUnavailableError as exc:
+                raise SandboxRestoreBusyError(str(exc)) from exc
+            yield
 
     def ensure_running_with_timings(self, sandbox) -> dict[str, float]:
         started = time.monotonic()
@@ -1411,7 +1662,8 @@ class DirectSandboxService:
             timings["reconcile"] = (time.monotonic() - phase) * 1000
         if record.state == HibernationState.PARKED:
             registration = self._require_registration(sandbox.sandbox_id)
-            with self._reserve_active_capacity(
+            phase = time.monotonic()
+            with self._restore_admission(
                 sandbox.sandbox_id,
                 registration.sandbox_generation,
                 ResourceQuantity(
@@ -1419,37 +1671,118 @@ class DirectSandboxService:
                     memory_mb=registration.spec.memory_mb or 0,
                 ),
             ):
-                phase = time.monotonic()
-                self._restore_slots.acquire()
                 timings["restore_queue"] = (time.monotonic() - phase) * 1000
-                try:
-                    registration = self._require_registration(sandbox.sandbox_id)
-                    phase = time.monotonic()
-                    self.provisioner.ensure_network(registration)
-                    timings["restore_network"] = (time.monotonic() - phase) * 1000
-                    phase = time.monotonic()
-                    warden_timings: dict[str, float] = {}
-                    with _translate_storage_capacity():
-                        record = self.warden.resume(
-                            sandbox,
-                            operation_id=f"wake:{uuid4().hex}",
-                            timings=warden_timings,
-                        )
-                    timings["restore"] = (time.monotonic() - phase) * 1000
-                    timings.update(
-                        {
-                            f"restore_{name}": elapsed_ms
-                            for name, elapsed_ms in warden_timings.items()
-                        }
+                registration = self._require_registration(sandbox.sandbox_id)
+                if registration.sandbox_generation != sandbox.sandbox_generation:
+                    raise DirectWardenError(
+                        "wake generation does not own direct sandbox"
                     )
-                finally:
-                    self._restore_slots.release()
+                phase = time.monotonic()
+                self.provisioner.ensure_network(registration)
+                timings["restore_network"] = (time.monotonic() - phase) * 1000
+                phase = time.monotonic()
+                warden_timings: dict[str, float] = {}
+                with _translate_storage_capacity():
+                    record = self.warden.resume(
+                        sandbox,
+                        operation_id=f"wake:{uuid4().hex}",
+                        timings=warden_timings,
+                    )
+                timings["restore"] = (time.monotonic() - phase) * 1000
+                timings.update(
+                    {
+                        f"restore_{name}": elapsed_ms
+                        for name, elapsed_ms in warden_timings.items()
+                    }
+                )
         if record.state != HibernationState.RUNNING:
             raise DirectWardenError(
                 f"direct sandbox cannot accept traffic in {record.state.value}"
             )
         timings["total"] = (time.monotonic() - started) * 1000
         return timings
+
+    @contextmanager
+    def _active_admission_guard(
+        self,
+        requested: ResourceQuantity,
+        *,
+        check_shape: bool,
+        check_cpu: bool = True,
+        check_memory_pressure: bool = True,
+        validate_owner: Callable[[], None] | None = None,
+    ):
+        """Yield the capacity lock only to publish an admitted operation's lease.
+
+        Sampling and condition waits release the lock. A waiting operation owns
+        no reservation yet, so drain may close admission and prove the node
+        empty; every attempt rechecks that fence before it can publish a lease.
+        Existing lifecycle locks/leases keep create, wake and exec owners stable.
+        """
+
+        deadline = time.monotonic() + _CPU_ADMISSION_DEADLINE_SECONDS
+        previous_error: str | None = None
+
+        def check_capacity() -> ResourceQuantity | None:
+            if not self._admission_open:
+                raise SandboxAdmissionClosedError("direct node admission is closed")
+            capacity = self._active_capacity
+            if capacity is not None and check_shape:
+                if not dynamic_request_fits(requested, ResourceQuantity(), capacity):
+                    raise SandboxCapacityUnavailableError(
+                        "sandbox CPU or memory request exceeds the physical node shape"
+                    )
+            return capacity
+
+        while True:
+            with self._capacity_guard:
+                capacity = check_capacity()
+                if previous_error is not None and time.monotonic() >= deadline:
+                    raise SandboxCapacityUnavailableError(previous_error)
+                metrics_provider = (
+                    self._runtime_metrics_provider if capacity is not None else None
+                )
+            # Production samples single-flight; never invalidate the shared
+            # cache or hold up other sandboxes/drain while /proc is sampled.
+            metrics = metrics_provider() if metrics_provider is not None else None
+            if validate_owner is not None:
+                validate_owner()
+            with self._capacity_guard:
+                capacity = check_capacity()
+                if (
+                    capacity is not None
+                    and metrics_provider is not self._runtime_metrics_provider
+                ):
+                    raise SandboxCapacityUnavailableError(
+                        "direct node runtime metrics provider changed during admission"
+                    )
+                pressure_error = (
+                    dynamic_pressure_error(
+                        metrics, requested, check_cpu=check_cpu,
+                        check_memory_pressure=check_memory_pressure,
+                    )
+                    if capacity is not None
+                    else None
+                )
+                now = time.monotonic()
+                if previous_error is not None and now >= deadline:
+                    # A slow collector must not grant an operation after its
+                    # pressure retry deadline, even if its late sample is low.
+                    raise SandboxCapacityUnavailableError(previous_error)
+                if pressure_error is None:
+                    yield
+                    return
+                if not dynamic_cpu_pressure_retryable(metrics, requested):
+                    raise SandboxCapacityUnavailableError(pressure_error)
+                # Do not start a retry unless its backoff and the normal CPU
+                # sampling interval both fit within the one-second deadline.
+                retry_at = now + _CPU_ADMISSION_RETRY_SECONDS
+                if retry_at + DEFAULT_CPU_SAMPLE_SECONDS >= deadline:
+                    raise SandboxCapacityUnavailableError(pressure_error)
+                previous_error = pressure_error
+                while time.monotonic() < retry_at:
+                    check_capacity()
+                    self._admission_changed.wait(retry_at - time.monotonic())
 
     @contextmanager
     def _reserve_active_capacity(
@@ -1459,36 +1792,11 @@ class DirectSandboxService:
         requested: ResourceQuantity,
     ):
         key = (sandbox_id, generation)
-        # Keep provider work outside the reservation guard. The production node
-        # provider single-flights adjacent /proc samples; explicitly configured
-        # service providers retain their own concurrency and freshness policy.
-        with self._capacity_guard:
-            metrics_provider = (
-                self._runtime_metrics_provider
-                if self._active_capacity is not None
-                else None
-            )
-        metrics = metrics_provider() if metrics_provider is not None else None
-        with self._capacity_guard:
-            if not self._admission_open:
-                raise SandboxAdmissionClosedError("direct node admission is closed")
-            capacity = self._active_capacity
-            if capacity is not None:
-                active_requested = ResourceQuantity(
-                    vcpu=requested.vcpu,
-                    memory_mb=requested.memory_mb,
-                )
-                if not dynamic_request_fits(
-                    active_requested,
-                    ResourceQuantity(),
-                    capacity,
-                ):
-                    raise SandboxCapacityUnavailableError(
-                        "sandbox CPU or memory request exceeds the physical node shape"
-                    )
-                pressure_error = dynamic_pressure_error(metrics, active_requested)
-                if pressure_error is not None:
-                    raise SandboxCapacityUnavailableError(pressure_error)
+        active_requested = ResourceQuantity(
+            vcpu=requested.vcpu,
+            memory_mb=requested.memory_mb,
+        )
+        with self._active_admission_guard(active_requested, check_shape=True):
             self._active_reservations[key] = requested
             self._activity_epoch += 1
         try:
@@ -1499,37 +1807,35 @@ class DirectSandboxService:
                 self._activity_epoch += 1
 
     def acquire_exec_capacity(self, sandbox_id: str, generation: int) -> str:
-        """Admit an exec from live node pressure and track its lifetime."""
+        """Fence an existing sandbox's exec and retain the memory safety floor."""
 
         registration = self._require_registration(sandbox_id)
         if registration.sandbox_generation != generation:
             raise SandboxConflictError("exec generation does not own direct sandbox")
         token = f"exec:{uuid4().hex}"
         key = (sandbox_id, generation)
-        # Keep provider work outside the capacity guard. The production node
-        # provider single-flights adjacent /proc samples; explicitly configured
-        # service providers retain their own concurrency and freshness policy.
-        with self._capacity_guard:
-            metrics_provider = (
-                self._runtime_metrics_provider
-                if self._active_capacity is not None
-                else None
-            )
-        metrics = metrics_provider() if metrics_provider is not None else None
-        with self._capacity_guard:
-            if not self._admission_open:
-                raise SandboxAdmissionClosedError("direct node admission is closed")
-            if self._active_capacity is not None:
-                # A sandbox's configured limits bound that sandbox; they do not
-                # describe what its next command will consume. Charging the
-                # complete shape here artificially capped a 32-vCPU worker at
-                # eight concurrent execs from 4-vCPU sandboxes even when the
-                # host was mostly idle. Admit from current host CPU, load,
-                # memory and PSI instead. ExecSessionManager retains the hard
-                # session-count backstop for admission bursts between samples.
-                pressure_error = dynamic_pressure_error(metrics, ResourceQuantity())
-                if pressure_error is not None:
-                    raise SandboxCapacityUnavailableError(pressure_error)
+
+        def validate_owner() -> None:
+            current = self._require_registration(sandbox_id)
+            if current.sandbox_generation != generation:
+                raise SandboxConflictError(
+                    "exec generation does not own direct sandbox"
+                )
+
+        # An existing sandbox already shares CPU through its cgroup. Rejecting
+        # commands (including file reads) at a sampled CPU percentage prevents
+        # that workload from making progress without adding physical capacity.
+        # PSI includes cache reclaim and stalls inside limited sandboxes. It is
+        # a placement signal, not proof that a resident sandbox cannot run its
+        # next command. Let cgroups govern its workload; retain the physical
+        # memory floor, generation ownership and full-lifetime fencing.
+        with self._active_admission_guard(
+            ResourceQuantity(),
+            check_shape=False,
+            check_cpu=False,
+            check_memory_pressure=False,
+            validate_owner=validate_owner,
+        ):
             # Keep a zero-resource lease so drain fencing, idle parking and
             # active-operation telemetry still cover the full exec lifetime.
             self._active_exec_reservations[token] = (key, ResourceQuantity())
@@ -1601,6 +1907,13 @@ class DirectSandboxService:
                 raise RuntimeError("direct lifecycle lock reference underflow")
             if entry.users == 0 and self._locks.get(key) is entry:
                 self._locks.pop(key)
+
+    @contextmanager
+    def _request_lock(self, sandbox_id: str, generation: int) -> Iterator[None]:
+        with self._try_lock(sandbox_id, generation) as acquired:
+            if not acquired:
+                raise SandboxStartupBusyError("sandbox lifecycle is busy")
+            yield
 
     @contextmanager
     def _lock(self, sandbox_id: str, generation: int) -> Iterator[None]:

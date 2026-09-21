@@ -84,6 +84,24 @@ The worker uses those same CPU, load, memory, swap, and PSI thresholds for
 create, wake, and exec. It no longer has a second additive CPU/memory gate that
 can disagree with gateway placement.
 
+CPU utilization at or above 90% blocks admission. A one-minute load average at
+or above 1.25 times the CPU count blocks admission only when current CPU usage
+is also at least 80%, or when that CPU sample is unavailable. Linux load average
+includes both runnable tasks and uninterruptible sleepers, as documented in
+[the kernel load-average implementation](https://github.com/torvalds/linux/blob/master/kernel/sched/loadavg.c#L16).
+The former unconditional load gate could reject an exec as CPU overloaded
+during disk flushes or while their load average decayed, despite spare CPU.
+The corroborating sample prevents that rejection; it does not establish that
+storage throughput or latency is healthy. Density qualification must still pass
+its measured action, park, wake and queued-completion targets.
+
+Admission always retains at least 2 GiB of available physical RAM when memory
+telemetry is known, even when swap remains free. Above that floor, available RAM
+plus free swap must cover the larger of 2 GiB and the requested memory limit.
+Swap can absorb cold pages; it is not extra resident working-set capacity. OCI
+memory limits permit an equal additional swap allowance by expressing the
+combined bound as twice `memory_mb`.
+
 Autoscaler placement uses the same dynamic accounting: CPU and memory are
 reusable after the per-sandbox physical-shape check, while each planned
 placement consumes hard disk. Live pressure remains a separate retained-node
@@ -116,25 +134,44 @@ pressure rather than an additive sum of sandbox limits. Adding a node helps new
 placements and later wakes; it cannot relocate an exec for a sandbox that is
 already running on another node.
 
-Create pressure is an amplifier for resident host pressure, not an independent
-reason to buy capacity. Two sampled `gateway_busy` rejections in the default
-30-second window prove that all gateway create slots are occupied, but another
-VM is requested only when the ordinary sustained CPU, memory, PSI, storage, or
-image-materialization queue independently proves that it can help. One full
-gateway-limit worth of rejected requests confirms saturation, but does not
-override the configured bound. `create_pressure_max_headroom_nodes` is the
-maximum temporary node headroom this feedback loop may request. Durable pending
-create demand can still grow the fleet toward `max_nodes` over later cycles.
-Already-provisioning nodes count toward both targets, preventing repeated
-scale-up every cycle.
+Sampled gateway create rejections amplify sustained CPU, memory, PSI, storage
+or image-materialization pressure. HTTP rejection counts alone do not buy VMs.
+There is also an earlier, bounded path for a genuine startup queue: at least
+`create_target_concurrency_per_node` durable capacity requests must be waiting,
+the oldest such request must reach `create_pressure_window_seconds` (30 seconds
+by default), and the ready workers must be occupied with fresh observations.
+This queue can justify headroom even while CPU is below its pressure threshold.
+An idle ready worker suppresses this early path. Warm reservations, expired
+requests and suppressed image/publication errors do not age the capacity queue.
 
-Accepted create and wake retries add a second, independent signal. Their count
-is divided by `create_target_concurrency_per_node` and adds pipeline nodes only
-while real node pressure is present. This does not sum nominal sandbox CPU or
-memory limits: runtime admission and exec remain based on measured usage, while
-the retry backlog describes work the current fleet has already failed to admit.
-The value comes only from `policy.create_target_concurrency_per_node`; gateway
-placement and autoscaler policy do not carry separate defaults.
+Both feedback paths obey `create_pressure_max_headroom_nodes`: the default
+permits one temporary worker above the hard-resource baseline. Provisioning
+workers count toward the target, so repeated retries do not buy a new worker
+every cycle. The fleet and provisioning caps still apply. Once ordinary host
+pressure is also sustained, the existing pressure-confirmed pending-demand
+path can grow the fleet toward `max_nodes`.
+
+`gateway_max_concurrent_sandbox_creates` is an optional fleet-wide create
+override, disabled by default (`0`). A positive override queues creates in FIFO
+order. Wakes, streamed reads and small control operations bypass it. Buffered
+uploads reserve bytes against a separate memory budget before their bodies are
+read. Expired admission closes the connection with explicit retryable
+backpressure so unread bytes cannot become another request.
+
+New workers receive `policy.create_target_concurrency_per_node` as their
+`--max-concurrent-startups` limit. Creates/uploads, restores and buffered reads
+use independent FIFO queues, so bulk startup cannot consume restore capacity.
+A restore does not also need a startup slot. Admission waits are deadline-bound;
+physical disk reservations and live memory/resource checks remain authoritative.
+Same-sandbox lifecycle contention in interactive create/wake/exec paths returns
+backpressure instead of waiting indefinitely for a lifecycle lock. Long-running
+user commands do not hold a startup slot merely because they are running.
+
+Capacity rejection occurs before command execution and carries a precise
+retryable error code plus `Retry-After`. The SDK retries these explicit fences
+with jitter within the caller's deadline. It does not blindly replay an upload
+or exec after an ambiguous timeout. Clients must use the matching SDK update;
+older clients can surface the new 503 rejection directly.
 
 Placement still prefers an existing immutable image copy. At eight concurrent
 creates on that node it may spill to another ready node, using registry-layer
@@ -146,7 +183,8 @@ Node heartbeats expose active sandbox creates plus active, waiting, and maximum
 image-materialization operations. Queue pressure is `waiting / concurrency`:
 occupied slots are productive capacity and cannot trigger scale-up without a queue.
 Gateway saturation can widen a confirmed burst but cannot manufacture pressure
-from healthy cold creates.
+from healthy cold creates. The durable-capacity-queue path above supplies the
+independent, bounded early-startup signal.
 
 Pending or active image builds keep one small runnable sandbox shape warm (1
 vCPU, 512 MiB memory, and 1 GiB disk). They do not reserve an entire pristine
@@ -250,31 +288,37 @@ against the hard provider and `max_provisioning_nodes` limits until the adapter
 reports it final. This prevents duplicate submissions from bypassing the cap
 while a billed or provider-visible job still exists.
 
-This weighting applies only to the initial pre-start `SUSPENDED` state. A
-post-start suspension is destructive node loss, contributes neither capacity
-nor a provider-limit slot to replacement planning, and is terminated directly.
-UCloud's current job state cannot prove VM continuity, so the UCloud adapter
-checks ordered lifecycle history for every managed running instance. Provider
-lifecycle evidence and the operation journal keep the loss classification
-latched if inventory later reports the destroyed instance as running again. A
-lost guest is never drained or sent sandbox/storage cleanup requests; its routes
-are fenced as `node_lost` and its provider job is stopped immediately. Hetzner
-does not enable this UCloud-specific history probe and retains its native server
-lifecycle semantics.
+This weighting applies only to the initial pre-start `SUSPENDED` state. For
+UCloud, a post-start suspension or a historical RUNNING → SUSPENDED → RUNNING
+sequence means **unavailable**, not safe to destroy. Provider readiness can
+change without loss of the guest. The controller quarantines the node from new
+placement while retaining its routes and inventory. A quarantine persists
+across heartbeats and controller restarts. Recovery requires current provider
+RUNNING state plus a fresh authenticated direct heartbeat with a verified guest
+boot identity and complete inventory matching the assigned route generations,
+create operations, and specifications. A plain RUNNING status or heartbeat
+arrival cannot clear quarantine.
 
-`unreachable_stop_after_seconds` is a separate, conservative eviction lease for
-a running VM whose heartbeat has disappeared. After the lease expires, the VM
-is normally eligible for provider termination only when it owns no gateway
-routes and its last complete heartbeat inventory was empty, or when it never
-produced a heartbeat at all. UCloud is the explicit exception: a guest lost
-after reaching `RUNNING` cannot be recovered, and UCloud may expose no later
-suspension update. An expired UCloud heartbeat lease therefore fences the node
-as permanent loss even when its last inventory or gateway routes were non-empty.
-The controller stops the provider job directly, marks those routes `node_lost`,
-and requests replacement capacity; it does not attempt cleanup against the lost
-guest. Hetzner retains the recoverable-host, empty-inventory safeguard. Set the
-timeout to `0` to disable unreachable-node eviction. Fresh nodes continue to use
-the normal drain-token handshake described below.
+An authenticated changed guest boot retires routes from the old incarnation;
+fully published portable snapshots remain recoverable. It does not authorize
+termination of the new guest. Old UCloud destructive stop authorizations are
+invalidated before replay; already submitted calls remain recorded as such.
+
+`unreachable_stop_after_seconds` retains the other providers' conservative
+empty-worker eviction behavior. UCloud does not treat elapsed heartbeat silence,
+even combined with a failed direct probe, as authority to delete an occupied VM.
+Workers that have reported a heartbeat must recover continuity and complete the
+ordinary drain handshake before automatic idle termination. A never-heartbeating
+VM with no assigned routes can still be retired under the existing unreachable
+startup policy. Quarantined jobs retain their provider/billing slots; replacement
+planning does not pretend those VMs have ceased to exist. A persistently
+unavailable VM may therefore need operator investigation and explicit cleanup.
+
+For controlled incident reproduction, use a disposable pre-provisioned pool
+with the executing autoscaler stopped. `max_stop_per_cycle=0` is not a global
+provider-mutation kill switch. Preserve guest boot IDs, provider history, and
+stop-journal evidence before cleanup; provider SUSPENDED timestamps alone cannot
+establish an unrecoverable guest failure.
 
 `scale_down_idle_seconds` prevents the controller from stopping a VM immediately
 after its last sandbox exits. The control plane records when a heartbeat first
@@ -438,14 +482,55 @@ Scale-down requires a proven empty node or detached, durable parked storage:
 Detachment is different from migration: it does not need another running
 worker and does not immediately download the sandbox again. A later wake
 selects a node, imports the published descriptor, and activates it there. An
-attached parked sandbox still takes the fast same-worker wake path. An
+attached parked sandbox normally takes the fast same-worker wake path; the
+optional consolidation policy below can select an occupied destination. An
 ambiguous eviction leaves the route in `detaching`; it cannot be counted as
 free until a successful retry or a fresh complete heartbeat proves the local
 incarnation absent.
 
+### Consolidating on wake
+
+`policy.parked_wake_consolidation_enabled` defaults to `false`, including when
+loading an older deployment configuration without that field. When enabled,
+a published attached park can resume on an already occupied worker even if
+its current worker could run it. This lets sparsely used nodes empty over
+successive park/wake cycles and become eligible for normal idle scale-down.
+Running processes are not forcibly checkpointed or moved by this policy.
+
+Optional relocation requires:
+
+- source CPU at or below half the configured CPU target (35% with the default
+  70% target), and a destination with at least as many active sandboxes;
+- a strictly lower immutable job/node rank, so consolidation cannot bounce a
+  sandbox back and forth as utilization changes;
+- fresh complete inventories and runtime samples, open admission, and no
+  concurrent creates or storage errors/queues on either worker;
+- a cached exact image on the destination, normal migration capabilities and
+  disk admission, plus room for the full waking CPU/memory shape under the
+  configured utilization targets and PSI/storage pressure limits;
+- no active migration anywhere, no creating/waking/unknown routes on the
+  destination, and expiration of the gateway's 60-second consolidation
+  cooldown. The cooldown applies after reservation and successful completion;
+  it is process-local, while the active migration reservation is durable.
+
+The gateway reserves through the existing fenced migration journal while
+holding the placement lock, then performs transfer outside that lock. Retries
+resume the same migration instead of waking the old incarnation locally.
+The `sandbox_wake_consolidation` metric event records the sandbox, migration,
+source job, and destination job. If optional placement has no suitable target,
+the normal local wake remains available. Necessary relocation from a draining,
+missing, or pressured source remains independent of these optional limits.
+
+This is incremental consolidation at existing park points. It does not
+proactively evacuate running or non-parkable workloads, guarantee a minimum
+worker count, or bypass the configured idle grace and drain/stop proof.
+
 Publication also bounds the immutable snapshot chain. The prospective old
 remote layers plus new local sealed delta are compacted when they exceed eight
-layers or 4 GiB. Compaction streams one flattened layer directly to the
+layers or 4 GiB of accumulated delta data beyond the oldest base layer. Local
+sealed-layer sizes are estimated from allocated bytes, excluding sparse holes.
+An already large compacted base therefore does not force another full rewrite
+after each small delta. Compaction streams one flattened layer directly to the
 Registry; it does not allocate another virtual-disk-sized worker file. The old
 publication and local delta retain authority until the replacement manifest is
 durable, so a compaction failure blocks detachment and scale-down rather than

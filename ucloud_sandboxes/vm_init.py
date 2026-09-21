@@ -16,6 +16,7 @@ from typing import Literal
 from .deployment import DEFAULT_INIT_VERSION, package_version
 from .direct_network import DirectNetworkTcpEgress
 from .models import ResourceQuantity
+from .gvisor_distribution import GVISOR_COMMIT, GVISOR_SIDECARS
 from .storage_native_publication import DEFAULT_MAX_CONCURRENT_PUBLICATIONS
 
 
@@ -35,8 +36,8 @@ DEFAULT_DOCKER_MAX_CONCURRENT_DOWNLOADS = 3
 DEFAULT_MAX_CONCURRENT_IMAGE_PULLS = 8
 DEFAULT_REMOTE_PACKAGE_DIR = "/var/cache/ucloud-sandboxes/init-packages"
 DEFAULT_REMOTE_PACKAGE_FILENAME = "node-package.tar.gz"
-STATIC_RUNTIME_RECEIPT_SCHEMA = 1
-DEFAULT_DIRECT_RUNSC = "/usr/local/libexec/ucloud-direct-runsc"
+STATIC_RUNTIME_RECEIPT_SCHEMA = 2
+DEFAULT_DIRECT_RUNSC = "/usr/local/libexec/ucloud-gvisor/runsc"
 DEFAULT_MANAGED_INIT = "/usr/local/libexec/ucloud-sandbox-init"
 DEFAULT_STORAGE_NATIVE_BACKEND = "/usr/local/libexec/ucloud-storage-native-backend"
 DEFAULT_STORAGE_NATIVE_BACKEND_SOCKET = (
@@ -67,6 +68,14 @@ DEFAULT_STORAGE_NATIVE_MAX_UBLK_DEVICES = 0
 DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_LAYERS = 8
 DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_BYTES = 4 * 1024 * 1024 * 1024
 PINNED_STORAGE_NATIVE_AGENTENV_COMMIT = "db1492b7915a408b37f863c9e3a34b2ccb2fb1b0"
+PINNED_STORAGE_NATIVE_PATCHES = (
+    "agentenv-streaming-dense-export.patch",
+    "agentenv-pooled-delete.patch",
+    "agentenv-owner-identity.patch",
+    "agentenv-owner-transitions.patch",
+    "agentenv-premerged-identity.patch",
+    "agentenv-device-reuse.patch",
+)
 DEFAULT_DIRECT_DISK_HEADROOM_MB = 16 * 1024
 DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES = 8
 
@@ -93,6 +102,9 @@ def vm_runtime_profile(provider_kind: str) -> VmRuntimeProfile:
 
 
 SANDBOX_RUNTIME_PACKAGES = (
+    "nftables",
+    "iproute2",
+    "iptables",
     "xfsprogs",
     "docker-ce",
     "docker-ce-cli",
@@ -116,6 +128,8 @@ RUNTIME_KERNEL_MODULES = (
     "veth",
     "nf_tables",
     "nft_chain_nat",
+    "nft_nat",
+    "nft_ct",
     "nft_compat",
     "ip_tables",
     "iptable_nat",
@@ -172,6 +186,7 @@ class VmInitOptions:
     direct_runsc_commit: str = ""
     direct_network: str = "none"
     direct_network_allow_tcp: tuple[str, ...] = ()
+    network_relays: dict[str, str] | None = None
     storage_native_registry_url: str = ""
     storage_native_repository: str = DEFAULT_STORAGE_NATIVE_REPOSITORY
     storage_native_snapshot_backend: Literal["registry", "s3"] = "registry"
@@ -191,6 +206,7 @@ class VmInitOptions:
     )
     direct_disk_headroom_mb: int = DEFAULT_DIRECT_DISK_HEADROOM_MB
     direct_max_concurrent_restores: int = DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES
+    direct_max_concurrent_startups: int = 8
     direct_idle_park_seconds: float = 0.0
     heartbeat_interval_seconds: int = DEFAULT_HEARTBEAT_INTERVAL_SECONDS
     labels: dict[str, str] | None = None
@@ -335,6 +351,12 @@ def render_vm_init_script(options: VmInitOptions) -> str:
             " --direct-network-allow-tcp " + shlex.quote(endpoint)
             for endpoint in options.direct_network_allow_tcp
         )
+        if options.network_relays:
+            direct_network_allow_flags += " --network-relays-json " + shlex.quote(
+                json.dumps(
+                    options.network_relays, sort_keys=True, separators=(",", ":")
+                )
+            )
         direct_agent_command = (
             f"{agent_bin} serve-direct-node-agent"
             " --job-id ${UCLOUD_JOB_ID}"
@@ -355,6 +377,7 @@ def render_vm_init_script(options: VmInitOptions) -> str:
             " --managed-init-binary ${UCLOUD_MANAGED_INIT}"
             " --storage-native-socket ${UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET}"
             " --max-concurrent-restores ${UCLOUD_DIRECT_MAX_CONCURRENT_RESTORES}"
+            " --max-concurrent-startups ${UCLOUD_DIRECT_MAX_CONCURRENT_STARTUPS}"
             " --max-concurrent-image-pulls ${UCLOUD_MAX_CONCURRENT_IMAGE_PULLS}"
             " --idle-park-seconds ${UCLOUD_DIRECT_IDLE_PARK_SECONDS}"
             " --total-vcpu ${UCLOUD_TOTAL_VCPU}"
@@ -469,6 +492,7 @@ UCLOUD_DIRECT_INIT_BINARY=/usr/libexec/docker-init
 UCLOUD_DIRECT_IMAGE_CACHE_ROOT=$UCLOUD_DOCKER_QUOTA_ROOT/ucloud-rootfs-cache
 UCLOUD_DIRECT_WRITABLE_DISK_MB={writable_disk_mb}
 UCLOUD_DIRECT_MAX_CONCURRENT_RESTORES={options.direct_max_concurrent_restores}
+UCLOUD_DIRECT_MAX_CONCURRENT_STARTUPS={options.direct_max_concurrent_startups}
 UCLOUD_DIRECT_IDLE_PARK_SECONDS={options.direct_idle_park_seconds}
 UCLOUD_STORAGE_NATIVE_BACKEND={shlex.quote(storage_native_backend)}
 UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET={shlex.quote(storage_native_backend_socket)}
@@ -622,7 +646,12 @@ if [ -f "$UCLOUD_STATIC_RUNTIME_RECEIPT" ] \
     if [ "$UCLOUD_NODE_ROLE" != sandbox ] \
       || {{ [ -x "$UCLOUD_DIRECT_RUNSC" ] \
         && [ -x "$UCLOUD_MANAGED_INIT" ] \
-        && [ -x "$UCLOUD_STORAGE_NATIVE_BACKEND" ]; }}; then
+        && [ -x "$UCLOUD_STORAGE_NATIVE_BACKEND" ] \
+        && {{ [ "$UCLOUD_DIRECT_RUNSC_COMMIT" != {GVISOR_COMMIT} ] \
+          || {{ [ -x "$(dirname \"$UCLOUD_DIRECT_RUNSC\")/gvisor-bin/checkpointgofer" ] \
+            && [ -x "$(dirname \"$UCLOUD_DIRECT_RUNSC\")/gvisor-bin/gvisor-sentry-prewarmer" ] \
+            && [ -x "$(dirname \"$UCLOUD_DIRECT_RUNSC\")/gvisor-bin/gvisor_sentry" ] \
+            && [ -x "$(dirname \"$UCLOUD_DIRECT_RUNSC\")/gvisor-bin/runsc-metric-server" ]; }}; }}; }}; then
       UCLOUD_STATIC_RUNTIME_READY=1
       echo "Using snapshot-baked runtime $UCLOUD_PACKAGE_BUNDLE_SHA256"
     fi
@@ -704,8 +733,8 @@ def verified_artifact(metadata: dict, file_name: str, label: str) -> str:
     if not re.fullmatch(r"[0-9a-f]{{64}}", sha256) or not isinstance(size, int) or size <= 0:
         raise SystemExit(f"invalid {{label}} metadata")
     path = bundle_dir / file_name
-    if not path.is_file():
-        raise SystemExit(f"missing {{label}}")
+    if path.is_symlink() or not path.is_file():
+        raise SystemExit(f"missing or nonregular {{label}}")
     if path.stat().st_size != size:
         raise SystemExit(f"{{label}} size mismatch")
     if digest(path) != sha256:
@@ -793,6 +822,22 @@ if runtime.get("role") == "sandbox":
         direct, "runtime/direct/runsc", "direct runtime binary"
     )
 
+    sidecars = direct.get("sidecars", [])
+    required_sidecars = {{"runtime/direct/gvisor-bin/" + name for name in {GVISOR_SIDECARS!r}}} if commit == {GVISOR_COMMIT!r} else set()
+    if not isinstance(sidecars, list) or any(not isinstance(item, dict) for item in sidecars):
+        raise SystemExit("invalid gVisor companion metadata")
+    declared_sidecars = {{item.get("file") for item in sidecars}}
+    if declared_sidecars != required_sidecars or len(sidecars) != len(required_sidecars):
+        raise SystemExit("gVisor companion executable set mismatch")
+    sidecar_dir = bundle_dir / "runtime/direct/gvisor-bin"
+    if sidecar_dir.is_symlink():
+        raise SystemExit("gVisor companion directory cannot be a symlink")
+    actual_sidecars = {{"runtime/direct/gvisor-bin/" + path.name for path in sidecar_dir.iterdir()}} if sidecar_dir.exists() else set()
+    if actual_sidecars != required_sidecars:
+        raise SystemExit("gVisor companion files do not match metadata")
+    for item in sidecars:
+        verified_artifact(item, item["file"], "gVisor companion executable")
+
     managed = runtime.get("managed_init")
     if not isinstance(managed, dict):
         raise SystemExit("managed-process init metadata is absent")
@@ -837,11 +882,7 @@ if runtime.get("role") == "sandbox":
         raise SystemExit("storage-native license checksum mismatch")
     build = json.loads(paths["manifest_file"].read_text(encoding="utf-8"))
     patches = build.get("patches")
-    expected_patches = [
-        "agentenv-streaming-dense-export.patch",
-        "agentenv-pooled-delete.patch",
-        "agentenv-owner-identity.patch",
-    ]
+    expected_patches = {list(PINNED_STORAGE_NATIVE_PATCHES)!r}
     if (
         build.get("schema") != 3
         or build.get("agentenv_commit") != storage["agentenv_commit"]
@@ -1122,6 +1163,15 @@ if [ "$UCLOUD_SWAP_GB" -gt 0 ]; then
 fi
 log_init_phase "swap"
 
+if [ "$UCLOUD_NODE_ROLE" = sandbox ]; then
+  # Buffered snapshot/rootfs I/O can fill page cache while MemAvailable stays
+  # high. Give background reclaim headroom before allocations stall in direct
+  # reclaim/compaction. This is a free-page watermark, not an admission cap.
+  echo "vm.watermark_scale_factor=100" \
+    | $SUDO tee /etc/sysctl.d/90-ucloud-sandbox-reclaim.conf >/dev/null
+  $SUDO sysctl -q -p /etc/sysctl.d/90-ucloud-sandbox-reclaim.conf
+fi
+
 if [ "$UCLOUD_DOCKER_QUOTA_IMAGE_GB" -gt 0 ]; then
   echo "Preparing XFS/project-quota Docker data root"
   if ! grep -qw xfs /proc/filesystems; then
@@ -1160,6 +1210,16 @@ if [ "$UCLOUD_NODE_ROLE" = sandbox ]; then
     $SUDO install -d -m 0755 -o root -g root "$(dirname "$UCLOUD_DIRECT_RUNSC")"
     $SUDO install -m 0755 -o root -g root "$UCLOUD_BUNDLED_DIRECT_RUNSC" "$UCLOUD_DIRECT_RUNSC"
     printf '%s  %s\n' "$UCLOUD_BUNDLED_DIRECT_RUNSC_SHA256" "$UCLOUD_DIRECT_RUNSC" | sha256sum --check --status -
+    if [ "$UCLOUD_DIRECT_RUNSC_COMMIT" = {GVISOR_COMMIT} ]; then
+      $SUDO install -d -m 0755 -o root -g root "$(dirname "$UCLOUD_DIRECT_RUNSC")/gvisor-bin"
+      for sidecar in {" ".join(GVISOR_SIDECARS)}; do
+        $SUDO install -m 0755 -o root -g root \
+          "$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/direct/gvisor-bin/$sidecar" \
+          "$(dirname "$UCLOUD_DIRECT_RUNSC")/gvisor-bin/$sidecar"
+        cmp "$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/direct/gvisor-bin/$sidecar" \
+          "$(dirname "$UCLOUD_DIRECT_RUNSC")/gvisor-bin/$sidecar"
+      done
+    fi
     "$UCLOUD_DIRECT_RUNSC" --version >/dev/null
     echo "Installing bundle-verified managed-process init"
     $SUDO install -m 0755 -o root -g root "$UCLOUD_BUNDLED_MANAGED_INIT" "$UCLOUD_MANAGED_INIT"
@@ -1480,6 +1540,7 @@ UCLOUD_DIRECT_INIT_BINARY=$UCLOUD_DIRECT_INIT_BINARY
 UCLOUD_DIRECT_IMAGE_CACHE_ROOT=$UCLOUD_DIRECT_IMAGE_CACHE_ROOT
 UCLOUD_DIRECT_WRITABLE_DISK_MB=$UCLOUD_DIRECT_WRITABLE_DISK_MB
 UCLOUD_DIRECT_MAX_CONCURRENT_RESTORES=$UCLOUD_DIRECT_MAX_CONCURRENT_RESTORES
+UCLOUD_DIRECT_MAX_CONCURRENT_STARTUPS=$UCLOUD_DIRECT_MAX_CONCURRENT_STARTUPS
 UCLOUD_STORAGE_NATIVE_BACKEND=$UCLOUD_STORAGE_NATIVE_BACKEND
 UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET=$UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET
 UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET=$UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET
@@ -1584,7 +1645,9 @@ User=$UCLOUD_SERVICE_USER
 Group=$UCLOUD_SERVICE_GROUP
 SupplementaryGroups=docker
 EnvironmentFile={env_file}
-WorkingDirectory={work_dir}
+# Python -m adds its working directory to the import search path. Keep the
+# periodic heartbeat off shared virtiofs directory scans during memory pressure.
+WorkingDirectory=/
 ExecStart={agent_bin} agent-heartbeat --from-node-agent-url http://127.0.0.1:${{UCLOUD_NODE_AGENT_PORT}} --post-url ${{UCLOUD_HEARTBEAT_URL}}{deployment_flag}{node_control_auth_flag} {heartbeat_auth_flag} {label_args}
 HEARTBEAT_SERVICE
 
@@ -1664,6 +1727,11 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
             raise ValueError(
                 "direct runtime network must be either 'none' or 'sandbox'."
             )
+        from .relay_network import parse_network_relays
+
+        parse_network_relays(options.network_relays or {})
+        if options.network_relays and options.direct_network != "sandbox":
+            raise ValueError("network relays require sandbox networking")
         for endpoint in options.direct_network_allow_tcp:
             DirectNetworkTcpEgress.parse(endpoint)
         if options.direct_network == "none" and options.direct_network_allow_tcp:
@@ -1746,6 +1814,8 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
                 "direct runtime physical disk cannot guarantee Docker, swap, "
                 "cache, headroom, and one writable MiB"
             )
+        if options.direct_max_concurrent_startups < 1:
+            raise ValueError("direct max concurrent startups must be positive.")
         if options.direct_max_concurrent_restores < 1:
             raise ValueError("direct max concurrent restores must be positive.")
     if options.docker_quota_image_gb < 0:

@@ -3,21 +3,27 @@ from __future__ import annotations
 import argparse
 import asyncio
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from contextvars import copy_context
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+import random
+import ssl
 import sys
-from threading import Event
+from threading import Event, Lock, local
 import time
 from typing import Any, Callable, Iterable
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlparse
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 from uuid import uuid4
 
 from opentelemetry.propagate import inject
+from opentelemetry.trace import get_current_span
+
+from .gvisor_distribution import distribution_files
 
 from .agent import (
     build_heartbeat,
@@ -52,7 +58,7 @@ from .bootstrap import (
     prune_bootstrap_records,
 )
 from .config import DeploymentConfig
-from .control_state import ControlStateStore
+from .control_state import ControlStateStore, QUARANTINE_REASON, QUARANTINE_EPOCH
 from .control_plane import build_server, release_registry_route_references
 from .deployment import (
     AGENT_VERSION_LABEL,
@@ -72,7 +78,7 @@ from .deploy import (
     run_remote_script_over_ssh,
     stage_file_over_ssh,
 )
-from .images import DockerImageRuntime, ImageRecord, ImageStore
+from .images import DEFAULT_MAX_ACTIVE_IMAGE_BUILDS, DockerImageRuntime, ImageRecord, ImageStore
 from .managed_registry import (
     RegistryClient,
     RegistryRequestError,
@@ -99,10 +105,13 @@ from .model_relay import (
     DEFAULT_MAX_INFLIGHT_BYTES,
     DEFAULT_MAX_INFLIGHT_REQUESTS,
     DEFAULT_MAX_INFLIGHT_REQUESTS_PER_ROLLOUT,
+    RelayCallerUnavailable,
     RelayRequest,
+    _finish_before_cancellation,
     create_model_relay_app,
 )
 from .models import (
+    InstancePhase,
     NodeHeartbeat,
     ResourceQuantity,
     SandboxDemand,
@@ -146,6 +155,7 @@ from .program_scheduler import (
 from .reconcile import (
     build_create_intents,
     evaluate_builder_scale,
+    requested_builder_nodes,
     node_drain_ready,
     partition_safe_stop_job_ids,
     with_provider_operation_label,
@@ -396,6 +406,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=8,
     )
     direct_node_agent.add_argument(
+        "--max-concurrent-startups",
+        type=int,
+        default=8,
+        help="Shared limit for create, restore and file operations on this node.",
+    )
+    direct_node_agent.add_argument(
         "--idle-park-seconds",
         type=float,
         default=0.0,
@@ -425,6 +441,11 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     direct_node_agent.add_argument(
+        "--network-relays-json",
+        default="{}",
+        help='Trusted relay map, e.g. {"default":"relay.example.org:443"}. Requires nftables.',
+    )
+    direct_node_agent.add_argument(
         "--node-control-bearer-token-file",
         type=Path,
         required=True,
@@ -449,7 +470,7 @@ def build_parser() -> argparse.ArgumentParser:
     builder_agent.add_argument("--docker-binary", default="docker")
     builder_agent.add_argument("--buildx-direct-push", action="store_true")
     builder_agent.add_argument("--buildx-cache-ref")
-    builder_agent.add_argument("--max-active-image-builds", type=int, default=4)
+    builder_agent.add_argument("--max-active-image-builds", type=int, default=DEFAULT_MAX_ACTIVE_IMAGE_BUILDS)
     builder_agent.add_argument(
         "--max-concurrent-image-pulls",
         type=int,
@@ -1031,6 +1052,7 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         ),
         max_http_request_threads=config.gateway_max_http_request_threads,
         max_sandbox_resources=config.sandbox.resources,
+        wake_consolidation_policy=config.policy,
         telemetry=telemetry,
     )
     host, port = server.server_address
@@ -1127,7 +1149,9 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
         docker_binary=args.docker_binary,
         network=args.network,
         network_allow_tcp=tuple(args.direct_network_allow_tcp or ()),
+        network_relays=json.loads(args.network_relays_json),
         max_concurrent_restores=args.max_concurrent_restores,
+        max_concurrent_startups=args.max_concurrent_startups,
         idle_park_seconds=float(args.idle_park_seconds),
         storage_native_socket=args.storage_native_socket.absolute(),
         telemetry=telemetry,
@@ -1185,24 +1209,17 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
     gateway_token = read_required_token_file(
         config.gateway_token_file(), "gateway bearer token"
     )
+    lifecycle = _RelayLifecycleDispatcher(gateway_url, gateway_token)
+    routes = RoutingStore(config.routing_file())
+
+    async def unavailable_callers() -> dict[tuple[str, int], str]:
+        return await asyncio.to_thread(routes.terminal_sandbox_incarnations)
 
     async def accepted_notifier(relay_request: RelayRequest) -> str | None:
-        return await asyncio.to_thread(
-            _post_gateway_sandbox_lifecycle,
-            gateway_url,
-            gateway_token,
-            relay_request,
-            action="park",
-        )
+        return await lifecycle.notify(relay_request, action="park")
 
     async def result_notifier(relay_request: RelayRequest) -> str | None:
-        return await asyncio.to_thread(
-            _post_gateway_sandbox_lifecycle,
-            gateway_url,
-            gateway_token,
-            relay_request,
-            action="wake",
-        )
+        return await lifecycle.notify(relay_request, action="wake")
 
     app = create_model_relay_app(
         sandbox_bearer_token=read_required_token_file(
@@ -1224,10 +1241,12 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
         state_path=config.relay_state_file(),
         accepted_notifier=accepted_notifier,
         result_notifier=result_notifier,
+        unavailable_callers=unavailable_callers,
         telemetry=telemetry,
     )
 
     async def shutdown_telemetry(_app: object) -> None:
+        await lifecycle.close()
         await asyncio.to_thread(telemetry.shutdown)
 
     app.on_cleanup.append(shutdown_telemetry)
@@ -1236,9 +1255,112 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
     return 0
 
 
+class _RelayLifecycleDispatcher:
+    """Bound lifecycle I/O independently of the CPU-sized default executor."""
+
+    def __init__(self, gateway_url: str, bearer_token: str) -> None:
+        self.gateway_url = gateway_url
+        self.bearer_token = bearer_token
+        # Four 32-vCPU workers can restore twelve sandboxes each. Keep park
+        # calls independent so pending checkpoints cannot hold up ready replies.
+        limits = {"park": 16, "wake": 48}
+        self._pools = {
+            action: ThreadPoolExecutor(max_workers=limit, thread_name_prefix=f"relay-{action}")
+            for action, limit in limits.items()
+        }
+        self._slots = {action: asyncio.Semaphore(limit) for action, limit in limits.items()}
+        self._closed = False
+        self._active: set[asyncio.Task[str | None]] = set()
+
+    async def notify(self, request: RelayRequest, *, action: str) -> str | None:
+        if action not in self._pools:
+            raise ValueError("unsupported relay sandbox lifecycle action")
+        if self._closed:
+            raise RuntimeError("relay lifecycle dispatcher is closed")
+        # Keep an accepted operation alive across caller cancellation, including
+        # async backoff. Only an actual HTTP attempt occupies a thread/slot.
+        task = asyncio.create_task(self._notify(request, action=action))
+        self._active.add(task)
+        try:
+            return await _finish_before_cancellation(task)
+        finally:
+            self._active.discard(task)
+
+    async def _notify(self, request: RelayRequest, *, action: str) -> str | None:
+        deadline = _relay_lifecycle_deadline(request)
+        attempt = 0
+        while True:
+            if self._closed:
+                raise RuntimeError("relay lifecycle dispatcher is closed")
+            if action == "wake":
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("relay wake deadline exceeded")
+                try:
+                    await asyncio.wait_for(self._slots[action].acquire(), remaining)
+                except asyncio.TimeoutError as exc:
+                    raise TimeoutError("relay wake deadline exceeded") from exc
+            else:
+                await self._slots[action].acquire()
+            try:
+                if self._closed:
+                    raise RuntimeError("relay lifecycle dispatcher is closed")
+                context = copy_context()
+                future = asyncio.get_running_loop().run_in_executor(
+                    self._pools[action],
+                    lambda: context.run(
+                        _post_gateway_sandbox_lifecycle_once,
+                        self.gateway_url, self.bearer_token, request,
+                        action=action, attempt=attempt, deadline=deadline,
+                    ),
+                )
+                try:
+                    return await future
+                except _RelayLifecycleRetry as retry:
+                    delay = retry.delay_seconds
+            finally:
+                self._slots[action].release()
+            # A capacity-blocked owner must not occupy fleet-wide dispatch
+            # capacity while unrelated, ready workers could make progress.
+            await asyncio.sleep(delay)
+            attempt += 1
+
+    async def close(self) -> None:
+        self._closed = True
+        # Include operations in async backoff, which no longer own a pool
+        # thread. They observe closure before submitting another HTTP attempt.
+        await asyncio.gather(*tuple(self._active), return_exceptions=True)
+        await asyncio.gather(*(
+            asyncio.to_thread(pool.shutdown, wait=True) for pool in self._pools.values()
+        ))
+
+
 class _RejectControlRedirects(HTTPRedirectHandler):
     def redirect_request(self, *_args: object, **_kwargs: object) -> None:
         return None
+
+
+_CONTROL_HTTP = local()
+_CONTROL_TLS_LOCK = Lock()
+_CONTROL_TLS_CONTEXT: ssl.SSLContext | None = None
+
+
+def _control_opener():
+    # urllib handlers reference their opener, forming cycles. Constructing a
+    # fresh HTTPSHandler for every retry retains native certificate stores
+    # until cyclic GC runs; Python's object counts miss their large native cost.
+    # The immutable TLS configuration is shared, the mutable opener is per thread.
+    global _CONTROL_TLS_CONTEXT
+    opener = getattr(_CONTROL_HTTP, "opener", None)
+    if opener is None:
+        with _CONTROL_TLS_LOCK:
+            if _CONTROL_TLS_CONTEXT is None:
+                _CONTROL_TLS_CONTEXT = ssl.create_default_context()
+                _CONTROL_TLS_CONTEXT.set_alpn_protocols(["http/1.1"])
+            context = _CONTROL_TLS_CONTEXT
+        opener = build_opener(_RejectControlRedirects(), HTTPSHandler(context=context))
+        _CONTROL_HTTP.opener = opener
+    return opener
 
 
 def _post_bounded_json(
@@ -1269,7 +1391,7 @@ def _post_bounded_json(
         headers=headers,
         method="POST",
     )
-    with build_opener(_RejectControlRedirects()).open(
+    with _control_opener().open(
         req,
         timeout=timeout_seconds,
     ) as response:
@@ -1308,7 +1430,7 @@ def _delete_bounded_json(
         headers=headers,
         method="DELETE",
     )
-    with build_opener(_RejectControlRedirects()).open(
+    with _control_opener().open(
         req,
         timeout=timeout_seconds,
     ) as response:
@@ -1321,6 +1443,22 @@ def _delete_bounded_json(
         return decoded, response.headers
 
 
+class _RelayLifecycleRetry(Exception):
+    """An identified, side-effect-safe retry; the response socket is closed."""
+
+    def __init__(self, delay_seconds: float) -> None:
+        super().__init__("relay lifecycle retry pending")
+        self.delay_seconds = delay_seconds
+
+
+def _relay_lifecycle_deadline(relay_request: RelayRequest) -> float:
+    budget = 600.0
+    expires_at = getattr(relay_request, "expires_at", None)
+    if expires_at is not None:
+        budget = max(0.0, min(budget, expires_at - time.time()))
+    return time.monotonic() + budget
+
+
 def _post_gateway_sandbox_lifecycle(
     gateway_url: str,
     bearer_token: str | None,
@@ -1328,41 +1466,118 @@ def _post_gateway_sandbox_lifecycle(
     *,
     action: str,
 ) -> str | None:
+    """Synchronous entry point; the relay dispatcher yields between attempts."""
+    deadline = _relay_lifecycle_deadline(relay_request)
+    attempt = 0
+    while True:
+        try:
+            return _post_gateway_sandbox_lifecycle_once(
+                gateway_url, bearer_token, relay_request,
+                action=action, attempt=attempt, deadline=deadline,
+            )
+        except _RelayLifecycleRetry as retry:
+            time.sleep(retry.delay_seconds)
+            attempt += 1
+
+
+def _post_gateway_sandbox_lifecycle_once(
+    gateway_url: str,
+    bearer_token: str | None,
+    relay_request: RelayRequest,
+    *,
+    action: str,
+    attempt: int,
+    deadline: float,
+) -> str | None:
     if action not in {"park", "wake"}:
         raise ValueError("unsupported relay sandbox lifecycle action")
     if relay_request.sandbox_id is None:
         return
     if relay_request.sandbox_generation is None:
         raise ValueError("relay sandbox lifecycle binding has no generation")
-    for attempt in range(101):
+    remaining = deadline - time.monotonic()
+    if action == "wake" and remaining <= 0:
+        raise TimeoutError("relay wake deadline exceeded")
+    try:
+        _payload, headers = _post_bounded_json(
+            gateway_url,
+            f"/v1/sandboxes/{quote(relay_request.sandbox_id, safe='')}/{action}",
+            {
+                "generation": relay_request.sandbox_generation,
+                "operation_id": f"relay-{action}:{relay_request.request_id}",
+                "rollout_id": relay_request.rollout_id,
+                "request_id": relay_request.request_id,
+                "request_created_at": relay_request.created_at,
+            },
+            bearer_token=bearer_token,
+            invalid_url_error="gateway URL is invalid",
+            empty_token_error="gateway bearer token cannot be empty",
+            timeout_seconds=(
+                remaining
+                if action == "wake" else 600.0
+            ),
+            response_name="gateway lifecycle",
+        )
+    except HTTPError as exc:
+        # HTTPError owns the response socket even though open() raised.
+        # Close every failure, including exhausted retries and 5xx errors.
         try:
-            _payload, headers = _post_bounded_json(
-                gateway_url,
-                f"/v1/sandboxes/{quote(relay_request.sandbox_id, safe='')}/{action}",
-                {
-                    "generation": relay_request.sandbox_generation,
-                    "operation_id": f"relay-{action}:{relay_request.request_id}",
-                    "rollout_id": relay_request.rollout_id,
-                    "request_id": relay_request.request_id,
-                    "request_created_at": relay_request.created_at,
-                },
-                bearer_token=bearer_token,
-                invalid_url_error="gateway URL is invalid",
-                empty_token_error="gateway bearer token cannot be empty",
-                timeout_seconds=600.0,
-                response_name="gateway lifecycle",
+            body = exc.read(_MAX_CONTROL_RESPONSE_BYTES + 1)
+            failure = (
+                json.loads(body)
+                if body and len(body) <= _MAX_CONTROL_RESPONSE_BYTES
+                else {}
             )
-            break
-        except HTTPError as exc:
-            # Another lifecycle request can win the fence between enqueue and
-            # this explicit park, and a concurrent status/log read can briefly
-            # hold the same activity fence. The bounded idempotent retry
-            # observes the stable result without giving transient reads a
-            # separate failure policy.
-            if exc.code != 409 or attempt >= 100:
-                raise
+        except (ValueError, OSError):
+            failure = {}
+        finally:
             exc.close()
-            time.sleep(0.05)
+        permanent = exc.code in {404, 410} or (
+            exc.code == 409
+            and isinstance(failure, dict)
+            and failure.get("retryable") is False
+        )
+        if action == "wake" and permanent:
+            raise RelayCallerUnavailable(exc.code) from exc
+        # Only retry positively identified admission failures here. An
+        # unclassified 5xx still reaches the worker's existing retry path.
+        capacity_pending = (
+            action == "wake"
+            and exc.code in {429, 503}
+            and isinstance(failure, dict)
+            and failure.get("retryable") is True
+        )
+        if isinstance(failure, dict) and failure.get("error_code"):
+            exc.msg = f"{exc.msg} ({str(failure['error_code'])[:160]})"
+        if capacity_pending:
+            try:
+                retry_after = float(exc.headers.get("Retry-After", "1"))
+            except (TypeError, ValueError):
+                retry_after = 1.0
+            delay = max(1.0, min(5.0, retry_after)) + random.uniform(0, 0.25)
+            if attempt >= 600 or time.monotonic() + delay >= deadline:
+                raise
+            get_current_span().add_event(
+                "relay.wake.capacity_retry",
+                {
+                    "gateway.lifecycle.status_code": exc.code,
+                    "gateway.lifecycle.error_code": str(failure.get("error_code", "")),
+                    "retry.attempt": attempt + 1,
+                    "retry.delay_seconds": delay,
+                },
+            )
+            raise _RelayLifecycleRetry(delay) from exc
+        # Another lifecycle request can win the fence between enqueue and
+        # this explicit park, and a concurrent status/log read can briefly
+        # hold the same activity fence. The bounded idempotent retry
+        # observes the stable result without giving transient reads a
+        # separate failure policy.
+        if (
+            permanent or exc.code != 409 or attempt >= 100
+            or (action == "wake" and time.monotonic() + 0.05 >= deadline)
+        ):
+            raise
+        raise _RelayLifecycleRetry(0.05) from exc
     transport_epoch = headers.get("X-UCloud-Sandbox-Transport-Epoch", "").strip()
     return transport_epoch or None
 
@@ -1922,6 +2137,36 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
                     "result": staged_direct_runsc.to_dict(),
                 }
             )
+        if plan.local_direct_runsc is not None:
+            companions = distribution_files(
+                plan.local_direct_runsc, plan.direct_runsc_commit
+            )
+            if companions:
+                companions.append(
+                    (
+                        plan.local_direct_runsc.parent / "build-manifest.json",
+                        "build-manifest.json",
+                    )
+                )
+            for local_path, relative in companions:
+                remote_path = str(
+                    PurePosixPath(plan.remote_direct_runsc_path).parent / relative
+                )
+                staged = stage_file_over_ssh(
+                    ssh_command,
+                    local_path,
+                    remote_path,
+                    mode="0644" if relative == "build-manifest.json" else "0755",
+                    timeout_seconds=timeout,
+                    private_key_file=args.ssh_private_key_file,
+                )
+                result["stagedFiles"].append(
+                    {
+                        "localPath": str(local_path),
+                        "remotePath": remote_path,
+                        "result": staged.to_dict(),
+                    }
+                )
         if plan.local_managed_init is not None:
             staged_managed_init = stage_file_over_ssh(
                 ssh_command,
@@ -2811,6 +3056,17 @@ def _reconcile_provider_operation_inventory(
     if not execution_authorized or provider_state is None:
         return [], [], set()
     results = list(provider_state.reconcile_provider_inventory(jobs))
+    for operation in provider_state.list_operations(kind="stop", states={"prepared"}):
+        if _stop_operation_is_destructive_node_loss(
+            operation
+        ) and not _stop_operation_has_safety_proof(provider_state, provider, operation):
+            suppressed = provider_state.suppress_prepared_operation(
+                operation.operation_id,
+                reason="obsolete destructive stop authorization; automatic retry disabled",
+            )
+            results.append(
+                ProviderOperationOutcome.from_operation(suppressed, source="journal")
+            )
     # Stops are replayed only after this cycle refreshes every active drain.
     replay_results = apply_prepared_provider_operations(
         provider_state,
@@ -2865,9 +3121,164 @@ class _ProviderObservation:
     destructive_node_loss_job_ids: tuple[str, ...]
     loss_latched_evidence: dict[str, dict[str, Any]]
     unreachable_loss_evidence: dict[str, dict[str, Any]]
+    unreachable_probe_results: list[dict[str, Any]]
     final_heartbeat_job_ids: tuple[str, ...]
     fenced_heartbeat_job_ids: tuple[str, ...]
     orphaned_stale_heartbeat_job_ids: tuple[str, ...]
+
+
+def _probe_unreachable_node(
+    heartbeat: NodeHeartbeat,
+    bearer_token: str | None,
+    heartbeat_ttl_seconds: int = 60,
+) -> tuple[NodeHeartbeat | None, bool]:
+    """Recover a lost push path; only transport failure supports retirement."""
+    if not heartbeat.node_url:
+        return None, False
+    try:
+        fresh = fetch_node_agent_heartbeat(
+            heartbeat.node_url,
+            bearer_token=bearer_token,
+            timeout_seconds=3.0,
+        )
+    except Exception as exc:
+        reason = exc.__cause__ or exc
+        # HTTP/auth/schema failures prove contact, not VM loss. Do not turn a
+        # token or protocol misconfiguration into destructive VM retirement.
+        return None, isinstance(reason, (URLError, OSError)) and not isinstance(
+            reason, HTTPError
+        )
+    if (fresh.job_id, fresh.node_id, fresh.deployment_id) != (
+        heartbeat.job_id,
+        heartbeat.node_id,
+        heartbeat.deployment_id,
+    ):
+        return None, False
+    if not fresh.is_fresh(utc_now(), heartbeat_ttl_seconds):
+        return None, False
+    return replace(fresh, received_at=utc_now()), False
+
+
+def _guest_continuity_matches(
+    previous: NodeHeartbeat,
+    fresh: NodeHeartbeat,
+    routes: tuple[SandboxRoute, ...],
+) -> bool:
+    """A reachable endpoint alone cannot restore placement authority."""
+    if (
+        not fresh.node_epoch
+        or not fresh.inventory_complete
+        or fresh.active_sandbox_creates
+        or fresh.node_epoch in previous.retired_node_epochs
+    ):
+        return False
+    anchor = previous.labels.get(QUARANTINE_EPOCH, previous.node_epoch)
+    if anchor != fresh.node_epoch and (
+        routes or fresh.inventory or fresh.active_workloads
+    ):
+        return False
+    inventory = {item.sandbox_id: item for item in fresh.inventory}
+    if len(inventory) != len(fresh.inventory):
+        return False
+    for route in routes:
+        item = inventory.get(route.sandbox_id)
+        if (
+            item is None
+            or route.node_epoch != fresh.node_epoch
+            or route.node_id != fresh.node_id
+            or (route.generation, route.create_operation_id, route.spec_hash)
+            != (item.generation, item.operation_id, item.spec_hash)
+        ):
+            return False
+    return True
+
+
+def _quarantine_unverified_guests(
+    jobs: list[ProviderInstance],
+    heartbeats: dict[str, NodeHeartbeat],
+    *,
+    control_state: ControlStateStore,
+    policy: ScalePolicy,
+    deployment_id: str,
+    route_reservations: dict[str, tuple[SandboxRoute, ...]],
+    execution_authorized: bool,
+    bearer_token: str | None,
+) -> tuple[list[ProviderInstance], dict[str, NodeHeartbeat]]:
+    candidates = {}
+    for job in jobs:
+        previous = heartbeats.get(job.id)
+        if job.is_final or not is_managed_compute_instance(job, deployment_id):
+            continue
+        if previous is None:
+            continue
+        if not (
+            job.is_unavailable
+            or previous.labels.get(QUARANTINE_REASON)
+            or not previous.is_fresh(utc_now(), policy.heartbeat_ttl_seconds)
+        ):
+            continue
+        reason = (
+            "provider_readiness_unverified"
+            if job.is_unavailable
+            else "heartbeat_continuity_unverified"
+        )
+        if execution_authorized:
+            guarded = control_state.quarantine_node(job.id, reason)
+            if guarded is None:
+                continue
+        else:
+            guarded = replace(
+                previous,
+                admission_open=False,
+                labels={
+                    **previous.labels,
+                    QUARANTINE_REASON: reason,
+                    QUARANTINE_EPOCH: previous.labels.get(
+                        QUARANTINE_EPOCH, previous.node_epoch
+                    ),
+                },
+            )
+        heartbeats[job.id] = guarded
+        # An authenticated guest may still serve existing work while UCloud
+        # readiness is false. Do not reopen placement until both agree.
+        if job.state == "RUNNING":
+            candidates[job.id] = guarded
+    recovered = set()
+    if candidates:
+        with ThreadPoolExecutor(max_workers=min(8, len(candidates))) as pool:
+            probes = {
+                pool.submit(
+                    _probe_unreachable_node,
+                    previous,
+                    bearer_token,
+                    policy.heartbeat_ttl_seconds,
+                ): jid
+                for jid, previous in candidates.items()
+            }
+            for future in as_completed(probes):
+                jid = probes[future]
+                fresh, _transport_failed = future.result()
+                if fresh is None or not _guest_continuity_matches(
+                    candidates[jid], fresh, route_reservations.get(jid, ())
+                ):
+                    continue
+                if execution_authorized and not control_state.recover_quarantined_node(
+                    fresh
+                ):
+                    continue
+                heartbeats[jid] = fresh
+                recovered.add(jid)
+    jobs = [
+        replace(job, phase=InstancePhase.RUNNING)
+        if job.id in recovered
+        else replace(job, phase=InstancePhase.UNAVAILABLE)
+        if job.id in heartbeats
+        and heartbeats[job.id].labels.get(QUARANTINE_REASON)
+        and not job.is_final
+        else job
+        for job in jobs
+    ]
+    return jobs, heartbeats
 
 
 def _observe_provider_nodes(
@@ -2881,6 +3292,7 @@ def _observe_provider_nodes(
     route_reservations: dict[str, tuple[SandboxRoute, ...]],
     execution_authorized: bool,
     retrieve_history: bool,
+    node_control_bearer_token: str | None = None,
 ) -> _ProviderObservation:
     """Normalize provider continuity and heartbeat evidence into node state."""
 
@@ -2966,6 +3378,18 @@ def _observe_provider_nodes(
             if job_id not in orphaned_stale_heartbeat_job_ids
         }
 
+    if getattr(provider, "requires_guest_continuity", False):
+        jobs, heartbeats = _quarantine_unverified_guests(
+            jobs,
+            heartbeats,
+            control_state=control_state,
+            policy=policy,
+            deployment_id=deployment_id,
+            route_reservations=route_reservations,
+            execution_authorized=execution_authorized,
+            bearer_token=node_control_bearer_token,
+        )
+
     destructive_loss_dispositions: dict[str, DestructiveInstanceLoss] = {}
     for job in jobs:
         if job.id in loss_latched_job_ids:
@@ -2985,33 +3409,71 @@ def _observe_provider_nodes(
         policy,
     )
     unreachable_loss_evidence: dict[str, dict[str, Any]] = {}
+    unreachable_probe_results: list[dict[str, Any]] = []
     unreachable_lease_loss = getattr(provider, "unreachable_lease_expiry_loss", None)
     if unreachable_lease_loss is not None:
-        for node in observed_nodes:
-            if (
-                not is_managed_compute_instance(node.job, deployment_id)
-                or node.job_id in destructive_loss_dispositions
-                or not unreachable_node_lease_expired(node, policy)
-            ):
-                continue
-            reference = unreachable_node_reference(node)
-            if reference is None:
-                continue
-            disposition = replace(
-                unreachable_lease_loss,
-                evidence=(
-                    ("unreachableLeaseExpired", True),
-                    ("unreachableReference", reference.isoformat()),
-                ),
-            )
-            if not unreachable_lease_loss.matches(disposition):
-                continue
-            destructive_loss_dispositions[node.job_id] = disposition
-            unreachable_loss_evidence[node.job_id] = {
-                "unreachableReference": reference.isoformat(),
-                "lastHeartbeatPresent": node.heartbeat is not None,
-                "lastKnownActiveSandboxes": node.active_sandboxes,
-            }
+        expired = [
+            node
+            for node in observed_nodes
+            if is_managed_compute_instance(node.job, deployment_id)
+            and node.job_id not in destructive_loss_dispositions
+            and unreachable_node_lease_expired(node, policy)
+            and node.heartbeat is not None
+        ]
+        if expired:
+            with ThreadPoolExecutor(max_workers=min(8, len(expired))) as pool:
+                probes = {
+                    pool.submit(
+                        _probe_unreachable_node,
+                        node.heartbeat,
+                        node_control_bearer_token,
+                        policy.heartbeat_ttl_seconds,
+                    ): node
+                    for node in expired
+                }
+                for future in as_completed(probes):
+                    node = probes[future]
+                    fresh, transport_failed = future.result()
+                    unreachable_probe_results.append(
+                        {
+                            "jobId": node.job_id,
+                            "status": "healthy"
+                            if fresh is not None
+                            else ("unreachable" if transport_failed else "unverified"),
+                        }
+                    )
+                    if fresh is not None:
+                        heartbeats[node.job_id] = fresh
+                        if execution_authorized:
+                            control_state.upsert_heartbeat(fresh)
+                        continue
+                    if not transport_failed:
+                        # Invalid credentials/schema are not an empty-worker
+                        # proof either. Keep the node unschedulable, without
+                        # letting the ordinary stale-empty path bypass probing.
+                        heartbeats[node.job_id] = replace(
+                            node.heartbeat, inventory_complete=False
+                        )
+                        continue
+                    reference = unreachable_node_reference(node)
+                    if reference is None:
+                        continue
+                    disposition = replace(
+                        unreachable_lease_loss,
+                        evidence=(
+                            ("unreachableLeaseExpired", True),
+                            ("unreachableReference", reference.isoformat()),
+                            ("directProbeFailed", True),
+                        ),
+                    )
+                    if not unreachable_lease_loss.matches(disposition):
+                        continue
+                    destructive_loss_dispositions[node.job_id] = disposition
+                    unreachable_loss_evidence[node.job_id] = {
+                        "unreachableReference": reference.isoformat(),
+                        "lastHeartbeatPresent": True,
+                        "lastKnownActiveSandboxes": node.active_sandboxes,
+                    }
 
     destructive_loss_reasons = {
         job_id: disposition.reason
@@ -3057,6 +3519,7 @@ def _observe_provider_nodes(
         destructive_node_loss_job_ids=destructive_node_loss_job_ids,
         loss_latched_evidence=loss_latched_evidence,
         unreachable_loss_evidence=unreachable_loss_evidence,
+        unreachable_probe_results=unreachable_probe_results,
         final_heartbeat_job_ids=final_heartbeat_job_ids,
         fenced_heartbeat_job_ids=fenced_heartbeat_job_ids,
         orphaned_stale_heartbeat_job_ids=orphaned_stale_heartbeat_job_ids,
@@ -3133,6 +3596,10 @@ def run_reconcile_cycle(
         route_reservations=route_reservations or {},
         execution_authorized=execution_authorized,
         retrieve_history=not bool(getattr(args, "jobs_file", None)),
+        node_control_bearer_token=read_required_token_file(
+            config.node_control_token_file(),
+            "node control bearer token",
+        ),
     )
     jobs = observation.jobs
     nodes = observation.nodes
@@ -3147,6 +3614,7 @@ def run_reconcile_cycle(
     fenced_heartbeat_job_ids = observation.fenced_heartbeat_job_ids
     orphaned_stale_heartbeat_job_ids = observation.orphaned_stale_heartbeat_job_ids
     destructive_job_id_set = set(destructive_node_loss_job_ids)
+    quarantined_job_ids = {node.job_id for node in nodes if node.job.is_unavailable}
     builder_pending = max(
         0,
         int(
@@ -3481,6 +3949,7 @@ def run_reconcile_cycle(
                 for route in sandbox_routes
                 if route.delete_operation_id
                 and route.job_id not in destructive_job_id_set
+                and route.job_id not in quarantined_job_ids
             ),
             key=lambda route: (route.updated_at, route.sandbox_id),
         )
@@ -3569,6 +4038,10 @@ def run_reconcile_cycle(
                 and intent.job_id in unreachable_stop_job_id_set
             ):
                 error = "unreachable stale-node stop proof selected"
+            elif intent.state == "active" and intent.job_id in quarantined_job_ids:
+                error = (
+                    "guest continuity is unverified; drain cannot authorize termination"
+                )
             elif not node_url:
                 error = "fresh node heartbeat has no node URL"
             else:
@@ -3944,6 +4417,8 @@ def run_reconcile_cycle(
             node.job_id for node in (*sandbox_nodes, *builder_nodes) if node.job.is_lost
         ),
         "destructive_node_loss_job_ids": list(destructive_node_loss_job_ids),
+        "quarantined_job_ids": sorted(quarantined_job_ids),
+        "unreachableNodeProbes": observation.unreachable_probe_results,
         "unreachable_permanent_loss_job_ids": sorted(
             job_id
             for job_id in destructive_loss_reasons
@@ -4069,7 +4544,9 @@ def run_reconcile_cycle(
         effective_policy.default_node_resources,
     )
     desired_builders = min(
-        max(1 if builder_pending > 0 else 0, builder_prepared),
+        requested_builder_nodes(
+            builder_nodes, pending_builds=builder_pending, prepared_builders=builder_prepared,
+        ),
         config.builder.max_nodes,
     )
     result["builderCapacityOperationSucceeded"] = _builder_capacity_operation_succeeded(
@@ -5517,6 +5994,7 @@ def dashboard_scale_policy_to_dict(policy: ScalePolicy) -> dict[str, Any]:
             policy.provisioning_scale_down_multiplier
         ),
         "program_aware_autoscaling_enabled": (policy.program_aware_autoscaling_enabled),
+        "parked_wake_consolidation_enabled": policy.parked_wake_consolidation_enabled,
         "model_wait_capacity_weight": policy.model_wait_capacity_weight,
         "model_wait_max_headroom_nodes": policy.model_wait_max_headroom_nodes,
         "default_node_resources": policy.default_node_resources.to_dict(),
@@ -5858,6 +6336,7 @@ def vm_init_options_for_job(
         direct_network_allow_tcp=(
             config.sandbox.direct_network_allow_tcp if role == "sandbox" else ()
         ),
+        network_relays=(config.sandbox.network_relays if role == "sandbox" else {}),
         storage_native_registry_url=(
             config.registry_worker_url if role == "sandbox" else ""
         ),
@@ -5891,6 +6370,7 @@ def vm_init_options_for_job(
         ),
         direct_disk_headroom_mb=config.sandbox.direct_disk_headroom_mb,
         direct_max_concurrent_restores=(config.sandbox.direct_max_concurrent_restores),
+        direct_max_concurrent_startups=config.policy.create_target_concurrency_per_node,
         direct_idle_park_seconds=config.sandbox.direct_idle_park_seconds,
         max_concurrent_image_pulls=(
             config.builder.max_concurrent_image_pulls
@@ -5938,6 +6418,7 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         "directRunscCommit": options.direct_runsc_commit,
         "directNetwork": options.direct_network,
         "directNetworkAllowTcp": list(options.direct_network_allow_tcp),
+        "networkRelays": dict(options.network_relays or {}),
         "storageNativeRegistryUrl": options.storage_native_registry_url,
         "storageNativeRepository": options.storage_native_repository,
         "storageNativeSnapshotBackend": options.storage_native_snapshot_backend,
@@ -5954,6 +6435,7 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         ),
         "directDiskHeadroomMb": options.direct_disk_headroom_mb,
         "directMaxConcurrentRestores": options.direct_max_concurrent_restores,
+        "directMaxConcurrentStartups": options.direct_max_concurrent_startups,
         "directIdleParkSeconds": options.direct_idle_park_seconds,
         "maxConcurrentImagePulls": options.max_concurrent_image_pulls,
         "heartbeatIntervalSeconds": options.heartbeat_interval_seconds,

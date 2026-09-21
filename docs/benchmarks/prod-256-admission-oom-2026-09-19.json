@@ -1,0 +1,2986 @@
+{
+  "samples": [
+    {
+      "sample": 0,
+      "at": "2026-09-19T11:02:45.916651+00:00",
+      "routes": [
+        [
+          "12396440",
+          "creating",
+          11
+        ],
+        [
+          "12396440",
+          "parked",
+          27
+        ],
+        [
+          "12396440",
+          "running",
+          10
+        ],
+        [
+          "12396440",
+          "waking",
+          2
+        ],
+        [
+          "12396441",
+          "creating",
+          13
+        ],
+        [
+          "12396441",
+          "parked",
+          11
+        ],
+        [
+          "12396441",
+          "running",
+          18
+        ],
+        [
+          "12396441",
+          "waking",
+          2
+        ],
+        [
+          "12396442",
+          "creating",
+          13
+        ],
+        [
+          "12396442",
+          "parked",
+          28
+        ],
+        [
+          "12396442",
+          "running",
+          14
+        ],
+        [
+          "12396442",
+          "waking",
+          5
+        ]
+      ],
+      "pending": 0,
+      "reservations": 0,
+      "sample_ids": [
+        "00c29e55a8bd42b0a590c73af1bb9726",
+        "0291d40a4ecf4a069a790a1d380d5de2",
+        "03c1bbf2825f41ad87f7ef0b47d824ec"
+      ],
+      "nodes": [
+        {
+          "job": "12396440",
+          "version": "0.5.48",
+          "age_seconds": 5.1,
+          "admission": true,
+          "draining": false,
+          "active": 10,
+          "cpu_percent": 42.30769230769231,
+          "memory_available_mb": 84933,
+          "memory_psi_full_avg10": 0.85,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 3,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 8,
+          "storage_snapshot_uploaded_bytes": 12682600448
+        },
+        {
+          "job": "12396441",
+          "version": "0.5.48",
+          "age_seconds": 19.7,
+          "admission": true,
+          "draining": false,
+          "active": 12,
+          "cpu_percent": 38.2716049382716,
+          "memory_available_mb": 85403,
+          "memory_psi_full_avg10": 0.59,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 0,
+          "storage_snapshot_uploaded_bytes": 0
+        },
+        {
+          "job": "12396442",
+          "version": "0.5.48",
+          "age_seconds": 1.2,
+          "admission": true,
+          "draining": false,
+          "active": 10,
+          "cpu_percent": 47.5,
+          "memory_available_mb": 85339,
+          "memory_psi_full_avg10": 4.27,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 0,
+          "storage_snapshot_uploaded_bytes": 0
+        },
+        {
+          "job": "12396443",
+          "version": "0.5.48",
+          "age_seconds": 12.4,
+          "admission": true,
+          "draining": false,
+          "active": 0,
+          "cpu_percent": 27.27272727272727,
+          "memory_available_mb": 42857,
+          "memory_psi_full_avg10": 0.0,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 0,
+          "storage_snapshot_uploaded_bytes": 0
+        }
+      ],
+      "relay_states": {
+        "completed": 781,
+        "leased": 24
+      },
+      "relay_recent_10m": {
+        "completed": 715,
+        "leased": 24
+      },
+      "delivery_pending_count": 63,
+      "oldest_pending": [
+        {
+          "rollout_id": "2afbab92af624e6ca150b204584824e9",
+          "state": "completed",
+          "age_seconds": 48.3
+        },
+        {
+          "rollout_id": "4fd5dd589c76448c8936d18155d14cd8",
+          "state": "completed",
+          "age_seconds": 46.9
+        },
+        {
+          "rollout_id": "cf1f7033e31d445186bc7854a0c3f2af",
+          "state": "completed",
+          "age_seconds": 44.3
+        },
+        {
+          "rollout_id": "e54dec35cdc44ec896f2b2938d9fc17a",
+          "state": "completed",
+          "age_seconds": 42.8
+        },
+        {
+          "rollout_id": "e5bad797dfc440519d294543129b255e",
+          "state": "completed",
+          "age_seconds": 33.4
+        }
+      ],
+      "completed_wake_delay_10m": {
+        "count": 652,
+        "p50": 3.905,
+        "p95": 17.876,
+        "max": 46.027
+      },
+      "health": {
+        "gateway": {
+          "status": 200,
+          "seconds": 0.057,
+          "version": "0.5.48"
+        },
+        "relay": {
+          "status": 200,
+          "seconds": 0.037,
+          "version": "0.5.48"
+        }
+      },
+      "recent_log_signals": {
+        "traceback": 0,
+        "stream timeout": 0,
+        "wake failed": 0,
+        "admission is closed": 0,
+        "no ready builder": 0,
+        "cpu pressure": 0,
+        "http 503": 0,
+        "http 504": 0
+      }
+    },
+    {
+      "sample": 1,
+      "at": "2026-09-19T11:03:15.916732+00:00",
+      "routes": [
+        [
+          "12396440",
+          "parked",
+          25
+        ],
+        [
+          "12396440",
+          "running",
+          24
+        ],
+        [
+          "12396440",
+          "waking",
+          4
+        ],
+        [
+          "12396441",
+          "creating",
+          8
+        ],
+        [
+          "12396441",
+          "parked",
+          19
+        ],
+        [
+          "12396441",
+          "running",
+          15
+        ],
+        [
+          "12396441",
+          "waking",
+          2
+        ],
+        [
+          "12396442",
+          "creating",
+          4
+        ],
+        [
+          "12396442",
+          "parked",
+          25
+        ],
+        [
+          "12396442",
+          "running",
+          26
+        ],
+        [
+          "12396442",
+          "waking",
+          4
+        ]
+      ],
+      "pending": 0,
+      "reservations": 0,
+      "sample_ids": [
+        "00c29e55a8bd42b0a590c73af1bb9726",
+        "0291d40a4ecf4a069a790a1d380d5de2",
+        "03c1bbf2825f41ad87f7ef0b47d824ec"
+      ],
+      "nodes": [
+        {
+          "job": "12396440",
+          "version": "0.5.48",
+          "age_seconds": 13.1,
+          "admission": true,
+          "draining": false,
+          "active": 15,
+          "cpu_percent": 50.641025641025635,
+          "memory_available_mb": 85028,
+          "memory_psi_full_avg10": 0.88,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 2,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 8,
+          "storage_snapshot_uploaded_bytes": 12682600448
+        },
+        {
+          "job": "12396441",
+          "version": "0.5.48",
+          "age_seconds": 8.5,
+          "admission": true,
+          "draining": false,
+          "active": 12,
+          "cpu_percent": 24.848484848484848,
+          "memory_available_mb": 85639,
+          "memory_psi_full_avg10": 1.09,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 0,
+          "storage_snapshot_uploaded_bytes": 0
+        },
+        {
+          "job": "12396442",
+          "version": "0.5.48",
+          "age_seconds": 11.2,
+          "admission": true,
+          "draining": false,
+          "active": 19,
+          "cpu_percent": 35.0,
+          "memory_available_mb": 85116,
+          "memory_psi_full_avg10": 1.7,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 1,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 0,
+          "storage_snapshot_uploaded_bytes": 0
+        },
+        {
+          "job": "12396443",
+          "version": "0.5.48",
+          "age_seconds": 1.3,
+          "admission": true,
+          "draining": false,
+          "active": 0,
+          "cpu_percent": 20.51282051282051,
+          "memory_available_mb": 42481,
+          "memory_psi_full_avg10": 0.0,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 0,
+          "storage_snapshot_uploaded_bytes": 0
+        }
+      ],
+      "relay_states": {
+        "completed": 980,
+        "leased": 29
+      },
+      "relay_recent_10m": {
+        "completed": 914,
+        "leased": 29
+      },
+      "delivery_pending_count": 62,
+      "oldest_pending": [
+        {
+          "rollout_id": "2afbab92af624e6ca150b204584824e9",
+          "state": "completed",
+          "age_seconds": 78.3
+        },
+        {
+          "rollout_id": "0291d40a4ecf4a069a790a1d380d5de2",
+          "state": "completed",
+          "age_seconds": 63.2
+        },
+        {
+          "rollout_id": "e0e9dfc6b45e4b7aa3b1795cb9aa3182",
+          "state": "completed",
+          "age_seconds": 34.0
+        },
+        {
+          "rollout_id": "dde60777f4fb4ae695238a4f1ba4b526",
+          "state": "completed",
+          "age_seconds": 32.9
+        },
+        {
+          "rollout_id": "adfbbac6819b462f8a8f6d1bbfccaaaf",
+          "state": "completed",
+          "age_seconds": 29.9
+        }
+      ],
+      "completed_wake_delay_10m": {
+        "count": 852,
+        "p50": 4.105,
+        "p95": 20.379,
+        "max": 55.153
+      },
+      "health": {
+        "gateway": {
+          "status": 200,
+          "seconds": 0.04,
+          "version": "0.5.48"
+        },
+        "relay": {
+          "status": 200,
+          "seconds": 0.036,
+          "version": "0.5.48"
+        }
+      },
+      "recent_log_signals": {
+        "traceback": 0,
+        "stream timeout": 0,
+        "wake failed": 0,
+        "admission is closed": 0,
+        "no ready builder": 0,
+        "cpu pressure": 0,
+        "http 503": 0,
+        "http 504": 0
+      }
+    },
+    {
+      "sample": 2,
+      "at": "2026-09-19T11:03:45.916820+00:00",
+      "routes": [
+        [
+          "12396440",
+          "creating",
+          9
+        ],
+        [
+          "12396440",
+          "parked",
+          26
+        ],
+        [
+          "12396440",
+          "running",
+          23
+        ],
+        [
+          "12396440",
+          "waking",
+          3
+        ],
+        [
+          "12396441",
+          "creating",
+          5
+        ],
+        [
+          "12396441",
+          "parked",
+          19
+        ],
+        [
+          "12396441",
+          "running",
+          19
+        ],
+        [
+          "12396441",
+          "waking",
+          3
+        ],
+        [
+          "12396442",
+          "creating",
+          9
+        ],
+        [
+          "12396442",
+          "parked",
+          30
+        ],
+        [
+          "12396442",
+          "running",
+          25
+        ],
+        [
+          "12396442",
+          "waking",
+          2
+        ]
+      ],
+      "pending": 0,
+      "reservations": 0,
+      "sample_ids": [
+        "00c29e55a8bd42b0a590c73af1bb9726",
+        "0291d40a4ecf4a069a790a1d380d5de2",
+        "03c1bbf2825f41ad87f7ef0b47d824ec"
+      ],
+      "nodes": [
+        {
+          "job": "12396440",
+          "version": "0.5.48",
+          "age_seconds": 4.9,
+          "admission": true,
+          "draining": false,
+          "active": 22,
+          "cpu_percent": 67.6829268292683,
+          "memory_available_mb": 84638,
+          "memory_psi_full_avg10": 2.13,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 8,
+          "storage_snapshot_uploaded_bytes": 12682600448
+        },
+        {
+          "job": "12396441",
+          "version": "0.5.48",
+          "age_seconds": 18.4,
+          "admission": true,
+          "draining": false,
+          "active": 13,
+          "cpu_percent": 47.5,
+          "memory_available_mb": 85525,
+          "memory_psi_full_avg10": 0.95,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 0,
+          "storage_snapshot_uploaded_bytes": 0
+        },
+        {
+          "job": "12396442",
+          "version": "0.5.48",
+          "age_seconds": 0.4,
+          "admission": true,
+          "draining": false,
+          "active": 24,
+          "cpu_percent": 62.091503267973856,
+          "memory_available_mb": 84706,
+          "memory_psi_full_avg10": 3.19,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 0,
+          "storage_snapshot_uploaded_bytes": 0
+        },
+        {
+          "job": "12396443",
+          "version": "0.5.48",
+          "age_seconds": 9.6,
+          "admission": true,
+          "draining": false,
+          "active": 0,
+          "cpu_percent": 50.63291139240506,
+          "memory_available_mb": 40463,
+          "memory_psi_full_avg10": 0.03,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 0,
+          "storage_snapshot_uploaded_bytes": 0
+        }
+      ],
+      "relay_states": {
+        "completed": 1172,
+        "leased": 19,
+        "pending": 1
+      },
+      "relay_recent_10m": {
+        "completed": 1106,
+        "leased": 19,
+        "pending": 1
+      },
+      "delivery_pending_count": 71,
+      "oldest_pending": [
+        {
+          "rollout_id": "ca3853a71dbd4170a3fd59aaf68da200",
+          "state": "completed",
+          "age_seconds": 29.5
+        },
+        {
+          "rollout_id": "27088733b7cc4ed7959b090aa40f495a",
+          "state": "completed",
+          "age_seconds": 28.0
+        },
+        {
+          "rollout_id": "d78bca7e03794f35a2326bf373531461",
+          "state": "completed",
+          "age_seconds": 26.5
+        },
+        {
+          "rollout_id": "bfa93268274a43ef9fbfc7e4c08eb5d2",
+          "state": "completed",
+          "age_seconds": 23.6
+        },
+        {
+          "rollout_id": "9e7b6cbf24a346feb9749210f4b05ba7",
+          "state": "completed",
+          "age_seconds": 22.5
+        }
+      ],
+      "completed_wake_delay_10m": {
+        "count": 1035,
+        "p50": 4.57,
+        "p95": 23.163,
+        "max": 90.344
+      },
+      "health": {
+        "gateway": {
+          "status": 200,
+          "seconds": 0.033,
+          "version": "0.5.48"
+        },
+        "relay": {
+          "status": 200,
+          "seconds": 0.02,
+          "version": "0.5.48"
+        }
+      },
+      "recent_log_signals": {
+        "traceback": 0,
+        "stream timeout": 0,
+        "wake failed": 0,
+        "admission is closed": 0,
+        "no ready builder": 0,
+        "cpu pressure": 0,
+        "http 503": 0,
+        "http 504": 0
+      }
+    },
+    {
+      "sample": 3,
+      "at": "2026-09-19T11:04:15.916904+00:00",
+      "routes": [
+        [
+          "12396440",
+          "creating",
+          9
+        ],
+        [
+          "12396440",
+          "parked",
+          29
+        ],
+        [
+          "12396440",
+          "running",
+          22
+        ],
+        [
+          "12396440",
+          "waking",
+          1
+        ],
+        [
+          "12396441",
+          "creating",
+          13
+        ],
+        [
+          "12396441",
+          "parked",
+          25
+        ],
+        [
+          "12396441",
+          "running",
+          18
+        ],
+        [
+          "12396441",
+          "waking",
+          1
+        ],
+        [
+          "12396442",
+          "creating",
+          10
+        ],
+        [
+          "12396442",
+          "parked",
+          30
+        ],
+        [
+          "12396442",
+          "running",
+          24
+        ],
+        [
+          "12396442",
+          "waking",
+          5
+        ]
+      ],
+      "pending": 0,
+      "reservations": 0,
+      "sample_ids": [
+        "00c29e55a8bd42b0a590c73af1bb9726",
+        "0291d40a4ecf4a069a790a1d380d5de2",
+        "03c1bbf2825f41ad87f7ef0b47d824ec"
+      ],
+      "nodes": [
+        {
+          "job": "12396440",
+          "version": "0.5.48",
+          "age_seconds": 14.1,
+          "admission": true,
+          "draining": false,
+          "active": 19,
+          "cpu_percent": 53.59477124183007,
+          "memory_available_mb": 84632,
+          "memory_psi_full_avg10": 1.42,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 1,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 8,
+          "storage_snapshot_uploaded_bytes": 12682600448
+        },
+        {
+          "job": "12396441",
+          "version": "0.5.48",
+          "age_seconds": 6.8,
+          "admission": true,
+          "draining": false,
+          "active": 23,
+          "cpu_percent": 19.875776397515526,
+          "memory_available_mb": 84938,
+          "memory_psi_full_avg10": 1.9,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 0,
+          "storage_snapshot_uploaded_bytes": 0
+        },
+        {
+          "job": "12396442",
+          "version": "0.5.48",
+          "age_seconds": 10.2,
+          "admission": true,
+          "draining": false,
+          "active": 21,
+          "cpu_percent": 51.533742331288344,
+          "memory_available_mb": 84666,
+          "memory_psi_full_avg10": 4.63,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 0,
+          "storage_snapshot_uploaded_bytes": 0
+        },
+        {
+          "job": "12396443",
+          "version": "0.5.48",
+          "age_seconds": 20.2,
+          "admission": true,
+          "draining": false,
+          "active": 0,
+          "cpu_percent": 30.37974683544304,
+          "memory_available_mb": 38187,
+          "memory_psi_full_avg10": 0.0,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 0,
+          "storage_snapshot_uploaded_bytes": 0
+        }
+      ],
+      "relay_states": {
+        "completed": 1335,
+        "leased": 14
+      },
+      "relay_recent_10m": {
+        "completed": 1205,
+        "leased": 14
+      },
+      "delivery_pending_count": 81,
+      "oldest_pending": [
+        {
+          "rollout_id": "973a86d9882c419c8e47c79a2693fe8f",
+          "state": "completed",
+          "age_seconds": 52.0
+        },
+        {
+          "rollout_id": "704fc3623dc64439b441f5b32ee830e1",
+          "state": "completed",
+          "age_seconds": 37.2
+        },
+        {
+          "rollout_id": "d0dcf994914e4e1a892ff4d417ee832c",
+          "state": "completed",
+          "age_seconds": 31.7
+        },
+        {
+          "rollout_id": "0728eafdf0dc48b994d9fc668ecb4915",
+          "state": "completed",
+          "age_seconds": 30.5
+        },
+        {
+          "rollout_id": "d0b80002993940c09b062a641b90c693",
+          "state": "completed",
+          "age_seconds": 29.7
+        }
+      ],
+      "completed_wake_delay_10m": {
+        "count": 1124,
+        "p50": 5.074,
+        "p95": 25.154,
+        "max": 90.344
+      },
+      "health": {
+        "gateway": {
+          "status": 200,
+          "seconds": 0.047,
+          "version": "0.5.48"
+        },
+        "relay": {
+          "status": 200,
+          "seconds": 0.046,
+          "version": "0.5.48"
+        }
+      },
+      "collection_error": "TimeoutExpired: Command '['journalctl', '-u', 'ucloud-sandbox-gateway', '-u', 'ucloud-sandbox-relay', '--since', '35 seconds ago', '--no-pager', '-o', 'cat', '-n', '3000']' timed out after 5 seconds"
+    },
+    {
+      "sample": 4,
+      "at": "2026-09-19T11:04:45.995389+00:00",
+      "routes": [
+        [
+          "12396440",
+          "creating",
+          7
+        ],
+        [
+          "12396440",
+          "parked",
+          30
+        ],
+        [
+          "12396440",
+          "running",
+          24
+        ],
+        [
+          "12396440",
+          "waking",
+          1
+        ],
+        [
+          "12396441",
+          "creating",
+          14
+        ],
+        [
+          "12396441",
+          "parked",
+          28
+        ],
+        [
+          "12396441",
+          "running",
+          16
+        ],
+        [
+          "12396442",
+          "creating",
+          8
+        ],
+        [
+          "12396442",
+          "parked",
+          32
+        ],
+        [
+          "12396442",
+          "running",
+          30
+        ],
+        [
+          "12396442",
+          "waking",
+          3
+        ]
+      ],
+      "pending": 0,
+      "reservations": 0,
+      "sample_ids": [
+        "00c29e55a8bd42b0a590c73af1bb9726",
+        "0291d40a4ecf4a069a790a1d380d5de2",
+        "03c1bbf2825f41ad87f7ef0b47d824ec"
+      ],
+      "nodes": [
+        {
+          "job": "12396440",
+          "version": "0.5.48",
+          "age_seconds": 24.0,
+          "admission": true,
+          "draining": false,
+          "active": 21,
+          "cpu_percent": 17.088607594936708,
+          "memory_available_mb": 84592,
+          "memory_psi_full_avg10": 1.47,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 8,
+          "storage_snapshot_uploaded_bytes": 12682600448
+        },
+        {
+          "job": "12396441",
+          "version": "0.5.48",
+          "age_seconds": 17.7,
+          "admission": true,
+          "draining": false,
+          "active": 19,
+          "cpu_percent": 20.754716981132077,
+          "memory_available_mb": 84958,
+          "memory_psi_full_avg10": 0.47,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 0,
+          "storage_snapshot_uploaded_bytes": 0
+        },
+        {
+          "job": "12396442",
+          "version": "0.5.48",
+          "age_seconds": 19.0,
+          "admission": true,
+          "draining": false,
+          "active": 27,
+          "cpu_percent": 77.27272727272727,
+          "memory_available_mb": 84368,
+          "memory_psi_full_avg10": 4.68,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 1,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 0,
+          "storage_snapshot_uploaded_bytes": 0
+        },
+        {
+          "job": "12396443",
+          "version": "0.5.48",
+          "age_seconds": 7.4,
+          "admission": true,
+          "draining": false,
+          "active": 0,
+          "cpu_percent": 11.39240506329114,
+          "memory_available_mb": 42143,
+          "memory_psi_full_avg10": 0.0,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 0,
+          "storage_snapshot_uploaded_bytes": 0
+        }
+      ],
+      "relay_states": {
+        "completed": 1398,
+        "leased": 3,
+        "pending": 1
+      },
+      "relay_recent_10m": {
+        "completed": 1204,
+        "leased": 3,
+        "pending": 1
+      },
+      "delivery_pending_count": 98,
+      "oldest_pending": [
+        {
+          "rollout_id": "973a86d9882c419c8e47c79a2693fe8f",
+          "state": "completed",
+          "age_seconds": 82.1
+        },
+        {
+          "rollout_id": "d0dcf994914e4e1a892ff4d417ee832c",
+          "state": "completed",
+          "age_seconds": 61.8
+        },
+        {
+          "rollout_id": "d0b80002993940c09b062a641b90c693",
+          "state": "completed",
+          "age_seconds": 59.8
+        },
+        {
+          "rollout_id": "9b866ea567b340929a39e49cc373ed4f",
+          "state": "completed",
+          "age_seconds": 56.0
+        },
+        {
+          "rollout_id": "40125b5f0335436597d89b67498d8217",
+          "state": "completed",
+          "age_seconds": 53.3
+        }
+      ],
+      "completed_wake_delay_10m": {
+        "count": 1106,
+        "p50": 5.495,
+        "p95": 26.783,
+        "max": 90.344
+      },
+      "health": {
+        "gateway": {
+          "status": 200,
+          "seconds": 0.097,
+          "version": "0.5.48"
+        },
+        "relay": {
+          "error": "HTTPError: HTTP Error 503: Service Unavailable",
+          "seconds": 0.932
+        }
+      },
+      "recent_log_signals": {
+        "traceback": 16,
+        "stream timeout": 0,
+        "wake failed": 0,
+        "admission is closed": 0,
+        "no ready builder": 0,
+        "cpu pressure": 0,
+        "http 503": 0,
+        "http 504": 0
+      }
+    },
+    {
+      "sample": 5,
+      "at": "2026-09-19T11:05:28.629012+00:00",
+      "routes": [
+        [
+          "12396440",
+          "creating",
+          6
+        ],
+        [
+          "12396440",
+          "parked",
+          29
+        ],
+        [
+          "12396440",
+          "running",
+          27
+        ],
+        [
+          "12396440",
+          "waking",
+          1
+        ],
+        [
+          "12396441",
+          "creating",
+          12
+        ],
+        [
+          "12396441",
+          "parked",
+          29
+        ],
+        [
+          "12396441",
+          "running",
+          17
+        ],
+        [
+          "12396442",
+          "creating",
+          7
+        ],
+        [
+          "12396442",
+          "parked",
+          33
+        ],
+        [
+          "12396442",
+          "running",
+          30
+        ],
+        [
+          "12396442",
+          "waking",
+          1
+        ]
+      ],
+      "pending": 0,
+      "reservations": 0,
+      "sample_ids": [
+        "00c29e55a8bd42b0a590c73af1bb9726",
+        "0291d40a4ecf4a069a790a1d380d5de2",
+        "03c1bbf2825f41ad87f7ef0b47d824ec"
+      ],
+      "nodes": [
+        {
+          "job": "12396440",
+          "version": "0.5.48",
+          "age_seconds": 3.0,
+          "admission": true,
+          "draining": false,
+          "active": 25,
+          "cpu_percent": 0.0,
+          "memory_available_mb": 84411,
+          "memory_psi_full_avg10": 0.02,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 8,
+          "storage_snapshot_uploaded_bytes": 12682600448
+        },
+        {
+          "job": "12396441",
+          "version": "0.5.48",
+          "age_seconds": 3.0,
+          "admission": true,
+          "draining": false,
+          "active": 15,
+          "cpu_percent": 1.2345679012345678,
+          "memory_available_mb": 85388,
+          "memory_psi_full_avg10": 0.0,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 0,
+          "storage_snapshot_uploaded_bytes": 0
+        },
+        {
+          "job": "12396442",
+          "version": "0.5.48",
+          "age_seconds": 3.0,
+          "admission": true,
+          "draining": false,
+          "active": 34,
+          "cpu_percent": 0.0,
+          "memory_available_mb": 84344,
+          "memory_psi_full_avg10": 0.06,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 0,
+          "storage_snapshot_uploaded_bytes": 0
+        },
+        {
+          "job": "12396443",
+          "version": "0.5.48",
+          "age_seconds": 2.7,
+          "admission": true,
+          "draining": false,
+          "active": 0,
+          "cpu_percent": 6.25,
+          "memory_available_mb": 41959,
+          "memory_psi_full_avg10": 0.0,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 0,
+          "storage_snapshot_uploaded_bytes": 0
+        }
+      ],
+      "relay_states": {
+        "completed": 1354,
+        "leased": 3,
+        "pending": 2
+      },
+      "relay_recent_10m": {
+        "completed": 1204,
+        "leased": 3,
+        "pending": 2
+      },
+      "delivery_pending_count": 98,
+      "oldest_pending": [
+        {
+          "rollout_id": "973a86d9882c419c8e47c79a2693fe8f",
+          "state": "completed",
+          "age_seconds": 124.7
+        },
+        {
+          "rollout_id": "d0dcf994914e4e1a892ff4d417ee832c",
+          "state": "completed",
+          "age_seconds": 104.4
+        },
+        {
+          "rollout_id": "d0b80002993940c09b062a641b90c693",
+          "state": "completed",
+          "age_seconds": 102.4
+        },
+        {
+          "rollout_id": "9b866ea567b340929a39e49cc373ed4f",
+          "state": "completed",
+          "age_seconds": 98.6
+        },
+        {
+          "rollout_id": "40125b5f0335436597d89b67498d8217",
+          "state": "completed",
+          "age_seconds": 95.9
+        }
+      ],
+      "completed_wake_delay_10m": {
+        "count": 1106,
+        "p50": 5.495,
+        "p95": 26.783,
+        "max": 90.344
+      },
+      "health": {
+        "gateway": {
+          "status": 200,
+          "seconds": 0.233,
+          "version": "0.5.48"
+        },
+        "relay": {
+          "error": "HTTPError: HTTP Error 503: Service Unavailable",
+          "seconds": 0.038
+        }
+      },
+      "recent_log_signals": {
+        "traceback": 20,
+        "stream timeout": 0,
+        "wake failed": 0,
+        "admission is closed": 0,
+        "no ready builder": 0,
+        "cpu pressure": 0,
+        "http 503": 0,
+        "http 504": 0
+      }
+    },
+    {
+      "sample": 6,
+      "at": "2026-09-19T11:05:58.630036+00:00",
+      "routes": [
+        [
+          "12396440",
+          "creating",
+          2
+        ],
+        [
+          "12396440",
+          "parked",
+          22
+        ],
+        [
+          "12396440",
+          "running",
+          24
+        ],
+        [
+          "12396440",
+          "waking",
+          5
+        ],
+        [
+          "12396441",
+          "creating",
+          6
+        ],
+        [
+          "12396441",
+          "parked",
+          21
+        ],
+        [
+          "12396441",
+          "running",
+          35
+        ],
+        [
+          "12396441",
+          "waking",
+          1
+        ],
+        [
+          "12396442",
+          "parked",
+          19
+        ],
+        [
+          "12396442",
+          "running",
+          40
+        ],
+        [
+          "12396442",
+          "waking",
+          7
+        ]
+      ],
+      "pending": 0,
+      "reservations": 0,
+      "sample_ids": [
+        "00c29e55a8bd42b0a590c73af1bb9726",
+        "0291d40a4ecf4a069a790a1d380d5de2",
+        "03c1bbf2825f41ad87f7ef0b47d824ec"
+      ],
+      "nodes": [
+        {
+          "job": "12396440",
+          "version": "0.5.48",
+          "age_seconds": 5.7,
+          "admission": true,
+          "draining": false,
+          "active": 33,
+          "cpu_percent": 48.734177215189874,
+          "memory_available_mb": 83597,
+          "memory_psi_full_avg10": 1.53,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 8,
+          "storage_snapshot_uploaded_bytes": 12682600448
+        },
+        {
+          "job": "12396441",
+          "version": "0.5.48",
+          "age_seconds": 3.2,
+          "admission": true,
+          "draining": false,
+          "active": 38,
+          "cpu_percent": 79.22077922077922,
+          "memory_available_mb": 82851,
+          "memory_psi_full_avg10": 1.81,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 0,
+          "storage_snapshot_uploaded_bytes": 0
+        },
+        {
+          "job": "12396442",
+          "version": "0.5.48",
+          "age_seconds": 7.6,
+          "admission": true,
+          "draining": false,
+          "active": 37,
+          "cpu_percent": 62.913907284768214,
+          "memory_available_mb": 83610,
+          "memory_psi_full_avg10": 0.87,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 2,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 0,
+          "storage_snapshot_uploaded_bytes": 0
+        },
+        {
+          "job": "12396443",
+          "version": "0.5.48",
+          "age_seconds": 10.9,
+          "admission": true,
+          "draining": false,
+          "active": 0,
+          "cpu_percent": 95.34883720930233,
+          "memory_available_mb": 40504,
+          "memory_psi_full_avg10": 0.0,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 0,
+          "storage_snapshot_uploaded_bytes": 0
+        }
+      ],
+      "relay_states": {
+        "completed": 1462,
+        "leased": 27
+      },
+      "relay_recent_10m": {
+        "completed": 1332,
+        "leased": 27
+      },
+      "delivery_pending_count": 59,
+      "oldest_pending": [
+        {
+          "rollout_id": "b33e2ad525e94e719658b04677cde6d2",
+          "state": "completed",
+          "age_seconds": 103.0
+        },
+        {
+          "rollout_id": "98ef5c1eabe24f17a66c0823d3ec2dd7",
+          "state": "completed",
+          "age_seconds": 93.0
+        },
+        {
+          "rollout_id": "9e7b6cbf24a346feb9749210f4b05ba7",
+          "state": "completed",
+          "age_seconds": 89.0
+        },
+        {
+          "rollout_id": "69d4afdac177458c8b93dca974b2b933",
+          "state": "completed",
+          "age_seconds": 24.0
+        },
+        {
+          "rollout_id": "c785371200df47e4ac7ee3b6fc92a333",
+          "state": "completed",
+          "age_seconds": 22.7
+        }
+      ],
+      "completed_wake_delay_10m": {
+        "count": 1273,
+        "p50": 5.799,
+        "p95": 73.747,
+        "max": 136.704
+      },
+      "health": {
+        "gateway": {
+          "status": 200,
+          "seconds": 0.021,
+          "version": "0.5.48"
+        },
+        "relay": {
+          "status": 200,
+          "seconds": 0.018,
+          "version": "0.5.48"
+        }
+      },
+      "recent_log_signals": {
+        "traceback": 20,
+        "stream timeout": 0,
+        "wake failed": 0,
+        "admission is closed": 0,
+        "no ready builder": 0,
+        "cpu pressure": 0,
+        "http 503": 0,
+        "http 504": 0
+      }
+    },
+    {
+      "sample": 7,
+      "at": "2026-09-19T11:06:28.630117+00:00",
+      "routes": [
+        [
+          "12396440",
+          "parked",
+          17
+        ],
+        [
+          "12396440",
+          "running",
+          28
+        ],
+        [
+          "12396440",
+          "waking",
+          4
+        ],
+        [
+          "12396441",
+          "creating",
+          7
+        ],
+        [
+          "12396441",
+          "parked",
+          23
+        ],
+        [
+          "12396441",
+          "running",
+          30
+        ],
+        [
+          "12396441",
+          "waking",
+          4
+        ]
+      ],
+      "pending": 0,
+      "reservations": 0,
+      "sample_ids": [
+        "00c29e55a8bd42b0a590c73af1bb9726",
+        "0291d40a4ecf4a069a790a1d380d5de2",
+        "03c1bbf2825f41ad87f7ef0b47d824ec"
+      ],
+      "nodes": [
+        {
+          "job": "12396440",
+          "version": "0.5.48",
+          "age_seconds": 18.2,
+          "admission": true,
+          "draining": false,
+          "active": 19,
+          "cpu_percent": 37.735849056603776,
+          "memory_available_mb": 84284,
+          "memory_psi_full_avg10": 2.06,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 1,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 8,
+          "storage_snapshot_uploaded_bytes": 12682600448
+        },
+        {
+          "job": "12396441",
+          "version": "0.5.48",
+          "age_seconds": 15.0,
+          "admission": true,
+          "draining": false,
+          "active": 30,
+          "cpu_percent": 18.867924528301888,
+          "memory_available_mb": 84502,
+          "memory_psi_full_avg10": 2.33,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 1,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 0,
+          "storage_snapshot_uploaded_bytes": 0
+        },
+        {
+          "job": "12396443",
+          "version": "0.5.48",
+          "age_seconds": 16.8,
+          "admission": true,
+          "draining": false,
+          "active": 0,
+          "cpu_percent": 84.61538461538461,
+          "memory_available_mb": 41331,
+          "memory_psi_full_avg10": 0.18,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 0,
+          "storage_snapshot_uploaded_bytes": 0
+        }
+      ],
+      "relay_states": {
+        "completed": 1606,
+        "leased": 16
+      },
+      "relay_recent_10m": {
+        "completed": 1476,
+        "leased": 16
+      },
+      "delivery_pending_count": 58,
+      "oldest_pending": [
+        {
+          "rollout_id": "c785371200df47e4ac7ee3b6fc92a333",
+          "state": "completed",
+          "age_seconds": 52.7
+        },
+        {
+          "rollout_id": "2ed3ecfbec6646f38b2b244c33be0c8b",
+          "state": "completed",
+          "age_seconds": 51.0
+        },
+        {
+          "rollout_id": "c3a2a3b205514864b0ba33afe750664a",
+          "state": "completed",
+          "age_seconds": 44.5
+        },
+        {
+          "rollout_id": "5186c01ce30e45ee9a1f2d0570000256",
+          "state": "completed",
+          "age_seconds": 44.3
+        },
+        {
+          "rollout_id": "59b31577ba3d425e8b74a993db05be60",
+          "state": "completed",
+          "age_seconds": 39.1
+        }
+      ],
+      "completed_wake_delay_10m": {
+        "count": 1407,
+        "p50": 5.702,
+        "p95": 73.368,
+        "max": 136.704
+      },
+      "health": {
+        "gateway": {
+          "status": 200,
+          "seconds": 0.051,
+          "version": "0.5.48"
+        },
+        "relay": {
+          "status": 200,
+          "seconds": 0.019,
+          "version": "0.5.48"
+        }
+      },
+      "recent_log_signals": {
+        "traceback": 1,
+        "stream timeout": 0,
+        "wake failed": 0,
+        "admission is closed": 0,
+        "no ready builder": 0,
+        "cpu pressure": 0,
+        "http 503": 0,
+        "http 504": 0
+      }
+    },
+    {
+      "sample": 8,
+      "at": "2026-09-19T11:06:58.630194+00:00",
+      "routes": [
+        [
+          "12396440",
+          "parked",
+          19
+        ],
+        [
+          "12396440",
+          "running",
+          25
+        ],
+        [
+          "12396440",
+          "waking",
+          5
+        ],
+        [
+          "12396441",
+          "creating",
+          8
+        ],
+        [
+          "12396441",
+          "parked",
+          21
+        ],
+        [
+          "12396441",
+          "running",
+          31
+        ],
+        [
+          "12396441",
+          "waking",
+          2
+        ]
+      ],
+      "pending": 1,
+      "reservations": 0,
+      "sample_ids": [
+        "00c29e55a8bd42b0a590c73af1bb9726",
+        "0291d40a4ecf4a069a790a1d380d5de2",
+        "03c1bbf2825f41ad87f7ef0b47d824ec"
+      ],
+      "nodes": [
+        {
+          "job": "12396440",
+          "version": "0.5.48",
+          "age_seconds": 5.1,
+          "admission": true,
+          "draining": false,
+          "active": 25,
+          "cpu_percent": 70.70063694267516,
+          "memory_available_mb": 83597,
+          "memory_psi_full_avg10": 6.56,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 8,
+          "storage_snapshot_uploaded_bytes": 12682600448
+        },
+        {
+          "job": "12396441",
+          "version": "0.5.48",
+          "age_seconds": 4.8,
+          "admission": true,
+          "draining": false,
+          "active": 27,
+          "cpu_percent": 41.61490683229814,
+          "memory_available_mb": 83552,
+          "memory_psi_full_avg10": 9.9,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 1,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 0,
+          "storage_snapshot_uploaded_bytes": 0
+        },
+        {
+          "job": "12396443",
+          "version": "0.5.48",
+          "age_seconds": 2.6,
+          "admission": true,
+          "draining": false,
+          "active": 0,
+          "cpu_percent": 27.848101265822784,
+          "memory_available_mb": 41535,
+          "memory_psi_full_avg10": 0.06,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 0,
+          "storage_snapshot_uploaded_bytes": 0
+        }
+      ],
+      "relay_states": {
+        "completed": 1749,
+        "leased": 14
+      },
+      "relay_recent_10m": {
+        "completed": 1619,
+        "leased": 14
+      },
+      "delivery_pending_count": 67,
+      "oldest_pending": [
+        {
+          "rollout_id": "2ed3ecfbec6646f38b2b244c33be0c8b",
+          "state": "completed",
+          "age_seconds": 81.0
+        },
+        {
+          "rollout_id": "9a3913517eaa4859b02ef6be94c9c7f7",
+          "state": "completed",
+          "age_seconds": 63.6
+        },
+        {
+          "rollout_id": "df7c40196f60467889a3b365166a3482",
+          "state": "completed",
+          "age_seconds": 57.3
+        },
+        {
+          "rollout_id": "0ec128894f4f4b1291ec425e0eed3537",
+          "state": "completed",
+          "age_seconds": 54.1
+        },
+        {
+          "rollout_id": "8290eec2249d4f95ab8826dbfe3e9665",
+          "state": "completed",
+          "age_seconds": 53.3
+        }
+      ],
+      "completed_wake_delay_10m": {
+        "count": 1537,
+        "p50": 5.587,
+        "p95": 70.961,
+        "max": 136.704
+      },
+      "health": {
+        "gateway": {
+          "status": 200,
+          "seconds": 0.025,
+          "version": "0.5.48"
+        },
+        "relay": {
+          "status": 200,
+          "seconds": 0.023,
+          "version": "0.5.48"
+        }
+      },
+      "recent_log_signals": {
+        "traceback": 0,
+        "stream timeout": 0,
+        "wake failed": 0,
+        "admission is closed": 0,
+        "no ready builder": 0,
+        "cpu pressure": 0,
+        "http 503": 0,
+        "http 504": 0
+      }
+    },
+    {
+      "sample": 9,
+      "at": "2026-09-19T11:07:28.630544+00:00",
+      "routes": [
+        [
+          "12396440",
+          "creating",
+          5
+        ],
+        [
+          "12396440",
+          "parked",
+          28
+        ],
+        [
+          "12396440",
+          "running",
+          17
+        ],
+        [
+          "12396440",
+          "waking",
+          2
+        ],
+        [
+          "12396441",
+          "creating",
+          1
+        ],
+        [
+          "12396441",
+          "parked",
+          21
+        ],
+        [
+          "12396441",
+          "running",
+          24
+        ],
+        [
+          "12396441",
+          "waking",
+          11
+        ],
+        [
+          "12396444",
+          "creating",
+          3
+        ]
+      ],
+      "pending": 1,
+      "reservations": 0,
+      "sample_ids": [
+        "00c29e55a8bd42b0a590c73af1bb9726",
+        "0291d40a4ecf4a069a790a1d380d5de2",
+        "03c1bbf2825f41ad87f7ef0b47d824ec"
+      ],
+      "nodes": [
+        {
+          "job": "12396440",
+          "version": "0.5.48",
+          "age_seconds": 14.2,
+          "admission": true,
+          "draining": false,
+          "active": 15,
+          "cpu_percent": 8.695652173913043,
+          "memory_available_mb": 84530,
+          "memory_psi_full_avg10": 8.23,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 4,
+          "storage_publication_waiting": 4,
+          "storage_snapshot_publications": 8,
+          "storage_snapshot_uploaded_bytes": 12682600448
+        },
+        {
+          "job": "12396441",
+          "version": "0.5.48",
+          "age_seconds": 16.1,
+          "admission": true,
+          "draining": false,
+          "active": 21,
+          "cpu_percent": 75.30120481927712,
+          "memory_available_mb": 84208,
+          "memory_psi_full_avg10": 4.55,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 1,
+          "storage_snapshot_uploaded_bytes": 1057918976
+        },
+        {
+          "job": "12396443",
+          "version": "0.5.48",
+          "age_seconds": 8.0,
+          "admission": true,
+          "draining": false,
+          "active": 0,
+          "cpu_percent": 27.848101265822784,
+          "memory_available_mb": 42384,
+          "memory_psi_full_avg10": 0.02,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 0,
+          "storage_snapshot_uploaded_bytes": 0
+        },
+        {
+          "job": "12396444",
+          "version": "0.5.48",
+          "age_seconds": 22.3,
+          "admission": true,
+          "draining": false,
+          "active": 0,
+          "cpu_percent": 0.0,
+          "memory_available_mb": 87635,
+          "memory_psi_full_avg10": 0.0,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 0,
+          "storage_snapshot_uploaded_bytes": 0
+        },
+        {
+          "job": "12396445",
+          "version": "0.5.48",
+          "age_seconds": 20.0,
+          "admission": true,
+          "draining": false,
+          "active": 0,
+          "cpu_percent": 0.0,
+          "memory_available_mb": 87782,
+          "memory_psi_full_avg10": 0.0,
+          "swap_used_mb": 0,
+          "storage_error_volumes": 0,
+          "storage_active_operations": 0,
+          "storage_waiting_operations": 0,
+          "storage_publication_active": 0,
+          "storage_publication_waiting": 0,
+          "storage_snapshot_publications": 0,
+          "storage_snapshot_uploaded_bytes": 0
+        }
+      ],
+      "relay_states": {
+        "completed": 1864,
+        "leased": 19
+      },
+      "relay_recent_10m": {
+        "completed": 1734,
+        "leased": 19
+      },
+      "delivery_pending_count": 53,
+      "oldest_pending": [
+        {
+          "rollout_id": "2ed3ecfbec6646f38b2b244c33be0c8b",
+          "state": "completed",
+          "age_seconds": 111.0
+        },
+        {
+          "rollout_id": "f1cf47a624214ae3a18c02db556ec5cc",
+          "state": "completed",
+          "age_seconds": 83.3
+        },
+        {
+          "rollout_id": "973a86d9882c419c8e47c79a2693fe8f",
+          "state": "completed",
+          "age_seconds": 81.3
+        },
+        {
+          "rollout_id": "c9d51498260b4ebabb65e9a2f33edaed",
+          "state": "completed",
+          "age_seconds": 47.5
+        },
+        {
+          "rollout_id": "0728eafdf0dc48b994d9fc668ecb4915",
+          "state": "completed",
+          "age_seconds": 35.2
+        }
+      ],
+      "completed_wake_delay_10m": {
+        "count": 1653,
+        "p50": 5.804,
+        "p95": 68.769,
+        "max": 136.704
+      },
+      "health": {
+        "gateway": {
+          "status": 200,
+          "seconds": 0.091,
+          "version": "0.5.48"
+        },
+        "relay": {
+          "status": 200,
+          "seconds": 0.036,
+          "version": "0.5.48"
+        }
+      },
+      "recent_log_signals": {
+        "traceback": 8,
+        "stream timeout": 0,
+        "wake failed": 0,
+        "admission is closed": 0,
+        "no ready builder": 0,
+        "cpu pressure": 0,
+        "http 503": 0,
+        "http 504": 0
+      }
+    }
+  ],
+  "traces": [
+    {
+      "query": "{ name = \"relay.wake_caller\" && duration > 10s }",
+      "count": 17,
+      "traces": [
+        {
+          "id": "acc8536335d13b830ed38b2e38584355",
+          "spans": [
+            {
+              "name": "POST /worker/respond",
+              "service": "ucloud-sandboxes-model-relay",
+              "seconds": 55.155,
+              "attributes": {
+                "http.response.status_code": "200",
+                "ucloud.span.thread_cpu.duration": 2.5616295449999997,
+                "http.request.method": "POST",
+                "http.route": "/worker/respond"
+              },
+              "events": []
+            },
+            {
+              "name": "relay.wake_caller",
+              "service": "ucloud-sandboxes-model-relay",
+              "seconds": 55.151,
+              "attributes": {
+                "relay.request.id": "8893cc05b3bf42d4aad4c9b4107f2074",
+                "relay.rollout.id": "4fd5dd589c76448c8936d18155d14cd8",
+                "sandbox.id": "4fd5dd589c76448c8936d18155d14cd8",
+                "ucloud.span.thread_cpu.duration": 2.560882286
+              },
+              "events": [
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "1",
+                    "retry.delay_seconds": 1.2379756369858392
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "2",
+                    "retry.delay_seconds": 1.0686707613063944
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "3",
+                    "retry.delay_seconds": 1.2010641074654846
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "4",
+                    "retry.delay_seconds": 1.1796520930140963
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "5",
+                    "retry.delay_seconds": 1.1387317566425386
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "6",
+                    "retry.delay_seconds": 1.0126623306960498
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "7",
+                    "retry.delay_seconds": 1.0887984556921666
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "8",
+                    "retry.delay_seconds": 1.2085118056047628
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "9",
+                    "retry.delay_seconds": 1.0520743304254887
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "10",
+                    "retry.delay_seconds": 1.0207465985865545
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "11",
+                    "retry.delay_seconds": 1.2428031275442142
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "12",
+                    "retry.delay_seconds": 1.1707000760534352
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+              "service": "ucloud-sandboxes-gateway",
+              "seconds": 1.547,
+              "attributes": {
+                "sandbox.id": "4fd5dd589c76448c8936d18155d14cd8",
+                "http.response.status_code": "200",
+                "ucloud.span.thread_cpu.duration": 0.028038616,
+                "http.request.method": "POST",
+                "http.route": "/v1/sandboxes/{sandbox_id}/wake"
+              },
+              "events": []
+            },
+            {
+              "name": "gateway.node_response_headers",
+              "service": "ucloud-sandboxes-gateway",
+              "seconds": 1.444,
+              "attributes": {
+                "http.response.status_code": "200",
+                "ucloud.span.thread_cpu.duration": 0.0006977760000000006,
+                "http.request.method": "POST",
+                "server.address": "sandbox-node-6fa43fe184-1",
+                "http.route": "sandbox.wake"
+              },
+              "events": []
+            },
+            {
+              "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+              "service": "ucloud-sandboxes-worker",
+              "seconds": 1.441,
+              "attributes": {
+                "sandbox.id": "4fd5dd589c76448c8936d18155d14cd8",
+                "http.response.status_code": "200",
+                "ucloud.span.thread_cpu.duration": 0.063783328,
+                "http.request.method": "POST",
+                "http.route": "/v1/sandboxes/{sandbox_id}/wake"
+              },
+              "events": []
+            },
+            {
+              "name": "sandbox.wake",
+              "service": "ucloud-sandboxes-worker",
+              "seconds": 1.383,
+              "attributes": {
+                "sandbox.id": "4fd5dd589c76448c8936d18155d14cd8",
+                "sandbox.generation": "1",
+                "ucloud.span.thread_cpu.duration": 0.041784343
+              },
+              "events": [
+                {
+                  "name": "sandbox.wake.timings",
+                  "attributes": {
+                    "validate_artifact": 115.61964899999566,
+                    "begin_restore_journal": 3.2360850000259234,
+                    "runsc_restore": 576.8446010000616,
+                    "runsc_state": 16.438844999925095,
+                    "candidate_fence": 0.07287899995844782,
+                    "candidate_journal": 129.43864600003963,
+                    "candidate_resume": 51.825133000079404,
+                    "readiness_exec": 71.51872099996126,
+                    "commit_running_journal": 238.07468200004678,
+                    "artifact_cleanup": 49.422182999933284,
+                    "warden_total": 1252.6861659999895
+                  }
+                }
+              ]
+            },
+            {
+              "name": "storage.server.EnsureMounted",
+              "service": "ucloud-sandboxes-storage",
+              "seconds": 0.034,
+              "attributes": {
+                "rpc.system": "ucloud-storage-native",
+                "rpc.method": "EnsureMounted",
+                "sandbox.id": "4fd5dd589c76448c8936d18155d14cd8",
+                "storage.volume.id": "4fd5dd589c76448c8936d18155d14cd8.sandbox-1",
+                "storage.admission.class": "lifecycle",
+                "ucloud.span.thread_cpu.duration": 0.008647723
+              },
+              "events": [
+                {
+                  "name": "storage.queue.acquired",
+                  "attributes": {
+                    "storage.queue.wait_seconds": 7.361000029959541e-06
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "f85985188956460c87b237739735a3",
+          "spans": [
+            {
+              "name": "POST /worker/respond",
+              "service": "ucloud-sandboxes-model-relay",
+              "seconds": 44.176,
+              "attributes": {
+                "http.response.status_code": "200",
+                "ucloud.span.thread_cpu.duration": 2.0325286710000006,
+                "http.request.method": "POST",
+                "http.route": "/worker/respond"
+              },
+              "events": []
+            },
+            {
+              "name": "relay.wake_caller",
+              "service": "ucloud-sandboxes-model-relay",
+              "seconds": 44.173,
+              "attributes": {
+                "relay.request.id": "6997e3a855eb48f2a47c1386a1f20a7a",
+                "relay.rollout.id": "318ecf40411441839450d532bc1b53c9",
+                "sandbox.id": "318ecf40411441839450d532bc1b53c9",
+                "ucloud.span.thread_cpu.duration": 2.031541892
+              },
+              "events": [
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "1",
+                    "retry.delay_seconds": 1.1268475342313877
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "2",
+                    "retry.delay_seconds": 1.1851972871707523
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "3",
+                    "retry.delay_seconds": 1.1836056711180596
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "4",
+                    "retry.delay_seconds": 1.2082306933710045
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "5",
+                    "retry.delay_seconds": 1.2401624688728143
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "6",
+                    "retry.delay_seconds": 1.1864401741854824
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "7",
+                    "retry.delay_seconds": 1.1800637748187155
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "8",
+                    "retry.delay_seconds": 1.0790386601447008
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "9",
+                    "retry.delay_seconds": 1.201441694822078
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "10",
+                    "retry.delay_seconds": 1.0678768541733752
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "11",
+                    "retry.delay_seconds": 1.078751524639287
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "12",
+                    "retry.delay_seconds": 1.2435057724059437
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+              "service": "ucloud-sandboxes-gateway",
+              "seconds": 1.898,
+              "attributes": {
+                "sandbox.id": "318ecf40411441839450d532bc1b53c9",
+                "http.response.status_code": "200",
+                "ucloud.span.thread_cpu.duration": 0.03478851,
+                "http.request.method": "POST",
+                "http.route": "/v1/sandboxes/{sandbox_id}/wake"
+              },
+              "events": []
+            },
+            {
+              "name": "gateway.node_response_headers",
+              "service": "ucloud-sandboxes-gateway",
+              "seconds": 1.786,
+              "attributes": {
+                "http.response.status_code": "200",
+                "ucloud.span.thread_cpu.duration": 0.00048106200000000085,
+                "http.request.method": "POST",
+                "server.address": "sandbox-node-6fa43fe184-1",
+                "http.route": "sandbox.wake"
+              },
+              "events": []
+            },
+            {
+              "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+              "service": "ucloud-sandboxes-worker",
+              "seconds": 1.783,
+              "attributes": {
+                "sandbox.id": "318ecf40411441839450d532bc1b53c9",
+                "http.response.status_code": "200",
+                "ucloud.span.thread_cpu.duration": 0.062561394,
+                "http.request.method": "POST",
+                "http.route": "/v1/sandboxes/{sandbox_id}/wake"
+              },
+              "events": []
+            },
+            {
+              "name": "sandbox.wake",
+              "service": "ucloud-sandboxes-worker",
+              "seconds": 1.709,
+              "attributes": {
+                "sandbox.id": "318ecf40411441839450d532bc1b53c9",
+                "sandbox.generation": "1",
+                "ucloud.span.thread_cpu.duration": 0.047953764
+              },
+              "events": [
+                {
+                  "name": "sandbox.wake.timings",
+                  "attributes": {
+                    "validate_artifact": 95.59411999998702,
+                    "begin_restore_journal": 4.938629999969635,
+                    "runsc_restore": 768.0599310000389,
+                    "runsc_state": 16.494319000003088,
+                    "candidate_fence": 0.07008499994753947,
+                    "candidate_journal": 230.97583800006305,
+                    "candidate_resume": 51.40151600005538,
+                    "readiness_exec": 64.40015700002277,
+                    "commit_running_journal": 272.3080340000479,
+                    "artifact_cleanup": 29.402464999975564,
+                    "warden_total": 1533.7592849999737
+                  }
+                }
+              ]
+            },
+            {
+              "name": "storage.server.EnsureMounted",
+              "service": "ucloud-sandboxes-storage",
+              "seconds": 0.038,
+              "attributes": {
+                "rpc.system": "ucloud-storage-native",
+                "rpc.method": "EnsureMounted",
+                "sandbox.id": "318ecf40411441839450d532bc1b53c9",
+                "storage.volume.id": "318ecf40411441839450d532bc1b53c9.sandbox-1",
+                "storage.admission.class": "lifecycle",
+                "ucloud.span.thread_cpu.duration": 0.009194537
+              },
+              "events": [
+                {
+                  "name": "storage.queue.acquired",
+                  "attributes": {
+                    "storage.queue.wait_seconds": 5.909000037718215e-06
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "4901a430e0cafe650710f9144a6d2305",
+          "spans": [
+            {
+              "name": "POST /worker/respond",
+              "service": "ucloud-sandboxes-model-relay",
+              "seconds": 41.107,
+              "attributes": {
+                "http.response.status_code": "200",
+                "ucloud.span.thread_cpu.duration": 2.042623903000001,
+                "http.request.method": "POST",
+                "http.route": "/worker/respond"
+              },
+              "events": []
+            },
+            {
+              "name": "relay.wake_caller",
+              "service": "ucloud-sandboxes-model-relay",
+              "seconds": 41.101,
+              "attributes": {
+                "relay.request.id": "f419ff6d1644428699a8d1fd6626957b",
+                "relay.rollout.id": "367c277185ac4adab632a856956d3be0",
+                "sandbox.id": "367c277185ac4adab632a856956d3be0",
+                "ucloud.span.thread_cpu.duration": 2.0412300539999997
+              },
+              "events": [
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "1",
+                    "retry.delay_seconds": 1.1568007687992576
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "2",
+                    "retry.delay_seconds": 1.124901032670273
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "3",
+                    "retry.delay_seconds": 1.1174992239396657
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "4",
+                    "retry.delay_seconds": 1.1130999013365022
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "5",
+                    "retry.delay_seconds": 1.1318470697203726
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "6",
+                    "retry.delay_seconds": 1.0109521734598017
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "7",
+                    "retry.delay_seconds": 1.096014567992383
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "8",
+                    "retry.delay_seconds": 1.0441523977118317
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "9",
+                    "retry.delay_seconds": 1.1867996006880117
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "10",
+                    "retry.delay_seconds": 1.2226553265480031
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "11",
+                    "retry.delay_seconds": 1.0335366641850814
+                  }
+                },
+                {
+                  "name": "relay.wake.capacity_retry",
+                  "attributes": {
+                    "gateway.lifecycle.status_code": "503",
+                    "gateway.lifecycle.error_code": "gateway_startup_busy",
+                    "retry.attempt": "12",
+                    "retry.delay_seconds": 1.1628906315527077
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+              "service": "ucloud-sandboxes-gateway",
+              "seconds": 1.344,
+              "attributes": {
+                "sandbox.id": "367c277185ac4adab632a856956d3be0",
+                "http.response.status_code": "200",
+                "ucloud.span.thread_cpu.duration": 0.03493854,
+                "http.request.method": "POST",
+                "http.route": "/v1/sandboxes/{sandbox_id}/wake"
+              },
+              "events": []
+            },
+            {
+              "name": "gateway.node_response_headers",
+              "service": "ucloud-sandboxes-gateway",
+              "seconds": 1.243,
+              "attributes": {
+                "http.response.status_code": "200",
+                "ucloud.span.thread_cpu.duration": 0.0005432349999999996,
+                "http.request.method": "POST",
+                "server.address": "sandbox-node-6fa43fe184-2",
+                "http.route": "sandbox.wake"
+              },
+              "events": []
+            },
+            {
+              "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+              "service": "ucloud-sandboxes-worker",
+              "seconds": 1.238,
+              "attributes": {
+                "sandbox.id": "367c277185ac4adab632a856956d3be0",
+                "http.response.status_code": "200",
+                "ucloud.span.thread_cpu.duration": 0.087644501,
+                "http.request.method": "POST",
+                "http.route": "/v1/sandboxes/{sandbox_id}/wake"
+              },
+              "events": []
+            },
+            {
+              "name": "sandbox.wake",
+              "service": "ucloud-sandboxes-worker",
+              "seconds": 1.159,
+              "attributes": {
+                "sandbox.id": "367c277185ac4adab632a856956d3be0",
+                "sandbox.generation": "1",
+                "ucloud.span.thread_cpu.duration": 0.06926607700000001
+              },
+              "events": [
+                {
+                  "name": "sandbox.wake.timings",
+                  "attributes": {
+                    "validate_artifact": 140.67152500001612,
+                    "begin_restore_journal": 2.5789740000163874,
+                    "runsc_restore": 668.1254549999949,
+                    "runsc_state": 17.262953999988895,
+                    "candidate_fence": 0.15061699991747446,
+                    "candidate_journal": 2.9613809999773366,
+                    "candidate_resume": 36.65374900003826,
+                    "readiness_exec": 33.007774999987305,
+                    "commit_running_journal": 2.9474789999994755,
+                    "artifact_cleanup": 37.19458599994141,
+                    "warden_total": 941.7148400000315
+                  }
+                }
+              ]
+            },
+            {
+              "name": "sandbox.wake.ensure_network",
+              "service": "ucloud-sandboxes-worker",
+              "seconds": 0.216,
+              "attributes": {
+                "ucloud.span.thread_cpu.duration": 0.014315499999999998
+              },
+              "events": []
+            },
+            {
+              "name": "storage.server.EnsureMounted",
+              "service": "ucloud-sandboxes-storage",
+              "seconds": 0.05,
+              "attributes": {
+                "rpc.system": "ucloud-storage-native",
+                "rpc.method": "EnsureMounted",
+                "sandbox.id": "367c277185ac4adab632a856956d3be0",
+                "storage.volume.id": "367c277185ac4adab632a856956d3be0.sandbox-1",
+                "storage.admission.class": "lifecycle",
+                "ucloud.span.thread_cpu.duration": 0.011784767
+              },
+              "events": [
+                {
+                  "name": "storage.queue.acquired",
+                  "attributes": {
+                    "storage.queue.wait_seconds": 9.74400006725773e-06
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "query": "{ name = \"storage.server.ListVolumesPage\" && duration > 1s }",
+      "count": 0,
+      "traces": []
+    }
+  ],
+  "heap_profile_before_fix": {
+    "seconds": 0.34850602480582893,
+    "objects": 330164,
+    "types": [
+      [
+        "builtins.list",
+        95020
+      ],
+      [
+        "builtins.dict",
+        90623
+      ],
+      [
+        "builtins.function",
+        20247
+      ],
+      [
+        "builtins.tuple",
+        14349
+      ],
+      [
+        "ssl.SSLContext",
+        5011
+      ],
+      [
+        "ucloud_sandboxes.cli._RejectControlRedirects",
+        5009
+      ],
+      [
+        "urllib.request.OpenerDirector",
+        5009
+      ],
+      [
+        "urllib.request.UnknownHandler",
+        5009
+      ],
+      [
+        "urllib.request.HTTPHandler",
+        5009
+      ],
+      [
+        "urllib.request.HTTPDefaultErrorHandler",
+        5009
+      ],
+      [
+        "urllib.request.FTPHandler",
+        5009
+      ],
+      [
+        "urllib.request.FileHandler",
+        5009
+      ],
+      [
+        "urllib.request.HTTPErrorProcessor",
+        5009
+      ],
+      [
+        "urllib.request.DataHandler",
+        5009
+      ],
+      [
+        "urllib.request.HTTPSHandler",
+        5009
+      ],
+      [
+        "builtins.cell",
+        4136
+      ],
+      [
+        "weakref.ReferenceType",
+        3872
+      ],
+      [
+        "_asyncio.Future",
+        2354
+      ],
+      [
+        "collections.deque",
+        2339
+      ],
+      [
+        "builtins.getset_descriptor",
+        2326
+      ],
+      [
+        "asyncio.locks.Lock",
+        2233
+      ],
+      [
+        "ucloud_sandboxes.model_relay.RelayRequest",
+        2232
+      ],
+      [
+        "ucloud_sandboxes.model_relay.RelayWorkerResponse",
+        2155
+      ],
+      [
+        "builtins.builtin_function_or_method",
+        2086
+      ],
+      [
+        "builtins.type",
+        1822
+      ]
+    ],
+    "shallow_bytes": [
+      [
+        "builtins.dict",
+        20551584
+      ],
+      [
+        "builtins.list",
+        15008544
+      ],
+      [
+        "builtins.function",
+        3401496
+      ],
+      [
+        "builtins.type",
+        2455696
+      ],
+      [
+        "collections.deque",
+        1777640
+      ],
+      [
+        "builtins.tuple",
+        989384
+      ],
+      [
+        "ssl.SSLContext",
+        761672
+      ],
+      [
+        "builtins.frozenset",
+        655048
+      ],
+      [
+        "abc.ABCMeta",
+        542456
+      ],
+      [
+        "builtins.set",
+        410048
+      ],
+      [
+        "_asyncio.Future",
+        338976
+      ],
+      [
+        "builtins.frame",
+        335368
+      ],
+      [
+        "weakref.ReferenceType",
+        309760
+      ],
+      [
+        "_io.BufferedWriter",
+        262480
+      ],
+      [
+        "ucloud_sandboxes.cli._RejectControlRedirects",
+        240432
+      ],
+      [
+        "urllib.request.OpenerDirector",
+        240432
+      ],
+      [
+        "urllib.request.UnknownHandler",
+        240432
+      ],
+      [
+        "urllib.request.HTTPHandler",
+        240432
+      ],
+      [
+        "urllib.request.HTTPDefaultErrorHandler",
+        240432
+      ],
+      [
+        "urllib.request.FTPHandler",
+        240432
+      ],
+      [
+        "urllib.request.FileHandler",
+        240432
+      ],
+      [
+        "urllib.request.HTTPErrorProcessor",
+        240432
+      ],
+      [
+        "urllib.request.DataHandler",
+        240432
+      ],
+      [
+        "urllib.request.HTTPSHandler",
+        240432
+      ],
+      [
+        "multidict._multidict.CIMultiDict",
+        227288
+      ]
+    ],
+    "large_dict_value_bytes": [
+      [
+        "builtins.dict",
+        231138
+      ]
+    ],
+    "tasks": [
+      [
+        "RequestHandler.start done=False",
+        77
+      ],
+      [
+        "RequestHandler._handle_request done=False",
+        77
+      ],
+      [
+        "_model_relay_maintenance_loop done=False",
+        1
+      ],
+      [
+        "_run_app done=False",
+        1
+      ]
+    ]
+  },
+  "gateway_create_budget": 16,
+  "host_memory_mb": 5503,
+  "swap_mb": 0,
+  "relay_oom": {
+    "restarted_at_utc": "2026-09-19T11:05:28Z",
+    "kernel_reason": "global_oom",
+    "killed_process_anon_rss_kb": 4149060,
+    "systemd_memory_peak": "3.9G"
+  }
+}

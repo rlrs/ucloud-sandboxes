@@ -93,12 +93,12 @@ def _instance_phase(
     started_at: datetime | None,
     updates: object,
 ) -> InstancePhase:
-    if _has_post_start_suspension(updates):
-        return InstancePhase.LOST
     if state in FINAL_JOB_STATES:
         return InstancePhase.TERMINAL
+    if _has_post_start_suspension(updates):
+        return InstancePhase.UNAVAILABLE
     if state == "SUSPENDED":
-        return InstancePhase.PROVISIONING if started_at is None else InstancePhase.LOST
+        return InstancePhase.PROVISIONING if started_at is None else InstancePhase.UNAVAILABLE
     if state == "RUNNING":
         return InstancePhase.RUNNING
     return InstancePhase.PROVISIONING

@@ -578,7 +578,7 @@ class HibernationArtifactStore:
         sandbox_generation: int,
         hibernation_generation: int,
     ) -> Path:
-        with self._locked():
+        with self._locked(sandbox_id, sandbox_generation):
             path = self.generation_path(
                 sandbox_id=sandbox_id,
                 sandbox_generation=sandbox_generation,
@@ -619,7 +619,7 @@ class HibernationArtifactStore:
         return path
 
     def publish_complete(self, manifest: HibernationManifest) -> HibernationManifest:
-        with self._locked():
+        with self._locked(manifest.sandbox_id, manifest.sandbox_generation):
             generation = self.generation_path(
                 sandbox_id=manifest.sandbox_id,
                 sandbox_generation=manifest.sandbox_generation,
@@ -693,7 +693,7 @@ class HibernationArtifactStore:
         A durable ``COMPLETE`` marker is an ownership boundary and is never
         removed by this rollback operation.
         """
-        with self._locked():
+        with self._locked(sandbox_id, sandbox_generation):
             generation = self.generation_path(
                 sandbox_id=sandbox_id,
                 sandbox_generation=sandbox_generation,
@@ -816,7 +816,7 @@ class HibernationArtifactStore:
         allow_consumed_main_memory: bool = False,
     ) -> None:
         """Delete one authenticated generation for an authorized sandbox delete."""
-        with self._locked():
+        with self._locked(manifest.sandbox_id, manifest.sandbox_generation):
             generation = self.generation_path(
                 sandbox_id=manifest.sandbox_id,
                 sandbox_generation=manifest.sandbox_generation,
@@ -981,20 +981,52 @@ class HibernationArtifactStore:
             raise HibernationError(f"{label} must be private and owned")
 
     @contextmanager
-    def _locked(self) -> Iterator[None]:
+    def _locked(self, sandbox_id: str, sandbox_generation: int) -> Iterator[None]:
+        # All generations of an incarnation share their parent directory, so
+        # publication, rollback and removal must exclude each other. Unrelated
+        # sandboxes must not wait for a large checkpoint's durable memory flush.
+        incarnation = self.generation_path(
+            sandbox_id=sandbox_id,
+            sandbox_generation=sandbox_generation,
+            hibernation_generation=1,
+        ).parent.name
+        lock_name = f".store-{hashlib.sha256(incarnation.encode()).hexdigest()}.lock"
         self._ensure_directory(self.root, create=True)
         root_fd = self._open_directory(self.root)
+        try:
+            # Retain shared admission through the original lock so an older
+            # process using its root-wide exclusive lock remains compatible.
+            # Keep incarnation locks in the stable root and never unlink them:
+            # waiters must retain one inode even when generations are deleted
+            # or their storage-native mount is detached and reattached.
+            with (
+                self._lock_file(root_fd, self.LOCK_NAME, fcntl.LOCK_SH),
+                self._lock_file(root_fd, lock_name, fcntl.LOCK_EX),
+            ):
+                yield
+        finally:
+            os.close(root_fd)
+
+    @contextmanager
+    def _lock_file(self, root_fd: int, name: str, mode: int) -> Iterator[None]:
         descriptor = -1
         try:
-            descriptor = os.open(
-                self.LOCK_NAME,
+            flags = (
                 os.O_RDWR
-                | os.O_CREAT
                 | getattr(os, "O_CLOEXEC", 0)
-                | getattr(os, "O_NOFOLLOW", 0),
-                0o600,
-                dir_fd=root_fd,
+                | getattr(os, "O_NOFOLLOW", 0)
             )
+            try:
+                descriptor = os.open(name, flags, dir_fd=root_fd)
+            except FileNotFoundError:
+                # Explicit exclusive creation also avoids concurrent openat
+                # O_CREAT returning ENOENT on macOS during first admission.
+                try:
+                    descriptor = os.open(
+                        name, flags | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=root_fd
+                    )
+                except FileExistsError:
+                    descriptor = os.open(name, flags, dir_fd=root_fd)
             info = os.fstat(descriptor)
             if (
                 not stat.S_ISREG(info.st_mode)
@@ -1004,13 +1036,12 @@ class HibernationArtifactStore:
                 raise HibernationError(
                     "hibernation artifact lock must be a private owned regular file"
                 )
-            fcntl.flock(descriptor, fcntl.LOCK_EX)
+            fcntl.flock(descriptor, mode)
             yield
         finally:
             if descriptor >= 0:
                 fcntl.flock(descriptor, fcntl.LOCK_UN)
                 os.close(descriptor)
-            os.close(root_fd)
 
     def _require_generation_path(self, generation: Path) -> None:
         try:
@@ -1025,7 +1056,9 @@ class HibernationArtifactStore:
 
     def _ensure_directory(self, path: Path, *, create: bool) -> None:
         if create and not os.path.lexists(path):
-            path.mkdir(mode=0o700)
+            # Independent first operations can initialize the store root at
+            # the same time, before either has opened its admission lock.
+            path.mkdir(mode=0o700, exist_ok=True)
             if path.parent != path:
                 self._fsync_directory(path.parent)
         try:

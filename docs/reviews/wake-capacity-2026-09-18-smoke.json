@@ -1,0 +1,95 @@
+{
+  "prefix": "capacity-0536-51ca55",
+  "sandbox_count": 129,
+  "create_concurrency": 8,
+  "steps": [
+    {
+      "name": "target-created",
+      "elapsed": 53.065,
+      "owner": "12396276"
+    },
+    {
+      "name": "target-parked",
+      "elapsed": 55.525,
+      "owner": "12396276",
+      "portable": false
+    },
+    {
+      "name": "fill-progress",
+      "elapsed": 58.458,
+      "created": 16
+    },
+    {
+      "name": "fill-progress",
+      "elapsed": 60.942,
+      "created": 32
+    },
+    {
+      "name": "fill-progress",
+      "elapsed": 64.527,
+      "created": 48
+    },
+    {
+      "name": "fill-progress",
+      "elapsed": 69.074,
+      "created": 64
+    },
+    {
+      "name": "fill-progress",
+      "elapsed": 71.213,
+      "created": 80
+    },
+    {
+      "name": "fill-progress",
+      "elapsed": 74.573,
+      "created": 96
+    },
+    {
+      "name": "fill-progress",
+      "elapsed": 77.777,
+      "created": 112
+    },
+    {
+      "name": "fill-progress",
+      "elapsed": 81.32,
+      "created": 128
+    },
+    {
+      "name": "source-device-limit-reached",
+      "elapsed": 93.328,
+      "owner": "12396276",
+      "active": 128,
+      "maximum": 128
+    },
+    {
+      "name": "spare-worker-ready",
+      "elapsed": 143.374,
+      "owner": "12396279"
+    },
+    {
+      "name": "capacity-wake-migrated",
+      "elapsed": 150.453,
+      "source": "12396276",
+      "destination": "12396279",
+      "wake_seconds": 7.078,
+      "identity_preserved": true
+    }
+  ],
+  "before": {
+    "id": "7a568747-4182-4d9d-825d-cdc0e1a0d5da",
+    "counter": 20
+  },
+  "success": true,
+  "http_rejections": {
+    "no_ready_node": 21,
+    "image_warmup_pending": 1,
+    "503": 2,
+    "snapshot_publication_pending": 2
+  },
+  "health": {
+    "count": 153,
+    "failures": [],
+    "max_seconds": 0.13
+  },
+  "total_seconds": 156.12
+}

@@ -45,6 +45,16 @@ Image builds should not run on sandbox nodes. The intended model is:
 - registry: durable image cache for common building blocks and custom images,
   typically the control-plane-managed registry backed by a UCloud mount
 
+Builders accept excess build submissions into a FIFO queue and execute at most
+four builds concurrently by default. Queued builds retain the existing `running`
+API status, immutable build context, deduplication identity, and drain protection;
+`wait=false` returns their build ID immediately. They do not start a waiting thread
+per build. Queueing does not make builds portable: queued work stays with its
+builder, and an agent restart marks interrupted builds failed under the existing
+recovery contract. The autoscaler sizes the pool from admitted plus pending build
+counts, divided by the default execution concurrency, within the configured VM
+budget. A burst no longer requests just one builder regardless of its size.
+
 The gateway routes `POST /v1/images/build` to ready builder-only nodes
 advertising `image-build`. If no builder is ready, it records pending image-build
 demand signal so the autoscaler can create a builder VM. The executing

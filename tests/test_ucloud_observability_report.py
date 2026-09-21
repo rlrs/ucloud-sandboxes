@@ -76,6 +76,13 @@ class UCloudObservabilityReportTests(unittest.TestCase):
                 "operation_errors_with_success",
             },
         )
+        mixed = next(
+            item
+            for item in _findings(report)
+            if item["kind"] == "operation_errors_with_success"
+        )
+        self.assertIn("66.7% error share", mixed["message"])
+        self.assertIn("do not establish recovery", mixed["message"])
 
 
 if __name__ == "__main__":

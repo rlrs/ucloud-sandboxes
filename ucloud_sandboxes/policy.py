@@ -22,6 +22,7 @@ from .models import (
 )
 from .resource_admission import (
     dynamic_request_fits,
+    node_storage_pressure_allows,
     reserve_dynamic_resources,
     reusable_dynamic_resources,
 )
@@ -111,7 +112,10 @@ def evaluate_scale(
         policy,
         live_signals,
     ) and not any(node.is_idle for node in ready_nodes)
-    create_pressure_scale_up = _create_pressure_requires_capacity(
+    backlog_scale_up = _startup_backlog_requires_capacity(
+        policy, demand, ready_nodes, live_signals
+    )
+    create_pressure_scale_up = backlog_scale_up or _create_pressure_requires_capacity(
         policy,
         live_signals,
     )
@@ -413,6 +417,15 @@ def evaluate_scale(
             max(1, live_signals.sandbox_create_limit),
             max(1, policy.create_target_concurrency_per_node),
         )
+        if backlog_scale_up:
+            pipeline_nodes = max(
+                pipeline_nodes,
+                len(ready_nodes)
+                + _ceil_div(
+                    demand.pending_count,
+                    max(1, policy.create_target_concurrency_per_node),
+                ),
+            )
         target_nodes = min(
             policy.max_nodes,
             max(
@@ -439,6 +452,10 @@ def evaluate_scale(
         )
         if create_count > 0:
             reason = (
+                f"{demand.pending_count} capacity request(s) queued for "
+                f"{demand.oldest_capacity_pending_seconds}s; targeting "
+                f"{target_nodes} temporary startup node(s)"
+            ) if backlog_scale_up else (
                 "sandbox create pipeline saturated at "
                 f"{live_signals.sandbox_create_limit} concurrent request(s); "
                 f"targeting {target_nodes} temporary node(s) after "
@@ -570,6 +587,33 @@ def _create_pressure_requires_capacity(
         # accelerate/magnify a real backlog without reacting to healthy cold
         # creates merely occupying request slots.
         and _live_pressure_requires_capacity(policy, signals)
+    )
+
+
+def _startup_backlog_requires_capacity(
+    policy: ScalePolicy,
+    demand: SandboxDemand,
+    ready_nodes: list[SandboxNode],
+    signals: LiveScaleSignals | None,
+) -> bool:
+    """A sustained capacity queue can justify bounded startup headroom.
+
+    Count durable capacity demands, not HTTP retries or warm reservations.
+    Another VM cannot help a short burst or a pool with an unused ready worker.
+    The existing headroom and provisioning caps still bound the purchase.
+    """
+
+    return bool(
+        policy.create_pressure_enabled
+        and demand.pending_count >= max(1, policy.create_target_concurrency_per_node)
+        and demand.oldest_capacity_pending_seconds
+        >= max(1, policy.create_pressure_window_seconds)
+        and ready_nodes
+        and not any(node.is_idle for node in ready_nodes)
+        and signals is not None
+        and signals.latest_observation_age_seconds is not None
+        and signals.latest_observation_age_seconds
+        <= policy.live_pressure_fresh_seconds
     )
 
 
@@ -727,7 +771,7 @@ def _nodes_for_unplaced_requests(
     now: datetime,
     oldest_pending_seconds: int,
 ) -> int:
-    """Bin-pack accepted request shapes so aggregate free space cannot lie."""
+    """Bin-pack shapes, batching repeated demand and stopping beyond fleet size."""
 
     if not requests:
         return 0
@@ -786,7 +830,8 @@ def _nodes_for_unplaced_requests(
     for placement in sorted(requests, key=pressure, reverse=True):
         requested = placement.resources
         excluded = set(placement.excluded_job_ids)
-        for _ in range(placement.count):
+        remaining = placement.count
+        while remaining > 0:
             fitting: list[tuple[int, str, ResourceQuantity, ResourceQuantity]] = []
             for index, (job_id, available, total) in enumerate(bins):
                 if job_id in excluded:
@@ -808,13 +853,30 @@ def _nodes_for_unplaced_requests(
                         item[2].vcpu - requested.vcpu,
                     ),
                 )
+                # CPU/RAM are reusable; only disk is reserved per placement.
+                # Consume identical demand together instead of expanding a
+                # reservation into one planner iteration per future sandbox.
+                batch = (
+                    min(remaining, available.disk_mb // requested.disk_mb)
+                    if requested.disk_mb > 0
+                    else remaining
+                )
+                if job_id == placement.owned_job_id and placement.owned_disk_mb > 0:
+                    batch = 1
                 bins[index] = (
                     job_id,
-                    reserve_dynamic_resources(available, requested),
+                    reserve_dynamic_resources(
+                        available, replace(requested, disk_mb=requested.disk_mb * batch)
+                    ),
                     total,
                 )
+                remaining -= batch
                 continue
             missing += 1
+            # Additional hypothetical nodes cannot change this cycle's create
+            # budget, or the answer to whether existing capacity suffices.
+            if missing > policy.max_nodes:
+                return missing
             bins.append(
                 (
                     "",
@@ -824,6 +886,7 @@ def _nodes_for_unplaced_requests(
                     default_bin,
                 )
             )
+            remaining -= 1
     return missing
 
 
@@ -980,8 +1043,8 @@ def _counts_as_unreachable(
     oldest_pending_seconds: int,
 ) -> bool:
     return bool(
-        node.job.is_running
-        and not node.heartbeat_fresh
+        (node.job.is_running or node.job.is_unavailable)
+        and (not node.heartbeat_fresh or node.job.is_unavailable)
         and not _counts_as_active_provisioning(
             node,
             policy,
@@ -1256,6 +1319,10 @@ def _security_adjusted_resources(
     node: SandboxNode,
     resources: ResourceQuantity,
 ) -> ResourceQuantity:
+    if node.heartbeat is not None and not node_storage_pressure_allows(
+        node.heartbeat, ResourceQuantity()
+    ):
+        return ResourceQuantity()
     if resources.disk_mb <= 0 or _node_has_disk_quota(node):
         return resources
     return ResourceQuantity(

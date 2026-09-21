@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from dataclasses import replace
 from pathlib import Path
 import logging
@@ -634,9 +636,23 @@ class DirectSandboxProvisioner:
                 sandbox.bundle / "rootfs",
                 spec=registration.spec,
             )
+            prepared_config = json.loads(
+                (sandbox.bundle / "config.json").read_text(encoding="utf-8")
+            )
+            self.oci.prepare_working_directory(
+                sandbox.bundle / "rootfs",
+                directory=prepared_config["process"]["cwd"],
+            )
             self.oci.prepare_network_files(
                 sandbox.bundle / "rootfs",
                 spec=registration.spec,
+                relay_hosts=(
+                    self.network_manager.hosts_for_policy(
+                        registration.spec.network_policy
+                    )
+                    if self.network_manager is not None
+                    else {}
+                ),
             )
             # Keep the init binary inside the quota-accounted rootfs. A bind
             # mount here is not executable under gVisor on production nodes.
@@ -651,7 +667,10 @@ class DirectSandboxProvisioner:
             )
             self.oci.install_managed_init(
                 sandbox.bundle / "rootfs",
-                enabled=registration.spec.managed_process,
+                enabled=(
+                    registration.spec.managed_process
+                    or registration.spec.filesystem.management_helper == "static"
+                ),
             )
             record = self.warden.inspect(sandbox)
             if record is None:
@@ -681,14 +700,19 @@ class DirectSandboxProvisioner:
             record = self.warden.inspect(registration.to_direct_sandbox())
             if record is None:
                 raise DirectWardenError("owned direct sandbox has no lifecycle journal")
+            # Quarantine retains this incarnation's ownership and storage until
+            # explicit cleanup. It must remain visible without blocking startup
+            # for other sandboxes or replaying its failed lifecycle transition.
             if record.state not in {
                 HibernationState.RUNNING,
                 HibernationState.PARKED,
+                HibernationState.RECOVERY_REQUIRED,
             }:
                 record = self.warden.reconcile(registration.to_direct_sandbox())
             if record.state not in {
                 HibernationState.RUNNING,
                 HibernationState.PARKED,
+                HibernationState.RECOVERY_REQUIRED,
             }:
                 raise DirectWardenError(
                     f"direct sandbox requires operator action: {record.state.value}"
@@ -801,8 +825,7 @@ class DirectSandboxProvisioner:
     ) -> StorageVolumeOwner:
         return StorageVolumeOwner(
             volume_id=(
-                f"{registration.sandbox_id}.sandbox-"
-                f"{registration.sandbox_generation}"
+                f"{registration.sandbox_id}.sandbox-{registration.sandbox_generation}"
             ),
             sandbox_id=registration.sandbox_id,
             sandbox_generation=registration.sandbox_generation,
@@ -836,6 +859,7 @@ class DirectSandboxProvisioner:
 
     def _validate_spec(self, spec: SandboxSpec) -> None:
         spec.validate()
+        self.oci.validate_management_helper(spec)
         if spec.memory_mb is None or spec.disk_mb is None:
             raise ValueError(
                 "direct sandboxes require explicit memory_mb and disk_mb limits"
@@ -847,6 +871,8 @@ class DirectSandboxProvisioner:
                 f"spec={spec.network!r} maps to {expected_network!r}, "
                 f"node={self.warden.config.network!r}"
             )
+        if self.network_manager is not None:
+            self.network_manager.validate_policy(spec.network_policy)
         if expected_network == "sandbox" and self.network_manager is None:
             raise ValueError("direct sandbox networking has no node network manager")
         if expected_network == "none" and self.network_manager is not None:
@@ -866,6 +892,7 @@ class DirectSandboxProvisioner:
             registration.sandbox_id,
             registration.sandbox_generation,
             host_rules_ready=host_rules_ready,
+            network_policy=registration.spec.network_policy,
         ).namespace_path
 
     def ensure_network(
@@ -906,6 +933,7 @@ class DirectSandboxProvisioner:
             registration.sandbox_id,
             registration.sandbox_generation,
             avoid_guest_ips=(source_guest_ip,),
+            network_policy=registration.spec.network_policy,
         )
         if lease.guest_ip == source_guest_ip:
             raise StorageNativeMigrationError(

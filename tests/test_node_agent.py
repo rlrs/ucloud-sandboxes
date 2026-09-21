@@ -148,6 +148,22 @@ class BuilderNodeAgentTests(unittest.TestCase):
                 },
             )
         self.assertEqual(rejected.exception.code, 503)
+        with rejected.exception as response:
+            body = json.load(response)
+            self.assertEqual(body["error_code"], "node_admission_closed")
+            self.assertTrue(body["retryable"])
+            self.assertEqual(response.headers["Retry-After"], "1")
+
+    def test_drain_rejects_image_pull_before_work_with_admission_fence(self) -> None:
+        self._json("/v1/drain", method="POST", payload={"draining": True, "token": "drain-pull"})
+        with self.assertRaises(error.HTTPError) as rejected:
+            self._json("/v1/images/pull", method="POST", payload={"image": "busybox"})
+        with rejected.exception as response:
+            body = json.load(response)
+            self.assertEqual(response.code, 503)
+            self.assertEqual(body["error_code"], "node_admission_closed")
+            self.assertTrue(body["retryable"])
+        self.assertEqual(self._json("/v1/images")[1]["images"], [])
 
     def test_image_build_requires_uploaded_content_addressed_context(self) -> None:
         with self.assertRaises(error.HTTPError) as rejected:

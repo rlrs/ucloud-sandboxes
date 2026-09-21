@@ -4,7 +4,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
-from typing import Sequence
+from typing import Mapping, Sequence
 
 from .direct_network import DirectNetworkManager
 from .direct_oci import DirectOciConfigBuilder
@@ -13,6 +13,7 @@ from .direct_registry import DirectSandboxRegistry
 from .direct_service import DirectSandboxService
 from .direct_warden import DirectRunscWarden, DirectRunscWardenConfig
 from .hibernation import HibernationRuntimeFingerprint
+from .gvisor_distribution import installed_sidecar_fingerprints
 from .image_rootfs import DockerOverlay2RootfsStore, OverlayRootfsManager
 from .storage_native_daemon import StorageNativeNodeClient
 from .telemetry import Telemetry
@@ -30,7 +31,9 @@ def build_direct_runtime_service(
     docker_binary: str = "docker",
     network: str = "none",
     network_allow_tcp: Sequence[str] = (),
+    network_relays: Mapping[str, str] | None = None,
     max_concurrent_restores: int = 8,
+    max_concurrent_startups: int = 8,
     idle_park_seconds: float = 0.0,
     storage_native_socket: Path,
     telemetry: Telemetry | None = None,
@@ -50,6 +53,8 @@ def build_direct_runtime_service(
     ):
         if not path.is_absolute():
             raise ValueError(f"{label} must be absolute")
+    if network_relays and network != "sandbox":
+        raise ValueError("network_relays requires sandbox networking")
     if network not in {"none", "sandbox"}:
         raise ValueError("direct runtime network must be none or sandbox")
     if not storage_native_socket.is_absolute():
@@ -59,16 +64,18 @@ def build_direct_runtime_service(
     resolved_image_cache_root.mkdir(mode=0o700, parents=True, exist_ok=True)
     volume_mount_root.mkdir(mode=0o700, parents=True, exist_ok=True)
     runsc_digest = _sha256_file(runsc)
-    boot_digest = _canonical_sha256(
-        {
-            "network": network,
-            "platform": "systrap",
-            # These identifiers describe the only shipped mounted-overlay and
-            # storage-native layout; changing either must fence old snapshots.
-            "rootfs_format": "ucloud-overlay2-rootfs-v1",
-            "quota_layout": "storage-native-v1",
-        }
-    )
+    boot_settings: dict[str, object] = {
+        "network": network,
+        "platform": "systrap",
+        "rootfs_format": "ucloud-overlay2-rootfs-v1",
+        "quota_layout": "storage-native-v1",
+    }
+    companions = installed_sidecar_fingerprints(runsc, runsc_commit)
+    if companions:
+        # Preserve legacy fingerprints, but bind new checkpoints to every
+        # executable that can implement their kernel and restore operations.
+        boot_settings["gvisor_companions"] = companions
+    boot_digest = _canonical_sha256(boot_settings)
     fingerprint = HibernationRuntimeFingerprint(
         runsc_sha256=runsc_digest,
         runsc_commit=runsc_commit,
@@ -94,6 +101,7 @@ def build_direct_runtime_service(
         DirectNetworkManager(
             state_root / "network-slots.json",
             allowed_tcp_egress=network_allow_tcp,
+            network_relays=network_relays,
         )
         if network == "sandbox"
         else None
@@ -132,6 +140,7 @@ def build_direct_runtime_service(
     return DirectSandboxService(
         provisioner,
         max_concurrent_restores=max_concurrent_restores,
+        max_concurrent_startups=max_concurrent_startups,
         idle_park_seconds=idle_park_seconds,
         telemetry=telemetry,
     )

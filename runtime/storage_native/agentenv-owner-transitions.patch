@@ -1,0 +1,381 @@
+diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.rs
+--- a/storage/ublk-daemon/src/server.rs
++++ b/storage/ublk-daemon/src/server.rs
+@@ -324,8 +324,7 @@
+     image_service_cache: Arc<ImageServiceCache>,
+     default_image_service: ImageService,
+     devices: Arc<DashMap<u32, ManagedDevice>>,
+-    runtime_owners: Arc<DashMap<String, RuntimeDeviceOwner>>,
+-    owner_by_dev_id: Arc<DashMap<u32, String>>,
++    runtime_owners: Arc<RuntimeOwners>,
+     pool_state: Option<Arc<PoolState>>,
+     resize_tool: Option<ResizeToolSpec>,
+     resize_global_config: PathBuf,
+@@ -377,8 +376,7 @@
+             image_service_cache: Arc::new(cache),
+             default_image_service,
+             devices: Arc::new(DashMap::new()),
+-            runtime_owners: Arc::new(DashMap::new()),
+-            owner_by_dev_id: Arc::new(DashMap::new()),
++            runtime_owners: Arc::new(RuntimeOwners::default()),
+             pool_state: None,
+             resize_tool: None,
+             resize_global_config,
+@@ -467,7 +465,6 @@
+                     let (stream, _) = accept.context("accept daemon connection")?;
+                     let devices = Arc::clone(&self.devices);
+                     let runtime_owners = Arc::clone(&self.runtime_owners);
+-                    let owner_by_dev_id = Arc::clone(&self.owner_by_dev_id);
+                     let ctrl_ring = self.ctrl_ring.clone();
+                     let image_service_cache = Arc::clone(&self.image_service_cache);
+                     let pool_state = self.pool_state.as_ref().map(Arc::clone);
+@@ -480,7 +477,6 @@
+                             stream,
+                             devices,
+                             runtime_owners,
+-                            owner_by_dev_id,
+                             ctrl_ring,
+                             image_service_cache,
+                             pool_state,
+@@ -559,7 +555,6 @@
+             }
+         }
+         self.runtime_owners.clear();
+-        self.owner_by_dev_id.clear();
+     }
+ }
+ 
+@@ -569,8 +564,7 @@
+ async fn handle_connection(
+     mut stream: tokio::net::UnixStream,
+     devices: Arc<DashMap<u32, ManagedDevice>>,
+-    runtime_owners: Arc<DashMap<String, RuntimeDeviceOwner>>,
+-    owner_by_dev_id: Arc<DashMap<u32, String>>,
++    runtime_owners: Arc<RuntimeOwners>,
+     ctrl_ring: IoRingHandle<io_uring::squeue::Entry128>,
+     image_service_cache: Arc<ImageServiceCache>,
+     pool_state: Option<Arc<PoolState>>,
+@@ -614,62 +608,68 @@
+                 || owner_id.contains('\r')
+             {
+                 Err(anyhow::anyhow!("runtime device owner_id is invalid"))
+-            } else if let Some(existing) = runtime_owners.get(&owner_id) {
+-                Ok(DaemonResponse::OverlaybdRuntimeDeviceCreated {
+-                    dev_id: existing.dev_id,
+-                    device_path: existing.device_path.clone(),
+-                    actual_virtual_size: existing.actual_virtual_size,
+-                    runtime_image_config_path: existing.image_config_path.clone(),
+-                })
+             } else {
+-                let request = OverlaybdRuntimeDeviceRequest {
+-                    source_image_config: &source_image_config,
+-                    global_config: &global_config,
+-                    runtime_dir: &runtime_dir,
+-                    read_only,
+-                    runtime_upper_mode,
+-                    requested_virtual_size,
+-                    known_source_virtual_size,
+-                    resize_tool: resize_tool.as_ref(),
+-                    resize_global_config: &resize_global_config,
+-                    resize_permit: Arc::clone(&resize_permit),
+-                    allow_shrink,
+-                };
+-                handle_create_overlaybd_runtime_device(
+-                    request,
+-                    ctrl_ring,
+-                    &devices,
+-                    &image_service_cache,
+-                    &pool_state,
+-                )
+-                .await
+-                .map(|response| {
+-                    if let DaemonResponse::OverlaybdRuntimeDeviceCreated {
+-                        dev_id,
+-                        device_path,
+-                        actual_virtual_size,
+-                        runtime_image_config_path,
+-                    } = &response
+-                    {
+-                        runtime_owners.insert(
+-                            owner_id.clone(),
+-                            RuntimeDeviceOwner {
+-                                dev_id: *dev_id,
+-                                device_path: device_path.clone(),
+-                                image_config_path: runtime_image_config_path.clone(),
+-                                actual_virtual_size: *actual_virtual_size,
+-                            },
+-                        );
+-                        owner_by_dev_id.insert(*dev_id, owner_id);
+-                    }
+-                    response
+-                })
++                let _owner_guard = runtime_owners.operation_lock(&owner_id).lock_owned().await;
++                if let Some(existing) = runtime_owners.get(&owner_id) {
++                    Ok(DaemonResponse::OverlaybdRuntimeDeviceCreated {
++                        dev_id: existing.dev_id,
++                        device_path: existing.device_path.clone(),
++                        actual_virtual_size: existing.actual_virtual_size,
++                        runtime_image_config_path: existing.image_config_path.clone(),
++                    })
++                } else {
++                    let request = OverlaybdRuntimeDeviceRequest {
++                        source_image_config: &source_image_config,
++                        global_config: &global_config,
++                        runtime_dir: &runtime_dir,
++                        read_only,
++                        runtime_upper_mode,
++                        requested_virtual_size,
++                        known_source_virtual_size,
++                        resize_tool: resize_tool.as_ref(),
++                        resize_global_config: &resize_global_config,
++                        resize_permit: Arc::clone(&resize_permit),
++                        allow_shrink,
++                    };
++                    handle_create_overlaybd_runtime_device(
++                        request,
++                        ctrl_ring,
++                        &devices,
++                        &image_service_cache,
++                        &pool_state,
++                    )
++                    .await
++                    .map(|response| {
++                        if let DaemonResponse::OverlaybdRuntimeDeviceCreated {
++                            dev_id,
++                            device_path,
++                            actual_virtual_size,
++                            runtime_image_config_path,
++                        } = &response
++                        {
++                            runtime_owners.insert(
++                                owner_id.clone(),
++                                RuntimeDeviceOwner {
++                                    dev_id: *dev_id,
++                                    device_path: device_path.clone(),
++                                    image_config_path: runtime_image_config_path.clone(),
++                                    actual_virtual_size: *actual_virtual_size,
++                                },
++                            );
++                        }
++                        response
++                    })
++                }
+             }
+         }
+         DaemonRequest::Delete { dev_id } => {
++            let expected_owner = runtime_owners.owner_for_device(dev_id);
++            let _owner_guard = runtime_owners
++                .lock_device_owner(dev_id, &expected_owner)
++                .await?;
+             let response = handle_delete(&devices, &pool_state, ctrl_ring, dev_id).await;
+             if response.is_ok() {
+-                remove_runtime_owner(&runtime_owners, &owner_by_dev_id, dev_id);
++                runtime_owners.remove_if_current(dev_id, expected_owner.as_deref());
+             }
+             response
+         }
+@@ -721,22 +721,18 @@
+             .await
+         }
+         DaemonRequest::ReleaseOverlaybd { dev_id } => {
++            let expected_owner = runtime_owners.owner_for_device(dev_id);
++            let _owner_guard = runtime_owners
++                .lock_device_owner(dev_id, &expected_owner)
++                .await?;
+             let response = handle_release_overlaybd(&pool_state, ctrl_ring.clone(), dev_id).await;
+             if response.is_ok() {
+-                remove_runtime_owner(&runtime_owners, &owner_by_dev_id, dev_id);
++                runtime_owners.remove_if_current(dev_id, expected_owner.as_deref());
+             }
+             response
+         }
+         DaemonRequest::ListExclusiveOwners => Ok(DaemonResponse::ExclusiveOwners {
+-            owners: runtime_owners
+-                .iter()
+-                .map(|entry| ExclusiveDeviceOwner {
+-                    owner_id: entry.key().clone(),
+-                    dev_id: entry.dev_id,
+-                    device_path: entry.device_path.clone(),
+-                    image_config_path: entry.image_config_path.clone(),
+-                })
+-                .collect(),
++            owners: runtime_owners.snapshot(),
+         }),
+         DaemonRequest::UpdateSize {
+             dev_id,
+@@ -776,13 +772,168 @@
+ 
+ // ── Request handlers ────────────────────────────────────────────────────────
+ 
+-fn remove_runtime_owner(
+-    runtime_owners: &DashMap<String, RuntimeDeviceOwner>,
+-    owner_by_dev_id: &DashMap<u32, String>,
+-    dev_id: u32,
+-) {
+-    if let Some((_, owner_id)) = owner_by_dev_id.remove(&dev_id) {
+-        runtime_owners.remove(&owner_id);
++// Metadata is atomic, but no registry lock spans device I/O. Device releases
++// capture their owner before the pool can reuse the number; late completion
++// must never erase the next owner's binding. Per-owner locks also make two
++// concurrent retries of the same acquisition idempotent.
++#[derive(Default)]
++struct OwnerBindings {
++    by_owner: HashMap<String, RuntimeDeviceOwner>,
++    by_device: HashMap<u32, String>,
++    operations: HashMap<String, std::sync::Weak<Mutex<()>>>,
++}
++
++#[derive(Default)]
++struct RuntimeOwners(std::sync::Mutex<OwnerBindings>);
++
++impl RuntimeOwners {
++    fn operation_lock(&self, owner: &str) -> Arc<Mutex<()>> {
++        let mut state = self.0.lock().unwrap();
++        state.operations.retain(|_, lock| lock.strong_count() > 0);
++        if let Some(lock) = state
++            .operations
++            .get(owner)
++            .and_then(std::sync::Weak::upgrade)
++        {
++            return lock;
++        }
++        let lock = Arc::new(Mutex::new(()));
++        state
++            .operations
++            .insert(owner.to_owned(), Arc::downgrade(&lock));
++        lock
++    }
++
++    async fn lock_device_owner(
++        &self,
++        dev_id: u32,
++        expected: &Option<String>,
++    ) -> Result<Option<tokio::sync::OwnedMutexGuard<()>>> {
++        let guard = match expected {
++            Some(owner) => Some(self.operation_lock(owner).lock_owned().await),
++            None => None,
++        };
++        if self.owner_for_device(dev_id) != *expected {
++            bail!("runtime device owner changed before release");
++        }
++        Ok(guard)
++    }
++
++    fn get(&self, owner: &str) -> Option<RuntimeDeviceOwner> {
++        self.0.lock().unwrap().by_owner.get(owner).cloned()
++    }
++
++    fn owner_for_device(&self, dev_id: u32) -> Option<String> {
++        self.0.lock().unwrap().by_device.get(&dev_id).cloned()
++    }
++
++    fn insert(&self, owner: String, device: RuntimeDeviceOwner) {
++        let mut state = self.0.lock().unwrap();
++        if let Some(previous) = state.by_device.insert(device.dev_id, owner.clone()) {
++            state.by_owner.remove(&previous);
++        }
++        if let Some(previous) = state.by_owner.insert(owner.clone(), device.clone()) {
++            if previous.dev_id != device.dev_id
++                && state.by_device.get(&previous.dev_id) == Some(&owner)
++            {
++                state.by_device.remove(&previous.dev_id);
++            }
++        }
++    }
++
++    fn remove_if_current(&self, dev_id: u32, expected: Option<&str>) {
++        let mut state = self.0.lock().unwrap();
++        if expected.is_some() && state.by_device.get(&dev_id).map(String::as_str) == expected {
++            let owner = state.by_device.remove(&dev_id).unwrap();
++            state.by_owner.remove(&owner);
++        }
++    }
++
++    fn snapshot(&self) -> Vec<ExclusiveDeviceOwner> {
++        self.0
++            .lock()
++            .unwrap()
++            .by_owner
++            .iter()
++            .map(|(owner, device)| ExclusiveDeviceOwner {
++                owner_id: owner.clone(),
++                dev_id: device.dev_id,
++                device_path: device.device_path.clone(),
++                image_config_path: device.image_config_path.clone(),
++            })
++            .collect()
++    }
++
++    fn clear(&self) {
++        *self.0.lock().unwrap() = OwnerBindings::default();
++    }
++}
++
++#[cfg(test)]
++mod runtime_owner_tests {
++    use super::*;
++
++    fn device(dev_id: u32) -> RuntimeDeviceOwner {
++        RuntimeDeviceOwner {
++            dev_id,
++            device_path: PathBuf::from(format!("/dev/ublkb{dev_id}")),
++            image_config_path: PathBuf::from("/runtime/image.json"),
++            actual_virtual_size: 4096,
++        }
++    }
++
++    #[test]
++    fn late_release_cannot_remove_reacquired_device_owner() {
++        let owners = RuntimeOwners::default();
++        owners.insert("old".into(), device(18));
++        let releasing = owners.owner_for_device(18);
++        // Pool release has made the device available, but its response has
++        // not returned. Another acquisition completes during that await.
++        owners.insert("new".into(), device(18));
++        owners.remove_if_current(18, releasing.as_deref());
++        assert!(owners.get("old").is_none());
++        assert_eq!(owners.owner_for_device(18).as_deref(), Some("new"));
++        let snapshot = owners.snapshot();
++        assert_eq!(snapshot.len(), 1);
++        assert_eq!(snapshot[0].owner_id, "new");
++        owners.remove_if_current(18, Some("new"));
++        assert!(owners.snapshot().is_empty());
++    }
++
++    #[tokio::test]
++    async fn duplicate_acquisition_waits_but_other_owners_progress() {
++        let owners = Arc::new(RuntimeOwners::default());
++        let first = owners.operation_lock("same").lock_owned().await;
++        let same = owners.operation_lock("same");
++        assert!(same.try_lock().is_err());
++        let unrelated = owners.operation_lock("unrelated");
++        assert!(unrelated.try_lock().is_ok());
++        owners.insert("same".into(), device(4));
++        drop(first);
++        let _retry = same.lock().await;
++        assert_eq!(owners.get("same").unwrap().dev_id, 4);
++    }
++
++    #[test]
++    fn concurrent_reuse_never_publishes_duplicate_device_owners() {
++        let owners = Arc::new(RuntimeOwners::default());
++        std::thread::scope(|scope| {
++            for worker in 0..8 {
++                let owners = owners.clone();
++                scope.spawn(move || {
++                    for cycle in 0..1000 {
++                        let name = format!("{worker}-{cycle}");
++                        owners.insert(name.clone(), device(worker));
++                        let snapshot = owners.snapshot();
++                        let ids: std::collections::HashSet<_> =
++                            snapshot.iter().map(|o| o.dev_id).collect();
++                        assert_eq!(ids.len(), snapshot.len());
++                        owners.remove_if_current(worker, Some(&name));
++                    }
++                });
++            }
++        });
++        assert!(owners.snapshot().is_empty());
+     }
+ }
+ 

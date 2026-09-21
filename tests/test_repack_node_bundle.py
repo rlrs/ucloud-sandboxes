@@ -1,8 +1,14 @@
+import json
+import os
 from pathlib import Path
+from ucloud_sandboxes.gvisor_distribution import GVISOR_COMMIT, GVISOR_SIDECARS
 from tempfile import TemporaryDirectory
 import unittest
+import zipfile
 
 from scripts.repack_node_bundle import (
+    replace_direct_runtime,
+    replace_agent_package,
     sha256_file,
     validate_agent_runtime_dependencies,
     validate_source_bundle,
@@ -10,6 +16,32 @@ from scripts.repack_node_bundle import (
 
 
 class RepackNodeBundleTests(unittest.TestCase):
+    def test_repacked_agent_is_traversable_under_restrictive_umask(self):
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            runtime = root / "runtime"
+            (runtime / "site-packages").mkdir(parents=True)
+            wheel = root / "agent.whl"
+            with zipfile.ZipFile(wheel, "w") as archive:
+                archive.writestr("ucloud_sandboxes/relay/__init__.py", "")
+                archive.writestr("ucloud_sandboxes/cli.py", "")
+                archive.writestr(
+                    "ucloud_sandboxes-0.5.35.dist-info/WHEEL",
+                    "Root-Is-Purelib: true\nTag: py3-none-any\n",
+                )
+                archive.writestr(
+                    "ucloud_sandboxes-0.5.35.dist-info/METADATA",
+                    "Name: ucloud-sandboxes\nVersion: 0.5.35\n",
+                )
+            previous = os.umask(0o077)
+            try:
+                replace_agent_package(runtime, wheel)
+            finally:
+                os.umask(previous)
+            for directory in (runtime / "site-packages").rglob("*"):
+                if directory.is_dir():
+                    self.assertEqual(directory.stat().st_mode & 0o777, 0o755)
+
     def test_accepts_role_specific_builder_bundle(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
@@ -34,9 +66,7 @@ class RepackNodeBundleTests(unittest.TestCase):
                     },
                     "kernel": {
                         "release": "6.8.0",
-                        "files": [
-                            {"name": module.name, "sha256": sha256_file(module)}
-                        ],
+                        "files": [{"name": module.name, "sha256": sha256_file(module)}],
                     },
                 },
             }
@@ -75,6 +105,57 @@ class RepackNodeBundleTests(unittest.TestCase):
             )
 
             validate_agent_runtime_dependencies(runtime)
+
+    def test_runtime_replacement_validates_before_modifying_and_copies_companions(self):
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            source = root / "source"
+            source.mkdir()
+            files = {}
+            for name in ["runsc", *("gvisor-bin/" + n for n in GVISOR_SIDECARS)]:
+                path = source / name
+                path.parent.mkdir(exist_ok=True)
+                path.write_bytes(name.encode())
+                path.chmod(0o755)
+                files[name] = {"size": path.stat().st_size, "sha256": sha256_file(path)}
+            (source / "build-manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema": 2,
+                        "gvisor_commit": GVISOR_COMMIT,
+                        "files": files,
+                    }
+                )
+            )
+            helper = source / "init"
+            helper.write_bytes(b"init")
+            helper.chmod(0o755)
+            bundle = root / "bundle"
+            old = bundle / "runtime/direct/runsc"
+            old.parent.mkdir(parents=True)
+            old.write_bytes(b"old")
+            manifest = {"runtime": {"role": "sandbox"}}
+            sentry = source / "gvisor-bin/gvisor_sentry"
+            original = sentry.read_bytes()
+            sentry.write_bytes(b"tampered")
+            with self.assertRaisesRegex(ValueError, "mismatch"):
+                replace_direct_runtime(
+                    bundle, manifest, source / "runsc", GVISOR_COMMIT, helper
+                )
+            self.assertEqual(old.read_bytes(), b"old")
+            sentry.write_bytes(original)
+            replace_direct_runtime(
+                bundle, manifest, source / "runsc", GVISOR_COMMIT, helper
+            )
+            direct = manifest["runtime"]["direct_runsc"]
+            self.assertEqual(direct["commit"], GVISOR_COMMIT)
+            self.assertEqual(len(direct["sidecars"]), 4)
+            for item in [
+                direct,
+                *direct["sidecars"],
+                manifest["runtime"]["managed_init"],
+            ]:
+                self.assertEqual(sha256_file(bundle / item["file"]), item["sha256"])
 
     @staticmethod
     def _metadata(runtime: Path, directory: str, contents: str) -> None:

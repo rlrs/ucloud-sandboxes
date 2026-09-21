@@ -1,0 +1,397 @@
+SWEREBENCH_V2_TEST_OUTPUT_START
+
+> @elastic/synthetics@1.0.0-beta.3 test:unit
+> jest --verbose --no-color
+
+
+Running without BrowserService
+(node:118) [DEP0147] DeprecationWarning: In future versions of Node.js, fs.rmdir(path, { recursive: true }) will be removed. Use fs.rm(path, { recursive: true }) instead
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:119) [DEP0147] DeprecationWarning: In future versions of Node.js, fs.rmdir(path, { recursive: true }) will be removed. Use fs.rm(path, { recursive: true }) instead
+(Use `node --trace-deprecation ...` to show where the warning was created)
+PASS __tests__/reporters/json.test.ts (13.833 s)
+  json reporter
+    ✓ writes each step as NDJSON to the FD (9 ms)
+    ✓ formats network fields in ECS format (3 ms)
+    ✓ writes step errors to the top level (4 ms)
+    ✓ writes journey errors to the top level (2 ms)
+    ✓ writes full journey info if present (1 ms)
+    ✓ captures number of journeys as metadata event (2 ms)
+    ✓ return empty when dir doesnt exists (1 ms)
+    ✓ idempotent on constructing screenshots blocks (4412 ms)
+    screenshots
+      ✓ write whole blobs data  (20 ms)
+      ✓ write block & reference docs (1661 ms)
+      ✓ dont write on only-on-failure for successful journey (6 ms)
+      ✓ write on only-on-failure for failed journey (14 ms)
+
+PASS __tests__/sdk/trace-metrics.test.ts
+  Trace metrics
+    ✓ compute user timing metrics (1 ms)
+    ✓ compute user experience trace and metrics (1 ms)
+    ✓ computes layout shift
+    ✓ computes cls with session window
+    ✓ calculate cls score with simulated sessions
+    ✓ cls to 0 when no events found (1 ms)
+    ✓ computes filmstrips
+
+PASS __tests__/plugins/network.test.ts (17.885 s)
+  network
+    ✓ should capture network info (1450 ms)
+    ✓ not include data URL in network info (1698 ms)
+    ✓ produce distinct events for redirects (1978 ms)
+    ✓ measure resource and transfer size (1614 ms)
+    ✓ timings for aborted requests (1844 ms)
+    ✓ timings for chunked response (2096 ms)
+    waterfall timing calculation
+      ✓ calculate timings for a request event (2 ms)
+      ✓ when some resource timing data is unavailable (2 ms)
+      ✓ when complete resource timing is not available (3 ms)
+
+PASS __tests__/helper.test.ts
+  ✓ indent message with seperator (1 ms)
+  ✓ get monotonic clock time (1 ms)
+  ✓ convert trace timestamp to internal time
+  ✓ format errors (1 ms)
+  ✓ throw error when no package.json found (2 ms)
+  ✓ rewrite error stack from Playwright (2 ms)
+  ✓ does not rewrite non playwright errors
+
+PASS __tests__/reporters/junit.test.ts
+  junit reporter
+    ✓ writes the output to fd (8 ms)
+    ✓ writes the output to a file (3 ms)
+
+PASS __tests__/reporters/base.test.ts
+  base reporter
+    ✓ writes each step to the FD (39 ms)
+    ✓ render hook errors without steps (4 ms)
+
+(node:125) [DEP0147] DeprecationWarning: In future versions of Node.js, fs.rmdir(path, { recursive: true }) will be removed. Use fs.rm(path, { recursive: true }) instead
+(Use `node --trace-deprecation ...` to show where the warning was created)
+FAIL __tests__/core/index.test.ts
+  ✕ add global hooks to runner (16 ms)
+  ✕ add journeys to runner (2 ms)
+  ✕ add steps to journeys (3 ms)
+  ✕ add hooks to journeys
+  ✕ add hooks - error on before/after outside journey context
+
+  ● add global hooks to runner
+
+    ENOENT: no such file or directory, lstat '/synthetics/.synthetics/125'
+
+      437 |      * the current synthetic agent run
+      438 |      */
+    > 439 |     rmdirSync(CACHE_PATH, { recursive: true });
+          |     ^
+      440 |     this.currentJourney = null;
+      441 |     this.journeys = [];
+      442 |     this.active = false;
+
+      at Runner.reset (src/core/runner.ts:439:5)
+      at Object.<anonymous> (__tests__/core/index.test.ts:36:25)
+
+  ● add journeys to runner
+
+    ENOENT: no such file or directory, lstat '/synthetics/.synthetics/125'
+
+      437 |      * the current synthetic agent run
+      438 |      */
+    > 439 |     rmdirSync(CACHE_PATH, { recursive: true });
+          |     ^
+      440 |     this.currentJourney = null;
+      441 |     this.journeys = [];
+      442 |     this.active = false;
+
+      at Runner.reset (src/core/runner.ts:439:5)
+      at Object.<anonymous> (__tests__/core/index.test.ts:36:25)
+
+  ● add steps to journeys
+
+    ENOENT: no such file or directory, lstat '/synthetics/.synthetics/125'
+
+      437 |      * the current synthetic agent run
+      438 |      */
+    > 439 |     rmdirSync(CACHE_PATH, { recursive: true });
+          |     ^
+      440 |     this.currentJourney = null;
+      441 |     this.journeys = [];
+      442 |     this.active = false;
+
+      at Runner.reset (src/core/runner.ts:439:5)
+      at Object.<anonymous> (__tests__/core/index.test.ts:36:25)
+
+  ● add steps to journeys
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 1
+    Received: 2
+
+      65 | 
+      66 |   expect(runner.currentJourney).toEqual(j);
+    > 67 |   expect(runner.journeys.length).toBe(1);
+         |                                  ^
+      68 |   expect(runner.currentJourney.steps.length).toBe(2);
+      69 |   expect(runner.currentJourney.steps).toEqual([s1, s2]);
+      70 | });
+
+      at Object.<anonymous> (__tests__/core/index.test.ts:67:34)
+
+  ● add hooks to journeys
+
+    ENOENT: no such file or directory, lstat '/synthetics/.synthetics/125'
+
+      437 |      * the current synthetic agent run
+      438 |      */
+    > 439 |     rmdirSync(CACHE_PATH, { recursive: true });
+          |     ^
+      440 |     this.currentJourney = null;
+      441 |     this.journeys = [];
+      442 |     this.active = false;
+
+      at Runner.reset (src/core/runner.ts:439:5)
+      at Object.<anonymous> (__tests__/core/index.test.ts:36:25)
+
+  ● add hooks to journeys
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 1
+    Received: 3
+
+      76 | 
+      77 |   expect(runner.currentJourney).toEqual(j);
+    > 78 |   expect(runner.journeys.length).toBe(1);
+         |                                  ^
+      79 |   expect(runner.currentJourney.steps.length).toBe(0);
+      80 |   expect(runner.currentJourney.hooks.before).toEqual([noop]);
+      81 |   expect(runner.currentJourney.hooks.after).toEqual([noop]);
+
+      at Object.<anonymous> (__tests__/core/index.test.ts:78:34)
+
+  ● add hooks - error on before/after outside journey context
+
+    ENOENT: no such file or directory, lstat '/synthetics/.synthetics/125'
+
+      437 |      * the current synthetic agent run
+      438 |      */
+    > 439 |     rmdirSync(CACHE_PATH, { recursive: true });
+          |     ^
+      440 |     this.currentJourney = null;
+      441 |     this.journeys = [];
+      442 |     this.active = false;
+
+      at Runner.reset (src/core/runner.ts:439:5)
+      at Object.<anonymous> (__tests__/core/index.test.ts:36:25)
+
+PASS __tests__/index.test.ts
+  Run
+    ✓ multiple run invokes runner only once (2207 ms)
+    ✓ calls runner with proper options (8 ms)
+
+PASS __tests__/plugins/browser-console.test.ts
+  BrowserConsole
+    ✓ should capture browser console logs (2002 ms)
+
+PASS __tests__/plugins/tracing.test.ts
+  tracing
+    ✓ should capture filmstrips (2080 ms)
+
+PASS __tests__/core/runner.test.ts (36.709 s)
+  runner
+    ✓ support emitting/subscribing to events (1 ms)
+    ✓ add journeys (1 ms)
+    ✓ add hooks
+    ✓ run journey - with events payload (1240 ms)
+    ✓ run journey - failed when any step fails (454 ms)
+    ✓ run journey - with hooks (293 ms)
+    ✓ run journey - failed when hooks errors (135 ms)
+    ✓ run journey - failed on beforeAll (95 ms)
+    ✓ run step (1689 ms)
+    ✓ run step - syntax failure (1880 ms)
+    ✓ run step - navigation failure (1697 ms)
+    ✓ run step - bad navigation (1915 ms)
+    ✓ run steps - accumulate results (1389 ms)
+    ✓ run api (1587 ms)
+    ✓ run api - match journey name explict (1489 ms)
+    ✓ run api - match journey name and tag globs (2139 ms)
+    ✓ run api - prefer tags glob matching (2215 ms)
+    ✓ run api - support multiple tags (1915 ms)
+    ✓ run api - support negation tags (1734 ms)
+    ✓ run api - accumulate failed journeys (2087 ms)
+    ✓ run api - dry run (6 ms)
+    ✓ run - should preserve order hooks/journeys/steps (2072 ms)
+    ✓ run - expose params in all hooks (1746 ms)
+    ✓ run - supports custom reporters (1808 ms)
+
+PASS __tests__/plugins/performance.test.ts
+  performance
+    ✓ should capture page metrics (2064 ms)
+
+PASS __tests__/core/gatherer.test.ts (7.096 s)
+  Gatherer
+    ✓ boot and close browser (1753 ms)
+    ✓ setup and dispose driver (2264 ms)
+    ✓ begin recording based on flags (2096 ms)
+
+PASS __tests__/config.test.ts
+  Config
+    ✓ read config based on environment (63 ms)
+    ✓ throw error when config does not exist (3 ms)
+    ✓ recursively look for configs and exit
+
+PASS __tests__/plugins/plugin-manager.test.ts
+  plugin manager
+    ✓ start plugin with given type (1 ms)
+    ✓ get returns plugin instance (1 ms)
+    ✓ stop plugin on output generation
+
+FAIL __tests__/core/browser-service.test.ts
+  BrowserService
+    ✕ should create browser pages (19 ms)
+
+  ● BrowserService › should create browser pages
+
+    browserType.connect: getaddrinfo ENOTFOUND localhost. Most likely ws endpoint is incorrect
+
+      at WebSocket.<anonymous> (node_modules/playwright-chromium/lib/client/browserType.js:165:28)
+      at WebSocket.onError (node_modules/ws/lib/event-target.js:140:16)
+      at ClientRequest.<anonymous> (node_modules/ws/lib/websocket.js:579:15)
+
+PASS __tests__/core/logger.test.ts
+  Logger
+    ✓ log to specified fd (1 ms)
+
+PASS __tests__/sdk/trace-processor.test.ts
+  Trace processor
+    ✓ computes trace of the tab (6 ms)
+
+PASS __tests__/dsl/journey.test.ts
+  Journey
+    ✓ add step to the journey (5 ms)
+
+FAIL __tests__/cli.test.ts (33.355 s)
+  CLI
+    ✕ run suites and exit with 0 (3355 ms)
+    ✓ run suites and exit with 1 (4172 ms)
+    ✕ produce json output via --json flag (3731 ms)
+    ✕ enables rich events on `--rich-events` flag (4285 ms)
+    ✕ pass config to journey params (4153 ms)
+    ✕ suite params wins over config params (4000 ms)
+    ✓ throw error on modifying params (3402 ms)
+    ✕ support capability flag (1660 ms)
+    ✓ show warn for unknown capability flag (421 ms)
+    ✕ run expect assetions with type check (3096 ms)
+
+  ● CLI › run suites and exit with 0
+
+    (node:1863) [DEP0147] DeprecationWarning: In future versions of Node.js, fs.rmdir(path, { recursive: true }) will be removed. Use fs.rm(path, { recursive: true }) instead
+    (Use `node --trace-deprecation ...` to show where the warning was created)
+
+      177 | 
+      178 |     this.exitCode = new Promise((res, rej) => {
+    > 179 |       this.process.stderr.on('data', data => rej(new Error(data)));
+          |                                                  ^
+      180 |       this.process.on('exit', code => res(code));
+      181 |     });
+      182 |   }
+
+      at Socket.<anonymous> (__tests__/cli.test.ts:179:50)
+
+  ● CLI › produce json output via --json flag
+
+    (node:2637) [DEP0147] DeprecationWarning: In future versions of Node.js, fs.rmdir(path, { recursive: true }) will be removed. Use fs.rm(path, { recursive: true }) instead
+    (Use `node --trace-deprecation ...` to show where the warning was created)
+
+      177 | 
+      178 |     this.exitCode = new Promise((res, rej) => {
+    > 179 |       this.process.stderr.on('data', data => rej(new Error(data)));
+          |                                                  ^
+      180 |       this.process.on('exit', code => res(code));
+      181 |     });
+      182 |   }
+
+      at Socket.<anonymous> (__tests__/cli.test.ts:179:50)
+
+  ● CLI › enables rich events on `--rich-events` flag
+
+    (node:3072) [DEP0147] DeprecationWarning: In future versions of Node.js, fs.rmdir(path, { recursive: true }) will be removed. Use fs.rm(path, { recursive: true }) instead
+    (Use `node --trace-deprecation ...` to show where the warning was created)
+
+      177 | 
+      178 |     this.exitCode = new Promise((res, rej) => {
+    > 179 |       this.process.stderr.on('data', data => rej(new Error(data)));
+          |                                                  ^
+      180 |       this.process.on('exit', code => res(code));
+      181 |     });
+      182 |   }
+
+      at Socket.<anonymous> (__tests__/cli.test.ts:179:50)
+
+  ● CLI › pass config to journey params
+
+    (node:3573) [DEP0147] DeprecationWarning: In future versions of Node.js, fs.rmdir(path, { recursive: true }) will be removed. Use fs.rm(path, { recursive: true }) instead
+    (Use `node --trace-deprecation ...` to show where the warning was created)
+
+      177 | 
+      178 |     this.exitCode = new Promise((res, rej) => {
+    > 179 |       this.process.stderr.on('data', data => rej(new Error(data)));
+          |                                                  ^
+      180 |       this.process.on('exit', code => res(code));
+      181 |     });
+      182 |   }
+
+      at Socket.<anonymous> (__tests__/cli.test.ts:179:50)
+
+  ● CLI › suite params wins over config params
+
+    (node:4066) [DEP0147] DeprecationWarning: In future versions of Node.js, fs.rmdir(path, { recursive: true }) will be removed. Use fs.rm(path, { recursive: true }) instead
+    (Use `node --trace-deprecation ...` to show where the warning was created)
+
+      177 | 
+      178 |     this.exitCode = new Promise((res, rej) => {
+    > 179 |       this.process.stderr.on('data', data => rej(new Error(data)));
+          |                                                  ^
+      180 |       this.process.on('exit', code => res(code));
+      181 |     });
+      182 |   }
+
+      at Socket.<anonymous> (__tests__/cli.test.ts:179:50)
+
+  ● CLI › support capability flag
+
+    (node:4674) [DEP0147] DeprecationWarning: In future versions of Node.js, fs.rmdir(path, { recursive: true }) will be removed. Use fs.rm(path, { recursive: true }) instead
+    (Use `node --trace-deprecation ...` to show where the warning was created)
+
+      177 | 
+      178 |     this.exitCode = new Promise((res, rej) => {
+    > 179 |       this.process.stderr.on('data', data => rej(new Error(data)));
+          |                                                  ^
+      180 |       this.process.on('exit', code => res(code));
+      181 |     });
+      182 |   }
+
+      at Socket.<anonymous> (__tests__/cli.test.ts:179:50)
+
+  ● CLI › run expect assetions with type check
+
+    (node:4797) [DEP0147] DeprecationWarning: In future versions of Node.js, fs.rmdir(path, { recursive: true }) will be removed. Use fs.rm(path, { recursive: true }) instead
+    (Use `node --trace-deprecation ...` to show where the warning was created)
+
+      177 | 
+      178 |     this.exitCode = new Promise((res, rej) => {
+    > 179 |       this.process.stderr.on('data', data => rej(new Error(data)));
+          |                                                  ^
+      180 |       this.process.on('exit', code => res(code));
+      181 |     });
+      182 |   }
+
+      at Socket.<anonymous> (__tests__/cli.test.ts:179:50)
+
+Test Suites: 3 failed, 17 passed, 20 total
+Tests:       13 failed, 83 passed, 96 total
+Snapshots:   11 passed, 11 total
+Time:        49.246 s
+Ran all test suites.
+SWEREBENCH_V2_TEST_OUTPUT_END

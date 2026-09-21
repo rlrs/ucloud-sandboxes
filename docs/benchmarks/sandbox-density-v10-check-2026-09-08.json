@@ -1,0 +1,26 @@
+{
+  "command": "PATH=\"/tmp/ucloud-compat-tools/bin:/tmp/ucloud-compat-bin:$PATH\" UV_CACHE_DIR=/tmp/ucloud-uv-cache GOCACHE=/tmp/ucloud-density-go-cache bash scripts/check.sh",
+  "exit_code": 0,
+  "scope": "Full repository verification after per-incarnation network setup locking. Live Linux qualification and density evidence are separate.",
+  "log": {
+    "path": "sandbox-density-v10-check-2026-09-08.log.gz",
+    "raw_sha256": "834d572934a0e6ae6cd10a171f68648d08467ac0d3fadbeb383879a3e961bf3d",
+    "archive_sha256": "747fb9e6e507bb8849869c52beb9808817f2b322046f3f727c9c7864c3e38ee4"
+  },
+  "main_python": {
+    "tests": 830,
+    "skipped": 5,
+    "duration_seconds": 34.822
+  },
+  "sdk_python": {
+    "tests": 82,
+    "skipped": 0,
+    "duration_seconds": 0.863
+  },
+  "other_checks": [
+    "ruff",
+    "shell syntax and ShellCheck",
+    "managed-process Go tests",
+    "root and SDK builds and installed-wheel verification"
+  ]
+}

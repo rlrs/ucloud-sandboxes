@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
 from threading import Event, Lock, RLock, Thread, local
-from typing import Iterator
+from typing import BinaryIO, Iterator
 from uuid import uuid4
 
 from .direct_service import DirectSandboxService
@@ -26,7 +26,6 @@ from .sandbox import (
     SandboxConflictError,
     SandboxLifecycleCoordinator,
     SandboxOperation,
-    SandboxSnapshotPublicationPendingError,
     SandboxRecord,
     SandboxSpec,
     _atomic_write_json,
@@ -204,7 +203,7 @@ class DirectLifecycle:
         self._coordinator.acquire_shared(sandbox_id)
         try:
             registration = self.owner.service._require_registration(sandbox_id)
-            with self.owner.service._lock(
+            with self.owner.service._request_lock(
                 sandbox_id,
                 registration.sandbox_generation,
             ):
@@ -221,13 +220,15 @@ class DirectLifecycle:
             raise
 
     def release_shared(self, sandbox_id: str) -> None:
-        registration = self.owner.service.provisioner.registry.get(sandbox_id)
-        if registration is not None:
-            self.owner.service.mark_activity(
-                sandbox_id,
-                registration.sandbox_generation,
-            )
-        self._coordinator.release_shared(sandbox_id)
+        try:
+            registration = self.owner.service.provisioner.registry.get(sandbox_id)
+            if registration is not None:
+                self.owner.service.mark_activity(
+                    sandbox_id,
+                    registration.sandbox_generation,
+                )
+        finally:
+            self._coordinator.release_shared(sandbox_id)
 
     @contextmanager
     def shared(self, sandbox_id: str) -> Iterator[None]:
@@ -347,7 +348,7 @@ class DirectNodeRuntime:
         *,
         operation: SandboxOperation,
     ) -> tuple[SandboxRecord, dict[str, object]]:
-        existing = self.service.get(spec.id)
+        existing = self.service.get_snapshot(spec.id)
         started = time.monotonic()
         record = self.service.create(spec, operation=operation)
         return (
@@ -475,10 +476,9 @@ class DirectNodeRuntime:
             join_transition=True,
             transition_timeout_seconds=60.0,
         ):
-            if self.service.storage_native_publication_pending(sandbox_id):
-                raise SandboxSnapshotPublicationPendingError(
-                    "parked snapshot publication is still in progress"
-                )
+            # Local wake takes precedence over background publication. The
+            # storage journal supersedes/fences the upload while retaining the
+            # sealed checkpoint; an uploader thread is not an admission limit.
             record = self.service.wake(
                 sandbox_id,
                 generation=generation,
@@ -569,8 +569,18 @@ class DirectNodeRuntime:
         sandbox_id: str,
         path: str,
         content: bytes,
+        *,
+        expected_generation: int | None = None,
     ) -> None:
-        self.service.write_file(sandbox_id, path, content)
+        self.service.write_file(sandbox_id, path, content, expected_generation=expected_generation)
+
+    def upload_file_from_file(
+        self, sandbox_id: str, path: str, source: BinaryIO, size: int,
+        *, expected_generation: int,
+    ) -> None:
+        self.service.write_file_from_file(
+            sandbox_id, path, source, size, expected_generation=expected_generation,
+        )
 
     def download_file(
         self,

@@ -1,0 +1,387 @@
+{
+  "production_server_version": "0.5.43",
+  "production_prefix": "relay-worker-512-bfa1d701",
+  "trace_selection": "Up to 20 matching sandbox.wake traces; four largest durationMs results inspected. This is a sample, not a fleet-wide percentile.",
+  "traces": [
+    {
+      "trace_id": "b49e86954db969bb167229338164dc2b",
+      "spans": [
+        {
+          "service": "ucloud-sandboxes-model-relay",
+          "name": "POST /worker/respond",
+          "ms": 6655.96,
+          "cpu": 1.7386625890000005,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-model-relay",
+          "name": "relay.wake_caller",
+          "ms": 4872.23,
+          "cpu": 1.2078483019999986,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-gateway",
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "ms": 3673.68,
+          "cpu": 0.11232354900000001,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-gateway",
+          "name": "gateway.node_response_headers",
+          "ms": 386.1,
+          "cpu": 0.00048439599999999805,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-worker",
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "ms": 371.79,
+          "cpu": 0.0388135,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-worker",
+          "name": "sandbox.wake",
+          "ms": 295.67,
+          "cpu": 0.012979518000000002,
+          "events": [
+            {
+              "name": "sandbox.wake.timings",
+              "attrs": {
+                "validate_artifact": 94.73598300002095,
+                "begin_restore_journal": 1.6650839999670097,
+                "runsc_restore": 114.07576599998492,
+                "runsc_state": 7.950359999995271,
+                "candidate_fence": 0.08108200000833676,
+                "candidate_journal": 1.7786159999673146,
+                "candidate_resume": 15.402401000017107,
+                "readiness_exec": 15.744986000015615,
+                "commit_running_journal": 3.364351000016086,
+                "artifact_cleanup": 0.8797239999580597,
+                "warden_total": 255.767402999993
+              }
+            }
+          ]
+        },
+        {
+          "service": "ucloud-sandboxes-worker",
+          "name": "sandbox.wake.ensure_network",
+          "ms": 39.67,
+          "cpu": 0.0033102129999999994,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-worker",
+          "name": "storage.client.EnsureMounted",
+          "ms": 25.64,
+          "cpu": 0.00024976399999999954,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-storage",
+          "name": "storage.server.EnsureMounted",
+          "ms": 23.22,
+          "cpu": 0.0069287459999999995,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-gateway",
+          "name": "gateway.node_response_body",
+          "ms": 0.15,
+          "cpu": null,
+          "events": []
+        }
+      ]
+    },
+    {
+      "trace_id": "b003dd035c99d4cf116cca6d1918dbca",
+      "spans": [
+        {
+          "service": "ucloud-sandboxes-model-relay",
+          "name": "POST /worker/respond",
+          "ms": 5983.86,
+          "cpu": 1.5649462720000002,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-model-relay",
+          "name": "relay.wake_caller",
+          "ms": 5037.19,
+          "cpu": 1.2992290970000013,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-gateway",
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "ms": 3974.16,
+          "cpu": 0.12499244999999999,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-gateway",
+          "name": "gateway.node_response_headers",
+          "ms": 597.7,
+          "cpu": 0.0009201699999999979,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-worker",
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "ms": 590.42,
+          "cpu": 0.07183407,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-worker",
+          "name": "sandbox.wake",
+          "ms": 483.47,
+          "cpu": 0.033641189,
+          "events": [
+            {
+              "name": "sandbox.wake.timings",
+              "attrs": {
+                "validate_artifact": 114.68325100000243,
+                "begin_restore_journal": 2.519208999984812,
+                "runsc_restore": 165.76261899999167,
+                "runsc_state": 16.773253999986082,
+                "candidate_fence": 0.192543999986583,
+                "candidate_journal": 2.71725099997866,
+                "candidate_resume": 54.66807599998447,
+                "readiness_exec": 33.155351000004885,
+                "commit_running_journal": 3.302723999979662,
+                "artifact_cleanup": 1.91219399999909,
+                "warden_total": 395.8774620000156
+              }
+            }
+          ]
+        },
+        {
+          "service": "ucloud-sandboxes-worker",
+          "name": "sandbox.wake.ensure_network",
+          "ms": 87.2,
+          "cpu": 0.011670649000000002,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-worker",
+          "name": "storage.client.EnsureMounted",
+          "ms": 37.15,
+          "cpu": 0.0005781680000000004,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-storage",
+          "name": "storage.server.EnsureMounted",
+          "ms": 34.34,
+          "cpu": 0.010643887999999999,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-gateway",
+          "name": "gateway.node_response_body",
+          "ms": 0.14,
+          "cpu": null,
+          "events": []
+        }
+      ]
+    },
+    {
+      "trace_id": "2d2047413aa910480a1247c5a8274d35",
+      "spans": [
+        {
+          "service": "ucloud-sandboxes-model-relay",
+          "name": "POST /worker/respond",
+          "ms": 5613.33,
+          "cpu": 1.2424337260000016,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-model-relay",
+          "name": "relay.wake_caller",
+          "ms": 4846.8,
+          "cpu": 1.135163777999999,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-gateway",
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "ms": 3726.03,
+          "cpu": 0.125752765,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-gateway",
+          "name": "gateway.node_response_headers",
+          "ms": 392.79,
+          "cpu": 0.0003578159999999969,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-worker",
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "ms": 391.07,
+          "cpu": 0.038384998,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-worker",
+          "name": "sandbox.wake",
+          "ms": 306.88,
+          "cpu": 0.011473021,
+          "events": [
+            {
+              "name": "sandbox.wake.timings",
+              "attrs": {
+                "validate_artifact": 93.23577499998237,
+                "begin_restore_journal": 1.8304939999893577,
+                "runsc_restore": 113.88549000002968,
+                "runsc_state": 7.87835199997744,
+                "candidate_fence": 0.05924900000309208,
+                "candidate_journal": 5.899613999986286,
+                "candidate_resume": 23.432538999998087,
+                "readiness_exec": 15.903975000014725,
+                "commit_running_journal": 1.5891809999857287,
+                "artifact_cleanup": 0.8552969999868765,
+                "warden_total": 264.6523999999886
+              }
+            }
+          ]
+        },
+        {
+          "service": "ucloud-sandboxes-worker",
+          "name": "sandbox.wake.ensure_network",
+          "ms": 42.02,
+          "cpu": 0.003298984999999999,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-worker",
+          "name": "storage.client.EnsureMounted",
+          "ms": 24.84,
+          "cpu": 0.0001739210000000005,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-storage",
+          "name": "storage.server.EnsureMounted",
+          "ms": 24.06,
+          "cpu": 0.006365941,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-gateway",
+          "name": "gateway.node_response_body",
+          "ms": 0.09,
+          "cpu": null,
+          "events": []
+        }
+      ]
+    },
+    {
+      "trace_id": "61981aa615ec02da167b27fae731c99c",
+      "spans": [
+        {
+          "service": "ucloud-sandboxes-model-relay",
+          "name": "POST /worker/respond",
+          "ms": 5574.44,
+          "cpu": 1.0805238909999986,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-model-relay",
+          "name": "relay.wake_caller",
+          "ms": 4495.39,
+          "cpu": 0.7652991220000018,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-gateway",
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "ms": 3792.1,
+          "cpu": 0.13134960199999998,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-gateway",
+          "name": "gateway.node_response_headers",
+          "ms": 374.26,
+          "cpu": 0.0007493920000000015,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-worker",
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "ms": 368.51,
+          "cpu": 0.037144279,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-worker",
+          "name": "sandbox.wake",
+          "ms": 315.03,
+          "cpu": 0.011684469,
+          "events": [
+            {
+              "name": "sandbox.wake.timings",
+              "attrs": {
+                "validate_artifact": 81.52764900000875,
+                "begin_restore_journal": 2.1614549999640076,
+                "runsc_restore": 113.98610499998085,
+                "runsc_state": 21.45412199996599,
+                "candidate_fence": 0.05853800001887066,
+                "candidate_journal": 1.5789779999977327,
+                "candidate_resume": 31.361673999981576,
+                "readiness_exec": 15.745644999981323,
+                "commit_running_journal": 1.4598889999888343,
+                "artifact_cleanup": 0.7667840000067372,
+                "warden_total": 270.7548950000387
+              }
+            }
+          ]
+        },
+        {
+          "service": "ucloud-sandboxes-worker",
+          "name": "sandbox.wake.ensure_network",
+          "ms": 44.09,
+          "cpu": 0.0040728940000000005,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-worker",
+          "name": "storage.client.EnsureMounted",
+          "ms": 28.12,
+          "cpu": 0.00033226100000000036,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-storage",
+          "name": "storage.server.EnsureMounted",
+          "ms": 23.58,
+          "cpu": 0.007554728,
+          "events": []
+        },
+        {
+          "service": "ucloud-sandboxes-gateway",
+          "name": "gateway.node_response_body",
+          "ms": 0.11,
+          "cpu": null,
+          "events": []
+        }
+      ]
+    }
+  ],
+  "local_profile": {
+    "routes": 512,
+    "workers": 4,
+    "wakes": 32,
+    "before_seconds": 3.148,
+    "after_seconds": 1.227,
+    "before_route_decodes": 49312,
+    "after_route_decodes": 12448,
+    "before_heartbeat_decodes": 320,
+    "after_heartbeat_decodes": 96,
+    "note": "Single local cProfile runs using temporary SQLite stores and synthetic parked routes. No worker restore or HTTP transport included; not production latency."
+  }
+}

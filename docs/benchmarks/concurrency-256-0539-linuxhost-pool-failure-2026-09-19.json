@@ -1,0 +1,151 @@
+{
+  "transport": "per-sandbox AsyncSandboxClient, matching Verifiers",
+  "prefix": "linuxhost-256-600781a9",
+  "started_at": "2026-09-19T06:02:51.138374+00:00",
+  "count": 256,
+  "concurrency": 256,
+  "image": "release-0534-989b03553a-image",
+  "shape": {
+    "cpus": 2,
+    "memory_mb": 1024,
+    "disk_mb": 5184
+  },
+  "phases": [
+    {
+      "name": "create-linux-host",
+      "seconds": 331.109,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 60.109,
+        "p50": 84.335,
+        "p95": 329.161,
+        "max": 331.079
+      }
+    },
+    {
+      "name": "initialize-and-tools",
+      "seconds": 21.957,
+      "passed": 243,
+      "failed": 13,
+      "latency": {
+        "min": 1.139,
+        "p50": 9.017,
+        "p95": 20.888,
+        "max": 21.872
+      }
+    }
+  ],
+  "errors": [
+    {
+      "id": "linuxhost-256-600781a9-221",
+      "ok": false,
+      "seconds": 18.19937687390484,
+      "error": "SandboxApiError: node-agent request failed (502): {'error': \"sandbox node request failed: HTTPConnectionPool(host='sandbox-node-f21fb05f8c-1', port=8090): Pool is empty and a new connection can't be opened due to blocking mode.\", 'code': 'node_transport_error', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-600781a9-150",
+      "ok": false,
+      "seconds": 18.28335929522291,
+      "error": "SandboxApiError: node-agent request failed (502): {'error': \"sandbox node request failed: HTTPConnectionPool(host='sandbox-node-f21fb05f8c-1', port=8090): Pool is empty and a new connection can't be opened due to blocking mode.\", 'code': 'node_transport_error', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-600781a9-085",
+      "ok": false,
+      "seconds": 18.32040004595183,
+      "error": "SandboxApiError: node-agent request failed (502): {'error': \"sandbox node request failed: HTTPConnectionPool(host='sandbox-node-f21fb05f8c-1', port=8090): Pool is empty and a new connection can't be opened due to blocking mode.\", 'code': 'node_transport_error', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-600781a9-057",
+      "ok": false,
+      "seconds": 18.354863352840766,
+      "error": "SandboxApiError: node-agent request failed (502): {'error': \"sandbox node request failed: HTTPConnectionPool(host='sandbox-node-f21fb05f8c-1', port=8090): Pool is empty and a new connection can't be opened due to blocking mode.\", 'code': 'node_transport_error', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-600781a9-226",
+      "ok": false,
+      "seconds": 18.284686859929934,
+      "error": "SandboxApiError: node-agent request failed (502): {'error': \"sandbox node request failed: HTTPConnectionPool(host='sandbox-node-f21fb05f8c-1', port=8090): Pool is empty and a new connection can't be opened due to blocking mode.\", 'code': 'node_transport_error', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-600781a9-118",
+      "ok": false,
+      "seconds": 18.348713926039636,
+      "error": "SandboxApiError: node-agent request failed (502): {'error': \"sandbox node request failed: HTTPConnectionPool(host='sandbox-node-f21fb05f8c-1', port=8090): Pool is empty and a new connection can't be opened due to blocking mode.\", 'code': 'node_transport_error', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-600781a9-219",
+      "ok": false,
+      "seconds": 18.37314642011188,
+      "error": "SandboxApiError: node-agent request failed (502): {'error': \"sandbox node request failed: HTTPConnectionPool(host='sandbox-node-f21fb05f8c-1', port=8090): Pool is empty and a new connection can't be opened due to blocking mode.\", 'code': 'node_transport_error', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-600781a9-243",
+      "ok": false,
+      "seconds": 18.399890447035432,
+      "error": "SandboxApiError: node-agent request failed (502): {'error': \"sandbox node request failed: HTTPConnectionPool(host='sandbox-node-f21fb05f8c-1', port=8090): Pool is empty and a new connection can't be opened due to blocking mode.\", 'code': 'node_transport_error', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-600781a9-098",
+      "ok": false,
+      "seconds": 18.575326181948185,
+      "error": "SandboxApiError: node-agent request failed (502): {'error': \"sandbox node request failed: HTTPConnectionPool(host='sandbox-node-f21fb05f8c-1', port=8090): Pool is empty and a new connection can't be opened due to blocking mode.\", 'code': 'node_transport_error', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-600781a9-204",
+      "ok": false,
+      "seconds": 19.225299543933943,
+      "error": "SandboxApiError: node-agent request failed (502): {'error': \"sandbox node request failed: HTTPConnectionPool(host='sandbox-node-5234558226-1', port=8090): Pool is empty and a new connection can't be opened due to blocking mode.\", 'code': 'node_transport_error', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-600781a9-186",
+      "ok": false,
+      "seconds": 19.505715862149373,
+      "error": "SandboxApiError: node-agent request failed (502): {'error': \"sandbox node request failed: HTTPConnectionPool(host='sandbox-node-f21fb05f8c-1', port=8090): Pool is empty and a new connection can't be opened due to blocking mode.\", 'code': 'node_transport_error', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-600781a9-137",
+      "ok": false,
+      "seconds": 19.600930931977928,
+      "error": "SandboxApiError: node-agent request failed (502): {'error': \"sandbox node request failed: HTTPConnectionPool(host='sandbox-node-f21fb05f8c-1', port=8090): Pool is empty and a new connection can't be opened due to blocking mode.\", 'code': 'node_transport_error', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-600781a9-246",
+      "ok": false,
+      "seconds": 19.554495519027114,
+      "error": "SandboxApiError: node-agent request failed (502): {'error': \"sandbox node request failed: HTTPConnectionPool(host='sandbox-node-f21fb05f8c-1', port=8090): Pool is empty and a new connection can't be opened due to blocking mode.\", 'code': 'node_transport_error', 'retryable': True}"
+    }
+  ],
+  "kind": "linux_host profile used by published Verifiers runtime; live open_process and file/exec operations; no parking requested",
+  "placement": [
+    [
+      "12396309",
+      "running",
+      128
+    ],
+    [
+      "12396311",
+      "running",
+      128
+    ]
+  ],
+  "success": false,
+  "fatal": "RuntimeError: initialize-and-tools: 13 failures",
+  "cleanup_errors": [],
+  "remaining": [],
+  "http_rejections": [],
+  "health": {
+    "count": 342,
+    "failures": [],
+    "latency": {
+      "min": 0.011,
+      "p50": 0.024,
+      "p95": 0.11,
+      "max": 2.678
+    }
+  },
+  "total_seconds": 359.949,
+  "server_version": "0.5.39",
+  "sdk_commit": "ed9240d071990f932a9db01cfc0c4e76692ac52c",
+  "note": "Cold startup included a failed provider SSH bootstrap; autoscaler created replacement 12396311. Empty failed VM 12396310 was explicitly stopped. All 13 workload failures were gateway-to-node connection-pool exhaustion."
+}

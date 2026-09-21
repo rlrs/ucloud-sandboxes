@@ -6,6 +6,7 @@ from ucloud_sandboxes.http_contract import match_sandbox_http_route
 class SandboxHttpContractTests(unittest.TestCase):
     def test_public_routes_have_one_exact_wake_contract(self) -> None:
         cases = (
+            ("GET", "/v1/sandboxes/s1/environment", "environment", False),
             ("DELETE", "/v1/sandboxes/s1", "delete", False),
             ("GET", "/v1/sandboxes/s1/files", "files", True),
             ("PUT", "/v1/sandboxes/s1/files", "files", True),

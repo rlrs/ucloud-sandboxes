@@ -38,6 +38,65 @@ from ucloud_sandboxes.sandbox import CommandResult
 
 
 class ImageTests(unittest.TestCase):
+    def test_builder_queue_accepts_burst_and_bounds_execution(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            release = Event()
+            full = Event()
+            lock = Lock()
+            active = peak = completed = 0
+
+            class Executor:
+                def run(self, argv):
+                    nonlocal active, peak, completed
+                    with lock:
+                        active += 1
+                        peak = max(peak, active)
+                        if active == 2:
+                            full.set()
+                    release.wait(10)
+                    with lock:
+                        active -= 1
+                        completed += 1
+                    return CommandResult(argv=argv, exit_code=0)
+
+            manager = ImageManager(
+                ImageStore(Path(raw_dir) / "images.sqlite"),
+                DockerImageRuntime(executor=Executor()),
+                max_active_builds=2, queue_builds=True,
+            )
+            identity, materialize = _uploaded_context(("Dockerfile", b"FROM scratch\n"))
+            records = []
+            try:
+                for i in range(12):
+                    spec = ImageBuildSpec(id=f"queued-{i}", tag=f"local/queued-{i}:latest", context_path=".")
+                    record, accepted = manager.start_build(
+                        spec, context_identity=identity, materialize_context=materialize,
+                    )
+                    self.assertTrue(accepted)
+                    records.append(record)
+                self.assertTrue(full.wait(1))
+                self.assertEqual(manager.active_build_count(), 12)
+                self.assertEqual(len(manager._active_threads), 2)
+                duplicate, accepted = manager.start_build(
+                    spec, context_identity=identity, materialize_context=materialize,
+                )
+                self.assertFalse(accepted)
+                self.assertEqual(duplicate.build_id, records[-1].build_id)
+                with self.assertRaises(ImageBuildConflictError):
+                    manager.start_build(
+                        ImageBuildSpec(id=spec.id, tag=spec.tag, context_path=".", build_args={"X": "other"}),
+                        context_identity=identity, materialize_context=materialize,
+                    )
+            finally:
+                release.set()
+                for record in records:
+                    done = manager.wait_for_build(record.build_id, timeout_seconds=5)
+                    self.assertEqual(done.status, "succeeded")
+                    self.assertFalse(Path(record.context_path).exists())
+            self.assertEqual(peak, 2)
+            self.assertEqual(completed, 12)
+            self.assertEqual(manager.active_build_count(), 0)
+
     def test_cold_pull_slots_bound_concurrency_without_losing_drain_fence(self) -> None:
         with TemporaryDirectory() as raw_dir:
             manager = ImageManager(

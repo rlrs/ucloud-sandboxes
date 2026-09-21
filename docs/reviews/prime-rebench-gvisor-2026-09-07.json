@@ -1,0 +1,26 @@
+{
+  "task": "elastic__synthetics-316",
+  "task_key": "f0fe2c516a578bdad76e0817b324ad15917bcaf6d02e34be08567c80d4e8c114",
+  "image": "docker.io/swerebenchv2/elastic-synthetics@sha256:43dec4337c7e470deff79db238b03e914f8a5234277b52ec7f3fd414e8978883",
+  "runtime": "ucloud-gvisor",
+  "cpus": 4,
+  "memory_mb": 4096,
+  "disk_mb": 10240,
+  "status": "gold_failed",
+  "sandbox_id": "rebench-review-d0227ea025dd",
+  "setup": "passed",
+  "gold_patch": "applied",
+  "reward": 0.0,
+  "cleanup": "stop_completed_inventory_check_required",
+  "elapsed_seconds": 115.73658158257604,
+  "qualification": {
+    "utc_date": "2026-09-07",
+    "node_job_id": "12383398",
+    "node_name": "density-review-20260907",
+    "candidate_wheel_sha256": "6fe6255c0797e52eeaae3cea3f661a3c9cc2f5f2ead01bad28956976e8704be3",
+    "kernel": "7.0.0-30-generic",
+    "test_output": "prime-rebench-gvisor-2026-09-07.tests.txt",
+    "recording": "Actual pinned Verifiers task setup, apply_gold_patch, run_tests and calculate_reward with unmodified task data and digest-pinned image.",
+    "cleanup_verification": "Both canary gateway and direct-node inventories empty after runtime.stop and before native comparison."
+  }
+}

@@ -8,12 +8,19 @@ import json
 import os
 from pathlib import Path
 import re
+import ipaddress
 import subprocess
 import tempfile
 from threading import Condition, RLock
 from typing import Any, Iterator, Protocol
 
+from .network_policy import SandboxNetworkPolicy
 from .hibernation import hibernation_disk_reservation_mb
+from .guest_paths import (
+    validate_guest_path,
+    validate_setup_path,
+    validate_workspace_path,
+)
 from .models import ResourceQuantity, utc_now
 
 
@@ -24,8 +31,7 @@ SANDBOX_RESERVED_LABEL_PREFIX = "ucloud-sandboxes."
 DEFAULT_SANDBOX_USER = "1000:1000"
 DEFAULT_PIDS_LIMIT = 256
 SECURITY_VALUE_RE = re.compile(r"^[A-Za-z0-9_.:@/-]+$")
-CONTAINER_PATH_RE = re.compile(r"^/[A-Za-z0-9_./-]+$")
-SANDBOX_PROFILES = {"container", "linux_host"}
+SANDBOX_PROFILES = {"container", "linux_host", "linux_session"}
 DEFAULT_LINUX_HOST_WRITABLE_PATHS = (
     "/run",
     "/run/lock",
@@ -92,6 +98,18 @@ class SandboxCapacityUnavailableError(RuntimeError):
     """The node cannot currently admit the requested sandbox resources."""
 
 
+class SandboxExecAdmissionDeferredError(SandboxCapacityUnavailableError):
+    """Capacity deferred an exec before its command could be dispatched."""
+
+
+class SandboxRestoreBusyError(SandboxCapacityUnavailableError):
+    """Restore admission rejected the request before any restore or tool work."""
+
+
+class SandboxStartupBusyError(SandboxCapacityUnavailableError):
+    """Startup or lifecycle admission rejected work before execution."""
+
+
 class SandboxSnapshotPublicationPendingError(RuntimeError):
     """A parked sandbox cannot wake until its durable publication completes."""
 
@@ -156,6 +174,7 @@ class SandboxSecuritySpec:
     user: str | None = DEFAULT_SANDBOX_USER
     cap_drop: tuple[str, ...] = ("ALL",)
     cap_add: tuple[str, ...] = ()
+    supplementary_groups: tuple[str, ...] = ()
     no_new_privileges: bool = True
     pids_limit: int | None = DEFAULT_PIDS_LIMIT
     read_only_rootfs: bool = False
@@ -169,6 +188,7 @@ class SandboxSecuritySpec:
             raw,
             "security",
             {
+                "supplementary_groups",
                 "cap_add",
                 "cap_drop",
                 "init",
@@ -185,6 +205,9 @@ class SandboxSecuritySpec:
             user=user or None,
             cap_drop=_json_string_list(raw.get("cap_drop", ["ALL"]), "cap_drop"),
             cap_add=_json_string_list(raw.get("cap_add", []), "cap_add"),
+            supplementary_groups=_json_string_list(
+                raw.get("supplementary_groups", []), "supplementary_groups"
+            ),
             no_new_privileges=_json_bool(
                 raw.get("no_new_privileges", True), "no_new_privileges"
             ),
@@ -200,6 +223,10 @@ class SandboxSecuritySpec:
     def validate(self) -> None:
         if self.user is not None:
             validate_security_value("security user", self.user)
+        if len(self.supplementary_groups) > 64:
+            raise ValueError("at most 64 supplementary groups are supported")
+        for item in self.supplementary_groups:
+            validate_security_value("supplementary group", item)
         for item in self.cap_drop:
             validate_security_value("cap_drop", item)
         for item in self.cap_add:
@@ -212,6 +239,11 @@ class SandboxSecuritySpec:
             "user": self.user,
             "cap_drop": list(self.cap_drop),
             "cap_add": list(self.cap_add),
+            **(
+                {"supplementary_groups": list(self.supplementary_groups)}
+                if self.supplementary_groups
+                else {}
+            ),
             "no_new_privileges": self.no_new_privileges,
             "pids_limit": self.pids_limit,
             "read_only_rootfs": self.read_only_rootfs,
@@ -225,6 +257,9 @@ class SandboxFilesystemSpec:
     workspace_path: str = "/workspace"
     tmpfs_mb: int = 64
     run_tmpfs_mb: int = 16
+    shm_mb: int = 64
+    workspace_storage: str | None = None
+    management_helper: str = "shell"
 
     @classmethod
     def from_dict(cls, raw: object) -> "SandboxFilesystemSpec":
@@ -233,7 +268,15 @@ class SandboxFilesystemSpec:
         raw = _json_object(
             raw,
             "filesystem",
-            {"enforce_disk_quota", "run_tmpfs_mb", "tmpfs_mb", "workspace_path"},
+            {
+                "enforce_disk_quota",
+                "run_tmpfs_mb",
+                "tmpfs_mb",
+                "workspace_path",
+                "shm_mb",
+                "workspace_storage",
+                "management_helper",
+            },
         )
         return cls(
             enforce_disk_quota=_json_bool(
@@ -244,10 +287,29 @@ class SandboxFilesystemSpec:
             ),
             tmpfs_mb=_json_int(raw.get("tmpfs_mb", 64), "tmpfs_mb"),
             run_tmpfs_mb=_json_int(raw.get("run_tmpfs_mb", 16), "run_tmpfs_mb"),
+            shm_mb=_json_int(raw.get("shm_mb", 64), "shm_mb"),
+            management_helper=_json_string(
+                raw.get("management_helper", "shell"), "management_helper"
+            ),
+            workspace_storage=(
+                _json_string(raw["workspace_storage"], "workspace_storage")
+                if raw.get("workspace_storage") is not None
+                else None
+            ),
         )
 
     def validate(self) -> None:
-        validate_container_path("workspace_path", self.workspace_path)
+        validate_workspace_path(self.workspace_path)
+        if self.management_helper not in {"shell", "static"}:
+            raise ValueError("management_helper must be shell or static")
+        if self.workspace_storage not in {None, "image", "tmpfs"}:
+            raise ValueError("workspace_storage must be image or tmpfs")
+        if self.enforce_disk_quota and self.workspace_storage == "image":
+            raise ValueError(
+                "legacy enforce_disk_quota conflicts with workspace_storage=image"
+            )
+        if self.shm_mb <= 0:
+            raise ValueError("shm_mb must be positive")
         if self.tmpfs_mb <= 0:
             raise ValueError("tmpfs_mb must be positive.")
         if self.run_tmpfs_mb <= 0:
@@ -257,9 +319,24 @@ class SandboxFilesystemSpec:
         return {
             "enforce_disk_quota": self.enforce_disk_quota,
             "workspace_path": self.workspace_path,
+            **(
+                {"management_helper": self.management_helper}
+                if self.management_helper != "shell"
+                else {}
+            ),
             "tmpfs_mb": self.tmpfs_mb,
             "run_tmpfs_mb": self.run_tmpfs_mb,
+            **({"shm_mb": self.shm_mb} if self.shm_mb != 64 else {}),
+            **(
+                {"workspace_storage": self.workspace_storage}
+                if self.workspace_storage is not None
+                else {}
+            ),
         }
+
+    @property
+    def workspace_is_tmpfs(self) -> bool:
+        return self.workspace_storage == "tmpfs" or self.enforce_disk_quota
 
 
 @dataclass(frozen=True)
@@ -290,7 +367,7 @@ class SandboxLinuxHostSpec:
 
     def validate(self) -> None:
         for path in self.writable_paths:
-            validate_container_path("linux_host writable path", path)
+            validate_setup_path("linux_host writable path", path)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -358,6 +435,7 @@ class SandboxSpec:
     id: str
     image: str
     profile: str = "container"
+    required_features: tuple[str, ...] = ()
     command: tuple[str, ...] = ()
     env: dict[str, str] = field(default_factory=dict)
     working_dir: str | None = None
@@ -365,14 +443,44 @@ class SandboxSpec:
     cpus: float | None = None
     disk_mb: int | None = None
     network: str = "bridge"
+    dns_servers: tuple[str, ...] = ()
+    network_policy: SandboxNetworkPolicy = field(
+        default_factory=SandboxNetworkPolicy, kw_only=True
+    )
     ttl_seconds: int | None = None
     parkable: bool = False
     managed_process: bool = False
     ssh: SandboxSshSpec = SandboxSshSpec()
-    security: SandboxSecuritySpec = SandboxSecuritySpec()
-    filesystem: SandboxFilesystemSpec = SandboxFilesystemSpec()
-    linux_host: SandboxLinuxHostSpec = SandboxLinuxHostSpec()
+    security: SandboxSecuritySpec | None = None
+    filesystem: SandboxFilesystemSpec | None = None
+    linux_host: SandboxLinuxHostSpec | None = None
     labels: dict[str, str] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.security is None:
+            object.__setattr__(
+                self,
+                "security",
+                linux_host_default_security()
+                if self.profile == "linux_host"
+                else SandboxSecuritySpec(),
+            )
+        if self.filesystem is None:
+            object.__setattr__(
+                self,
+                "filesystem",
+                linux_host_default_filesystem()
+                if self.profile in {"linux_host", "linux_session"}
+                else SandboxFilesystemSpec(),
+            )
+        if self.linux_host is None:
+            object.__setattr__(
+                self,
+                "linux_host",
+                SandboxLinuxHostSpec(writable_paths=())
+                if self.profile == "linux_session"
+                else SandboxLinuxHostSpec(),
+            )
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "SandboxSpec":
@@ -391,8 +499,11 @@ class SandboxSpec:
             "managed_process",
             "memory_mb",
             "network",
+            "dns_servers",
+            "network_policy",
             "parkable",
             "profile",
+            "required_features",
             "security",
             "ssh",
             "ttl_seconds",
@@ -405,17 +516,34 @@ class SandboxSpec:
         command_items = _json_string_list(raw.get("command", []), "command")
         env = _json_string_map(raw.get("env", {}), "env")
         labels = _json_string_map(raw.get("labels", {}), "labels")
-        security = SandboxSecuritySpec.from_dict(raw.get("security"))
-        filesystem = SandboxFilesystemSpec.from_dict(raw.get("filesystem"))
+        security_raw = raw.get("security")
+        filesystem_raw = raw.get("filesystem")
         if profile == "linux_host":
-            if raw.get("security") is None:
-                security = linux_host_default_security()
-            if raw.get("filesystem") is None:
-                filesystem = linux_host_default_filesystem()
+            if security_raw is None or isinstance(security_raw, dict):
+                security_raw = {
+                    **linux_host_default_security().to_dict(),
+                    **(security_raw or {}),
+                }
+        if profile in {"linux_host", "linux_session"}:
+            if filesystem_raw is None or isinstance(filesystem_raw, dict):
+                filesystem_raw = {
+                    **linux_host_default_filesystem().to_dict(),
+                    **(filesystem_raw or {}),
+                }
+        security = SandboxSecuritySpec.from_dict(security_raw)
+        filesystem = SandboxFilesystemSpec.from_dict(filesystem_raw)
+        linux_host_raw = raw.get("linux_host")
+        if profile == "linux_session" and (
+            linux_host_raw is None or isinstance(linux_host_raw, dict)
+        ):
+            linux_host_raw = {"writable_paths": [], **(linux_host_raw or {})}
         return cls(
             id=_json_string(raw.get("id", ""), "id"),
             image=_json_string(raw.get("image", ""), "image"),
             profile=profile,
+            required_features=_json_string_list(
+                raw.get("required_features", []), "required_features"
+            ),
             command=command_items,
             env=env,
             working_dir=(
@@ -439,6 +567,10 @@ class SandboxSpec:
                 else None
             ),
             network=_json_string(raw.get("network", "bridge"), "network"),
+            dns_servers=_json_string_list(raw.get("dns_servers", []), "dns_servers"),
+            network_policy=SandboxNetworkPolicy.from_dict(
+                raw.get("network_policy", {})
+            ),
             ttl_seconds=(
                 _json_int(raw["ttl_seconds"], "ttl_seconds")
                 if raw.get("ttl_seconds") is not None
@@ -451,7 +583,7 @@ class SandboxSpec:
             ssh=SandboxSshSpec.from_dict(raw.get("ssh")),
             security=security,
             filesystem=filesystem,
-            linux_host=SandboxLinuxHostSpec.from_dict(raw.get("linux_host")),
+            linux_host=SandboxLinuxHostSpec.from_dict(linux_host_raw),
             labels=labels,
         )
 
@@ -519,8 +651,35 @@ class SandboxSpec:
             raise ValueError(
                 "profile must be one of: " + ", ".join(sorted(SANDBOX_PROFILES))
             )
+        if not isinstance(self.network_policy, SandboxNetworkPolicy):
+            raise ValueError("network_policy must be a SandboxNetworkPolicy")
+        if self.network_policy.egress == "relay":
+            if self.network != "bridge":
+                raise ValueError("relay egress requires bridge networking")
+            if self.dns_servers or self.ssh.enabled:
+                raise ValueError(
+                    "relay egress does not allow custom DNS or inbound SSH"
+                )
         if self.network not in {"none", "bridge"}:
             raise ValueError("network must be either 'none' or 'bridge'.")
+        if self.managed_process and self.security.supplementary_groups:
+            raise ValueError(
+                "managed_process does not yet support supplementary groups"
+            )
+        from .environment_contract import validate_requirements
+
+        if len(self.required_features) > 64 or any(
+            not isinstance(name, str) or not re.fullmatch(r"[a-z][a-z0-9-]{0,63}", name)
+            for name in self.required_features
+        ):
+            raise ValueError("required_features must contain at most 64 feature names")
+        validate_requirements(self)
+        if len(self.dns_servers) > 3:
+            raise ValueError("at most three DNS servers are supported")
+        for server in self.dns_servers:
+            ipaddress.IPv4Address(server)
+        if self.dns_servers and self.network == "none":
+            raise ValueError("DNS servers require bridge networking")
         self.ssh.validate()
         self.security.validate()
         self.filesystem.validate()
@@ -532,6 +691,18 @@ class SandboxSpec:
 
     def to_dict(self) -> dict[str, Any]:
         raw = asdict(self)
+        if self.network_policy.egress == "direct":
+            raw.pop("network_policy")
+        else:
+            raw["network_policy"] = self.network_policy.to_dict()
+        if self.required_features:
+            raw["required_features"] = list(self.required_features)
+        else:
+            raw.pop("required_features")
+        if self.dns_servers:
+            raw["dns_servers"] = list(self.dns_servers)
+        else:
+            raw.pop("dns_servers")
         raw["command"] = list(self.command)
         raw["ssh"] = self.ssh.to_dict()
         raw["security"] = self.security.to_dict()
@@ -817,85 +988,57 @@ def linux_host_default_filesystem() -> SandboxFilesystemSpec:
 def linux_host_entrypoint_script() -> str:
     return r"""set -eu
 
-install_service_shim() {
-  if command -v service >/dev/null 2>&1; then
-    return 0
-  fi
-  mkdir -p /usr/local/bin 2>/dev/null || return 0
-  cat > /usr/local/bin/service <<'UCLOUD_SERVICE_SHIM'
-#!/bin/sh
-name="${1:-}"
-action="${2:-}"
-case "$name:$action" in
-  cron:start|crond:start)
-    if command -v cron >/dev/null 2>&1; then cron >/tmp/ucloud-cron.log 2>&1 || true; exit 0; fi
-    if command -v crond >/dev/null 2>&1; then crond >/tmp/ucloud-cron.log 2>&1 || true; exit 0; fi
-    exit 0
-    ;;
-  ssh:start|sshd:start)
-    if command -v sshd >/dev/null 2>&1; then sshd >/tmp/ucloud-sshd.log 2>&1 || true; exit 0; fi
-    if [ -x /usr/sbin/sshd ]; then /usr/sbin/sshd >/tmp/ucloud-sshd.log 2>&1 || true; exit 0; fi
-    exit 0
-    ;;
-esac
-exit 0
-UCLOUD_SERVICE_SHIM
-  chmod +x /usr/local/bin/service 2>/dev/null || true
-}
-
 prepare_paths() {
   old_ifs="$IFS"
   IFS=:
+  set -f
   for path in ${UCLOUD_SANDBOX_LINUX_HOST_PATHS:-}; do
     [ -n "$path" ] || continue
-    mkdir -p -- "$path" 2>/dev/null || true
+    if [ ! -d "$path" ]; then
+      mkdir -p -- "$path" || { echo "cannot prepare sandbox directory: $path" >&2; exit 1; }
+    fi
   done
+  set +f
   IFS="$old_ifs"
-  chmod 1777 /tmp /var/tmp 2>/dev/null || true
-  chmod 0777 /tests /logs /logs/agent /logs/verifier /task /oracle /workspace 2>/dev/null || true
 }
 
 start_cron() {
   [ "${UCLOUD_SANDBOX_ENABLE_CRON:-0}" = "1" ] || return 0
-  if command -v service >/dev/null 2>&1; then
-    service cron start >/tmp/ucloud-cron.log 2>&1 || service crond start >/tmp/ucloud-cron.log 2>&1 || true
-  fi
   if command -v cron >/dev/null 2>&1; then
-    cron >/tmp/ucloud-cron.log 2>&1 || true
-    return 0
-  fi
-  if command -v crond >/dev/null 2>&1; then
-    crond >/tmp/ucloud-cron.log 2>&1 || true
+    cron
+  elif command -v crond >/dev/null 2>&1; then
+    crond
+  else
+    echo "cron was requested but neither cron nor crond is installed" >&2
+    exit 1
   fi
 }
 
 start_sshd() {
   [ "${UCLOUD_SANDBOX_ENABLE_SSHD:-0}" = "1" ] || return 0
   user="${UCLOUD_SANDBOX_SSH_USER:-root}"
-  home_dir="$(getent passwd "$user" 2>/dev/null | awk -F: '{print $6}' || true)"
-  [ -n "$home_dir" ] || home_dir=/root
-  mkdir -p "$home_dir/.ssh" /run/sshd 2>/dev/null || true
+  home_dir="$(getent passwd "$user" | awk -F: '{print $6}')"
+  [ -n "$home_dir" ] || { echo "SSH user has no home: $user" >&2; exit 1; }
+  mkdir -p "$home_dir/.ssh" /run/sshd
   if [ -n "${UCLOUD_SANDBOX_SSH_AUTHORIZED_KEYS:-}" ]; then
-    printf '%s\n' "$UCLOUD_SANDBOX_SSH_AUTHORIZED_KEYS" > "$home_dir/.ssh/authorized_keys" 2>/dev/null || true
-    chmod 700 "$home_dir/.ssh" 2>/dev/null || true
-    chmod 600 "$home_dir/.ssh/authorized_keys" 2>/dev/null || true
-    chown -R "$user" "$home_dir/.ssh" 2>/dev/null || true
+    printf '%s\n' "$UCLOUD_SANDBOX_SSH_AUTHORIZED_KEYS" > "$home_dir/.ssh/authorized_keys"
+    chmod 700 "$home_dir/.ssh"
+    chmod 600 "$home_dir/.ssh/authorized_keys"
+    chown "$user" "$home_dir/.ssh" "$home_dir/.ssh/authorized_keys"
   fi
-  if command -v ssh-keygen >/dev/null 2>&1; then
-    ssh-keygen -A >/tmp/ucloud-ssh-keygen.log 2>&1 || true
-  fi
-  sshd_path=
+  ssh-keygen -A
   if command -v sshd >/dev/null 2>&1; then
     sshd_path="$(command -v sshd)"
   elif [ -x /usr/sbin/sshd ]; then
     sshd_path=/usr/sbin/sshd
+  else
+    echo "sshd was requested but is not installed" >&2
+    exit 1
   fi
-  if [ -n "$sshd_path" ]; then
-    "$sshd_path" -p "${UCLOUD_SANDBOX_SSH_PORT:-22}" >/tmp/ucloud-sshd.log 2>&1 || true
-  fi
+  "$sshd_path" -t
+  "$sshd_path" -p "${UCLOUD_SANDBOX_SSH_PORT:-22}"
 }
 
-install_service_shim
 prepare_paths
 start_cron
 start_sshd
@@ -992,11 +1135,4 @@ def validate_security_value(name: str, value: str) -> None:
 
 
 def validate_container_path(name: str, value: str) -> None:
-    if not value.startswith("/"):
-        raise ValueError(f"{name} must be an absolute container path.")
-    if "\n" in value or "\r" in value or ":" in value or "," in value:
-        raise ValueError(f"{name} contains unsupported characters.")
-    if ".." in Path(value).parts:
-        raise ValueError(f"{name} cannot contain '..'.")
-    if not CONTAINER_PATH_RE.match(value):
-        raise ValueError(f"{name} contains unsupported characters.")
+    validate_guest_path(name, value)

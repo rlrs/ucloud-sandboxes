@@ -196,6 +196,7 @@ def fetch_node_agent_heartbeat(
     node_agent_url: str,
     *,
     bearer_token: str | None = None,
+    timeout_seconds: float = 10.0,
 ) -> NodeHeartbeat:
     from .registry import heartbeat_from_dict
 
@@ -209,7 +210,7 @@ def fetch_node_agent_heartbeat(
     try:
         with request.build_opener(_RejectNodeRedirects()).open(
             req,
-            timeout=10.0,
+            timeout=timeout_seconds,
         ) as response:
             payload = _decode_json(response.read().decode("utf-8"))
     except error.URLError as exc:

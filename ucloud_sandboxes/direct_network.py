@@ -5,14 +5,31 @@ import fcntl
 import hashlib
 import ipaddress
 import json
+import logging
 import os
 from pathlib import Path
 import re
+import shlex
 import socket
 import subprocess
 import tempfile
 import threading
-from typing import Callable, Sequence
+import time
+from typing import Callable, Mapping, Sequence
+
+from .network_policy import SandboxNetworkPolicy
+from .relay_network import (
+    NetworkRelay,
+    apply_nft,
+    parse_network_relays,
+    relay_hosts,
+    relay_ipv4_addresses,
+    relay_policy_rules,
+    relay_policy_table,
+)
+
+
+_LOG = logging.getLogger(__name__)
 
 
 NETWORK_STATE_VERSION = 1
@@ -107,6 +124,8 @@ class DirectNetworkManager:
         *,
         namespace_root: Path = Path("/run/netns"),
         allowed_tcp_egress: Sequence[str] = (),
+        network_relays: Mapping[str, str] | None = None,
+        nft_runner: Callable[[str], None] | None = None,
         runner: Callable[[Sequence[str]], None] | None = None,
         resolver: Callable[[str], Sequence[str]] | None = None,
         resolve_interval_seconds: float = DEFAULT_EGRESS_RESOLVE_INTERVAL_SECONDS,
@@ -127,6 +146,12 @@ class DirectNetworkManager:
                 for value in allowed_tcp_egress
             )
         )
+        self.relays = parse_network_relays(
+            {} if network_relays is None else network_relays
+        )
+        self.nft_runner = nft_runner or apply_nft
+        self._relay_resolution: dict[str, tuple[float, tuple[str, ...]]] = {}
+        self._relay_applied: dict[int, str] = {}
         self.runner = runner or self._run
         self.resolver = resolver or self._resolve_ipv4
         self.resolve_interval_seconds = float(resolve_interval_seconds)
@@ -135,14 +160,29 @@ class DirectNetworkManager:
 
     @property
     def has_dynamic_tcp_egress(self) -> bool:
-        return any(endpoint.is_dynamic for endpoint in self.allowed_tcp_egress)
+        return bool(self.relays) or any(
+            endpoint.is_dynamic for endpoint in self.allowed_tcp_egress
+        )
 
     def reconcile(self) -> None:
         """Reconcile host rules and refresh DNS-backed exact egress exceptions."""
+        if self.relays:
+            # Verify nft userspace and kernel support before advertising relay
+            # capabilities, even when the node has no active sandboxes.
+            probe = f"ucloud_relay_probe_{os.getpid()}"
+            self.nft_runner(
+                f"add table inet {probe}\n"
+                f"add chain inet {probe} nat {{ type nat hook prerouting priority -110; }}\n"
+                f"delete table inet {probe}\n"
+            )
+        # Restore restrictions before any broad legacy forwarding rules.
+        self._refresh_relay_policies(force=True)
         self._ensure_host_rules()
+        self._refresh_relay_policies(force=True)
 
     def refresh_tcp_egress(self) -> None:
         """Refresh only dynamic exact egress rules after initial reconciliation."""
+        self._refresh_relay_policies()
         self._reconcile_tcp_egress()
 
     def ensure(
@@ -151,8 +191,10 @@ class DirectNetworkManager:
         sandbox_generation: int,
         *,
         avoid_guest_ips: Sequence[str] = (),
+        network_policy: SandboxNetworkPolicy = SandboxNetworkPolicy(),
         host_rules_ready: bool = False,
     ) -> DirectNetworkLease:
+        self.validate_policy(network_policy)
         if sandbox_generation < 0:
             raise ValueError("sandbox generation cannot be negative")
         avoided = {
@@ -162,46 +204,81 @@ class DirectNetworkManager:
         if any(ipaddress.IPv4Address(item) not in NETWORK_CIDR for item in avoided):
             raise ValueError("avoided guest IP is outside the direct network")
         key = self._key(sandbox_id, sandbox_generation)
-        with self._locked():
-            state = self._load()
-            slot = state["leases"].get(key)
-            if slot is None:
-                used = {int(item) for item in state["leases"].values()}
-                slot = next(
-                    (candidate for candidate in range(1, MAX_NETWORK_SLOTS + 1)
-                     if candidate not in used
-                     and self._lease(
-                         sandbox_id,
-                         sandbox_generation,
-                         candidate,
-                     ).guest_ip not in avoided),
-                    None,
-                )
+        with self._lease_locked(key):
+            with self._locked():
+                state = self._load()
+                slot = state["leases"].get(key)
                 if slot is None:
-                    raise DirectNetworkError("direct network slot capacity is exhausted")
-                state["leases"][key] = slot
-                self._store(state)
-            lease = self._lease(sandbox_id, sandbox_generation, int(slot))
-            if lease.guest_ip in avoided:
-                raise DirectNetworkError(
-                    "existing direct network lease reuses a forbidden guest IP"
+                    used = {int(item) for item in state["leases"].values()}
+                    slot = next(
+                        (candidate for candidate in range(1, MAX_NETWORK_SLOTS + 1)
+                         if candidate not in used
+                         and self._lease(
+                             sandbox_id,
+                             sandbox_generation,
+                             candidate,
+                         ).guest_ip not in avoided),
+                        None,
+                    )
+                    if slot is None:
+                        raise DirectNetworkError("direct network slot capacity is exhausted")
+                    state["leases"][key] = slot
+                    if network_policy.egress == "relay":
+                        state.setdefault("policies", {})[key] = network_policy.to_dict()
+                    self._store(state)
+                stored_policy = SandboxNetworkPolicy.from_dict(
+                    state.get("policies", {}).get(key, {})
                 )
-            if not host_rules_ready:
-                self._ensure_host_rules()
+                if stored_policy != network_policy:
+                    raise DirectNetworkError(
+                        "network policy is immutable for a sandbox generation"
+                    )
+                lease = self._lease(sandbox_id, sandbox_generation, int(slot))
+                if lease.guest_ip in avoided:
+                    raise DirectNetworkError(
+                        "existing direct network lease reuses a forbidden guest IP"
+                    )
+                if not host_rules_ready:
+                    self._ensure_host_rules()
+                if network_policy.egress == "relay":
+                    addresses = self._resolve_relay(network_policy.relay)
+                    self._install_relay_policy(
+                        lease, network_policy, addresses, force=True
+                    )
+                    if not addresses:
+                        raise DirectNetworkError(
+                            "relay has no usable IPv4 address; egress is blocked"
+                        )
             self._ensure_kernel_lease(lease)
             return lease
 
     def release(self, sandbox_id: str, sandbox_generation: int) -> None:
         key = self._key(sandbox_id, sandbox_generation)
-        with self._locked():
-            state = self._load()
-            raw_slot = state["leases"].get(key)
-            if raw_slot is None:
-                return
-            lease = self._lease(sandbox_id, sandbox_generation, int(raw_slot))
+        with self._lease_locked(key):
+            with self._locked():
+                state = self._load()
+                raw_slot = state["leases"].get(key)
+                if raw_slot is None:
+                    return
+                lease = self._lease(sandbox_id, sandbox_generation, int(raw_slot))
+            # Keep the slot allocated until kernel cleanup finishes. Different
+            # incarnations can set up their own namespaces during this work.
             self._cleanup_kernel_lease(lease)
-            del state["leases"][key]
-            self._store(state)
+            with self._locked():
+                state = self._load()
+                if state["leases"].get(key) != raw_slot:
+                    raise DirectNetworkError("network lease changed during cleanup")
+                if key in state.get("policies", {}):
+                    if self._command_ok(
+                        ("ip", "link", "show", "dev", lease.host_interface)
+                    ):
+                        raise DirectNetworkError(
+                            "cannot release relay policy while interface exists"
+                        )
+                    self._remove_relay_policy(lease)
+                    del state["policies"][key]
+                del state["leases"][key]
+                self._store(state)
 
     def lease(self, sandbox_id: str, sandbox_generation: int) -> DirectNetworkLease | None:
         key = self._key(sandbox_id, sandbox_generation)
@@ -212,11 +289,119 @@ class DirectNetworkManager:
             return None
         return self._lease(sandbox_id, sandbox_generation, int(raw_slot))
 
+    def validate_policy(self, policy: SandboxNetworkPolicy) -> None:
+        if not isinstance(policy, SandboxNetworkPolicy):
+            raise ValueError("network policy must be a SandboxNetworkPolicy")
+        if policy.egress == "relay" and policy.relay not in self.relays:
+            raise ValueError(
+                f"network relay {policy.relay!r} is not configured on this node"
+            )
+
+    def hosts_for_policy(self, policy: SandboxNetworkPolicy) -> dict[str, str]:
+        self.validate_policy(policy)
+        return relay_hosts(self.relays, policy)
+
+    def _resolve_relay(self, name: str, *, force: bool = False) -> tuple[str, ...]:
+        cached = self._relay_resolution.get(name)
+        if (
+            not force
+            and cached
+            and time.monotonic() - cached[0] < self.resolve_interval_seconds
+        ):
+            return cached[1]
+        relay = self.relays[name]
+        endpoint = DirectNetworkTcpEgress.parse(relay.endpoint)
+        try:
+            values = self.resolver(relay.host) if endpoint.is_dynamic else (relay.host,)
+            addresses = tuple(sorted({str(ipaddress.IPv4Address(ip)) for ip in values}))
+            # Validate even when there are no active leases. Reject the entire
+            # DNS answer if it contains a forbidden destination.
+            relay_ipv4_addresses(addresses)
+        except (OSError, ValueError):
+            addresses = ()
+        if not addresses and (cached is None or cached[1]):
+            _LOG.warning(
+                "network relay %s has no usable IPv4 address; blocking its egress", name
+            )
+        elif addresses and cached is not None and not cached[1]:
+            _LOG.info("network relay %s resolved again; restoring its egress", name)
+        self._relay_resolution[name] = (time.monotonic(), addresses)
+        return addresses
+
+    def _install_relay_policy(
+        self,
+        lease: DirectNetworkLease,
+        policy: SandboxNetworkPolicy,
+        addresses: tuple[str, ...],
+        *,
+        force: bool = False,
+    ) -> None:
+        script = relay_policy_rules(lease, self.relays[policy.relay], addresses)
+        if not force and self._relay_applied.get(lease.slot) == script:
+            return
+        self.nft_runner(script)
+        # The nft prerouting and forward guards have already constrained every
+        # packet. This scoped exception permits that traffic past legacy
+        # private-address denies and Docker's FORWARD default DROP.
+        rule = ("-i", lease.host_interface, "-j", "ACCEPT")
+        if self._command_ok(("iptables", "-C", "FORWARD", *rule)):
+            self.runner(("iptables", "-D", "FORWARD", *rule))
+        self.runner(("iptables", "-I", "FORWARD", "1", *rule))
+        self._relay_applied[lease.slot] = script
+
+    def _refresh_relay_policies(self, *, force: bool = False) -> None:
+        # Share the durable lease lock with create/delete so DNS refresh cannot
+        # reinstall rules after a slot has been released or reassigned.
+        with self._locked():
+            state = self._load()
+            policies = state.get("policies", {})
+            resolved = {
+                name: self._resolve_relay(name, force=True) for name in self.relays
+            }
+            missing = set()
+            for key, raw in policies.items():
+                policy = SandboxNetworkPolicy.from_dict(raw)
+                sandbox_id, generation = key.split("\0")
+                lease = self._lease(sandbox_id, int(generation), state["leases"][key])
+                if policy.relay not in self.relays:
+                    # Configuration removal revokes access, even if a sentry
+                    # survived the node-agent restart. Keep the durable lease
+                    # so startup can recover once its relay is restored.
+                    self.nft_runner(
+                        relay_policy_rules(
+                            lease,
+                            NetworkRelay(policy.relay, "0.0.0.0", 1),
+                            (),
+                        )
+                    )
+                    self._relay_applied.pop(lease.slot, None)
+                    missing.add(policy.relay)
+                    continue
+                self._install_relay_policy(
+                    lease, policy, resolved[policy.relay], force=force
+                )
+            if missing:
+                raise DirectNetworkError(
+                    f"active network relays are missing: {sorted(missing)}"
+                )
+
+    def _remove_relay_policy(self, lease: DirectNetworkLease) -> None:
+        rule = ("-i", lease.host_interface, "-j", "ACCEPT")
+        if self._command_ok(("iptables", "-C", "FORWARD", *rule)):
+            self.runner(("iptables", "-D", "FORWARD", *rule))
+        table = relay_policy_table(lease)
+        self.nft_runner(f"add table inet {table}\ndelete table inet {table}\n")
+        self._relay_applied.pop(lease.slot, None)
+
     def _ensure_host_rules(self) -> None:
+        # Read a fresh kernel snapshot for this reconciliation, never a cached
+        # assertion that policy remains installed across requests.
+        snapshot = self._iptables_snapshot()
         self.runner(("sysctl", "-q", "-w", "net.ipv4.ip_forward=1"))
         self._ensure_iptables(
             ("iptables", "-C", "INPUT", "-s", str(NETWORK_CIDR), "-j", "DROP"),
             ("iptables", "-I", "INPUT", "1", "-s", str(NETWORK_CIDR), "-j", "DROP"),
+            snapshot=snapshot,
         )
         for destination in DENIED_DESTINATIONS:
             self._ensure_iptables(
@@ -228,11 +413,13 @@ class DirectNetworkManager:
                     "iptables", "-I", "FORWARD", "1", "-s", str(NETWORK_CIDR),
                     "-d", destination, "-j", "DROP",
                 ),
+                snapshot=snapshot,
             )
-        self._reconcile_tcp_egress()
+        self._reconcile_tcp_egress(snapshot=snapshot)
         self._ensure_iptables(
             ("iptables", "-C", "FORWARD", "-s", str(NETWORK_CIDR), "-j", "ACCEPT"),
             ("iptables", "-A", "FORWARD", "-s", str(NETWORK_CIDR), "-j", "ACCEPT"),
+            snapshot=snapshot,
         )
         self._ensure_iptables(
             (
@@ -245,6 +432,7 @@ class DirectNetworkManager:
                 "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED",
                 "-j", "ACCEPT",
             ),
+            snapshot=snapshot,
         )
         self._ensure_iptables(
             (
@@ -255,9 +443,12 @@ class DirectNetworkManager:
                 "iptables", "-t", "nat", "-A", "POSTROUTING",
                 "-s", str(NETWORK_CIDR), "-j", "MASQUERADE",
             ),
+            snapshot=snapshot,
         )
 
-    def _reconcile_tcp_egress(self) -> None:
+    def _reconcile_tcp_egress(
+        self, *, snapshot: set[tuple[str, ...]] | None = None
+    ) -> None:
         # Exact service exceptions sit above the broad private-destination
         # denies. DNS names are resolved on the host and become /32 rules; no
         # resolver or general RFC1918 access is exposed to a sandbox.
@@ -303,6 +494,7 @@ class DirectNetworkManager:
                 self._ensure_iptables(
                     ("iptables", "-C", "FORWARD", *rule),
                     ("iptables", "-I", "FORWARD", "1", *rule),
+                    snapshot=snapshot,
                 )
             for address, port in sorted(old_rules - new_rules):
                 self._run_best_effort(
@@ -416,11 +608,73 @@ class DirectNetworkManager:
             except FileNotFoundError:
                 pass
 
+    @staticmethod
+    def _iptables_rule_key(command: Sequence[str]) -> tuple[str, ...]:
+        words = list(command)
+        if words and words[0] == "iptables":
+            words.pop(0)
+        table = "filter"
+        if words[:1] == ["-t"] and len(words) >= 2:
+            table = words[1]
+            del words[:2]
+        if words[:1] in (["-C"], ["-A"]):
+            words[0] = "-A"
+        # iptables-save makes the implicit TCP matcher explicit. Strip only
+        # that redundant module; retain every other predicate verbatim.
+        if "-p" in words and words[words.index("-p") + 1:][:1] == ["tcp"]:
+            for i in range(len(words) - 1):
+                if words[i:i + 2] == ["-m", "tcp"]:
+                    del words[i:i + 2]
+                    break
+        return (table, *words)
+
+    @classmethod
+    def _iptables_snapshot(cls) -> set[tuple[str, ...]] | None:
+        try:
+            result = subprocess.run(
+                ("iptables-save",),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                check=False,
+                timeout=5,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if result.returncode != 0 or not isinstance(result.stdout, str):
+            return None
+        rules: set[tuple[str, ...]] = set()
+        table = None
+        try:
+            for line in result.stdout.splitlines():
+                if line.startswith("*"):
+                    if table is not None:
+                        return None
+                    table = line[1:]
+                elif line == "COMMIT":
+                    if table is None:
+                        return None
+                    table = None
+                elif line.startswith("-A "):
+                    if table is None:
+                        return None
+                    rules.add(cls._iptables_rule_key(
+                        ("-t", table, *shlex.split(line))
+                    ))
+        except ValueError:
+            return None
+        return rules if table is None else None
+
     def _ensure_iptables(
         self,
         check: Sequence[str],
         install: Sequence[str],
+        *,
+        snapshot: set[tuple[str, ...]] | None = None,
     ) -> None:
+        if snapshot is not None and self._iptables_rule_key(check) in snapshot:
+            return
         result = subprocess.run(
             tuple(check),
             stdin=subprocess.DEVNULL,
@@ -565,6 +819,12 @@ class DirectNetworkManager:
             )
         ):
             raise DirectNetworkError("direct network state is invalid")
+        policies = raw.get("policies", {})
+        if not isinstance(policies, dict) or set(policies) - set(raw["leases"]):
+            raise DirectNetworkError("direct network policy state is invalid")
+        for policy in policies.values():
+            if SandboxNetworkPolicy.from_dict(policy).egress != "relay":
+                raise DirectNetworkError("invalid persisted relay policy")
         if len(set(raw["leases"].values())) != len(raw["leases"]):
             raise DirectNetworkError("direct network state double-allocates a slot")
         return raw
@@ -593,13 +853,20 @@ class DirectNetworkManager:
             except FileNotFoundError:
                 pass
 
-    def _locked(self):
-        manager = self
+    def _lease_locked(self, key: str):
+        digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
+        directory = self.lock_path.with_name(self.lock_path.name + ".leases")
+        # Retain lock inodes after deletion so existing waiters cannot acquire
+        # a different lock from a later operation for the same incarnation.
+        return self._locked(directory / (digest + ".lock"))
+
+    def _locked(self, path: Path | None = None):
+        lock_path = self.lock_path if path is None else path
 
         class Lock:
             def __enter__(self):
-                manager.lock_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-                self.handle = manager.lock_path.open("a+b")
+                lock_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                self.handle = lock_path.open("a+b")
                 fcntl.flock(self.handle.fileno(), fcntl.LOCK_EX)
                 return self
 

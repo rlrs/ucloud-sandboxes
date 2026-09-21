@@ -156,3 +156,15 @@ Bootstrap diagnostics emit `UCLOUD_INIT_PHASE` lines with phase and cumulative
 timings. On failure, inspect the init output plus the node, Docker, containerd,
 and storage-native journals. Correct the bundle or configuration and replay the
 same bootstrap generation; do not repair the node with a different artifact.
+
+### Terminal sandbox loss
+
+When a worker is permanently lost, requests for its non-portable sandboxes
+return HTTP 410 with `error_code: node_lost` and `retryable: false`. The response
+includes `sandbox_generation` and `lost_at`. This means the runner should fail
+or restart the agent attempt with a new sandbox, rather than retry the same
+operation indefinitely. It does not promise continuation from a local checkpoint.
+The diagnosis is retained for seven days and does not carry over to a replacement
+generation. DELETE remains idempotent. The relay retains completed model results
+for authenticated replay under its existing retention policy and does not retry
+a wake after a terminal caller-loss response.

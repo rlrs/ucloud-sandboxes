@@ -1,0 +1,132 @@
+{
+  "schema": 1,
+  "status": "passed",
+  "captured_at_utc": "2026-09-07T22:58:37.675026+00:00",
+  "node_job_id": "12383398",
+  "kernel": "7.0.0-30-generic",
+  "boot_id": "ed483050-13f2-405c-a1a1-84edb1f6bf21",
+  "scope": "Isolated-node functional compatibility qualification; not a density performance result or production deployment.",
+  "runtime_artifact": "gvisor-hibernate-af682a2ddeec1eeb8dbe7ec7bf137c6b8810304638ed0da3c8418aa45a129775",
+  "runsc_sha256": "9ebdf83ec7bf37f8be26660a915ccef7d67c9a9f0342896c41364be81a05d3c1",
+  "patch_series_sha256": "53b928cb582c1c22c508ff590b91cff6f4d47cb871be8573ca31e39945061db1",
+  "runtime_installation_evidence": "gvisor-acl-installation-2026-09-07.json",
+  "original_acl_oracle": {
+    "evidence": "prime-acl-patched-2026-09-07.json",
+    "sha256": "824d15b8be205515a80a07871c691e3289a85c4a8230c67d0defb9f50bd34ef1",
+    "tests_passed": 9,
+    "reward": 1,
+    "unchanged_image_solution_grader_resources": true,
+    "cleanup": "deleted"
+  },
+  "expanded_qualification": {
+    "evidence": "gvisor-acl-hibernation-2026-09-07.json",
+    "result_sha256": "049fb1d0c01e68e2252e3ec462f27885874f611904f817d90780a8f6041d0c10",
+    "commands": "gvisor-acl-hibernation-2026-09-07.commands.jsonl",
+    "commands_sha256": "ad24d2f7df2d988137ee44713c762a5c7906cfc596064f7e25b07bbc11f57bd3",
+    "initial": "passed",
+    "capture_rollback": "passed",
+    "cycles_passed": 10,
+    "checks": [
+      "default ACL cross-user writes under umasks0022/0077",
+      "file/directory/FIFO inheritance",
+      "native Unix socket umask exception",
+      "private0600/0700 modes",
+      "setgid group42 inheritance",
+      "plain-parent umask controls",
+      "ACL/identity/flock persistence",
+      "paused handoff counter remains frozen",
+      "CPU quota restored each cycle"
+    ],
+    "resources": {
+      "cpu": {
+        "quota": 25000,
+        "period": 100000
+      },
+      "memory": {
+        "limit": 536870912
+      }
+    },
+    "limits_and_assertions_unchanged": true
+  },
+  "fixture_correction": {
+    "added_root_capability": "CAP_FSETID",
+    "reason": "Root fixture setup chowns the parent to gid42, then chmod2770; without CAP_FSETID and membership in gid42, Linux clears SGID and new files inherit gid0.",
+    "observed_failure": "AssertionError: ('file', 0) at qualify_acl_umask assertion actual.st_gid == 42",
+    "native_control_evidence": "gvisor-acl-native-fsetid-control-2026-09-07.json",
+    "identity_matrix": "as_user still clears supplementary groups and switches gid/uid to1000 or1001; no permission assertion relaxed.",
+    "diagnostic_change": "report_guest_errors sends original exception and traceback on verification socket before re-raising; no grader changes.",
+    "runtime_binary_rebuilt_for_fixture_change": false
+  },
+  "final_inputs": {
+    "archive": "docs/reviews/prime-acl-qualification-inputs-2026-09-07.tar.gz",
+    "archive_sha256": "ee2c8a5ccb6c08fd020ba34dfa8654d8d7c69014708acf25f5f729f25d3bd3a7",
+    "files": {
+      "scripts/qualify_gvisor_hibernation.py": {
+        "sha256": "2de78016db3f06e987b77a63e7acd59c8c6c8352091ee75bdec48edeb1279909",
+        "size": 8832
+      },
+      "runtime/gvisor/compatibility_workload.py": {
+        "sha256": "2f5017f804d7356ef561312bb519434a26b37034ce1651d8521cc6dbba2a89a8",
+        "size": 9952
+      },
+      "tests/test_gvisor_compatibility_workload.py": {
+        "sha256": "cd9f3a7ddce86f35efc248ebf8fce8cf481e6e6027154fceb980d84d8d574dc0",
+        "size": 2581
+      }
+    }
+  },
+  "failed_attempts": [
+    {
+      "output_directory": "qualification-10cycles",
+      "status": "failed_initial_verification",
+      "completed_cycles": 0,
+      "host_log": "Traceback (most recent call last):\n  File \"/var/lib/gvisor-acl-build/package/scripts/qualify_gvisor_hibernation.py\", line 244, in <module>\n    main()\n    ~~~~^^\n  File \"/var/lib/gvisor-acl-build/package/scripts/qualify_gvisor_hibernation.py\", line 169, in main\n    initial = verify()\n  File \"/var/lib/gvisor-acl-build/package/scripts/qualify_gvisor_hibernation.py\", line 74, in verify\n    result = json.loads(\n        run(\n    ...<8 lines>...\n        )\n    )\n  File \"/usr/lib/python3.14/json/__init__.py\", line 352, in loads\n    return _default_decoder.decode(s)\n           ~~~~~~~~~~~~~~~~~~~~~~~^^^\n  File \"/usr/lib/python3.14/json/decoder.py\", line 345, in decode\n    obj, end = self.raw_decode(s, idx=_w(s, 0).end())\n               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.14/json/decoder.py\", line 363, in raw_decode\n    raise JSONDecodeError(\"Expecting value\", s, err.value) from None\njson.decoder.JSONDecodeError: Expecting value: line 2 column 1 (char 1)\n",
+      "command_log_sha256": "58e877dd558b05d5216c1e30a626871ac03a5e6ecf0e80267b2452b16935bab5",
+      "cleanup_commands": [
+        "[\"/usr/local/libexec/gvisor-hibernate-af682a2ddeec1eeb8dbe7ec7bf137c6b8810304638ed0da3c8418aa45a129775/runsc\", \"--root=/var/lib/gvisor-acl-build/qualification-10cycles/state\", \"delete\", \"--force\", \"gvisor-compat-b169807b3263\"]",
+        "[\"docker\", \"rm\", \"d40fe84ad542ab97d3b0eb39d50d4ae63b5b965b415ab369fe8306ad661ccf68\"]",
+        "[\"umount\", \"/var/lib/gvisor-acl-build/qualification-10cycles/state/null-netns\"]"
+      ]
+    },
+    {
+      "output_directory": "qualification-10cycles-diagnostic",
+      "status": "failed_initial_verification",
+      "completed_cycles": 0,
+      "host_log": "Traceback (most recent call last):\n  File \"/var/lib/gvisor-acl-build/package/scripts/qualify_gvisor_hibernation_debug.py\", line 244, in <module>\n    main()\n    ~~~~^^\n  File \"/var/lib/gvisor-acl-build/package/scripts/qualify_gvisor_hibernation_debug.py\", line 169, in main\n    initial = verify()\n  File \"/var/lib/gvisor-acl-build/package/scripts/qualify_gvisor_hibernation_debug.py\", line 74, in verify\n    result = json.loads(\n        run(\n    ...<8 lines>...\n        )\n    )\n  File \"/usr/lib/python3.14/json/__init__.py\", line 352, in loads\n    return _default_decoder.decode(s)\n           ~~~~~~~~~~~~~~~~~~~~~~~^^^\n  File \"/usr/lib/python3.14/json/decoder.py\", line 345, in decode\n    obj, end = self.raw_decode(s, idx=_w(s, 0).end())\n               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.14/json/decoder.py\", line 363, in raw_decode\n    raise JSONDecodeError(\"Expecting value\", s, err.value) from None\njson.decoder.JSONDecodeError: Expecting value: line 2 column 1 (char 1)\n",
+      "command_log_sha256": "ed94ccab89dc8954583f124056b1b646c1b7f0422b5d6330f88d516ec19eeb50",
+      "cleanup_commands": [
+        "[\"/usr/local/libexec/gvisor-hibernate-af682a2ddeec1eeb8dbe7ec7bf137c6b8810304638ed0da3c8418aa45a129775/runsc\", \"--root=/var/lib/gvisor-acl-build/qualification-10cycles-diagnostic/state\", \"delete\", \"--force\", \"gvisor-compat-617e5197ef63\"]",
+        "[\"docker\", \"rm\", \"5e4cd44afbfaafbe548a94dce47e2224a6d138f43aa20558de86041cb7ebc636\"]",
+        "[\"umount\", \"/var/lib/gvisor-acl-build/qualification-10cycles-diagnostic/state/null-netns\"]"
+      ]
+    },
+    {
+      "output_directory": "qualification-10cycles-diagnostic2",
+      "status": "failed_initial_verification",
+      "completed_cycles": 0,
+      "host_log": "Traceback (most recent call last):\n  File \"/var/lib/gvisor-acl-build/package/scripts/qualify_gvisor_hibernation_diagnostic2.py\", line 244, in <module>\n    main()\n    ~~~~^^\n  File \"/var/lib/gvisor-acl-build/package/scripts/qualify_gvisor_hibernation_diagnostic2.py\", line 169, in main\n    initial = verify()\n  File \"/var/lib/gvisor-acl-build/package/scripts/qualify_gvisor_hibernation_diagnostic2.py\", line 92, in verify\n    raise RuntimeError(f\"guest verification failed: {result}\")\nRuntimeError: guest verification failed: {'guest_error': \"AssertionError(('file', 0))\", 'traceback': 'Traceback (most recent call last):\\n  File \"/compatibility.py\", line 219, in serve\\n    qualify_acl_umask(root, counter)\\n    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^\\n  File \"/compatibility.py\", line 149, in qualify_acl_umask\\n    assert actual.st_gid == 42, (name, actual.st_gid)\\n           ^^^^^^^^^^^^^^^^^^^\\nAssertionError: (\\'file\\', 0)\\n'}\n",
+      "command_log_sha256": "d0bbfa6bbc2fc7ddf39d7155d2f024f248e521734dd99071b90fe3f0fc7edde6",
+      "cleanup_commands": [
+        "[\"/usr/local/libexec/gvisor-hibernate-af682a2ddeec1eeb8dbe7ec7bf137c6b8810304638ed0da3c8418aa45a129775/runsc\", \"--root=/var/lib/gvisor-acl-build/qualification-10cycles-diagnostic2/state\", \"delete\", \"--force\", \"gvisor-compat-bae77f7e34e1\"]",
+        "[\"docker\", \"rm\", \"c864818b8d6d49b0e7b31197e013cba5dc99256dcb15f162a6050f9adc29e3aa\"]",
+        "[\"umount\", \"/var/lib/gvisor-acl-build/qualification-10cycles-diagnostic2/state/null-netns\"]"
+      ]
+    }
+  ],
+  "cleanup": {
+    "owned_guest_ids": [
+      "gvisor-compat-b169807b3263",
+      "gvisor-compat-617e5197ef63",
+      "gvisor-compat-bae77f7e34e1",
+      "gvisor-compat-991b954f65a7"
+    ],
+    "remaining_owned_process_pids": [],
+    "remaining_owned_cgroups": [],
+    "remaining_qualification_mounts": []
+  },
+  "local_checks": {
+    "unit_tests_passed": 2,
+    "native_only_test_skipped_locally": 1,
+    "ruff": "passed"
+  }
+}

@@ -585,7 +585,12 @@ of it.
 
 Published layers also have a bounded-chain rule. An ordinary detach appends
 the latest sealed delta, but a publication that would exceed eight layers or
-4 GiB of layer data is compacted into one sealed layer. The worker does not
+4 GiB of accumulated delta data beyond the base triggers compaction into a sealed
+layer. Local sparse-file holes do not count toward the byte estimate; a large
+base alone does not trigger repeated compaction. Depth-only maintenance retains
+a published base larger than all newer layers combined and merges only those
+newer layers, yielding two layers. A one-layer threshold, accumulated delta-byte
+pressure, or a blob-origin change still forces a full merge. The worker does not
 reserve enough local disk for a second flattened copy: AgentEnv reads the old
 remote layers through its bounded local cache, overlays the new local delta,
 and streams the compacted result directly to the configured durable backend.

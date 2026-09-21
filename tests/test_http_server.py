@@ -2,8 +2,10 @@ from http.client import HTTPConnection
 from http.server import BaseHTTPRequestHandler
 import json
 import socket
+import time
 from threading import Event, Thread
 import unittest
+from unittest.mock import patch
 
 from ucloud_sandboxes.http_server import HighBacklogThreadingHTTPServer
 from ucloud_sandboxes.http_server import JsonHttpHandler, RequestBodyTooLargeError
@@ -64,6 +66,95 @@ class _NoKeepAliveJsonHandler(JsonHttpHandler):
 
 
 class HttpServerTests(unittest.TestCase):
+    def test_handler_rejection_keeps_delayed_upload_writable_until_response_is_read(self):
+        server = HighBacklogThreadingHTTPServer(
+            ("127.0.0.1", 0), _EarlyRejectingJsonHandler,
+        )
+        thread = Thread(target=server.serve_forever, kwargs={"poll_interval": .01}, daemon=True)
+        thread.start()
+        connection = HTTPConnection(*server.server_address, timeout=2)
+        try:
+            connection.putrequest("POST", "/upload")
+            connection.putheader("Content-Length", "8192")
+            connection.endheaders()
+            self.assertIn(b"503", connection.sock.recv(4096, socket.MSG_PEEK))
+            time.sleep(.05)
+            connection.send(b"x" * 4096)
+            time.sleep(.05)
+            connection.send(b"x" * 4096)
+            response = connection.getresponse()
+            self.assertEqual(response.status, 503)
+            self.assertTrue(json.loads(response.read())["retryable"])
+        finally:
+            connection.close()
+            server.shutdown()
+            thread.join(timeout=1)
+            server.server_close()
+
+    def test_overload_allows_delayed_post_body_without_reset_or_blocking_accept(self) -> None:
+        _BlockingHandler.started.clear()
+        _BlockingHandler.release.clear()
+        server = HighBacklogThreadingHTTPServer(
+            ("127.0.0.1", 0), _BlockingHandler, max_request_threads=1,
+        )
+        thread = Thread(
+            target=server.serve_forever,
+            kwargs={"poll_interval": 0.01}, daemon=True,
+        )
+        thread.start()
+        first = HTTPConnection(*server.server_address, timeout=2)
+        rejected = HTTPConnection(*server.server_address, timeout=2)
+        probe = HTTPConnection(*server.server_address, timeout=2)
+        try:
+            first.request("GET", "/hold")
+            self.assertTrue(_BlockingHandler.started.wait(timeout=2))
+            rejected.connect()
+            # Receive the rejection before sending headers/body, reproducing
+            # the accept/send race of a simultaneous localhost POST burst.
+            self.assertIn(b"503", rejected.sock.recv(4096, socket.MSG_PEEK))
+            rejected.putrequest("POST", "/park")
+            rejected.putheader("Content-Length", "8192")
+            rejected.endheaders()
+            time.sleep(0.05)
+            rejected.send(b"x" * 4096)
+            # A slow rejected sender must not stall the next connection.
+            probe.request("GET", "/probe")
+            response = probe.getresponse()
+            self.assertEqual(response.status, 503)
+            self.assertTrue(json.loads(response.read())["retryable"])
+            rejected.send(b"x" * 4096)
+            response = rejected.getresponse()
+            self.assertEqual(response.status, 503)
+            self.assertEqual(
+                json.loads(response.read())["error_code"],
+                "http_request_capacity_exhausted",
+            )
+        finally:
+            _BlockingHandler.release.set()
+            first.close()
+            rejected.close()
+            probe.close()
+            server.shutdown()
+            thread.join(timeout=1)
+            server.server_close()
+
+    def test_overload_drains_expire_without_request_threads(self) -> None:
+        server = HighBacklogThreadingHTTPServer(("127.0.0.1", 0), _NoopHandler)
+        sender, receiver = socket.socketpair()
+        try:
+            with patch("ucloud_sandboxes.http_server.HTTP_OVERLOAD_DRAIN_SECONDS", 0):
+                server._reject_overload(receiver)
+            self.assertEqual(len(server._overload_drains), 1)
+            server.service_actions()
+            self.assertEqual(len(server._overload_drains), 0)
+            self.assertEqual(receiver.fileno(), -1)
+            self.assertIn(b"503", sender.recv(4096))
+            self.assertEqual(sender.recv(1), b"")
+        finally:
+            sender.close()
+            receiver.close()
+            server.server_close()
+
     def test_handler_can_close_idle_reverse_proxy_connections(self) -> None:
         server = HighBacklogThreadingHTTPServer(
             ("127.0.0.1", 0),

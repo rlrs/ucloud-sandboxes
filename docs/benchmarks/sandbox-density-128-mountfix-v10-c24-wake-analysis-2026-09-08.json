@@ -1,0 +1,137 @@
+{
+  "source": "sandbox-density-128-mountfix-v10-c24-services-2026-09-08.jsonl.gz",
+  "qualification": false,
+  "caveat": "Platform-interrupted run: captured successful stage timings only; validate_artifact includes storage mount and is not pure checkpoint validation. Stage samples may include the interrupted operation before it timed out.",
+  "stages": {
+    "phases_ms.active_admission": {
+      "n": 356,
+      "median_ms": 0.053,
+      "p95_nearest_rank_ms": 63.692
+    },
+    "phases_ms.ensure_network": {
+      "n": 356,
+      "median_ms": 141.403,
+      "p95_nearest_rank_ms": 234.788
+    },
+    "phases_ms.restore_slot_wait": {
+      "n": 356,
+      "median_ms": 112.959,
+      "p95_nearest_rank_ms": 2018.973
+    },
+    "phases_ms.warden_resume_call": {
+      "n": 356,
+      "median_ms": 584.391,
+      "p95_nearest_rank_ms": 1564.234
+    },
+    "storage_mount.backend.create_runtime_device": {
+      "n": 359,
+      "median_ms": 2.431,
+      "p95_nearest_rank_ms": 6.764
+    },
+    "storage_mount.dispatch.dispatch": {
+      "n": 359,
+      "median_ms": 36.423,
+      "p95_nearest_rank_ms": 1206.596
+    },
+    "storage_mount.host.device_is_unused": {
+      "n": 359,
+      "median_ms": 0.042,
+      "p95_nearest_rank_ms": 0.207
+    },
+    "storage_mount.host.mount": {
+      "n": 359,
+      "median_ms": 9.982,
+      "p95_nearest_rank_ms": 163.187
+    },
+    "storage_mount.journal._connect": {
+      "n": 1795,
+      "median_ms": 0.355,
+      "p95_nearest_rank_ms": 1.538
+    },
+    "storage_mount.journal.begin_transition": {
+      "n": 359,
+      "median_ms": 6.387,
+      "p95_nearest_rank_ms": 316.636
+    },
+    "storage_mount.journal.finish": {
+      "n": 359,
+      "median_ms": 3.324,
+      "p95_nearest_rank_ms": 134.786
+    },
+    "storage_mount.journal.load": {
+      "n": 359,
+      "median_ms": 0.685,
+      "p95_nearest_rank_ms": 9.018
+    },
+    "storage_mount.service._backend_ownership": {
+      "n": 1077,
+      "median_ms": 0.498,
+      "p95_nearest_rank_ms": 0.985
+    },
+    "storage_mount.service._begin_transition": {
+      "n": 359,
+      "median_ms": 6.405,
+      "p95_nearest_rank_ms": 316.656
+    },
+    "storage_mount.service.mount_snapshot_cow": {
+      "n": 359,
+      "median_ms": 35.464,
+      "p95_nearest_rank_ms": 1206.072
+    },
+    "warden_timings_ms.artifact_cleanup": {
+      "n": 356,
+      "median_ms": 26.569,
+      "p95_nearest_rank_ms": 50.252
+    },
+    "warden_timings_ms.begin_restore_journal": {
+      "n": 356,
+      "median_ms": 13.878,
+      "p95_nearest_rank_ms": 38.065
+    },
+    "warden_timings_ms.candidate_fence": {
+      "n": 356,
+      "median_ms": 3.68,
+      "p95_nearest_rank_ms": 12.28
+    },
+    "warden_timings_ms.candidate_journal": {
+      "n": 356,
+      "median_ms": 14.869,
+      "p95_nearest_rank_ms": 60.293
+    },
+    "warden_timings_ms.candidate_resume": {
+      "n": 356,
+      "median_ms": 45.284,
+      "p95_nearest_rank_ms": 73.963
+    },
+    "warden_timings_ms.commit_running_journal": {
+      "n": 356,
+      "median_ms": 14.221,
+      "p95_nearest_rank_ms": 61.605
+    },
+    "warden_timings_ms.readiness_exec": {
+      "n": 356,
+      "median_ms": 31.349,
+      "p95_nearest_rank_ms": 44.024
+    },
+    "warden_timings_ms.runsc_restore": {
+      "n": 356,
+      "median_ms": 167.656,
+      "p95_nearest_rank_ms": 229.332
+    },
+    "warden_timings_ms.runsc_state": {
+      "n": 356,
+      "median_ms": 22.77,
+      "p95_nearest_rank_ms": 35.863
+    },
+    "warden_timings_ms.validate_artifact": {
+      "n": 356,
+      "median_ms": 214.8,
+      "p95_nearest_rank_ms": 1262.693
+    },
+    "warden_timings_ms.warden_total": {
+      "n": 356,
+      "median_ms": 582.746,
+      "p95_nearest_rank_ms": 1563.84
+    }
+  }
+}

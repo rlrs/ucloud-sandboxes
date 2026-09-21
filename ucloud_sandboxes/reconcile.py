@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from math import ceil
 from typing import Any, Literal
 from uuid import uuid4
 
@@ -18,6 +19,7 @@ from .deployment import (
     DEFAULT_INIT_VERSION,
     package_version,
 )
+from .images import DEFAULT_MAX_ACTIVE_IMAGE_BUILDS
 from .networking import stable_hostname
 from .models import (
     ResourceQuantity,
@@ -106,6 +108,20 @@ def build_create_intents(
     return intents
 
 
+def requested_builder_nodes(
+    builder_nodes: list[SandboxNode], *, pending_builds: int, prepared_builders: int = 0,
+) -> int:
+    # Pending work is a quantity, not a boolean. Include admitted builds so a
+    # busy builder cannot hide the deficit caused by the next burst.
+    active = sum(
+        max(0, node.heartbeat.active_image_builds)
+        for node in builder_nodes
+        if node.heartbeat is not None and node.heartbeat_fresh
+        and not node.job.is_final and not node.job.is_lost and not node.permanently_lost
+    )
+    return max(ceil((active + max(0, pending_builds)) / DEFAULT_MAX_ACTIVE_IMAGE_BUILDS), max(0, prepared_builders))
+
+
 def evaluate_builder_scale(
     builder_nodes: list[SandboxNode],
     *,
@@ -139,10 +155,17 @@ def evaluate_builder_scale(
     max_builder_nodes = max(0, max_builder_nodes)
     pending_builds = max(0, pending_builds)
     prepared_builders = max(0, prepared_builders)
-    desired_nodes = max(1 if pending_builds > 0 else 0, prepared_builders)
-    desired_nodes = min(desired_nodes, max_builder_nodes)
+    requested_nodes = requested_builder_nodes(
+        builder_nodes, pending_builds=pending_builds, prepared_builders=prepared_builders,
+    )
+    desired_nodes = min(requested_nodes, max_builder_nodes)
     actions: list[ScaleAction] = []
     reasons: list[str] = []
+    if requested_nodes > max_builder_nodes:
+        reasons.append(
+            f"builder demand requests {requested_nodes} node(s), capped by "
+            f"max_builder_nodes={max_builder_nodes}"
+        )
 
     if unreachable_stop_candidates:
         job_ids = tuple(node.job_id for node in unreachable_stop_candidates)
@@ -194,7 +217,8 @@ def evaluate_builder_scale(
             reasons.append(f"max_builder_nodes={max_builder_nodes} reached")
         else:
             reasons.append(
-                f"builder capacity exists for demand ({pending_builds} pending build(s), "
+                f"builder pool meets capped node target={desired_nodes} "
+                f"({pending_builds} pending build(s), "
                 f"{prepared_builders} prepared builder(s))"
             )
     else:

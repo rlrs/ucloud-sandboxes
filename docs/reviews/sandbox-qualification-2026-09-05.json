@@ -1,0 +1,1041 @@
+{
+  "date": "2026-09-05",
+  "scope": "One sample per taskset family; setup-only search checks. Not complete taskset certification.",
+  "source_commit": "cb9cffdd0f08592081d281b3b38f30b62ae99edb",
+  "verifiers_commit": "555a17a62ee36a2ffe96772b8191402e44f30c43",
+  "verifiers_version": "0.3.2.dev16",
+  "verifiers_ucloud_commit": "fed54c688896057ddde95bf864babd614150bdb8",
+  "sdk_version": "0.4.15",
+  "initial_canary": {
+    "deployment_id": "compat-20260905",
+    "sandbox_job": "12381574",
+    "builder_job": "12381579",
+    "wheel_sha256": "3354073e6adf820924a4ab72adb609a2fa38ea0b3febc98d06344685ab7872dc",
+    "bundle_sha256": "825a0f96aa9c5a095753888349aeffd42c3358d9398e562fb24871c14f75216a",
+    "runsc_sha256": "342c8141209d85d7456dee7bf319e7bfebf93b05cb5186ff3cf19f7a73048dd1",
+    "jobs_stopped": true
+  },
+  "guest_contract_checks": [
+    {
+      "image": "ubuntu:noble-20260324",
+      "profile": "linux_host",
+      "user": null,
+      "exit_code": 0,
+      "stdout": "Linux\nuid=0(root) gid=0(root) groups=0(root)\nHOME=/root\nverified",
+      "stderr": "",
+      "status": "passed",
+      "cleanup": "deleted"
+    },
+    {
+      "image": "ubuntu:noble-20260324",
+      "profile": "linux_session",
+      "user": null,
+      "exit_code": 0,
+      "stdout": "Linux\nuid=1000(ubuntu) gid=1000(ubuntu) groups=1000(ubuntu)\nHOME=/home/ubuntu\nverified",
+      "stderr": "",
+      "status": "passed",
+      "cleanup": "deleted"
+    },
+    {
+      "image": "alpine:3.20",
+      "profile": "linux_session",
+      "user": null,
+      "exit_code": 0,
+      "stdout": "Linux\nuid=1000 gid=1000\nHOME=/workspace\nverified",
+      "stderr": "",
+      "status": "passed",
+      "cleanup": "deleted"
+    },
+    {
+      "image": "ubuntu:noble-20260324",
+      "profile": "linux_session",
+      "user": "nobody",
+      "exit_code": 0,
+      "stdout": "Linux\nuid=65534(nobody) gid=65534(nogroup) groups=65534(nogroup)\nHOME=/nonexistent\nverified",
+      "stderr": "",
+      "status": "passed",
+      "cleanup": "deleted"
+    }
+  ],
+  "tasksets": [
+    {
+      "taskset": "swesmith-env",
+      "domain": "swe",
+      "qualification": "sample_passed",
+      "summary": {
+        "checks": {
+          "gold": {
+            "error": 0,
+            "invalid": 0,
+            "missing": 0,
+            "timeout": 0,
+            "unchecked": 0,
+            "valid": 1
+          },
+          "setup": {
+            "error": 0,
+            "invalid": 0,
+            "missing": 0,
+            "timeout": 0,
+            "unchecked": 0,
+            "valid": 1
+          }
+        },
+        "mode": "all",
+        "outcomes": {
+          "error": 0,
+          "invalid": 0,
+          "missing": 0,
+          "timeout": 0,
+          "unchecked": 0,
+          "valid": 1
+        },
+        "owed": 0,
+        "recorded": 1,
+        "terminal": 1,
+        "total": 1,
+        "valid_rate": 1.0
+      },
+      "task_name": "py:oauthlib__oauthlib.1fd52536.combine_file__09vlzwgc",
+      "task_key": "55f063f85fd855b6a6dceecb6949a34ac38f86457e59dd7f7532495689842066",
+      "setup": "valid",
+      "gold": "valid"
+    },
+    {
+      "taskset": "openswe",
+      "domain": "swe",
+      "qualification": "failed_or_incomplete",
+      "summary": null,
+      "blocker": "Gated GAIR/OpenSWE dataset denies data access with the existing local HF login."
+    },
+    {
+      "taskset": "swerebench-v2",
+      "domain": "swe",
+      "qualification": "failed_or_incomplete",
+      "summary": {
+        "checks": {
+          "gold": {
+            "error": 0,
+            "invalid": 1,
+            "missing": 0,
+            "timeout": 0,
+            "unchecked": 0,
+            "valid": 0
+          },
+          "setup": {
+            "error": 0,
+            "invalid": 0,
+            "missing": 0,
+            "timeout": 0,
+            "unchecked": 0,
+            "valid": 1
+          }
+        },
+        "mode": "all",
+        "outcomes": {
+          "error": 0,
+          "invalid": 1,
+          "missing": 0,
+          "timeout": 0,
+          "unchecked": 0,
+          "valid": 0
+        },
+        "owed": 0,
+        "recorded": 1,
+        "terminal": 1,
+        "total": 1,
+        "valid_rate": 0.0
+      },
+      "task_name": "elastic__synthetics-316",
+      "task_key": "f0fe2c516a578bdad76e0817b324ad15917bcaf6d02e34be08567c80d4e8c114",
+      "setup": "valid",
+      "gold": "invalid",
+      "blocker": "Public source image provisions and setup passes; gold grading fails. Captured output includes Node.js DEP0147 warnings rejected by the CLI test and 5-second Jest timeouts."
+    },
+    {
+      "taskset": "scaleswe",
+      "domain": "swe",
+      "qualification": "sample_passed",
+      "summary": {
+        "checks": {
+          "gold": {
+            "error": 0,
+            "invalid": 0,
+            "missing": 0,
+            "timeout": 0,
+            "unchecked": 0,
+            "valid": 1
+          },
+          "setup": {
+            "error": 0,
+            "invalid": 0,
+            "missing": 0,
+            "timeout": 0,
+            "unchecked": 0,
+            "valid": 1
+          }
+        },
+        "mode": "all",
+        "outcomes": {
+          "error": 0,
+          "invalid": 0,
+          "missing": 0,
+          "timeout": 0,
+          "unchecked": 0,
+          "valid": 1
+        },
+        "owed": 0,
+        "recorded": 1,
+        "terminal": 1,
+        "total": 1,
+        "valid_rate": 1.0
+      },
+      "task_name": "auth0_auth0-python_pr671",
+      "task_key": "c88eb0f4c42effac8ed9554b398f2a7e2bd949b02303fd874e85fb3a8f2698fc",
+      "setup": "valid",
+      "gold": "valid"
+    },
+    {
+      "taskset": "swelego",
+      "domain": "swe",
+      "qualification": "failed_or_incomplete",
+      "summary": {
+        "checks": {
+          "gold": {
+            "error": 0,
+            "invalid": 0,
+            "missing": 0,
+            "timeout": 0,
+            "unchecked": 1,
+            "valid": 0
+          },
+          "setup": {
+            "error": 0,
+            "invalid": 0,
+            "missing": 0,
+            "timeout": 0,
+            "unchecked": 0,
+            "valid": 1
+          }
+        },
+        "mode": "all",
+        "outcomes": {
+          "error": 0,
+          "invalid": 0,
+          "missing": 0,
+          "timeout": 0,
+          "unchecked": 1,
+          "valid": 0
+        },
+        "owed": 0,
+        "recorded": 1,
+        "terminal": 1,
+        "total": 1,
+        "valid_rate": null
+      },
+      "task_name": "googleapis__python-bigquery-644",
+      "task_key": "54ed7e19aeeb28a09817ec23930454fc2e1fa82f75e47c26dfd29e35e838e73a",
+      "setup": "valid",
+      "gold": "unchecked"
+    },
+    {
+      "taskset": "multiswe",
+      "domain": "swe",
+      "qualification": "sample_passed",
+      "summary": {
+        "checks": {
+          "gold": {
+            "error": 0,
+            "invalid": 0,
+            "missing": 0,
+            "timeout": 0,
+            "unchecked": 0,
+            "valid": 1
+          },
+          "setup": {
+            "error": 0,
+            "invalid": 0,
+            "missing": 0,
+            "timeout": 0,
+            "unchecked": 0,
+            "valid": 1
+          }
+        },
+        "mode": "all",
+        "outcomes": {
+          "error": 0,
+          "invalid": 0,
+          "missing": 0,
+          "timeout": 0,
+          "unchecked": 0,
+          "valid": 1
+        },
+        "owed": 0,
+        "recorded": 1,
+        "terminal": 1,
+        "total": 1,
+        "valid_rate": 1.0
+      },
+      "task_name": "OpenMathLib__OpenBLAS-4729",
+      "task_key": "0a9fae55283383d2c9a0a7e979735a289211596863b6cecb86120fc5d2ec497a",
+      "setup": "valid",
+      "gold": "valid"
+    },
+    {
+      "taskset": "r2e-gym",
+      "domain": "swe",
+      "qualification": "sample_passed",
+      "summary": {
+        "checks": {
+          "gold": {
+            "error": 0,
+            "invalid": 0,
+            "missing": 0,
+            "timeout": 0,
+            "unchecked": 0,
+            "valid": 1
+          },
+          "setup": {
+            "error": 0,
+            "invalid": 0,
+            "missing": 0,
+            "timeout": 0,
+            "unchecked": 0,
+            "valid": 1
+          }
+        },
+        "mode": "all",
+        "outcomes": {
+          "error": 0,
+          "invalid": 0,
+          "missing": 0,
+          "timeout": 0,
+          "unchecked": 0,
+          "valid": 1
+        },
+        "owed": 0,
+        "recorded": 1,
+        "terminal": 1,
+        "total": 1,
+        "valid_rate": 1.0
+      },
+      "task_name": "2d9617bd0cb1f0ba61771258410ab8fae8e7e24d",
+      "task_key": "891ef3bae80d827093d3034bfcef9c2c9e72c46f527219ec1515ca5d20467de3",
+      "setup": "valid",
+      "gold": "valid"
+    },
+    {
+      "taskset": "swebench-pro",
+      "domain": "swe",
+      "qualification": "failed_or_incomplete",
+      "summary": {
+        "checks": {
+          "gold": {
+            "error": 0,
+            "invalid": 0,
+            "missing": 0,
+            "timeout": 0,
+            "unchecked": 1,
+            "valid": 0
+          },
+          "setup": {
+            "error": 0,
+            "invalid": 0,
+            "missing": 0,
+            "timeout": 0,
+            "unchecked": 0,
+            "valid": 1
+          }
+        },
+        "mode": "all",
+        "outcomes": {
+          "error": 0,
+          "invalid": 0,
+          "missing": 0,
+          "timeout": 0,
+          "unchecked": 1,
+          "valid": 0
+        },
+        "owed": 0,
+        "recorded": 1,
+        "terminal": 1,
+        "total": 1,
+        "valid_rate": null
+      },
+      "task_name": "scale-ai/instance_ansible__ansible-0ea40e09d1b35bcb69ff4d9cecf3d0defa4b36e8-v30a923fb5c164d6cd18280c02422f75e611e8fb2",
+      "task_key": "edb953d4bc59c4af404d587f4f92b5dc3548d3f94a5eca7761c38a5858328363",
+      "setup": "valid",
+      "gold": "unchecked"
+    },
+    {
+      "taskset": "swebench-verified",
+      "domain": "swe",
+      "qualification": "failed_or_incomplete",
+      "summary": {
+        "checks": {
+          "gold": {
+            "error": 0,
+            "invalid": 0,
+            "missing": 0,
+            "timeout": 0,
+            "unchecked": 1,
+            "valid": 0
+          },
+          "setup": {
+            "error": 0,
+            "invalid": 0,
+            "missing": 0,
+            "timeout": 0,
+            "unchecked": 0,
+            "valid": 1
+          }
+        },
+        "mode": "all",
+        "outcomes": {
+          "error": 0,
+          "invalid": 0,
+          "missing": 0,
+          "timeout": 0,
+          "unchecked": 1,
+          "valid": 0
+        },
+        "owed": 0,
+        "recorded": 1,
+        "terminal": 1,
+        "total": 1,
+        "valid_rate": null
+      },
+      "task_name": "swe-bench/astropy__astropy-12907",
+      "task_key": "6b9219ebcd4ca8ef316d94fefa10dfbae0f76e8e8c2bb0ec0fd409994a351b65",
+      "setup": "valid",
+      "gold": "unchecked"
+    },
+    {
+      "taskset": "swebench-multilingual",
+      "domain": "swe",
+      "qualification": "failed_or_incomplete",
+      "summary": {
+        "checks": {
+          "gold": {
+            "error": 0,
+            "invalid": 0,
+            "missing": 1,
+            "timeout": 0,
+            "unchecked": 0,
+            "valid": 0
+          },
+          "setup": {
+            "error": 0,
+            "invalid": 0,
+            "missing": 1,
+            "timeout": 0,
+            "unchecked": 0,
+            "valid": 0
+          }
+        },
+        "mode": "all",
+        "outcomes": {
+          "error": 0,
+          "invalid": 0,
+          "missing": 1,
+          "timeout": 0,
+          "unchecked": 0,
+          "valid": 0
+        },
+        "owed": 1,
+        "recorded": 0,
+        "terminal": 0,
+        "total": 1,
+        "valid_rate": null
+      },
+      "blocker": "Verifiers rejects the UCloud adapter because it lacks the framework-aware network policy required by this task."
+    },
+    {
+      "taskset": "senior-swe-bench",
+      "domain": "swe",
+      "qualification": "failed_or_incomplete",
+      "summary": {
+        "checks": {
+          "gold": {
+            "error": 1,
+            "invalid": 0,
+            "missing": 0,
+            "timeout": 0,
+            "unchecked": 0,
+            "valid": 0
+          },
+          "setup": {
+            "error": 1,
+            "invalid": 0,
+            "missing": 0,
+            "timeout": 0,
+            "unchecked": 0,
+            "valid": 0
+          }
+        },
+        "mode": "all",
+        "outcomes": {
+          "error": 1,
+          "invalid": 0,
+          "missing": 0,
+          "timeout": 0,
+          "unchecked": 0,
+          "valid": 0
+        },
+        "owed": 1,
+        "recorded": 1,
+        "terminal": 0,
+        "total": 1,
+        "valid_rate": null
+      },
+      "task_name": "better-auth-fix-api-key-run",
+      "task_key": "de60b6d308a3d1f15e4694c628153da21fa8306f39303a548897e832c15a2623",
+      "setup": "error",
+      "gold": "error",
+      "blocker": "Taskset hardcodes senior-swe-bench/{task}:latest Prime-hosted image names, which are not public Docker Hub pulls. Public source Dockerfile is available; this sample was not rebuilt or qualified.",
+      "public_build_source": {
+        "repository": "https://github.com/snorkel-ai/senior-swe-bench-v2026.06",
+        "commit": "e30b0e19fdbc4b099e752c6d5324f5b250aee3dc",
+        "context": "tasks/better-auth-fix-api-key-run/environment",
+        "dockerfile_sha256": "9fb0f60054ac6b2eee9f307988e447ed53222b204e188a074ea1e8c82a0180ca"
+      }
+    },
+    {
+      "taskset": "tmax",
+      "domain": "terminal",
+      "qualification": "failed_or_incomplete",
+      "summary": {
+        "checks": {
+          "gold": {
+            "error": 0,
+            "invalid": 0,
+            "missing": 0,
+            "timeout": 0,
+            "unchecked": 1,
+            "valid": 0
+          },
+          "setup": {
+            "error": 0,
+            "invalid": 0,
+            "missing": 0,
+            "timeout": 0,
+            "unchecked": 0,
+            "valid": 1
+          }
+        },
+        "mode": "all",
+        "outcomes": {
+          "error": 0,
+          "invalid": 0,
+          "missing": 0,
+          "timeout": 0,
+          "unchecked": 1,
+          "valid": 0
+        },
+        "owed": 0,
+        "recorded": 1,
+        "terminal": 1,
+        "total": 1,
+        "valid_rate": null
+      },
+      "task_name": "tmax/task_000000_c19dda5b",
+      "task_key": "c1840a7e377f10b8881c82a2c1456f03e089553ccf13b6e976ce6c78d24a126c",
+      "setup": "valid",
+      "gold": "unchecked"
+    },
+    {
+      "taskset": "terminal-lego",
+      "domain": "terminal",
+      "qualification": "failed_or_incomplete",
+      "summary": {
+        "checks": {
+          "gold": {
+            "error": 0,
+            "invalid": 0,
+            "missing": 0,
+            "timeout": 0,
+            "unchecked": 1,
+            "valid": 0
+          },
+          "setup": {
+            "error": 0,
+            "invalid": 0,
+            "missing": 0,
+            "timeout": 0,
+            "unchecked": 0,
+            "valid": 1
+          }
+        },
+        "mode": "all",
+        "outcomes": {
+          "error": 0,
+          "invalid": 0,
+          "missing": 0,
+          "timeout": 0,
+          "unchecked": 1,
+          "valid": 0
+        },
+        "owed": 0,
+        "recorded": 1,
+        "terminal": 1,
+        "total": 1,
+        "valid_rate": null
+      },
+      "task_name": "task_00000",
+      "task_key": "457461a8bd551dad000f78a354a8f4d8a365765d94c58c236f21c306fa2999cb",
+      "setup": "valid",
+      "gold": "unchecked",
+      "oracle": {
+        "task": "task_00000",
+        "image": "gateway-live-ucloud-20260824a:5000/ucloud-managed/compat-20260905-terminal-lego-76258bf0e18e@sha256:be2916e86172d4d7a39e5c88979350d511d64dc006d8ae0816e072d4b3dc1e0c",
+        "status": "oracle_passed",
+        "setup": "passed",
+        "oracle": {
+          "exit_code": 0,
+          "stdout": "Successfully found and saved .txt files to /app/task_file/output/found_files.txt\nContents:\n./file1.txt\n./file2.txt\n./subdir1/deep/file4.txt\n./subdir1/file3.txt\n./subdir2/notes.txt\n",
+          "stderr": ""
+        },
+        "reward": 1.0,
+        "cleanup": "deleted"
+      }
+    },
+    {
+      "taskset": "openthoughts-tblite",
+      "domain": "terminal",
+      "qualification": "failed_or_incomplete",
+      "summary": {
+        "checks": {
+          "gold": {
+            "error": 0,
+            "invalid": 0,
+            "missing": 0,
+            "timeout": 0,
+            "unchecked": 1,
+            "valid": 0
+          },
+          "setup": {
+            "error": 0,
+            "invalid": 0,
+            "missing": 0,
+            "timeout": 0,
+            "unchecked": 0,
+            "valid": 1
+          }
+        },
+        "mode": "all",
+        "outcomes": {
+          "error": 0,
+          "invalid": 0,
+          "missing": 0,
+          "timeout": 0,
+          "unchecked": 1,
+          "valid": 0
+        },
+        "owed": 0,
+        "recorded": 1,
+        "terminal": 1,
+        "total": 1,
+        "valid_rate": null
+      },
+      "task_name": "openthoughts/acl-permissions-inheritance",
+      "task_key": "d741fce36b0e868a6ef10fc66e5ca14bdad94387b98daf652a5a3855e0d2e733",
+      "setup": "valid",
+      "gold": "unchecked",
+      "oracle": {
+        "task": "openthoughts/acl-permissions-inheritance",
+        "image": "gateway-live-ucloud-20260824a:5000/ucloud-managed/compat-20260905-openthoughts-tblite-da65646f2b10@sha256:ebb70997d6683787d8dbf56f35abc263bc403699ef58376b4c6492890bdc6c15",
+        "status": "failed",
+        "setup": "passed",
+        "oracle": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "setfacl: /srv/shared: Operation not supported\n"
+        },
+        "error_type": "RuntimeError",
+        "cleanup": "deleted"
+      },
+      "blocker": "POSIX ACLs: setfacl returns Operation not supported under pinned gVisor; identical operation succeeds in Docker on the UCloud builder VM."
+    },
+    {
+      "taskset": "terminal-bench-2",
+      "domain": "terminal",
+      "qualification": "failed_or_incomplete",
+      "summary": {
+        "checks": {
+          "gold": {
+            "error": 0,
+            "invalid": 0,
+            "missing": 0,
+            "timeout": 0,
+            "unchecked": 1,
+            "valid": 0
+          },
+          "setup": {
+            "error": 0,
+            "invalid": 0,
+            "missing": 0,
+            "timeout": 0,
+            "unchecked": 0,
+            "valid": 1
+          }
+        },
+        "mode": "all",
+        "outcomes": {
+          "error": 0,
+          "invalid": 0,
+          "missing": 0,
+          "timeout": 0,
+          "unchecked": 1,
+          "valid": 0
+        },
+        "owed": 0,
+        "recorded": 1,
+        "terminal": 1,
+        "total": 1,
+        "valid_rate": null
+      },
+      "task_name": "terminal-bench/adaptive-rejection-sampler",
+      "task_key": "9fb4eebf3871230dc9beceafd6007f65629ce74bb4e1a87ad436d31c3ba5b33f",
+      "setup": "valid",
+      "gold": "unchecked"
+    },
+    {
+      "taskset": "papersearchqa",
+      "domain": "search",
+      "qualification": "setup_passed",
+      "summary": {
+        "mode": "setup",
+        "outcomes": {
+          "error": 0,
+          "invalid": 0,
+          "missing": 0,
+          "timeout": 0,
+          "unchecked": 0,
+          "valid": 1
+        },
+        "owed": 0,
+        "recorded": 1,
+        "terminal": 1,
+        "total": 1,
+        "valid_rate": 1.0
+      },
+      "task_name": null,
+      "task_key": "12def1d88037c7ad83082832636bef3e60ff136950e6e55e364c43a3253e08c5",
+      "setup": "valid",
+      "gold": null
+    },
+    {
+      "taskset": "wideseek",
+      "domain": "search",
+      "qualification": "setup_passed",
+      "summary": {
+        "mode": "setup",
+        "outcomes": {
+          "error": 0,
+          "invalid": 0,
+          "missing": 0,
+          "timeout": 0,
+          "unchecked": 0,
+          "valid": 1
+        },
+        "owed": 0,
+        "recorded": 1,
+        "terminal": 1,
+        "total": 1,
+        "valid_rate": 1.0
+      },
+      "task_name": "For a comparative analysis of higher education institutions in the Western Unite",
+      "task_key": "6738daaf347ab35b6c363b52c27d59691d3431b10df07afb1a3005a564d60d93",
+      "setup": "valid",
+      "gold": null
+    },
+    {
+      "taskset": "s1-deepresearch",
+      "domain": "search",
+      "qualification": "setup_passed",
+      "summary": {
+        "mode": "setup",
+        "outcomes": {
+          "error": 0,
+          "invalid": 0,
+          "missing": 0,
+          "timeout": 0,
+          "unchecked": 0,
+          "valid": 1
+        },
+        "owed": 0,
+        "recorded": 1,
+        "terminal": 1,
+        "total": 1,
+        "valid_rate": 1.0
+      },
+      "task_name": null,
+      "task_key": "c34b10c074688398f5de9726604c20bd5d9cadc5ca073ea7214928cf3a471be2",
+      "setup": "valid",
+      "gold": null
+    },
+    {
+      "taskset": "openseeker",
+      "domain": "search",
+      "qualification": "setup_passed",
+      "summary": {
+        "mode": "setup",
+        "outcomes": {
+          "error": 0,
+          "invalid": 0,
+          "missing": 0,
+          "timeout": 0,
+          "unchecked": 0,
+          "valid": 1
+        },
+        "owed": 0,
+        "recorded": 1,
+        "terminal": 1,
+        "total": 1,
+        "valid_rate": 1.0
+      },
+      "task_name": null,
+      "task_key": "317b2a7fcbdc3c3bbf5e87bf397e1bbf1713bfb3a46c0304462fe8f90a8ca3c3",
+      "setup": "valid",
+      "gold": null
+    },
+    {
+      "taskset": "deepdive",
+      "domain": "search",
+      "qualification": "setup_passed",
+      "summary": {
+        "mode": "setup",
+        "outcomes": {
+          "error": 0,
+          "invalid": 0,
+          "missing": 0,
+          "timeout": 0,
+          "unchecked": 0,
+          "valid": 1
+        },
+        "owed": 0,
+        "recorded": 1,
+        "terminal": 1,
+        "total": 1,
+        "valid_rate": 1.0
+      },
+      "task_name": null,
+      "task_key": "25ad3ab2b7f63eee135edfcfd21f4d4f9eee537d2f0ba9f3abbe4aa3bc5eb12d",
+      "setup": "valid",
+      "gold": null
+    },
+    {
+      "taskset": "browsecomp",
+      "domain": "search",
+      "qualification": "setup_passed",
+      "summary": {
+        "mode": "setup",
+        "outcomes": {
+          "error": 0,
+          "invalid": 0,
+          "missing": 0,
+          "timeout": 0,
+          "unchecked": 0,
+          "valid": 1
+        },
+        "owed": 0,
+        "recorded": 1,
+        "terminal": 1,
+        "total": 1,
+        "valid_rate": 1.0
+      },
+      "task_name": null,
+      "task_key": "3fbbe413a0ba62b2f244402ff99311f0ac404de8c1687e7452ee5e66ac8d3edf",
+      "setup": "valid",
+      "gold": null
+    },
+    {
+      "taskset": "redsearcher",
+      "domain": "search",
+      "qualification": "setup_passed",
+      "summary": {
+        "mode": "setup",
+        "outcomes": {
+          "error": 0,
+          "invalid": 0,
+          "missing": 0,
+          "timeout": 0,
+          "unchecked": 0,
+          "valid": 1
+        },
+        "owed": 0,
+        "recorded": 1,
+        "terminal": 1,
+        "total": 1,
+        "valid_rate": 1.0
+      },
+      "task_name": null,
+      "task_key": "85ad8acbb78c46598b91ef011667857bbf27ebccb3caee1387f0393fb3e35d0a",
+      "setup": "valid",
+      "gold": null
+    },
+    {
+      "taskset": "browsecomp-plus",
+      "domain": "search",
+      "qualification": "failed_or_incomplete",
+      "summary": {
+        "mode": "setup",
+        "outcomes": {
+          "error": 0,
+          "invalid": 0,
+          "missing": 1,
+          "timeout": 0,
+          "unchecked": 0,
+          "valid": 0
+        },
+        "owed": 1,
+        "recorded": 0,
+        "terminal": 0,
+        "total": 1,
+        "valid_rate": null
+      },
+      "blocker": "Verifiers rejects the UCloud adapter because it cannot enforce the task framework-aware network policy; no policy was removed or relaxed."
+    }
+  ],
+  "rebuilt_images": [
+    {
+      "taskset": "tmax",
+      "image": {
+        "available_to_sandboxes": true,
+        "created_at": "2026-09-05T09:37:48.232198+00:00",
+        "id": "compat-20260905-tmax",
+        "labels": {},
+        "manifest_digest": "sha256:9302bc612bcdef633cc49e40be315bf27cb96238d6ff458c94888a5dd3f16c61",
+        "pushed": true,
+        "source": "build:/tmp/ucloud-image-context-lrcj4njb",
+        "state": "available",
+        "tag": "gateway-live-ucloud-20260824a:5000/ucloud-managed/compat-20260905-tmax-5f09d9cdaa1d:latest",
+        "updated_at": "2026-09-05T09:37:48.232198+00:00"
+      },
+      "context_sha256": {
+        "Dockerfile": "ae35cff0e6f2a51573641c2b50bbfa5911fc35a0a0c304937c129393c7304c70",
+        "_fixtures/app/fixtures/image.png": "2289e18a1c03d57a195889267cca62f8779ccdd2b05c7d9ac8d2a837d9060e34",
+        "base_install.sh": "0e71b3e06fcf8cc6f9d95ba2e9664dfbba7786949a0e21b810ada563ae27a637",
+        "post_install.sh": "478eaadf5b5fcb4e2bd900e8dd6dc79e740bd84d2eabd0f24be8f93204b2ade9"
+      }
+    },
+    {
+      "taskset": "terminal-lego",
+      "image": {
+        "available_to_sandboxes": true,
+        "created_at": "2026-09-05T09:29:27.492889+00:00",
+        "id": "compat-20260905-terminal-lego",
+        "labels": {},
+        "manifest_digest": "sha256:be2916e86172d4d7a39e5c88979350d511d64dc006d8ae0816e072d4b3dc1e0c",
+        "pushed": true,
+        "source": "build:/tmp/ucloud-image-context-sxcvhjjf",
+        "state": "available",
+        "tag": "gateway-live-ucloud-20260824a:5000/ucloud-managed/compat-20260905-terminal-lego-76258bf0e18e:latest",
+        "updated_at": "2026-09-05T09:29:27.492889+00:00"
+      },
+      "context_sha256": {
+        "Dockerfile": "b9487a03cd64cd2c3c2dd60618650c0a5b666e59b3f1d9444df4e26151f67052",
+        "task_file/input/document.pdf": "f62abfa7d530021f8483259bd478b13d77dc833644dd1fba4ba8240d3b9a4a83",
+        "task_file/input/file1.txt": "2c846e61fd6eb8e81a54f96c96d08bdc4640c7220e90d95b29ee2fffc334f0d4",
+        "task_file/input/file2.txt": "85bb745f287fd2bd8021c310cd09acb5362a171cb3eba40b711692f978a0e083",
+        "task_file/input/subdir1/deep/file4.txt": "81f45cda8f659f650e802c2d8960e8655089a8d183c276cb87d3ced16c41592d",
+        "task_file/input/subdir1/file3.txt": "ce7173f32933d315999b9fb4c5f48b3481c72b9033f3cac34106c2b49a6a761c",
+        "task_file/input/subdir1/image.png": "9c54e20d461355e09bb906725d96438c953e61973c1d5796b0bdc8eab04f6c65",
+        "task_file/input/subdir2/data.csv": "f032dfe6c671d3c8e903a4461f0f2191a39b7975ef33d5e1044b26565b787ff6",
+        "task_file/input/subdir2/notes.txt": "66059bc15a47f3aafdb53b9c030dbdba981208d30a04618864699dbc230f9e82"
+      }
+    },
+    {
+      "taskset": "openthoughts-tblite",
+      "image": {
+        "available_to_sandboxes": true,
+        "created_at": "2026-09-05T09:29:27.405589+00:00",
+        "id": "compat-20260905-openthoughts-tblite",
+        "labels": {},
+        "manifest_digest": "sha256:ebb70997d6683787d8dbf56f35abc263bc403699ef58376b4c6492890bdc6c15",
+        "pushed": true,
+        "source": "build:/tmp/ucloud-image-context-0fvzy0vd",
+        "state": "available",
+        "tag": "gateway-live-ucloud-20260824a:5000/ucloud-managed/compat-20260905-openthoughts-tblite-da65646f2b10:latest",
+        "updated_at": "2026-09-05T09:29:27.405589+00:00"
+      },
+      "context_sha256": {
+        "Dockerfile": "f745e7280076ab7b7321b7274dc68d31afd0acabef85187003dde3699fd53d6c"
+      }
+    }
+  ],
+  "final_canary": {
+    "sandbox_job": "12381588",
+    "wheel_sha256": "c9e5d22f908fa8d1fe98f747840b7ecf86ae949f3f6828a2587a6d369fbc7a8d",
+    "bundle_sha256": "23fdc5a3fb02ef6ea45b6dd59a598832d139af86570c8d3585bad7f51f46e378",
+    "changes_after_taskset_run": "Cwd repeated-slash containment and rejection of relative passwd HOME as a default; final live userspace probes repeated on fresh node. Taskset run was not repeated in full.",
+    "guest_contract_checks": [
+      {
+        "image": "ubuntu:noble-20260324",
+        "profile": "linux_host",
+        "user": null,
+        "exit_code": 0,
+        "stdout": "Linux\nuid=0(root) gid=0(root) groups=0(root)\nHOME=/root\nverified",
+        "stderr": "",
+        "status": "passed",
+        "cleanup": "deleted"
+      },
+      {
+        "image": "ubuntu:noble-20260324",
+        "profile": "linux_session",
+        "user": null,
+        "exit_code": 0,
+        "stdout": "Linux\nuid=1000(ubuntu) gid=1000(ubuntu) groups=1000(ubuntu)\nHOME=/home/ubuntu\nverified",
+        "stderr": "",
+        "status": "passed",
+        "cleanup": "deleted"
+      },
+      {
+        "image": "alpine:3.20",
+        "profile": "linux_session",
+        "user": null,
+        "working_dir": "//workspace//nested/.",
+        "exit_code": 0,
+        "stdout": "Linux\nuid=1000 gid=1000\nHOME=/workspace\nverified",
+        "stderr": "",
+        "status": "passed",
+        "cleanup": "deleted"
+      },
+      {
+        "image": "ubuntu:noble-20260324",
+        "profile": "linux_session",
+        "user": "nobody",
+        "exit_code": 0,
+        "stdout": "Linux\nuid=65534(nobody) gid=65534(nogroup) groups=65534(nogroup)\nHOME=/nonexistent\nverified",
+        "stderr": "",
+        "status": "passed",
+        "cleanup": "deleted"
+      }
+    ],
+    "jobs_stopped": true
+  },
+  "local_checks": {
+    "main_tests": 721,
+    "skipped": 4,
+    "sdk_tests": 82,
+    "go_shellcheck_ruff_builds": "passed via scripts/check.sh",
+    "connection_test": "Synchronized TCP close to avoid kernel reset race; passed 25 consecutive runs."
+  },
+  "cleanup": {
+    "job_states": {
+      "12381574": "SUCCESS",
+      "12381579": "SUCCESS",
+      "12381588": "SUCCESS"
+    },
+    "canary_services": "inactive",
+    "remaining_sandboxes": 0,
+    "copied_credentials": "removed",
+    "production_services": "not replaced"
+  },
+  "counts": {
+    "families_attempted": 23,
+    "setup_passed": 19,
+    "upstream_gold_passed": 4,
+    "supplemental_oracle_passed": 1
+  }
+}

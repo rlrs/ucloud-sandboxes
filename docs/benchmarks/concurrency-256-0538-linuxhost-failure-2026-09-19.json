@@ -1,0 +1,1190 @@
+{
+  "transport": "per-sandbox AsyncSandboxClient, matching Verifiers",
+  "prefix": "linuxhost-256-c4f43d34",
+  "started_at": "2026-09-19T05:53:20.485109+00:00",
+  "count": 256,
+  "concurrency": 256,
+  "image": "release-0534-989b03553a-image",
+  "shape": {
+    "cpus": 2,
+    "memory_mb": 1024,
+    "disk_mb": 5184
+  },
+  "phases": [
+    {
+      "name": "create-linux-host",
+      "seconds": 22.146,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 0.822,
+        "p50": 9.889,
+        "p95": 20.914,
+        "max": 22.084
+      }
+    },
+    {
+      "name": "initialize-and-tools",
+      "seconds": 81.703,
+      "passed": 82,
+      "failed": 174,
+      "latency": {
+        "min": 1.052,
+        "p50": 29.575,
+        "p95": 61.945,
+        "max": 81.587
+      }
+    }
+  ],
+  "errors": [
+    {
+      "id": "linuxhost-256-c4f43d34-219",
+      "ok": false,
+      "seconds": 8.15179377188906,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-055",
+      "ok": false,
+      "seconds": 8.409064452163875,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-151",
+      "ok": false,
+      "seconds": 8.601155420998111,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-167",
+      "ok": false,
+      "seconds": 8.685946607030928,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-163",
+      "ok": false,
+      "seconds": 8.75182311120443,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-077",
+      "ok": false,
+      "seconds": 8.851649216143414,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-149",
+      "ok": false,
+      "seconds": 9.278012049151585,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-233",
+      "ok": false,
+      "seconds": 9.374126913025975,
+      "error": "SandboxApiError: node-agent request failed (502): {'error': '<html>\\r\\n<head><title>502 Bad Gateway</title></head>\\r\\n<body>\\r\\n<center><h1>502 Bad Gateway</h1></center>\\r\\n<hr><center>nginx</center>\\r\\n</body>\\r\\n</html>\\r\\n'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-097",
+      "ok": false,
+      "seconds": 22.073506915010512,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-a6e2e5fc266f485a946c261a7856f428'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-020",
+      "ok": false,
+      "seconds": 22.228541757911444,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-905403cd2b3b4c579605e4a6c2843ea6'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-184",
+      "ok": false,
+      "seconds": 22.23155995993875,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-8cfc3e0486ab4d3899a66a7ef3ba4bc1'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-230",
+      "ok": false,
+      "seconds": 22.216898937011138,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-2ba073a2e88e4e8ca55d729f37cac936'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-161",
+      "ok": false,
+      "seconds": 22.508002161048353,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-dda7794d486b4a6a9b15376e6f47ea1b'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-250",
+      "ok": false,
+      "seconds": 22.774722235044464,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-1f5df73a871945678b67a4e9463f67eb'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-103",
+      "ok": false,
+      "seconds": 23.055712691042572,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-c353d662135f4388a372867562a9f05c'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-003",
+      "ok": false,
+      "seconds": 23.15248565096408,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-019c41a10ec446b4b99fefd4bb16180f'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-079",
+      "ok": false,
+      "seconds": 23.756879166001454,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-514352eba32e4517acf66b7393c7cafc'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-110",
+      "ok": false,
+      "seconds": 23.821132436860353,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-09be8e0aeb7b44d388d5144ba9c6cce7'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-128",
+      "ok": false,
+      "seconds": 23.928229994140565,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-0b6cf705b49540ad98140a32d202a580'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-154",
+      "ok": false,
+      "seconds": 23.955520767951384,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-ced0234830374666b9ab147664e9a9c0'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-136",
+      "ok": false,
+      "seconds": 24.347391620045528,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-78bdf6f87ef14b31b14da95030966892'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-241",
+      "ok": false,
+      "seconds": 24.740815589902923,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-53d9079abf584456906252196e9055c2'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-201",
+      "ok": false,
+      "seconds": 24.938046627910808,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-8c6099b8064f48898f02d17d187d6b1e'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-095",
+      "ok": false,
+      "seconds": 26.276679596165195,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-051",
+      "ok": false,
+      "seconds": 26.32844611001201,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-152",
+      "ok": false,
+      "seconds": 26.60221352800727,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-125",
+      "ok": false,
+      "seconds": 26.792946364032105,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-132",
+      "ok": false,
+      "seconds": 26.86166069796309,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-009",
+      "ok": false,
+      "seconds": 27.035500517114997,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-112",
+      "ok": false,
+      "seconds": 27.021546002011746,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-064",
+      "ok": false,
+      "seconds": 27.05271637113765,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-216",
+      "ok": false,
+      "seconds": 27.278445651056245,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-071",
+      "ok": false,
+      "seconds": 27.37232940387912,
+      "error": "SandboxApiError: node-agent request failed (502): {'error': '<html>\\r\\n<head><title>502 Bad Gateway</title></head>\\r\\n<body>\\r\\n<center><h1>502 Bad Gateway</h1></center>\\r\\n<hr><center>nginx</center>\\r\\n</body>\\r\\n</html>\\r\\n'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-017",
+      "ok": false,
+      "seconds": 27.427274943096563,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-172",
+      "ok": false,
+      "seconds": 27.455852522980422,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-018",
+      "ok": false,
+      "seconds": 27.543807602021843,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-119",
+      "ok": false,
+      "seconds": 27.54666481097229,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-171",
+      "ok": false,
+      "seconds": 27.541882121004164,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-085",
+      "ok": false,
+      "seconds": 27.583420223090798,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-039",
+      "ok": false,
+      "seconds": 27.633256569039077,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-082",
+      "ok": false,
+      "seconds": 27.61657277890481,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-040",
+      "ok": false,
+      "seconds": 27.669726360123605,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-178",
+      "ok": false,
+      "seconds": 27.677181440172717,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-195",
+      "ok": false,
+      "seconds": 27.670810007024556,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-207",
+      "ok": false,
+      "seconds": 27.684848058968782,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-096",
+      "ok": false,
+      "seconds": 27.745081051951274,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-189",
+      "ok": false,
+      "seconds": 27.745729550952092,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-223",
+      "ok": false,
+      "seconds": 27.762539013056085,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-061",
+      "ok": false,
+      "seconds": 27.834698734106496,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-228",
+      "ok": false,
+      "seconds": 27.817511833040044,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-111",
+      "ok": false,
+      "seconds": 27.94132791296579,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-041",
+      "ok": false,
+      "seconds": 28.03084238898009,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-206",
+      "ok": false,
+      "seconds": 27.99717473401688,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-108",
+      "ok": false,
+      "seconds": 28.039166503120214,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-098",
+      "ok": false,
+      "seconds": 28.053513851948082,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-094",
+      "ok": false,
+      "seconds": 28.098529772134498,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-091",
+      "ok": false,
+      "seconds": 28.183486469089985,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-099",
+      "ok": false,
+      "seconds": 28.200040983967483,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-135",
+      "ok": false,
+      "seconds": 28.206538976868615,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-068",
+      "ok": false,
+      "seconds": 28.308171240845695,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-202",
+      "ok": false,
+      "seconds": 28.29484900087118,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-087",
+      "ok": false,
+      "seconds": 28.335801959969103,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-199",
+      "ok": false,
+      "seconds": 28.35121220583096,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-153",
+      "ok": false,
+      "seconds": 28.38593702809885,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-036",
+      "ok": false,
+      "seconds": 28.44693820201792,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-065",
+      "ok": false,
+      "seconds": 28.427530334098265,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-238",
+      "ok": false,
+      "seconds": 28.41098158690147,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-117",
+      "ok": false,
+      "seconds": 28.65029327897355,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-126",
+      "ok": false,
+      "seconds": 28.71331838099286,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-107",
+      "ok": false,
+      "seconds": 29.18483980000019,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-142",
+      "ok": false,
+      "seconds": 29.333015742944553,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-186",
+      "ok": false,
+      "seconds": 29.44182780198753,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-049",
+      "ok": false,
+      "seconds": 29.52913004392758,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-023",
+      "ok": false,
+      "seconds": 29.574731658911332,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-025",
+      "ok": false,
+      "seconds": 29.70317159895785,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-166",
+      "ok": false,
+      "seconds": 29.72531108604744,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-102",
+      "ok": false,
+      "seconds": 30.12544754310511,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-221",
+      "ok": false,
+      "seconds": 30.401523410109803,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-116",
+      "ok": false,
+      "seconds": 30.636286654043943,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-033",
+      "ok": false,
+      "seconds": 41.85838520200923,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-b997e2959b7e4034b7e854e55bacfeaa'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-129",
+      "ok": false,
+      "seconds": 41.86483643390238,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-a37a2528f18644d1939840b98dde882b'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-158",
+      "ok": false,
+      "seconds": 41.925656534032896,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-b62ac7689d134e45bb638a09cfe636b2'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-092",
+      "ok": false,
+      "seconds": 42.04729222715832,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'exec session capacity reached'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-063",
+      "ok": false,
+      "seconds": 42.064874657196924,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-f5c3d2beddd7486c81913ca27b7126b9'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-147",
+      "ok": false,
+      "seconds": 42.16213921899907,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-dae866b358e24245ad21c548f570119e'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-225",
+      "ok": false,
+      "seconds": 42.133631554897875,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-fec1d4f9205f4545a134dd07bad941e1'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-059",
+      "ok": false,
+      "seconds": 42.20070967497304,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-7ecb1b997c444f33a4d375ac0619e4e8'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-144",
+      "ok": false,
+      "seconds": 42.23701997403987,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-45453333866e45d9a483d3ae8fe29b89'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-054",
+      "ok": false,
+      "seconds": 42.332363513996825,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-f37670fb00174c63ba5b4ed0d6dd132e'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-214",
+      "ok": false,
+      "seconds": 42.32777227205224,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-6d2c181d862f4f99b0afcf3634ec353c'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-175",
+      "ok": false,
+      "seconds": 42.37497315485962,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-2e565c5966a44da69fa50af2db762f53'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-191",
+      "ok": false,
+      "seconds": 42.373227486154065,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'exec session capacity reached'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-139",
+      "ok": false,
+      "seconds": 42.45749250706285,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-a21d0d2c403c4902a34d51c43e42f53f'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-122",
+      "ok": false,
+      "seconds": 42.489529117010534,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-47f51f67a83f49bdad22426e0f187334'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-015",
+      "ok": false,
+      "seconds": 42.64016283513047,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-0ea7c72a3fba4955ba9a80cd0c501d60'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-104",
+      "ok": false,
+      "seconds": 42.59871194511652,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-ec4425d1cc9e48d8a8f62b21c3298653'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-160",
+      "ok": false,
+      "seconds": 42.69208278181031,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-b1f9d0542ec746c5a4d38ec9d0b468cb'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-006",
+      "ok": false,
+      "seconds": 42.7923372539226,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-a18ffc3c374b4528ba8403c34316613b'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-066",
+      "ok": false,
+      "seconds": 42.81005049101077,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-fd651214b40a44e0b5ae333ff82c4de2'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-218",
+      "ok": false,
+      "seconds": 42.80000746878795,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-9aa1c640d4574f92866950c0afd72db6'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-120",
+      "ok": false,
+      "seconds": 42.92994049517438,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-01d0af816d6e47eca00a3e8a8ef9fd58'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-245",
+      "ok": false,
+      "seconds": 42.929917661007494,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-ad6b0f1e4f8d4f16bf817dc301ee8200'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-133",
+      "ok": false,
+      "seconds": 43.02071853191592,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-8d858dc2a6574031a1260ffca1904596'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-027",
+      "ok": false,
+      "seconds": 43.068588155088946,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-79f3a0d47dd44004aca74c244aca5018'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-046",
+      "ok": false,
+      "seconds": 43.100104707991704,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-57770875c60040a3b33c0ff4e856a957'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-067",
+      "ok": false,
+      "seconds": 43.12221501208842,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-6faf1b646b2240cc92df99af0c7d1e2c'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-248",
+      "ok": false,
+      "seconds": 43.12784315017052,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-f24b430da8ca4472919ae8c6d0b62288'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-222",
+      "ok": false,
+      "seconds": 43.157704952172935,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-835d91938e4b48feb8d18db7e0c5e14d'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-016",
+      "ok": false,
+      "seconds": 43.25302414293401,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-8a63363ba4774dddac85a5929c64baf3'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-229",
+      "ok": false,
+      "seconds": 43.22043257509358,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-073ccf9a151440b7b98e7f00e78df62a'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-226",
+      "ok": false,
+      "seconds": 43.27042089099996,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-8d6c5885e6054e22849769a56e3f8205'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-134",
+      "ok": false,
+      "seconds": 43.31959534599446,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-9b641c6f4f6b47598e71cb993f542740'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-026",
+      "ok": false,
+      "seconds": 43.41646799794398,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-558d66c16f8446e29ddb7d23db35834f'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-069",
+      "ok": false,
+      "seconds": 43.442904309835285,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-699a4ad565be482695256dace50aa6cb'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-105",
+      "ok": false,
+      "seconds": 43.46201268490404,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'exec session capacity reached'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-211",
+      "ok": false,
+      "seconds": 43.44845594186336,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-1bd8241a10c344b1a13c578ca0e13eca'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-187",
+      "ok": false,
+      "seconds": 43.503404576098546,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-389462089c8d425a8d766bb47ff034b4'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-213",
+      "ok": false,
+      "seconds": 43.67022999282926,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-6f1aa584be7d4218914602177da8a736'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-131",
+      "ok": false,
+      "seconds": 43.72229422698729,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'exec session capacity reached'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-215",
+      "ok": false,
+      "seconds": 43.69366510910913,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-40f0863a6db24e35ada39529a065006c'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-074",
+      "ok": false,
+      "seconds": 43.759462903952226,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'exec session capacity reached'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-156",
+      "ok": false,
+      "seconds": 43.8206807251554,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-936f15e1b13f4a46909ea58a95230e70'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-251",
+      "ok": false,
+      "seconds": 43.78461793088354,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-4eb5b341d8264fa2ab8b9635be041660'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-243",
+      "ok": false,
+      "seconds": 43.84807715099305,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-3f6c641210d74987990de152863da382'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-076",
+      "ok": false,
+      "seconds": 44.57639283617027,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-2a908a1ac64c4801a69df9f1d5c76242'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-050",
+      "ok": false,
+      "seconds": 44.75235840911046,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-09fb70a9a51e44c9a08e2ebfcbca1f78'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-004",
+      "ok": false,
+      "seconds": 45.049296292010695,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-d940c730ac2b44148d16c6dc38660ccb'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-205",
+      "ok": false,
+      "seconds": 45.042570546036586,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-08e9016021d44acdb6cd4ea956d8f7c0'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-204",
+      "ok": false,
+      "seconds": 45.114716205978766,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-dddbbd23ee9f434aa31b80a3a2c3a6ec'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-123",
+      "ok": false,
+      "seconds": 45.96583497105166,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-689af0833c5a4a3e854f93ba4247f678'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-240",
+      "ok": false,
+      "seconds": 45.955186964944005,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-fa2702ed6de040ff9a1bc770780a3baa'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-159",
+      "ok": false,
+      "seconds": 46.87320738192648,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-029",
+      "ok": false,
+      "seconds": 47.41752188000828,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-086",
+      "ok": false,
+      "seconds": 47.40624817810021,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-193",
+      "ok": false,
+      "seconds": 47.60464361682534,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-115",
+      "ok": false,
+      "seconds": 47.66589582990855,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-188",
+      "ok": false,
+      "seconds": 47.898762200027704,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-113",
+      "ok": false,
+      "seconds": 48.08862284710631,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-088",
+      "ok": false,
+      "seconds": 48.25527261686511,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-141",
+      "ok": false,
+      "seconds": 48.388268182985485,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-034",
+      "ok": false,
+      "seconds": 48.56049919012003,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-070",
+      "ok": false,
+      "seconds": 48.84315127879381,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-231",
+      "ok": false,
+      "seconds": 48.861397329950705,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-212",
+      "ok": false,
+      "seconds": 48.96137266000733,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-010",
+      "ok": false,
+      "seconds": 49.11750817694701,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-032",
+      "ok": false,
+      "seconds": 49.13384088687599,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-089",
+      "ok": false,
+      "seconds": 49.19534800481051,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-137",
+      "ok": false,
+      "seconds": 49.22985069290735,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-200",
+      "ok": false,
+      "seconds": 49.43721215496771,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-209",
+      "ok": false,
+      "seconds": 50.254402812803164,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-030",
+      "ok": false,
+      "seconds": 51.35339909908362,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-042",
+      "ok": false,
+      "seconds": 51.40677471505478,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-121",
+      "ok": false,
+      "seconds": 51.428462320007384,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-140",
+      "ok": false,
+      "seconds": 51.61082313093357,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-045",
+      "ok": false,
+      "seconds": 51.94944623694755,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-168",
+      "ok": false,
+      "seconds": 52.06631571799517,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-217",
+      "ok": false,
+      "seconds": 61.07895838608965,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-6724069b3a2a4eea9c8c257932d879d7'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-198",
+      "ok": false,
+      "seconds": 61.228284389013425,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-96027e93e35047948812bebcea300c96'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-057",
+      "ok": false,
+      "seconds": 61.338990489952266,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-ed6af8749d80446da2378a916a9dab9f'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-155",
+      "ok": false,
+      "seconds": 61.508350267075,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'exec session capacity reached'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-148",
+      "ok": false,
+      "seconds": 61.61096651991829,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'exec session capacity reached'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-224",
+      "ok": false,
+      "seconds": 61.713654892053455,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-68c49259798e4a6baaa3324dbe23544a'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-047",
+      "ok": false,
+      "seconds": 61.878786127083,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-2b160cd73f6e40d192c3b1f52d054feb'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-044",
+      "ok": false,
+      "seconds": 61.903916315874085,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'exec session capacity reached'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-114",
+      "ok": false,
+      "seconds": 61.882278204895556,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'exec session capacity reached'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-037",
+      "ok": false,
+      "seconds": 62.02357656206004,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'exec session capacity reached'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-169",
+      "ok": false,
+      "seconds": 62.04666592599824,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'exec session capacity reached'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-220",
+      "ok": false,
+      "seconds": 62.26637174002826,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'exec session capacity reached'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-022",
+      "ok": false,
+      "seconds": 62.41497875493951,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'exec session capacity reached'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-038",
+      "ok": false,
+      "seconds": 66.47746591619216,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-322ea9277881478d8365e2e8012680e3'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-180",
+      "ok": false,
+      "seconds": 66.67636864283122,
+      "error": "SandboxApiError: node-agent request failed (404): {'error': 'exec session not found: exec-175e2a52fbe046d58858841029c11ec9'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-253",
+      "ok": false,
+      "seconds": 66.81530268583447,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'exec session capacity reached'}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-012",
+      "ok": false,
+      "seconds": 67.51965419598855,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+    },
+    {
+      "id": "linuxhost-256-c4f43d34-073",
+      "ok": false,
+      "seconds": 80.99841224821284,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'exec session capacity reached'}"
+    }
+  ],
+  "kind": "linux_host profile used by published Verifiers runtime; live open_process and file/exec operations; no parking requested",
+  "placement": [
+    [
+      "12396306",
+      "running",
+      128
+    ],
+    [
+      "12396307",
+      "running",
+      128
+    ]
+  ],
+  "success": false,
+  "fatal": "RuntimeError: initialize-and-tools: 174 failures",
+  "cleanup_errors": [],
+  "remaining": [],
+  "http_rejections": [],
+  "health": {
+    "count": 45,
+    "failures": [
+      {
+        "phase": "initialize-and-tools",
+        "seconds": 4.644697013078257,
+        "ok": false,
+        "error": "node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+      },
+      {
+        "phase": "initialize-and-tools",
+        "seconds": 4.465527435066178,
+        "ok": false,
+        "error": "node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+      },
+      {
+        "phase": "initialize-and-tools",
+        "seconds": 4.622347105061635,
+        "ok": false,
+        "error": "node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+      },
+      {
+        "phase": "initialize-and-tools",
+        "seconds": 4.725168409990147,
+        "ok": false,
+        "error": "node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+      },
+      {
+        "phase": "initialize-and-tools",
+        "seconds": 4.500065727857873,
+        "ok": false,
+        "error": "node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+      },
+      {
+        "phase": "initialize-and-tools",
+        "seconds": 4.4471279110293835,
+        "ok": false,
+        "error": "node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+      },
+      {
+        "phase": "initialize-and-tools",
+        "seconds": 4.256392831914127,
+        "ok": false,
+        "error": "node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+      },
+      {
+        "phase": "initialize-and-tools",
+        "seconds": 4.399335597874597,
+        "ok": false,
+        "error": "node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+      },
+      {
+        "phase": "initialize-and-tools",
+        "seconds": 4.47407705290243,
+        "ok": false,
+        "error": "node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+      },
+      {
+        "phase": "initialize-and-tools",
+        "seconds": 4.767312098061666,
+        "ok": false,
+        "error": "node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+      },
+      {
+        "phase": "initialize-and-tools",
+        "seconds": 4.427133516175672,
+        "ok": false,
+        "error": "node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+      },
+      {
+        "phase": "initialize-and-tools",
+        "seconds": 4.542731154942885,
+        "ok": false,
+        "error": "node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}"
+      }
+    ],
+    "latency": {
+      "min": 0.011,
+      "p50": 0.112,
+      "p95": 4.622,
+      "max": 4.767
+    }
+  },
+  "total_seconds": 110.098,
+  "server_version": "0.5.38",
+  "sdk_commit": "37a4c72faf25ffb6419acb6a2bab7dc39e68efc7",
+  "representative_traceback": "andles[sid];h.upload_file('/tmp/probe',payload(sid));out=h.exec(['python','-c',\"import json,hashlib; s=json.load(open('/tmp/state.json')); s['digest']=hashlib.sha256(open('/tmp/payload','rb').read()).hexdigest(); print(json.dumps(s))\"],timeout_seconds=120)\n                                                                ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/work/ucloud-sandboxes/release/0.5.38/linuxhost-256-async.py\", line 21, in call\n    result=asyncio.run_coroutine_threadsafe(value(*args,**kwargs),async_loop).result()\n  File \"/usr/lib/python3.14/concurrent/futures/_base.py\", line 450, in result\n    return self.__get_result()\n           ~~~~~~~~~~~~~~~~~^^\n  File \"/usr/lib/python3.14/concurrent/futures/_base.py\", line 395, in __get_result\n    raise self._exception\n  File \"/work/ucloud-sandboxes/release/0.5.38/sdk-0.4.21/ucloud_sandboxes_sdk/client.py\", line 1580, in exec\n    return await self.client.exec(\n           ^^^^^^^^^^^^^^^^^^^^^^^\n    ...<7 lines>...\n    )\n    ^\n  File \"/work/ucloud-sandboxes/release/0.5.38/sdk-0.4.21/ucloud_sandboxes_sdk/client.py\", line 2140, in exec\n    return await handle.wait(timeout_seconds=timeout_seconds)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/work/ucloud-sandboxes/release/0.5.38/sdk-0.4.21/ucloud_sandboxes_sdk/client.py\", line 1686, in wait\n    payload = await self.client.read_exec_events(\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    ...<4 lines>...\n    )\n    ^\n  File \"/work/ucloud-sandboxes/release/0.5.38/sdk-0.4.21/ucloud_sandboxes_sdk/client.py\", line 2246, in read_exec_events\n    return await super().read_exec_events(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        session_id, after=after, limit=limit, wait_seconds=wait_seconds\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/work/ucloud-sandboxes/release/0.5.38/sdk-0.4.21/ucloud_sandboxes_sdk/client.py\", line 2429, in _request_json\n    raw, status, received_headers = await self._send(\n                                    ^^^^^^^^^^^^^^^^^\n    ...<8 lines>...\n    )\n    ^\n  File \"/work/ucloud-sandboxes/release/0.5.38/sdk-0.4.21/ucloud_sandboxes_sdk/client.py\", line 2523, in _send\n    raise api_error\n  File \"/work/ucloud-sandboxes/release/0.5.38/sdk-0.4.21/ucloud_sandboxes_sdk/client.py\", line 3114, in _node_error\n    _decode_node_json(raw, status=status, headers=headers)\n    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/work/ucloud-sandboxes/release/0.5.38/sdk-0.4.21/ucloud_sandboxes_sdk/client.py\", line 3075, in _decode_node_json\n    raise SandboxApiError(\n    ...<4 lines>...\n    )\nucloud_sandboxes_sdk.client.SandboxApiError: node-agent request failed (503): {'error': 'HTTP request capacity is exhausted; retry shortly', 'error_code': 'http_request_capacity_exhausted', 'retryable': True}\n"
+}

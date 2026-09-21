@@ -26,7 +26,7 @@ jobs:
         with:
           repository: rlrs/ucloud-sandboxes-sdk
           # Deliberately pinned: update this SHA with coordinated SDK changes.
-          ref: 22c0802af2f605b301ab302b790977ca0f78983c
+          ref: 9f34764bd4e776372f2015496c119dc74a9814ad
           path: ucloud-sandboxes-sdk
           persist-credentials: false
       - uses: actions/setup-python@v6
@@ -44,6 +44,12 @@ jobs:
         run: sudo apt-get update && sudo apt-get install --yes shellcheck
       - name: Run the canonical repository check
         run: bash scripts/check.sh
+      - name: Qualify relay-only packet filtering in isolated Linux namespaces
+        if: matrix.python-version == '3.13'
+        run: |
+          sudo apt-get install --yes nftables iptables iproute2
+          sudo env UCLOUD_RUN_NETNS_TESTS=1 PYTHONPATH="$PWD" \
+            "$(command -v python)" tests/test_relay_network_linux.py
       - name: Run the Docker Distribution contract
         if: matrix.python-version == '3.13'
         run: |
@@ -73,7 +79,7 @@ jobs:
             --publish 9000:9000 \
             --env MINIO_ROOT_USER=minioadmin \
             --env MINIO_ROOT_PASSWORD=minioadmin \
-            minio/minio:RELEASE.2025-09-07T16-13-09Z \
+            quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z \
             server /data --address :9000
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:9000/minio/health/live >/dev/null; then

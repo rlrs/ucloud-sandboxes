@@ -1,0 +1,77 @@
+{
+  "phases_ms.active_admission": {
+    "count": 384,
+    "p50_ms": 0.044,
+    "p95_ms": 54.004
+  },
+  "phases_ms.ensure_network": {
+    "count": 384,
+    "p50_ms": 344.659,
+    "p95_ms": 472.75
+  },
+  "phases_ms.restore_slot_wait": {
+    "count": 384,
+    "p50_ms": 680.412,
+    "p95_ms": 2062.212
+  },
+  "phases_ms.warden_resume_call": {
+    "count": 384,
+    "p50_ms": 368.001,
+    "p95_ms": 1259.338
+  },
+  "warden_timings_ms.artifact_cleanup": {
+    "count": 384,
+    "p50_ms": 2.7696409999862226,
+    "p95_ms": 22.156092999921384
+  },
+  "warden_timings_ms.begin_restore_journal": {
+    "count": 384,
+    "p50_ms": 4.884795999942071,
+    "p95_ms": 30.00294099990697
+  },
+  "warden_timings_ms.candidate_fence": {
+    "count": 384,
+    "p50_ms": 0.58931700004905,
+    "p95_ms": 4.14752500000759
+  },
+  "warden_timings_ms.candidate_journal": {
+    "count": 384,
+    "p50_ms": 6.008037000015065,
+    "p95_ms": 52.600664999999935
+  },
+  "warden_timings_ms.candidate_resume": {
+    "count": 384,
+    "p50_ms": 32.24823900006868,
+    "p95_ms": 48.24707099999159
+  },
+  "warden_timings_ms.commit_running_journal": {
+    "count": 384,
+    "p50_ms": 5.080720000023575,
+    "p95_ms": 55.59937099997114
+  },
+  "warden_timings_ms.readiness_exec": {
+    "count": 384,
+    "p50_ms": 19.985814999927243,
+    "p95_ms": 34.13867599999776
+  },
+  "warden_timings_ms.runsc_restore": {
+    "count": 384,
+    "p50_ms": 165.20179099995858,
+    "p95_ms": 214.98584500000106
+  },
+  "warden_timings_ms.runsc_state": {
+    "count": 384,
+    "p50_ms": 14.251150000063717,
+    "p95_ms": 24.59778799993728
+  },
+  "warden_timings_ms.validate_artifact": {
+    "count": 384,
+    "p50_ms": 118.57400799999596,
+    "p95_ms": 963.4932940000454
+  },
+  "warden_timings_ms.warden_total": {
+    "count": 384,
+    "p50_ms": 367.6647080000066,
+    "p95_ms": 1259.315741000023
+  }
+}

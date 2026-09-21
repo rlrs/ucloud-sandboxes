@@ -29,6 +29,9 @@ from ucloud_sandboxes.storage_native_daemon import (  # noqa: E402
     StorageVolumeOwner,
     StorageVolumeState,
 )
+from ucloud_sandboxes.storage_native_publication import (  # noqa: E402
+    local_layer_data_bytes, snapshot_compaction_start,
+)
 from ucloud_sandboxes.storage_native_registry import (  # noqa: E402
     RegistrySnapshotPublisher,
 )
@@ -357,15 +360,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         second_publication_seconds = 0.0
         compacted_resume_seconds = 0.0
         if publisher is not None:
-            prospective_layers = len(second_release.published_layers) + len(
-                second_release.sealed_layer_paths
-            )
-            prospective_bytes = sum(
-                int(layer["size"])
-                for layer in second_release.published_layers
-            ) + sum(
-                Path(path).stat().st_size
-                for path in second_release.sealed_layer_paths
+            layer_sizes = tuple(int(layer["size"]) for layer in second_release.published_layers) + tuple(
+                local_layer_data_bytes(Path(path)) for path in second_release.sealed_layer_paths
             )
             started = time.monotonic()
             second_publication = active_service.publish_snapshot(
@@ -374,11 +370,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 expected_revision=second_release.revision,
             )
             second_publication_seconds = time.monotonic() - started
-            compaction_expected = (
-                prospective_layers > args.compact_after_layers
-                or prospective_bytes > args.compact_after_bytes
+            compact_start = snapshot_compaction_start(
+                layer_sizes, max_layers=args.compact_after_layers,
+                max_delta_bytes=args.compact_after_bytes,
+                reusable_base=bool(second_release.published_layers),
             )
-            expected_layers = 1 if compaction_expected else 2
+            expected_layers = len(layer_sizes) if compact_start is None else compact_start + 1
             if len(second_publication.published_layers) != expected_layers:
                 raise RuntimeError("snapshot chain compaction policy was not enforced")
             started = time.monotonic()

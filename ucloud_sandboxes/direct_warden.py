@@ -15,6 +15,7 @@ import stat
 import subprocess
 import tempfile
 import time
+from uuid import UUID
 from typing import Iterator, Protocol, Sequence
 
 from .hibernation import (
@@ -40,6 +41,7 @@ from .storage_native_daemon import (
     StorageVolumeState,
 )
 from .telemetry import Telemetry
+from .runtime_process import RuntimeProcessIdentityError, owned_runtime_process_ticks
 
 
 _SAFE_COMPONENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z")
@@ -192,6 +194,8 @@ class LinuxPidfdFencer:
         self.proc_root = proc_root
 
     def open(self, pid: int, start_time_ticks: int) -> LinuxPidfdHandle:
+        if type(pid) is not int or pid <= 1:
+            raise DirectWardenError("refusing to fence a system process PID")
         pidfd_open = getattr(os, "pidfd_open", None)
         if pidfd_open is None:
             raise DirectWardenError("pidfd_open is required for exact sentry fencing")
@@ -340,6 +344,18 @@ class DirectRunscWarden:
                 self._best_effort_delete(sandbox)
                 raise
 
+    def _readiness_command(self, sandbox: DirectSandbox) -> tuple[str, ...]:
+        try:
+            config = json.loads((sandbox.bundle / "config.json").read_text())
+        except FileNotFoundError:
+            return self.config.readiness_command
+        if (
+            config.get("annotations", {}).get("dev.ucloud-sandboxes.file-helper")
+            == "v1"
+        ):
+            return ("/.ucloud-job-init", "files", "ready")
+        return self.config.readiness_command
+
     def exec(
         self,
         sandbox: DirectSandbox,
@@ -477,17 +493,26 @@ class DirectRunscWarden:
             record = self._storage_record(sandbox)
             if record.state == StorageVolumeState.PUBLISHED:
                 return record
-            if record.state == StorageVolumeState.MOUNTED:
-                self.rootfs_lifecycle.park_sandbox(sandbox)
-            record = self.storage.ensure_published(
-                self._storage_owner(sandbox),
-                operation_id=operation_id,
+            if record.state in {StorageVolumeState.MOUNTED, StorageVolumeState.SEALED}:
+                # Imported checkpoints can be logically parked while metadata
+                # repair still owns a writable COW mount. Seal/release under
+                # the lifecycle lock before capturing the upload revision.
+                self._release_parked_storage(sandbox, operation_seed=operation_id)
+                record = self._storage_record(sandbox)
+            revision = record.revision
+        # The sealed layers are immutable. Do not hold the Warden lock across
+        # remote uploads: local wake/delete can supersede publication. Fence the
+        # request so a delayed publisher cannot seal a newly resumed filesystem.
+        record = self.storage.ensure_published(
+            self._storage_owner(sandbox),
+            operation_id=operation_id,
+            expected_revision=revision,
+        )
+        if record.state != StorageVolumeState.PUBLISHED:
+            raise DirectWardenError(
+                "storage-native publication returned an invalid record"
             )
-            if record.state != StorageVolumeState.PUBLISHED:
-                raise DirectWardenError(
-                    "storage-native publication returned an invalid record"
-                )
-            return record
+        return record
 
     def running_process_alive(self, sandbox: DirectSandbox) -> bool:
         """Prove that a RUNNING journal still owns the recorded sentry."""
@@ -496,10 +521,10 @@ class DirectRunscWarden:
             return bool(
                 record is not None
                 and record.state == HibernationState.RUNNING
-                and hibernation_process_identity_matches(
+                and self._sentry_identity_matches(
+                    sandbox,
                     record.sentry_pid,
                     record.sentry_start_time_ticks,
-                    proc_root=self.config.proc_root,
                 )
             )
 
@@ -545,7 +570,8 @@ class DirectRunscWarden:
             running = self._require_state(sandbox, HibernationState.RUNNING)
             if running.sentry_pid is None or running.sentry_start_time_ticks is None:
                 raise DirectWardenError("running journal lacks a sentry identity")
-            handle = self.fencer.open(
+            handle = self._open_sentry_fence(
+                sandbox,
                 running.sentry_pid,
                 running.sentry_start_time_ticks,
             )
@@ -596,12 +622,7 @@ class DirectRunscWarden:
                         operation_id=operation_id,
                         expected_revision=hibernating.revision,
                     )
-                    self._checked(
-                        *self._state_prefix(),
-                        "delete",
-                        "--force",
-                        sandbox.container_id,
-                    )
+                    self._delete_runtime(sandbox)
                 # runsc delete removes its filestore from the merged rootfs.
                 # Do this before detaching the overlay so that the sealed
                 # layer contains the final, cleaned-up filesystem state.
@@ -676,12 +697,14 @@ class DirectRunscWarden:
             candidate_record: HibernationRecord | None = None
             try:
                 phase = time.monotonic()
+                # Keep the OCI CPU quota during boot. The optional startup
+                # burst removes it before runsc sizes the sentry's Go scheduler,
+                # letting every concurrent restore use all host CPUs.
                 self._checked(
                     *self._common(),
                     "restore",
                     "--detach",
                     "--background",
-                    "--cpu-startup-burst",
                     "--start-paused",
                     f"--image-path={generation}",
                     f"--bundle={sandbox.bundle}",
@@ -694,7 +717,7 @@ class DirectRunscWarden:
                 if status != "paused":
                     raise DirectWardenError("runsc restore candidate was not paused")
                 phase = time.monotonic()
-                candidate = self.fencer.open(pid, ticks)
+                candidate = self._open_sentry_fence(sandbox, pid, ticks)
                 timings["candidate_fence"] = (time.monotonic() - phase) * 1000
                 phase = time.monotonic()
                 candidate_record = journal.mark_candidate_started(
@@ -717,7 +740,7 @@ class DirectRunscWarden:
                     *self._state_prefix(),
                     "exec",
                     sandbox.container_id,
-                    *self.config.readiness_command,
+                    *self._readiness_command(sandbox),
                 )
                 timings["readiness_exec"] = (time.monotonic() - phase) * 1000
             except Exception:
@@ -761,6 +784,18 @@ class DirectRunscWarden:
         with self._locked(sandbox):
             journal = self._journal(sandbox)
             durable = journal.load()
+            if (
+                durable is not None
+                and durable.state == HibernationState.RECOVERY_REQUIRED
+            ):
+                # Quarantine is already durable. Its volume may deliberately
+                # remain unreadable until operator recovery or deletion.
+                return durable
+            if (
+                durable is not None
+                and self._storage_record(sandbox).state == StorageVolumeState.ERROR
+            ):
+                return self._quarantine_storage_error(sandbox, journal, durable)
             if durable is not None and durable.state != HibernationState.RUNNING:
                 self._mount_storage(
                     sandbox,
@@ -769,6 +804,12 @@ class DirectRunscWarden:
                 self.rootfs_lifecycle.resume_sandbox(sandbox)
             if durable is not None and durable.state == HibernationState.RESTORING:
                 return self._reconcile_restoring(sandbox, journal, durable)
+            if durable is not None:
+                for pid, ticks in (
+                    (durable.sentry_pid, durable.sentry_start_time_ticks),
+                    (durable.candidate_pid, durable.candidate_start_time_ticks),
+                ):
+                    self._sentry_identity_matches(sandbox, pid, ticks)
             result = HibernationReconciler(
                 journal,
                 self.artifacts,
@@ -796,7 +837,8 @@ class DirectRunscWarden:
                     sandbox_generation=sandbox.sandbox_generation,
                     hibernation_generation=record.hibernation_generation,
                 )
-                handle = self.fencer.open(
+                handle = self._open_sentry_fence(
+                    sandbox,
                     record.sentry_pid,
                     record.sentry_start_time_ticks,
                 )
@@ -808,12 +850,7 @@ class DirectRunscWarden:
                     operation_id=record.operation_id,
                     expected_revision=record.revision,
                 )
-                self._checked(
-                    *self._state_prefix(),
-                    "delete",
-                    "--force",
-                    sandbox.container_id,
-                )
+                self._delete_runtime(sandbox)
                 parked = journal.commit_parked(
                     manifest,
                     operation_id=record.operation_id,
@@ -831,7 +868,8 @@ class DirectRunscWarden:
                     raise DirectWardenError(
                         "interrupted capture has no live sentry identity"
                     )
-                handle = self.fencer.open(
+                handle = self._open_sentry_fence(
+                    sandbox,
                     record.sentry_pid,
                     record.sentry_start_time_ticks,
                 )
@@ -876,6 +914,48 @@ class DirectRunscWarden:
                 )
             return record
 
+    def _quarantine_storage_error(
+        self,
+        sandbox: DirectSandbox,
+        journal: HibernationJournal,
+        record: HibernationRecord,
+    ) -> HibernationRecord:
+        """Fence this incarnation without remounting an unusable volume."""
+        identities = {
+            (pid, ticks)
+            for pid, ticks in (
+                (record.sentry_pid, record.sentry_start_time_ticks),
+                (record.candidate_pid, record.candidate_start_time_ticks),
+            )
+            if pid is not None and ticks is not None
+        }
+        if (
+            record.state == HibernationState.RESTORING
+            and record.authority == HibernationAuthority.PARKED
+        ):
+            # Restore may have daemonized before recording its candidate.
+            candidate = self._candidate_identity_or_none(sandbox)
+            if candidate is not None:
+                identities.add(candidate)
+        for pid, ticks in identities:
+            # A stale PID from before reboot must never fence its new owner.
+            if not hibernation_process_identity_matches(
+                pid, ticks, proc_root=self.config.proc_root
+            ):
+                continue
+            handle = self._open_sentry_fence(sandbox, pid, ticks)
+            try:
+                handle.terminate(timeout=self.config.stop_timeout_seconds)
+                if handle.alive():
+                    raise DirectWardenError("storage-error runtime could not be fenced")
+            finally:
+                handle.close()
+        return journal.quarantine(
+            reason="storage-native volume is in error state",
+            expected_revision=record.revision,
+            live_process_confirmed_dead=True,
+        )
+
     def _reconcile_restoring(
         self,
         sandbox: DirectSandbox,
@@ -903,10 +983,10 @@ class DirectRunscWarden:
         if (
             restoring.candidate_pid is not None
             and restoring.candidate_start_time_ticks is not None
-            and hibernation_process_identity_matches(
+            and self._sentry_identity_matches(
+                sandbox,
                 restoring.candidate_pid,
                 restoring.candidate_start_time_ticks,
-                proc_root=self.config.proc_root,
             )
         ):
             candidate_identity = (
@@ -933,7 +1013,7 @@ class DirectRunscWarden:
                 candidate_confirmed_dead=True,
             )
 
-        candidate = self.fencer.open(*candidate_identity)
+        candidate = self._open_sentry_fence(sandbox, *candidate_identity)
         try:
             self._ensure_candidate_running(
                 sandbox,
@@ -944,7 +1024,7 @@ class DirectRunscWarden:
                 *self._state_prefix(),
                 "exec",
                 sandbox.container_id,
-                *self.config.readiness_command,
+                *self._readiness_command(sandbox),
             )
             running = journal.commit_running(
                 operation_id=restoring.operation_id,
@@ -975,10 +1055,15 @@ class DirectRunscWarden:
     def delete(self, sandbox: DirectSandbox) -> None:
         """Fence one backend; the storage authority removes its opaque volume."""
         snapshot = self.inspect(sandbox)
-        if snapshot is not None and snapshot.state in {
-            HibernationState.HIBERNATING,
-            HibernationState.RESTORING,
-        }:
+        if (
+            snapshot is not None
+            and snapshot.state
+            in {
+                HibernationState.HIBERNATING,
+                HibernationState.RESTORING,
+            }
+            and snapshot.authority != HibernationAuthority.PENDING
+        ):
             self.reconcile(sandbox)
         with self._locked(sandbox):
             journal = self._journal(sandbox)
@@ -986,11 +1071,32 @@ class DirectRunscWarden:
             if record is None:
                 self._parked_manifest_path(sandbox).unlink(missing_ok=True)
                 return
-            if record.state not in {
-                HibernationState.RUNNING,
-                HibernationState.PARKED,
-                HibernationState.RECOVERY_REQUIRED,
-            }:
+            reaped_capture = (
+                record.state == HibernationState.HIBERNATING
+                and record.authority == HibernationAuthority.PENDING
+            )
+            if reaped_capture:
+                # A release failure can follow successful capture and runtime
+                # teardown. Deletion must not remount the failed volume just
+                # to reconcile a checkpoint the caller has asked to discard.
+                if (
+                    record.sentry_pid is not None
+                    or record.candidate_pid is not None
+                    or self._candidate_identity_or_none(sandbox) is not None
+                ):
+                    raise DirectWardenError(
+                        "reaped capture still has a runtime identity"
+                    )
+                self._best_effort_delete(sandbox)
+            if (
+                record.state
+                not in {
+                    HibernationState.RUNNING,
+                    HibernationState.PARKED,
+                    HibernationState.RECOVERY_REQUIRED,
+                }
+                and not reaped_capture
+            ):
                 raise DirectWardenError(
                     "sandbox transition must be reconciled before deletion"
                 )
@@ -1012,22 +1118,17 @@ class DirectRunscWarden:
                     raise DirectWardenError(
                         "live delete authority lacks a process identity"
                     )
-                if hibernation_process_identity_matches(
-                    pid,
-                    ticks,
-                    proc_root=self.config.proc_root,
-                ):
-                    handle = self.fencer.open(pid, ticks)
+                if self._sentry_identity_matches(sandbox, pid, ticks):
                     try:
-                        handle.terminate(timeout=self.config.stop_timeout_seconds)
-                    finally:
-                        handle.close()
-                    self._checked(
-                        *self._state_prefix(),
-                        "delete",
-                        "--force",
-                        sandbox.container_id,
-                    )
+                        handle = self._open_cleanup_fence(sandbox, pid, "sandbox", expected_ticks=ticks)
+                    except ProcessLookupError:
+                        pass
+                    else:
+                        try:
+                            handle.terminate(timeout=self.config.stop_timeout_seconds)
+                        finally:
+                            handle.close()
+            self._delete_runtime(sandbox)
 
             # The storage-native quota owner deletes the opaque volume after
             # this lifecycle fence is removed. Do not remount or traverse it:
@@ -1101,7 +1202,7 @@ class DirectRunscWarden:
             try:
                 identity = self._candidate_identity_or_none(sandbox)
                 if identity is not None:
-                    candidate = self.fencer.open(*identity)
+                    candidate = self._open_sentry_fence(sandbox, *identity)
                     opened_candidate = True
             except Exception as exc:
                 raise DirectWardenError(
@@ -1314,6 +1415,91 @@ class DirectRunscWarden:
             rootfs_sha256=sandbox.rootfs_sha256,
         )
 
+    def _sentry_identity(
+        self,
+        sandbox: DirectSandbox,
+        pid: int,
+        expected_ticks: int | None = None,
+    ) -> int:
+        try:
+            boot = self._current_process_boot(sandbox)
+            marker = self._process_boot_marker(sandbox)
+            ticks = owned_runtime_process_ticks(
+                pid,
+                proc_root=self.config.proc_root,
+                runsc=self.config.runsc,
+                runtime_root=self.config.runtime_root,
+                bundle=sandbox.bundle,
+                container_id=sandbox.container_id,
+                expected_ticks=expected_ticks,
+            )
+            if not marker.exists():
+                marker.parent.mkdir(mode=0o700, exist_ok=True)
+                with marker.open("x") as stream:
+                    stream.write(boot + "\n")
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                marker.chmod(0o600)
+                directory = os.open(marker.parent, os.O_RDONLY | os.O_DIRECTORY)
+                try:
+                    os.fsync(directory)
+                finally:
+                    os.close(directory)
+            return ticks
+        except ProcessLookupError:
+            raise
+        except (RuntimeProcessIdentityError, OSError, ValueError) as exc:
+            raise DirectWardenError(str(exc)) from exc
+
+    def _sentry_identity_matches(
+        self,
+        sandbox: DirectSandbox,
+        pid: int | None,
+        ticks: int | None,
+    ) -> bool:
+        if not hibernation_process_identity_matches(
+            pid, ticks, proc_root=self.config.proc_root
+        ):
+            return False
+        try:
+            self._sentry_identity(sandbox, pid, ticks)
+        except ProcessLookupError:
+            return False
+        return True
+
+    def _current_process_boot(self, sandbox: DirectSandbox) -> str:
+        boot = str(
+            UUID(
+                (self.config.proc_root / "sys/kernel/random/boot_id")
+                .read_text()
+                .strip()
+            )
+        )
+        marker = self._process_boot_marker(sandbox)
+        if marker.exists() and marker.read_text().strip() != boot:
+            raise RuntimeProcessIdentityError(
+                "runtime identity belongs to another boot"
+            )
+        return boot
+
+    def _process_boot_marker(self, sandbox: DirectSandbox) -> Path:
+        return self.config.runtime_root / "warden-process-owners" / sandbox.container_id
+
+    def _open_sentry_fence(
+        self,
+        sandbox: DirectSandbox,
+        pid: int,
+        ticks: int,
+    ) -> ProcessHandle:
+        self._sentry_identity(sandbox, pid, ticks)
+        handle = self.fencer.open(pid, ticks)
+        try:
+            self._sentry_identity(sandbox, pid, ticks)
+        except BaseException:
+            handle.close()
+            raise
+        return handle
+
     def _state_identity_status(
         self,
         sandbox: DirectSandbox,
@@ -1332,10 +1518,7 @@ class DirectRunscWarden:
         if status not in {"running", "paused"}:
             raise DirectWardenError(f"runsc state is not live: {status}")
         try:
-            ticks = linux_process_start_time_ticks(
-                pid,
-                proc_root=self.config.proc_root,
-            )
+            ticks = self._sentry_identity(sandbox, pid)
         except (ProcessLookupError, ValueError) as exc:
             raise DirectWardenError("cannot read sentry process identity") from exc
         return pid, ticks, status
@@ -1386,10 +1569,7 @@ class DirectRunscWarden:
         if status not in {"running", "paused"}:
             raise DirectWardenError(f"runsc state is not recognized: {status}")
         try:
-            ticks = linux_process_start_time_ticks(
-                pid,
-                proc_root=self.config.proc_root,
-            )
+            ticks = self._sentry_identity(sandbox, pid)
         except ProcessLookupError:
             return None
         except ValueError as exc:
@@ -1425,15 +1605,177 @@ class DirectRunscWarden:
         return result
 
     def _best_effort_delete(self, sandbox: DirectSandbox) -> None:
-        self.runner.run(
-            (
-                *self._state_prefix(),
-                "delete",
-                "--force",
-                sandbox.container_id,
-            ),
+        self._delete_runtime(sandbox, checked=False)
+
+    def _open_cleanup_fence(
+        self,
+        sandbox: DirectSandbox,
+        pid: int,
+        role: str,
+        expected_ticks: int | None = None,
+    ) -> ProcessHandle:
+        # Pin first, but never signal until provenance has been established.
+        # A dying gofer can lose /proc/PID/exe before its stat becomes Z; the
+        # pidfd lets that exit count as completed cleanup without trusting it.
+        ticks = linux_process_start_time_ticks(pid, proc_root=self.config.proc_root)
+        if expected_ticks is not None and ticks != expected_ticks:
+            raise DirectWardenError("cleanup process identity changed")
+        try:
+            handle = self.fencer.open(pid, ticks)
+        except DirectWardenError:
+            # Exit between stat and pidfd_open is normal. A replacement owner
+            # still fails provenance/start-time validation and is never killed.
+            owned_runtime_process_ticks(
+                pid,
+                proc_root=self.config.proc_root,
+                runsc=self.config.runsc,
+                runtime_root=self.config.runtime_root,
+                bundle=sandbox.bundle,
+                container_id=sandbox.container_id,
+                role=role,
+                expected_ticks=ticks,
+            )
+            raise
+        try:
+            if role == "sandbox":
+                self._sentry_identity(sandbox, pid, ticks)
+            else:
+                self._current_process_boot(sandbox)
+                owned_runtime_process_ticks(
+                    pid,
+                    proc_root=self.config.proc_root,
+                    runsc=self.config.runsc,
+                    runtime_root=self.config.runtime_root,
+                    bundle=sandbox.bundle,
+                    container_id=sandbox.container_id,
+                    role=role,
+                    expected_ticks=ticks,
+                )
+        except Exception as exc:
+            exited = not handle.alive()
+            if not exited and isinstance(handle, LinuxPidfdHandle):
+                poller = select.poll()
+                poller.register(handle.pidfd, select.POLLIN)
+                exited = bool(
+                    poller.poll(max(1, int(self.config.stop_timeout_seconds * 1000)))
+                )
+            handle.close()
+            if exited:
+                raise ProcessLookupError(pid) from exc
+            raise
+        return handle
+
+    def _fence_delete_metadata(self, sandbox: DirectSandbox) -> None:
+        """Reap verified owners and clear numeric PID fields before runsc cleanup.
+
+        runsc's metadata lock serializes this edit with runsc state updates.
+        Leaving numeric PIDs for downstream SIGKILL would reopen PID reuse races,
+        including after our sentry pidfd has already reported process exit.
+        """
+        stem = f"{sandbox.container_id}_sandbox:{sandbox.container_id}"
+        path = self.config.runtime_root / (stem + ".state")
+        lock_fd = os.open(
+            self.config.runtime_root / (stem + ".lock"),
+            os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW,
+            0o600,
+        )
+        handles: list[ProcessHandle] = []
+        try:
+            deadline = time.monotonic() + self.config.command_timeout_seconds
+            while True:
+                try:
+                    fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() >= deadline:
+                        raise DirectWardenError(
+                            "timed out acquiring runsc cleanup metadata lock"
+                        )
+                    time.sleep(0.01)
+            try:
+                fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+            except FileNotFoundError:
+                return
+            with os.fdopen(fd, "rb") as stream:
+                info = os.fstat(stream.fileno())
+                if (
+                    not stat.S_ISREG(info.st_mode)
+                    or info.st_uid != os.geteuid()
+                    or info.st_mode & 0o022
+                ):
+                    raise DirectWardenError("runsc cleanup metadata is not private")
+                raw = stream.read(4 * 1024 * 1024 + 1)
+            if len(raw) > 4 * 1024 * 1024:
+                raise DirectWardenError("runsc cleanup metadata exceeds its bound")
+            state = json.loads(raw)
+            if not isinstance(state, dict):
+                raise DirectWardenError("runsc cleanup metadata is not an object")
+            runtime = state.get("sandbox")
+            if state.get("id") != sandbox.container_id or (
+                runtime is not None
+                and (
+                    not isinstance(runtime, dict)
+                    or runtime.get("id") != sandbox.container_id
+                )
+            ):
+                raise DirectWardenError("runsc cleanup metadata has another owner")
+            for role, pid in (
+                ("sandbox", (runtime or {}).get("pid", 0)),
+                ("gofer", state.get("goferPid", 0)),
+            ):
+                if type(pid) is not int or pid < 0 or pid == 1:
+                    raise DirectWardenError("runsc cleanup metadata has an unsafe PID")
+                if not pid:
+                    continue
+                try:
+                    handle = self._open_cleanup_fence(sandbox, pid, role)
+                    handles.append(handle)
+                except ProcessLookupError:
+                    # Missing/zombie processes need no signal. Their stored PIDs
+                    # must still be cleared before the numeric-PID teardown.
+                    continue
+            # Verify every target before sending even the first signal.
+            for handle in handles:
+                handle.terminate(timeout=self.config.stop_timeout_seconds)
+            state["goferPid"] = 0
+            if runtime is not None:
+                runtime["pid"] = 0
+            descriptor, temporary = tempfile.mkstemp(
+                prefix=".warden-delete-", dir=path.parent
+            )
+            try:
+                with os.fdopen(descriptor, "w") as stream:
+                    json.dump(state, stream)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(temporary, path)
+                directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+                try:
+                    os.fsync(directory)
+                finally:
+                    os.close(directory)
+            finally:
+                if os.path.exists(temporary):
+                    os.unlink(temporary)
+        except (ValueError, RuntimeProcessIdentityError) as exc:
+            raise DirectWardenError(
+                f"cannot prove runsc cleanup process ownership: {exc}"
+            ) from exc
+        finally:
+            for handle in handles:
+                handle.close()
+            os.close(lock_fd)
+
+    def _delete_runtime(self, sandbox: DirectSandbox, *, checked: bool = True) -> None:
+        self._fence_delete_metadata(sandbox)
+        result = self.runner.run(
+            (*self._state_prefix(), "delete", "--force", sandbox.container_id),
             timeout=self.config.command_timeout_seconds,
         )
+        if result.returncode == 0:
+            self._process_boot_marker(sandbox).unlink(missing_ok=True)
+        elif checked:
+            raise DirectWardenError(f"runsc cleanup failed: {result.stderr}")
 
     def _storage_record(self, sandbox: DirectSandbox) -> StorageVolumeRecord:
         record = self.storage.get_volume(sandbox.memory_directory)

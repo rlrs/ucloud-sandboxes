@@ -1,0 +1,2997 @@
+{
+  "scope": "temporary timing-only wrapper, eight-sandbox two-cycle probe",
+  "records": [
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 64940,
+      "process_start_to_wait_ms": 1.342,
+      "schema": 2,
+      "session_id": "exec-a43992e014b04015a2889c95b34a5f55",
+      "stages": [
+        {
+          "ms": 4146.155,
+          "phase": "process_wait",
+          "start_ms": 0.034
+        },
+        {
+          "alive_after": false,
+          "ms": 0.031,
+          "phase": "stdout_join",
+          "start_ms": 4146.231,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.004,
+          "phase": "stderr_join",
+          "start_ms": 4146.274,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 4146.294
+        },
+        {
+          "ms": 1.515,
+          "phase": "completion",
+          "start_ms": 4146.301
+        },
+        {
+          "ms": 0.015,
+          "phase": "capacity_lease_release",
+          "start_ms": 4146.31
+        },
+        {
+          "ms": 1.456,
+          "phase": "activity_lease_release",
+          "start_ms": 4146.328
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 4137.304,
+          "last_ms": 4137.304
+        }
+      },
+      "total_ms": 4147.818
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 64965,
+      "process_start_to_wait_ms": 1.146,
+      "schema": 2,
+      "session_id": "exec-760917cc97524a01a0a651ab412fbf04",
+      "stages": [
+        {
+          "ms": 432.81,
+          "phase": "process_wait",
+          "start_ms": 0.017
+        },
+        {
+          "alive_after": false,
+          "ms": 0.011,
+          "phase": "stdout_join",
+          "start_ms": 432.835,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.003,
+          "phase": "stderr_join",
+          "start_ms": 432.849,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.001,
+          "phase": "stdin_close",
+          "start_ms": 432.859
+        },
+        {
+          "ms": 1.02,
+          "phase": "completion",
+          "start_ms": 432.862
+        },
+        {
+          "ms": 0.008,
+          "phase": "capacity_lease_release",
+          "start_ms": 432.867
+        },
+        {
+          "ms": 0.982,
+          "phase": "activity_lease_release",
+          "start_ms": 432.877
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 428.137,
+          "last_ms": 428.137
+        }
+      },
+      "total_ms": 433.884
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 64977,
+      "process_start_to_wait_ms": 1.123,
+      "schema": 2,
+      "session_id": "exec-3db3f3c99ae449c8a39824538113dea8",
+      "stages": [
+        {
+          "ms": 427.93,
+          "phase": "process_wait",
+          "start_ms": 0.02
+        },
+        {
+          "alive_after": false,
+          "ms": 0.016,
+          "phase": "stdout_join",
+          "start_ms": 427.972,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.003,
+          "phase": "stderr_join",
+          "start_ms": 427.994,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 428.006
+        },
+        {
+          "ms": 1.28,
+          "phase": "completion",
+          "start_ms": 428.012
+        },
+        {
+          "ms": 0.008,
+          "phase": "capacity_lease_release",
+          "start_ms": 428.017
+        },
+        {
+          "ms": 1.235,
+          "phase": "activity_lease_release",
+          "start_ms": 428.027
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 423.051,
+          "last_ms": 423.051
+        }
+      },
+      "total_ms": 429.295
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 64989,
+      "process_start_to_wait_ms": 0.844,
+      "schema": 2,
+      "session_id": "exec-25195295fc2e4c0fb4c5183a3a073575",
+      "stages": [
+        {
+          "ms": 465.532,
+          "phase": "process_wait",
+          "start_ms": 0.011
+        },
+        {
+          "alive_after": false,
+          "ms": 0.011,
+          "phase": "stdout_join",
+          "start_ms": 465.552,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.003,
+          "phase": "stderr_join",
+          "start_ms": 465.568,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 465.581
+        },
+        {
+          "ms": 1.233,
+          "phase": "completion",
+          "start_ms": 465.585
+        },
+        {
+          "ms": 0.006,
+          "phase": "capacity_lease_release",
+          "start_ms": 465.591
+        },
+        {
+          "ms": 1.196,
+          "phase": "activity_lease_release",
+          "start_ms": 465.599
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 460.759,
+          "last_ms": 460.759
+        }
+      },
+      "total_ms": 466.82
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 65731,
+      "process_start_to_wait_ms": 2.512,
+      "schema": 2,
+      "session_id": "exec-9679162d3ab44011b590c1e767dff120",
+      "stages": [
+        {
+          "ms": 4239.101,
+          "phase": "process_wait",
+          "start_ms": 0.018
+        },
+        {
+          "alive_after": false,
+          "ms": 0.028,
+          "phase": "stdout_join",
+          "start_ms": 4239.154,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.005,
+          "phase": "stderr_join",
+          "start_ms": 4239.188,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 4239.207
+        },
+        {
+          "ms": 1.53,
+          "phase": "completion",
+          "start_ms": 4239.214
+        },
+        {
+          "ms": 0.01,
+          "phase": "capacity_lease_release",
+          "start_ms": 4239.221
+        },
+        {
+          "ms": 1.477,
+          "phase": "activity_lease_release",
+          "start_ms": 4239.233
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 4231.487,
+          "last_ms": 4231.487
+        }
+      },
+      "total_ms": 4240.746
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 65765,
+      "process_start_to_wait_ms": 1.012,
+      "schema": 2,
+      "session_id": "exec-8f5302c508c64488ae08fe8a5d366485",
+      "stages": [
+        {
+          "ms": 4275.128,
+          "phase": "process_wait",
+          "start_ms": 0.016
+        },
+        {
+          "alive_after": false,
+          "ms": 0.021,
+          "phase": "stdout_join",
+          "start_ms": 4275.168,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.113,
+          "phase": "stderr_join",
+          "start_ms": 4275.195,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 4275.32
+        },
+        {
+          "ms": 1.673,
+          "phase": "completion",
+          "start_ms": 4275.327
+        },
+        {
+          "ms": 0.011,
+          "phase": "capacity_lease_release",
+          "start_ms": 4275.333
+        },
+        {
+          "ms": 1.619,
+          "phase": "activity_lease_release",
+          "start_ms": 4275.346
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 4266.396,
+          "last_ms": 4266.396
+        }
+      },
+      "total_ms": 4277.003
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 65736,
+      "process_start_to_wait_ms": 3.711,
+      "schema": 2,
+      "session_id": "exec-3c2c3dfabe9e4eee994d1f41672a81f5",
+      "stages": [
+        {
+          "ms": 4340.409,
+          "phase": "process_wait",
+          "start_ms": 0.025
+        },
+        {
+          "alive_after": false,
+          "ms": 0.015,
+          "phase": "stdout_join",
+          "start_ms": 4340.444,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.049,
+          "phase": "stderr_join",
+          "start_ms": 4340.463,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 4340.519
+        },
+        {
+          "ms": 1.109,
+          "phase": "completion",
+          "start_ms": 4340.523
+        },
+        {
+          "ms": 0.005,
+          "phase": "capacity_lease_release",
+          "start_ms": 4340.527
+        },
+        {
+          "ms": 1.076,
+          "phase": "activity_lease_release",
+          "start_ms": 4340.533
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 4331.63,
+          "last_ms": 4331.63
+        }
+      },
+      "total_ms": 4341.633
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 65910,
+      "process_start_to_wait_ms": 1.192,
+      "schema": 2,
+      "session_id": "exec-42650293f8384b50a21acc75fee81eb5",
+      "stages": [
+        {
+          "ms": 4267.959,
+          "phase": "process_wait",
+          "start_ms": 0.025
+        },
+        {
+          "alive_after": false,
+          "ms": 0.017,
+          "phase": "stdout_join",
+          "start_ms": 4268.03,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.051,
+          "phase": "stderr_join",
+          "start_ms": 4268.051,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 4268.112
+        },
+        {
+          "ms": 1.478,
+          "phase": "completion",
+          "start_ms": 4268.118
+        },
+        {
+          "ms": 0.009,
+          "phase": "capacity_lease_release",
+          "start_ms": 4268.124
+        },
+        {
+          "ms": 1.438,
+          "phase": "activity_lease_release",
+          "start_ms": 4268.136
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 4260.065,
+          "last_ms": 4260.065
+        }
+      },
+      "total_ms": 4269.598
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 66000,
+      "process_start_to_wait_ms": 1.021,
+      "schema": 2,
+      "session_id": "exec-f6a44b1f32ff4eec9d4508cca73d0a80",
+      "stages": [
+        {
+          "ms": 4220.041,
+          "phase": "process_wait",
+          "start_ms": 0.018
+        },
+        {
+          "alive_after": false,
+          "ms": 0.027,
+          "phase": "stdout_join",
+          "start_ms": 4220.094,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.05,
+          "phase": "stderr_join",
+          "start_ms": 4220.127,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 4220.19
+        },
+        {
+          "ms": 1.545,
+          "phase": "completion",
+          "start_ms": 4220.197
+        },
+        {
+          "ms": 0.01,
+          "phase": "capacity_lease_release",
+          "start_ms": 4220.203
+        },
+        {
+          "ms": 1.486,
+          "phase": "activity_lease_release",
+          "start_ms": 4220.215
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 4212.216,
+          "last_ms": 4212.216
+        }
+      },
+      "total_ms": 4221.745
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 66091,
+      "process_start_to_wait_ms": 1.402,
+      "schema": 2,
+      "session_id": "exec-88cb01e6f5e3446393f35d35aa56bb09",
+      "stages": [
+        {
+          "ms": 4135.111,
+          "phase": "process_wait",
+          "start_ms": 0.019
+        },
+        {
+          "alive_after": false,
+          "ms": 0.02,
+          "phase": "stdout_join",
+          "start_ms": 4135.153,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.039,
+          "phase": "stderr_join",
+          "start_ms": 4135.179,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.008,
+          "phase": "stdin_close",
+          "start_ms": 4135.227
+        },
+        {
+          "ms": 1.458,
+          "phase": "completion",
+          "start_ms": 4135.239
+        },
+        {
+          "ms": 0.009,
+          "phase": "capacity_lease_release",
+          "start_ms": 4135.244
+        },
+        {
+          "ms": 1.411,
+          "phase": "activity_lease_release",
+          "start_ms": 4135.254
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 4127.81,
+          "last_ms": 4127.81
+        }
+      },
+      "total_ms": 4136.699
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 66101,
+      "process_start_to_wait_ms": 1.084,
+      "schema": 2,
+      "session_id": "exec-a9d2914ccb6b418cbbbe5b02f3a36884",
+      "stages": [
+        {
+          "ms": 4177.866,
+          "phase": "process_wait",
+          "start_ms": 0.019
+        },
+        {
+          "alive_after": false,
+          "ms": 0.013,
+          "phase": "stdout_join",
+          "start_ms": 4177.897,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.041,
+          "phase": "stderr_join",
+          "start_ms": 4177.914,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 4177.962
+        },
+        {
+          "ms": 1.072,
+          "phase": "completion",
+          "start_ms": 4177.967
+        },
+        {
+          "ms": 0.005,
+          "phase": "capacity_lease_release",
+          "start_ms": 4177.97
+        },
+        {
+          "ms": 1.038,
+          "phase": "activity_lease_release",
+          "start_ms": 4177.977
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 4169.831,
+          "last_ms": 4169.831
+        }
+      },
+      "total_ms": 4179.04
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 66155,
+      "process_start_to_wait_ms": 2.159,
+      "schema": 2,
+      "session_id": "exec-c28fe572d68342c799ff60a4196bc0ff",
+      "stages": [
+        {
+          "ms": 410.727,
+          "phase": "process_wait",
+          "start_ms": 0.016
+        },
+        {
+          "alive_after": false,
+          "ms": 0.029,
+          "phase": "stdout_join",
+          "start_ms": 410.777,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.003,
+          "phase": "stderr_join",
+          "start_ms": 410.812,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 410.83
+        },
+        {
+          "ms": 1.453,
+          "phase": "completion",
+          "start_ms": 410.838
+        },
+        {
+          "ms": 0.011,
+          "phase": "capacity_lease_release",
+          "start_ms": 410.844
+        },
+        {
+          "ms": 1.385,
+          "phase": "activity_lease_release",
+          "start_ms": 410.858
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 401.802,
+          "last_ms": 401.802
+        }
+      },
+      "total_ms": 412.293
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 66165,
+      "process_start_to_wait_ms": 2.378,
+      "schema": 2,
+      "session_id": "exec-4e63246781b8479f9dc9daccc229bf74",
+      "stages": [
+        {
+          "ms": 417.237,
+          "phase": "process_wait",
+          "start_ms": 0.016
+        },
+        {
+          "alive_after": false,
+          "ms": 0.038,
+          "phase": "stdout_join",
+          "start_ms": 417.299,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.121,
+          "phase": "stderr_join",
+          "start_ms": 417.344,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 417.485
+        },
+        {
+          "ms": 1.649,
+          "phase": "completion",
+          "start_ms": 417.494
+        },
+        {
+          "ms": 0.013,
+          "phase": "capacity_lease_release",
+          "start_ms": 417.503
+        },
+        {
+          "ms": 1.58,
+          "phase": "activity_lease_release",
+          "start_ms": 417.519
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 410.322,
+          "last_ms": 410.322
+        }
+      },
+      "total_ms": 419.145
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 66146,
+      "process_start_to_wait_ms": 1.998,
+      "schema": 2,
+      "session_id": "exec-6fbc25c8c60c44d29b52b8ae3f66e4e3",
+      "stages": [
+        {
+          "ms": 439.494,
+          "phase": "process_wait",
+          "start_ms": 0.02
+        },
+        {
+          "alive_after": false,
+          "ms": 0.018,
+          "phase": "stdout_join",
+          "start_ms": 439.536,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.046,
+          "phase": "stderr_join",
+          "start_ms": 439.56,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 439.616
+        },
+        {
+          "ms": 1.411,
+          "phase": "completion",
+          "start_ms": 439.622
+        },
+        {
+          "ms": 0.009,
+          "phase": "capacity_lease_release",
+          "start_ms": 439.628
+        },
+        {
+          "ms": 1.361,
+          "phase": "activity_lease_release",
+          "start_ms": 439.639
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 433.598,
+          "last_ms": 433.598
+        }
+      },
+      "total_ms": 441.036
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 66181,
+      "process_start_to_wait_ms": 7.221,
+      "schema": 2,
+      "session_id": "exec-f3829a462ebd44eb9393b1f1177d7bad",
+      "stages": [
+        {
+          "ms": 427.112,
+          "phase": "process_wait",
+          "start_ms": 0.019
+        },
+        {
+          "alive_after": false,
+          "ms": 0.014,
+          "phase": "stdout_join",
+          "start_ms": 427.145,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.041,
+          "phase": "stderr_join",
+          "start_ms": 427.163,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 427.212
+        },
+        {
+          "ms": 1.581,
+          "phase": "completion",
+          "start_ms": 427.218
+        },
+        {
+          "ms": 0.008,
+          "phase": "capacity_lease_release",
+          "start_ms": 427.221
+        },
+        {
+          "ms": 1.489,
+          "phase": "activity_lease_release",
+          "start_ms": 427.231
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 420.353,
+          "last_ms": 420.353
+        }
+      },
+      "total_ms": 428.804
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 66175,
+      "process_start_to_wait_ms": 1.524,
+      "schema": 2,
+      "session_id": "exec-b8d271ce63e34e12b7b4b4ecc9f8e3eb",
+      "stages": [
+        {
+          "ms": 435.171,
+          "phase": "process_wait",
+          "start_ms": 0.018
+        },
+        {
+          "alive_after": false,
+          "ms": 0.129,
+          "phase": "stdout_join",
+          "start_ms": 435.206,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.057,
+          "phase": "stderr_join",
+          "start_ms": 435.34,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 435.406
+        },
+        {
+          "ms": 1.675,
+          "phase": "completion",
+          "start_ms": 435.412
+        },
+        {
+          "ms": 0.007,
+          "phase": "capacity_lease_release",
+          "start_ms": 435.417
+        },
+        {
+          "ms": 1.624,
+          "phase": "activity_lease_release",
+          "start_ms": 435.426
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 429.393,
+          "last_ms": 429.393
+        }
+      },
+      "total_ms": 437.091
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 66205,
+      "process_start_to_wait_ms": 4.941,
+      "schema": 2,
+      "session_id": "exec-842c94e392984be9bf64da9351351e12",
+      "stages": [
+        {
+          "ms": 429.025,
+          "phase": "process_wait",
+          "start_ms": 0.013
+        },
+        {
+          "alive_after": false,
+          "ms": 0.012,
+          "phase": "stdout_join",
+          "start_ms": 429.049,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.036,
+          "phase": "stderr_join",
+          "start_ms": 429.065,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.001,
+          "phase": "stdin_close",
+          "start_ms": 429.109
+        },
+        {
+          "ms": 1.254,
+          "phase": "completion",
+          "start_ms": 429.113
+        },
+        {
+          "ms": 0.005,
+          "phase": "capacity_lease_release",
+          "start_ms": 429.117
+        },
+        {
+          "ms": 1.217,
+          "phase": "activity_lease_release",
+          "start_ms": 429.124
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 423.591,
+          "last_ms": 423.591
+        }
+      },
+      "total_ms": 430.37
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 66203,
+      "process_start_to_wait_ms": 3.589,
+      "schema": 2,
+      "session_id": "exec-0b311469bc284969a8b7f4dfb5879f26",
+      "stages": [
+        {
+          "ms": 436.86,
+          "phase": "process_wait",
+          "start_ms": 0.02
+        },
+        {
+          "alive_after": false,
+          "ms": 0.018,
+          "phase": "stdout_join",
+          "start_ms": 436.889,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.036,
+          "phase": "stderr_join",
+          "start_ms": 436.911,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.001,
+          "phase": "stdin_close",
+          "start_ms": 436.954
+        },
+        {
+          "ms": 0.878,
+          "phase": "completion",
+          "start_ms": 436.957
+        },
+        {
+          "ms": 0.004,
+          "phase": "capacity_lease_release",
+          "start_ms": 436.961
+        },
+        {
+          "ms": 0.848,
+          "phase": "activity_lease_release",
+          "start_ms": 436.966
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 431.771,
+          "last_ms": 431.771
+        }
+      },
+      "total_ms": 437.837
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 66193,
+      "process_start_to_wait_ms": 2.036,
+      "schema": 2,
+      "session_id": "exec-18b143f8f5b24b09a01ce49c00281353",
+      "stages": [
+        {
+          "ms": 465.762,
+          "phase": "process_wait",
+          "start_ms": 0.018
+        },
+        {
+          "alive_after": false,
+          "ms": 0.037,
+          "phase": "stdout_join",
+          "start_ms": 465.804,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.021,
+          "phase": "stderr_join",
+          "start_ms": 465.848,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 465.881
+        },
+        {
+          "ms": 1.622,
+          "phase": "completion",
+          "start_ms": 465.887
+        },
+        {
+          "ms": 0.011,
+          "phase": "capacity_lease_release",
+          "start_ms": 465.895
+        },
+        {
+          "ms": 1.563,
+          "phase": "activity_lease_release",
+          "start_ms": 465.908
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 459.815,
+          "last_ms": 459.815
+        }
+      },
+      "total_ms": 467.511
+    },
+    {
+      "diagnostic": "density_park_v1",
+      "sandbox_id": "density-3e00350e9d20450a-0",
+      "phases_ms": {
+        "prepare": 9.315,
+        "runsc_checkpoint": 33.136,
+        "commit_artifact": 17.907,
+        "stop_runtime": 40.428,
+        "release_storage": 168.868,
+        "commit_journal": 1.896
+      },
+      "time": 1788820909.190062,
+      "status": "ok",
+      "total_ms": 273.077
+    },
+    {
+      "diagnostic": "density_park_v1",
+      "sandbox_id": "density-3e00350e9d20450a-5",
+      "phases_ms": {
+        "prepare": 7.372,
+        "runsc_checkpoint": 32.777,
+        "commit_artifact": 70.981,
+        "stop_runtime": 34.056,
+        "release_storage": 132.426,
+        "commit_journal": 1.607
+      },
+      "time": 1788820909.2050796,
+      "status": "ok",
+      "total_ms": 282.516
+    },
+    {
+      "diagnostic": "density_park_v1",
+      "sandbox_id": "density-3e00350e9d20450a-2",
+      "phases_ms": {
+        "prepare": 6.339,
+        "runsc_checkpoint": 33.196,
+        "commit_artifact": 72.579,
+        "stop_runtime": 34.151,
+        "release_storage": 155.935,
+        "commit_journal": 1.564
+      },
+      "time": 1788820909.205632,
+      "status": "ok",
+      "total_ms": 305.97
+    },
+    {
+      "diagnostic": "density_park_v1",
+      "sandbox_id": "density-3e00350e9d20450a-7",
+      "phases_ms": {
+        "prepare": 7.139,
+        "runsc_checkpoint": 32.998,
+        "commit_artifact": 83.437,
+        "stop_runtime": 36.645,
+        "release_storage": 146.319,
+        "commit_journal": 1.859
+      },
+      "time": 1788820909.2070622,
+      "status": "ok",
+      "total_ms": 310.266
+    },
+    {
+      "diagnostic": "density_park_v1",
+      "sandbox_id": "density-3e00350e9d20450a-1",
+      "phases_ms": {
+        "prepare": 6.785,
+        "runsc_checkpoint": 33.456,
+        "commit_artifact": 92.238,
+        "stop_runtime": 31.582,
+        "release_storage": 153.405,
+        "commit_journal": 1.833
+      },
+      "time": 1788820909.2007334,
+      "status": "ok",
+      "total_ms": 322.193
+    },
+    {
+      "diagnostic": "density_park_v1",
+      "sandbox_id": "density-3e00350e9d20450a-6",
+      "phases_ms": {
+        "prepare": 8.948,
+        "runsc_checkpoint": 32.729,
+        "commit_artifact": 89.72,
+        "stop_runtime": 33.015,
+        "release_storage": 153.896,
+        "commit_journal": 1.961
+      },
+      "time": 1788820909.204555,
+      "status": "ok",
+      "total_ms": 323.523
+    },
+    {
+      "diagnostic": "density_park_v1",
+      "sandbox_id": "density-3e00350e9d20450a-3",
+      "phases_ms": {
+        "prepare": 4.27,
+        "runsc_checkpoint": 32.992,
+        "commit_artifact": 65.03,
+        "stop_runtime": 38.305,
+        "release_storage": 185.357,
+        "commit_journal": 1.558
+      },
+      "time": 1788820909.2054856,
+      "status": "ok",
+      "total_ms": 329.415
+    },
+    {
+      "diagnostic": "density_park_v1",
+      "sandbox_id": "density-3e00350e9d20450a-4",
+      "phases_ms": {
+        "prepare": 5.144,
+        "runsc_checkpoint": 33.177,
+        "commit_artifact": 92.795,
+        "stop_runtime": 31.656,
+        "release_storage": 175.074,
+        "commit_journal": 1.51
+      },
+      "time": 1788820909.203367,
+      "status": "ok",
+      "total_ms": 341.375
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 67395,
+      "process_start_to_wait_ms": 1.564,
+      "schema": 2,
+      "session_id": "exec-79f9798090874ee394433c4a453f8e57",
+      "stages": [
+        {
+          "ms": 509.367,
+          "phase": "process_wait",
+          "start_ms": 0.045
+        },
+        {
+          "alive_after": false,
+          "ms": 0.032,
+          "phase": "stdout_join",
+          "start_ms": 509.447,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.004,
+          "phase": "stderr_join",
+          "start_ms": 509.485,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 509.501
+        },
+        {
+          "ms": 1.887,
+          "phase": "completion",
+          "start_ms": 509.508
+        },
+        {
+          "ms": 0.014,
+          "phase": "capacity_lease_release",
+          "start_ms": 509.516
+        },
+        {
+          "ms": 1.821,
+          "phase": "activity_lease_release",
+          "start_ms": 509.533
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 502.133,
+          "last_ms": 502.133
+        }
+      },
+      "total_ms": 511.399
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 67461,
+      "process_start_to_wait_ms": 0.979,
+      "schema": 2,
+      "session_id": "exec-e341863501a24c3ba35e8b3e132cfafc",
+      "stages": [
+        {
+          "ms": 509.184,
+          "phase": "process_wait",
+          "start_ms": 0.023
+        },
+        {
+          "alive_after": false,
+          "ms": 0.022,
+          "phase": "stdout_join",
+          "start_ms": 509.231,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.063,
+          "phase": "stderr_join",
+          "start_ms": 509.258,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 509.332
+        },
+        {
+          "ms": 1.487,
+          "phase": "completion",
+          "start_ms": 509.338
+        },
+        {
+          "ms": 0.008,
+          "phase": "capacity_lease_release",
+          "start_ms": 509.345
+        },
+        {
+          "ms": 1.438,
+          "phase": "activity_lease_release",
+          "start_ms": 509.355
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 503.218,
+          "last_ms": 503.218
+        }
+      },
+      "total_ms": 510.828
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 67520,
+      "process_start_to_wait_ms": 1.018,
+      "schema": 2,
+      "session_id": "exec-52a53e5cb52e4685a4b24e7a11901341",
+      "stages": [
+        {
+          "ms": 511.173,
+          "phase": "process_wait",
+          "start_ms": 0.02
+        },
+        {
+          "alive_after": false,
+          "ms": 0.016,
+          "phase": "stdout_join",
+          "start_ms": 511.206,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.037,
+          "phase": "stderr_join",
+          "start_ms": 511.225,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.001,
+          "phase": "stdin_close",
+          "start_ms": 511.272
+        },
+        {
+          "ms": 1.123,
+          "phase": "completion",
+          "start_ms": 511.276
+        },
+        {
+          "ms": 0.005,
+          "phase": "capacity_lease_release",
+          "start_ms": 511.281
+        },
+        {
+          "ms": 1.086,
+          "phase": "activity_lease_release",
+          "start_ms": 511.288
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 505.341,
+          "last_ms": 505.341
+        }
+      },
+      "total_ms": 512.401
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 67313,
+      "process_start_to_wait_ms": 2.056,
+      "schema": 2,
+      "session_id": "exec-1a67bef11b3a4986af6b7bf637535cb4",
+      "stages": [
+        {
+          "ms": 636.068,
+          "phase": "process_wait",
+          "start_ms": 0.019
+        },
+        {
+          "alive_after": false,
+          "ms": 0.016,
+          "phase": "stdout_join",
+          "start_ms": 636.126,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.049,
+          "phase": "stderr_join",
+          "start_ms": 636.146,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 636.206
+        },
+        {
+          "ms": 1.54,
+          "phase": "completion",
+          "start_ms": 636.213
+        },
+        {
+          "ms": 0.008,
+          "phase": "capacity_lease_release",
+          "start_ms": 636.218
+        },
+        {
+          "ms": 1.486,
+          "phase": "activity_lease_release",
+          "start_ms": 636.228
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 628.361,
+          "last_ms": 628.361
+        }
+      },
+      "total_ms": 637.756
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 67695,
+      "process_start_to_wait_ms": 1.374,
+      "schema": 2,
+      "session_id": "exec-e912c97dee284580a60eb6de2458084f",
+      "stages": [
+        {
+          "ms": 547.416,
+          "phase": "process_wait",
+          "start_ms": 0.025
+        },
+        {
+          "alive_after": false,
+          "ms": 0.022,
+          "phase": "stdout_join",
+          "start_ms": 547.471,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.053,
+          "phase": "stderr_join",
+          "start_ms": 547.498,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 547.563
+        },
+        {
+          "ms": 1.409,
+          "phase": "completion",
+          "start_ms": 547.57
+        },
+        {
+          "ms": 0.009,
+          "phase": "capacity_lease_release",
+          "start_ms": 547.577
+        },
+        {
+          "ms": 1.356,
+          "phase": "activity_lease_release",
+          "start_ms": 547.589
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 492.392,
+          "last_ms": 492.392
+        }
+      },
+      "total_ms": 548.982
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 67710,
+      "process_start_to_wait_ms": 0.985,
+      "schema": 2,
+      "session_id": "exec-e36271f5e0e44f9f88898af808b3b000",
+      "stages": [
+        {
+          "ms": 590.374,
+          "phase": "process_wait",
+          "start_ms": 0.023
+        },
+        {
+          "alive_after": false,
+          "ms": 0.022,
+          "phase": "stdout_join",
+          "start_ms": 590.428,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.04,
+          "phase": "stderr_join",
+          "start_ms": 590.456,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 590.507
+        },
+        {
+          "ms": 1.548,
+          "phase": "completion",
+          "start_ms": 590.513
+        },
+        {
+          "ms": 0.021,
+          "phase": "capacity_lease_release",
+          "start_ms": 590.52
+        },
+        {
+          "ms": 1.49,
+          "phase": "activity_lease_release",
+          "start_ms": 590.543
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 584.435,
+          "last_ms": 584.435
+        }
+      },
+      "total_ms": 592.064
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 67773,
+      "process_start_to_wait_ms": 1.711,
+      "schema": 2,
+      "session_id": "exec-250bc3a9f60b498a985b3f383750957b",
+      "stages": [
+        {
+          "ms": 500.215,
+          "phase": "process_wait",
+          "start_ms": 0.008
+        },
+        {
+          "alive_after": false,
+          "ms": 0.016,
+          "phase": "stdout_join",
+          "start_ms": 500.239,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.048,
+          "phase": "stderr_join",
+          "start_ms": 500.26,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 500.317
+        },
+        {
+          "ms": 1.445,
+          "phase": "completion",
+          "start_ms": 500.322
+        },
+        {
+          "ms": 0.009,
+          "phase": "capacity_lease_release",
+          "start_ms": 500.327
+        },
+        {
+          "ms": 1.403,
+          "phase": "activity_lease_release",
+          "start_ms": 500.338
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 493.852,
+          "last_ms": 493.852
+        }
+      },
+      "total_ms": 501.769
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 67769,
+      "process_start_to_wait_ms": 2.52,
+      "schema": 2,
+      "session_id": "exec-39401c8c1de8412aad48813864e852e0",
+      "stages": [
+        {
+          "ms": 504.932,
+          "phase": "process_wait",
+          "start_ms": 0.021
+        },
+        {
+          "alive_after": false,
+          "ms": 0.038,
+          "phase": "stdout_join",
+          "start_ms": 504.961,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.027,
+          "phase": "stderr_join",
+          "start_ms": 505.002,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.001,
+          "phase": "stdin_close",
+          "start_ms": 505.035
+        },
+        {
+          "ms": 0.783,
+          "phase": "completion",
+          "start_ms": 505.038
+        },
+        {
+          "ms": 0.003,
+          "phase": "capacity_lease_release",
+          "start_ms": 505.041
+        },
+        {
+          "ms": 0.756,
+          "phase": "activity_lease_release",
+          "start_ms": 505.046
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 498.825,
+          "last_ms": 498.825
+        }
+      },
+      "total_ms": 505.823
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 67819,
+      "process_start_to_wait_ms": 1.5,
+      "schema": 2,
+      "session_id": "exec-075f67e45157459a986905ca90e3b119",
+      "stages": [
+        {
+          "ms": 442.083,
+          "phase": "process_wait",
+          "start_ms": 0.017
+        },
+        {
+          "alive_after": false,
+          "ms": 0.02,
+          "phase": "stdout_join",
+          "start_ms": 442.125,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.003,
+          "phase": "stderr_join",
+          "start_ms": 442.149,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 442.162
+        },
+        {
+          "ms": 1.47,
+          "phase": "completion",
+          "start_ms": 442.168
+        },
+        {
+          "ms": 0.009,
+          "phase": "capacity_lease_release",
+          "start_ms": 442.174
+        },
+        {
+          "ms": 1.417,
+          "phase": "activity_lease_release",
+          "start_ms": 442.185
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 435.589,
+          "last_ms": 435.589
+        }
+      },
+      "total_ms": 443.641
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 67836,
+      "process_start_to_wait_ms": 2.883,
+      "schema": 2,
+      "session_id": "exec-2a2c840cc96740beaf2d7b7c9b94afdd",
+      "stages": [
+        {
+          "ms": 434.879,
+          "phase": "process_wait",
+          "start_ms": 0.01
+        },
+        {
+          "alive_after": false,
+          "ms": 0.042,
+          "phase": "stdout_join",
+          "start_ms": 434.899,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.014,
+          "phase": "stderr_join",
+          "start_ms": 434.946,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.001,
+          "phase": "stdin_close",
+          "start_ms": 434.966
+        },
+        {
+          "ms": 1.002,
+          "phase": "completion",
+          "start_ms": 434.97
+        },
+        {
+          "ms": 0.005,
+          "phase": "capacity_lease_release",
+          "start_ms": 434.973
+        },
+        {
+          "ms": 0.97,
+          "phase": "activity_lease_release",
+          "start_ms": 434.979
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 428.131,
+          "last_ms": 428.131
+        }
+      },
+      "total_ms": 435.974
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 67810,
+      "process_start_to_wait_ms": 2.373,
+      "schema": 2,
+      "session_id": "exec-b2d01fb59e644789a3b0ea2884411aab",
+      "stages": [
+        {
+          "ms": 460.712,
+          "phase": "process_wait",
+          "start_ms": 0.021
+        },
+        {
+          "alive_after": false,
+          "ms": 0.043,
+          "phase": "stdout_join",
+          "start_ms": 460.777,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.165,
+          "phase": "stderr_join",
+          "start_ms": 460.827,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.003,
+          "phase": "stdin_close",
+          "start_ms": 461.014
+        },
+        {
+          "ms": 3.578,
+          "phase": "completion",
+          "start_ms": 461.023
+        },
+        {
+          "ms": 0.013,
+          "phase": "capacity_lease_release",
+          "start_ms": 461.032
+        },
+        {
+          "ms": 3.513,
+          "phase": "activity_lease_release",
+          "start_ms": 461.047
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 454.793,
+          "last_ms": 454.793
+        }
+      },
+      "total_ms": 464.604
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 67861,
+      "process_start_to_wait_ms": 4.287,
+      "schema": 2,
+      "session_id": "exec-1063f529bcd6487eb98a1671dc8df128",
+      "stages": [
+        {
+          "ms": 443.507,
+          "phase": "process_wait",
+          "start_ms": 0.025
+        },
+        {
+          "alive_after": false,
+          "ms": 0.1,
+          "phase": "stdout_join",
+          "start_ms": 443.553,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.047,
+          "phase": "stderr_join",
+          "start_ms": 443.659,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 443.715
+        },
+        {
+          "ms": 1.649,
+          "phase": "completion",
+          "start_ms": 443.722
+        },
+        {
+          "ms": 0.01,
+          "phase": "capacity_lease_release",
+          "start_ms": 443.727
+        },
+        {
+          "ms": 1.593,
+          "phase": "activity_lease_release",
+          "start_ms": 443.74
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 433.528,
+          "last_ms": 433.528
+        }
+      },
+      "total_ms": 445.374
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 67842,
+      "process_start_to_wait_ms": 3.679,
+      "schema": 2,
+      "session_id": "exec-527a219d33574a21a2adbc7861a269c0",
+      "stages": [
+        {
+          "ms": 447.999,
+          "phase": "process_wait",
+          "start_ms": 0.013
+        },
+        {
+          "alive_after": false,
+          "ms": 0.076,
+          "phase": "stdout_join",
+          "start_ms": 448.029,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.036,
+          "phase": "stderr_join",
+          "start_ms": 448.111,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 448.156
+        },
+        {
+          "ms": 2.866,
+          "phase": "completion",
+          "start_ms": 448.162
+        },
+        {
+          "ms": 0.008,
+          "phase": "capacity_lease_release",
+          "start_ms": 448.168
+        },
+        {
+          "ms": 2.823,
+          "phase": "activity_lease_release",
+          "start_ms": 448.178
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 440.889,
+          "last_ms": 440.889
+        }
+      },
+      "total_ms": 451.03
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 67830,
+      "process_start_to_wait_ms": 5.018,
+      "schema": 2,
+      "session_id": "exec-83c60af2290f437fb587b51b26a2c9a3",
+      "stages": [
+        {
+          "ms": 453.269,
+          "phase": "process_wait",
+          "start_ms": 0.015
+        },
+        {
+          "alive_after": false,
+          "ms": 0.045,
+          "phase": "stdout_join",
+          "start_ms": 453.308,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.035,
+          "phase": "stderr_join",
+          "start_ms": 453.359,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 453.414
+        },
+        {
+          "ms": 1.375,
+          "phase": "completion",
+          "start_ms": 453.424
+        },
+        {
+          "ms": 0.008,
+          "phase": "capacity_lease_release",
+          "start_ms": 453.431
+        },
+        {
+          "ms": 1.335,
+          "phase": "activity_lease_release",
+          "start_ms": 453.441
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 446.747,
+          "last_ms": 446.747
+        }
+      },
+      "total_ms": 454.802
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 67848,
+      "process_start_to_wait_ms": 5.901,
+      "schema": 2,
+      "session_id": "exec-eeded2044f13420bad3906dcfb1bc16a",
+      "stages": [
+        {
+          "ms": 467.673,
+          "phase": "process_wait",
+          "start_ms": 0.019
+        },
+        {
+          "alive_after": false,
+          "ms": 0.023,
+          "phase": "stdout_join",
+          "start_ms": 467.714,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.055,
+          "phase": "stderr_join",
+          "start_ms": 467.741,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 467.807
+        },
+        {
+          "ms": 1.358,
+          "phase": "completion",
+          "start_ms": 467.814
+        },
+        {
+          "ms": 0.009,
+          "phase": "capacity_lease_release",
+          "start_ms": 467.82
+        },
+        {
+          "ms": 1.309,
+          "phase": "activity_lease_release",
+          "start_ms": 467.831
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 460.485,
+          "last_ms": 460.485
+        }
+      },
+      "total_ms": 469.175
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 67876,
+      "process_start_to_wait_ms": 1.794,
+      "schema": 2,
+      "session_id": "exec-7766dc3eb72749a98607f858fda9b30a",
+      "stages": [
+        {
+          "ms": 513.242,
+          "phase": "process_wait",
+          "start_ms": 0.017
+        },
+        {
+          "alive_after": false,
+          "ms": 0.014,
+          "phase": "stdout_join",
+          "start_ms": 513.271,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.035,
+          "phase": "stderr_join",
+          "start_ms": 513.29,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 513.333
+        },
+        {
+          "ms": 1.306,
+          "phase": "completion",
+          "start_ms": 513.338
+        },
+        {
+          "ms": 0.007,
+          "phase": "capacity_lease_release",
+          "start_ms": 513.344
+        },
+        {
+          "ms": 1.245,
+          "phase": "activity_lease_release",
+          "start_ms": 513.353
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 507.542,
+          "last_ms": 507.542
+        }
+      },
+      "total_ms": 514.647
+    },
+    {
+      "diagnostic": "density_park_v1",
+      "sandbox_id": "density-3e00350e9d20450a-0",
+      "phases_ms": {
+        "prepare": 12.671,
+        "runsc_checkpoint": 34.327,
+        "commit_artifact": 70.912,
+        "stop_runtime": 37.723,
+        "release_storage": 109.03,
+        "commit_journal": 1.628
+      },
+      "time": 1788820911.549488,
+      "status": "ok",
+      "total_ms": 269.002
+    },
+    {
+      "diagnostic": "density_park_v1",
+      "sandbox_id": "density-3e00350e9d20450a-5",
+      "phases_ms": {
+        "prepare": 7.529,
+        "runsc_checkpoint": 33.397,
+        "commit_artifact": 74.754,
+        "stop_runtime": 34.609,
+        "release_storage": 104.701,
+        "commit_journal": 1.518
+      },
+      "time": 1788820911.5663786,
+      "status": "ok",
+      "total_ms": 258.668
+    },
+    {
+      "diagnostic": "density_park_v1",
+      "sandbox_id": "density-3e00350e9d20450a-6",
+      "phases_ms": {
+        "prepare": 10.808,
+        "runsc_checkpoint": 32.999,
+        "commit_artifact": 72.196,
+        "stop_runtime": 36.927,
+        "release_storage": 109.924,
+        "commit_journal": 1.972
+      },
+      "time": 1788820911.5628984,
+      "status": "ok",
+      "total_ms": 267.311
+    },
+    {
+      "diagnostic": "density_park_v1",
+      "sandbox_id": "density-3e00350e9d20450a-3",
+      "phases_ms": {
+        "prepare": 9.169,
+        "runsc_checkpoint": 32.598,
+        "commit_artifact": 74.196,
+        "stop_runtime": 31.717,
+        "release_storage": 120.315,
+        "commit_journal": 1.965
+      },
+      "time": 1788820911.561583,
+      "status": "ok",
+      "total_ms": 274.631
+    },
+    {
+      "diagnostic": "density_park_v1",
+      "sandbox_id": "density-3e00350e9d20450a-4",
+      "phases_ms": {
+        "prepare": 5.69,
+        "runsc_checkpoint": 32.532,
+        "commit_artifact": 68.22,
+        "stop_runtime": 33.671,
+        "release_storage": 134.447,
+        "commit_journal": 2.908
+      },
+      "time": 1788820911.5600488,
+      "status": "ok",
+      "total_ms": 280.548
+    },
+    {
+      "diagnostic": "density_park_v1",
+      "sandbox_id": "density-3e00350e9d20450a-2",
+      "phases_ms": {
+        "prepare": 9.059,
+        "runsc_checkpoint": 32.688,
+        "commit_artifact": 69.933,
+        "stop_runtime": 34.998,
+        "release_storage": 133.465,
+        "commit_journal": 1.96
+      },
+      "time": 1788820911.5613334,
+      "status": "ok",
+      "total_ms": 285.088
+    },
+    {
+      "diagnostic": "density_park_v1",
+      "sandbox_id": "density-3e00350e9d20450a-1",
+      "phases_ms": {
+        "prepare": 5.252,
+        "runsc_checkpoint": 33.273,
+        "commit_artifact": 68.409,
+        "stop_runtime": 26.051,
+        "release_storage": 149.476,
+        "commit_journal": 2.809
+      },
+      "time": 1788820911.5588086,
+      "status": "ok",
+      "total_ms": 293.183
+    },
+    {
+      "diagnostic": "density_park_v1",
+      "sandbox_id": "density-3e00350e9d20450a-7",
+      "phases_ms": {
+        "prepare": 6.636,
+        "runsc_checkpoint": 32.605,
+        "commit_artifact": 73.098,
+        "stop_runtime": 37.381,
+        "release_storage": 134.126,
+        "commit_journal": 1.803
+      },
+      "time": 1788820911.564353,
+      "status": "ok",
+      "total_ms": 288.876
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 68927,
+      "process_start_to_wait_ms": 1.64,
+      "schema": 2,
+      "session_id": "exec-e1f61f8f2da544c3b45c03fc7b9d8ea8",
+      "stages": [
+        {
+          "ms": 516.113,
+          "phase": "process_wait",
+          "start_ms": 0.025
+        },
+        {
+          "alive_after": false,
+          "ms": 0.023,
+          "phase": "stdout_join",
+          "start_ms": 516.161,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.003,
+          "phase": "stderr_join",
+          "start_ms": 516.188,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 516.204
+        },
+        {
+          "ms": 1.522,
+          "phase": "completion",
+          "start_ms": 516.211
+        },
+        {
+          "ms": 0.013,
+          "phase": "capacity_lease_release",
+          "start_ms": 516.217
+        },
+        {
+          "ms": 1.466,
+          "phase": "activity_lease_release",
+          "start_ms": 516.233
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 510.225,
+          "last_ms": 510.225
+        }
+      },
+      "total_ms": 517.735
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 69157,
+      "process_start_to_wait_ms": 0.945,
+      "schema": 2,
+      "session_id": "exec-80e3a76e16c14aa2b160840005b7606a",
+      "stages": [
+        {
+          "ms": 505.922,
+          "phase": "process_wait",
+          "start_ms": 0.022
+        },
+        {
+          "alive_after": false,
+          "ms": 0.031,
+          "phase": "stdout_join",
+          "start_ms": 505.98,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.08,
+          "phase": "stderr_join",
+          "start_ms": 506.017,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 506.114
+        },
+        {
+          "ms": 1.48,
+          "phase": "completion",
+          "start_ms": 506.122
+        },
+        {
+          "ms": 0.012,
+          "phase": "capacity_lease_release",
+          "start_ms": 506.129
+        },
+        {
+          "ms": 1.425,
+          "phase": "activity_lease_release",
+          "start_ms": 506.143
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 497.238,
+          "last_ms": 497.238
+        }
+      },
+      "total_ms": 507.604
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 69057,
+      "process_start_to_wait_ms": 0.881,
+      "schema": 2,
+      "session_id": "exec-83d4b584b6f542c4b9fb388248aac64b",
+      "stages": [
+        {
+          "ms": 549.179,
+          "phase": "process_wait",
+          "start_ms": 0.022
+        },
+        {
+          "alive_after": false,
+          "ms": 0.027,
+          "phase": "stdout_join",
+          "start_ms": 549.236,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.056,
+          "phase": "stderr_join",
+          "start_ms": 549.269,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 549.341
+        },
+        {
+          "ms": 1.471,
+          "phase": "completion",
+          "start_ms": 549.349
+        },
+        {
+          "ms": 0.009,
+          "phase": "capacity_lease_release",
+          "start_ms": 549.355
+        },
+        {
+          "ms": 1.414,
+          "phase": "activity_lease_release",
+          "start_ms": 549.366
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 542.072,
+          "last_ms": 542.072
+        }
+      },
+      "total_ms": 550.823
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 69262,
+      "process_start_to_wait_ms": 1.125,
+      "schema": 2,
+      "session_id": "exec-13df2062200345bb922d936b8dd17870",
+      "stages": [
+        {
+          "ms": 506.903,
+          "phase": "process_wait",
+          "start_ms": 0.025
+        },
+        {
+          "alive_after": false,
+          "ms": 0.017,
+          "phase": "stdout_join",
+          "start_ms": 506.948,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.035,
+          "phase": "stderr_join",
+          "start_ms": 506.97,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 507.015
+        },
+        {
+          "ms": 1.495,
+          "phase": "completion",
+          "start_ms": 507.022
+        },
+        {
+          "ms": 0.011,
+          "phase": "capacity_lease_release",
+          "start_ms": 507.028
+        },
+        {
+          "ms": 1.443,
+          "phase": "activity_lease_release",
+          "start_ms": 507.042
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 500.471,
+          "last_ms": 500.471
+        }
+      },
+      "total_ms": 508.519
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 69223,
+      "process_start_to_wait_ms": 1.517,
+      "schema": 2,
+      "session_id": "exec-d18e612ecf0044e5bfd833567a26e63a",
+      "stages": [
+        {
+          "ms": 564.027,
+          "phase": "process_wait",
+          "start_ms": 0.017
+        },
+        {
+          "alive_after": false,
+          "ms": 0.013,
+          "phase": "stdout_join",
+          "start_ms": 564.062,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.031,
+          "phase": "stderr_join",
+          "start_ms": 564.08,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 564.122
+        },
+        {
+          "ms": 1.557,
+          "phase": "completion",
+          "start_ms": 564.128
+        },
+        {
+          "ms": 0.011,
+          "phase": "capacity_lease_release",
+          "start_ms": 564.134
+        },
+        {
+          "ms": 1.506,
+          "phase": "activity_lease_release",
+          "start_ms": 564.147
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 557.942,
+          "last_ms": 557.942
+        }
+      },
+      "total_ms": 565.688
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 69402,
+      "process_start_to_wait_ms": 2.152,
+      "schema": 2,
+      "session_id": "exec-fea92d98425d45dbb10b933585931225",
+      "stages": [
+        {
+          "ms": 502.562,
+          "phase": "process_wait",
+          "start_ms": 0.022
+        },
+        {
+          "alive_after": false,
+          "ms": 0.019,
+          "phase": "stdout_join",
+          "start_ms": 502.606,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.044,
+          "phase": "stderr_join",
+          "start_ms": 502.63,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 502.686
+        },
+        {
+          "ms": 1.254,
+          "phase": "completion",
+          "start_ms": 502.693
+        },
+        {
+          "ms": 0.009,
+          "phase": "capacity_lease_release",
+          "start_ms": 502.699
+        },
+        {
+          "ms": 1.197,
+          "phase": "activity_lease_release",
+          "start_ms": 502.711
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 496.662,
+          "last_ms": 496.662
+        }
+      },
+      "total_ms": 503.949
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 69401,
+      "process_start_to_wait_ms": 2.596,
+      "schema": 2,
+      "session_id": "exec-e90eb743feb640868d1ac2f6e0a5288d",
+      "stages": [
+        {
+          "ms": 523.028,
+          "phase": "process_wait",
+          "start_ms": 0.026
+        },
+        {
+          "alive_after": false,
+          "ms": 0.021,
+          "phase": "stdout_join",
+          "start_ms": 523.081,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.062,
+          "phase": "stderr_join",
+          "start_ms": 523.108,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 523.182
+        },
+        {
+          "ms": 1.423,
+          "phase": "completion",
+          "start_ms": 523.189
+        },
+        {
+          "ms": 0.01,
+          "phase": "capacity_lease_release",
+          "start_ms": 523.195
+        },
+        {
+          "ms": 1.359,
+          "phase": "activity_lease_release",
+          "start_ms": 523.207
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 517.323,
+          "last_ms": 517.323
+        }
+      },
+      "total_ms": 524.614
+    },
+    {
+      "completion_method": "_complete",
+      "event": "density_exec_completion",
+      "exit_code": 0,
+      "process_pid": 69421,
+      "process_start_to_wait_ms": 0.944,
+      "schema": 2,
+      "session_id": "exec-63d110dbcd3943998f87d4c11772bba2",
+      "stages": [
+        {
+          "ms": 561.426,
+          "phase": "process_wait",
+          "start_ms": 0.016
+        },
+        {
+          "alive_after": false,
+          "ms": 0.047,
+          "phase": "stdout_join",
+          "start_ms": 561.459,
+          "timeout_seconds": 2.0
+        },
+        {
+          "alive_after": false,
+          "ms": 0.034,
+          "phase": "stderr_join",
+          "start_ms": 561.512,
+          "timeout_seconds": 2.0
+        },
+        {
+          "has_pipe": false,
+          "ms": 0.002,
+          "phase": "stdin_close",
+          "start_ms": 561.554
+        },
+        {
+          "ms": 1.333,
+          "phase": "completion",
+          "start_ms": 561.56
+        },
+        {
+          "ms": 0.008,
+          "phase": "capacity_lease_release",
+          "start_ms": 561.565
+        },
+        {
+          "ms": 1.288,
+          "phase": "activity_lease_release",
+          "start_ms": 561.575
+        }
+      ],
+      "stream_arrivals": {
+        "stderr": {
+          "count": 0,
+          "first_ms": null,
+          "last_ms": null
+        },
+        "stdout": {
+          "count": 1,
+          "first_ms": 503.623,
+          "last_ms": 503.623
+        }
+      },
+      "total_ms": 562.896
+    }
+  ]
+}

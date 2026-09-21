@@ -36,7 +36,9 @@ _EXEC_ROUTE_CACHE_SANDBOX_INDEXES: defaultdict[Path, dict[str, set[str]]] = defa
     dict
 )
 PENDING_DEMAND_TTL_SECONDS = 300
-MAX_PREPARED_CAPACITY_COUNT = 100
+# SQLite stores the durable demand count as a signed 64-bit integer. This is a
+# representation bound, not an admission limit; fleet policy governs capacity.
+MAX_PREPARED_CAPACITY_COUNT = (1 << 63) - 1
 EXEC_ROUTE_CACHE_MAX_ENTRIES = 65_536
 PROGRAM_TERMINAL_RETENTION_SECONDS = 7 * 24 * 60 * 60
 ROUTING_SCHEMA_VERSION = 3
@@ -442,7 +444,8 @@ class PendingSandboxDemand(_ExpiringDemand):
         return not (
             reason.startswith("image_pull_http_")
             or reason == "registry_lease_unavailable"
-            or reason == "wake_snapshot_publication_pending"
+            or reason
+            in {"wake_snapshot_publication_pending", "wake_storage_recovery_required"}
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -631,6 +634,64 @@ class RoutingStore:
     def get_sandbox_readonly(self, sandbox_id: str) -> SandboxRoute | None:
         with self._connect() as conn:
             return self._get_sandbox_unlocked(conn, sandbox_id)
+
+    def get_sandbox_loss(self, sandbox_id: str) -> dict[str, Any] | None:
+        """Return terminal loss only for the latest, still-absent incarnation."""
+        cutoff = (
+            utc_now() - timedelta(seconds=PROGRAM_TERMINAL_RETENTION_SECONDS)
+        ).isoformat()
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT loss.sandbox_id, loss.generation, loss.job_id,
+                       loss.reason, loss.lost_at
+                FROM sandbox_losses AS loss
+                JOIN sandbox_generation_hwm AS hwm USING (sandbox_id)
+                WHERE loss.sandbox_id = ? AND loss.generation = hwm.generation
+                  AND loss.lost_at > ?
+                  AND NOT EXISTS (
+                      SELECT 1 FROM sandboxes WHERE sandbox_id = loss.sandbox_id
+                  )
+                """,
+                (sandbox_id, cutoff),
+            ).fetchone()
+        return dict(row) if row is not None else None
+
+    def get_exec_loss(self, session_id: str) -> dict[str, Any] | None:
+        """Keep an accepted process's loss distinct from an unknown session ID."""
+        cutoff = (
+            utc_now() - timedelta(seconds=PROGRAM_TERMINAL_RETENTION_SECONDS)
+        ).isoformat()
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM exec_losses WHERE session_id = ? AND lost_at > ?",
+                (session_id, cutoff),
+            ).fetchone()
+        return dict(row) if row is not None else None
+
+    def terminal_sandbox_incarnations(self) -> dict[tuple[str, int], str]:
+        """Batch proven worker losses and explicit deletions for relay cleanup."""
+        cutoff = (
+            utc_now() - timedelta(seconds=PROGRAM_TERMINAL_RETENTION_SECONDS)
+        ).isoformat()
+        with self._connect() as conn:
+            terminal = {
+                (str(row[0]), int(row[1])): "sandbox_deleted"
+                for row in conn.execute(
+                    "SELECT sandbox_id, sandbox_generation FROM program_requests "
+                    "WHERE state = 'terminal' AND last_error = 'sandbox deletion requested' "
+                    "AND updated_at > ?",
+                    (cutoff,),
+                )
+            }
+            terminal.update(
+                ((str(row[0]), int(row[1])), "node_lost")
+                for row in conn.execute(
+                    "SELECT sandbox_id, generation FROM sandbox_losses WHERE lost_at > ?",
+                    (cutoff,),
+                )
+            )
+            return terminal
 
     def get_managed_process(
         self,
@@ -1990,7 +2051,9 @@ class RoutingStore:
                         )
                         removed_sandbox_ids.append(sandbox_id)
                         continue
-                    if not self._delete_sandbox_unlocked(conn, route):
+                    if not self._delete_sandbox_unlocked(
+                        conn, route, terminal_error="node_lost" if replaced_boot else ""
+                    ):
                         continue
                     removed_routes.append(route)
                     removed_sandbox_ids.append(sandbox_id)
@@ -2012,6 +2075,7 @@ class RoutingStore:
         job_ids: Iterable[str],
         *,
         terminal_error: str = "",
+        retired_node_epoch: str | None = None,
     ) -> list[SandboxRoute]:
         """Forget non-portable sandboxes owned by terminated VM jobs.
 
@@ -2047,7 +2111,10 @@ class RoutingStore:
                     ).fetchall()
                     for row in rows:
                         route = _sandbox_route_from_row(row)
-                        if route is not None:
+                        if route is not None and (
+                            retired_node_epoch is None
+                            or route.node_epoch == retired_node_epoch
+                        ):
                             if (
                                 sandbox_owner_loss_disposition(route)
                                 is SandboxOwnerLossDisposition.RECOVER_DETACHED
@@ -2150,11 +2217,28 @@ class RoutingStore:
             updated_at=updated_at,
         )
         self._write_sandbox(conn, detached)
+        self._record_exec_losses_unlocked(conn, route)
         conn.execute(
             "DELETE FROM exec_sessions WHERE sandbox_id = ?",
             (route.sandbox_id,),
         )
         return detached
+
+    @staticmethod
+    def _record_exec_losses_unlocked(
+        conn: sqlite3.Connection, route: SandboxRoute
+    ) -> None:
+        # Exec sessions belong to the worker process, even when a portable
+        # sandbox snapshot survives. Never redirect or replay an accepted exec.
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO exec_losses
+                (session_id, sandbox_id, generation, job_id, lost_at)
+            SELECT session_id, sandbox_id, ?, job_id, ?
+            FROM exec_sessions WHERE sandbox_id = ? AND job_id = ?
+            """,
+            (route.generation, utc_now().isoformat(), route.sandbox_id, route.job_id),
+        )
 
     def _delete_sandbox_unlocked(
         self,
@@ -2184,6 +2268,24 @@ class RoutingStore:
             removed = conn.execute(
                 "DELETE FROM sandboxes WHERE sandbox_id = ?", (sandbox_id,)
             ).rowcount
+        if removed and terminal_error and isinstance(route, SandboxRoute):
+            self._record_exec_losses_unlocked(conn, route)
+            conn.execute(
+                """
+                INSERT INTO sandbox_losses VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(sandbox_id) DO UPDATE SET
+                    generation = excluded.generation, job_id = excluded.job_id,
+                    reason = excluded.reason, lost_at = excluded.lost_at
+                WHERE excluded.generation >= sandbox_losses.generation
+                """,
+                (
+                    sandbox_id,
+                    route.generation,
+                    route.job_id,
+                    terminal_error,
+                    utc_now().isoformat(),
+                ),
+            )
         conn.execute(
             "DELETE FROM sandbox_storage_dependencies WHERE sandbox_id = ?",
             (sandbox_id,),
@@ -2243,16 +2345,12 @@ class RoutingStore:
         ).rowcount
 
     def get_exec(self, session_id: str) -> ExecRoute | None:
-        with self._lock:
-            cached = self._exec_route_cache.pop(session_id, None)
-            if cached is not None:
-                self._exec_route_cache[session_id] = cached
-                return cached
-            with self._connect() as conn:
-                route = self._get_exec_unlocked(conn, session_id)
-            if route is not None:
-                self._cache_exec_route_unlocked(route)
-            return route
+        # The autoscaler retires routes in another process. Its commit cannot
+        # invalidate this process's cache, so routing must read the indexed
+        # durable row. Do not serialize these independent reads on the writer
+        # lock: SQLite WAL supplies a consistent snapshot.
+        with self._connect() as conn:
+            return self._get_exec_unlocked(conn, session_id)
 
     def get_pending(self, sandbox_id: str) -> PendingSandboxDemand | None:
         with self._lock:
@@ -2909,6 +3007,12 @@ class RoutingStore:
             now - timedelta(seconds=PROGRAM_TERMINAL_RETENTION_SECONDS)
         ).isoformat()
         conn.execute(
+            "DELETE FROM sandbox_losses WHERE lost_at <= ?", (terminal_cutoff,)
+        )
+        conn.execute(
+            "DELETE FROM exec_losses WHERE lost_at <= ?", (terminal_cutoff,)
+        )
+        conn.execute(
             """
             DELETE FROM program_requests
             WHERE state = 'terminal' AND updated_at <= ?
@@ -2988,6 +3092,7 @@ class RoutingStore:
                     oldest_pending_seconds,
                     int((now - created_at).total_seconds()),
                 )
+        oldest_capacity_pending_seconds = max(0, oldest_pending_seconds)
         for item in prepared:
             prepared_placement_requests.append(
                 SandboxPlacementRequest(
@@ -3007,6 +3112,7 @@ class RoutingStore:
             pending_count=pending_count,
             suppressed_pending_count=suppressed_pending_count,
             oldest_pending_seconds=max(0, oldest_pending_seconds),
+            oldest_capacity_pending_seconds=oldest_capacity_pending_seconds,
             placement_requests=tuple(placement_requests),
             prepared_placement_requests=tuple(prepared_placement_requests),
         )
@@ -3292,6 +3398,55 @@ class RoutingStore:
                 ON program_requests(sandbox_id, sandbox_generation)
                 """
             )
+            # Additive diagnostic state: existing route/lease contracts and
+            # schema-3 readers remain compatible. Backfill once from retained
+            # program failures so already-lost callers gain the same response.
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS exec_losses (
+                    session_id TEXT PRIMARY KEY,
+                    sandbox_id TEXT NOT NULL,
+                    generation INTEGER NOT NULL CHECK (generation > 0),
+                    job_id TEXT NOT NULL,
+                    lost_at TEXT NOT NULL
+                ) STRICT
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS exec_losses_time ON exec_losses(lost_at)"
+            )
+            has_losses = (
+                conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sandbox_losses'"
+                ).fetchone()
+                is not None
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS sandbox_losses (
+                    sandbox_id TEXT PRIMARY KEY,
+                    generation INTEGER NOT NULL CHECK (generation > 0),
+                    job_id TEXT NOT NULL,
+                    reason TEXT NOT NULL,
+                    lost_at TEXT NOT NULL
+                ) STRICT
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS sandbox_losses_time ON sandbox_losses(lost_at)"
+            )
+            if not has_losses:
+                conn.execute(
+                    """
+                    INSERT INTO sandbox_losses
+                    SELECT p.sandbox_id, p.sandbox_generation, '', 'node_lost', MAX(p.updated_at)
+                    FROM program_requests AS p
+                    JOIN sandbox_generation_hwm AS h ON p.sandbox_id = h.sandbox_id
+                        AND p.sandbox_generation = h.generation
+                    WHERE p.state = 'terminal' AND p.last_error = 'node_lost'
+                    GROUP BY p.sandbox_id, p.sandbox_generation
+                    """
+                )
             conn.execute(f"PRAGMA user_version={ROUTING_SCHEMA_VERSION}")
             conn.commit()
 
@@ -4088,6 +4243,7 @@ def sandbox_demand_from_routing_state(
                 oldest_pending_seconds,
                 int((now - created_at).total_seconds()),
             )
+    oldest_capacity_pending_seconds = max(0, oldest_pending_seconds)
     for item in state.prepared.values():
         if item.is_expired(now):
             continue
@@ -4109,6 +4265,7 @@ def sandbox_demand_from_routing_state(
         pending_count=pending_count,
         suppressed_pending_count=suppressed_pending_count,
         oldest_pending_seconds=max(0, oldest_pending_seconds),
+        oldest_capacity_pending_seconds=oldest_capacity_pending_seconds,
         placement_requests=tuple(placement_requests),
         prepared_placement_requests=tuple(prepared_placement_requests),
     )

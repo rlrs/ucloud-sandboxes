@@ -1,0 +1,192 @@
+{
+  "schema": 1,
+  "gvisor_commit": "50e1502a95d36ad2faf2c7ef33b8bf21fe975293",
+  "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+  "initial": {
+    "acl": "pass",
+    "acl_umask": "pass",
+    "flock": "pass",
+    "identity": {
+      "uid": 1000,
+      "gid": 1000,
+      "groups": [
+        42
+      ]
+    },
+    "counter": 20
+  },
+  "capture_rollback": "pass",
+  "cycles": [
+    {
+      "cycle": 0,
+      "cpu_max": "25000 100000",
+      "state": {
+        "acl": "pass",
+        "acl_umask": "pass",
+        "flock": "pass",
+        "identity": {
+          "uid": 1000,
+          "gid": 1000,
+          "groups": [
+            42
+          ]
+        },
+        "counter": 84
+      }
+    },
+    {
+      "cycle": 1,
+      "cpu_max": "25000 100000",
+      "state": {
+        "acl": "pass",
+        "acl_umask": "pass",
+        "flock": "pass",
+        "identity": {
+          "uid": 1000,
+          "gid": 1000,
+          "groups": [
+            42
+          ]
+        },
+        "counter": 112
+      }
+    },
+    {
+      "cycle": 2,
+      "cpu_max": "25000 100000",
+      "state": {
+        "acl": "pass",
+        "acl_umask": "pass",
+        "flock": "pass",
+        "identity": {
+          "uid": 1000,
+          "gid": 1000,
+          "groups": [
+            42
+          ]
+        },
+        "counter": 144
+      }
+    },
+    {
+      "cycle": 3,
+      "cpu_max": "25000 100000",
+      "state": {
+        "acl": "pass",
+        "acl_umask": "pass",
+        "flock": "pass",
+        "identity": {
+          "uid": 1000,
+          "gid": 1000,
+          "groups": [
+            42
+          ]
+        },
+        "counter": 171
+      }
+    },
+    {
+      "cycle": 4,
+      "cpu_max": "25000 100000",
+      "state": {
+        "acl": "pass",
+        "acl_umask": "pass",
+        "flock": "pass",
+        "identity": {
+          "uid": 1000,
+          "gid": 1000,
+          "groups": [
+            42
+          ]
+        },
+        "counter": 210
+      }
+    },
+    {
+      "cycle": 5,
+      "cpu_max": "25000 100000",
+      "state": {
+        "acl": "pass",
+        "acl_umask": "pass",
+        "flock": "pass",
+        "identity": {
+          "uid": 1000,
+          "gid": 1000,
+          "groups": [
+            42
+          ]
+        },
+        "counter": 240
+      }
+    },
+    {
+      "cycle": 6,
+      "cpu_max": "25000 100000",
+      "state": {
+        "acl": "pass",
+        "acl_umask": "pass",
+        "flock": "pass",
+        "identity": {
+          "uid": 1000,
+          "gid": 1000,
+          "groups": [
+            42
+          ]
+        },
+        "counter": 263
+      }
+    },
+    {
+      "cycle": 7,
+      "cpu_max": "25000 100000",
+      "state": {
+        "acl": "pass",
+        "acl_umask": "pass",
+        "flock": "pass",
+        "identity": {
+          "uid": 1000,
+          "gid": 1000,
+          "groups": [
+            42
+          ]
+        },
+        "counter": 299
+      }
+    },
+    {
+      "cycle": 8,
+      "cpu_max": "25000 100000",
+      "state": {
+        "acl": "pass",
+        "acl_umask": "pass",
+        "flock": "pass",
+        "identity": {
+          "uid": 1000,
+          "gid": 1000,
+          "groups": [
+            42
+          ]
+        },
+        "counter": 314
+      }
+    },
+    {
+      "cycle": 9,
+      "cpu_max": "25000 100000",
+      "state": {
+        "acl": "pass",
+        "acl_umask": "pass",
+        "flock": "pass",
+        "identity": {
+          "uid": 1000,
+          "gid": 1000,
+          "groups": [
+            42
+          ]
+        },
+        "counter": 340
+      }
+    }
+  ],
+  "runsc_sha256": "9ebdf83ec7bf37f8be26660a915ccef7d67c9a9f0342896c41364be81a05d3c1"
+}

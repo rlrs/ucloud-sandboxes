@@ -274,7 +274,7 @@ class DirectOciConfigTests(unittest.TestCase):
             )
             self.assertEqual(
                 resources["memory"],
-                {"limit": memory_mb * 1024**2, "swap": memory_mb * 1024**2},
+                {"limit": memory_mb * 1024**2, "swap": memory_mb * 2 * 1024**2},
             )
             self.assertEqual(
                 resources["cpu"],

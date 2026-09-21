@@ -1,0 +1,797 @@
+SWEREBENCH_V2_TEST_OUTPUT_START
+
+> @elastic/synthetics@1.0.0-beta.3 test:unit
+> jest --verbose --no-color
+
+
+Running without BrowserService
+PASS __tests__/helper.test.ts (26.791 s)
+  ✓ indent message with seperator (12 ms)
+  ✓ get monotonic clock time (3 ms)
+  ✓ convert trace timestamp to internal time (1 ms)
+  ✓ format errors (1 ms)
+  ✓ throw error when no package.json found (1 ms)
+  ✓ rewrite error stack from Playwright (344 ms)
+  ✓ does not rewrite non playwright errors
+
+PASS __tests__/dsl/journey.test.ts (30.445 s)
+  Journey
+    ✓ add step to the journey (8 ms)
+
+FAIL __tests__/plugins/browser-console.test.ts (39.462 s)
+  BrowserConsole
+    ✕ should capture browser console logs (5075 ms)
+
+  ● BrowserConsole › should capture browser console logs
+
+    : Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Error:
+
+      38 |   });
+      39 | 
+    > 40 |   it('should capture browser console logs', async () => {
+         |   ^
+      41 |     const { page } = await Gatherer.setupDriver({ wsEndpoint });
+      42 |     const browserConsole = new BrowserConsole(page);
+      43 |     browserConsole.start();
+
+      at new Spec (node_modules/jest-jasmine2/build/jasmine/Spec.js:116:22)
+      at Suite.<anonymous> (__tests__/plugins/browser-console.test.ts:40:3)
+
+(node:342) [DEP0147] DeprecationWarning: In future versions of Node.js, fs.rmdir(path, { recursive: true }) will be removed. Use fs.rm(path, { recursive: true }) instead
+(Use `node --trace-deprecation ...` to show where the warning was created)
+node:internal/process/promises:391
+    triggerUncaughtException(err, true /* fromPromise */);
+    ^
+
+page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:33785/index.html
+=========================== logs ===========================
+navigating to "http://localhost:33785/index.html", waiting until "load"
+============================================================
+Note: use DEBUG=pw:api environment variable to capture Playwright logs.
+Error: 
+    at Object.captureStackTrace (/synthetics/node_modules/playwright-chromium/lib/utils/stackTrace.js:50:19)
+    at Connection.sendMessageToServer (/synthetics/node_modules/playwright-chromium/lib/client/connection.js:65:48)
+    at Proxy.<anonymous> (/synthetics/node_modules/playwright-chromium/lib/client/channelOwner.js:64:61)
+    at /synthetics/node_modules/playwright-chromium/lib/client/frame.js:102:65
+    at Frame._wrapApiCall (/synthetics/node_modules/playwright-chromium/lib/client/channelOwner.js:77:34)
+    at Frame.goto (/synthetics/node_modules/playwright-chromium/lib/client/frame.js:100:21)
+    at /synthetics/node_modules/playwright-chromium/lib/client/page.js:303:60
+    at Page._attributeToPage (/synthetics/node_modules/playwright-chromium/lib/client/page.js:238:20)
+    at Page.goto (/synthetics/node_modules/playwright-chromium/lib/client/page.js:303:21)
+    at Object.<anonymous> (/synthetics/__tests__/plugins/browser-console.test.ts:44:16)
+
+Node.js v20.20.0
+PASS __tests__/sdk/trace-metrics.test.ts (42.446 s)
+  Trace metrics
+    ✓ compute user timing metrics (131 ms)
+    ✓ compute user experience trace and metrics (2 ms)
+    ✓ computes layout shift (1 ms)
+    ✓ computes cls with session window
+    ✓ calculate cls score with simulated sessions
+    ✓ cls to 0 when no events found
+    ✓ computes filmstrips (1 ms)
+
+PASS __tests__/core/logger.test.ts (42.494 s)
+  Logger
+    ✓ log to specified fd (7 ms)
+
+PASS __tests__/plugins/plugin-manager.test.ts (43.193 s)
+  plugin manager
+    ✓ start plugin with given type (8 ms)
+    ✓ get returns plugin instance
+    ✓ stop plugin on output generation (1 ms)
+
+PASS __tests__/config.test.ts (43.262 s)
+  Config
+    ✓ read config based on environment (162 ms)
+    ✓ throw error when config does not exist (138 ms)
+    ✓ recursively look for configs and exit
+
+PASS __tests__/sdk/trace-processor.test.ts (43.183 s)
+  Trace processor
+    ✓ computes trace of the tab (364 ms)
+
+PASS __tests__/reporters/base.test.ts (43.461 s)
+  base reporter
+    ✓ writes each step to the FD (269 ms)
+    ✓ render hook errors without steps (1 ms)
+
+FAIL __tests__/plugins/tracing.test.ts (43.669 s)
+  tracing
+    ✕ should capture filmstrips (5235 ms)
+
+  ● tracing › should capture filmstrips
+
+    : Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Error:
+
+      38 |   });
+      39 | 
+    > 40 |   it('should capture filmstrips', async () => {
+         |   ^
+      41 |     const driver = await Gatherer.setupDriver({ wsEndpoint });
+      42 |     const tracer = new Tracing({ filmstrips: true, trace: true });
+      43 |     await tracer.start(driver.client);
+
+      at new Spec (node_modules/jest-jasmine2/build/jasmine/Spec.js:116:22)
+      at Suite.<anonymous> (__tests__/plugins/tracing.test.ts:40:3)
+
+PASS __tests__/reporters/junit.test.ts (44.148 s)
+  junit reporter
+    ✓ writes the output to fd (33 ms)
+    ✓ writes the output to a file (1 ms)
+
+node:internal/process/promises:391
+    triggerUncaughtException(err, true /* fromPromise */);
+    ^
+
+page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:41747/index.html
+=========================== logs ===========================
+navigating to "http://localhost:41747/index.html", waiting until "load"
+============================================================
+Note: use DEBUG=pw:api environment variable to capture Playwright logs.
+Error: 
+    at Object.captureStackTrace (/synthetics/node_modules/playwright-chromium/lib/utils/stackTrace.js:50:19)
+    at Connection.sendMessageToServer (/synthetics/node_modules/playwright-chromium/lib/client/connection.js:65:48)
+    at Proxy.<anonymous> (/synthetics/node_modules/playwright-chromium/lib/client/channelOwner.js:64:61)
+    at /synthetics/node_modules/playwright-chromium/lib/client/frame.js:102:65
+    at Frame._wrapApiCall (/synthetics/node_modules/playwright-chromium/lib/client/channelOwner.js:77:34)
+    at Frame.goto (/synthetics/node_modules/playwright-chromium/lib/client/frame.js:100:21)
+    at /synthetics/node_modules/playwright-chromium/lib/client/page.js:303:60
+    at Page._attributeToPage (/synthetics/node_modules/playwright-chromium/lib/client/page.js:238:20)
+    at Page.goto (/synthetics/node_modules/playwright-chromium/lib/client/page.js:303:21)
+    at Object.<anonymous> (/synthetics/__tests__/plugins/tracing.test.ts:44:23)
+
+Node.js v20.20.0
+FAIL __tests__/plugins/performance.test.ts (44.711 s)
+  performance
+    ✕ should capture page metrics (5013 ms)
+
+  ● performance › should capture page metrics
+
+    : Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Error:
+
+      38 |   });
+      39 | 
+    > 40 |   it('should capture page metrics', async () => {
+         |   ^
+      41 |     const driver = await Gatherer.setupDriver({ wsEndpoint });
+      42 |     const performance = new PerformanceManager(driver.client);
+      43 |     await performance.start();
+
+      at new Spec (node_modules/jest-jasmine2/build/jasmine/Spec.js:116:22)
+      at Suite.<anonymous> (__tests__/plugins/performance.test.ts:40:3)
+
+node:internal/process/promises:391
+    triggerUncaughtException(err, true /* fromPromise */);
+    ^
+
+page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:35625/index.html
+=========================== logs ===========================
+navigating to "http://localhost:35625/index.html", waiting until "load"
+============================================================
+Note: use DEBUG=pw:api environment variable to capture Playwright logs.
+Error: 
+    at Object.captureStackTrace (/synthetics/node_modules/playwright-chromium/lib/utils/stackTrace.js:50:19)
+    at Connection.sendMessageToServer (/synthetics/node_modules/playwright-chromium/lib/client/connection.js:65:48)
+    at Proxy.<anonymous> (/synthetics/node_modules/playwright-chromium/lib/client/channelOwner.js:64:61)
+    at /synthetics/node_modules/playwright-chromium/lib/client/frame.js:102:65
+    at Frame._wrapApiCall (/synthetics/node_modules/playwright-chromium/lib/client/channelOwner.js:77:34)
+    at Frame.goto (/synthetics/node_modules/playwright-chromium/lib/client/frame.js:100:21)
+    at /synthetics/node_modules/playwright-chromium/lib/client/page.js:303:60
+    at Page._attributeToPage (/synthetics/node_modules/playwright-chromium/lib/client/page.js:238:20)
+    at Page.goto (/synthetics/node_modules/playwright-chromium/lib/client/page.js:303:21)
+    at Object.<anonymous> (/synthetics/__tests__/plugins/performance.test.ts:44:23)
+
+Node.js v20.20.0
+(node:343) [DEP0147] DeprecationWarning: In future versions of Node.js, fs.rmdir(path, { recursive: true }) will be removed. Use fs.rm(path, { recursive: true }) instead
+(Use `node --trace-deprecation ...` to show where the warning was created)
+FAIL __tests__/reporters/json.test.ts (44.905 s)
+  json reporter
+    ✓ writes each step as NDJSON to the FD (19 ms)
+    ✓ formats network fields in ECS format (214 ms)
+    ✓ writes step errors to the top level (3 ms)
+    ✓ writes journey errors to the top level
+    ✓ writes full journey info if present (1 ms)
+    ✓ captures number of journeys as metadata event
+    ✓ return empty when dir doesnt exists (2 ms)
+    ✕ idempotent on constructing screenshots blocks (5003 ms)
+    screenshots
+      ✓ write whole blobs data  (4 ms)
+      ✕ write block & reference docs (5005 ms)
+      ✓ dont write on only-on-failure for successful journey (7 ms)
+      ✓ write on only-on-failure for failed journey (426 ms)
+
+  ● json reporter › idempotent on constructing screenshots blocks
+
+    : Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Error:
+
+      259 |   });
+      260 | 
+    > 261 |   it('idempotent on constructing screenshots blocks', async () => {
+          |   ^
+      262 |     const screenshotsDir = join(FIXTURES_DIR, 'screenshots');
+      263 |     const collectScreenshots = async () => {
+      264 |       const screenshots = [];
+
+      at new Spec (node_modules/jest-jasmine2/build/jasmine/Spec.js:116:22)
+      at Suite.<anonymous> (__tests__/reporters/json.test.ts:261:3)
+
+  ● json reporter › screenshots › write block & reference docs
+
+    : Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Error:
+
+      314 |     });
+      315 | 
+    > 316 |     it('write block & reference docs', async () => {
+          |     ^
+      317 |       emitEnd({
+      318 |         screenshots: 'on',
+      319 |         ssblocks: true,
+
+      at new Spec (node_modules/jest-jasmine2/build/jasmine/Spec.js:116:22)
+      at Suite.<anonymous> (__tests__/reporters/json.test.ts:316:5)
+
+FAIL __tests__/plugins/network.test.ts (45.145 s)
+  network
+    ✕ should capture network info (5279 ms)
+    ✕ not include data URL in network info (5001 ms)
+    ✕ produce distinct events for redirects (3065 ms)
+    ✕ measure resource and transfer size (3 ms)
+    ✕ timings for aborted requests
+    ✕ timings for chunked response (1 ms)
+    waterfall timing calculation
+      ✓ calculate timings for a request event (2 ms)
+      ✓ when some resource timing data is unavailable
+      ✓ when complete resource timing is not available
+
+  ● network › should capture network info
+
+    : Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Error:
+
+      40 |   const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+      41 | 
+    > 42 |   it('should capture network info', async () => {
+         |   ^
+      43 |     const driver = await Gatherer.setupDriver({ wsEndpoint });
+      44 |     const network = new NetworkManager();
+      45 |     await network.start(driver.client);
+
+      at new Spec (node_modules/jest-jasmine2/build/jasmine/Spec.js:116:22)
+      at Suite.<anonymous> (__tests__/plugins/network.test.ts:42:3)
+
+  ● network › not include data URL in network info
+
+    : Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Error:
+
+      65 |   });
+      66 | 
+    > 67 |   it('not include data URL in network info', async () => {
+         |   ^
+      68 |     const driver = await Gatherer.setupDriver({ wsEndpoint });
+      69 |     const network = new NetworkManager();
+      70 |     await network.start(driver.client);
+
+      at new Spec (node_modules/jest-jasmine2/build/jasmine/Spec.js:116:22)
+      at Suite.<anonymous> (__tests__/plugins/network.test.ts:67:3)
+
+  ● network › produce distinct events for redirects
+
+    browserContext.newPage: Protocol error (Page.enable): Target closed.browserContext.newPage: Protocol error (Page.enable): Target closed.
+
+      63 |     }
+      64 |     const context = await Gatherer.browser.newContext();
+    > 65 |     const page = await context.newPage();
+         |                                ^
+      66 |     const client = await context.newCDPSession(page);
+      67 |     return { browser: Gatherer.browser, context, page, client };
+      68 |   }
+
+      at Object.captureStackTrace (node_modules/playwright-chromium/lib/utils/stackTrace.js:50:19)
+      at Connection.sendMessageToServer (node_modules/playwright-chromium/lib/client/connection.js:65:48)
+      at Proxy.<anonymous> (node_modules/playwright-chromium/lib/client/channelOwner.js:64:61)
+      at node_modules/playwright-chromium/lib/client/browserContext.js:140:52
+      at BrowserContext._wrapApiCall (node_modules/playwright-chromium/lib/client/channelOwner.js:77:34)
+      at BrowserContext.newPage (node_modules/playwright-chromium/lib/client/browserContext.js:137:21)
+      at Function.setupDriver (src/core/gatherer.ts:65:32)
+      at Object.<anonymous> (__tests__/plugins/network.test.ts:79:20)
+
+  ● network › measure resource and transfer size
+
+    browser.newContext: Protocol error (Target.createBrowserContext): Browser closed.
+    ==================== Browser output: ====================
+    <launching> /root/.cache/ms-playwright/chromium-878941/chrome-linux/chrome --disable-background-networking --enable-features=NetworkService,NetworkServiceInProcess --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-default-apps --disable-dev-shm-usage --disable-extensions --disable-features=TranslateUI,BlinkGenPropertyTrees,ImprovedCookieControls,SameSiteByDefaultCookies,LazyFrameLoading --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-sync --force-color-profile=srgb --metrics-recording-only --no-first-run --enable-automation --password-store=basic --use-mock-keychain --no-service-autorun --user-data-dir=/tmp/playwright_chromiumdev_profile-pMqicJ --remote-debugging-pipe --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --no-startup-window
+    <launched> pid=875
+    [pid=875][err] [0907/221241.084678:ERROR:bus.cc(393)] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+    [pid=875][err] [0907/221244.233041:ERROR:gpu_init.cc(441)] Passthrough is not supported, GL is swiftshader
+    [pid=875][err] [0907/221245.189768:ERROR:command_buffer_proxy_impl.cc(123)] ContextResult::kTransientFailure: Failed to send GpuChannelMsg_CreateCommandBuffer.
+    [pid=875] <gracefully close start>browser.newContext: Protocol error (Target.createBrowserContext): Browser closed.
+    ==================== Browser output: ====================
+    <launching> /root/.cache/ms-playwright/chromium-878941/chrome-linux/chrome --disable-background-networking --enable-features=NetworkService,NetworkServiceInProcess --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-default-apps --disable-dev-shm-usage --disable-extensions --disable-features=TranslateUI,BlinkGenPropertyTrees,ImprovedCookieControls,SameSiteByDefaultCookies,LazyFrameLoading --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-sync --force-color-profile=srgb --metrics-recording-only --no-first-run --enable-automation --password-store=basic --use-mock-keychain --no-service-autorun --user-data-dir=/tmp/playwright_chromiumdev_profile-pMqicJ --remote-debugging-pipe --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --no-startup-window
+    <launched> pid=875
+    [pid=875][err] [0907/221241.084678:ERROR:bus.cc(393)] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+    [pid=875][err] [0907/221244.233041:ERROR:gpu_init.cc(441)] Passthrough is not supported, GL is swiftshader
+    [pid=875][err] [0907/221245.189768:ERROR:command_buffer_proxy_impl.cc(123)] ContextResult::kTransientFailure: Failed to send GpuChannelMsg_CreateCommandBuffer.
+    [pid=875] <gracefully close start>
+
+      at Object.captureStackTrace (node_modules/playwright-chromium/lib/utils/stackTrace.js:50:19)
+      at Connection.sendMessageToServer (node_modules/playwright-chromium/lib/client/connection.js:65:48)
+      at Proxy.<anonymous> (node_modules/playwright-chromium/lib/client/channelOwner.js:64:61)
+      at node_modules/playwright-chromium/lib/client/browser.js:43:81
+      at Browser._wrapApiCall (node_modules/playwright-chromium/lib/client/channelOwner.js:77:28)
+
+  ● network › timings for aborted requests
+
+    browser.newContext: Target page, context or browser has been closedbrowser.newContext: Target page, context or browser has been closed
+
+      at Object.captureStackTrace (node_modules/playwright-chromium/lib/utils/stackTrace.js:50:19)
+      at Connection.sendMessageToServer (node_modules/playwright-chromium/lib/client/connection.js:65:48)
+      at Proxy.<anonymous> (node_modules/playwright-chromium/lib/client/channelOwner.js:64:61)
+      at node_modules/playwright-chromium/lib/client/browser.js:43:81
+      at Browser._wrapApiCall (node_modules/playwright-chromium/lib/client/channelOwner.js:77:28)
+
+  ● network › timings for chunked response
+
+    browser.newContext: Target page, context or browser has been closedbrowser.newContext: Target page, context or browser has been closed
+
+      at Object.captureStackTrace (node_modules/playwright-chromium/lib/utils/stackTrace.js:50:19)
+      at Connection.sendMessageToServer (node_modules/playwright-chromium/lib/client/connection.js:65:48)
+      at Proxy.<anonymous> (node_modules/playwright-chromium/lib/client/channelOwner.js:64:61)
+      at node_modules/playwright-chromium/lib/client/browser.js:43:81
+      at Browser._wrapApiCall (node_modules/playwright-chromium/lib/client/channelOwner.js:77:28)
+
+FAIL __tests__/index.test.ts (45.426 s)
+  Run
+    ✕ multiple run invokes runner only once (5010 ms)
+    ✓ calls runner with proper options (5 ms)
+
+  ● Run › multiple run invokes runner only once
+
+    : Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Error:
+
+      36 |   });
+      37 | 
+    > 38 |   it('multiple run invokes runner only once', async () => {
+         |   ^
+      39 |     journey('j1', () => {});
+      40 |     journey('j2', () => {});
+      41 |     /**
+
+      at new Spec (node_modules/jest-jasmine2/build/jasmine/Spec.js:116:22)
+      at Suite.<anonymous> (__tests__/index.test.ts:38:3)
+
+/synthetics/node_modules/sonic-boom/index.js:277
+    throw new Error('SonicBoom destroyed')
+    ^
+
+Error: SonicBoom destroyed
+    at SonicBoom.Object.<anonymous>.SonicBoom.end (/synthetics/node_modules/sonic-boom/index.js:277:11)
+    at SonicBoom.<anonymous> (/synthetics/__tests__/reporters/json.test.ts:85:39)
+    at Object.onceWrapper (node:events:638:28)
+    at SonicBoom.emit (node:events:524:28)
+    at emitDrain (/synthetics/node_modules/sonic-boom/index.js:205:9)
+    at processTicksAndRejections (node:internal/process/task_queues:81:21)
+
+Node.js v20.20.0
+FAIL __tests__/core/gatherer.test.ts (45.394 s)
+  Gatherer
+    ✕ boot and close browser (5011 ms)
+    ✕ setup and dispose driver (5001 ms)
+    ✕ begin recording based on flags (1491 ms)
+
+  ● Gatherer › boot and close browser
+
+    : Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Error:
+
+      32 | 
+      33 | describe('Gatherer', () => {
+    > 34 |   it('boot and close browser', async () => {
+         |   ^
+      35 |     const driver = await Gatherer.setupDriver({ wsEndpoint });
+      36 |     expect(typeof driver.page.goto).toBe('function');
+      37 |     await Gatherer.stop();
+
+      at new Spec (node_modules/jest-jasmine2/build/jasmine/Spec.js:116:22)
+      at Suite.<anonymous> (__tests__/core/gatherer.test.ts:34:3)
+
+  ● Gatherer › setup and dispose driver
+
+    : Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Error:
+
+      38 |   });
+      39 | 
+    > 40 |   it('setup and dispose driver', async () => {
+         |   ^
+      41 |     const driver = await Gatherer.setupDriver({ wsEndpoint });
+      42 |     await Gatherer.dispose(driver);
+      43 |     expect(Gatherer.browser).toBeDefined();
+
+      at new Spec (node_modules/jest-jasmine2/build/jasmine/Spec.js:116:22)
+      at Suite.<anonymous> (__tests__/core/gatherer.test.ts:40:3)
+
+  ● Gatherer › begin recording based on flags
+
+    browserContext.newPage: Protocol error (Page.enable): Target closed.browserContext.newPage: Protocol error (Page.enable): Target closed.
+
+      63 |     }
+      64 |     const context = await Gatherer.browser.newContext();
+    > 65 |     const page = await context.newPage();
+         |                                ^
+      66 |     const client = await context.newCDPSession(page);
+      67 |     return { browser: Gatherer.browser, context, page, client };
+      68 |   }
+
+      at Object.captureStackTrace (node_modules/playwright-chromium/lib/utils/stackTrace.js:50:19)
+      at Connection.sendMessageToServer (node_modules/playwright-chromium/lib/client/connection.js:65:48)
+      at Proxy.<anonymous> (node_modules/playwright-chromium/lib/client/channelOwner.js:64:61)
+      at node_modules/playwright-chromium/lib/client/browserContext.js:140:52
+      at BrowserContext._wrapApiCall (node_modules/playwright-chromium/lib/client/channelOwner.js:77:34)
+      at BrowserContext.newPage (node_modules/playwright-chromium/lib/client/browserContext.js:137:21)
+      at Function.setupDriver (src/core/gatherer.ts:65:32)
+      at Object.<anonymous> (__tests__/core/gatherer.test.ts:35:20)
+
+(node:391) [DEP0147] DeprecationWarning: In future versions of Node.js, fs.rmdir(path, { recursive: true }) will be removed. Use fs.rm(path, { recursive: true }) instead
+(Use `node --trace-deprecation ...` to show where the warning was created)
+FAIL __tests__/core/index.test.ts (45.43 s)
+  ✕ add global hooks to runner (10 ms)
+  ✕ add journeys to runner (1 ms)
+  ✕ add steps to journeys (6 ms)
+  ✕ add hooks to journeys (1 ms)
+  ✕ add hooks - error on before/after outside journey context (1444 ms)
+
+  ● add global hooks to runner
+
+    ENOENT: no such file or directory, lstat '/synthetics/.synthetics/391'
+
+      437 |      * the current synthetic agent run
+      438 |      */
+    > 439 |     rmdirSync(CACHE_PATH, { recursive: true });
+          |     ^
+      440 |     this.currentJourney = null;
+      441 |     this.journeys = [];
+      442 |     this.active = false;
+
+      at Runner.reset (src/core/runner.ts:439:5)
+      at Object.<anonymous> (__tests__/core/index.test.ts:36:25)
+
+  ● add journeys to runner
+
+    ENOENT: no such file or directory, lstat '/synthetics/.synthetics/391'
+
+      437 |      * the current synthetic agent run
+      438 |      */
+    > 439 |     rmdirSync(CACHE_PATH, { recursive: true });
+          |     ^
+      440 |     this.currentJourney = null;
+      441 |     this.journeys = [];
+      442 |     this.active = false;
+
+      at Runner.reset (src/core/runner.ts:439:5)
+      at Object.<anonymous> (__tests__/core/index.test.ts:36:25)
+
+  ● add steps to journeys
+
+    ENOENT: no such file or directory, lstat '/synthetics/.synthetics/391'
+
+      437 |      * the current synthetic agent run
+      438 |      */
+    > 439 |     rmdirSync(CACHE_PATH, { recursive: true });
+          |     ^
+      440 |     this.currentJourney = null;
+      441 |     this.journeys = [];
+      442 |     this.active = false;
+
+      at Runner.reset (src/core/runner.ts:439:5)
+      at Object.<anonymous> (__tests__/core/index.test.ts:36:25)
+
+  ● add steps to journeys
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 1
+    Received: 2
+
+      65 | 
+      66 |   expect(runner.currentJourney).toEqual(j);
+    > 67 |   expect(runner.journeys.length).toBe(1);
+         |                                  ^
+      68 |   expect(runner.currentJourney.steps.length).toBe(2);
+      69 |   expect(runner.currentJourney.steps).toEqual([s1, s2]);
+      70 | });
+
+      at Object.<anonymous> (__tests__/core/index.test.ts:67:34)
+
+  ● add hooks to journeys
+
+    ENOENT: no such file or directory, lstat '/synthetics/.synthetics/391'
+
+      437 |      * the current synthetic agent run
+      438 |      */
+    > 439 |     rmdirSync(CACHE_PATH, { recursive: true });
+          |     ^
+      440 |     this.currentJourney = null;
+      441 |     this.journeys = [];
+      442 |     this.active = false;
+
+      at Runner.reset (src/core/runner.ts:439:5)
+      at Object.<anonymous> (__tests__/core/index.test.ts:36:25)
+
+  ● add hooks to journeys
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 1
+    Received: 3
+
+      76 | 
+      77 |   expect(runner.currentJourney).toEqual(j);
+    > 78 |   expect(runner.journeys.length).toBe(1);
+         |                                  ^
+      79 |   expect(runner.currentJourney.steps.length).toBe(0);
+      80 |   expect(runner.currentJourney.hooks.before).toEqual([noop]);
+      81 |   expect(runner.currentJourney.hooks.after).toEqual([noop]);
+
+      at Object.<anonymous> (__tests__/core/index.test.ts:78:34)
+
+  ● add hooks - error on before/after outside journey context
+
+    ENOENT: no such file or directory, lstat '/synthetics/.synthetics/391'
+
+      437 |      * the current synthetic agent run
+      438 |      */
+    > 439 |     rmdirSync(CACHE_PATH, { recursive: true });
+          |     ^
+      440 |     this.currentJourney = null;
+      441 |     this.journeys = [];
+      442 |     this.active = false;
+
+      at Runner.reset (src/core/runner.ts:439:5)
+      at Object.<anonymous> (__tests__/core/index.test.ts:36:25)
+
+(node:398) [DEP0147] DeprecationWarning: In future versions of Node.js, fs.rmdir(path, { recursive: true }) will be removed. Use fs.rm(path, { recursive: true }) instead
+(Use `node --trace-deprecation ...` to show where the warning was created)
+FAIL __tests__/core/browser-service.test.ts (46.033 s)
+  BrowserService
+    ✕ should create browser pages (5058 ms)
+
+  ● BrowserService › should create browser pages
+
+    : Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Error:
+
+      41 |   });
+      42 | 
+    > 43 |   it('should create browser pages', async () => {
+         |   ^
+      44 |     const { page } = await Gatherer.setupDriver({
+      45 |       wsEndpoint: 'ws://localhost:9323',
+      46 |     });
+
+      at new Spec (node_modules/jest-jasmine2/build/jasmine/Spec.js:116:22)
+      at Suite.<anonymous> (__tests__/core/browser-service.test.ts:43:3)
+
+FAIL __tests__/core/runner.test.ts (49.498 s)
+  runner
+    ✓ support emitting/subscribing to events (5 ms)
+    ✓ add journeys (437 ms)
+    ✓ add hooks (1 ms)
+    ✕ run journey - with events payload (5009 ms)
+    ✓ run journey - failed when any step fails (3344 ms)
+    ✓ run journey - with hooks (154 ms)
+    ✓ run journey - failed when hooks errors (234 ms)
+    ✓ run journey - failed on beforeAll (17 ms)
+    ✓ run step (1081 ms)
+    ✓ run step - syntax failure (371 ms)
+    ✓ run step - navigation failure (279 ms)
+    ✓ run step - bad navigation (219 ms)
+    ✓ run steps - accumulate results (231 ms)
+    ✓ run api (263 ms)
+    ✓ run api - match journey name explict (264 ms)
+    ✓ run api - match journey name and tag globs (1043 ms)
+    ✓ run api - prefer tags glob matching (411 ms)
+    ✓ run api - support multiple tags (323 ms)
+    ✓ run api - support negation tags (276 ms)
+    ✓ run api - accumulate failed journeys (232 ms)
+    ✓ run api - dry run (1 ms)
+    ✓ run - should preserve order hooks/journeys/steps (216 ms)
+    ✓ run - expose params in all hooks (242 ms)
+    ✓ run - supports custom reporters (259 ms)
+
+  ● runner › run journey - with events payload
+
+    : Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Error:
+
+      73 |   });
+      74 | 
+    > 75 |   it('run journey - with events payload', async () => {
+         |   ^
+      76 |     const journey = new Journey({ name: 'j1' }, noop);
+      77 |     const step = journey.addStep('step1', noop);
+      78 |     runner.on('journey:start', event => {
+
+      at new Spec (node_modules/jest-jasmine2/build/jasmine/Spec.js:116:22)
+      at Suite.<anonymous> (__tests__/core/runner.test.ts:75:3)
+
+FAIL __tests__/cli.test.ts (50.004 s)
+  CLI
+    ✕ run suites and exit with 0 (5431 ms)
+    ✕ run suites and exit with 1 (5008 ms)
+    ✕ produce json output via --json flag (5359 ms)
+    ✕ enables rich events on `--rich-events` flag (5007 ms)
+    ✕ pass config to journey params (2762 ms)
+    ✕ suite params wins over config params (740 ms)
+    ✓ throw error on modifying params (1905 ms)
+    ✕ support capability flag (740 ms)
+    ✓ show warn for unknown capability flag (129 ms)
+    ✕ run expect assetions with type check (1299 ms)
+
+  ● CLI › run suites and exit with 0
+
+    : Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Error:
+
+      29 | describe('CLI', () => {
+      30 |   const FIXTURES_DIR = join(__dirname, 'fixtures');
+    > 31 |   it('run suites and exit with 0', async () => {
+         |   ^
+      32 |     const cli = new CLIMock([join(FIXTURES_DIR, 'fake.journey.ts')]);
+      33 |     await cli.waitFor('Journey: fake journey');
+      34 |     expect(cli.output()).toContain('fake journey');
+
+      at new Spec (node_modules/jest-jasmine2/build/jasmine/Spec.js:116:22)
+      at Suite.<anonymous> (__tests__/cli.test.ts:31:3)
+
+  ● CLI › run suites and exit with 1
+
+    : Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Error:
+
+      36 |   });
+      37 | 
+    > 38 |   it('run suites and exit with 1', async () => {
+         |   ^
+      39 |     const cli = new CLIMock([join(FIXTURES_DIR, 'error.journey.ts')]);
+      40 |     await cli.waitFor('boom');
+      41 |     expect(await cli.exitCode).toBe(1);
+
+      at new Spec (node_modules/jest-jasmine2/build/jasmine/Spec.js:116:22)
+      at Suite.<anonymous> (__tests__/cli.test.ts:38:3)
+
+  ● CLI › produce json output via --json flag
+
+    : Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Error:
+
+      42 |   });
+      43 | 
+    > 44 |   it('produce json output via --json flag', async () => {
+         |   ^
+      45 |     const cli = new CLIMock([join(FIXTURES_DIR, 'fake.journey.ts'), '--json']);
+      46 |     await cli.waitFor('fake journey');
+      47 |     const output = cli.output();
+
+      at new Spec (node_modules/jest-jasmine2/build/jasmine/Spec.js:116:22)
+      at Suite.<anonymous> (__tests__/cli.test.ts:44:3)
+
+  ● CLI › enables rich events on `--rich-events` flag
+
+    (node:604) [DEP0147] DeprecationWarning: In future versions of Node.js, fs.rmdir(path, { recursive: true }) will be removed. Use fs.rm(path, { recursive: true }) instead
+    (Use `node --trace-deprecation ...` to show where the warning was created)
+
+      177 | 
+      178 |     this.exitCode = new Promise((res, rej) => {
+    > 179 |       this.process.stderr.on('data', data => rej(new Error(data)));
+          |                                                  ^
+      180 |       this.process.on('exit', code => res(code));
+      181 |     });
+      182 |   }
+
+      at Socket.<anonymous> (__tests__/cli.test.ts:179:50)
+
+  ● CLI › enables rich events on `--rich-events` flag
+
+    : Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Timeout - Async callback was not invoked within the 5000 ms timeout specified by jest.setTimeout.Error:
+
+      53 |   });
+      54 | 
+    > 55 |   it('enables rich events on `--rich-events` flag', async () => {
+         |   ^
+      56 |     const cli = new CLIMock([
+      57 |       join(FIXTURES_DIR, 'fake.journey.ts'),
+      58 |       '--rich-events',
+
+      at new Spec (node_modules/jest-jasmine2/build/jasmine/Spec.js:116:22)
+      at Suite.<anonymous> (__tests__/cli.test.ts:55:3)
+
+  ● CLI › pass config to journey params
+
+    (node:929) [DEP0147] DeprecationWarning: In future versions of Node.js, fs.rmdir(path, { recursive: true }) will be removed. Use fs.rm(path, { recursive: true }) instead
+    (Use `node --trace-deprecation ...` to show where the warning was created)
+
+      177 | 
+      178 |     this.exitCode = new Promise((res, rej) => {
+    > 179 |       this.process.stderr.on('data', data => rej(new Error(data)));
+          |                                                  ^
+      180 |       this.process.on('exit', code => res(code));
+      181 |     });
+      182 |   }
+
+      at Socket.<anonymous> (__tests__/cli.test.ts:179:50)
+
+  ● CLI › pass config to journey params
+
+    (node:1501) [DEP0147] DeprecationWarning: In future versions of Node.js, fs.rmdir(path, { recursive: true }) will be removed. Use fs.rm(path, { recursive: true }) instead
+    (Use `node --trace-deprecation ...` to show where the warning was created)
+
+      177 | 
+      178 |     this.exitCode = new Promise((res, rej) => {
+    > 179 |       this.process.stderr.on('data', data => rej(new Error(data)));
+          |                                                  ^
+      180 |       this.process.on('exit', code => res(code));
+      181 |     });
+      182 |   }
+
+      at Socket.<anonymous> (__tests__/cli.test.ts:179:50)
+
+  ● CLI › pass config to journey params
+
+    (node:2015) [DEP0147] DeprecationWarning: In future versions of Node.js, fs.rmdir(path, { recursive: true }) will be removed. Use fs.rm(path, { recursive: true }) instead
+    (Use `node --trace-deprecation ...` to show where the warning was created)
+
+      177 | 
+      178 |     this.exitCode = new Promise((res, rej) => {
+    > 179 |       this.process.stderr.on('data', data => rej(new Error(data)));
+          |                                                  ^
+      180 |       this.process.on('exit', code => res(code));
+      181 |     });
+      182 |   }
+
+      at Socket.<anonymous> (__tests__/cli.test.ts:179:50)
+
+  ● CLI › suite params wins over config params
+
+    (node:2852) [DEP0147] DeprecationWarning: In future versions of Node.js, fs.rmdir(path, { recursive: true }) will be removed. Use fs.rm(path, { recursive: true }) instead
+    (Use `node --trace-deprecation ...` to show where the warning was created)
+
+      177 | 
+      178 |     this.exitCode = new Promise((res, rej) => {
+    > 179 |       this.process.stderr.on('data', data => rej(new Error(data)));
+          |                                                  ^
+      180 |       this.process.on('exit', code => res(code));
+      181 |     });
+      182 |   }
+
+      at Socket.<anonymous> (__tests__/cli.test.ts:179:50)
+
+  ● CLI › support capability flag
+
+    (node:4007) [DEP0147] DeprecationWarning: In future versions of Node.js, fs.rmdir(path, { recursive: true }) will be removed. Use fs.rm(path, { recursive: true }) instead
+    (Use `node --trace-deprecation ...` to show where the warning was created)
+
+      177 | 
+      178 |     this.exitCode = new Promise((res, rej) => {
+    > 179 |       this.process.stderr.on('data', data => rej(new Error(data)));
+          |                                                  ^
+      180 |       this.process.on('exit', code => res(code));
+      181 |     });
+      182 |   }
+
+      at Socket.<anonymous> (__tests__/cli.test.ts:179:50)
+
+  ● CLI › run expect assetions with type check
+
+    (node:4738) [DEP0147] DeprecationWarning: In future versions of Node.js, fs.rmdir(path, { recursive: true }) will be removed. Use fs.rm(path, { recursive: true }) instead
+    (Use `node --trace-deprecation ...` to show where the warning was created)
+
+      177 | 
+      178 |     this.exitCode = new Promise((res, rej) => {
+    > 179 |       this.process.stderr.on('data', data => rej(new Error(data)));
+          |                                                  ^
+      180 |       this.process.on('exit', code => res(code));
+      181 |     });
+      182 |   }
+
+      at Socket.<anonymous> (__tests__/cli.test.ts:179:50)
+
+A worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks.
+Test Suites: 11 failed, 9 passed, 20 total
+Tests:       30 failed, 66 passed, 96 total
+Snapshots:   10 passed, 10 total
+Time:        51.311 s
+Ran all test suites.
+SWEREBENCH_V2_TEST_OUTPUT_END

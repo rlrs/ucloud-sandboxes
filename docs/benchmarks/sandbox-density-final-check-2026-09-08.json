@@ -1,0 +1,32 @@
+{
+  "command": "PATH=\"/tmp/ucloud-compat-tools/bin:/tmp/ucloud-compat-bin:$PATH\" UV_CACHE_DIR=/tmp/ucloud-uv-cache GOCACHE=/tmp/ucloud-density-go-cache bash scripts/check.sh",
+  "exit_code": 0,
+  "log": {
+    "archive_sha256": "4a4e1690c7ec8e972c3dea8258fa8e7d0e74d4742e6ebff0e219e3d87e92512f",
+    "path": "sandbox-density-final-check-2026-09-08.log.gz",
+    "raw_bytes": 14287,
+    "raw_sha256": "1efc82e7ed12c00b4d13e8549a68106c0088fc58524bd2949a305e7e53cb3ff4"
+  },
+  "main_python": {
+    "duration_seconds": 33.807,
+    "result": "pass",
+    "skipped": 5,
+    "tests": 824
+  },
+  "other_checks": {
+    "managed_process_go_tests": "pass (cached)",
+    "root_build_and_installed_wheel_verification": "pass",
+    "ruff_root_and_sdk": "pass",
+    "sdk_build_and_installed_wheel_verification": "pass",
+    "shell_syntax_and_shellcheck": "pass"
+  },
+  "schema": 1,
+  "scope": "Local repository validation after the v7 retired-device admission-reclamation repair. This does not establish live density or runtime compatibility results.",
+  "sdk_python": {
+    "duration_seconds": 0.862,
+    "result": "pass",
+    "skipped": 0,
+    "tests": 82
+  },
+  "validation_date_local": "2026-09-08"
+}

@@ -67,7 +67,7 @@ class FixedImageStore:
 
     @contextlib.contextmanager
     def operation_lease(self, image_ref: str):
-        if image_ref != self.image.image_ref:
+        if image_ref not in {self.image.image_ref, self.image.image_id}:
             raise RuntimeError("unexpected benchmark image reference")
         yield self.image
 
@@ -230,16 +230,20 @@ def _cpu_features_sha256() -> str:
     return hashlib.sha256(features.encode("ascii")).hexdigest()
 
 
-def _runtime_fingerprint(runsc: Path) -> HibernationRuntimeFingerprint:
+def _runtime_fingerprint(runsc: Path, commit: str) -> HibernationRuntimeFingerprint:
+    from ucloud_sandboxes.gvisor_distribution import installed_sidecar_fingerprints
+
+    companions = installed_sidecar_fingerprints(runsc, commit)
+    boot_identity = json.dumps({"qualification": "storage-native-warden-qualification-v1", "companions": companions}, sort_keys=True).encode()
     return HibernationRuntimeFingerprint(
         runsc_sha256=hashlib.sha256(runsc.read_bytes()).hexdigest(),
-        runsc_commit="0" * 40,
+        runsc_commit=commit,
         platform="systrap",
         architecture=os.uname().machine,
         page_size=os.sysconf("SC_PAGE_SIZE"),
         cpu_features_sha256=_cpu_features_sha256(),
         boot_config_sha256=hashlib.sha256(
-            b"storage-native-warden-qualification-v1"
+            boot_identity
         ).hexdigest(),
         rootfs_sha256="0" * 64,
     )
@@ -462,7 +466,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 memory_root=mount_root,
                 bundle_root=root / "bundles",
                 journal_root=root / "warden-journal",
-                runtime_fingerprint=_runtime_fingerprint(args.runsc),
+                runtime_fingerprint=_runtime_fingerprint(args.runsc, args.runsc_commit),
                 network="sandbox",
                 command_timeout_seconds=120,
                 readiness_command=("/noop",),
@@ -596,7 +600,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                     memory_root=destination_mount_root,
                     bundle_root=root / "destination-bundles",
                     journal_root=root / "destination-warden-journal",
-                    runtime_fingerprint=_runtime_fingerprint(args.runsc),
+                    runtime_fingerprint=_runtime_fingerprint(args.runsc, args.runsc_commit),
                     network="sandbox",
                     command_timeout_seconds=120,
                     readiness_command=("/noop",),
@@ -761,6 +765,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--daemon", required=True, type=Path)
     parser.add_argument("--runsc", required=True, type=Path)
+    parser.add_argument("--runsc-commit", default="0" * 40)
     parser.add_argument("--conformance-workload", required=True, type=Path)
     parser.add_argument("--noop-workload", required=True, type=Path)
     parser.add_argument("--work-root", required=True, type=Path)

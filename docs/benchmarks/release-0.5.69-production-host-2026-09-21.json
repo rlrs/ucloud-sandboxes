@@ -1,0 +1,136 @@
+{
+  "description": "Synthetic isolated temporary databases on the otherwise idle production gateway, three runs per wheel. Baseline then candidate; not an end-to-end throughput benchmark.",
+  "commit": "8a803c0a2d0915e73fb6829d46b425314c664bca",
+  "versions": {
+    "0.5.68": {
+      "python": "3.14.4",
+      "platform": "Linux",
+      "nodes": 6,
+      "inventory_per_node": 86,
+      "runs": [
+        {
+          "reads": {
+            "owner_reads": {
+              "count": 1000,
+              "cpu_seconds": 1.191633886,
+              "wall_seconds": 1.191901647951454
+            },
+            "fleet_reads": {
+              "count": 200,
+              "cpu_seconds": 1.293912732,
+              "wall_seconds": 1.294556732987985
+            }
+          },
+          "metrics": {
+            "append_count": 8,
+            "wall_seconds": 5.008022407069802,
+            "retained_events": 10
+          }
+        },
+        {
+          "reads": {
+            "owner_reads": {
+              "count": 1000,
+              "cpu_seconds": 1.1826585049999996,
+              "wall_seconds": 1.1829422321170568
+            },
+            "fleet_reads": {
+              "count": 200,
+              "cpu_seconds": 1.2881536340000004,
+              "wall_seconds": 1.2883224578108639
+            }
+          },
+          "metrics": {
+            "append_count": 8,
+            "wall_seconds": 5.008209441090003,
+            "retained_events": 10
+          }
+        },
+        {
+          "reads": {
+            "owner_reads": {
+              "count": 1000,
+              "cpu_seconds": 1.1821266430000001,
+              "wall_seconds": 1.1824734730180353
+            },
+            "fleet_reads": {
+              "count": 200,
+              "cpu_seconds": 1.3020667969999993,
+              "wall_seconds": 1.302395676029846
+            }
+          },
+          "metrics": {
+            "append_count": 8,
+            "wall_seconds": 6.322888977825642,
+            "retained_events": 10
+          }
+        }
+      ]
+    },
+    "0.5.69": {
+      "python": "3.14.4",
+      "platform": "Linux",
+      "nodes": 6,
+      "inventory_per_node": 86,
+      "runs": [
+        {
+          "reads": {
+            "owner_reads": {
+              "count": 1000,
+              "cpu_seconds": 0.5828305030000003,
+              "wall_seconds": 0.5830035877879709
+            },
+            "fleet_reads": {
+              "count": 200,
+              "cpu_seconds": 0.5782882020000004,
+              "wall_seconds": 0.5784286118578166
+            }
+          },
+          "metrics": {
+            "append_count": 8,
+            "wall_seconds": 0.0006038029678165913,
+            "retained_events": 10
+          }
+        },
+        {
+          "reads": {
+            "owner_reads": {
+              "count": 1000,
+              "cpu_seconds": 0.5811577049999999,
+              "wall_seconds": 0.5815312541089952
+            },
+            "fleet_reads": {
+              "count": 200,
+              "cpu_seconds": 0.5752032060000003,
+              "wall_seconds": 0.5752464819233865
+            }
+          },
+          "metrics": {
+            "append_count": 8,
+            "wall_seconds": 0.000597652979195118,
+            "retained_events": 10
+          }
+        },
+        {
+          "reads": {
+            "owner_reads": {
+              "count": 1000,
+              "cpu_seconds": 0.5797539489999997,
+              "wall_seconds": 0.5798314230050892
+            },
+            "fleet_reads": {
+              "count": 200,
+              "cpu_seconds": 0.5759374069999996,
+              "wall_seconds": 0.5759999498259276
+            }
+          },
+          "metrics": {
+            "append_count": 8,
+            "wall_seconds": 0.0005626210477203131,
+            "retained_events": 10
+          }
+        }
+      ]
+    }
+  }
+}

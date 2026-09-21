@@ -1,0 +1,26 @@
+{
+  "command": "PATH=\"/tmp/ucloud-compat-tools/bin:/tmp/ucloud-compat-bin:$PATH\" UV_CACHE_DIR=/tmp/ucloud-uv-cache GOCACHE=/tmp/ucloud-density-go-cache bash scripts/check.sh",
+  "exit_code": 0,
+  "scope": "Full repository verification after the fresh firewall-rule snapshot fast path; separate Linux functional namespace test and live density evidence apply.",
+  "log": {
+    "path": "sandbox-density-v8-check-2026-09-08.log.gz",
+    "raw_sha256": "af37a41323bacceddb5ae0993e1f6c2246a891ca23c6412f6243ab9c820919d7",
+    "archive_sha256": "8dfc8ea9432491ba7e9d80966b86dbb598f75a6709dd2f089b56c57846e223f8"
+  },
+  "main_python": {
+    "tests": 828,
+    "skipped": 5,
+    "duration_seconds": 36.246
+  },
+  "sdk_python": {
+    "tests": 82,
+    "skipped": 0,
+    "duration_seconds": 0.873
+  },
+  "other_checks": [
+    "ruff",
+    "shell syntax and ShellCheck",
+    "managed-process Go tests",
+    "root and SDK builds and installed-wheel verification"
+  ]
+}

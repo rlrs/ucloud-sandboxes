@@ -1,0 +1,197 @@
+{
+  "reselection_trace_ids": [
+    "b8c0eaad4a2be39801f0fe0005013596",
+    "e62874f142499e3a04d12316ff78be67",
+    "fb370b2e26e8f864107aa054da3bd614",
+    "e17c8685e915eec0074dc776bcf731c6",
+    "7d3cc653014f61f70659cc2c4738596a",
+    "35329a9db192ede112da4233ba942377",
+    "e786c75f6341a333174d9ceae180cf3c",
+    "36527ea3eb48777b0707aca8e0ec30fb",
+    "6a29dc36cd948379000f94d5099c6549",
+    "87684383bbd66e020adf4a7b3ca2f3b3",
+    "9486b109e5314b006e4a9a6e144a9ef",
+    "e7e5a90a4fabadc6117f853b680b205c",
+    "b962e7ff50a4b68e0448718502e20ded"
+  ],
+  "reselection_evidence": [
+    {
+      "trace_id": "b8c0eaad4a2be39801f0fe0005013596",
+      "name": "gateway.sandbox_create",
+      "attributes": {
+        "sandbox.id": "provision-64-b975e32c-011",
+        "container.image.name": "provision-64-b975e32c-image",
+        "sandbox.request.vcpu": 2,
+        "sandbox.request.memory_mb": "1024",
+        "sandbox.request.disk_mb": "8320",
+        "sandbox.placement.excluded_jobs": "0",
+        "resolved_image": "gateway-live-ucloud-20260824a:5000/ucloud-managed/provision-64-b975e32c-image-2107e0384304:latest@sha256:52bce4d45730283348c516817dbecb286c17e2024055c7df9d3ce6083fe741df",
+        "reserved_route": true,
+        "outcome": "reselect_after_image_admission_rejection",
+        "ucloud.span.thread_cpu.duration": 0.046346204
+      }
+    },
+    {
+      "trace_id": "e62874f142499e3a04d12316ff78be67",
+      "name": "gateway.sandbox_create",
+      "attributes": {
+        "sandbox.id": "provision-64-b975e32c-034",
+        "container.image.name": "provision-64-b975e32c-image",
+        "sandbox.request.vcpu": 2,
+        "sandbox.request.memory_mb": "1024",
+        "sandbox.request.disk_mb": "8320",
+        "sandbox.placement.excluded_jobs": "0",
+        "resolved_image": "gateway-live-ucloud-20260824a:5000/ucloud-managed/provision-64-b975e32c-image-2107e0384304:latest@sha256:52bce4d45730283348c516817dbecb286c17e2024055c7df9d3ce6083fe741df",
+        "reserved_route": true,
+        "outcome": "reselect_after_image_admission_rejection",
+        "ucloud.span.thread_cpu.duration": 0.068823182
+      }
+    },
+    {
+      "trace_id": "fb370b2e26e8f864107aa054da3bd614",
+      "name": "gateway.sandbox_create",
+      "attributes": {
+        "sandbox.id": "provision-64-b975e32c-009",
+        "container.image.name": "provision-64-b975e32c-image",
+        "sandbox.request.vcpu": 2,
+        "sandbox.request.memory_mb": "1024",
+        "sandbox.request.disk_mb": "8320",
+        "sandbox.placement.excluded_jobs": "0",
+        "resolved_image": "gateway-live-ucloud-20260824a:5000/ucloud-managed/provision-64-b975e32c-image-2107e0384304:latest@sha256:52bce4d45730283348c516817dbecb286c17e2024055c7df9d3ce6083fe741df",
+        "reserved_route": true,
+        "outcome": "reselect_after_image_admission_rejection",
+        "ucloud.span.thread_cpu.duration": 0.059715371999999996
+      }
+    },
+    {
+      "trace_id": "e17c8685e915eec0074dc776bcf731c6",
+      "name": "gateway.sandbox_create",
+      "attributes": {
+        "sandbox.id": "provision-64-b975e32c-054",
+        "container.image.name": "provision-64-b975e32c-image",
+        "sandbox.request.vcpu": 2,
+        "sandbox.request.memory_mb": "1024",
+        "sandbox.request.disk_mb": "8320",
+        "sandbox.placement.excluded_jobs": "0",
+        "resolved_image": "gateway-live-ucloud-20260824a:5000/ucloud-managed/provision-64-b975e32c-image-2107e0384304:latest@sha256:52bce4d45730283348c516817dbecb286c17e2024055c7df9d3ce6083fe741df",
+        "reserved_route": true,
+        "outcome": "reselect_after_image_admission_rejection",
+        "ucloud.span.thread_cpu.duration": 0.055267555
+      }
+    },
+    {
+      "trace_id": "7d3cc653014f61f70659cc2c4738596a",
+      "name": "gateway.sandbox_create",
+      "attributes": {
+        "sandbox.id": "provision-64-b975e32c-048",
+        "container.image.name": "provision-64-b975e32c-image",
+        "sandbox.request.vcpu": 2,
+        "sandbox.request.memory_mb": "1024",
+        "sandbox.request.disk_mb": "8320",
+        "sandbox.placement.excluded_jobs": "0",
+        "resolved_image": "gateway-live-ucloud-20260824a:5000/ucloud-managed/provision-64-b975e32c-image-2107e0384304:latest@sha256:52bce4d45730283348c516817dbecb286c17e2024055c7df9d3ce6083fe741df",
+        "reserved_route": true,
+        "outcome": "reselect_after_image_admission_rejection",
+        "ucloud.span.thread_cpu.duration": 0.057046374000000004
+      }
+    },
+    {
+      "trace_id": "35329a9db192ede112da4233ba942377",
+      "name": "gateway.sandbox_create",
+      "attributes": {
+        "sandbox.id": "provision-64-b975e32c-029",
+        "container.image.name": "provision-64-b975e32c-image",
+        "sandbox.request.vcpu": 2,
+        "sandbox.request.memory_mb": "1024",
+        "sandbox.request.disk_mb": "8320",
+        "sandbox.placement.excluded_jobs": "0",
+        "resolved_image": "gateway-live-ucloud-20260824a:5000/ucloud-managed/provision-64-b975e32c-image-2107e0384304:latest@sha256:52bce4d45730283348c516817dbecb286c17e2024055c7df9d3ce6083fe741df",
+        "reserved_route": true,
+        "outcome": "reselect_after_image_admission_rejection",
+        "ucloud.span.thread_cpu.duration": 0.056163785
+      }
+    },
+    {
+      "trace_id": "e786c75f6341a333174d9ceae180cf3c",
+      "name": "gateway.sandbox_create",
+      "attributes": {
+        "sandbox.id": "provision-64-b975e32c-051",
+        "container.image.name": "provision-64-b975e32c-image",
+        "sandbox.request.vcpu": 2,
+        "sandbox.request.memory_mb": "1024",
+        "sandbox.request.disk_mb": "8320",
+        "sandbox.placement.excluded_jobs": "0",
+        "resolved_image": "gateway-live-ucloud-20260824a:5000/ucloud-managed/provision-64-b975e32c-image-2107e0384304:latest@sha256:52bce4d45730283348c516817dbecb286c17e2024055c7df9d3ce6083fe741df",
+        "reserved_route": true,
+        "outcome": "reselect_after_image_admission_rejection",
+        "ucloud.span.thread_cpu.duration": 0.053412689
+      }
+    },
+    {
+      "trace_id": "36527ea3eb48777b0707aca8e0ec30fb",
+      "name": "gateway.sandbox_create",
+      "attributes": {
+        "sandbox.id": "provision-64-b975e32c-061",
+        "container.image.name": "provision-64-b975e32c-image",
+        "sandbox.request.vcpu": 2,
+        "sandbox.request.memory_mb": "1024",
+        "sandbox.request.disk_mb": "8320",
+        "sandbox.placement.excluded_jobs": "0",
+        "resolved_image": "gateway-live-ucloud-20260824a:5000/ucloud-managed/provision-64-b975e32c-image-2107e0384304:latest@sha256:52bce4d45730283348c516817dbecb286c17e2024055c7df9d3ce6083fe741df",
+        "reserved_route": true,
+        "outcome": "reselect_after_image_admission_rejection",
+        "ucloud.span.thread_cpu.duration": 0.057967922
+      }
+    },
+    {
+      "trace_id": "6a29dc36cd948379000f94d5099c6549",
+      "name": "gateway.sandbox_create",
+      "attributes": {
+        "sandbox.id": "provision-64-b975e32c-033",
+        "container.image.name": "provision-64-b975e32c-image",
+        "sandbox.request.vcpu": 2,
+        "sandbox.request.memory_mb": "1024",
+        "sandbox.request.disk_mb": "8320",
+        "sandbox.placement.excluded_jobs": "0",
+        "resolved_image": "gateway-live-ucloud-20260824a:5000/ucloud-managed/provision-64-b975e32c-image-2107e0384304:latest@sha256:52bce4d45730283348c516817dbecb286c17e2024055c7df9d3ce6083fe741df",
+        "reserved_route": true,
+        "outcome": "reselect_after_image_admission_rejection",
+        "ucloud.span.thread_cpu.duration": 0.052253782
+      }
+    },
+    {
+      "trace_id": "87684383bbd66e020adf4a7b3ca2f3b3",
+      "name": "gateway.sandbox_create",
+      "attributes": {
+        "sandbox.id": "provision-64-b975e32c-037",
+        "container.image.name": "provision-64-b975e32c-image",
+        "sandbox.request.vcpu": 2,
+        "sandbox.request.memory_mb": "1024",
+        "sandbox.request.disk_mb": "8320",
+        "sandbox.placement.excluded_jobs": "0",
+        "resolved_image": "gateway-live-ucloud-20260824a:5000/ucloud-managed/provision-64-b975e32c-image-2107e0384304:latest@sha256:52bce4d45730283348c516817dbecb286c17e2024055c7df9d3ce6083fe741df",
+        "reserved_route": true,
+        "outcome": "reselect_after_image_admission_rejection",
+        "ucloud.span.thread_cpu.duration": 0.049355252999999995
+      }
+    }
+  ],
+  "relay_evidence": {
+    "requests": 128,
+    "states": {
+      "completed": 128
+    },
+    "park_notified": 128,
+    "wake_notified": 128,
+    "pending_delivery": 0
+  },
+  "qualification_reservation": {
+    "count": 64,
+    "initial_disk_mb": 5184,
+    "expanded_disk_mb": 32768,
+    "expanded_at": "2026-09-19T09:57:54.446056+00:00",
+    "reason": "The 64-sandbox reservation needs only one worker. Temporarily increase disk headroom to obtain a second empty worker for the controlled drain race. Actual sandbox disk remains 5184 MiB.",
+    "released": true
+  },
+  "final_observation": "Own routes, demand, reservation and relay deliveries were cleared. An unrelated super-park-harness workload started after the qualification; it was left untouched."
+}

@@ -7,6 +7,8 @@ from tempfile import TemporaryDirectory
 from pathlib import Path
 import json
 import sqlite3
+import subprocess
+import sys
 from threading import Event
 import unittest
 from unittest.mock import patch
@@ -141,6 +143,131 @@ def seed_routing_state(store: RoutingStore, state: RoutingState) -> None:
 
 
 class RoutingStoreTests(unittest.TestCase):
+    def test_exec_read_observes_worker_loss_from_another_process(self) -> None:
+        with routing_store() as store:
+            route = store.upsert_sandbox(sandbox_route(
+                sandbox_id="lost", node_id="node", job_id="job",
+                node_url="http://node", state="running",
+            ))
+            store.upsert_exec(ExecRoute(
+                session_id="accepted", sandbox_id=route.sandbox_id,
+                node_id=route.node_id, job_id=route.job_id, node_url=route.node_url,
+            ))
+            self.assertIsNotNone(store.get_exec("accepted"))
+            subprocess.run([
+                sys.executable, "-c",
+                "from pathlib import Path; import sys; "
+                "from ucloud_sandboxes.routing import RoutingStore; "
+                "RoutingStore(Path(sys.argv[1])).delete_sandboxes_for_jobs_with_error"
+                "(['job'], terminal_error='node_lost')",
+                str(store.path),
+            ], check=True)
+            self.assertIsNone(store.get_exec("accepted"))
+            self.assertEqual(store.get_exec_loss("accepted")["job_id"], "job")
+
+    def test_exec_loss_survives_restart_and_sandbox_reuse_then_expires(self) -> None:
+        with routing_store() as store:
+            route = store.upsert_sandbox(sandbox_route(
+                sandbox_id="lost", node_id="node", job_id="job",
+                node_url="http://node", state="running",
+            ))
+            store.upsert_exec(ExecRoute(
+                session_id="accepted", sandbox_id=route.sandbox_id,
+                node_id=route.node_id, job_id=route.job_id, node_url=route.node_url,
+            ))
+            store.delete_sandboxes_for_jobs_with_error(["job"], terminal_error="node_lost")
+            reopened = RoutingStore(store.path)
+            self.assertIsNone(reopened.get_exec("accepted"))
+            loss = reopened.get_exec_loss("accepted")
+            self.assertEqual(loss["generation"], 1)
+            self.assertEqual(loss["job_id"], "job")
+            reopened.delete_sandbox("lost")
+            reopened.upsert_sandbox(replace(route, generation=2, create_operation_id="new"))
+            self.assertEqual(reopened.get_exec_loss("accepted"), loss)
+            self.assertIsNone(reopened.get_exec_loss("unknown"))
+            with patch("ucloud_sandboxes.routing.utc_now", return_value=utc_now() + timedelta(days=8)):
+                self.assertIsNone(reopened.get_exec_loss("accepted"))
+                reopened.load()
+            with sqlite3.connect(store.path) as conn:
+                self.assertEqual(conn.execute("SELECT COUNT(*) FROM exec_losses").fetchone()[0], 0)
+
+    def test_node_loss_survives_restart_but_not_a_new_incarnation(self) -> None:
+        with routing_store() as store:
+            route = store.upsert_sandbox(
+                sandbox_route(
+                    sandbox_id="lost",
+                    node_id="node",
+                    job_id="job",
+                    node_url="http://node",
+                    state="running",
+                )
+            )
+            store.delete_sandboxes_for_jobs_with_error(
+                ["job"], terminal_error="node_lost"
+            )
+            reopened = RoutingStore(store.path)
+            loss = reopened.get_sandbox_loss("lost")
+            self.assertEqual(loss["reason"], "node_lost")
+            self.assertEqual(loss["generation"], 1)
+            self.assertEqual(loss["job_id"], "job")
+            self.assertEqual(reopened.terminal_sandbox_incarnations(), {("lost", 1): "node_lost"})
+            reopened.delete_sandbox("lost")  # Idempotent cleanup keeps the diagnosis.
+            self.assertEqual(reopened.get_sandbox_loss("lost"), loss)
+            reopened.upsert_sandbox(
+                replace(route, generation=2, create_operation_id="new")
+            )
+            self.assertIsNone(reopened.get_sandbox_loss("lost"))
+            self.assertEqual(reopened.terminal_sandbox_incarnations(), {("lost", 1): "node_lost"})
+            reopened.delete_sandbox("lost")
+            self.assertIsNone(reopened.get_sandbox_loss("lost"))
+
+    def test_node_loss_backfill_and_retention(self) -> None:
+        with routing_store() as store:
+            store.upsert_sandbox(
+                sandbox_route(
+                    sandbox_id="lost",
+                    node_id="node",
+                    job_id="job",
+                    node_url="http://node",
+                    state="running",
+                )
+            )
+            with sqlite3.connect(store.path) as conn:
+                conn.execute("DELETE FROM sandboxes")
+                conn.execute("DROP TABLE sandbox_losses")
+                conn.execute(
+                    """INSERT INTO program_requests
+                    (request_id, rollout_id, sandbox_id, sandbox_generation,
+                     state, resources_json, updated_at, last_error)
+                    VALUES ('request', 'rollout', 'lost', 1, 'terminal', '{}', ?, 'node_lost')
+                """,
+                    (utc_now().isoformat(),),
+                )
+            reopened = RoutingStore(store.path)
+            self.assertEqual(reopened.get_sandbox_loss("lost")["reason"], "node_lost")
+            with sqlite3.connect(store.path) as conn:
+                conn.execute(
+                    """INSERT INTO program_requests
+                    (request_id, rollout_id, sandbox_id, sandbox_generation,
+                     state, resources_json, updated_at, last_error)
+                    VALUES ('deleted', 'rollout', 'deleted', 4, 'terminal', '{}', ?, 'sandbox deletion requested')""",
+                    (utc_now().isoformat(),),
+                )
+            self.assertEqual(reopened.terminal_sandbox_incarnations(), {
+                ("lost", 1): "node_lost", ("deleted", 4): "sandbox_deleted",
+            })
+            with patch(
+                "ucloud_sandboxes.routing.utc_now",
+                return_value=utc_now() + timedelta(days=8),
+            ):
+                self.assertIsNone(reopened.get_sandbox_loss("lost"))
+                self.assertEqual(reopened.terminal_sandbox_incarnations(), {})
+                reopened.load()
+            with sqlite3.connect(store.path) as conn:
+                self.assertEqual(
+                    conn.execute("SELECT COUNT(*) FROM sandbox_losses").fetchone()[0], 0
+                )
+
     def test_lifecycle_proof_fences_pre_mutation_heartbeats(self) -> None:
         with routing_store() as store:
             route = store.upsert_sandbox(
@@ -1302,6 +1429,9 @@ class RoutingStoreTests(unittest.TestCase):
                 terminal_error="node_lost",
             )
             state = store.load()
+            for route in (live, portable, local_park, deleting_portable):
+                loss = store.get_exec_loss(f"exec-{route.sandbox_id}")
+                self.assertEqual(loss["generation"], route.generation)
 
         self.assertTrue(is_portable_parked_route(portable))
         self.assertEqual(

@@ -1,0 +1,1164 @@
+{
+  "sdk_version": "0.4.21",
+  "transport": "per-sandbox AsyncSandboxClient, matching Verifiers",
+  "prefix": "relay-worker-256-d2c59056",
+  "started_at": "2026-09-19T05:43:57.600322+00:00",
+  "count": 256,
+  "concurrency": 256,
+  "image": "release-0534-989b03553a-image",
+  "shape": {
+    "cpus": 2,
+    "memory_mb": 1024,
+    "disk_mb": 5184
+  },
+  "phases": [
+    {
+      "name": "create",
+      "seconds": 24.046,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 0.862,
+        "p50": 10.92,
+        "p95": 21.624,
+        "max": 23.952
+      }
+    },
+    {
+      "name": "initialize-relay-agents",
+      "seconds": 5.385,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 0.197,
+        "p50": 2.714,
+        "p95": 4.246,
+        "max": 5.324
+      }
+    },
+    {
+      "name": "trigger-1",
+      "seconds": 5.185,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 0.371,
+        "p50": 1.648,
+        "p95": 4.029,
+        "max": 5.082
+      }
+    },
+    {
+      "name": "forward-wake-tools-1",
+      "seconds": 42.702,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 5.158,
+        "p50": 27.637,
+        "p95": 33.006,
+        "max": 42.563
+      }
+    },
+    {
+      "name": "trigger-2",
+      "seconds": 5.472,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 0.174,
+        "p50": 1.882,
+        "p95": 5.135,
+        "max": 5.389
+      }
+    },
+    {
+      "name": "forward-wake-tools-2",
+      "seconds": 43.229,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 0.671,
+        "p50": 27.271,
+        "p95": 32.149,
+        "max": 43.155
+      }
+    },
+    {
+      "name": "trigger-3",
+      "seconds": 5.403,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 0.136,
+        "p50": 1.747,
+        "p95": 4.235,
+        "max": 5.287
+      }
+    },
+    {
+      "name": "forward-wake-tools-3",
+      "seconds": 121.672,
+      "passed": 88,
+      "failed": 168,
+      "latency": {
+        "min": 5.417,
+        "p50": 120.21,
+        "p95": 121.128,
+        "max": 121.54
+      }
+    }
+  ],
+  "errors": [
+    {
+      "id": "relay-worker-256-d2c59056-014",
+      "ok": false,
+      "seconds": 120.03494543815032,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-024",
+      "ok": false,
+      "seconds": 120.04350327397697,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-040",
+      "ok": false,
+      "seconds": 120.04597987793386,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-102",
+      "ok": false,
+      "seconds": 120.0377620048821,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-132",
+      "ok": false,
+      "seconds": 120.02874202979729,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-049",
+      "ok": false,
+      "seconds": 120.08250402007252,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-051",
+      "ok": false,
+      "seconds": 120.08922752505168,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-196",
+      "ok": false,
+      "seconds": 120.01931034284644,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-246",
+      "ok": false,
+      "seconds": 120.0002610059455,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-088",
+      "ok": false,
+      "seconds": 120.07894471986219,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-025",
+      "ok": false,
+      "seconds": 120.11555603402667,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-060",
+      "ok": false,
+      "seconds": 120.09024817682803,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-242",
+      "ok": false,
+      "seconds": 120.00932366610505,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-155",
+      "ok": false,
+      "seconds": 120.05000424198806,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-224",
+      "ok": false,
+      "seconds": 120.01945467106998,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-199",
+      "ok": false,
+      "seconds": 120.04072924098,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-019",
+      "ok": false,
+      "seconds": 120.15286088711582,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-145",
+      "ok": false,
+      "seconds": 120.06991068297066,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-211",
+      "ok": false,
+      "seconds": 120.04200615081936,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-251",
+      "ok": false,
+      "seconds": 120.0253056040965,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-184",
+      "ok": false,
+      "seconds": 120.05742907500826,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-254",
+      "ok": false,
+      "seconds": 120.03874511108734,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-157",
+      "ok": false,
+      "seconds": 120.09404435614124,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-136",
+      "ok": false,
+      "seconds": 120.10686914296821,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-134",
+      "ok": false,
+      "seconds": 120.11368423514068,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-092",
+      "ok": false,
+      "seconds": 120.14083769218996,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-096",
+      "ok": false,
+      "seconds": 120.14482543012127,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-189",
+      "ok": false,
+      "seconds": 120.09768970613368,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-194",
+      "ok": false,
+      "seconds": 120.09903541998938,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-058",
+      "ok": false,
+      "seconds": 120.16952184215188,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-207",
+      "ok": false,
+      "seconds": 120.10696044983342,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-174",
+      "ok": false,
+      "seconds": 120.12545776180923,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-182",
+      "ok": false,
+      "seconds": 120.12262190598994,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-228",
+      "ok": false,
+      "seconds": 120.10629332181998,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-200",
+      "ok": false,
+      "seconds": 120.13029411388561,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-047",
+      "ok": false,
+      "seconds": 120.20975268888287,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-208",
+      "ok": false,
+      "seconds": 120.14064544113353,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-089",
+      "ok": false,
+      "seconds": 120.20415187301114,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-152",
+      "ok": false,
+      "seconds": 120.21140958508477,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-154",
+      "ok": false,
+      "seconds": 120.21098690503277,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-129",
+      "ok": false,
+      "seconds": 120.2195287279319,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-061",
+      "ok": false,
+      "seconds": 120.2522813079413,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-054",
+      "ok": false,
+      "seconds": 120.26149214198813,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-248",
+      "ok": false,
+      "seconds": 120.17107277805917,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-151",
+      "ok": false,
+      "seconds": 120.2230804269202,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-237",
+      "ok": false,
+      "seconds": 120.18611762090586,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-117",
+      "ok": false,
+      "seconds": 120.24138038000092,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-167",
+      "ok": false,
+      "seconds": 120.23284870199859,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-039",
+      "ok": false,
+      "seconds": 120.30346569302492,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-137",
+      "ok": false,
+      "seconds": 120.25823515909724,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-166",
+      "ok": false,
+      "seconds": 120.24965044180863,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-041",
+      "ok": false,
+      "seconds": 120.31038650497794,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-022",
+      "ok": false,
+      "seconds": 120.32856048783287,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-128",
+      "ok": false,
+      "seconds": 120.26559923193417,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-109",
+      "ok": false,
+      "seconds": 120.27159011713229,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-063",
+      "ok": false,
+      "seconds": 120.30148694082163,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-015",
+      "ok": false,
+      "seconds": 120.36257588886656,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-056",
+      "ok": false,
+      "seconds": 120.32842515502125,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-122",
+      "ok": false,
+      "seconds": 120.29900932591408,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-198",
+      "ok": false,
+      "seconds": 120.27107457793318,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-133",
+      "ok": false,
+      "seconds": 120.30611990601756,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-173",
+      "ok": false,
+      "seconds": 120.28973292303272,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-247",
+      "ok": false,
+      "seconds": 120.26237743999809,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-087",
+      "ok": false,
+      "seconds": 120.3410907399375,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-150",
+      "ok": false,
+      "seconds": 120.31608907599002,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-147",
+      "ok": false,
+      "seconds": 120.31869438290596,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-076",
+      "ok": false,
+      "seconds": 120.35970978601836,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-216",
+      "ok": false,
+      "seconds": 120.29223150014877,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-160",
+      "ok": false,
+      "seconds": 120.32495246292092,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-030",
+      "ok": false,
+      "seconds": 120.41180543601513,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-162",
+      "ok": false,
+      "seconds": 120.34606270492077,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-116",
+      "ok": false,
+      "seconds": 120.36351619916968,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-035",
+      "ok": false,
+      "seconds": 120.42264159792103,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-123",
+      "ok": false,
+      "seconds": 120.37579541211016,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-235",
+      "ok": false,
+      "seconds": 120.32626402610913,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-252",
+      "ok": false,
+      "seconds": 120.32033516396768,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-175",
+      "ok": false,
+      "seconds": 120.35731283202767,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-106",
+      "ok": false,
+      "seconds": 120.39077095105313,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-229",
+      "ok": false,
+      "seconds": 120.33908733096905,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-068",
+      "ok": false,
+      "seconds": 120.41615138598718,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-203",
+      "ok": false,
+      "seconds": 120.35733717912808,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-046",
+      "ok": false,
+      "seconds": 120.4296292711515,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-138",
+      "ok": false,
+      "seconds": 120.38989324402064,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-250",
+      "ok": false,
+      "seconds": 120.34265076788142,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-007",
+      "ok": false,
+      "seconds": 120.48293842677958,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-053",
+      "ok": false,
+      "seconds": 120.44453575578518,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-172",
+      "ok": false,
+      "seconds": 120.39356271992438,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-209",
+      "ok": false,
+      "seconds": 120.38254352193326,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-028",
+      "ok": false,
+      "seconds": 120.48393380199559,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-201",
+      "ok": false,
+      "seconds": 120.4061569981277,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-125",
+      "ok": false,
+      "seconds": 120.45343383587897,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-239",
+      "ok": false,
+      "seconds": 120.4019953480456,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-161",
+      "ok": false,
+      "seconds": 120.4406423701439,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-052",
+      "ok": false,
+      "seconds": 120.49097599694505,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-050",
+      "ok": false,
+      "seconds": 120.49416808411479,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-044",
+      "ok": false,
+      "seconds": 120.50148061709478,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-020",
+      "ok": false,
+      "seconds": 120.55478607816622,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-059",
+      "ok": false,
+      "seconds": 120.50967061705887,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-205",
+      "ok": false,
+      "seconds": 120.44347167597152,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-153",
+      "ok": false,
+      "seconds": 120.47062500403263,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-176",
+      "ok": false,
+      "seconds": 120.49329590401612,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-140",
+      "ok": false,
+      "seconds": 120.51440835883841,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-197",
+      "ok": false,
+      "seconds": 120.48796454491094,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-144",
+      "ok": false,
+      "seconds": 120.51744819409214,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-105",
+      "ok": false,
+      "seconds": 120.54503815295175,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-079",
+      "ok": false,
+      "seconds": 120.56214833608828,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-091",
+      "ok": false,
+      "seconds": 120.55916652991436,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-253",
+      "ok": false,
+      "seconds": 120.48264729697257,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-016",
+      "ok": false,
+      "seconds": 120.61562498589046,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-214",
+      "ok": false,
+      "seconds": 120.50025335303508,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-115",
+      "ok": false,
+      "seconds": 120.54337085108273,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-156",
+      "ok": false,
+      "seconds": 120.53200404904783,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-177",
+      "ok": false,
+      "seconds": 120.523779385956,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-108",
+      "ok": false,
+      "seconds": 120.55821499088779,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-114",
+      "ok": false,
+      "seconds": 120.55506272497587,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-186",
+      "ok": false,
+      "seconds": 120.53402436198667,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-192",
+      "ok": false,
+      "seconds": 120.5440601638984,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-113",
+      "ok": false,
+      "seconds": 120.61646284395829,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-142",
+      "ok": false,
+      "seconds": 120.60712369601242,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-017",
+      "ok": false,
+      "seconds": 120.70636421395466,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-231",
+      "ok": false,
+      "seconds": 120.58673369209282,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-084",
+      "ok": false,
+      "seconds": 120.65794718405232,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-255",
+      "ok": false,
+      "seconds": 120.65420986479148,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-111",
+      "ok": false,
+      "seconds": 120.71727762185037,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-188",
+      "ok": false,
+      "seconds": 120.68320709792897,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-093",
+      "ok": false,
+      "seconds": 120.73654633015394,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-243",
+      "ok": false,
+      "seconds": 120.6690568588674,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-098",
+      "ok": false,
+      "seconds": 120.74462810601108,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-021",
+      "ok": false,
+      "seconds": 120.82767610880546,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-118",
+      "ok": false,
+      "seconds": 120.77142262016423,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-130",
+      "ok": false,
+      "seconds": 120.77612072392367,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-078",
+      "ok": false,
+      "seconds": 120.82249221298844,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-164",
+      "ok": false,
+      "seconds": 120.79534577601589,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-045",
+      "ok": false,
+      "seconds": 120.84937418880872,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-185",
+      "ok": false,
+      "seconds": 120.78747204388492,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-121",
+      "ok": false,
+      "seconds": 120.84553457377478,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-127",
+      "ok": false,
+      "seconds": 120.86313293711282,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-204",
+      "ok": false,
+      "seconds": 120.84574923897162,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-181",
+      "ok": false,
+      "seconds": 120.86133430805057,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-245",
+      "ok": false,
+      "seconds": 120.8469695749227,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-149",
+      "ok": false,
+      "seconds": 120.89464531419799,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-195",
+      "ok": false,
+      "seconds": 120.90679699392058,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-244",
+      "ok": false,
+      "seconds": 120.89200795791112,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-126",
+      "ok": false,
+      "seconds": 120.9760288191028,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-226",
+      "ok": false,
+      "seconds": 120.92974019702524,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-110",
+      "ok": false,
+      "seconds": 120.98168583097868,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-225",
+      "ok": false,
+      "seconds": 120.93974440987222,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-159",
+      "ok": false,
+      "seconds": 121.00274251285009,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-112",
+      "ok": false,
+      "seconds": 121.02155261812732,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-124",
+      "ok": false,
+      "seconds": 121.03822332783602,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-141",
+      "ok": false,
+      "seconds": 121.04395463201217,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-241",
+      "ok": false,
+      "seconds": 121.02652174793184,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-083",
+      "ok": false,
+      "seconds": 121.11211899411865,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-064",
+      "ok": false,
+      "seconds": 121.14461079100147,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-165",
+      "ok": false,
+      "seconds": 121.12813109904528,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-238",
+      "ok": false,
+      "seconds": 121.12778851995245,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-202",
+      "ok": false,
+      "seconds": 121.22488984721713,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-215",
+      "ok": false,
+      "seconds": 121.23557697306387,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-082",
+      "ok": false,
+      "seconds": 121.30609634611756,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-191",
+      "ok": false,
+      "seconds": 121.29053395893425,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-037",
+      "ok": false,
+      "seconds": 121.39026580285281,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-095",
+      "ok": false,
+      "seconds": 121.36267872899771,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-180",
+      "ok": false,
+      "seconds": 121.31992813316174,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-217",
+      "ok": false,
+      "seconds": 121.34000102803111,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-055",
+      "ok": false,
+      "seconds": 121.47032680711709,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-135",
+      "ok": false,
+      "seconds": 121.45304908812977,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-131",
+      "ok": false,
+      "seconds": 121.51853880798444,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    },
+    {
+      "id": "relay-worker-256-d2c59056-193",
+      "ok": false,
+      "seconds": 121.5396789140068,
+      "error": "TimeoutError: agent did not consume its relay response and execute the tool"
+    }
+  ],
+  "kind": "shared-relay-run-worker-forwarding",
+  "relay_cycles": 3,
+  "placement": [
+    [
+      "12396306",
+      "running",
+      128
+    ],
+    [
+      "12396307",
+      "running",
+      128
+    ]
+  ],
+  "success": false,
+  "fatal": "RuntimeError: forward-wake-tools-3: 168 failures",
+  "upstream_counts": {
+    "1": 256,
+    "2": 256,
+    "3": 88
+  },
+  "relay_cleanup_errors": [],
+  "cleanup_errors": [],
+  "remaining": [],
+  "http_rejections": [],
+  "health": {
+    "count": 320,
+    "failures": [],
+    "latency": {
+      "min": 0.012,
+      "p50": 0.026,
+      "p95": 0.124,
+      "max": 0.4
+    }
+  },
+  "total_seconds": 333.422,
+  "sdk_commit": "08078340dc2ddb5d27ccc974c60574e5554588f0",
+  "server_version": "0.5.38",
+  "worker_error_counts": {
+    "relay request failed (410): {'error': 'request is already completed'}": 168
+  },
+  "representative_traceback": "Traceback (most recent call last):\n  File \"/work/ucloud-sandboxes/release/0.5.38/relay-worker-256-async.py\", line 59, in one\n    try:fn(sid);return {'id':sid,'ok':True,'seconds':time.monotonic()-started}\n        ~~^^^^^\n  File \"/work/ucloud-sandboxes/release/0.5.38/relay-worker-256-async.py\", line 150, in verify\n    raise TimeoutError('agent did not consume its relay response and execute the tool')\nTimeoutError: agent did not consume its relay response and execute the tool\n"
+}

@@ -1,0 +1,1066 @@
+{
+  "candidate_wheel_sha256": "7a4c627e040325dbb333fd99cf4c157fc2edf1c69e7d2c620e8f8eae62ce501f",
+  "cleanup_errors": [],
+  "configuration": {
+    "act_p95_ms": 2000,
+    "burst_ms": 15000,
+    "cleanup_timeout_seconds": 180,
+    "completion_p95_ms": 10000,
+    "concurrency": 2,
+    "count": 2,
+    "cpu_ms": 100,
+    "cpus": 1.0,
+    "create_concurrency": 2,
+    "cycles": 2,
+    "disk_mb": 2048,
+    "expected_cpus": 32,
+    "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+    "memory_mb": 1024,
+    "park_p95_ms": 2000,
+    "resident_mb": 256,
+    "wake_p95_ms": 3000
+  },
+  "errors": [],
+  "finished_at": "2026-09-07T21:47:01.445722+00:00",
+  "image_pull": {
+    "command": [
+      "docker",
+      "pull",
+      "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285"
+    ],
+    "exit_code": 0,
+    "image": {
+      "available_to_sandboxes": true,
+      "created_at": "2026-09-07T21:46:42.523177+00:00",
+      "id": "density-f66eb1c4dafd4819",
+      "labels": {},
+      "manifest_digest": "sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+      "pushed": true,
+      "source": "registry",
+      "state": "available",
+      "tag": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+      "updated_at": "2026-09-07T21:46:42.523177+00:00"
+    },
+    "timings": {
+      "docker_pull_ms": 358,
+      "pull_queue_ms": 0,
+      "rootfs_materialize_ms": 57
+    }
+  },
+  "note": "Unreleased working-tree candidate on isolated UCloud dev job 12383398; no production deployment.",
+  "owned_ids": [
+    "density-f66eb1c4dafd4819-0",
+    "density-f66eb1c4dafd4819-1"
+  ],
+  "phases": [
+    {
+      "completion": {
+        "count": 1,
+        "max_ms": 4754.86,
+        "p50_ms": 4754.86,
+        "p95_ms": 4754.86,
+        "p99_ms": 4754.86
+      },
+      "errors": [],
+      "makespan_ms": 4755.133653001394,
+      "name": "single_create",
+      "samples": [
+        {
+          "completion_ms": 4754.859509004746,
+          "id": "density-f66eb1c4dafd4819-0",
+          "result": {
+            "counter": 0,
+            "files": 0,
+            "memory_sha256": "128661d3670e44387037467593a2e4e12f1625cf60f4d8d8ed98923c36b30dfc",
+            "nonce": "cdb11f457a8d4afab81f5e0859463ce4",
+            "pid": 1,
+            "resident_bytes": 268435456
+          },
+          "service_ms": 4754.498672002228
+        }
+      ],
+      "service": {
+        "count": 1,
+        "max_ms": 4754.499,
+        "p50_ms": 4754.499,
+        "p95_ms": 4754.499,
+        "p99_ms": 4754.499
+      }
+    },
+    {
+      "completion": {
+        "count": 3,
+        "max_ms": 3623.539,
+        "p50_ms": 1076.838,
+        "p95_ms": 3623.539,
+        "p99_ms": 3623.539
+      },
+      "errors": [],
+      "makespan_ms": 3623.7311940058134,
+      "name": "single_act",
+      "samples": [
+        {
+          "completion_ms": 579.0054829849396,
+          "id": "density-f66eb1c4dafd4819-0",
+          "result": {
+            "counter": 1,
+            "files": 64,
+            "memory_sha256": "ba2e9f012d923468913674adff6cef238c42b973609ccb45c9ba83a6d3479abb",
+            "nonce": "cdb11f457a8d4afab81f5e0859463ce4",
+            "pid": 1,
+            "resident_bytes": 268435456
+          },
+          "service_ms": 578.7547439977061
+        },
+        {
+          "completion_ms": 1076.838137989398,
+          "id": "density-f66eb1c4dafd4819-0",
+          "result": {
+            "counter": 2,
+            "files": 64,
+            "memory_sha256": "90d0a7ad18fdb1322aa3f21b8a67df54ff81c9cf457adcfdc2065da3c9b0dff4",
+            "nonce": "cdb11f457a8d4afab81f5e0859463ce4",
+            "pid": 1,
+            "resident_bytes": 268435456
+          },
+          "service_ms": 497.80832801479846
+        },
+        {
+          "completion_ms": 3623.5387639899272,
+          "id": "density-f66eb1c4dafd4819-0",
+          "result": {
+            "counter": 3,
+            "files": 64,
+            "memory_sha256": "fd72d73be5403b3722ea947ba282a41d4aff39857081e8b46f0cac45ae3eb90f",
+            "nonce": "cdb11f457a8d4afab81f5e0859463ce4",
+            "pid": 1,
+            "resident_bytes": 268435456
+          },
+          "service_ms": 2546.671541989781
+        }
+      ],
+      "service": {
+        "count": 3,
+        "max_ms": 2546.672,
+        "p50_ms": 578.755,
+        "p95_ms": 2546.672,
+        "p99_ms": 2546.672
+      }
+    },
+    {
+      "completion": {
+        "count": 1,
+        "max_ms": 5257.459,
+        "p50_ms": 5257.459,
+        "p95_ms": 5257.459,
+        "p99_ms": 5257.459
+      },
+      "errors": [],
+      "makespan_ms": 5257.603436999489,
+      "name": "create",
+      "samples": [
+        {
+          "completion_ms": 5257.459078973625,
+          "id": "density-f66eb1c4dafd4819-1",
+          "result": {
+            "counter": 0,
+            "files": 0,
+            "memory_sha256": "41a4ed3a02640d807653665bf626c579f7df615c34060c75cbaeec1cc6812598",
+            "nonce": "5e788ea144f54bfb90b2ab50f242733e",
+            "pid": 1,
+            "resident_bytes": 268435456
+          },
+          "service_ms": 5257.2409590065945
+        }
+      ],
+      "service": {
+        "count": 1,
+        "max_ms": 5257.241,
+        "p50_ms": 5257.241,
+        "p95_ms": 5257.241,
+        "p99_ms": 5257.241
+      }
+    },
+    {
+      "completion": {
+        "count": 2,
+        "max_ms": 594.14,
+        "p50_ms": 530.274,
+        "p95_ms": 594.14,
+        "p99_ms": 594.14
+      },
+      "errors": [],
+      "makespan_ms": 594.3479829875287,
+      "name": "act_0",
+      "samples": [
+        {
+          "completion_ms": 594.1398679860868,
+          "id": "density-f66eb1c4dafd4819-0",
+          "result": {
+            "counter": 4,
+            "files": 64,
+            "memory_sha256": "0ff960746399b5223413b12334a33236ffe13106d450811bbfeb1971cbb7b368",
+            "nonce": "cdb11f457a8d4afab81f5e0859463ce4",
+            "pid": 1,
+            "resident_bytes": 268435456
+          },
+          "service_ms": 593.8597260101233
+        },
+        {
+          "completion_ms": 530.2739979815669,
+          "id": "density-f66eb1c4dafd4819-1",
+          "result": {
+            "counter": 1,
+            "files": 64,
+            "memory_sha256": "4f4326c44b34f29ad8b1484435325e5ed0f737e07aa83d45cb8417d3245f4792",
+            "nonce": "5e788ea144f54bfb90b2ab50f242733e",
+            "pid": 1,
+            "resident_bytes": 268435456
+          },
+          "service_ms": 529.567631019745
+        }
+      ],
+      "service": {
+        "count": 2,
+        "max_ms": 593.86,
+        "p50_ms": 529.568,
+        "p95_ms": 593.86,
+        "p99_ms": 593.86
+      }
+    },
+    {
+      "completion": {
+        "count": 2,
+        "max_ms": 305.936,
+        "p50_ms": 300.186,
+        "p95_ms": 305.936,
+        "p99_ms": 305.936
+      },
+      "errors": [],
+      "makespan_ms": 306.1005689960439,
+      "name": "park_0",
+      "samples": [
+        {
+          "completion_ms": 300.18644998199306,
+          "id": "density-f66eb1c4dafd4819-0",
+          "result": {
+            "state": "parked"
+          },
+          "service_ms": 300.028691010084
+        },
+        {
+          "completion_ms": 305.9360299957916,
+          "id": "density-f66eb1c4dafd4819-1",
+          "result": {
+            "state": "parked"
+          },
+          "service_ms": 305.52749198977835
+        }
+      ],
+      "service": {
+        "count": 2,
+        "max_ms": 305.527,
+        "p50_ms": 300.029,
+        "p95_ms": 305.527,
+        "p99_ms": 305.527
+      }
+    },
+    {
+      "completion": {
+        "count": 2,
+        "max_ms": 1021.502,
+        "p50_ms": 999.738,
+        "p95_ms": 1021.502,
+        "p99_ms": 1021.502
+      },
+      "errors": [],
+      "makespan_ms": 1021.7131790122949,
+      "name": "wake_0",
+      "samples": [
+        {
+          "completion_ms": 999.738395010354,
+          "id": "density-f66eb1c4dafd4819-0",
+          "result": {
+            "counter": 5,
+            "files": 64,
+            "memory_sha256": "bfb9344829a387095f61cdc7c165859184715b1b5147f71c4cd2b7fb69a26e38",
+            "nonce": "cdb11f457a8d4afab81f5e0859463ce4",
+            "pid": 1,
+            "resident_bytes": 268435456
+          },
+          "service_ms": 999.5924340037163
+        },
+        {
+          "completion_ms": 1021.5023089840543,
+          "id": "density-f66eb1c4dafd4819-1",
+          "result": {
+            "counter": 2,
+            "files": 64,
+            "memory_sha256": "973e28cfa7f7a16da5cc0f2797720165c7e1b14d99ded535eeb76025db47c80e",
+            "nonce": "5e788ea144f54bfb90b2ab50f242733e",
+            "pid": 1,
+            "resident_bytes": 268435456
+          },
+          "service_ms": 1021.1035360116512
+        }
+      ],
+      "service": {
+        "count": 2,
+        "max_ms": 1021.104,
+        "p50_ms": 999.592,
+        "p95_ms": 1021.104,
+        "p99_ms": 1021.104
+      }
+    },
+    {
+      "completion": {
+        "count": 2,
+        "max_ms": 508.862,
+        "p50_ms": 443.725,
+        "p95_ms": 508.862,
+        "p99_ms": 508.862
+      },
+      "errors": [],
+      "makespan_ms": 509.0079139918089,
+      "name": "act_1",
+      "samples": [
+        {
+          "completion_ms": 508.8624549971428,
+          "id": "density-f66eb1c4dafd4819-0",
+          "result": {
+            "counter": 6,
+            "files": 64,
+            "memory_sha256": "3b5e470c938558fa46fbb1d0ceccda16b2c1682c288808e39ddc4b15ad283985",
+            "nonce": "cdb11f457a8d4afab81f5e0859463ce4",
+            "pid": 1,
+            "resident_bytes": 268435456
+          },
+          "service_ms": 508.66156301344745
+        },
+        {
+          "completion_ms": 443.7248620088212,
+          "id": "density-f66eb1c4dafd4819-1",
+          "result": {
+            "counter": 3,
+            "files": 64,
+            "memory_sha256": "ab8a75df62c4a73b95e2c91726a9b0a9908235ce27a6b9235800c1ead422a559",
+            "nonce": "5e788ea144f54bfb90b2ab50f242733e",
+            "pid": 1,
+            "resident_bytes": 268435456
+          },
+          "service_ms": 443.2816629996523
+        }
+      ],
+      "service": {
+        "count": 2,
+        "max_ms": 508.662,
+        "p50_ms": 443.282,
+        "p95_ms": 508.662,
+        "p99_ms": 508.662
+      }
+    },
+    {
+      "completion": {
+        "count": 2,
+        "max_ms": 426.33,
+        "p50_ms": 419.863,
+        "p95_ms": 426.33,
+        "p99_ms": 426.33
+      },
+      "errors": [],
+      "makespan_ms": 426.50365200825036,
+      "name": "park_1",
+      "samples": [
+        {
+          "completion_ms": 419.86299501149915,
+          "id": "density-f66eb1c4dafd4819-0",
+          "result": {
+            "state": "parked"
+          },
+          "service_ms": 419.7341499966569
+        },
+        {
+          "completion_ms": 426.3297100260388,
+          "id": "density-f66eb1c4dafd4819-1",
+          "result": {
+            "state": "parked"
+          },
+          "service_ms": 425.95887900097296
+        }
+      ],
+      "service": {
+        "count": 2,
+        "max_ms": 425.959,
+        "p50_ms": 419.734,
+        "p95_ms": 425.959,
+        "p99_ms": 425.959
+      }
+    },
+    {
+      "completion": {
+        "count": 2,
+        "max_ms": 1003.566,
+        "p50_ms": 981.544,
+        "p95_ms": 1003.566,
+        "p99_ms": 1003.566
+      },
+      "errors": [],
+      "makespan_ms": 1003.7507099914365,
+      "name": "wake_1",
+      "samples": [
+        {
+          "completion_ms": 1003.566461004084,
+          "id": "density-f66eb1c4dafd4819-0",
+          "result": {
+            "counter": 7,
+            "files": 64,
+            "memory_sha256": "70eb23344e9b3196618925776d66d0bb7f484c2c84005fcca727d9a4f274c6a5",
+            "nonce": "cdb11f457a8d4afab81f5e0859463ce4",
+            "pid": 1,
+            "resident_bytes": 268435456
+          },
+          "service_ms": 1003.3824229903985
+        },
+        {
+          "completion_ms": 981.54355501174,
+          "id": "density-f66eb1c4dafd4819-1",
+          "result": {
+            "counter": 4,
+            "files": 64,
+            "memory_sha256": "5fe23098f83baeb873d506af2342f59abc17c651534e17ca11662d6079f2ff94",
+            "nonce": "5e788ea144f54bfb90b2ab50f242733e",
+            "pid": 1,
+            "resident_bytes": 268435456
+          },
+          "service_ms": 981.125794001855
+        }
+      ],
+      "service": {
+        "count": 2,
+        "max_ms": 1003.382,
+        "p50_ms": 981.126,
+        "p95_ms": 1003.382,
+        "p99_ms": 1003.382
+      }
+    }
+  ],
+  "remaining_owned_ids": [],
+  "run_id": "density-f66eb1c4dafd4819",
+  "schema": 1,
+  "slo_violations": [],
+  "snapshots": {
+    "awake_0": {
+      "active_sandbox_creates": 0,
+      "active_sandboxes": 2,
+      "agent_version": "0.5.31",
+      "capabilities": [
+        "environment-contract-v1",
+        "sandbox",
+        "image-cache",
+        "disk-quota",
+        "hibernate-local-v2",
+        "direct-runsc-v1",
+        "managed-primary-v1",
+        "static-file-management-v1",
+        "storage-native-v1",
+        "sandbox-detach-published-v1",
+        "sandbox-migrate-storage-native-v1"
+      ],
+      "deployment_id": "density-20260907",
+      "init_version": "3",
+      "inventory_complete": true,
+      "node_epoch": "84fa5d94e3b040cf9a9ddc5bee6e5daf",
+      "node_id": "density-review-20260907",
+      "runtime_metrics": {
+        "collected_at": "2026-09-07T21:46:58.351618+00:00",
+        "cpu_count": 32,
+        "cpu_percent": 0.6211180124223602,
+        "cpu_vcpu": 0.19875776397515527,
+        "image_materialization_active_operations": 0,
+        "image_materialization_max_concurrent_operations": 32,
+        "image_materialization_waiting_operations": 0,
+        "image_pull_active_operations": 0,
+        "image_pull_max_concurrent_operations": 8,
+        "image_pull_waiting_operations": 0,
+        "load_average_15m": 0.154296875,
+        "load_average_1m": 0.76611328125,
+        "load_average_5m": 0.37548828125,
+        "memory_available_mb": 88156,
+        "memory_percent": 1.9377516741195577,
+        "memory_psi_full_avg10": 0.0,
+        "memory_psi_some_avg10": 0.0,
+        "memory_total_mb": 89898,
+        "memory_used_mb": 1742,
+        "storage_active_operations": 0,
+        "storage_cache_mb": 0,
+        "storage_device_pool_acquires": 5,
+        "storage_device_pool_discards": 0,
+        "storage_device_pool_enabled": true,
+        "storage_device_pool_high_watermark": 16,
+        "storage_device_pool_idle_devices": 4,
+        "storage_device_pool_low_watermark": 2,
+        "storage_device_pool_new_acquires": 1,
+        "storage_device_pool_releases": 3,
+        "storage_device_pool_reused_acquires": 4,
+        "storage_error_volumes": 0,
+        "storage_hard_capacity_mb": 1449984,
+        "storage_hard_reserved_mb": 10368,
+        "storage_max_concurrent_operations": 8,
+        "storage_publication_active": 0,
+        "storage_publication_duration_ms_max": 0,
+        "storage_publication_duration_ms_total": 0,
+        "storage_publication_limit": 4,
+        "storage_publication_queue_wait_ms_max": 0,
+        "storage_publication_queue_wait_ms_total": 0,
+        "storage_publication_waiting": 0,
+        "storage_published_volumes": 0,
+        "storage_snapshot_compactions": 0,
+        "storage_snapshot_publications": 0,
+        "storage_snapshot_uploaded_bytes": 0,
+        "storage_ublk_active_devices": 2,
+        "storage_ublk_live_devices": 6,
+        "storage_ublk_max_devices": 128,
+        "storage_waiting_operations": 0,
+        "swap_free_mb": 98303,
+        "swap_total_mb": 98303,
+        "swap_used_mb": 0
+      },
+      "total_resources": {
+        "disk_mb": 1449984,
+        "memory_mb": 98304,
+        "vcpu": 32.0
+      },
+      "used_resources": {
+        "disk_mb": 10368,
+        "memory_mb": 0,
+        "vcpu": 0.0
+      }
+    },
+    "awake_1": {
+      "active_sandbox_creates": 0,
+      "active_sandboxes": 2,
+      "agent_version": "0.5.31",
+      "capabilities": [
+        "environment-contract-v1",
+        "sandbox",
+        "image-cache",
+        "disk-quota",
+        "hibernate-local-v2",
+        "direct-runsc-v1",
+        "managed-primary-v1",
+        "static-file-management-v1",
+        "storage-native-v1",
+        "sandbox-detach-published-v1",
+        "sandbox-migrate-storage-native-v1"
+      ],
+      "deployment_id": "density-20260907",
+      "init_version": "3",
+      "inventory_complete": true,
+      "node_epoch": "84fa5d94e3b040cf9a9ddc5bee6e5daf",
+      "node_id": "density-review-20260907",
+      "runtime_metrics": {
+        "collected_at": "2026-09-07T21:47:00.427952+00:00",
+        "cpu_count": 32,
+        "cpu_percent": 0.0,
+        "cpu_vcpu": 0.0,
+        "image_materialization_active_operations": 0,
+        "image_materialization_max_concurrent_operations": 32,
+        "image_materialization_waiting_operations": 0,
+        "image_pull_active_operations": 0,
+        "image_pull_max_concurrent_operations": 8,
+        "image_pull_waiting_operations": 0,
+        "load_average_15m": 0.17529296875,
+        "load_average_1m": 1.025390625,
+        "load_average_5m": 0.43603515625,
+        "memory_available_mb": 88122,
+        "memory_percent": 1.9755723152906628,
+        "memory_psi_full_avg10": 0.0,
+        "memory_psi_some_avg10": 0.0,
+        "memory_total_mb": 89898,
+        "memory_used_mb": 1776,
+        "storage_active_operations": 0,
+        "storage_cache_mb": 0,
+        "storage_device_pool_acquires": 7,
+        "storage_device_pool_discards": 0,
+        "storage_device_pool_enabled": true,
+        "storage_device_pool_high_watermark": 16,
+        "storage_device_pool_idle_devices": 4,
+        "storage_device_pool_low_watermark": 2,
+        "storage_device_pool_new_acquires": 1,
+        "storage_device_pool_releases": 5,
+        "storage_device_pool_reused_acquires": 6,
+        "storage_error_volumes": 0,
+        "storage_hard_capacity_mb": 1449984,
+        "storage_hard_reserved_mb": 10368,
+        "storage_max_concurrent_operations": 8,
+        "storage_publication_active": 0,
+        "storage_publication_duration_ms_max": 0,
+        "storage_publication_duration_ms_total": 0,
+        "storage_publication_limit": 4,
+        "storage_publication_queue_wait_ms_max": 0,
+        "storage_publication_queue_wait_ms_total": 0,
+        "storage_publication_waiting": 0,
+        "storage_published_volumes": 0,
+        "storage_snapshot_compactions": 0,
+        "storage_snapshot_publications": 0,
+        "storage_snapshot_uploaded_bytes": 0,
+        "storage_ublk_active_devices": 2,
+        "storage_ublk_live_devices": 6,
+        "storage_ublk_max_devices": 128,
+        "storage_waiting_operations": 0,
+        "swap_free_mb": 98303,
+        "swap_total_mb": 98303,
+        "swap_used_mb": 0
+      },
+      "total_resources": {
+        "disk_mb": 1449984,
+        "memory_mb": 98304,
+        "vcpu": 32.0
+      },
+      "used_resources": {
+        "disk_mb": 10368,
+        "memory_mb": 0,
+        "vcpu": 0.0
+      }
+    },
+    "baseline": {
+      "active_sandbox_creates": 0,
+      "active_sandboxes": 0,
+      "agent_version": "0.5.31",
+      "capabilities": [
+        "environment-contract-v1",
+        "sandbox",
+        "image-cache",
+        "disk-quota",
+        "hibernate-local-v2",
+        "direct-runsc-v1",
+        "managed-primary-v1",
+        "static-file-management-v1",
+        "storage-native-v1",
+        "sandbox-detach-published-v1",
+        "sandbox-migrate-storage-native-v1"
+      ],
+      "deployment_id": "density-20260907",
+      "init_version": "3",
+      "inventory_complete": true,
+      "node_epoch": "84fa5d94e3b040cf9a9ddc5bee6e5daf",
+      "node_id": "density-review-20260907",
+      "runtime_metrics": {
+        "collected_at": "2026-09-07T21:46:42.057073+00:00",
+        "cpu_count": 32,
+        "cpu_percent": 0.0,
+        "cpu_vcpu": 0.0,
+        "image_materialization_active_operations": 0,
+        "image_materialization_max_concurrent_operations": 32,
+        "image_materialization_waiting_operations": 0,
+        "image_pull_active_operations": 0,
+        "image_pull_max_concurrent_operations": 8,
+        "image_pull_waiting_operations": 0,
+        "load_average_15m": 0.1181640625,
+        "load_average_1m": 0.333984375,
+        "load_average_5m": 0.2744140625,
+        "memory_available_mb": 88308,
+        "memory_percent": 1.768671160648735,
+        "memory_psi_full_avg10": 0.0,
+        "memory_psi_some_avg10": 0.0,
+        "memory_total_mb": 89898,
+        "memory_used_mb": 1590,
+        "storage_active_operations": 0,
+        "storage_cache_mb": 0,
+        "storage_device_pool_acquires": 1,
+        "storage_device_pool_discards": 0,
+        "storage_device_pool_enabled": true,
+        "storage_device_pool_high_watermark": 16,
+        "storage_device_pool_idle_devices": 5,
+        "storage_device_pool_low_watermark": 2,
+        "storage_device_pool_new_acquires": 1,
+        "storage_device_pool_releases": 1,
+        "storage_device_pool_reused_acquires": 0,
+        "storage_error_volumes": 0,
+        "storage_hard_capacity_mb": 1449984,
+        "storage_hard_reserved_mb": 0,
+        "storage_max_concurrent_operations": 8,
+        "storage_publication_active": 0,
+        "storage_publication_duration_ms_max": 0,
+        "storage_publication_duration_ms_total": 0,
+        "storage_publication_limit": 4,
+        "storage_publication_queue_wait_ms_max": 0,
+        "storage_publication_queue_wait_ms_total": 0,
+        "storage_publication_waiting": 0,
+        "storage_published_volumes": 0,
+        "storage_snapshot_compactions": 0,
+        "storage_snapshot_publications": 0,
+        "storage_snapshot_uploaded_bytes": 0,
+        "storage_ublk_active_devices": 0,
+        "storage_ublk_live_devices": 5,
+        "storage_ublk_max_devices": 128,
+        "storage_waiting_operations": 0,
+        "swap_free_mb": 98303,
+        "swap_total_mb": 98303,
+        "swap_used_mb": 0
+      },
+      "total_resources": {
+        "disk_mb": 1449984,
+        "memory_mb": 98304,
+        "vcpu": 32.0
+      },
+      "used_resources": {
+        "disk_mb": 0,
+        "memory_mb": 0,
+        "vcpu": 0.0
+      }
+    },
+    "final": {
+      "active_sandbox_creates": 0,
+      "active_sandboxes": 0,
+      "agent_version": "0.5.31",
+      "capabilities": [
+        "environment-contract-v1",
+        "sandbox",
+        "image-cache",
+        "disk-quota",
+        "hibernate-local-v2",
+        "direct-runsc-v1",
+        "managed-primary-v1",
+        "static-file-management-v1",
+        "storage-native-v1",
+        "sandbox-detach-published-v1",
+        "sandbox-migrate-storage-native-v1"
+      ],
+      "deployment_id": "density-20260907",
+      "init_version": "3",
+      "inventory_complete": true,
+      "node_epoch": "84fa5d94e3b040cf9a9ddc5bee6e5daf",
+      "node_id": "density-review-20260907",
+      "runtime_metrics": {
+        "collected_at": "2026-09-07T21:47:01.325575+00:00",
+        "cpu_count": 32,
+        "cpu_percent": 0.0,
+        "cpu_vcpu": 0.0,
+        "image_materialization_active_operations": 0,
+        "image_materialization_max_concurrent_operations": 32,
+        "image_materialization_waiting_operations": 0,
+        "image_pull_active_operations": 0,
+        "image_pull_max_concurrent_operations": 8,
+        "image_pull_waiting_operations": 0,
+        "load_average_15m": 0.17529296875,
+        "load_average_1m": 1.025390625,
+        "load_average_5m": 0.43603515625,
+        "memory_available_mb": 88067,
+        "memory_percent": 2.036752764243921,
+        "memory_psi_full_avg10": 0.0,
+        "memory_psi_some_avg10": 0.0,
+        "memory_total_mb": 89898,
+        "memory_used_mb": 1831,
+        "storage_active_operations": 0,
+        "storage_cache_mb": 0,
+        "storage_device_pool_acquires": 7,
+        "storage_device_pool_discards": 0,
+        "storage_device_pool_enabled": true,
+        "storage_device_pool_high_watermark": 16,
+        "storage_device_pool_idle_devices": 5,
+        "storage_device_pool_low_watermark": 2,
+        "storage_device_pool_new_acquires": 1,
+        "storage_device_pool_releases": 6,
+        "storage_device_pool_reused_acquires": 6,
+        "storage_error_volumes": 0,
+        "storage_hard_capacity_mb": 1449984,
+        "storage_hard_reserved_mb": 0,
+        "storage_max_concurrent_operations": 8,
+        "storage_publication_active": 0,
+        "storage_publication_duration_ms_max": 0,
+        "storage_publication_duration_ms_total": 0,
+        "storage_publication_limit": 4,
+        "storage_publication_queue_wait_ms_max": 0,
+        "storage_publication_queue_wait_ms_total": 0,
+        "storage_publication_waiting": 0,
+        "storage_published_volumes": 0,
+        "storage_snapshot_compactions": 0,
+        "storage_snapshot_publications": 0,
+        "storage_snapshot_uploaded_bytes": 0,
+        "storage_ublk_active_devices": 0,
+        "storage_ublk_live_devices": 5,
+        "storage_ublk_max_devices": 128,
+        "storage_waiting_operations": 0,
+        "swap_free_mb": 98303,
+        "swap_total_mb": 98303,
+        "swap_used_mb": 0
+      },
+      "total_resources": {
+        "disk_mb": 1449984,
+        "memory_mb": 98304,
+        "vcpu": 32.0
+      },
+      "used_resources": {
+        "disk_mb": 0,
+        "memory_mb": 0,
+        "vcpu": 0.0
+      }
+    },
+    "parked_0": {
+      "active_sandbox_creates": 0,
+      "active_sandboxes": 0,
+      "agent_version": "0.5.31",
+      "capabilities": [
+        "environment-contract-v1",
+        "sandbox",
+        "image-cache",
+        "disk-quota",
+        "hibernate-local-v2",
+        "direct-runsc-v1",
+        "managed-primary-v1",
+        "static-file-management-v1",
+        "storage-native-v1",
+        "sandbox-detach-published-v1",
+        "sandbox-migrate-storage-native-v1"
+      ],
+      "deployment_id": "density-20260907",
+      "init_version": "3",
+      "inventory_complete": true,
+      "node_epoch": "84fa5d94e3b040cf9a9ddc5bee6e5daf",
+      "node_id": "density-review-20260907",
+      "runtime_metrics": {
+        "collected_at": "2026-09-07T21:46:57.260318+00:00",
+        "cpu_count": 32,
+        "cpu_percent": 0.6172839506172839,
+        "cpu_vcpu": 0.19753086419753085,
+        "image_materialization_active_operations": 0,
+        "image_materialization_max_concurrent_operations": 32,
+        "image_materialization_waiting_operations": 0,
+        "image_pull_active_operations": 0,
+        "image_pull_max_concurrent_operations": 8,
+        "image_pull_waiting_operations": 0,
+        "load_average_15m": 0.154296875,
+        "load_average_1m": 0.76611328125,
+        "load_average_5m": 0.37548828125,
+        "memory_available_mb": 88189,
+        "memory_percent": 1.901043404747603,
+        "memory_psi_full_avg10": 0.0,
+        "memory_psi_some_avg10": 0.0,
+        "memory_total_mb": 89898,
+        "memory_used_mb": 1709,
+        "storage_active_operations": 0,
+        "storage_cache_mb": 0,
+        "storage_device_pool_acquires": 3,
+        "storage_device_pool_discards": 0,
+        "storage_device_pool_enabled": true,
+        "storage_device_pool_high_watermark": 16,
+        "storage_device_pool_idle_devices": 6,
+        "storage_device_pool_low_watermark": 2,
+        "storage_device_pool_new_acquires": 1,
+        "storage_device_pool_releases": 3,
+        "storage_device_pool_reused_acquires": 2,
+        "storage_error_volumes": 0,
+        "storage_hard_capacity_mb": 1449984,
+        "storage_hard_reserved_mb": 10368,
+        "storage_max_concurrent_operations": 8,
+        "storage_publication_active": 0,
+        "storage_publication_duration_ms_max": 0,
+        "storage_publication_duration_ms_total": 0,
+        "storage_publication_limit": 4,
+        "storage_publication_queue_wait_ms_max": 0,
+        "storage_publication_queue_wait_ms_total": 0,
+        "storage_publication_waiting": 0,
+        "storage_published_volumes": 0,
+        "storage_snapshot_compactions": 0,
+        "storage_snapshot_publications": 0,
+        "storage_snapshot_uploaded_bytes": 0,
+        "storage_ublk_active_devices": 0,
+        "storage_ublk_live_devices": 6,
+        "storage_ublk_max_devices": 128,
+        "storage_waiting_operations": 0,
+        "swap_free_mb": 98303,
+        "swap_total_mb": 98303,
+        "swap_used_mb": 0
+      },
+      "total_resources": {
+        "disk_mb": 1449984,
+        "memory_mb": 98304,
+        "vcpu": 32.0
+      },
+      "used_resources": {
+        "disk_mb": 10368,
+        "memory_mb": 0,
+        "vcpu": 0.0
+      }
+    },
+    "parked_1": {
+      "active_sandbox_creates": 0,
+      "active_sandboxes": 0,
+      "agent_version": "0.5.31",
+      "capabilities": [
+        "environment-contract-v1",
+        "sandbox",
+        "image-cache",
+        "disk-quota",
+        "hibernate-local-v2",
+        "direct-runsc-v1",
+        "managed-primary-v1",
+        "static-file-management-v1",
+        "storage-native-v1",
+        "sandbox-detach-published-v1",
+        "sandbox-migrate-storage-native-v1"
+      ],
+      "deployment_id": "density-20260907",
+      "init_version": "3",
+      "inventory_complete": true,
+      "node_epoch": "84fa5d94e3b040cf9a9ddc5bee6e5daf",
+      "node_id": "density-review-20260907",
+      "runtime_metrics": {
+        "collected_at": "2026-09-07T21:46:59.353466+00:00",
+        "cpu_count": 32,
+        "cpu_percent": 1.2345679012345678,
+        "cpu_vcpu": 0.3950617283950617,
+        "image_materialization_active_operations": 0,
+        "image_materialization_max_concurrent_operations": 32,
+        "image_materialization_waiting_operations": 0,
+        "image_pull_active_operations": 0,
+        "image_pull_max_concurrent_operations": 8,
+        "image_pull_waiting_operations": 0,
+        "load_average_15m": 0.154296875,
+        "load_average_1m": 0.76611328125,
+        "load_average_5m": 0.37548828125,
+        "memory_available_mb": 88184,
+        "memory_percent": 1.9066052637433537,
+        "memory_psi_full_avg10": 0.0,
+        "memory_psi_some_avg10": 0.0,
+        "memory_total_mb": 89898,
+        "memory_used_mb": 1714,
+        "storage_active_operations": 0,
+        "storage_cache_mb": 0,
+        "storage_device_pool_acquires": 5,
+        "storage_device_pool_discards": 0,
+        "storage_device_pool_enabled": true,
+        "storage_device_pool_high_watermark": 16,
+        "storage_device_pool_idle_devices": 6,
+        "storage_device_pool_low_watermark": 2,
+        "storage_device_pool_new_acquires": 1,
+        "storage_device_pool_releases": 5,
+        "storage_device_pool_reused_acquires": 4,
+        "storage_error_volumes": 0,
+        "storage_hard_capacity_mb": 1449984,
+        "storage_hard_reserved_mb": 10368,
+        "storage_max_concurrent_operations": 8,
+        "storage_publication_active": 0,
+        "storage_publication_duration_ms_max": 0,
+        "storage_publication_duration_ms_total": 0,
+        "storage_publication_limit": 4,
+        "storage_publication_queue_wait_ms_max": 0,
+        "storage_publication_queue_wait_ms_total": 0,
+        "storage_publication_waiting": 0,
+        "storage_published_volumes": 0,
+        "storage_snapshot_compactions": 0,
+        "storage_snapshot_publications": 0,
+        "storage_snapshot_uploaded_bytes": 0,
+        "storage_ublk_active_devices": 0,
+        "storage_ublk_live_devices": 6,
+        "storage_ublk_max_devices": 128,
+        "storage_waiting_operations": 0,
+        "swap_free_mb": 98303,
+        "swap_total_mb": 98303,
+        "swap_used_mb": 0
+      },
+      "total_resources": {
+        "disk_mb": 1449984,
+        "memory_mb": 98304,
+        "vcpu": 32.0
+      },
+      "used_resources": {
+        "disk_mb": 10368,
+        "memory_mb": 0,
+        "vcpu": 0.0
+      }
+    },
+    "resident": {
+      "active_sandbox_creates": 0,
+      "active_sandboxes": 2,
+      "agent_version": "0.5.31",
+      "capabilities": [
+        "environment-contract-v1",
+        "sandbox",
+        "image-cache",
+        "disk-quota",
+        "hibernate-local-v2",
+        "direct-runsc-v1",
+        "managed-primary-v1",
+        "static-file-management-v1",
+        "storage-native-v1",
+        "sandbox-detach-published-v1",
+        "sandbox-migrate-storage-native-v1"
+      ],
+      "deployment_id": "density-20260907",
+      "init_version": "3",
+      "inventory_complete": true,
+      "node_epoch": "84fa5d94e3b040cf9a9ddc5bee6e5daf",
+      "node_id": "density-review-20260907",
+      "runtime_metrics": {
+        "collected_at": "2026-09-07T21:46:56.287545+00:00",
+        "cpu_count": 32,
+        "cpu_percent": 0.0,
+        "cpu_vcpu": 0.0,
+        "image_materialization_active_operations": 0,
+        "image_materialization_max_concurrent_operations": 32,
+        "image_materialization_waiting_operations": 0,
+        "image_pull_active_operations": 0,
+        "image_pull_max_concurrent_operations": 8,
+        "image_pull_waiting_operations": 0,
+        "load_average_15m": 0.154296875,
+        "load_average_1m": 0.76611328125,
+        "load_average_5m": 0.37548828125,
+        "memory_available_mb": 88168,
+        "memory_percent": 1.9244032125297559,
+        "memory_psi_full_avg10": 0.0,
+        "memory_psi_some_avg10": 0.0,
+        "memory_total_mb": 89898,
+        "memory_used_mb": 1730,
+        "storage_active_operations": 0,
+        "storage_cache_mb": 0,
+        "storage_device_pool_acquires": 3,
+        "storage_device_pool_discards": 0,
+        "storage_device_pool_enabled": true,
+        "storage_device_pool_high_watermark": 16,
+        "storage_device_pool_idle_devices": 4,
+        "storage_device_pool_low_watermark": 2,
+        "storage_device_pool_new_acquires": 1,
+        "storage_device_pool_releases": 1,
+        "storage_device_pool_reused_acquires": 2,
+        "storage_error_volumes": 0,
+        "storage_hard_capacity_mb": 1449984,
+        "storage_hard_reserved_mb": 10368,
+        "storage_max_concurrent_operations": 8,
+        "storage_publication_active": 0,
+        "storage_publication_duration_ms_max": 0,
+        "storage_publication_duration_ms_total": 0,
+        "storage_publication_limit": 4,
+        "storage_publication_queue_wait_ms_max": 0,
+        "storage_publication_queue_wait_ms_total": 0,
+        "storage_publication_waiting": 0,
+        "storage_published_volumes": 0,
+        "storage_snapshot_compactions": 0,
+        "storage_snapshot_publications": 0,
+        "storage_snapshot_uploaded_bytes": 0,
+        "storage_ublk_active_devices": 2,
+        "storage_ublk_live_devices": 6,
+        "storage_ublk_max_devices": 128,
+        "storage_waiting_operations": 0,
+        "swap_free_mb": 98303,
+        "swap_total_mb": 98303,
+        "swap_used_mb": 0
+      },
+      "total_resources": {
+        "disk_mb": 1449984,
+        "memory_mb": 98304,
+        "vcpu": 32.0
+      },
+      "used_resources": {
+        "disk_mb": 10368,
+        "memory_mb": 0,
+        "vcpu": 0.0
+      }
+    }
+  },
+  "source_base_commit": "d792fda",
+  "started_at": "2026-09-07T21:46:42.144474+00:00",
+  "status": "passed",
+  "workload_sha256": "62492000deea1e751fa5b757a51a16784a70878a47cd58bfd21c430d22a7be4d"
+}

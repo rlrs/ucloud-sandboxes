@@ -54,6 +54,7 @@ from ucloud_sandboxes.node_agent import (
     build_builder_node_agent_server as _build_builder_node_agent_server,
 )
 from ucloud_sandboxes.routing import (
+    ExecRoute,
     RoutingStore,
     SandboxRoute,
     SandboxRouteAllocation,
@@ -358,6 +359,141 @@ def _store_build_context(server, archive: bytes) -> dict[str, object]:
 
 
 class ControlPlaneTests(unittest.TestCase):
+    def test_exec_requests_wait_for_missing_worker_without_proxying(self) -> None:
+        with _temporary_root() as root:
+            routing = RoutingStore(root / "routes.sqlite")
+            routing.upsert_exec(ExecRoute(
+                session_id="accepted", sandbox_id="sandbox", node_id="node",
+                job_id="job", node_url="http://node.invalid",
+            ))
+            gateway = _gateway_server(root, routing_file=routing.path)
+            with patch.object(gateway.RequestHandlerClass, "_proxy_request") as proxy:
+                with _running_server(gateway) as base:
+                    result = self._json_request(base + "/v1/exec/accepted/events", allow_error=True)
+                proxy.assert_not_called()
+            self.assertEqual(result["status"], 503)
+            self.assertEqual(result["body"]["error_code"], "sandbox_worker_unreachable")
+            self.assertIsNotNone(routing.get_exec("accepted"))
+            self.assertIsNone(routing.get_exec_loss("accepted"))
+
+    def test_implicit_wake_transport_errors_fence_original_command_only(self) -> None:
+        for failure in ("dns", "timeout", "transport"):
+            for failed_phase in ("wake", "exec"):
+                with self.subTest(failure=failure, failed_phase=failed_phase), _temporary_root() as root:
+                    routing = RoutingStore(root / "routes.sqlite")
+                    route = routing.upsert_sandbox(_sandbox_route(
+                        sandbox_id="sandbox", node_id="node", job_id="job",
+                        node_url="http://node.invalid", state="parked",
+                    ))
+                    gateway = _gateway_server(root, routing_file=routing.path)
+                    handler = gateway.RequestHandlerClass
+                    proxied = []
+                    def proxy(_handler, _url, path, **kwargs):
+                        proxied.append(path.rsplit("/", 1)[-1])
+                        if proxied[-1] == failed_phase:
+                            return control_plane.ProxiedResponse(
+                                504 if failure == "timeout" else 503,
+                                {"Content-Type": "application/json"},
+                                json.dumps({"code": "node_" + failure, "retryable": True}).encode(),
+                                transport_error_kind=failure,
+                            )
+                        return control_plane.ProxiedResponse(200, {}, b'{}')
+                    with (
+                        patch.object(handler, "_prepare_wake_placement", return_value=(route, False)),
+                        patch.object(handler, "_route_worker_is_fresh", return_value=True),
+                        patch.object(handler, "_commit_successful_wake", return_value=replace(route, state="running")),
+                        patch.object(handler, "_proxy_request", proxy),
+                        _running_server(gateway) as base,
+                    ):
+                        result = self._json_request(
+                            base + "/v1/sandboxes/sandbox/exec", method="POST",
+                            payload={"command": ["side-effecting-command"]}, allow_error=True,
+                        )
+                    if failed_phase == "wake":
+                        self.assertEqual(proxied, ["wake"])
+                        self.assertEqual(result["status"], 503)
+                        self.assertEqual(result["body"]["error_code"], "node_restore_busy")
+                        self.assertEqual(result["body"]["cause_code"], "node_" + failure)
+                        self.assertTrue(result["body"]["retryable"])
+                        self.assertNotIn("lifecycle_state", result["body"])
+                    else:
+                        self.assertEqual(proxied, ["wake", "exec"])
+                        self.assertNotIn("error_code", result["body"])
+
+    def test_lost_exec_returns_terminal_reason_without_contacting_worker(self) -> None:
+        with _temporary_root() as root:
+            route_file = root / "routes.sqlite"
+            routing = RoutingStore(route_file)
+            route = routing.upsert_sandbox(_sandbox_route(
+                sandbox_id="lost", node_id="node", job_id="job",
+                node_url="http://node.invalid", state="running",
+            ))
+            routing.upsert_exec(ExecRoute(
+                session_id="accepted", sandbox_id=route.sandbox_id,
+                node_id=route.node_id, job_id=route.job_id, node_url=route.node_url,
+            ))
+            routing.delete_sandboxes_for_jobs_with_error(["job"], terminal_error="node_lost")
+            gateway = _gateway_server(root, routing_file=route_file)
+            with _running_server(gateway) as base:
+                for method, suffix in [("GET", ""), ("GET", "/events"), ("POST", "/stdin"), ("POST", "/signal")]:
+                    with self.subTest(method=method, suffix=suffix):
+                        result = self._json_request(
+                            base + "/v1/exec/accepted" + suffix, method=method,
+                            payload={} if method == "POST" else None, allow_error=True,
+                        )
+                        self.assertEqual(result["status"], 410)
+                        self.assertEqual(result["body"]["error_code"], "exec_worker_lost")
+                        self.assertFalse(result["body"]["retryable"])
+                        self.assertEqual(result["body"]["sandbox_generation"], 1)
+                result = self._json_request(base + "/v1/exec/unknown/events", allow_error=True)
+                self.assertEqual(result["status"], 404)
+
+    def test_lost_sandbox_returns_terminal_reason_for_status_and_lifecycle(
+        self,
+    ) -> None:
+        with _temporary_root() as root:
+            route_file = root / "routes.sqlite"
+            routing = RoutingStore(route_file)
+            routing.upsert_sandbox(
+                _sandbox_route(
+                    sandbox_id="lost",
+                    node_id="node",
+                    job_id="job",
+                    node_url="http://node.invalid",
+                    state="running",
+                )
+            )
+            routing.delete_sandboxes_for_jobs_with_error(
+                ["job"], terminal_error="node_lost"
+            )
+            gateway = _gateway_server(root, routing_file=route_file)
+            with _running_server(gateway) as base:
+                for method, path in [
+                    ("GET", "/v1/sandboxes/lost"),
+                    ("GET", "/v1/sandboxes/lost/jobs/job-1"),
+                    ("POST", "/v1/sandboxes/lost/wake"),
+                    ("POST", "/v1/sandboxes/lost/park"),
+                ]:
+                    with self.subTest(method=method, path=path):
+                        result = self._json_request(
+                            base + path,
+                            method=method,
+                            payload={} if method == "POST" else None,
+                            allow_error=True,
+                        )
+                        self.assertEqual(result["status"], 410)
+                        self.assertEqual(result["body"]["error_code"], "node_lost")
+                        self.assertFalse(result["body"]["retryable"])
+                        self.assertEqual(result["body"]["sandbox_generation"], 1)
+                deleted = self._json_request(
+                    base + "/v1/sandboxes/lost", method="DELETE"
+                )
+                self.assertFalse(deleted["deleted"])
+                missing = self._json_request(
+                    base + "/v1/sandboxes/unknown", allow_error=True
+                )
+                self.assertEqual(missing["status"], 404)
+
     def test_exec_signal_is_available_to_the_public_sdk_route(self) -> None:
         self.assertTrue(
             control_plane._is_sdk_api_request(  # noqa: SLF001
@@ -1985,7 +2121,7 @@ class ControlPlaneTests(unittest.TestCase):
         )
         with _running_server(node) as node_url:
             try:
-                with patch.object(control_plane, "_NODE_HTTP_POOL", pool):
+                with patch.object(control_plane, "_NODE_EXEC_EVENT_HTTP_POOL", pool):
                     for _ in range(2):
                         req = request.Request(
                             f"{node_url}/v1/exec/session/events",
@@ -2006,9 +2142,18 @@ class ControlPlaneTests(unittest.TestCase):
 
     def test_authenticated_node_requests_with_bodies_close_connections(self) -> None:
         client_ports: list[int] = []
+        release_connections = Event()
 
         class EarlyRejectingNode(BaseHTTPRequestHandler):
             protocol_version = "HTTP/1.1"
+
+            def handle(self) -> None:
+                self.close_connection = True
+                self.handle_one_request()
+                # Keep the response socket alive until both attempts finish.
+                # Closing with unread request bytes can reset TCP before the
+                # client reads the response, depending on kernel scheduling.
+                release_connections.wait(10)
 
             def do_POST(self) -> None:
                 # Deliberately reject without consuming the request body. A
@@ -2018,6 +2163,8 @@ class ControlPlaneTests(unittest.TestCase):
                 self.send_response(400)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
+                if self.headers.get("Connection", "").lower() == "close":
+                    self.send_header("Connection", "close")
                 self.end_headers()
                 self.wfile.write(body)
 
@@ -2041,22 +2188,15 @@ class ControlPlaneTests(unittest.TestCase):
                             method="POST",
                             headers={"Authorization": "Bearer node-secret"},
                         )
-                        try:
-                            with control_plane._open_node_request(
-                                req,
-                                timeout=5,
-                                authenticated=True,
-                            ) as response:
-                                self.assertEqual(response.status, 400)
-                                self.assertEqual(
-                                    response.read(), b'{"intentional":true}'
-                                )
-                        except error.URLError:
-                            # Some kernels reset a closing TCP connection that
-                            # still has unread inbound bytes. That is a safe
-                            # transport failure; it must not be pooled.
-                            pass
+                        with control_plane._open_node_request(
+                            req,
+                            timeout=5,
+                            authenticated=True,
+                        ) as response:
+                            self.assertEqual(response.status, 400)
+                            self.assertEqual(response.read(), b'{"intentional":true}')
             finally:
+                release_connections.set()
                 pool.clear()
 
         self.assertEqual(len(client_ports), 2)
@@ -2786,6 +2926,7 @@ class ControlPlaneTests(unittest.TestCase):
             handler.registry_worker_url = ""
             handler.registry_layer_cache = None
             handler._write_json = lambda *_args, **_kwargs: None
+            handler.create_target_concurrency_per_node = 4
             pull_started = Event()
             release_pull = Event()
 
@@ -2795,6 +2936,10 @@ class ControlPlaneTests(unittest.TestCase):
                 return False
 
             handler._prepare_migration_destination_image = slow_prepare
+            # This case intentionally exercises remote placement. The source
+            # admission refresh fails promptly rather than contacting a real
+            # host named "source" before the controlled slow image pull.
+            handler._proxy_request = lambda *_args, **_kwargs: control_plane.ProxiedResponse(503, {}, b"{}")
             wake_thread = Thread(
                 target=handler._ensure_parked_sandbox_wake_placement,
                 args=(parked,),
@@ -2824,9 +2969,11 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(len(migrations), 1)
         self.assertEqual(migrations[0].destination_node_id, "destination-node")
 
-    def test_unpublished_park_retries_without_starting_blocking_migration(
-        self,
-    ) -> None:
+    def test_unpublished_park_retries_without_starting_blocking_migration(self) -> None:
+        self._assert_unpublished_wake_error(storage_errors=0)
+        self._assert_unpublished_wake_error(storage_errors=1)
+
+    def _assert_unpublished_wake_error(self, *, storage_errors: int) -> None:
         with _temporary_root() as root:
             routing = RoutingStore(root / "routes.sqlite")
             resources = ResourceQuantity(vcpu=2, memory_mb=4096, disk_mb=8192)
@@ -2859,6 +3006,7 @@ class ControlPlaneTests(unittest.TestCase):
                     runtime_metrics=NodeRuntimeMetrics(
                         collected_at=utc_now(),
                         cpu_percent=95.0,
+                        storage_error_volumes=storage_errors,
                         cpu_count=4,
                         memory_total_mb=8192,
                         memory_available_mb=4096,
@@ -2892,6 +3040,7 @@ class ControlPlaneTests(unittest.TestCase):
             handler._prepare_migration_destination_image = lambda *_args: (
                 _ for _ in ()
             ).throw(AssertionError("unpublished wake must not begin migration"))
+            handler._proxy_request = lambda *_args, **_kwargs: control_plane.ProxiedResponse(202, {}, b"{}")
 
             selected = handler._ensure_parked_sandbox_wake_placement(parked)
             migrations = routing.sandbox_migrations(active_only=True)
@@ -2899,8 +3048,13 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertIsNone(selected)
         self.assertEqual(migrations, [])
         self.assertEqual(writes[0][1], 503)
-        self.assertEqual(writes[0][0]["error_code"], "snapshot_publication_pending")
-        self.assertEqual(writes[0][2]["Retry-After"], "1")
+        self.assertEqual(
+            writes[0][0]["error_code"],
+            "storage_recovery_required"
+            if storage_errors
+            else "snapshot_publication_pending",
+        )
+        self.assertEqual(writes[0][2]["Retry-After"], "5" if storage_errors else "1")
 
     def test_gateway_hides_stale_private_registry_image_records(self) -> None:
         class MissingManifestRegistryHandler(BaseHTTPRequestHandler):
@@ -3650,6 +3804,7 @@ class ControlPlaneTests(unittest.TestCase):
                 routing_file=raw_path / "routes.sqlite",
                 max_concurrent_sandbox_creates=8,
             )
+            gateway.RequestHandlerClass.admission_wait_seconds = .01
             with _running_server(gateway) as base:
 
                 def create(index: int) -> dict:
@@ -3684,13 +3839,14 @@ class ControlPlaneTests(unittest.TestCase):
         )
         self.assertLess(elapsed, 5)
 
-    def test_gateway_create_reads_body_before_admission_and_caps_json(self) -> None:
+    def test_gateway_create_rejects_overload_and_caps_admitted_json(self) -> None:
         with _temporary_root() as root:
             gateway = _gateway_server(
                 root,
                 routing_file=root / "routes.sqlite",
                 max_concurrent_sandbox_creates=1,
             )
+            gateway.RequestHandlerClass.admission_wait_seconds = .01
             with _running_server(gateway):
                 host, port = gateway.server_address
                 limiter = gateway.RequestHandlerClass.sandbox_create_limiter
@@ -3732,8 +3888,10 @@ class ControlPlaneTests(unittest.TestCase):
                 oversized_status = response.status
                 connection.close()
 
-                # Bad input must release admission for the next request.
-                self.assertTrue(limiter.acquire(blocking=False))
+                # The response can arrive before the handler's finally block
+                # releases admission. Wait for cleanup, while still detecting
+                # a leaked slot with a bounded deadline.
+                self.assertTrue(limiter.acquire(timeout=2))
                 limiter.release()
 
         self.assertEqual(busy_body["retryable"], True)
@@ -3840,7 +3998,7 @@ class ControlPlaneTests(unittest.TestCase):
             record: dict[str, object] = {}
 
             def do_GET(self) -> None:
-                if self.path == "/v1/sandboxes":
+                if self.path.split("?", 1)[0] == "/v1/sandboxes":
                     self._write_json({"sandboxes": [type(self).record]})
                     return
                 self.send_response(404)
@@ -3922,7 +4080,7 @@ class ControlPlaneTests(unittest.TestCase):
             operation: dict[str, object] | None = None
 
             def do_GET(self) -> None:
-                if self.path == "/v1/sandboxes":
+                if self.path.split("?", 1)[0] == "/v1/sandboxes":
                     sandboxes: list[dict[str, object]] = []
                     if type(self).created_spec is not None and type(self).operation:
                         operation = type(self).operation or {}
@@ -4393,7 +4551,9 @@ class ControlPlaneTests(unittest.TestCase):
     def test_external_registry_images_do_not_use_managed_registry_leases(self) -> None:
         class RejectingRegistryUsageStore:
             def __getattr__(self, name: str):
-                raise AssertionError(f"external image reached usage store through {name}")
+                raise AssertionError(
+                    f"external image reached usage store through {name}"
+                )
 
         with _temporary_root() as raw_path:
             gateway = _gateway_server(
@@ -5100,6 +5260,7 @@ class ControlPlaneTests(unittest.TestCase):
     def test_gateway_forwards_the_complete_file_upload_body(self) -> None:
         body = b"# /// script\n# dependencies = ['requests']\n# ///\nprint('visible')\n"
         forwarded_requests: list[request.Request] = []
+        forwarded_bodies: list[bytes] = []
         response_payload = json.dumps(
             {
                 "ok": True,
@@ -5134,6 +5295,8 @@ class ControlPlaneTests(unittest.TestCase):
             **_kwargs: object,
         ) -> UploadResponse:
             forwarded_requests.append(proxied)
+            self.assertIsInstance(proxied.data, control_plane.RequestBodyStream)
+            forwarded_bodies.append(b"".join(iter(lambda: proxied.data.read(65536), b"")))
             return UploadResponse()
 
         with _temporary_root() as root:
@@ -5166,7 +5329,8 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(response.status, 200)
         self.assertEqual(uploaded["size"], len(body))
         self.assertEqual(len(forwarded_requests), 1)
-        self.assertEqual(forwarded_requests[0].data, body)
+        self.assertEqual(forwarded_bodies, [body])
+        self.assertEqual(forwarded_requests[0].get_header("Content-length"), str(len(body)))
         self.assertEqual(
             forwarded_requests[0].get_header("Content-type"),
             "application/octet-stream",
@@ -5577,9 +5741,7 @@ class ControlPlaneTests(unittest.TestCase):
                 )
             finally:
                 with control_plane._IMAGE_WARMUP_TASKS_GUARD:
-                    control_plane._IMAGE_WARMUP_TASKS.discard(
-                        ("prepare-1", "node-1")
-                    )
+                    control_plane._IMAGE_WARMUP_TASKS.discard(("prepare-1", "node-1"))
 
         self.assertIsNotNone(matching)
         self.assertEqual(matching.warmup_id, "prepare-1")

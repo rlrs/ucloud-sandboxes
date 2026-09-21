@@ -1,0 +1,177 @@
+{
+  "name": "result",
+  "elapsed": 157.884,
+  "prefix": "qualify-256-068a4298",
+  "started_at": "2026-09-19T04:52:30.361026+00:00",
+  "count": 256,
+  "concurrency": 256,
+  "image": "release-0534-989b03553a-image",
+  "shape": {
+    "cpus": 2,
+    "memory_mb": 1024,
+    "disk_mb": 5184
+  },
+  "phases": [
+    {
+      "name": "cold-create",
+      "seconds": 79.381,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 52.463,
+        "p50": 63.797,
+        "p95": 76.78,
+        "max": 79.179
+      }
+    },
+    {
+      "name": "initialize-and-tools",
+      "seconds": 14.111,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 0.802,
+        "p50": 8.783,
+        "p95": 13.431,
+        "max": 14.01
+      }
+    },
+    {
+      "name": "park-1",
+      "seconds": 8.652,
+      "passed": 256,
+      "failed": 0,
+      "latency": {
+        "min": 2.008,
+        "p50": 5.071,
+        "p95": 8.52,
+        "max": 8.582
+      }
+    },
+    {
+      "name": "resume-and-tools-1",
+      "seconds": 49.357,
+      "passed": 254,
+      "failed": 2,
+      "latency": {
+        "min": 1.049,
+        "p50": 44.632,
+        "p95": 48.554,
+        "max": 49.248
+      }
+    }
+  ],
+  "errors": [
+    {
+      "id": "qualify-256-068a4298-204",
+      "ok": false,
+      "seconds": 14.506070924922824,
+      "error": "SandboxApiError: node-agent request failed (502): {'error': '<html>\\r\\n<head><title>502 Bad Gateway</title></head>\\r\\n<body>\\r\\n<center><h1>502 Bad Gateway</h1></center>\\r\\n<hr><center>nginx</center>\\r\\n</body>\\r\\n</html>\\r\\n'}"
+    },
+    {
+      "id": "qualify-256-068a4298-101",
+      "ok": false,
+      "seconds": 48.15654249791987,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'storage-native ublk device capacity is exhausted', 'lifecycle_state': 'parked'}"
+    }
+  ],
+  "placement": [
+    [
+      "12396299",
+      "running",
+      128
+    ],
+    [
+      "12396300",
+      "running",
+      128
+    ]
+  ],
+  "success": false,
+  "fatal": "RuntimeError: resume-and-tools-1: 2 failures",
+  "cleanup_errors": [],
+  "remaining": [],
+  "http_rejections": [
+    {
+      "phase": "cold-create",
+      "code": "503",
+      "count": 1
+    },
+    {
+      "phase": "cold-create",
+      "code": "gateway_startup_busy",
+      "count": 3797
+    },
+    {
+      "phase": "cold-create",
+      "code": "image_warmup_pending",
+      "count": 31
+    },
+    {
+      "phase": "cold-create",
+      "code": "no_ready_node",
+      "count": 5016
+    },
+    {
+      "phase": "cold-create",
+      "code": "node_active_admission_deferred",
+      "count": 12
+    },
+    {
+      "phase": "initialize-and-tools",
+      "code": "gateway_startup_busy",
+      "count": 1635
+    },
+    {
+      "phase": "initialize-and-tools",
+      "code": "node_startup_busy",
+      "count": 11
+    },
+    {
+      "phase": "park-1",
+      "code": "http_request_capacity_exhausted",
+      "count": 493
+    },
+    {
+      "phase": "resume-and-tools-1",
+      "code": "502",
+      "count": 1
+    },
+    {
+      "phase": "resume-and-tools-1",
+      "code": "503",
+      "count": 1
+    },
+    {
+      "phase": "resume-and-tools-1",
+      "code": "gateway_startup_busy",
+      "count": 7876
+    },
+    {
+      "phase": "resume-and-tools-1",
+      "code": "node_restore_busy",
+      "count": 36
+    },
+    {
+      "phase": "resume-and-tools-1",
+      "code": "node_startup_busy",
+      "count": 8
+    },
+    {
+      "phase": "resume-and-tools-1",
+      "code": "snapshot_publication_pending",
+      "count": 115
+    }
+  ],
+  "health": {
+    "count": 147,
+    "failures": [],
+    "latency": {
+      "min": 0.018,
+      "p50": 0.042,
+      "p95": 0.208,
+      "max": 1.091
+    }
+  },
+  "total_seconds": 157.882
+}

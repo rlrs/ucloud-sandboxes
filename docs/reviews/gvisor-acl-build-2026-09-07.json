@@ -1,0 +1,166 @@
+{
+  "archive": {
+    "path": "/var/lib/gvisor-acl-build/artifacts/gvisor-hibernate-af682a2ddeec1eeb8dbe7ec7bf137c6b8810304638ed0da3c8418aa45a129775.tar.gz",
+    "sha256": "e27d1a86c89837ac06aa08ca2cb4236b161fa564b479ea92b1143c0dec1bb986",
+    "size": 149120650
+  },
+  "bazel_shutdown": {
+    "exit_code": 0,
+    "stderr": "",
+    "stdout": ""
+  },
+  "build_runner_sha256": "21dfaac7a02aa5bf774aefc3b705a928a17a2ec071f996d658b99e1a05dc554a",
+  "build_seconds": 101.94694638252258,
+  "build_status": {
+    "exit_code": 0,
+    "finish": 1788821391.3798995,
+    "start": 1788821289.4329531
+  },
+  "created_at_unix": 1788821461.3290236,
+  "distribution_installed": false,
+  "initial_attempt": {
+    "exit_code": 1,
+    "failure": "New test used AccessAt arguments in wrong order; one-line test correction was attested before retry.",
+    "finish": 1788821204.7734172,
+    "start": 1788820968.570188
+  },
+  "live_runtime_qualification": "pending; this summary reports build and unit tests only",
+  "manifest": {
+    "artifact": "gvisor-hibernate-af682a2ddeec1eeb8dbe7ec7bf137c6b8810304638ed0da3c8418aa45a129775",
+    "bazel_version": "bazel 8.3.1",
+    "build_config": "opt",
+    "files": {
+      "gvisor-bin/checkpointgofer": {
+        "sha256": "cc138a5b5b993f6539fed883a62ba74cef3dbb3c2a05f4d6e6c009aa294355b2",
+        "size": 68926386
+      },
+      "gvisor-bin/gvisor-sentry-prewarmer": {
+        "sha256": "70425fafd4f5b7ed5c96f78ce4f23c68948304da6fd6dd60ad33dd945a34760e",
+        "size": 1392
+      },
+      "gvisor-bin/gvisor_sentry": {
+        "sha256": "70bc2ba6961258f3e225a70b7864b39367ef5a1545e09fe6078559f06a5db030",
+        "size": 48220410
+      },
+      "gvisor-bin/runsc-metric-server": {
+        "sha256": "70319f5a6a3eae46a1a93e8261d174d41a6fcc1df4dfc28f81427c4660bb71dd",
+        "size": 52635914
+      },
+      "runsc": {
+        "sha256": "9ebdf83ec7bf37f8be26660a915ccef7d67c9a9f0342896c41364be81a05d3c1",
+        "size": 105437103
+      }
+    },
+    "gvisor_commit": "50e1502a95d36ad2faf2c7ef33b8bf21fe975293",
+    "host_architecture": "x86_64",
+    "patch_series_sha256": "53b928cb582c1c22c508ff590b91cff6f4d47cb871be8573ca31e39945061db1",
+    "patched_files_sha256": "691118645688a87a28b05d446774524164da246c7943dcef8fdc2ef0506c3a44",
+    "patches": [
+      {
+        "name": "20260817/0001-ucloud-hibernation.patch",
+        "sha256": "bed13a2a1ef790a61a7a09d3a70511a15a7504d1ef2342edc672b4203950f5e6"
+      },
+      {
+        "name": "20260817/0002-ucloud-default-acl-umask.patch",
+        "sha256": "361476d2fe3ab4c8adc80ab0c54e63c18f96984c2d59c00b51b770cb9f3fd506"
+      }
+    ],
+    "runsc_sha256": "9ebdf83ec7bf37f8be26660a915ccef7d67c9a9f0342896c41364be81a05d3c1",
+    "schema": 2
+  },
+  "native_acl_regression": {
+    "native_acl_test_exit": 0,
+    "package_sha256": "33f284b3514880e21a64e2cfa628e87502cc23c8301bfe3134e9ace1d87dcb96",
+    "qualifier_sha256": "929d7b4bff5af2b8c6652c40ca4169fd42390ba7877673ae3e5b7c02a91be721",
+    "stderr": "..\n----------------------------------------------------------------------\nRan 2 tests in 0.046s\n\nOK\n",
+    "stdout": "",
+    "timestamp": 1788821371.3034055
+  },
+  "postbuild_loadavg": [
+    3.296875,
+    7.5849609375,
+    4.64794921875
+  ],
+  "schema": 1,
+  "source_package_sha256": "33f284b3514880e21a64e2cfa628e87502cc23c8301bfe3134e9ace1d87dcb96",
+  "tests": [
+    {
+      "reports": [
+        {
+          "path": "/var/lib/gvisor-acl-build/cache/9406efeeae5d2cf69b2fdc6560e273cb/execroot/_main/bazel-out/k8-fastbuild/testlogs/pkg/sentry/pgalloc/pgalloc_test/test.xml",
+          "suites": []
+        }
+      ],
+      "status": "pass",
+      "target": "pkg/sentry/pgalloc/pgalloc_test"
+    },
+    {
+      "reports": [
+        {
+          "path": "/var/lib/gvisor-acl-build/cache/9406efeeae5d2cf69b2fdc6560e273cb/execroot/_main/bazel-out/k8-fastbuild/testlogs/runsc/boot/boot_test/test.xml",
+          "suites": []
+        }
+      ],
+      "status": "pass",
+      "target": "runsc/boot/boot_test"
+    },
+    {
+      "reports": [
+        {
+          "path": "/var/lib/gvisor-acl-build/cache/9406efeeae5d2cf69b2fdc6560e273cb/execroot/_main/bazel-out/k8-fastbuild/testlogs/runsc/cmd/cmd_test/test.xml",
+          "suites": []
+        }
+      ],
+      "status": "pass",
+      "target": "runsc/cmd/cmd_test"
+    },
+    {
+      "reports": [
+        {
+          "path": "/var/lib/gvisor-acl-build/cache/9406efeeae5d2cf69b2fdc6560e273cb/execroot/_main/bazel-out/k8-fastbuild/testlogs/runsc/container/container_test/shard_7_of_8/test.xml",
+          "suites": []
+        },
+        {
+          "path": "/var/lib/gvisor-acl-build/cache/9406efeeae5d2cf69b2fdc6560e273cb/execroot/_main/bazel-out/k8-fastbuild/testlogs/runsc/container/container_test/shard_8_of_8/test.xml",
+          "suites": []
+        },
+        {
+          "path": "/var/lib/gvisor-acl-build/cache/9406efeeae5d2cf69b2fdc6560e273cb/execroot/_main/bazel-out/k8-fastbuild/testlogs/runsc/container/container_test/shard_6_of_8/test.xml",
+          "suites": []
+        },
+        {
+          "path": "/var/lib/gvisor-acl-build/cache/9406efeeae5d2cf69b2fdc6560e273cb/execroot/_main/bazel-out/k8-fastbuild/testlogs/runsc/container/container_test/shard_1_of_8/test.xml",
+          "suites": []
+        },
+        {
+          "path": "/var/lib/gvisor-acl-build/cache/9406efeeae5d2cf69b2fdc6560e273cb/execroot/_main/bazel-out/k8-fastbuild/testlogs/runsc/container/container_test/shard_3_of_8/test.xml",
+          "suites": []
+        },
+        {
+          "path": "/var/lib/gvisor-acl-build/cache/9406efeeae5d2cf69b2fdc6560e273cb/execroot/_main/bazel-out/k8-fastbuild/testlogs/runsc/container/container_test/shard_2_of_8/test.xml",
+          "suites": []
+        },
+        {
+          "path": "/var/lib/gvisor-acl-build/cache/9406efeeae5d2cf69b2fdc6560e273cb/execroot/_main/bazel-out/k8-fastbuild/testlogs/runsc/container/container_test/shard_4_of_8/test.xml",
+          "suites": []
+        },
+        {
+          "path": "/var/lib/gvisor-acl-build/cache/9406efeeae5d2cf69b2fdc6560e273cb/execroot/_main/bazel-out/k8-fastbuild/testlogs/runsc/container/container_test/shard_5_of_8/test.xml",
+          "suites": []
+        }
+      ],
+      "status": "pass",
+      "target": "runsc/container/container_test"
+    },
+    {
+      "reports": [
+        {
+          "path": "/var/lib/gvisor-acl-build/cache/9406efeeae5d2cf69b2fdc6560e273cb/execroot/_main/bazel-out/k8-fastbuild/testlogs/pkg/sentry/fsimpl/tmpfs/tmpfs_test/test.xml",
+          "suites": []
+        }
+      ],
+      "status": "pass",
+      "target": "pkg/sentry/fsimpl/tmpfs/tmpfs_test"
+    }
+  ]
+}

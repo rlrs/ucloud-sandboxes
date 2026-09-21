@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "baseline_commit": "c1826b9",
+  "candidate": "uncommitted working tree",
+  "environment": {
+    "os": "macOS",
+    "python": "3.10.13"
+  },
+  "workload": {
+    "nodes": 6,
+    "inventory_entries_per_node": 86,
+    "snapshot_dependency_layers_per_entry": 4,
+    "warmup_reads": 1
+  },
+  "heartbeat_reads": [
+    {
+      "implementation": "baseline",
+      "repeat": 0,
+      "owner_reads": {
+        "count": 1000,
+        "cpu_seconds": 2.228084,
+        "wall_seconds": 2.405673958011903
+      },
+      "fleet_reads": {
+        "count": 200,
+        "cpu_seconds": 1.8695009999999996,
+        "wall_seconds": 1.904220416006865
+      }
+    },
+    {
+      "implementation": "candidate",
+      "repeat": 0,
+      "owner_reads": {
+        "count": 1000,
+        "cpu_seconds": 1.31515,
+        "wall_seconds": 1.4128061660157982
+      },
+      "fleet_reads": {
+        "count": 200,
+        "cpu_seconds": 0.9860370000000005,
+        "wall_seconds": 1.0075064580014441
+      }
+    },
+    {
+      "implementation": "baseline",
+      "repeat": 1,
+      "owner_reads": {
+        "count": 1000,
+        "cpu_seconds": 2.057238999999999,
+        "wall_seconds": 2.120758292003302
+      },
+      "fleet_reads": {
+        "count": 200,
+        "cpu_seconds": 1.8585010000000004,
+        "wall_seconds": 1.8804859169758856
+      }
+    },
+    {
+      "implementation": "candidate",
+      "repeat": 1,
+      "owner_reads": {
+        "count": 1000,
+        "cpu_seconds": 1.288158000000001,
+        "wall_seconds": 1.3686490000109188
+      },
+      "fleet_reads": {
+        "count": 200,
+        "cpu_seconds": 0.9798880000000008,
+        "wall_seconds": 1.009154999977909
+      }
+    },
+    {
+      "implementation": "baseline",
+      "repeat": 2,
+      "owner_reads": {
+        "count": 1000,
+        "cpu_seconds": 2.0276129999999988,
+        "wall_seconds": 2.0690717920078896
+      },
+      "fleet_reads": {
+        "count": 200,
+        "cpu_seconds": 1.8661510000000003,
+        "wall_seconds": 1.8824449999956414
+      }
+    },
+    {
+      "implementation": "candidate",
+      "repeat": 2,
+      "owner_reads": {
+        "count": 1000,
+        "cpu_seconds": 1.2374569999999991,
+        "wall_seconds": 1.2830727079999633
+      },
+      "fleet_reads": {
+        "count": 200,
+        "cpu_seconds": 0.9780620000000013,
+        "wall_seconds": 0.9924991249863524
+      }
+    }
+  ],
+  "pinned_reader_metrics": {
+    "append_count": 8,
+    "event_padding_bytes": 2048,
+    "max_bytes": 131072,
+    "max_events": 10,
+    "baseline_seconds": 5.2754899579740595,
+    "candidate_seconds": 0.0025523750227876008,
+    "retained_events_after_reader_release": 10
+  },
+  "limits": [
+    "Synthetic local benchmark, not end-to-end production latency or capacity qualification.",
+    "Pinned-reader experiment demonstrates a stall mechanism; it does not measure its share of current production latency.",
+    "Heartbeat results are three alternating baseline/candidate repetitions; CPU time is per-process."
+  ]
+}

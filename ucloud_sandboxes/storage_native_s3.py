@@ -27,6 +27,8 @@ from .storage_native_registry import (
 from .storage_native_publication import (
     DEFAULT_MAX_CONCURRENT_PUBLICATIONS,
     PublicationGate,
+    local_layer_data_bytes,
+    snapshot_compaction_start,
 )
 from .telemetry import Telemetry
 
@@ -366,6 +368,7 @@ class S3SnapshotPublisher:
         existing_layers: tuple[PublishedStorageLayer, ...] = (),
         existing_repo_blob_url: str = "",
         global_config_path: Path | None = None,
+        check_current: Callable[[], None] | None = None,
     ) -> StorageSnapshotPublication:
         started = time.monotonic()
         with self.telemetry.span(
@@ -377,7 +380,7 @@ class S3SnapshotPublisher:
                 "snapshot.virtual_size": virtual_size,
             },
         ) as span:
-            with self._publication_gate.acquire(self.telemetry) as queue_wait_ms:
+            with self._publication_gate.acquire(self.telemetry, check_current) as queue_wait_ms:
                 span.set_attribute("snapshot.queue.wait_ms", queue_wait_ms)
                 publication, compacted, uploaded_bytes = self._publish_locked(
                     client=self._client_factory(),
@@ -512,37 +515,44 @@ class S3SnapshotPublisher:
             raise ValueError("snapshot virtual size must be positive")
         if not source_layer_paths and not existing_layers:
             raise ValueError("snapshot requires at least one sealed layer")
-        input_bytes = sum(layer.size for layer in existing_layers)
         for path in source_layer_paths:
             if not path.is_absolute():
                 raise ValueError("sealed layer path must be absolute")
-            input_bytes += path.stat().st_size
-        should_compact = (
-            len(existing_layers) + len(source_layer_paths) > self.compact_after_layers
-            or input_bytes > self.compact_after_bytes
-            or bool(
-                existing_layers
-                and existing_repo_blob_url
-                and existing_repo_blob_url.rstrip("/") != self.repo_blob_url.rstrip("/")
-            )
+        layer_sizes = tuple(layer.size for layer in existing_layers) + tuple(
+            local_layer_data_bytes(path) for path in source_layer_paths
         )
+        input_bytes = sum(layer_sizes)
+        compact_start = snapshot_compaction_start(
+            layer_sizes, max_layers=self.compact_after_layers,
+            max_delta_bytes=self.compact_after_bytes,
+            reusable_base=bool(existing_layers),
+            origin_changed=bool(
+                existing_layers and existing_repo_blob_url
+                and existing_repo_blob_url.rstrip("/") != self.repo_blob_url.rstrip("/")
+            ),
+        )
+        should_compact = compact_start is not None
+        retained_layers = existing_layers[:compact_start] if should_compact else ()
         uploaded_bytes = 0
         if should_compact:
             if global_config_path is None or not global_config_path.is_absolute():
                 raise ValueError("compacted publication requires a global config")
             with self.telemetry.span(
                 "snapshot.compact_and_upload",
-                attributes={"snapshot.input_bytes": input_bytes},
+                attributes={
+                    "snapshot.input_bytes": sum(layer_sizes[compact_start:]),
+                    "snapshot.retained_base_bytes": sum(layer.size for layer in retained_layers),
+                },
             ):
                 layer = self._publish_compacted_layer(
                     client,
                     exporter,
-                    existing_layers=existing_layers,
+                    existing_layers=existing_layers[compact_start:],
                     existing_repo_blob_url=existing_repo_blob_url,
                     source_layer_paths=source_layer_paths,
                     global_config_path=global_config_path,
                 )
-            layers = (layer,)
+            layers = (*retained_layers, layer)
             uploaded_bytes += layer.size
         else:
             with self.telemetry.span(

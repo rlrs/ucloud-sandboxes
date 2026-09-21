@@ -1,0 +1,59 @@
+{
+  "runsc": "/usr/local/libexec/gvisor-hibernate-98916c2462a6aaaf33239321a957453d861719a05772f648f2e490ddce594046/runsc",
+  "runsc_sha256": "be491ee25a10a9036b46037dbd21343cc3bf4a4eee90ca21885e7848124bd9e5",
+  "sidecar_sha256": {
+    "checkpointgofer": "f446aa6be14f4ee667f983e80a2290b4b8a667ec896b4af6209912e9699ef984",
+    "gvisor-sentry-prewarmer": "70425fafd4f5b7ed5c96f78ce4f23c68948304da6fd6dd60ad33dd945a34760e",
+    "gvisor_sentry": "5a2c51695ba932d99b15ee1dba40a6688c8dbbe9460560e89d4550748752965a",
+    "runsc-metric-server": "e08f71e3c7461984a10647327684c4059108fe31bcafd72571fc313f7efabd9b"
+  },
+  "state_root": "/var/lib/ucloud-sandboxes/node-state/direct-runtime-mountfix-e87ff7015c04",
+  "old_state_root": "/var/lib/ucloud-sandboxes/node-state/direct-runtime",
+  "build_manifest": {
+    "artifact": "gvisor-hibernate-98916c2462a6aaaf33239321a957453d861719a05772f648f2e490ddce594046",
+    "bazel_version": "bazel 8.3.1",
+    "build_config": "opt",
+    "files": {
+      "gvisor-bin/checkpointgofer": {
+        "sha256": "f446aa6be14f4ee667f983e80a2290b4b8a667ec896b4af6209912e9699ef984",
+        "size": 68926386
+      },
+      "gvisor-bin/gvisor-sentry-prewarmer": {
+        "sha256": "70425fafd4f5b7ed5c96f78ce4f23c68948304da6fd6dd60ad33dd945a34760e",
+        "size": 1392
+      },
+      "gvisor-bin/gvisor_sentry": {
+        "sha256": "5a2c51695ba932d99b15ee1dba40a6688c8dbbe9460560e89d4550748752965a",
+        "size": 48222282
+      },
+      "gvisor-bin/runsc-metric-server": {
+        "sha256": "e08f71e3c7461984a10647327684c4059108fe31bcafd72571fc313f7efabd9b",
+        "size": 52637700
+      },
+      "runsc": {
+        "sha256": "be491ee25a10a9036b46037dbd21343cc3bf4a4eee90ca21885e7848124bd9e5",
+        "size": 105448164
+      }
+    },
+    "gvisor_commit": "50e1502a95d36ad2faf2c7ef33b8bf21fe975293",
+    "host_architecture": "x86_64",
+    "patch_series_sha256": "e87ff7015c04691ee37905b0f54257acee060518a2672f3d764d4d8b36a4ad42",
+    "patched_files_sha256": "53aa4c8bd9164196b5c6624d4f0cb19a0194ce56cf8f016863342dd83f35e571",
+    "patches": [
+      {
+        "name": "20260817/0001-ucloud-hibernation.patch",
+        "sha256": "bed13a2a1ef790a61a7a09d3a70511a15a7504d1ef2342edc672b4203950f5e6"
+      },
+      {
+        "name": "20260817/0002-ucloud-default-acl-umask.patch",
+        "sha256": "361476d2fe3ab4c8adc80ab0c54e63c18f96984c2d59c00b51b770cb9f3fd506"
+      },
+      {
+        "name": "20260817/0003-ucloud-release-detached-mounts.patch",
+        "sha256": "0b3d2eb13a8f417e1ee9c5d9e80ef5df38eba59d6cde3623dfa9d058bd7f493c"
+      }
+    ],
+    "runsc_sha256": "be491ee25a10a9036b46037dbd21343cc3bf4a4eee90ca21885e7848124bd9e5",
+    "schema": 2
+  }
+}

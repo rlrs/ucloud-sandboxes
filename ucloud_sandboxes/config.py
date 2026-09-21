@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, fields, replace
+from dataclasses import asdict, dataclass, field, fields, replace
 import json
 import math
 from pathlib import Path
@@ -174,8 +174,7 @@ class RegistryStoreConfig:
             )
             if not Path(data_root).is_relative_to(Path(mount_point)):
                 raise ValueError(
-                    "registry_store.data_root must be inside "
-                    "registry_store.mount_point"
+                    "registry_store.data_root must be inside registry_store.mount_point"
                 )
             if result.endpoint or result.bucket or result.region or result.prefix:
                 raise ValueError(
@@ -260,11 +259,14 @@ class SandboxPoolConfig:
     swap_gb: int = 96
     direct_runsc_commit: str = DEFAULT_DIRECT_RUNSC_COMMIT
     direct_network_allow_tcp: tuple[str, ...] = ()
+    network_relays: dict[str, str] = field(default_factory=dict)
     storage_native_repository: str = "ucloud-sandbox-snapshots"
     storage_native_cache_gb: int = 32
     storage_native_pool_low_watermark: int = 2
     storage_native_pool_high_watermark: int = 16
-    storage_native_max_ublk_devices: int = 128
+    # Optional operator override. Disk quota and live memory admission provide
+    # the default capacity bounds; a fixed device count ignores machine size.
+    storage_native_max_ublk_devices: int = 0
     storage_native_max_concurrent_publications: int = (
         DEFAULT_MAX_CONCURRENT_PUBLICATIONS
     )
@@ -289,11 +291,20 @@ class SandboxPoolConfig:
 
     @classmethod
     def from_dict(cls, raw: object) -> "SandboxPoolConfig":
+        # Optional extension of schema 5; existing deployment files remain valid.
+        if isinstance(raw, dict):
+            raw = {"network_relays": {}, **raw}
         values = _exact_dataclass_values("sandbox", raw, cls())
         values["direct_network_allow_tcp"] = _string_tuple(
             "sandbox.direct_network_allow_tcp",
             values["direct_network_allow_tcp"],
         )
+        from .relay_network import parse_network_relays
+
+        values["network_relays"] = {
+            name: relay.endpoint
+            for name, relay in parse_network_relays(values["network_relays"]).items()
+        }
         result = cls(**values)
         _require_string("sandbox.product_id", result.product_id)
         _require_int("sandbox.disk_gb", result.disk_gb, minimum=1)
@@ -303,14 +314,16 @@ class SandboxPoolConfig:
             "docker_quota_image_gb",
             "storage_native_cache_gb",
             "storage_native_pool_high_watermark",
-            "storage_native_max_ublk_devices",
             "storage_native_max_concurrent_publications",
             "direct_disk_headroom_mb",
             "direct_max_concurrent_restores",
             "max_concurrent_image_pulls",
         ):
             _require_int(f"sandbox.{name}", getattr(result, name), minimum=1)
-        for name in ("swap_gb", "storage_native_pool_low_watermark"):
+        for name in (
+            "swap_gb", "storage_native_pool_low_watermark",
+            "storage_native_max_ublk_devices",
+        ):
             _require_int(f"sandbox.{name}", getattr(result, name), minimum=0)
         _require_float(
             "sandbox.direct_idle_park_seconds",
@@ -326,7 +339,8 @@ class SandboxPoolConfig:
                 "sandbox.storage_native_pool_high_watermark"
             )
         if (
-            result.storage_native_pool_high_watermark
+            result.storage_native_max_ublk_devices > 0
+            and result.storage_native_pool_high_watermark
             > result.storage_native_max_ublk_devices
         ):
             raise ValueError(
@@ -409,6 +423,7 @@ class DeploymentConfig:
     policy: ScalePolicy
     sandbox: SandboxPoolConfig
     builder: BuilderPoolConfig
+    node_package_root: str = DEFAULT_INSTALL_ROOT + "/release"
 
     @classmethod
     def default(cls, scope_id: str = "project-id") -> "DeploymentConfig":
@@ -424,8 +439,8 @@ class DeploymentConfig:
             registry_private_ip="",
             gateway_port=8090,
             gateway_heartbeat_ttl_seconds=120,
-            gateway_max_concurrent_sandbox_creates=64,
-            gateway_max_http_request_threads=128,
+            gateway_max_concurrent_sandbox_creates=0,
+            gateway_max_http_request_threads=1536,
             relay_port=8092,
             relay_request_timeout_seconds=7200,
             relay_worker_lease_seconds=600,
@@ -465,6 +480,7 @@ class DeploymentConfig:
     def from_dict(cls, raw: object) -> "DeploymentConfig":
         if not isinstance(raw, dict):
             raise ValueError("deployment config must be a JSON object")
+        raw = {"node_package_root": DEFAULT_INSTALL_ROOT + "/release", **raw}
         expected = {item.name for item in fields(cls)}
         schema = _require_int("schema", raw.get("schema"), minimum=1)
         if schema != DEPLOYMENT_CONFIG_SCHEMA:
@@ -501,6 +517,9 @@ class DeploymentConfig:
             deployment_id=_require_string("deployment_id", raw["deployment_id"]),
             provider=provider,
             data_root=_require_absolute_path("data_root", raw["data_root"]),
+            node_package_root=_require_absolute_path(
+                "node_package_root", raw["node_package_root"]
+            ),
             registry_store=registry_store,
             gateway_private_host=_require_string(
                 "gateway_private_host", raw["gateway_private_host"]
@@ -646,10 +665,10 @@ class DeploymentConfig:
         return self._state_file("ssh/gateway-init.pub")
 
     def sandbox_node_package_bundle(self) -> Path:
-        return Path(DEFAULT_INSTALL_ROOT) / "release/sandbox-node-package.tar.gz"
+        return Path(self.node_package_root) / "sandbox-node-package.tar.gz"
 
     def builder_node_package_bundle(self) -> Path:
-        return Path(DEFAULT_INSTALL_ROOT) / "release/builder-node-package.tar.gz"
+        return Path(self.node_package_root) / "builder-node-package.tar.gz"
 
     def registry_data_dir(self) -> Path:
         if self.registry_store.kind != "filesystem":
@@ -693,8 +712,7 @@ class DeploymentConfig:
     @property
     def heartbeat_url(self) -> str:
         return (
-            f"http://{self.gateway_private_host}:{self.gateway_port}"
-            "/v1/nodes/heartbeat"
+            f"http://{self.gateway_private_host}:{self.gateway_port}/v1/nodes/heartbeat"
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -713,6 +731,11 @@ class DeploymentConfig:
             "deployment_id": self.deployment_id,
             "provider": provider,
             "data_root": self.data_root,
+            **(
+                {"node_package_root": self.node_package_root}
+                if self.node_package_root != DEFAULT_INSTALL_ROOT + "/release"
+                else {}
+            ),
             "registry_store": asdict(self.registry_store),
             "gateway_private_host": self.gateway_private_host,
             "registry_private_ip": self.registry_private_ip,
@@ -766,6 +789,8 @@ def _decode_policy(
     if not isinstance(raw, dict):
         raise ValueError("policy must be a JSON object")
     defaults = ScalePolicy()
+    # Existing deployments retain local wake placement until explicitly enabled.
+    raw = {"parked_wake_consolidation_enabled": False, **raw}
     expected = {item.name for item in fields(defaults)} - _RUNTIME_POLICY_FIELDS
     _require_exact_keys("policy", raw, expected)
     values: dict[str, object] = {}

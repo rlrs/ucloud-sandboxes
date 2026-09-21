@@ -48,4 +48,4 @@ Both queueing and actual release work mattered in the old run. Raising concurren
 
 ## Validation and rollout state
 
-Regression coverage checks completed migration history and transport epochs, per-sandbox lifecycle lookups, permissions on live and recreated SQLite sidecars, and park-before-wake ordering with timing recorded. **1,051 server tests passed (six skipped)**, along with Ruff and `git diff --check`. The follow-up is **local and not deployed**. No SDK or Verifiers change is required for these backend changes.
+Regression coverage checks completed migration history and transport epochs, per-sandbox lifecycle lookups, permissions on live and recreated SQLite sidecars, and park-before-wake ordering with timing recorded. **1,051 server tests passed (six skipped)**, along with Ruff and `git diff --check`. The follow-up was subsequently deployed as **0.5.74**; see the [rollout verification](release-0.5.74-production-2026-09-21.md). No SDK or Verifiers change is required for these backend changes.

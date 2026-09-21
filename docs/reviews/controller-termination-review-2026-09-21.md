@@ -92,3 +92,20 @@ route-only ownership, durable quarantine, stale recovery rejection, mismatched
 inventory, obsolete stop replay, and authenticated boot replacement. These are
 controlled fault-injection tests with provider termination mocked, not evidence
 that an actual UCloud readiness interruption has been reproduced.
+
+## Live qualification found an additional import-publication defect
+
+0.5.67 was deployed while production had zero routes or reservations, with all
+93 installed package files matching commit `bceed00`. CI and 258 selected tests
+on the production Linux/Python environment passed. Disposable worker 12397503
+then failed detached wake with `storage-native snapshot changed before
+publication`; the guest remained healthy.
+
+The Warden's mounted-import publication path unmounted only the overlay before
+capturing a revision. The underlying writable storage remained MOUNTED, which
+the upload revision fence correctly rejects. 0.5.68 explicitly seals/releases
+that parked import while holding its lifecycle lock, then captures the released
+revision before uploading outside the lock. It retains the existing protection
+against a delayed upload sealing a resumed or re-parked sandbox. A regression
+models metadata repair with a parked journal and mounted storage and checks the
+release order and revision passed to publication.

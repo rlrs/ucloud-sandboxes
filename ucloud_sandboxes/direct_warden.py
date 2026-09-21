@@ -493,8 +493,11 @@ class DirectRunscWarden:
             record = self._storage_record(sandbox)
             if record.state == StorageVolumeState.PUBLISHED:
                 return record
-            if record.state == StorageVolumeState.MOUNTED:
-                self.rootfs_lifecycle.park_sandbox(sandbox)
+            if record.state in {StorageVolumeState.MOUNTED, StorageVolumeState.SEALED}:
+                # Imported checkpoints can be logically parked while metadata
+                # repair still owns a writable COW mount. Seal/release under
+                # the lifecycle lock before capturing the upload revision.
+                self._release_parked_storage(sandbox, operation_seed=operation_id)
                 record = self._storage_record(sandbox)
             revision = record.revision
         # The sealed layers are immutable. Do not hold the Warden lock across

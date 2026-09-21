@@ -1,3 +1,4 @@
+from dataclasses import replace
 import json
 import os
 import shutil
@@ -672,6 +673,27 @@ class DirectRunscWardenTests(unittest.TestCase):
             self.warden._delete_runtime(self.sandbox)
         self.assertEqual(self.fencer.handles, [])
         self.assertFalse(any("delete" in command for command in self.runner.commands))
+
+    def test_publication_seals_mounted_import_before_capturing_revision(self):
+        self.warden.create(self.sandbox, operation_id="create:1")
+        self.warden.park(self.sandbox, operation_id="park:1")
+        # Import repair mounts the filesystem without starting the guest.
+        owner = self.warden._storage_owner(self.sandbox)
+        mounted = self.storage.ensure_mounted(owner, operation_id="import:repair")
+        self.storage.events.clear()
+
+        def upload(owner, *, operation_id, expected_revision):
+            current = self.storage._typed()
+            self.assertEqual(current.state, StorageVolumeState.RELEASED)
+            self.assertGreater(expected_revision, mounted.revision)
+            self.assertEqual(expected_revision, current.revision)
+            self.assertEqual(self.storage.events, ["rootfs-park", "seal", "release"])
+            return replace(current, state=StorageVolumeState.PUBLISHED)
+
+        with patch.object(self.storage, "ensure_published", side_effect=upload, create=True):
+            published = self.warden.publish_storage_snapshot(self.sandbox, operation_id="import:publish")
+        self.assertEqual(published.state, StorageVolumeState.PUBLISHED)
+        self.assertEqual(self.warden.inspect(self.sandbox).state, HibernationState.PARKED)
 
     def test_background_upload_does_not_hold_wake_lock(self):
         self.warden.create(self.sandbox, operation_id="create:1")

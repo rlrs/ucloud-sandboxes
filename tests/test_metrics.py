@@ -3,6 +3,7 @@ from tempfile import TemporaryDirectory
 from pathlib import Path
 import json
 import sqlite3
+import time
 import unittest
 from unittest.mock import patch
 
@@ -45,6 +46,58 @@ def sandbox_route(**values: object) -> SandboxRoute:
 
 
 class MetricsTests(unittest.TestCase):
+    def test_interrupted_maintenance_preserves_committed_events(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = MetricsStore(Path(raw_dir) / "metrics.sqlite")
+            store.append("before")
+
+            def fail_cleanup(connection):
+                connection.execute("DELETE FROM metric_events")
+                raise sqlite3.OperationalError("database is locked")
+
+            with (
+                patch("ucloud_sandboxes.metrics._sqlite_storage_bytes", return_value=10**9),
+                patch.object(store, "_try_reclaim_sqlite_space_locked", side_effect=fail_cleanup),
+            ):
+                store.append("during")
+            self.assertFalse(store._sqlite_connection.in_transaction)
+            store.append("after")
+            self.assertEqual([event.kind for event in store.load_events()],
+                             ["before", "during", "after"])
+
+    def test_pinned_reader_does_not_block_request_thread_checkpoint(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "metrics.sqlite"
+            store = MetricsStore(path, max_bytes=128 * 1024, max_events=10)
+            store.append("initial")
+            reader = sqlite3.connect(path)
+            try:
+                reader.execute("BEGIN")
+                reader.execute("SELECT * FROM metric_events").fetchall()
+                started = time.monotonic()
+                for index in range(30):
+                    store.append("event", {"index": index, "padding": "x" * 2048})
+                elapsed = time.monotonic() - started
+                # A pinned WAL cannot be truncated, but inserts and logical
+                # retention must proceed instead of each waiting a full second.
+                self.assertLess(elapsed, 1.0)
+                events = store.load_events()
+                self.assertEqual(len(events), 10)
+                self.assertEqual(events[-1].data["index"], 29)
+                self.assertTrue(all(event.kind == "event" for event in events))
+                self.assertEqual(
+                    store._sqlite_connection.execute("PRAGMA busy_timeout").fetchone()[0],
+                    1000,
+                )
+            finally:
+                reader.close()
+            store.append("after-reader")
+            physical_bytes = sum(
+                candidate.stat().st_size for candidate in (path, Path(f"{path}-wal"))
+                if candidate.exists()
+            )
+            self.assertLessEqual(physical_bytes, 128 * 1024)
+
     def test_sqlite_store_filters_indexed_recent_events(self) -> None:
         with TemporaryDirectory() as raw_dir:
             path = Path(raw_dir) / "metrics.sqlite"

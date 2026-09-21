@@ -1270,28 +1270,66 @@ class _RelayLifecycleDispatcher:
         }
         self._slots = {action: asyncio.Semaphore(limit) for action, limit in limits.items()}
         self._closed = False
+        self._active: set[asyncio.Task[str | None]] = set()
 
     async def notify(self, request: RelayRequest, *, action: str) -> str | None:
         if action not in self._pools:
             raise ValueError("unsupported relay sandbox lifecycle action")
-        async with self._slots[action]:
+        if self._closed:
+            raise RuntimeError("relay lifecycle dispatcher is closed")
+        # Keep an accepted operation alive across caller cancellation, including
+        # async backoff. Only an actual HTTP attempt occupies a thread/slot.
+        task = asyncio.create_task(self._notify(request, action=action))
+        self._active.add(task)
+        try:
+            return await _finish_before_cancellation(task)
+        finally:
+            self._active.discard(task)
+
+    async def _notify(self, request: RelayRequest, *, action: str) -> str | None:
+        deadline = _relay_lifecycle_deadline(request)
+        attempt = 0
+        while True:
             if self._closed:
                 raise RuntimeError("relay lifecycle dispatcher is closed")
-            context = copy_context()
-            future = asyncio.get_running_loop().run_in_executor(
-                self._pools[action],
-                lambda: context.run(
-                    _post_gateway_sandbox_lifecycle,
-                    self.gateway_url, self.bearer_token, request, action=action,
-                ),
-            )
-            # A cancelled caller must not release admission while its blocking
-            # HTTP operation still runs, or repeated cancellation could queue
-            # unbounded work in the executor.
-            return await _finish_before_cancellation(future)
+            if action == "wake":
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("relay wake deadline exceeded")
+                try:
+                    await asyncio.wait_for(self._slots[action].acquire(), remaining)
+                except asyncio.TimeoutError as exc:
+                    raise TimeoutError("relay wake deadline exceeded") from exc
+            else:
+                await self._slots[action].acquire()
+            try:
+                if self._closed:
+                    raise RuntimeError("relay lifecycle dispatcher is closed")
+                context = copy_context()
+                future = asyncio.get_running_loop().run_in_executor(
+                    self._pools[action],
+                    lambda: context.run(
+                        _post_gateway_sandbox_lifecycle_once,
+                        self.gateway_url, self.bearer_token, request,
+                        action=action, attempt=attempt, deadline=deadline,
+                    ),
+                )
+                try:
+                    return await future
+                except _RelayLifecycleRetry as retry:
+                    delay = retry.delay_seconds
+            finally:
+                self._slots[action].release()
+            # A capacity-blocked owner must not occupy fleet-wide dispatch
+            # capacity while unrelated, ready workers could make progress.
+            await asyncio.sleep(delay)
+            attempt += 1
 
     async def close(self) -> None:
         self._closed = True
+        # Include operations in async backoff, which no longer own a pool
+        # thread. They observe closure before submitting another HTTP attempt.
+        await asyncio.gather(*tuple(self._active), return_exceptions=True)
         await asyncio.gather(*(
             asyncio.to_thread(pool.shutdown, wait=True) for pool in self._pools.values()
         ))
@@ -1405,6 +1443,22 @@ def _delete_bounded_json(
         return decoded, response.headers
 
 
+class _RelayLifecycleRetry(Exception):
+    """An identified, side-effect-safe retry; the response socket is closed."""
+
+    def __init__(self, delay_seconds: float) -> None:
+        super().__init__("relay lifecycle retry pending")
+        self.delay_seconds = delay_seconds
+
+
+def _relay_lifecycle_deadline(relay_request: RelayRequest) -> float:
+    budget = 600.0
+    expires_at = getattr(relay_request, "expires_at", None)
+    if expires_at is not None:
+        budget = max(0.0, min(budget, expires_at - time.time()))
+    return time.monotonic() + budget
+
+
 def _post_gateway_sandbox_lifecycle(
     gateway_url: str,
     bearer_token: str | None,
@@ -1412,104 +1466,118 @@ def _post_gateway_sandbox_lifecycle(
     *,
     action: str,
 ) -> str | None:
+    """Synchronous entry point; the relay dispatcher yields between attempts."""
+    deadline = _relay_lifecycle_deadline(relay_request)
+    attempt = 0
+    while True:
+        try:
+            return _post_gateway_sandbox_lifecycle_once(
+                gateway_url, bearer_token, relay_request,
+                action=action, attempt=attempt, deadline=deadline,
+            )
+        except _RelayLifecycleRetry as retry:
+            time.sleep(retry.delay_seconds)
+            attempt += 1
+
+
+def _post_gateway_sandbox_lifecycle_once(
+    gateway_url: str,
+    bearer_token: str | None,
+    relay_request: RelayRequest,
+    *,
+    action: str,
+    attempt: int,
+    deadline: float,
+) -> str | None:
     if action not in {"park", "wake"}:
         raise ValueError("unsupported relay sandbox lifecycle action")
     if relay_request.sandbox_id is None:
         return
     if relay_request.sandbox_generation is None:
         raise ValueError("relay sandbox lifecycle binding has no generation")
-    # The model result is durable before wake. Capacity backpressure must not
-    # require the worker to recommit it (or abort the other rollouts it owns).
-    # Keep retries inside the bounded wake dispatcher, with the same lifecycle
-    # operation ID, and never extend the original request's lifetime.
-    wake_budget = 600.0
-    expires_at = getattr(relay_request, "expires_at", None)
-    if expires_at is not None:
-        wake_budget = max(0.0, min(wake_budget, expires_at - time.time()))
-    deadline = time.monotonic() + wake_budget
-    for attempt in range(601 if action == "wake" else 101):
+    remaining = deadline - time.monotonic()
+    if action == "wake" and remaining <= 0:
+        raise TimeoutError("relay wake deadline exceeded")
+    try:
+        _payload, headers = _post_bounded_json(
+            gateway_url,
+            f"/v1/sandboxes/{quote(relay_request.sandbox_id, safe='')}/{action}",
+            {
+                "generation": relay_request.sandbox_generation,
+                "operation_id": f"relay-{action}:{relay_request.request_id}",
+                "rollout_id": relay_request.rollout_id,
+                "request_id": relay_request.request_id,
+                "request_created_at": relay_request.created_at,
+            },
+            bearer_token=bearer_token,
+            invalid_url_error="gateway URL is invalid",
+            empty_token_error="gateway bearer token cannot be empty",
+            timeout_seconds=(
+                remaining
+                if action == "wake" else 600.0
+            ),
+            response_name="gateway lifecycle",
+        )
+    except HTTPError as exc:
+        # HTTPError owns the response socket even though open() raised.
+        # Close every failure, including exhausted retries and 5xx errors.
         try:
-            _payload, headers = _post_bounded_json(
-                gateway_url,
-                f"/v1/sandboxes/{quote(relay_request.sandbox_id, safe='')}/{action}",
-                {
-                    "generation": relay_request.sandbox_generation,
-                    "operation_id": f"relay-{action}:{relay_request.request_id}",
-                    "rollout_id": relay_request.rollout_id,
-                    "request_id": relay_request.request_id,
-                    "request_created_at": relay_request.created_at,
-                },
-                bearer_token=bearer_token,
-                invalid_url_error="gateway URL is invalid",
-                empty_token_error="gateway bearer token cannot be empty",
-                timeout_seconds=(
-                    max(0.001, deadline - time.monotonic())
-                    if action == "wake" else 600.0
-                ),
-                response_name="gateway lifecycle",
+            body = exc.read(_MAX_CONTROL_RESPONSE_BYTES + 1)
+            failure = (
+                json.loads(body)
+                if body and len(body) <= _MAX_CONTROL_RESPONSE_BYTES
+                else {}
             )
-            break
-        except HTTPError as exc:
-            # HTTPError owns the response socket even though open() raised.
-            # Close every failure, including exhausted retries and 5xx errors.
+        except (ValueError, OSError):
+            failure = {}
+        finally:
+            exc.close()
+        permanent = exc.code in {404, 410} or (
+            exc.code == 409
+            and isinstance(failure, dict)
+            and failure.get("retryable") is False
+        )
+        if action == "wake" and permanent:
+            raise RelayCallerUnavailable(exc.code) from exc
+        # Only retry positively identified admission failures here. An
+        # unclassified 5xx still reaches the worker's existing retry path.
+        capacity_pending = (
+            action == "wake"
+            and exc.code in {429, 503}
+            and isinstance(failure, dict)
+            and failure.get("retryable") is True
+        )
+        if isinstance(failure, dict) and failure.get("error_code"):
+            exc.msg = f"{exc.msg} ({str(failure['error_code'])[:160]})"
+        if capacity_pending:
             try:
-                body = exc.read(_MAX_CONTROL_RESPONSE_BYTES + 1)
-                failure = (
-                    json.loads(body)
-                    if body and len(body) <= _MAX_CONTROL_RESPONSE_BYTES
-                    else {}
-                )
-            except (ValueError, OSError):
-                failure = {}
-            finally:
-                exc.close()
-            permanent = exc.code in {404, 410} or (
-                exc.code == 409
-                and isinstance(failure, dict)
-                and failure.get("retryable") is False
-            )
-            if action == "wake" and permanent:
-                raise RelayCallerUnavailable(exc.code) from exc
-            # Only retry positively identified admission failures here. An
-            # unclassified 5xx still reaches the worker's existing retry path.
-            capacity_pending = (
-                action == "wake"
-                and exc.code in {429, 503}
-                and isinstance(failure, dict)
-                and failure.get("retryable") is True
-            )
-            if isinstance(failure, dict) and failure.get("error_code"):
-                exc.msg = f"{exc.msg} ({str(failure['error_code'])[:160]})"
-            if capacity_pending:
-                try:
-                    retry_after = float(exc.headers.get("Retry-After", "1"))
-                except (TypeError, ValueError):
-                    retry_after = 1.0
-                delay = max(1.0, min(5.0, retry_after)) + random.uniform(0, 0.25)
-                if attempt >= 600 or time.monotonic() + delay >= deadline:
-                    raise
-                get_current_span().add_event(
-                    "relay.wake.capacity_retry",
-                    {
-                        "gateway.lifecycle.status_code": exc.code,
-                        "gateway.lifecycle.error_code": str(failure.get("error_code", "")),
-                        "retry.attempt": attempt + 1,
-                        "retry.delay_seconds": delay,
-                    },
-                )
-                time.sleep(delay)
-                continue
-            # Another lifecycle request can win the fence between enqueue and
-            # this explicit park, and a concurrent status/log read can briefly
-            # hold the same activity fence. The bounded idempotent retry
-            # observes the stable result without giving transient reads a
-            # separate failure policy.
-            if (
-                permanent or exc.code != 409 or attempt >= 100
-                or (action == "wake" and time.monotonic() + 0.05 >= deadline)
-            ):
+                retry_after = float(exc.headers.get("Retry-After", "1"))
+            except (TypeError, ValueError):
+                retry_after = 1.0
+            delay = max(1.0, min(5.0, retry_after)) + random.uniform(0, 0.25)
+            if attempt >= 600 or time.monotonic() + delay >= deadline:
                 raise
-            time.sleep(0.05)
+            get_current_span().add_event(
+                "relay.wake.capacity_retry",
+                {
+                    "gateway.lifecycle.status_code": exc.code,
+                    "gateway.lifecycle.error_code": str(failure.get("error_code", "")),
+                    "retry.attempt": attempt + 1,
+                    "retry.delay_seconds": delay,
+                },
+            )
+            raise _RelayLifecycleRetry(delay) from exc
+        # Another lifecycle request can win the fence between enqueue and
+        # this explicit park, and a concurrent status/log read can briefly
+        # hold the same activity fence. The bounded idempotent retry
+        # observes the stable result without giving transient reads a
+        # separate failure policy.
+        if (
+            permanent or exc.code != 409 or attempt >= 100
+            or (action == "wake" and time.monotonic() + 0.05 >= deadline)
+        ):
+            raise
+        raise _RelayLifecycleRetry(0.05) from exc
     transport_epoch = headers.get("X-UCloud-Sandbox-Transport-Epoch", "").strip()
     return transport_epoch or None
 

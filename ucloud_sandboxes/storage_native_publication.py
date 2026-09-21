@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from pathlib import Path
 import threading
 import time
 from typing import Callable, Iterator
@@ -9,6 +10,29 @@ from .telemetry import Telemetry
 
 
 DEFAULT_MAX_CONCURRENT_PUBLICATIONS = 4
+
+
+def local_layer_data_bytes(path: Path) -> int:
+    """Estimate export work without counting sparse virtual-address holes.
+
+    Sparse OverlayBD uppers retain the volume's virtual EOF when sealed.
+    Publication streams mapped data, so st_size can overstate that work by
+    orders of magnitude. Allocation is a scheduling estimate, never a digest,
+    quota, or authority check; dense export still computes the exact output.
+    """
+    stat = path.stat()
+    blocks = getattr(stat, "st_blocks", None)
+    return stat.st_size if blocks is None else min(stat.st_size, blocks * 512)
+
+
+def snapshot_chain_needs_compaction(
+    layer_sizes: tuple[int, ...], *, max_layers: int, max_delta_bytes: int,
+) -> bool:
+    # The oldest layer is the base, including the result of the last flatten.
+    # Counting it makes a base larger than the byte threshold trigger another
+    # full rewrite after every tiny delta. Bound accumulated deltas instead;
+    # the independent layer-depth trigger still bounds lookup work.
+    return len(layer_sizes) > max_layers or sum(layer_sizes[1:]) > max_delta_bytes
 
 
 class PublicationGate:

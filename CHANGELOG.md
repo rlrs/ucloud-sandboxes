@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.69 - 2026-09-21
+
+- Release relay lifecycle slots during retry backoff, cache validated heartbeat
+  decoding, and keep best-effort metrics cleanup from waiting on SQLite readers.
+- Avoid repeatedly compacting large snapshot bases; count accumulated delta data
+  and allocated sparse-layer bytes while retaining the chain-depth bound.
+- Include worker I/O pressure in placement and avoid optional consolidation onto
+  more heavily stalled workers. Upgrade the gateway before workers.
+
 ## 0.5.54
 
 - Retain generation-fenced node-loss records for seven days. Requests for a lost

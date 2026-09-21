@@ -67,6 +67,7 @@ def sample_node_runtime_metrics(
     swap_free_mb = memory.get("SwapFree", 0) // 1024
     swap_used_mb = max(0, swap_total_mb - swap_free_mb)
     memory_pressure = read_proc_pressure(proc_path / "pressure" / "memory")
+    io_pressure = read_proc_pressure(proc_path / "pressure" / "io")
     memory_percent = (
         (memory_used_mb / memory_total_mb) * 100.0 if memory_total_mb > 0 else None
     )
@@ -84,6 +85,8 @@ def sample_node_runtime_metrics(
         swap_free_mb=swap_free_mb,
         memory_psi_some_avg10=memory_pressure.get("some"),
         memory_psi_full_avg10=memory_pressure.get("full"),
+        io_psi_some_avg10=io_pressure.get("some"),
+        io_psi_full_avg10=io_pressure.get("full"),
         load_average_1m=load[0],
         load_average_5m=load[1],
         load_average_15m=load[2],

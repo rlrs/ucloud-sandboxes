@@ -5701,6 +5701,11 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     layer_cache,
                     spread_cold_image=spread_cold_image,
                 ),
+                # Prefer pressure headroom before packing disk onto older
+                # workers. Count newly reserved creates immediately so a burst
+                # cannot all follow the same low-pressure heartbeat sample.
+                node_pressure_score(item[0])
+                + item[1].active_creates / max(1, self.create_target_concurrency_per_node),
                 item[1].active_creates,
                 _resource_slack(
                     item[1].available_resources,

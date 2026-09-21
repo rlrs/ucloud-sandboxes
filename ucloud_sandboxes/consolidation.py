@@ -51,6 +51,16 @@ def can_consolidate_wake(
     src = source.runtime_metrics
     dst = destination.runtime_metrics
     assert src is not None and dst is not None
+    # Optional packing must not concentrate work onto a worker with worse
+    # measured I/O/reclaim stalls merely because it is older and more occupied.
+    # Compare like-for-like samples; older agents may not report I/O PSI yet.
+    for name in ("io_psi_some_avg10", "io_psi_full_avg10", "memory_psi_some_avg10"):
+        source_stall, destination_stall = getattr(src, name), getattr(dst, name)
+        if (
+            source_stall is not None and destination_stall is not None
+            and destination_stall > source_stall
+        ):
+            return False
     # Evacuate only lightly loaded sources. Charge the full waking shape
     # against live destination headroom, rather than relying on overcommit.
     if src.cpu_percent / 100 > policy.target_cpu_utilization / 2:

@@ -48,8 +48,12 @@ the measured reduction in churn and compaction, including its limitations.
 
 Each ordinary publication appends the newly sealed writable layer to the
 existing immutable Registry chain. The node compacts the prospective chain
-before publishing when it would exceed either eight layers or 4 GiB of layer
-data. Those defaults bound lookup depth and Registry metadata without putting a
+before publishing when it would exceed either eight layers or 4 GiB of accumulated
+delta data after the oldest base layer. Local sealed layers use allocated bytes
+as the size estimate, excluding sparse virtual-address holes. Excluding the base
+avoids repeatedly flattening an already compacted multi-GiB snapshot after every
+small update. These are compaction triggers, not snapshot size limits. They bound
+lookup depth and Registry metadata without putting a
 large temporary flattened file on the worker's constrained local disk.
 
 Compaction opens the complete old-remote-plus-new-local image through

@@ -331,6 +331,8 @@ class NodeRuntimeMetrics:
     swap_free_mb: int = 0
     memory_psi_some_avg10: float | None = None
     memory_psi_full_avg10: float | None = None
+    io_psi_some_avg10: float | None = None
+    io_psi_full_avg10: float | None = None
     load_average_1m: float | None = None
     load_average_5m: float | None = None
     load_average_15m: float | None = None
@@ -380,6 +382,8 @@ class NodeRuntimeMetrics:
         # storage signals remain optional at that rolling-upgrade boundary.
         raw = dict(raw)
         raw.setdefault("storage_ublk_max_devices", 0)
+        raw.setdefault("io_psi_some_avg10", None)
+        raw.setdefault("io_psi_full_avg10", None)
         raw.setdefault("storage_publication_active", 0)
         raw.setdefault("storage_publication_waiting", 0)
         raw.setdefault("storage_publication_limit", 0)
@@ -401,6 +405,8 @@ class NodeRuntimeMetrics:
             "memory_percent",
             "memory_psi_some_avg10",
             "memory_psi_full_avg10",
+            "io_psi_some_avg10",
+            "io_psi_full_avg10",
             "load_average_1m",
             "load_average_5m",
             "load_average_15m",

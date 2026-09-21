@@ -527,7 +527,10 @@ worker count, or bypass the configured idle grace and drain/stop proof.
 
 Publication also bounds the immutable snapshot chain. The prospective old
 remote layers plus new local sealed delta are compacted when they exceed eight
-layers or 4 GiB. Compaction streams one flattened layer directly to the
+layers or 4 GiB of accumulated delta data beyond the oldest base layer. Local
+sealed-layer sizes are estimated from allocated bytes, excluding sparse holes.
+An already large compacted base therefore does not force another full rewrite
+after each small delta. Compaction streams one flattened layer directly to the
 Registry; it does not allocate another virtual-disk-sized worker file. The old
 publication and local delta retain authority until the replacement manifest is
 durable, so a compaction failure blocks detachment and scale-down rather than

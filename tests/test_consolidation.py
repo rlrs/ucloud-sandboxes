@@ -131,6 +131,24 @@ class ConsolidationTests(unittest.TestCase):
             )
         )
 
+    def test_optional_packing_does_not_move_to_worse_io_or_reclaim_pressure(self):
+        for signal in ("io_psi_some_avg10", "io_psi_full_avg10", "memory_psi_some_avg10"):
+            source = replace(self.source, runtime_metrics=replace(
+                self.source.runtime_metrics, **{signal: 5},
+            ))
+            busy = replace(self.destination, runtime_metrics=replace(
+                self.destination.runtime_metrics, **{signal: 36},
+            ))
+            quiet = replace(self.destination, runtime_metrics=replace(
+                self.destination.runtime_metrics, **{signal: 2},
+            ))
+            self.assertFalse(can_consolidate_wake(
+                source, busy, self.shape, self.policy, now=self.now,
+            ))
+            self.assertTrue(can_consolidate_wake(
+                source, quiet, self.shape, self.policy, now=self.now,
+            ))
+
     def setup_handler(self, root):
         snapshot = _portable_snapshot("parked")
         routing = RoutingStore(root / "routes.sqlite")

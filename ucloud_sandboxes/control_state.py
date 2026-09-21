@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from collections import OrderedDict
 from dataclasses import replace
 import json
 import os
 from pathlib import Path
 import sqlite3
+from threading import Lock
 import time
 from typing import Any, Iterable, Iterator
 
@@ -23,6 +25,10 @@ from .registry import (
 _APPLICATION_ID = 0x55435331  # UCS1
 _SCHEMA_VERSION = 1
 _ERROR = "control state is unreadable"
+# These bound retained decoding work, not fleet size or admission. SQLite is
+# still read on every lookup; only identical validated payloads can be reused.
+_HEARTBEAT_CACHE_ENTRIES = 64
+_HEARTBEAT_CACHE_BYTES = 16 * 1024**2
 # Controller-owned metadata uses the existing extensible heartbeat labels so
 # workers and the durable heartbeat schema remain wire-compatible.
 QUARANTINE_REASON = "ucloud-sandboxes/controller-quarantine"
@@ -60,6 +66,9 @@ class ControlStateStore:
 
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
+        self._heartbeat_cache: OrderedDict[str, tuple[str, NodeHeartbeat]] = OrderedDict()
+        self._heartbeat_cache_bytes = 0
+        self._heartbeat_cache_lock = Lock()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._prepare_file()
         connection = self._connect()
@@ -114,7 +123,7 @@ class ControlStateStore:
             ).fetchone()
             if row is None:
                 return None
-            return _placement_heartbeat(self._decode_heartbeat(job_id, row[0]))
+            return _placement_heartbeat(self._read_heartbeat(job_id, row[0]))
 
     def quarantine_node(self, job_id: str, reason: str) -> NodeHeartbeat | None:
         """Close placement durably without discarding authenticated inventory."""
@@ -273,14 +282,54 @@ class ControlStateStore:
             (namespace,),
         )
 
-    @classmethod
-    def _load_heartbeats(cls, connection) -> dict[str, NodeHeartbeat]:
+    def _load_heartbeats(self, connection) -> dict[str, NodeHeartbeat]:
         result = {}
-        for job_id, payload in cls._records(connection, "heartbeat"):
-            heartbeat = cls._decode_heartbeat(job_id, payload)
+        for job_id, payload in self._records(connection, "heartbeat"):
+            heartbeat = self._read_heartbeat(job_id, payload)
             _assert_heartbeat_binding(result, heartbeat)
             result[job_id] = heartbeat
         return result
+
+    def _read_heartbeat(self, job_id: str, payload: str) -> NodeHeartbeat:
+        with self._heartbeat_cache_lock:
+            cached = self._heartbeat_cache.get(job_id)
+            if cached is not None and cached[0] == payload:
+                heartbeat = cached[1]
+                self._heartbeat_cache.move_to_end(job_id)
+            else:
+                # Validate before caching, including canonical encoding and job
+                # identity. External writers, quarantine and reboot fences are
+                # visible immediately because the key includes the actual row.
+                heartbeat = self._decode_heartbeat(job_id, payload)
+                if cached is not None:
+                    self._heartbeat_cache_bytes -= len(cached[0])
+                    del self._heartbeat_cache[job_id]
+                # Canonical payloads use JSON's ASCII escaping, so character
+                # length is also their encoded byte length.
+                if len(payload) <= _HEARTBEAT_CACHE_BYTES:
+                    self._heartbeat_cache[job_id] = (payload, heartbeat)
+                    self._heartbeat_cache_bytes += len(payload)
+                    while (
+                        len(self._heartbeat_cache) > _HEARTBEAT_CACHE_ENTRIES
+                        or self._heartbeat_cache_bytes > _HEARTBEAT_CACHE_BYTES
+                    ):
+                        _, (evicted, _) = self._heartbeat_cache.popitem(last=False)
+                        self._heartbeat_cache_bytes -= len(evicted)
+        # Frozen dataclasses still contain mutable labels/snapshot descriptors.
+        # Never expose cached dictionaries to a caller. Immutable scalar and
+        # resource fields can be shared without revalidating the inventory.
+        return replace(
+            heartbeat,
+            labels=dict(heartbeat.labels),
+            inventory=tuple(
+                replace(
+                    entry,
+                    storage_snapshot=_copy_json_value(entry.storage_snapshot),
+                    storage_dependency=_copy_json_value(entry.storage_dependency),
+                )
+                for entry in heartbeat.inventory
+            ),
+        )
 
     @staticmethod
     def _decode_heartbeat(job_id: str, payload: str) -> NodeHeartbeat:
@@ -365,6 +414,19 @@ class ControlStateStore:
                 time.sleep(0.01)
 
 
+def _copy_json_value(value: Any) -> Any:
+    """Detach containers from validated JSON; scalar leaves are immutable.
+
+    These values came from json.loads, so they cannot contain cycles or custom
+    Python objects that require deepcopy's memoization/reconstruction machinery.
+    """
+    if isinstance(value, dict):
+        return {key: _copy_json_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_copy_json_value(item) for item in value]
+    return value
+
+
 def _heartbeat_payload_is_canonical(
     raw: dict[str, Any],
     heartbeat: NodeHeartbeat,
@@ -374,18 +436,22 @@ def _heartbeat_payload_is_canonical(
     if _json(encoded) == payload:
         return True
 
-    # During a rolling upgrade, persisted heartbeats from pre-0.5.1 workers do
-    # not contain this additive runtime metric. Accept only the otherwise exact
-    # canonical legacy representation. New heartbeats rewrite the row using the
-    # current schema through the normal receive path.
+    # Accept only the exact canonical legacy representation of additive
+    # metrics with their default values. Unknown fields and noncanonical
+    # encodings still fail closed; receive rewrites using the current schema.
     runtime_metrics = encoded.get("runtime_metrics")
-    if not isinstance(runtime_metrics, dict):
-        return False
-    if runtime_metrics.get("storage_ublk_max_devices") != 0:
+    raw_metrics = raw.get("runtime_metrics")
+    if not isinstance(runtime_metrics, dict) or not isinstance(raw_metrics, dict):
         return False
     legacy = dict(encoded)
     legacy_metrics = dict(runtime_metrics)
-    legacy_metrics.pop("storage_ublk_max_devices")
+    for name, default in (
+        ("storage_ublk_max_devices", 0),
+        ("io_psi_some_avg10", None),
+        ("io_psi_full_avg10", None),
+    ):
+        if name not in raw_metrics and legacy_metrics.get(name) == default:
+            legacy_metrics.pop(name)
     legacy["runtime_metrics"] = legacy_metrics
     return raw == legacy and _json(raw) == payload
 

@@ -2926,6 +2926,7 @@ class ControlPlaneTests(unittest.TestCase):
             handler.registry_worker_url = ""
             handler.registry_layer_cache = None
             handler._write_json = lambda *_args, **_kwargs: None
+            handler.create_target_concurrency_per_node = 4
             pull_started = Event()
             release_pull = Event()
 

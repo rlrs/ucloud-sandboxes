@@ -389,6 +389,24 @@ class MetricsStore:
     def _reclaim_sqlite_space_locked(self, connection: sqlite3.Connection) -> None:
         if _sqlite_storage_bytes(self.path) <= self._max_bytes:
             return
+        # A retained reader can pin WAL frames. Maintenance must not spend the
+        # writer's busy timeout waiting for it on every request-thread append.
+        # Logical retention is enforced before this best-effort reclamation.
+        busy_timeout = int(connection.execute("PRAGMA busy_timeout").fetchone()[0])
+        connection.execute("PRAGMA busy_timeout=0")
+        try:
+            self._try_reclaim_sqlite_space_locked(connection)
+        except sqlite3.OperationalError:
+            # The event was committed before maintenance began. A failed
+            # cleanup DELETE may still have opened an implicit transaction;
+            # do not leave that transaction attached to the next append.
+            if connection.in_transaction:
+                connection.rollback()
+            raise
+        finally:
+            connection.execute(f"PRAGMA busy_timeout={busy_timeout}")
+
+    def _try_reclaim_sqlite_space_locked(self, connection: sqlite3.Connection) -> None:
         checkpoint = connection.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
         if checkpoint is not None and int(checkpoint[0]) != 0:
             # A concurrent reader can temporarily pin WAL frames. Logical

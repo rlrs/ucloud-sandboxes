@@ -16,6 +16,8 @@ from .storage_native import StorageNativeLayer
 from .storage_native_publication import (
     DEFAULT_MAX_CONCURRENT_PUBLICATIONS,
     PublicationGate,
+    local_layer_data_bytes,
+    snapshot_chain_needs_compaction,
 )
 from .telemetry import Telemetry
 
@@ -365,12 +367,15 @@ class RegistrySnapshotPublisher:
             if not path.is_absolute():
                 raise ValueError("sealed layer path must be absolute")
         input_layers = len(existing_layers) + len(source_layer_paths)
-        input_bytes = sum(layer.size for layer in existing_layers) + sum(
-            path.stat().st_size for path in source_layer_paths
+        layer_sizes = tuple(layer.size for layer in existing_layers) + tuple(
+            local_layer_data_bytes(path) for path in source_layer_paths
         )
+        input_bytes = sum(layer_sizes)
         should_compact = (
-            input_layers > self.compact_after_layers
-            or input_bytes > self.compact_after_bytes
+            snapshot_chain_needs_compaction(
+                layer_sizes, max_layers=self.compact_after_layers,
+                max_delta_bytes=self.compact_after_bytes,
+            )
             or bool(
                 existing_layers
                 and existing_repo_blob_url

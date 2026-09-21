@@ -109,3 +109,40 @@ revision before uploading outside the lock. It retains the existing protection
 against a delayed upload sealing a resumed or re-parked sandbox. A regression
 models metadata repair with a parked journal and mounted storage and checks the
 release order and revision passed to publication.
+
+## Deployment and live verification
+
+Final runtime release **0.5.68**, commit `8c47bd6`, was installed at
+2026-09-21 09:08:02 UTC. All 93 installed package files matched the wheel;
+sandbox and builder bundles passed boot-manifest validation. Checks passed:
+983 server tests (6 platform skips), 118 SDK tests, lint/package/native-process
+checks, and 387 selected tests on the production Linux/Python host.
+[CI passed](https://github.com/rlrs/ucloud-sandboxes/actions/runs/35581401027).
+
+Fresh worker **12397518**, guest boot `cf6bfadb796e4403ac540120870b7b51`, passed
+three detached park/wake cycles through SDK exec with zero lifecycle retries.
+Process identity and the in-memory counter survived every wake. Single-sandbox
+median times were 0.167s park, 0.409s detach, and 0.767s wake; these are smoke-test
+measurements, not concurrent-load guarantees.
+
+A separate disposable sandbox on that worker passed a continuity experiment.
+Synthetic SUSPENDED and failed-direct-probe observations were applied only to
+an isolated controller-state database, without an executing autoscaler or any
+provider mutation. Both kept placement fenced. A real authenticated direct
+heartbeat then proved the unchanged boot and exact route/inventory identity,
+reopened placement, and subsequent SDK exec read the original marker. This
+validates recovery behavior; it does not reproduce or explain an actual UCloud
+readiness failure. An initial attempt used a nonpersistent test process and
+exited before exec; the corrected test used a persistent managed process.
+
+Final public health reported 0.5.68; gateway, autoscaler, and relay were active.
+Test routes, pending creates, and prepared reservations were all zero. Idle
+worker 12397503 still reported 0.5.67 at that check and is excluded from new
+placement by the existing exact-version rule; the live qualification used
+12397518 on 0.5.68. Existing native storage backend and SDK 0.4.23 were unchanged.
+
+Release manifests, installation proof, and live result are retained under
+`/work/ucloud-sandboxes/release/0.5.68/` on gateway job 12379311. The initiating
+VM/readiness failure remains unresolved pending backend evidence. Ambiguous
+workers now retain their VM and provider quota until recovery or explicit
+operator cleanup, rather than being automatically destroyed.

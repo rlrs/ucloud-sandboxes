@@ -1,6 +1,6 @@
 # Delta-only snapshot compaction
 
-Implemented after release 0.5.69; not deployed. Both Registry and S3 use the
+Deployed as release 0.5.70 on September 21, 2026. Both Registry and S3 use the
 same selection policy. No native binary, publication schema, SDK, admission
 limit or configured threshold changes are required.
 
@@ -83,4 +83,43 @@ production credential file, and only the autoscaler service was restarted.
 Provisioning resumed and created the qualification worker. The temporary local
 credential-transfer script was removed. Qualification reservations were removed
 after each attempt; the normal autoscaler retains ownership of worker cleanup.
-The production runtime remains 0.5.69.
+The production runtime was 0.5.69 during that native qualification; the
+subsequent deployment is recorded below.
+
+## Release 0.5.70 deployment
+
+Runtime commit `b285051b2331a58794801b721e68eeac9256fb36` was committed and
+pushed. Gateway deployment completed at 12:17:18 UTC; all 93 installed package
+files matched the wheel. Both sandbox and builder bundles passed Linux boot
+validation, and future nodes use the 0.5.70 bundle directory. The 62 targeted
+Linux tests and both Python 3.10/3.13 [CI jobs](https://github.com/rlrs/ucloud-sandboxes/actions/runs/35598489561)
+passed. Native storage and gVisor binaries are unchanged.
+
+The previous idle qualification worker scaled down normally before the worker
+rollout reached it. Fresh worker `12397877` then booted on 0.5.70 from the new
+bundle. The old quarantined worker was left untouched. The deployment procedure
+issued no provider stop requests. No SDK or Verifiers change is required.
+
+An initial eight-cycle smoke passed but produced one through eight layers,
+without triggering compaction. After correcting a property-access error in the
+post-run manifest checker, a fresh 16-cycle smoke exercised two depth triggers.
+Every park, publish/detach and SDK-exec wake passed, preserving state and process
+identity, with zero lifecycle retries. Manifest layer counts were
+`1,2,3,4,5,6,7,8,2,3,4,5,6,7,8,2`. All sixteen manifests retained the same
+239,546,368-byte base. The merged delta at the second compaction was 8,892,416
+bytes.
+
+Publish/detach took 0.515 s on compaction cycle 9 and 0.562 s on cycle 16. Across
+all cycles, median park was 0.222 s, publish/detach 0.452 s, and SDK-exec wake
+0.913 s. Maximum publish/detach was 2.228 s (initial publication); maximum wake
+was 0.973 s. This was a single-sandbox smoke on an idle worker, not a loaded
+throughput qualification or a controlled comparison against the prior release.
+
+Final public health checks passed 20/20, median 19.9 ms and maximum 47.1 ms.
+Gateway, relay and autoscaler were active; the worker was fresh, admission open
+and unquarantined. All smoke sandboxes and reservations were removed, and there
+were no remaining routes, pending creates or capacity reservations. The normal
+autoscaler owns idle-worker cleanup. Worker publication counters (24 publications,
+two compactions) include both the eight-cycle and sixteen-cycle smokes.
+
+Raw release evidence: [16-cycle smoke](../benchmarks/release-0.5.70-live-smoke-2026-09-21.json).

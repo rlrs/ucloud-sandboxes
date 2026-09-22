@@ -1,0 +1,18 @@
+some avg10=0.05 avg60=0.57 avg300=0.49 total=3290849
+full avg10=0.05 avg60=0.55 avg300=0.47 total=3209122
+some avg10=8.75 avg60=44.46 avg300=32.00 total=150396473
+full avg10=6.56 avg60=29.36 avg300=18.96 total=85323694
+MemTotal:       92055768 kB
+MemFree:         6989288 kB
+MemAvailable:   82759192 kB
+Buffers:           42488 kB
+Cached:         78792648 kB
+SwapCached:           68 kB
+Active:         67495880 kB
+Inactive:       15499368 kB
+procs -----------memory---------- ---swap-- -----io---- -system-- -------cpu-------
+ r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st gu
+ 6  0     68 6988796  42628 79297944    0    0 1231914 2100223 177832   98 11 20 43 22  3  0
+ 0  1     68 6996668  42632 79304640    0    0   184 128536 41123 54349  1  2 95  1  1  0
+ 1  1     68 6997608  42632 79312316    0    0     0 55104 40930 54943  1  2 95  1  1  0
+/sys/fs/cgroup/system.slice/ucloud-sandbox-node.service/memory.events

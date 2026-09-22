@@ -1,0 +1,67 @@
+MemTotal:       92055760 kB
+MemFree:         2688316 kB
+MemAvailable:   84022944 kB
+Buffers:           15960 kB
+Cached:         83976072 kB
+SwapCached:           68 kB
+Active:         41901200 kB
+Inactive:       44652984 kB
+Active(anon):     872616 kB
+Inactive(anon):  1741496 kB
+Active(file):   41028584 kB
+Inactive(file): 42911488 kB
+Unevictable:       13596 kB
+Mlocked:            9596 kB
+SwapTotal:      100663292 kB
+SwapFree:       100663224 kB
+Zswap:                 0 kB
+Zswapped:              0 kB
+Dirty:           5805472 kB
+Writeback:          1044 kB
+AnonPages:       2576384 kB
+Mapped:         47522320 kB
+Shmem:             44724 kB
+KReclaimable:    1316396 kB
+Slab:            1968168 kB
+SReclaimable:    1316396 kB
+SUnreclaim:       651772 kB
+KernelStack:       85136 kB
+PageTables:       193296 kB
+SecPageTables:         0 kB
+NFS_Unstable:          0 kB
+Bounce:                0 kB
+WritebackTmp:          0 kB
+CommitLimit:    146691172 kB
+Committed_AS:   38711600 kB
+VmallocTotal:   13743895347199 kB
+VmallocUsed:      183196 kB
+VmallocChunk:          0 kB
+Percpu:            47744 kB
+HardwareCorrupted:     0 kB
+AnonHugePages:         0 kB
+ShmemHugePages:        0 kB
+ShmemPmdMapped:        0 kB
+FileHugePages:         0 kB
+FilePmdMapped:         0 kB
+CmaTotal:              0 kB
+CmaFree:         1335920 kB
+Unaccepted:            0 kB
+Balloon:             272 kB
+HugePages_Total:       0
+HugePages_Free:        0
+HugePages_Rsvd:        0
+HugePages_Surp:        0
+Hugepagesize:       2048 kB
+Hugetlb:               0 kB
+DirectMap4k:      236392 kB
+DirectMap2M:    15919104 kB
+DirectMap1G:    78643200 kB
+some avg10=0.30 avg60=0.24 avg300=0.06 total=412054
+full avg10=0.30 avg60=0.24 avg300=0.06 total=409232
+some avg10=9.16 avg60=22.30 avg300=10.48 total=39166217
+full avg10=8.27 avg60=12.18 avg300=5.10 total=19049248
+procs -----------memory---------- ---swap-- -----io---- -system-- -------cpu-------
+ r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st gu
+ 1  0     68 2687308  15984 85292444    0    0 10121 3169955 164731   74 10 20 62  8  0  0
+ 2  0     68 3842924  15700 84233972    0    0  9500 1435728 67897 105982  5  4 80 11  0  0
+ 6  1     68 3411052  15700 84644880    0    0  6480 484760 75583 118024  9  4 85  2  0  0

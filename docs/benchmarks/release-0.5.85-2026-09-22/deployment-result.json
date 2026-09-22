@@ -1,0 +1,14 @@
+{
+  "version": "0.5.85",
+  "commit": "2769b1d",
+  "installed_at": "2026-09-22T21:43:54.897891+00:00",
+  "matched_package_files": 110,
+  "health": {
+    "ok": true,
+    "service": "control-plane",
+    "version": "0.5.85"
+  },
+  "relay_backend": "postgres",
+  "node_package_root": "/work/ucloud-sandboxes/release/0.5.85",
+  "autoscaler": "resumed by install exit trap"
+}

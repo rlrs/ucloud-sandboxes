@@ -1,0 +1,3 @@
+PREFLIGHT_RELAY {"backend": "postgres", "inflight": 0, "delivery_pending": 0}
+PREFLIGHT_ROUTES []
+DEPLOYED {"version": "0.5.88", "commit": "e228bce", "installed_at": "2026-09-22T22:18:22.432157+00:00", "matched_package_files": 110, "health": {"ok": true, "service": "control-plane", "version": "0.5.88"}, "relay_backend": "postgres", "node_package_root": "/work/ucloud-sandboxes/release/0.5.88", "autoscaler": "held until worker upgrade"}

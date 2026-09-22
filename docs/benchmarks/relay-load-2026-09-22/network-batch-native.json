@@ -1,0 +1,12 @@
+[
+  {
+    "individual": {
+      "median_seconds": 0.00959725258871913,
+      "max_seconds": 0.01564963790588081
+    },
+    "batch": {
+      "median_seconds": 0.0025012248661369085,
+      "max_seconds": 0.002691837027668953
+    }
+  }
+]

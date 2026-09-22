@@ -15,9 +15,13 @@ from pathlib import Path
 import shutil
 import tempfile
 import threading
+import time
 from typing import Any, Callable
 from uuid import uuid4
+from weakref import WeakValueDictionary
 
+from .background_io import BackgroundPacer, PressureSampler
+from .storage_native import AgentEnvUblkClient
 from .storage_native_publication import local_layer_data_bytes, snapshot_compaction_start
 from .storage_native_registry import consume_export_stream
 
@@ -34,6 +38,7 @@ class LocalCheckpointCompactor:
         self, *, root: Path, global_config: Path, exporter: Any,
         load: Callable, remove_layers: Callable, max_layers: int = 8,
         max_delta_bytes: int = 4 * 1024**3, timeout_seconds: float = 120,
+        foreground: Callable[[], bool] = lambda: False,
     ) -> None:
         self.root = root
         self.global_config = global_config
@@ -43,17 +48,24 @@ class LocalCheckpointCompactor:
         self.max_layers = max_layers
         self.max_delta_bytes = max_delta_bytes
         self.timeout_seconds = timeout_seconds
+        self._foreground = foreground
         self._guard = threading.RLock()
+        self._volume_guards = WeakValueDictionary()
         self._pending: dict[str, Any] = {}
         self._thread: threading.Thread | None = None
         self._active = False
+        self._active_cancel: tuple[str, threading.Event] | None = None
         self._completed = self._adopted = self._failed = self._deferred = 0
         self._input_bytes = self._output_bytes = 0
+        self._cancelled = self._discarded_bytes = 0
+        self._pressure = PressureSampler()
+        self._pace_seconds = 0.0
 
     def metrics(self) -> dict[str, int]:
         with self._guard:
             return {
                 "local_compaction_active": int(self._active),
+                "local_compaction_paced_ms": int(self._pace_seconds * 1000),
                 "local_compaction_waiting": len(self._pending),
                 "local_compaction_completed": self._completed,
                 "local_compaction_adopted": self._adopted,
@@ -61,6 +73,8 @@ class LocalCheckpointCompactor:
                 "local_compaction_deferred": self._deferred,
                 "local_compaction_input_bytes": self._input_bytes,
                 "local_compaction_output_bytes": self._output_bytes,
+                "local_compaction_cancelled": self._cancelled,
+                "local_compaction_discarded_bytes": self._discarded_bytes,
             }
 
     def submit(self, record: Any) -> None:
@@ -90,6 +104,13 @@ class LocalCheckpointCompactor:
         if thread is not None:
             thread.join(timeout)
 
+    def cancel(self, volume_id: str) -> None:
+        """Drop disposable work after lifecycle authority marks a volume deleted."""
+        with self._guard:
+            self._pending.pop(volume_id, None)
+            if self._active_cancel is not None and self._active_cancel[0] == volume_id:
+                self._active_cancel[1].set()
+
     def _run(self) -> None:
         while True:
             with self._guard:
@@ -100,18 +121,28 @@ class LocalCheckpointCompactor:
                 volume_id = next(iter(self._pending))
                 record = self._pending.pop(volume_id)
                 self._active = True
+                cancelled = threading.Event()
+                self._active_cancel = (volume_id, cancelled)
             try:
                 current = self.load(volume_id)
                 if (self._matches(current, record.owner.request_fields(), record.sealed_layer_paths)
                         and current.state.value != "publishing"):
-                    self._compact(current)
+                    self._compact(current, cancelled=cancelled)
             except _CompactionSuperseded:
                 with self._guard:
                     self._deferred += 1
+                    self._cancelled += int(cancelled.is_set())
             except Exception:
                 with self._guard:
-                    self._failed += 1
-                LOGGER.exception("local checkpoint compaction failed for %s", volume_id)
+                    if cancelled.is_set():
+                        self._cancelled += 1
+                    else:
+                        self._failed += 1
+                if not cancelled.is_set():
+                    LOGGER.exception("local checkpoint compaction failed for %s", volume_id)
+            finally:
+                with self._guard:
+                    self._active_cancel = None
 
     @staticmethod
     def _matches(record: Any, owner: dict, paths: tuple[str, ...]) -> bool:
@@ -120,6 +151,17 @@ class LocalCheckpointCompactor:
             and record.state.value not in {"deleted", "deleting", "error"}
             and tuple(record.sealed_layer_paths[:len(paths)]) == tuple(paths)
         )
+
+    def _volume_guard(self, volume_id: str):
+        # Disk operations for one volume must not hold the node-wide metrics /
+        # queue lock. Weak entries disappear when no operation holds the lock;
+        # both holders and waiters retain a strong reference while using it.
+        with self._guard:
+            guard = self._volume_guards.get(volume_id)
+            if guard is None:
+                guard = threading.RLock()
+                self._volume_guards[volume_id] = guard
+            return guard
 
     def _manifest_path(self, volume_id: str) -> Path:
         return self.root / volume_id / "local-compaction.json"
@@ -172,15 +214,16 @@ class LocalCheckpointCompactor:
         """Adopt only inside a journaled mount or publication transition."""
         if record.state.value not in {"acquiring", "publishing"}:
             return record
-        if not self._guard.acquire(blocking=False):
+        guard = self._volume_guard(record.volume_id)
+        if not guard.acquire(blocking=False):
             return record
         try:
             return self._adopt_locked(record, persist)
         finally:
-            self._guard.release()
+            guard.release()
 
     def _adopt_locked(self, record: Any, persist: Callable) -> Any:
-        with self._guard:
+        with self._volume_guard(record.volume_id):
             try:
                 candidate = self._read(record.volume_id)
                 if candidate is None or not self._matches(record, candidate["owner"], candidate["sources"]):
@@ -199,7 +242,8 @@ class LocalCheckpointCompactor:
                 cached_layer_paths=tuple(dict.fromkeys((*record.cached_layer_paths, *obsolete))),
             )
             persist(updated)  # durable before any input name is removed
-            self._adopted += 1
+            with self._guard:
+                self._adopted += 1
             # If cleanup is interrupted, the next attempt recognizes output as
             # journal-owned and cannot discard it as an unused candidate.
             try:
@@ -209,12 +253,13 @@ class LocalCheckpointCompactor:
                 LOGGER.warning("local compaction cleanup deferred for %s", record.volume_id, exc_info=True)
             return updated
 
-    def _compact(self, record: Any) -> None:
+    def _compact(self, record: Any, *, cancelled: threading.Event | None = None) -> None:
+        cancelled = cancelled or threading.Event()
         paths = tuple(record.sealed_layer_paths)
         if len(paths) < 2:
             return
         manifest = self._manifest_path(record.volume_id)
-        with self._guard:
+        with self._volume_guard(record.volume_id):
             try:
                 ready = self._read(record.volume_id)
             except (ValueError, KeyError, TypeError):
@@ -249,8 +294,31 @@ class LocalCheckpointCompactor:
             return
         output = manifest.parent / f"local-compact-{uuid4().hex}.commit"
         committed = False
+        written = 0
         lock = None
+        pacer = BackgroundPacer(self._pressure.sample, foreground=self._foreground)
+        progress_at = time.monotonic()
+        pacing = False
+
+        def check_cancelled():
+            if cancelled.is_set():
+                raise _CompactionSuperseded("local compaction cancelled by deletion")
+
+        def check_current():
+            check_cancelled()
+            current = self.load(record.volume_id)
+            if (not self._matches(current, record.owner.request_fields(), paths)
+                    or current.state.value == "publishing"):
+                raise _CompactionSuperseded("local compaction inputs superseded")
+
+        def export_progress():
+            # Abort the separate control-response waiter too, even when the
+            # export has not produced a stream chunk yet.
+            check_cancelled()
+            return time.monotonic() if pacing else progress_at
+
         try:
+            check_current()
             with tempfile.TemporaryDirectory(prefix=".local-compact-", dir=manifest.parent) as raw:
                 work = Path(raw)
                 # Startup reconciliation can remove crash-left hardlinks, but
@@ -266,31 +334,38 @@ class LocalCheckpointCompactor:
                 source = work / "source.json"
                 source.write_text(json.dumps({"lowers": inputs, "upper": {}, "resultFile": "", "repoBlobUrl": ""}))
 
-                def check_current():
-                    current = self.load(record.volume_id)
-                    if (not self._matches(current, record.owner.request_fields(), paths)
-                            or current.state.value == "publishing"):
-                        raise _CompactionSuperseded("local compaction inputs superseded")
-
                 with output.open("xb") as stream:
-                    written = 0
-
                     def consume(chunk):
-                        nonlocal written
+                        nonlocal written, progress_at, pacing
+                        check_cancelled()
+                        pacing = True
+                        try:
+                            pacer.pace()
+                        finally:
+                            progress_at = time.monotonic()
+                            pacing = False
+                        check_cancelled()
                         if (written + len(chunk) > budget
                                 or shutil.disk_usage(manifest.parent).free - len(chunk) < reserve):
                             raise OSError("local compaction output exceeds available maintenance space")
                         stream.write(chunk)
                         written += len(chunk)
 
+                    def note_progress():
+                        nonlocal progress_at
+                        progress_at = time.monotonic()
+
                     descriptor = consume_export_stream(
                         lambda sock: self.exporter.export_compacted_image(
                             source_image_config=source, global_config=self.global_config,
                             stream_socket_path=sock,
+                            **({"progress": export_progress}
+                               if isinstance(self.exporter, AgentEnvUblkClient) else {}),
                         ),
                         # Short socket names also permit local macOS qualification.
                         stream_socket_root=self.root, chunk_bytes=1024**2,
                         timeout_seconds=self.timeout_seconds, consume=consume, check_current=check_current,
+                        on_progress=note_progress,
                     )
                     stream.flush()
                     os.fsync(stream.fileno())
@@ -302,7 +377,7 @@ class LocalCheckpointCompactor:
                     json.dump(payload, stream)
                     stream.flush()
                     os.fsync(stream.fileno())
-                with self._guard:
+                with self._volume_guard(record.volume_id):
                     check_current()
                     os.replace(staged, manifest)
                     committed = True  # never delete a now-visible candidate
@@ -314,10 +389,20 @@ class LocalCheckpointCompactor:
                         raise
                     finally:
                         os.close(directory)
-                    self._completed += 1
-                    self._input_bytes += estimate
-                    self._output_bytes += descriptor.size
+                    with self._guard:
+                        self._completed += 1
+                        self._input_bytes += estimate
+                        self._output_bytes += descriptor.size
+        except OSError:
+            # Deletion may remove the directory between a cancellation check
+            # and stat/open/link. Treat that as discarded work, not a failure.
+            check_current()
+            raise
         finally:
+            with self._guard:
+                self._pace_seconds += pacer.wait_seconds
+                if not committed:
+                    self._discarded_bytes += written
             if lock is not None:
                 lock.close()
             if not committed:

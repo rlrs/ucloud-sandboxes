@@ -1,0 +1,60 @@
+{
+  "platform": "Linux-5.15.0-190-generic-x86_64-with-glibc2.36",
+  "python": "3.13.12",
+  "results": [
+    {
+      "kind": "routing",
+      "grouped": false,
+      "count": 512,
+      "simulated_flush_delay_seconds": 0,
+      "seconds": 1.67889985605143,
+      "p95_seconds": 0.11080321110785007,
+      "commits": 512
+    },
+    {
+      "kind": "routing",
+      "grouped": true,
+      "count": 512,
+      "simulated_flush_delay_seconds": 0,
+      "seconds": 0.3107583071105182,
+      "p95_seconds": 0.03685285500250757,
+      "commits": 54
+    },
+    {
+      "kind": "routing",
+      "grouped": false,
+      "count": 512,
+      "simulated_flush_delay_seconds": 0.005,
+      "seconds": 4.365656598936766,
+      "p95_seconds": 0.280508650932461,
+      "commits": 512
+    },
+    {
+      "kind": "routing",
+      "grouped": true,
+      "count": 512,
+      "simulated_flush_delay_seconds": 0.005,
+      "seconds": 0.653841181891039,
+      "p95_seconds": 0.07880934397689998,
+      "commits": 61
+    }
+  ],
+  "generation_projection": {
+    "count": 10000,
+    "synthetic_spec_bytes": 11924,
+    "seconds": {
+      "full_route": 0.30436398019082844,
+      "generation_only": 0.02693141484633088
+    }
+  },
+  "routing_crash_recovery": {
+    "before": {
+      "surviving_rows": 0,
+      "integrity": "ok"
+    },
+    "after": {
+      "surviving_rows": 1,
+      "integrity": "ok"
+    }
+  }
+}

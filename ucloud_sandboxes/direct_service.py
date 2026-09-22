@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from contextlib import ExitStack, contextmanager
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -282,6 +284,7 @@ class DirectSandboxService:
         self.process_runner = process_runner or DirectProcessRunner()
         self.telemetry = telemetry or Telemetry.disabled("direct-sandbox-service")
         self._restore_slots = FairCapacity(max_concurrent_restores)
+        self._restore_demands: dict[tuple[str, int], tuple[ResourceQuantity, int]] = {}
         self._startup_slots = FairCapacity(max_concurrent_startups)
         self._file_read_slots = FairCapacity(max_concurrent_startups)
         self.upload_spool = UploadSpool(provisioner.registry.path.parent / "upload-staging")
@@ -871,6 +874,7 @@ class DirectSandboxService:
                 record = self.warden.reconcile(sandbox)
             if record.state == HibernationState.PARKED:
                 timings: dict[str, float] = {}
+                admission_started = time.monotonic()
                 with self._restore_admission(
                     sandbox_id,
                     generation,
@@ -879,6 +883,7 @@ class DirectSandboxService:
                         memory_mb=registration.spec.memory_mb or 0,
                     ),
                 ):
+                    timings['restore_queue'] = (time.monotonic() - admission_started) * 1000
                     current = self._require_registration(sandbox_id)
                     if current.sandbox_generation != generation:
                         raise DirectWardenError(
@@ -891,14 +896,9 @@ class DirectSandboxService:
                             "sandbox.generation": generation,
                         },
                     ) as span:
-                        with self.telemetry.span("sandbox.wake.ensure_network"):
-                            self.provisioner.ensure_network(registration)
-                        with _translate_storage_capacity():
-                            record = self.warden.resume(
-                                sandbox,
-                                operation_id=operation_id,
-                                timings=timings,
-                            )
+                        record = self._resume_with_network(
+                            registration, operation_id=operation_id, timings=timings,
+                        )
                         span.add_event("sandbox.wake.timings", timings)
             if record.state != HibernationState.RUNNING:
                 raise DirectWardenError(
@@ -1631,13 +1631,59 @@ class DirectSandboxService:
     def _restore_admission(self, sandbox_id: str, generation: int, requested: ResourceQuantity):
         # Only admission failures before resume begins are safe to replay.
         # Do not infer that guarantee from a later, fallible inventory read.
-        with ExitStack() as stack:
-            try:
-                stack.enter_context(self._restore_slot())
-                stack.enter_context(self._reserve_active_capacity(sandbox_id, generation, requested))
-            except SandboxCapacityUnavailableError as exc:
-                raise SandboxRestoreBusyError(str(exc)) from exc
-            yield
+        key = (sandbox_id, generation)
+        with self._capacity_guard:
+            previous, users = self._restore_demands.get(key, (requested, 0))
+            self._restore_demands[key] = (previous, users + 1)
+        try:
+            with ExitStack() as stack:
+                try:
+                    stack.enter_context(self._restore_slot())
+                    stack.enter_context(self._reserve_active_capacity(sandbox_id, generation, requested))
+                except SandboxCapacityUnavailableError as exc:
+                    raise SandboxRestoreBusyError(str(exc)) from exc
+                yield
+        finally:
+            with self._capacity_guard:
+                previous, users = self._restore_demands[key]
+                if users == 1:
+                    del self._restore_demands[key]
+                else:
+                    self._restore_demands[key] = (previous, users - 1)
+
+    def warm_park_demand_bytes(self) -> int:
+        """Memory to leave for queued/in-progress restores and cold starts."""
+        with self._capacity_guard:
+            if not self._admission_open:
+                return 1 << 63  # draining should reclaim, never retain warm work
+            requests = dict(self._active_reservations)
+            requests.update({key: value[0] for key, value in self._restore_demands.items()})
+            incoming = sum(item.memory_mb for item in requests.values()) * 1024**2
+        if self._startup_slots.waiting:
+            return 1 << 63  # queued cold starts do not have a memory lease yet
+        return incoming
+
+    def _resume_with_network(self, registration, *, operation_id, timings):
+        # The caller holds this sandbox's lifecycle lock and restore admission.
+        # Storage and network preparation are independent; join both before
+        # starting runsc, including on failure so no work escapes the lock.
+        def network():
+            started = time.monotonic()
+            with self.telemetry.span("sandbox.wake.ensure_network"):
+                self.provisioner.ensure_network(registration)
+            return (time.monotonic() - started) * 1000
+
+        with ThreadPoolExecutor(max_workers=1, thread_name_prefix="wake-network") as pool:
+            ready = pool.submit(copy_context().run, network)
+
+            def require_network():
+                timings["network_prepare"] = ready.result()
+
+            with _translate_storage_capacity():
+                return self.warden.resume(
+                    registration.to_direct_sandbox(), operation_id=operation_id,
+                    timings=timings, before_restore=require_network,
+                )
 
     def ensure_running_with_timings(self, sandbox) -> dict[str, float]:
         started = time.monotonic()
@@ -1678,16 +1724,12 @@ class DirectSandboxService:
                         "wake generation does not own direct sandbox"
                     )
                 phase = time.monotonic()
-                self.provisioner.ensure_network(registration)
-                timings["restore_network"] = (time.monotonic() - phase) * 1000
-                phase = time.monotonic()
                 warden_timings: dict[str, float] = {}
-                with _translate_storage_capacity():
-                    record = self.warden.resume(
-                        sandbox,
-                        operation_id=f"wake:{uuid4().hex}",
-                        timings=warden_timings,
-                    )
+                record = self._resume_with_network(
+                    registration,
+                    operation_id=f"wake:{uuid4().hex}",
+                    timings=warden_timings,
+                )
                 timings["restore"] = (time.monotonic() - phase) * 1000
                 timings.update(
                     {
@@ -1870,7 +1912,7 @@ class DirectSandboxService:
         with self._capacity_guard:
             self._activity_epoch += 1
             transient_revision = self._activity_epoch
-        durable_revision = self.provisioner.registry.snapshot().activity_revision
+        durable_revision = self.provisioner.registry.activity_revision()
         return compose_activity_revision(
             durable_revision=durable_revision,
             transient_revision=transient_revision,

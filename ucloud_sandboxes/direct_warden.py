@@ -6,6 +6,7 @@ import fcntl
 import hashlib
 import json
 import logging
+import math
 import os
 from pathlib import Path
 import re
@@ -16,7 +17,7 @@ import subprocess
 import tempfile
 import time
 from uuid import UUID
-from typing import Iterator, Protocol, Sequence
+from typing import Callable, Iterator, Protocol, Sequence
 
 from .hibernation import (
     HibernationArtifactStore,
@@ -77,6 +78,36 @@ class CommandRunner(Protocol):
 
 
 class SubprocessCommandRunner:
+    @staticmethod
+    def _diagnostics_file():
+        # Seekable anonymous memory keeps daemonized output semantics without
+        # creating two filesystem inodes for every short lifecycle command.
+        # These descriptors contain command diagnostics, never durable state.
+        try:
+            descriptor = os.memfd_create("sandbox-command", os.MFD_CLOEXEC)
+        except (AttributeError, OSError):
+            return tempfile.TemporaryFile(mode="w+", encoding="utf-8")
+        return os.fdopen(descriptor, "w+", encoding="utf-8")
+
+    @staticmethod
+    def _wait(process: subprocess.Popen, timeout: float) -> int:
+        # Popen.wait(timeout) polls waitpid with exponential sleeps (up to
+        # 50 ms). Restores issue several short runsc commands, so these sleeps
+        # accumulate even on an idle worker. A pidfd wakes on the exact child
+        # exit and does not depend on daemonized children closing stdout.
+        try:
+            descriptor = os.pidfd_open(process.pid)
+        except (AttributeError, OSError):
+            return process.wait(timeout=timeout)
+        try:
+            poller = select.poll()
+            poller.register(descriptor, select.POLLIN)
+            if not poller.poll(max(0, math.ceil(timeout * 1000))):
+                raise subprocess.TimeoutExpired(process.args, timeout)
+            return process.wait()
+        finally:
+            os.close(descriptor)
+
     def run(
         self,
         argv: Sequence[str],
@@ -89,24 +120,28 @@ class SubprocessCommandRunner:
         # runsc parent has exited. Seekable files preserve diagnostics without
         # tying command completion to the sentry/gofer descriptor lifetime.
         with (
-            tempfile.TemporaryFile(mode="w+", encoding="utf-8") as stdout,
-            tempfile.TemporaryFile(mode="w+", encoding="utf-8") as stderr,
+            self._diagnostics_file() as stdout,
+            self._diagnostics_file() as stderr,
         ):
-            result = subprocess.run(
+            with subprocess.Popen(
                 command,
                 text=True,
                 stdout=stdout,
                 stderr=stderr,
-                timeout=timeout,
-                check=False,
-            )
+            ) as process:
+                try:
+                    returncode = self._wait(process, timeout)
+                except BaseException:
+                    process.kill()
+                    process.wait()
+                    raise
             stdout.seek(0)
             stderr.seek(0)
             rendered_stdout = stdout.read()
             rendered_stderr = stderr.read()
         return CommandResult(
             argv=command,
-            returncode=result.returncode,
+            returncode=returncode,
             stdout=rendered_stdout,
             stderr=rendered_stderr,
         )
@@ -647,6 +682,7 @@ class DirectRunscWarden:
         *,
         operation_id: str,
         timings: dict[str, float] | None = None,
+        before_restore: Callable[[], object] | None = None,
     ) -> HibernationRecord:
         timings = timings if timings is not None else {}
         resume_started = time.monotonic()
@@ -675,6 +711,10 @@ class DirectRunscWarden:
                 # Bind that exact rootfs ledger to the checkpoint before runsc is
                 # allowed to construct or resume any workload task.
                 self._require_managed_process_ledger(sandbox, manifest)
+                # Network preparation can overlap storage mounting/validation,
+                # but must succeed before a restore candidate can be started.
+                if before_restore is not None:
+                    before_restore()
             except Exception:
                 self._rollback_parked_storage_mount(
                     sandbox,

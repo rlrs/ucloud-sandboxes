@@ -1,0 +1,90 @@
+{
+  "concurrent_traces": 4,
+  "seconds": 45.08483867300038,
+  "before": {
+    "io_pressure": "some avg10=0.31 avg60=0.25 avg300=5.94 total=2587395938\nfull avg10=0.31 avg60=0.23 avg300=2.10 total=943599984\n",
+    "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.19 total=107026244\nfull avg10=0.00 avg60=0.00 avg300=0.19 total=102107729\n"
+  },
+  "after": {
+    "io_pressure": "some avg10=1.21 avg60=0.40 avg300=5.17 total=2587663493\nfull avg10=1.21 avg60=0.39 avg300=1.87 total=943865454\n",
+    "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.16 total=107026244\nfull avg10=0.00 avg60=0.00 avg300=0.16 total=102107729\n"
+  },
+  "results": [
+    {
+      "cycles": 64,
+      "results": {
+        "previous": {
+          "exported_bytes": 2147876864,
+          "merges": 32,
+          "seconds_including_verification": 22.776708737999797,
+          "final_layers": 1
+        },
+        "tiered": {
+          "exported_bytes": 268959744,
+          "merges": 32,
+          "seconds_including_verification": 21.11470725900017,
+          "final_layers": 2
+        }
+      },
+      "logical_verification_each_cycle": true,
+      "scope": "Synthetic local overwrite/export trace; excludes publication and production load."
+    },
+    {
+      "cycles": 64,
+      "results": {
+        "previous": {
+          "exported_bytes": 2147876864,
+          "merges": 32,
+          "seconds_including_verification": 21.415058150999357,
+          "final_layers": 1
+        },
+        "tiered": {
+          "exported_bytes": 268959744,
+          "merges": 32,
+          "seconds_including_verification": 21.709430273999715,
+          "final_layers": 2
+        }
+      },
+      "logical_verification_each_cycle": true,
+      "scope": "Synthetic local overwrite/export trace; excludes publication and production load."
+    },
+    {
+      "cycles": 64,
+      "results": {
+        "previous": {
+          "exported_bytes": 2147876864,
+          "merges": 32,
+          "seconds_including_verification": 21.981040048999603,
+          "final_layers": 1
+        },
+        "tiered": {
+          "exported_bytes": 268959744,
+          "merges": 32,
+          "seconds_including_verification": 21.942021410000052,
+          "final_layers": 2
+        }
+      },
+      "logical_verification_each_cycle": true,
+      "scope": "Synthetic local overwrite/export trace; excludes publication and production load."
+    },
+    {
+      "cycles": 64,
+      "results": {
+        "previous": {
+          "exported_bytes": 2147876864,
+          "merges": 32,
+          "seconds_including_verification": 21.571085855999627,
+          "final_layers": 1
+        },
+        "tiered": {
+          "exported_bytes": 268959744,
+          "merges": 32,
+          "seconds_including_verification": 21.863151464999646,
+          "final_layers": 2
+        }
+      },
+      "logical_verification_each_cycle": true,
+      "scope": "Synthetic local overwrite/export trace; excludes publication and production load."
+    }
+  ]
+}

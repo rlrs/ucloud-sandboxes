@@ -2,6 +2,7 @@ import hashlib
 import json
 import shutil
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
@@ -387,8 +388,10 @@ class FakeWarden:
         self.records[self.key(sandbox)] = record
         return record
 
-    def resume(self, sandbox, *, operation_id, timings=None):
+    def resume(self, sandbox, *, operation_id, timings=None, before_restore=None):
         del operation_id
+        if before_restore is not None:
+            before_restore()
         if timings is not None:
             timings["runsc_restore"] = 1.0
         record = SimpleNamespace(state=HibernationState.RUNNING)
@@ -1121,6 +1124,46 @@ class DirectProvisionerTests(unittest.TestCase):
 
             self.assertEqual(provisioner.start(), ())
             self.assertIn(("orphan", 1), quota.active_records)
+
+    def test_wake_overlaps_preparation_but_joins_network_on_storage_failure(self) -> None:
+        for fail_storage in (False, True):
+            with self.subTest(fail_storage=fail_storage), TemporaryDirectory() as raw:
+                provisioner, _, _, _, warden = self.make(Path(raw).resolve())
+                service = DirectSandboxService(provisioner)
+                created = self.create(service, self.spec())
+                service.park(created.spec.id, operation_id="park:parallel")
+                network_started, storage_started, release = Event(), Event(), Event()
+                original = warden.resume
+
+                def network(_registration):
+                    network_started.set()
+                    if not release.wait(5):
+                        raise TimeoutError("network test not released")
+
+                def restore(*args, **kwargs):
+                    storage_started.set()
+                    if fail_storage:
+                        raise OSError("storage preparation failed")
+                    return original(*args, **kwargs)
+
+                with patch.object(provisioner, "ensure_network", side_effect=network), patch.object(
+                    warden, "resume", side_effect=restore,
+                ), ThreadPoolExecutor(max_workers=1) as pool:
+                    wake = pool.submit(
+                        service.wake, created.spec.id,
+                        generation=created.generation, operation_id="wake:parallel",
+                    )
+                    try:
+                        self.assertTrue(network_started.wait(3))
+                        self.assertTrue(storage_started.wait(3))
+                        self.assertFalse(wake.done())
+                    finally:
+                        release.set()
+                    if fail_storage:
+                        with self.assertRaisesRegex(OSError, "storage preparation failed"):
+                            wake.result(timeout=3)
+                    else:
+                        self.assertEqual(wake.result(timeout=3).state, "running")
 
     def test_wake_refreshes_idle_interval_and_stale_timer_cannot_repark(self) -> None:
         with TemporaryDirectory() as raw:

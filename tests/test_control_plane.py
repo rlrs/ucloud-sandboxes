@@ -883,6 +883,7 @@ class ControlPlaneTests(unittest.TestCase):
                     payload=identity,
                 )
                 records = RoutingStore(route_file).program_requests_readonly()
+                self.assertTrue(gateway.RequestHandlerClass.metrics_store.flush())
                 wake_events = control_plane.MetricsStore(metrics_file).load_events(
                     max_events=10,
                     kinds=(
@@ -1010,6 +1011,7 @@ class ControlPlaneTests(unittest.TestCase):
                 final_route = RoutingStore(route_file).get_sandbox_readonly(
                     route.sandbox_id
                 )
+                self.assertTrue(gateway.RequestHandlerClass.metrics_store.flush())
                 events = control_plane.MetricsStore(metrics_file).load_events(
                     max_events=20,
                     kinds=("program_state_transition", "program_wake_shadow_plan"),

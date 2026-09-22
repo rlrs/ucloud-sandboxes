@@ -6,6 +6,7 @@ import json
 import os
 import sqlite3
 import unittest
+from unittest.mock import patch
 
 from ucloud_sandboxes.direct_registry import (
     DirectRegistryConflictError,
@@ -137,6 +138,27 @@ class DirectRegistryTests(unittest.TestCase):
             self.assertEqual(deleted.records, ())
             self.assertGreater(deleted.activity_revision, 0)
             self.assertEqual(reopened.activity_revision, deleted.activity_revision)
+            self.assertEqual(registry.activity_revision(), deleted.activity_revision)
+
+    def test_activity_clock_observes_external_commits_without_inventory_decode(self) -> None:
+        with TemporaryDirectory() as raw:
+            path = (Path(raw) / 'registry.sqlite3').resolve()
+            registry = DirectSandboxRegistry(path)
+            before = registry.activity_revision()
+            external = DirectSandboxRegistry(path)
+            external.plan(
+                spec=self.spec(), sandbox_generation=7, operation_id='create:7',
+                runtime_compatibility_sha256='b' * 64,
+            )
+            expected = external.snapshot().activity_revision
+            with patch.object(DirectSandboxRegistry, '_decode', side_effect=AssertionError('inventory scan')):
+                self.assertEqual(registry.activity_revision(), expected)
+                self.assertGreater(expected, before)
+            with sqlite3.connect(path) as connection:
+                connection.execute('PRAGMA ignore_check_constraints = ON')
+                connection.execute('UPDATE registry_metadata SET activity_revision = -1')
+            with self.assertRaises(DirectRegistryError):
+                registry.activity_revision()
 
     def test_legacy_json_registry_is_rejected_without_migration(self) -> None:
         with TemporaryDirectory() as raw:
@@ -547,3 +569,26 @@ class DirectRegistryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RelayWakeFenceTests(unittest.TestCase):
+    def test_legacy_schema_upgrade_retains_registration_and_fences_survive_reopen(self):
+        from ucloud_sandboxes import direct_registry as module
+        with TemporaryDirectory() as raw:
+            path=(Path(raw)/'registry.sqlite3').resolve()
+            registry=DirectSandboxRegistry(path)
+            original=registry.plan(spec=DirectRegistryTests().spec(),sandbox_generation=1,
+                                  operation_id='create:1',runtime_compatibility_sha256='b'*64)
+            # Exact prior on-disk schema, not a hand-written approximation.
+            with closing(sqlite3.connect(path)) as conn:
+                conn.execute('DROP TABLE relay_wake_fences')
+                conn.execute('PRAGMA user_version=3')
+            reopened=DirectSandboxRegistry(path)
+            self.assertEqual(reopened.get('sandbox'),original)
+            self.assertFalse(reopened.relay_wake_fence('sandbox',1,'request'))
+            self.assertTrue(reopened.relay_wake_fence('sandbox',1,'request',record=True))
+            self.assertTrue(DirectSandboxRegistry(path).relay_wake_fence('sandbox',1,'request'))
+            with self.assertRaises(DirectRegistryConflictError):
+                reopened.relay_wake_fence('sandbox',2,'request',record=True)
+            with closing(sqlite3.connect(path)) as conn:
+                self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0],module._DIRECT_REGISTRY_SCHEMA_VERSION)

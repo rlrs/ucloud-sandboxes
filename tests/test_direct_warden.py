@@ -779,6 +779,26 @@ class DirectRunscWardenTests(unittest.TestCase):
             ).is_file()
         )
 
+    def test_network_preparation_failure_does_not_start_restore_candidate(self) -> None:
+        self.warden.create(self.sandbox, operation_id="create:1")
+        self.warden.park(self.sandbox, operation_id="park:1")
+
+        def unavailable():
+            self.assertEqual(self.storage.record["state"], "mounted")
+            raise OSError("network preparation failed")
+
+        with self.assertRaisesRegex(OSError, "network preparation failed"):
+            self.warden.resume(
+                self.sandbox, operation_id="wake:1", before_restore=unavailable,
+            )
+        self.assertEqual(self.warden.inspect(self.sandbox).state, HibernationState.PARKED)
+        self.assertEqual(self.storage.record["state"], "released")
+        self.assertEqual(self.runner.status, "absent")
+        self.assertEqual(
+            self.warden.resume(self.sandbox, operation_id="wake:2").state,
+            HibernationState.RUNNING,
+        )
+
     def test_managed_process_ledger_is_verified_before_restore(self) -> None:
         managed_directory = self.bundle / "rootfs" / ".ucloud-managed"
         managed_directory.mkdir(parents=True)

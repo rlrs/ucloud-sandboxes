@@ -391,6 +391,33 @@ class BuilderPoolConfig:
 
 
 @dataclass(frozen=True)
+class RelayPostgresConfig:
+    dsn_file: str
+    schema: str = "ucloud_shared"
+    max_connections: int = 16
+    storage_budget_bytes: int = 64 * 1024**3
+
+    @classmethod
+    def from_dict(cls, raw):
+        if raw is None:
+            return None
+        if not isinstance(raw, dict):
+            raise ValueError("relay_postgres must be an object or null")
+        values = {"schema": "ucloud_shared", "max_connections": 16,
+                  "storage_budget_bytes": 64 * 1024**3, **raw}
+        _require_exact_keys("relay_postgres", values, {item.name for item in fields(cls)})
+        import re
+        schema = _require_string("relay_postgres.schema", values["schema"])
+        if not re.fullmatch(r"ucloud_shared(?:_[a-z0-9_]+)?", schema) or len(schema) > 63:
+            raise ValueError("invalid relay PostgreSQL schema")
+        return cls(
+            _require_absolute_path("relay_postgres.dsn_file", values["dsn_file"]), schema,
+            _require_int("relay_postgres.max_connections", values["max_connections"], minimum=1),
+            _require_int("relay_postgres.storage_budget_bytes", values["storage_budget_bytes"], minimum=32 * 1024**2 + 65536),
+        )
+
+
+@dataclass(frozen=True)
 class DeploymentConfig:
     schema: int
     deployment_id: str
@@ -424,6 +451,7 @@ class DeploymentConfig:
     sandbox: SandboxPoolConfig
     builder: BuilderPoolConfig
     node_package_root: str = DEFAULT_INSTALL_ROOT + "/release"
+    relay_postgres: RelayPostgresConfig | None = None
 
     @classmethod
     def default(cls, scope_id: str = "project-id") -> "DeploymentConfig":
@@ -480,7 +508,7 @@ class DeploymentConfig:
     def from_dict(cls, raw: object) -> "DeploymentConfig":
         if not isinstance(raw, dict):
             raise ValueError("deployment config must be a JSON object")
-        raw = {"node_package_root": DEFAULT_INSTALL_ROOT + "/release", **raw}
+        raw = {"node_package_root": DEFAULT_INSTALL_ROOT + "/release", "relay_postgres": None, **raw}
         expected = {item.name for item in fields(cls)}
         schema = _require_int("schema", raw.get("schema"), minimum=1)
         if schema != DEPLOYMENT_CONFIG_SCHEMA:
@@ -515,6 +543,7 @@ class DeploymentConfig:
         result = cls(
             schema=schema,
             deployment_id=_require_string("deployment_id", raw["deployment_id"]),
+            relay_postgres=RelayPostgresConfig.from_dict(raw["relay_postgres"]),
             provider=provider,
             data_root=_require_absolute_path("data_root", raw["data_root"]),
             node_package_root=_require_absolute_path(
@@ -729,6 +758,7 @@ class DeploymentConfig:
         return {
             "schema": self.schema,
             "deployment_id": self.deployment_id,
+            **({"relay_postgres": asdict(self.relay_postgres)} if self.relay_postgres is not None else {}),
             "provider": provider,
             "data_root": self.data_root,
             **(

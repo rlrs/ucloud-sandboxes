@@ -58,9 +58,47 @@ class IoPressurePlacementTests(unittest.TestCase):
         handler._ready_sandbox_heartbeats = lambda: [self.heartbeat("busy", io=99)]
         self.assertIsNotNone(handler._select_node(requested, image="image"))
 
+    def test_completed_creates_remain_visible_to_load_balancing(self):
+        handler = object.__new__(control_plane.ControlPlaneHandler)
+        routes = []
+        nodes = [self.heartbeat(str(n), io=40 if n == 3 else 0) for n in range(4)]
+        handler._placement_routes = lambda: routes
+        handler._ready_sandbox_heartbeats = lambda: nodes
+        handler._nodes_with_image = lambda *_args, **_kwargs: {n.node_id for n in nodes}
+        handler.registry_layer_cache = None
+        handler.create_target_concurrency_per_node = 4
+        for index in range(256):
+            node = handler._select_node(ResourceQuantity(1, 1024, 4096), image="image")
+            routes.append(_sandbox_route(
+                sandbox_id=str(index), node_id=node.node_id, job_id=node.job_id,
+                node_url=node.node_url, state="running",
+                resources=ResourceQuantity(1, 1024, 4096), spec={"image": "image"},
+            ))
+        counts = Counter(r.node_id for r in routes)
+        # Pressure can favor the quieter peers without letting a stale sample
+        # strand most of a ready worker's capacity for the entire burst.
+        self.assertEqual(len(counts), 4)
+        self.assertLess(max(counts.values()) - min(counts.values()), 16)
+        self.assertLess(counts['3'], counts['0'])
+
     def test_partial_memory_reclaim_is_a_ranking_signal(self):
         self.assertGreater(node_pressure_score(self.heartbeat("reclaim", memory=60)),
                            node_pressure_score(self.heartbeat("quiet")))
+
+    def test_image_cache_affinity_does_not_hide_idle_worker(self):
+        busy = self.heartbeat("busy", io=75)
+        quiet = replace(self.heartbeat("quiet"), cached_images=())
+        handler = object.__new__(control_plane.ControlPlaneHandler)
+        handler._placement_routes = lambda: []
+        handler._ready_sandbox_heartbeats = lambda: [busy, quiet]
+        handler._nodes_with_image = lambda *_args, **_kwargs: {"busy"}
+        handler.registry_layer_cache = None
+        handler.create_target_concurrency_per_node = 4
+        requested = ResourceQuantity(1, 1024, 4096)
+        self.assertEqual(handler._select_node(requested, image="image").node_id, "quiet")
+        # Retain locality when both nodes have comparable pressure/headroom.
+        busy = self.heartbeat("busy")
+        self.assertEqual(handler._select_node(requested, image="image").node_id, "busy")
 
     def test_io_psi_sampling_and_unavailable_signal(self):
         with TemporaryDirectory() as directory:

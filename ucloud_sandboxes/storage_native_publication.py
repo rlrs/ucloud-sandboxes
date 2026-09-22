@@ -133,10 +133,11 @@ def snapshot_compaction_start(
 ) -> int | None:
     """Return the first layer to merge, or None when append alone suffices.
 
-    Depth-only maintenance can retain a dominant immutable base and merge its
-    deltas. This avoids at least half the input bytes while returning two layers.
-    Delta growth still forces a full merge so obsolete base data is eventually
-    reclaimed. A changed blob origin must copy every referenced layer.
+    Merge a suffix of similarly sized layers, retaining larger older tiers.
+    Crossing the byte trigger is not enough reason to rewrite a large base (or
+    an already compacted delta) for every tiny new seal. Older tiers join once
+    accumulated newer data is at least as large, or depth requires a merge.
+    A changed blob origin must copy every referenced layer.
     """
     if origin_changed:
         return 0
@@ -144,13 +145,18 @@ def snapshot_compaction_start(
         layer_sizes, max_layers=max_layers, max_delta_bytes=max_delta_bytes,
     ):
         return None
-    delta_bytes = sum(layer_sizes[1:])
-    if (
-        reusable_base and max_layers >= 2 and len(layer_sizes) >= 3
-        and delta_bytes <= max_delta_bytes and layer_sizes[0] > delta_bytes
+    if not reusable_base or max_layers < 2:
+        return 0
+    start = len(layer_sizes) - 1
+    selected_bytes = layer_sizes[start]
+    while start > 0 and (
+        layer_sizes[start - 1] <= selected_bytes or start >= max_layers
     ):
-        return 1
-    return 0
+        start -= 1
+        selected_bytes += layer_sizes[start]
+    # A single large delta is already one tier: rewriting it cannot reduce
+    # either lookup depth or bytes. Wait for more changes to amortize the work.
+    return start if start < len(layer_sizes) - 1 else None
 
 
 class PublicationGate:

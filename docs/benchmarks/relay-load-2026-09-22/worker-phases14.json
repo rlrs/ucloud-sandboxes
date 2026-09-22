@@ -1,0 +1,133 @@
+[
+  {
+    "job_id": "12398342",
+    "window_seconds": 50,
+    "completed_calls": {
+      "DirectRunscWarden._sentry_identity": {
+        "calls": 3840,
+        "wall_sum": 184.35965581199775,
+        "cpu_sum": 7.995613305,
+        "p50": 0.04542376500000955,
+        "p95": 0.11751486600002181,
+        "max": 0.3169431089999648
+      },
+      "DirectRunscWarden._require_state": {
+        "calls": 1424,
+        "wall_sum": 16.770202162001738,
+        "cpu_sum": 0.797990132,
+        "p50": 0.007863840000027267,
+        "p95": 0.0361844939999969,
+        "max": 0.11755393400000003
+      },
+      "SubprocessCommandRunner.run:runsc": {
+        "calls": 2135,
+        "wall_sum": 147.49984034900166,
+        "cpu_sum": 2.702357784,
+        "p50": 0.04274860800001079,
+        "p95": 0.251781574000006,
+        "max": 0.4623567329999787
+      },
+      "HibernationJournal.commit_running": {
+        "calls": 323,
+        "wall_sum": 13.780109310000682,
+        "cpu_sum": 0.534463057,
+        "p50": 0.03675944999997682,
+        "p95": 0.10452324400000634,
+        "max": 0.41037456200001543
+      },
+      "HibernationJournal.mark_candidate_started": {
+        "calls": 321,
+        "wall_sum": 13.625762050000105,
+        "cpu_sum": 0.524342592,
+        "p50": 0.035549707999962266,
+        "p95": 0.10440650800001094,
+        "max": 0.2504049920000284
+      },
+      "DirectRunscWarden._finalize_restore_artifacts": {
+        "calls": 323,
+        "wall_sum": 22.92989413000089,
+        "cpu_sum": 1.250526788,
+        "p50": 0.07452908100003697,
+        "p95": 0.15295457799999213,
+        "max": 0.21462919299995065
+      },
+      "SubprocessCommandRunner.run:mountpoint": {
+        "calls": 907,
+        "wall_sum": 29.213072296999655,
+        "cpu_sum": 1.206484474,
+        "p50": 0.028631871000015963,
+        "p95": 0.07223362399997768,
+        "max": 0.11994775800002344
+      },
+      "SubprocessCommandRunner.run:umount": {
+        "calls": 269,
+        "wall_sum": 8.695594894998806,
+        "cpu_sum": 0.3432548,
+        "p50": 0.028532181000002765,
+        "p95": 0.0738443789999792,
+        "max": 0.149499574999993
+      },
+      "SubprocessCommandRunner.run:mount": {
+        "calls": 319,
+        "wall_sum": 8.658350947000258,
+        "cpu_sum": 0.430806373,
+        "p50": 0.025376699999981156,
+        "p95": 0.06302646200003892,
+        "max": 0.1120631059999937
+      },
+      "OverlayRootfsManager.resume_sandbox": {
+        "calls": 319,
+        "wall_sum": 48.17040605799957,
+        "cpu_sum": 2.140662052,
+        "p50": 0.15671153499999946,
+        "p95": 0.31333611799999517,
+        "max": 0.4088101570000049
+      },
+      "HibernationArtifactStore.load_complete": {
+        "calls": 319,
+        "wall_sum": 12.911929714000166,
+        "cpu_sum": 0.58976688,
+        "p50": 0.03659756499996547,
+        "p95": 0.09825935200001368,
+        "max": 0.14023415399998385
+      },
+      "DirectRunscWarden._require_managed_process_ledger": {
+        "calls": 319,
+        "wall_sum": 2.241320328999734,
+        "cpu_sum": 0.140879504,
+        "p50": 0.004281225999989147,
+        "p95": 0.021422405999999228,
+        "max": 0.0627380860000244
+      },
+      "HibernationJournal.begin_restore": {
+        "calls": 319,
+        "wall_sum": 12.447114686000134,
+        "cpu_sum": 0.50202306,
+        "p50": 0.03342500899998413,
+        "p95": 0.0916135850000046,
+        "max": 0.2923394919999964
+      },
+      "DirectRunscWarden._mount_storage": {
+        "calls": 316,
+        "wall_sum": 92.00218094500059,
+        "cpu_sum": 0.29590704300000004,
+        "p50": 0.062279665999994904,
+        "p95": 1.9918474160000414,
+        "max": 3.798210342999994
+      },
+      "SubprocessCommandRunner.run:docker": {
+        "calls": 1,
+        "wall_sum": 0.07207839099999092,
+        "cpu_sum": 0.001252827999999706,
+        "p50": 0.07207839099999092,
+        "p95": 0.07207839099999092,
+        "max": 0.07207839099999092
+      }
+    }
+  },
+  {
+    "job_id": "12398343",
+    "window_seconds": 50,
+    "completed_calls": {}
+  }
+]

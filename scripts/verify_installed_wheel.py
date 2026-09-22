@@ -17,6 +17,9 @@ def main() -> None:
     assert build_parser().prog
     unit = files("ucloud_sandboxes").joinpath("systemd/ucloud-sandbox-gateway.service")
     assert unit.is_file(), "systemd units are missing from the wheel"
+    schema = files("ucloud_sandboxes.shared_control").joinpath("schema.sql")
+    assert schema.is_file(), "shared-control migrations are missing from the wheel"
+    assert files("ucloud_sandboxes.shared_control").joinpath("relay_schema.sql").is_file()
 
 
 if __name__ == "__main__":

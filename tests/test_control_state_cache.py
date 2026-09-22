@@ -12,6 +12,34 @@ from ucloud_sandboxes.models import SandboxInventoryEntry, utc_now
 
 
 class ControlStateCacheTests(unittest.TestCase):
+    def test_header_read_omits_inventory_but_rechecks_external_authority(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "control.sqlite"
+            reader, writer = ControlStateStore(path), ControlStateStore(path)
+            writer.receive_heartbeat(replace(self.heartbeat(), received_at=utc_now()))
+            header = reader.get_heartbeat("job", include_inventory=False)
+            self.assertEqual(header.inventory, ())
+            self.assertFalse(header.inventory_complete)
+            self.assertEqual(header.node_epoch, "boot-1")
+            header.labels["pool"] = "changed"
+            full = reader.get_heartbeat("job")
+            self.assertTrue(full.inventory_complete)
+            self.assertEqual(len(full.inventory), 1)
+            self.assertEqual(full.labels["pool"], "workers")
+            writer.quarantine_node("job", "test")
+            self.assertFalse(reader.get_heartbeat("job", include_inventory=False).admission_open)
+            writer.receive_heartbeat(replace(
+                self.heartbeat(), node_epoch="boot-2", received_at=utc_now(),
+            ))
+            self.assertEqual(reader.get_heartbeat("job", include_inventory=False).node_epoch, "boot-2")
+            with sqlite3.connect(path) as connection:
+                connection.execute("UPDATE control_records SET payload = ' ' || payload")
+            with self.assertRaisesRegex(ValueError, "invalid heartbeat"):
+                reader.get_heartbeat("job", include_inventory=False)
+            with sqlite3.connect(path) as connection:
+                connection.execute("DELETE FROM control_records")
+            self.assertIsNone(reader.get_heartbeat("job", include_inventory=False))
+
     def heartbeat(self, job_id="job"):
         return build_heartbeat(
             job_id=job_id, node_id=f"node-{job_id}",

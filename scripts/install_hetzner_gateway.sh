@@ -182,7 +182,8 @@ install -m 0644 -o ucloud -g ucloud \
   "$init_public_key" "$data_root/ssh/gateway-init.pub"
 
 python3 -m venv "$venv_dir"
-"$venv_dir/bin/pip" install --disable-pip-version-check --force-reinstall "$wheel"
+relay_extra="$(python3 -c 'import json,sys; print("[postgres]" if json.load(open(sys.argv[1])).get("relay_postgres") else "")' "$deployment")"
+"$venv_dir/bin/pip" install --disable-pip-version-check --force-reinstall "$wheel$relay_extra"
 
 for name in \
   gateway-token \

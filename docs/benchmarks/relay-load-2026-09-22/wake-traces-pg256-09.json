@@ -1,0 +1,2592 @@
+[
+  {
+    "traceId": "9RpvpQaZr6QUKWeeY3BsNA==",
+    "spanId": "/d0UZzjd4zw=",
+    "parentSpanId": "gf7Q55ndSOs=",
+    "name": "sandbox.wake.ensure_network",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033415480855772",
+    "endTimeUnixNano": "1790033415497869957",
+    "attributes": [
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.002992285
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "9RpvpQaZr6QUKWeeY3BsNA==",
+    "spanId": "gf7Q55ndSOs=",
+    "parentSpanId": "S+9x8CK9zmw=",
+    "name": "sandbox.wake",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033415480608669",
+    "endTimeUnixNano": "1790033415680921560",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0078"
+        }
+      },
+      {
+        "key": "sandbox.generation",
+        "value": {
+          "intValue": "1"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.009546602
+        }
+      }
+    ],
+    "events": [
+      {
+        "timeUnixNano": "1790033415680816892",
+        "name": "sandbox.wake.timings",
+        "attributes": [
+          {
+            "key": "restore_queue",
+            "value": {
+              "doubleValue": 0.05344000010154559
+            }
+          },
+          {
+            "key": "network_prepare",
+            "value": {
+              "doubleValue": 17.094918000111647
+            }
+          },
+          {
+            "key": "validate_artifact",
+            "value": {
+              "doubleValue": 57.28066299980128
+            }
+          },
+          {
+            "key": "begin_restore_journal",
+            "value": {
+              "doubleValue": 1.7716249999466527
+            }
+          },
+          {
+            "key": "runsc_restore",
+            "value": {
+              "doubleValue": 98.87884199997643
+            }
+          },
+          {
+            "key": "runsc_state",
+            "value": {
+              "doubleValue": 9.11524000002828
+            }
+          },
+          {
+            "key": "candidate_fence",
+            "value": {
+              "doubleValue": 0.4889790002380323
+            }
+          },
+          {
+            "key": "candidate_journal",
+            "value": {
+              "doubleValue": 1.3379090000853466
+            }
+          },
+          {
+            "key": "candidate_resume",
+            "value": {
+              "doubleValue": 15.104362999863952
+            }
+          },
+          {
+            "key": "readiness_exec",
+            "value": {
+              "doubleValue": 11.88245800040022
+            }
+          },
+          {
+            "key": "commit_running_journal",
+            "value": {
+              "doubleValue": 1.6132350001498708
+            }
+          },
+          {
+            "key": "artifact_cleanup",
+            "value": {
+              "doubleValue": 2.0171349997326615
+            }
+          },
+          {
+            "key": "warden_total",
+            "value": {
+              "doubleValue": 199.56208799976594
+            }
+          }
+        ]
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "9RpvpQaZr6QUKWeeY3BsNA==",
+    "spanId": "S+9x8CK9zmw=",
+    "parentSpanId": "cceVG6qmAbI=",
+    "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+    "kind": "SPAN_KIND_SERVER",
+    "startTimeUnixNano": "1790033415478392463",
+    "endTimeUnixNano": "1790033415682168912",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0078"
+        }
+      },
+      {
+        "key": "http.request.body.size",
+        "value": {
+          "intValue": "131"
+        }
+      },
+      {
+        "key": "http.response.status_code",
+        "value": {
+          "intValue": "200"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.012735399
+        }
+      },
+      {
+        "key": "http.request.method",
+        "value": {
+          "stringValue": "POST"
+        }
+      },
+      {
+        "key": "url.path",
+        "value": {
+          "stringValue": "/v1/sandboxes/relay-load-54345a8ff724-0078/wake"
+        }
+      },
+      {
+        "key": "http.route",
+        "value": {
+          "stringValue": "/v1/sandboxes/{sandbox_id}/wake"
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "9RpvpQaZr6QUKWeeY3BsNA==",
+    "spanId": "yTUClF/i+II=",
+    "parentSpanId": "cceVG6qmAbI=",
+    "name": "gateway.wake.await_admission",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033415450360265",
+    "endTimeUnixNano": "1790033415458091621",
+    "attributes": [
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 3.502299999999991e-05
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "9RpvpQaZr6QUKWeeY3BsNA==",
+    "spanId": "cceVG6qmAbI=",
+    "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+    "kind": "SPAN_KIND_SERVER",
+    "startTimeUnixNano": "1790033415449147662",
+    "endTimeUnixNano": "1790033415711957153",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0078"
+        }
+      },
+      {
+        "key": "http.request.body.size",
+        "value": {
+          "intValue": "244"
+        }
+      },
+      {
+        "key": "http.response.status_code",
+        "value": {
+          "intValue": "200"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.009783913
+        }
+      },
+      {
+        "key": "http.request.method",
+        "value": {
+          "stringValue": "POST"
+        }
+      },
+      {
+        "key": "url.path",
+        "value": {
+          "stringValue": "/v1/sandboxes/relay-load-54345a8ff724-0078/wake"
+        }
+      },
+      {
+        "key": "http.route",
+        "value": {
+          "stringValue": "/v1/sandboxes/{sandbox_id}/wake"
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "mmbIOFZxjlUAvs8Uu0nm8Q==",
+    "spanId": "VGpUnkgYoZ8=",
+    "parentSpanId": "inqtoIGZew0=",
+    "name": "sandbox.wake.ensure_network",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033413936475413",
+    "endTimeUnixNano": "1790033413958054630",
+    "attributes": [
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.002702342
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "mmbIOFZxjlUAvs8Uu0nm8Q==",
+    "spanId": "inqtoIGZew0=",
+    "parentSpanId": "GVd8JKp3AAA=",
+    "name": "sandbox.wake",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033413935799936",
+    "endTimeUnixNano": "1790033414230156777",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0199"
+        }
+      },
+      {
+        "key": "sandbox.generation",
+        "value": {
+          "intValue": "1"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.011731605
+        }
+      }
+    ],
+    "events": [
+      {
+        "timeUnixNano": "1790033414230015776",
+        "name": "sandbox.wake.timings",
+        "attributes": [
+          {
+            "key": "restore_queue",
+            "value": {
+              "doubleValue": 51.119415999892226
+            }
+          },
+          {
+            "key": "network_prepare",
+            "value": {
+              "doubleValue": 21.82529900028385
+            }
+          },
+          {
+            "key": "validate_artifact",
+            "value": {
+              "doubleValue": 59.342528999877686
+            }
+          },
+          {
+            "key": "begin_restore_journal",
+            "value": {
+              "doubleValue": 1.6883030002645683
+            }
+          },
+          {
+            "key": "runsc_restore",
+            "value": {
+              "doubleValue": 185.2026050000859
+            }
+          },
+          {
+            "key": "runsc_state",
+            "value": {
+              "doubleValue": 8.917861000099947
+            }
+          },
+          {
+            "key": "candidate_fence",
+            "value": {
+              "doubleValue": 0.42324800006099395
+            }
+          },
+          {
+            "key": "candidate_journal",
+            "value": {
+              "doubleValue": 1.3521060000130092
+            }
+          },
+          {
+            "key": "candidate_resume",
+            "value": {
+              "doubleValue": 16.921873000228516
+            }
+          },
+          {
+            "key": "readiness_exec",
+            "value": {
+              "doubleValue": 14.004692000071373
+            }
+          },
+          {
+            "key": "commit_running_journal",
+            "value": {
+              "doubleValue": 2.2250199999689357
+            }
+          },
+          {
+            "key": "artifact_cleanup",
+            "value": {
+              "doubleValue": 2.6406970000607544
+            }
+          },
+          {
+            "key": "warden_total",
+            "value": {
+              "doubleValue": 292.80171900018104
+            }
+          }
+        ]
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "mmbIOFZxjlUAvs8Uu0nm8Q==",
+    "spanId": "GVd8JKp3AAA=",
+    "parentSpanId": "K7Sioq97NO8=",
+    "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+    "kind": "SPAN_KIND_SERVER",
+    "startTimeUnixNano": "1790033413881403754",
+    "endTimeUnixNano": "1790033414232243871",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0199"
+        }
+      },
+      {
+        "key": "http.request.body.size",
+        "value": {
+          "intValue": "131"
+        }
+      },
+      {
+        "key": "http.response.status_code",
+        "value": {
+          "intValue": "200"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.017691333
+        }
+      },
+      {
+        "key": "http.request.method",
+        "value": {
+          "stringValue": "POST"
+        }
+      },
+      {
+        "key": "url.path",
+        "value": {
+          "stringValue": "/v1/sandboxes/relay-load-54345a8ff724-0199/wake"
+        }
+      },
+      {
+        "key": "http.route",
+        "value": {
+          "stringValue": "/v1/sandboxes/{sandbox_id}/wake"
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "mmbIOFZxjlUAvs8Uu0nm8Q==",
+    "spanId": "wSrC4yQma24=",
+    "parentSpanId": "K7Sioq97NO8=",
+    "name": "gateway.wake.await_admission",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033413867122857",
+    "endTimeUnixNano": "1790033413871557560",
+    "attributes": [
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 3.532300000000008e-05
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "mmbIOFZxjlUAvs8Uu0nm8Q==",
+    "spanId": "K7Sioq97NO8=",
+    "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+    "kind": "SPAN_KIND_SERVER",
+    "startTimeUnixNano": "1790033413862156491",
+    "endTimeUnixNano": "1790033414236642163",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0199"
+        }
+      },
+      {
+        "key": "http.request.body.size",
+        "value": {
+          "intValue": "244"
+        }
+      },
+      {
+        "key": "http.response.status_code",
+        "value": {
+          "intValue": "200"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.008445392999999999
+        }
+      },
+      {
+        "key": "http.request.method",
+        "value": {
+          "stringValue": "POST"
+        }
+      },
+      {
+        "key": "url.path",
+        "value": {
+          "stringValue": "/v1/sandboxes/relay-load-54345a8ff724-0199/wake"
+        }
+      },
+      {
+        "key": "http.route",
+        "value": {
+          "stringValue": "/v1/sandboxes/{sandbox_id}/wake"
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "2Eb6Liy+I2oFvg91PJzQQQ==",
+    "spanId": "m7U73QxUTMk=",
+    "parentSpanId": "ZmdfL+fFdEQ=",
+    "name": "sandbox.wake.ensure_network",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033413652520464",
+    "endTimeUnixNano": "1790033413670529220",
+    "attributes": [
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.00264947
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "2Eb6Liy+I2oFvg91PJzQQQ==",
+    "spanId": "ZmdfL+fFdEQ=",
+    "parentSpanId": "q8FqP781DGg=",
+    "name": "sandbox.wake",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033413652068082",
+    "endTimeUnixNano": "1790033413880349195",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0027"
+        }
+      },
+      {
+        "key": "sandbox.generation",
+        "value": {
+          "intValue": "1"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.008629434
+        }
+      }
+    ],
+    "events": [
+      {
+        "timeUnixNano": "1790033413880272949",
+        "name": "sandbox.wake.timings",
+        "attributes": [
+          {
+            "key": "restore_queue",
+            "value": {
+              "doubleValue": 50.71539100026712
+            }
+          },
+          {
+            "key": "network_prepare",
+            "value": {
+              "doubleValue": 18.18600400019932
+            }
+          },
+          {
+            "key": "validate_artifact",
+            "value": {
+              "doubleValue": 51.74352399990312
+            }
+          },
+          {
+            "key": "begin_restore_journal",
+            "value": {
+              "doubleValue": 1.5070459999151353
+            }
+          },
+          {
+            "key": "runsc_restore",
+            "value": {
+              "doubleValue": 93.8070960000914
+            }
+          },
+          {
+            "key": "runsc_state",
+            "value": {
+              "doubleValue": 8.693903999756003
+            }
+          },
+          {
+            "key": "candidate_fence",
+            "value": {
+              "doubleValue": 0.41517699992255075
+            }
+          },
+          {
+            "key": "candidate_journal",
+            "value": {
+              "doubleValue": 1.3282449999678647
+            }
+          },
+          {
+            "key": "candidate_resume",
+            "value": {
+              "doubleValue": 15.554531999896426
+            }
+          },
+          {
+            "key": "readiness_exec",
+            "value": {
+              "doubleValue": 50.257051000244246
+            }
+          },
+          {
+            "key": "commit_running_journal",
+            "value": {
+              "doubleValue": 2.0556229997055198
+            }
+          },
+          {
+            "key": "artifact_cleanup",
+            "value": {
+              "doubleValue": 1.8450450002092111
+            }
+          },
+          {
+            "key": "warden_total",
+            "value": {
+              "doubleValue": 227.27211899973554
+            }
+          }
+        ]
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "2Eb6Liy+I2oFvg91PJzQQQ==",
+    "spanId": "q8FqP781DGg=",
+    "parentSpanId": "N4ooXJ6nW7Q=",
+    "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+    "kind": "SPAN_KIND_SERVER",
+    "startTimeUnixNano": "1790033413598760155",
+    "endTimeUnixNano": "1790033413881427613",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0027"
+        }
+      },
+      {
+        "key": "http.request.body.size",
+        "value": {
+          "intValue": "131"
+        }
+      },
+      {
+        "key": "http.response.status_code",
+        "value": {
+          "intValue": "200"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.012434576
+        }
+      },
+      {
+        "key": "http.request.method",
+        "value": {
+          "stringValue": "POST"
+        }
+      },
+      {
+        "key": "url.path",
+        "value": {
+          "stringValue": "/v1/sandboxes/relay-load-54345a8ff724-0027/wake"
+        }
+      },
+      {
+        "key": "http.route",
+        "value": {
+          "stringValue": "/v1/sandboxes/{sandbox_id}/wake"
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "2Eb6Liy+I2oFvg91PJzQQQ==",
+    "spanId": "1I7A7orawLc=",
+    "parentSpanId": "N4ooXJ6nW7Q=",
+    "name": "gateway.wake.await_admission",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033413586502847",
+    "endTimeUnixNano": "1790033413590446346",
+    "attributes": [
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 1.7426000000000073e-05
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "2Eb6Liy+I2oFvg91PJzQQQ==",
+    "spanId": "N4ooXJ6nW7Q=",
+    "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+    "kind": "SPAN_KIND_SERVER",
+    "startTimeUnixNano": "1790033413583342900",
+    "endTimeUnixNano": "1790033413885107560",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0027"
+        }
+      },
+      {
+        "key": "http.request.body.size",
+        "value": {
+          "intValue": "244"
+        }
+      },
+      {
+        "key": "http.response.status_code",
+        "value": {
+          "intValue": "200"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.008013697
+        }
+      },
+      {
+        "key": "http.request.method",
+        "value": {
+          "stringValue": "POST"
+        }
+      },
+      {
+        "key": "url.path",
+        "value": {
+          "stringValue": "/v1/sandboxes/relay-load-54345a8ff724-0027/wake"
+        }
+      },
+      {
+        "key": "http.route",
+        "value": {
+          "stringValue": "/v1/sandboxes/{sandbox_id}/wake"
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "IZOBe/Nr9yUSJUr1/xcFqg==",
+    "spanId": "KipRm1UWHAM=",
+    "parentSpanId": "Lj9sjHmMxUI=",
+    "name": "sandbox.wake.ensure_network",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033407624373176",
+    "endTimeUnixNano": "1790033407714984736",
+    "attributes": [
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.006265746
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "IZOBe/Nr9yUSJUr1/xcFqg==",
+    "spanId": "Lj9sjHmMxUI=",
+    "parentSpanId": "jSbgWgfuPsk=",
+    "name": "sandbox.wake",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033407623057077",
+    "endTimeUnixNano": "1790033408758648850",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0014"
+        }
+      },
+      {
+        "key": "sandbox.generation",
+        "value": {
+          "intValue": "1"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.052424091000000006
+        }
+      }
+    ],
+    "events": [
+      {
+        "timeUnixNano": "1790033408758587097",
+        "name": "sandbox.wake.timings",
+        "attributes": [
+          {
+            "key": "restore_queue",
+            "value": {
+              "doubleValue": 8.01441400000158
+            }
+          },
+          {
+            "key": "network_prepare",
+            "value": {
+              "doubleValue": 90.93196099999545
+            }
+          },
+          {
+            "key": "validate_artifact",
+            "value": {
+              "doubleValue": 327.2063189999983
+            }
+          },
+          {
+            "key": "begin_restore_journal",
+            "value": {
+              "doubleValue": 36.28893800001265
+            }
+          },
+          {
+            "key": "runsc_restore",
+            "value": {
+              "doubleValue": 271.40001800000846
+            }
+          },
+          {
+            "key": "runsc_state",
+            "value": {
+              "doubleValue": 110.53165800001352
+            }
+          },
+          {
+            "key": "candidate_fence",
+            "value": {
+              "doubleValue": 162.95979299999885
+            }
+          },
+          {
+            "key": "candidate_journal",
+            "value": {
+              "doubleValue": 33.37054299998954
+            }
+          },
+          {
+            "key": "candidate_resume",
+            "value": {
+              "doubleValue": 82.27327799997397
+            }
+          },
+          {
+            "key": "readiness_exec",
+            "value": {
+              "doubleValue": 34.87526399999297
+            }
+          },
+          {
+            "key": "commit_running_journal",
+            "value": {
+              "doubleValue": 32.59283400001323
+            }
+          },
+          {
+            "key": "artifact_cleanup",
+            "value": {
+              "doubleValue": 35.92420000001084
+            }
+          },
+          {
+            "key": "warden_total",
+            "value": {
+              "doubleValue": 1127.6765060000002
+            }
+          }
+        ]
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "IZOBe/Nr9yUSJUr1/xcFqg==",
+    "spanId": "jSbgWgfuPsk=",
+    "parentSpanId": "+rnWmGKH1TQ=",
+    "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+    "kind": "SPAN_KIND_SERVER",
+    "startTimeUnixNano": "1790033407570222252",
+    "endTimeUnixNano": "1790033408823571182",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0014"
+        }
+      },
+      {
+        "key": "http.request.body.size",
+        "value": {
+          "intValue": "131"
+        }
+      },
+      {
+        "key": "http.response.status_code",
+        "value": {
+          "intValue": "200"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.066529349
+        }
+      },
+      {
+        "key": "http.request.method",
+        "value": {
+          "stringValue": "POST"
+        }
+      },
+      {
+        "key": "url.path",
+        "value": {
+          "stringValue": "/v1/sandboxes/relay-load-54345a8ff724-0014/wake"
+        }
+      },
+      {
+        "key": "http.route",
+        "value": {
+          "stringValue": "/v1/sandboxes/{sandbox_id}/wake"
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "IZOBe/Nr9yUSJUr1/xcFqg==",
+    "spanId": "UIAEVExWH3o=",
+    "parentSpanId": "+rnWmGKH1TQ=",
+    "name": "gateway.wake.await_admission",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033407206549921",
+    "endTimeUnixNano": "1790033407463760169",
+    "attributes": [
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 4.039100000000008e-05
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "IZOBe/Nr9yUSJUr1/xcFqg==",
+    "spanId": "+rnWmGKH1TQ=",
+    "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+    "kind": "SPAN_KIND_SERVER",
+    "startTimeUnixNano": "1790033407160229811",
+    "endTimeUnixNano": "1790033409019075705",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0014"
+        }
+      },
+      {
+        "key": "http.request.body.size",
+        "value": {
+          "intValue": "244"
+        }
+      },
+      {
+        "key": "http.response.status_code",
+        "value": {
+          "intValue": "200"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.007805251000000001
+        }
+      },
+      {
+        "key": "http.request.method",
+        "value": {
+          "stringValue": "POST"
+        }
+      },
+      {
+        "key": "url.path",
+        "value": {
+          "stringValue": "/v1/sandboxes/relay-load-54345a8ff724-0014/wake"
+        }
+      },
+      {
+        "key": "http.route",
+        "value": {
+          "stringValue": "/v1/sandboxes/{sandbox_id}/wake"
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "I+MoCv1hdhERde2yC8FKrg==",
+    "spanId": "iDkzASjuD9w=",
+    "parentSpanId": "UB0N0SEfIi0=",
+    "name": "gateway.wake.await_admission",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033407200946581",
+    "endTimeUnixNano": "1790033407463913520",
+    "attributes": [
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 2.2953999999999943e-05
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "I+MoCv1hdhERde2yC8FKrg==",
+    "spanId": "UB0N0SEfIi0=",
+    "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+    "kind": "SPAN_KIND_SERVER",
+    "startTimeUnixNano": "1790033407151404011",
+    "endTimeUnixNano": "1790033414264267978",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0251"
+        }
+      },
+      {
+        "key": "http.request.body.size",
+        "value": {
+          "intValue": "244"
+        }
+      },
+      {
+        "key": "http.response.status_code",
+        "value": {
+          "intValue": "200"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.010683077999999999
+        }
+      },
+      {
+        "key": "http.request.method",
+        "value": {
+          "stringValue": "POST"
+        }
+      },
+      {
+        "key": "url.path",
+        "value": {
+          "stringValue": "/v1/sandboxes/relay-load-54345a8ff724-0251/wake"
+        }
+      },
+      {
+        "key": "http.route",
+        "value": {
+          "stringValue": "/v1/sandboxes/{sandbox_id}/wake"
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "I+MoCv1hdhERde2yC8FKrg==",
+    "spanId": "81Lf4RleGaI=",
+    "parentSpanId": "+tZZnYiBpI0=",
+    "name": "sandbox.wake.ensure_network",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033411411655473",
+    "endTimeUnixNano": "1790033411703800595",
+    "attributes": [
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.015474256
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "I+MoCv1hdhERde2yC8FKrg==",
+    "spanId": "+tZZnYiBpI0=",
+    "parentSpanId": "I4vND128+8Q=",
+    "name": "sandbox.wake",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033411409496900",
+    "endTimeUnixNano": "1790033414064353070",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0251"
+        }
+      },
+      {
+        "key": "sandbox.generation",
+        "value": {
+          "intValue": "1"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.077131852
+        }
+      }
+    ],
+    "events": [
+      {
+        "timeUnixNano": "1790033414064111997",
+        "name": "sandbox.wake.timings",
+        "attributes": [
+          {
+            "key": "restore_queue",
+            "value": {
+              "doubleValue": 3291.3575479997235
+            }
+          },
+          {
+            "key": "network_prepare",
+            "value": {
+              "doubleValue": 292.3637420003615
+            }
+          },
+          {
+            "key": "validate_artifact",
+            "value": {
+              "doubleValue": 699.058918999981
+            }
+          },
+          {
+            "key": "begin_restore_journal",
+            "value": {
+              "doubleValue": 126.22696600010386
+            }
+          },
+          {
+            "key": "runsc_restore",
+            "value": {
+              "doubleValue": 444.8762810002336
+            }
+          },
+          {
+            "key": "runsc_state",
+            "value": {
+              "doubleValue": 366.9071110002733
+            }
+          },
+          {
+            "key": "candidate_fence",
+            "value": {
+              "doubleValue": 351.7101659999753
+            }
+          },
+          {
+            "key": "candidate_journal",
+            "value": {
+              "doubleValue": 69.94457999962833
+            }
+          },
+          {
+            "key": "candidate_resume",
+            "value": {
+              "doubleValue": 222.82991099973515
+            }
+          },
+          {
+            "key": "readiness_exec",
+            "value": {
+              "doubleValue": 117.37450900000113
+            }
+          },
+          {
+            "key": "commit_running_journal",
+            "value": {
+              "doubleValue": 90.02755799974693
+            }
+          },
+          {
+            "key": "artifact_cleanup",
+            "value": {
+              "doubleValue": 128.65953100026672
+            }
+          },
+          {
+            "key": "warden_total",
+            "value": {
+              "doubleValue": 2625.928777000354
+            }
+          }
+        ]
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "I+MoCv1hdhERde2yC8FKrg==",
+    "spanId": "I4vND128+8Q=",
+    "parentSpanId": "UB0N0SEfIi0=",
+    "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+    "kind": "SPAN_KIND_SERVER",
+    "startTimeUnixNano": "1790033407546724274",
+    "endTimeUnixNano": "1790033414259766144",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0251"
+        }
+      },
+      {
+        "key": "http.request.body.size",
+        "value": {
+          "intValue": "131"
+        }
+      },
+      {
+        "key": "http.response.status_code",
+        "value": {
+          "intValue": "200"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.108695857
+        }
+      },
+      {
+        "key": "http.request.method",
+        "value": {
+          "stringValue": "POST"
+        }
+      },
+      {
+        "key": "url.path",
+        "value": {
+          "stringValue": "/v1/sandboxes/relay-load-54345a8ff724-0251/wake"
+        }
+      },
+      {
+        "key": "http.route",
+        "value": {
+          "stringValue": "/v1/sandboxes/{sandbox_id}/wake"
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "v1v22un1FgcX5zXkObLwbw==",
+    "spanId": "s2vjWeOwjf0=",
+    "parentSpanId": "YkMRRjJS+RY=",
+    "name": "sandbox.wake.ensure_network",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033406972740016",
+    "endTimeUnixNano": "1790033406994054933",
+    "attributes": [
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.004475578
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "v1v22un1FgcX5zXkObLwbw==",
+    "spanId": "YkMRRjJS+RY=",
+    "parentSpanId": "gD92mFkVeA8=",
+    "name": "sandbox.wake",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033406972209405",
+    "endTimeUnixNano": "1790033407273991118",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0178"
+        }
+      },
+      {
+        "key": "sandbox.generation",
+        "value": {
+          "intValue": "1"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.027258281999999998
+        }
+      }
+    ],
+    "events": [
+      {
+        "timeUnixNano": "1790033407273871297",
+        "name": "sandbox.wake.timings",
+        "attributes": [
+          {
+            "key": "restore_queue",
+            "value": {
+              "doubleValue": 0.0555240003450308
+            }
+          },
+          {
+            "key": "network_prepare",
+            "value": {
+              "doubleValue": 21.41145299992786
+            }
+          },
+          {
+            "key": "validate_artifact",
+            "value": {
+              "doubleValue": 89.74431100023139
+            }
+          },
+          {
+            "key": "begin_restore_journal",
+            "value": {
+              "doubleValue": 5.403799000305298
+            }
+          },
+          {
+            "key": "runsc_restore",
+            "value": {
+              "doubleValue": 110.60902999997779
+            }
+          },
+          {
+            "key": "runsc_state",
+            "value": {
+              "doubleValue": 24.674991000210866
+            }
+          },
+          {
+            "key": "candidate_fence",
+            "value": {
+              "doubleValue": 18.518315999699553
+            }
+          },
+          {
+            "key": "candidate_journal",
+            "value": {
+              "doubleValue": 6.038105999778054
+            }
+          },
+          {
+            "key": "candidate_resume",
+            "value": {
+              "doubleValue": 23.12830600021698
+            }
+          },
+          {
+            "key": "readiness_exec",
+            "value": {
+              "doubleValue": 14.594352000131039
+            }
+          },
+          {
+            "key": "commit_running_journal",
+            "value": {
+              "doubleValue": 2.808409999943251
+            }
+          },
+          {
+            "key": "artifact_cleanup",
+            "value": {
+              "doubleValue": 4.284769000150845
+            }
+          },
+          {
+            "key": "warden_total",
+            "value": {
+              "doubleValue": 300.1807059999919
+            }
+          }
+        ]
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "v1v22un1FgcX5zXkObLwbw==",
+    "spanId": "gD92mFkVeA8=",
+    "parentSpanId": "nrcSreZYPvg=",
+    "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+    "kind": "SPAN_KIND_SERVER",
+    "startTimeUnixNano": "1790033406966813438",
+    "endTimeUnixNano": "1790033407288048199",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0178"
+        }
+      },
+      {
+        "key": "http.request.body.size",
+        "value": {
+          "intValue": "131"
+        }
+      },
+      {
+        "key": "http.response.status_code",
+        "value": {
+          "intValue": "200"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.033984288
+        }
+      },
+      {
+        "key": "http.request.method",
+        "value": {
+          "stringValue": "POST"
+        }
+      },
+      {
+        "key": "url.path",
+        "value": {
+          "stringValue": "/v1/sandboxes/relay-load-54345a8ff724-0178/wake"
+        }
+      },
+      {
+        "key": "http.route",
+        "value": {
+          "stringValue": "/v1/sandboxes/{sandbox_id}/wake"
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "v1v22un1FgcX5zXkObLwbw==",
+    "spanId": "b6GXuBTaq8I=",
+    "parentSpanId": "nrcSreZYPvg=",
+    "name": "gateway.wake.await_admission",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033406763424483",
+    "endTimeUnixNano": "1790033406904545810",
+    "attributes": [
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 2.365700000000006e-05
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "v1v22un1FgcX5zXkObLwbw==",
+    "spanId": "nrcSreZYPvg=",
+    "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+    "kind": "SPAN_KIND_SERVER",
+    "startTimeUnixNano": "1790033406670435356",
+    "endTimeUnixNano": "1790033407467128590",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0178"
+        }
+      },
+      {
+        "key": "http.request.body.size",
+        "value": {
+          "intValue": "244"
+        }
+      },
+      {
+        "key": "http.response.status_code",
+        "value": {
+          "intValue": "200"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.008815857
+        }
+      },
+      {
+        "key": "http.request.method",
+        "value": {
+          "stringValue": "POST"
+        }
+      },
+      {
+        "key": "url.path",
+        "value": {
+          "stringValue": "/v1/sandboxes/relay-load-54345a8ff724-0178/wake"
+        }
+      },
+      {
+        "key": "http.route",
+        "value": {
+          "stringValue": "/v1/sandboxes/{sandbox_id}/wake"
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "qRpaMBLpBzcL5Aub9uFcVg==",
+    "spanId": "yN/bfcsUR/A=",
+    "parentSpanId": "nl7WmupbcDQ=",
+    "name": "sandbox.wake.ensure_network",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033406944410017",
+    "endTimeUnixNano": "1790033406970381495",
+    "attributes": [
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.0025152160000000002
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "qRpaMBLpBzcL5Aub9uFcVg==",
+    "spanId": "nl7WmupbcDQ=",
+    "parentSpanId": "v8+rZVrLrzk=",
+    "name": "sandbox.wake",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033406942572974",
+    "endTimeUnixNano": "1790033407269343872",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0114"
+        }
+      },
+      {
+        "key": "sandbox.generation",
+        "value": {
+          "intValue": "1"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.023998004
+        }
+      }
+    ],
+    "events": [
+      {
+        "timeUnixNano": "1790033407269210161",
+        "name": "sandbox.wake.timings",
+        "attributes": [
+          {
+            "key": "restore_queue",
+            "value": {
+              "doubleValue": 38.42783200025224
+            }
+          },
+          {
+            "key": "network_prepare",
+            "value": {
+              "doubleValue": 26.09295199999906
+            }
+          },
+          {
+            "key": "validate_artifact",
+            "value": {
+              "doubleValue": 87.44721500033847
+            }
+          },
+          {
+            "key": "begin_restore_journal",
+            "value": {
+              "doubleValue": 6.340932000057364
+            }
+          },
+          {
+            "key": "runsc_restore",
+            "value": {
+              "doubleValue": 144.98526600027617
+            }
+          },
+          {
+            "key": "runsc_state",
+            "value": {
+              "doubleValue": 23.84106299996347
+            }
+          },
+          {
+            "key": "candidate_fence",
+            "value": {
+              "doubleValue": 13.79754999970828
+            }
+          },
+          {
+            "key": "candidate_journal",
+            "value": {
+              "doubleValue": 4.056984000271768
+            }
+          },
+          {
+            "key": "candidate_resume",
+            "value": {
+              "doubleValue": 22.254566999890812
+            }
+          },
+          {
+            "key": "readiness_exec",
+            "value": {
+              "doubleValue": 14.6977889999107
+            }
+          },
+          {
+            "key": "commit_running_journal",
+            "value": {
+              "doubleValue": 2.543067999795312
+            }
+          },
+          {
+            "key": "artifact_cleanup",
+            "value": {
+              "doubleValue": 3.8561009996556095
+            }
+          },
+          {
+            "key": "warden_total",
+            "value": {
+              "doubleValue": 323.9382609999666
+            }
+          }
+        ]
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "qRpaMBLpBzcL5Aub9uFcVg==",
+    "spanId": "v8+rZVrLrzk=",
+    "parentSpanId": "pVn2z3ZEP0w=",
+    "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+    "kind": "SPAN_KIND_SERVER",
+    "startTimeUnixNano": "1790033406893849589",
+    "endTimeUnixNano": "1790033407273562921",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0114"
+        }
+      },
+      {
+        "key": "http.request.body.size",
+        "value": {
+          "intValue": "131"
+        }
+      },
+      {
+        "key": "http.response.status_code",
+        "value": {
+          "intValue": "200"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.031145088
+        }
+      },
+      {
+        "key": "http.request.method",
+        "value": {
+          "stringValue": "POST"
+        }
+      },
+      {
+        "key": "url.path",
+        "value": {
+          "stringValue": "/v1/sandboxes/relay-load-54345a8ff724-0114/wake"
+        }
+      },
+      {
+        "key": "http.route",
+        "value": {
+          "stringValue": "/v1/sandboxes/{sandbox_id}/wake"
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "qRpaMBLpBzcL5Aub9uFcVg==",
+    "spanId": "xOBUCEpO63w=",
+    "parentSpanId": "pVn2z3ZEP0w=",
+    "name": "gateway.wake.await_admission",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033406645199223",
+    "endTimeUnixNano": "1790033406784655803",
+    "attributes": [
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 3.424000000000005e-05
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "qRpaMBLpBzcL5Aub9uFcVg==",
+    "spanId": "pVn2z3ZEP0w=",
+    "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+    "kind": "SPAN_KIND_SERVER",
+    "startTimeUnixNano": "1790033406551764112",
+    "endTimeUnixNano": "1790033407465338204",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0114"
+        }
+      },
+      {
+        "key": "http.request.body.size",
+        "value": {
+          "intValue": "244"
+        }
+      },
+      {
+        "key": "http.response.status_code",
+        "value": {
+          "intValue": "200"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.007482773999999999
+        }
+      },
+      {
+        "key": "http.request.method",
+        "value": {
+          "stringValue": "POST"
+        }
+      },
+      {
+        "key": "url.path",
+        "value": {
+          "stringValue": "/v1/sandboxes/relay-load-54345a8ff724-0114/wake"
+        }
+      },
+      {
+        "key": "http.route",
+        "value": {
+          "stringValue": "/v1/sandboxes/{sandbox_id}/wake"
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "xfNBAIOLSOcHqav71XNQ7A==",
+    "spanId": "odToIhleV78=",
+    "parentSpanId": "rNL8QUiNeqs=",
+    "name": "sandbox.wake.ensure_network",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033406948675427",
+    "endTimeUnixNano": "1790033406977689067",
+    "attributes": [
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.004265365
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "xfNBAIOLSOcHqav71XNQ7A==",
+    "spanId": "rNL8QUiNeqs=",
+    "parentSpanId": "xfu9c96MV1o=",
+    "name": "sandbox.wake",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033406947265829",
+    "endTimeUnixNano": "1790033407253405511",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0092"
+        }
+      },
+      {
+        "key": "sandbox.generation",
+        "value": {
+          "intValue": "1"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.023128128
+        }
+      }
+    ],
+    "events": [
+      {
+        "timeUnixNano": "1790033407253222765",
+        "name": "sandbox.wake.timings",
+        "attributes": [
+          {
+            "key": "restore_queue",
+            "value": {
+              "doubleValue": 39.93984599992473
+            }
+          },
+          {
+            "key": "network_prepare",
+            "value": {
+              "doubleValue": 29.19007699983922
+            }
+          },
+          {
+            "key": "validate_artifact",
+            "value": {
+              "doubleValue": 85.8720460000768
+            }
+          },
+          {
+            "key": "begin_restore_journal",
+            "value": {
+              "doubleValue": 4.519802999766398
+            }
+          },
+          {
+            "key": "runsc_restore",
+            "value": {
+              "doubleValue": 128.90338799979872
+            }
+          },
+          {
+            "key": "runsc_state",
+            "value": {
+              "doubleValue": 13.806263000333274
+            }
+          },
+          {
+            "key": "candidate_fence",
+            "value": {
+              "doubleValue": 3.303247000076226
+            }
+          },
+          {
+            "key": "candidate_journal",
+            "value": {
+              "doubleValue": 6.126968999978999
+            }
+          },
+          {
+            "key": "candidate_resume",
+            "value": {
+              "doubleValue": 28.605284000150277
+            }
+          },
+          {
+            "key": "readiness_exec",
+            "value": {
+              "doubleValue": 17.377893999764638
+            }
+          },
+          {
+            "key": "commit_running_journal",
+            "value": {
+              "doubleValue": 3.532783000082418
+            }
+          },
+          {
+            "key": "artifact_cleanup",
+            "value": {
+              "doubleValue": 8.67123999978503
+            }
+          },
+          {
+            "key": "warden_total",
+            "value": {
+              "doubleValue": 302.9279739998856
+            }
+          }
+        ]
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "xfNBAIOLSOcHqav71XNQ7A==",
+    "spanId": "xfu9c96MV1o=",
+    "parentSpanId": "m47j40lJpa0=",
+    "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+    "kind": "SPAN_KIND_SERVER",
+    "startTimeUnixNano": "1790033406889431570",
+    "endTimeUnixNano": "1790033407256134571",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0092"
+        }
+      },
+      {
+        "key": "http.request.body.size",
+        "value": {
+          "intValue": "131"
+        }
+      },
+      {
+        "key": "http.response.status_code",
+        "value": {
+          "intValue": "200"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.030797977
+        }
+      },
+      {
+        "key": "http.request.method",
+        "value": {
+          "stringValue": "POST"
+        }
+      },
+      {
+        "key": "url.path",
+        "value": {
+          "stringValue": "/v1/sandboxes/relay-load-54345a8ff724-0092/wake"
+        }
+      },
+      {
+        "key": "http.route",
+        "value": {
+          "stringValue": "/v1/sandboxes/{sandbox_id}/wake"
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "xfNBAIOLSOcHqav71XNQ7A==",
+    "spanId": "COGYr8rTg60=",
+    "parentSpanId": "m47j40lJpa0=",
+    "name": "gateway.wake.await_admission",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033406644331502",
+    "endTimeUnixNano": "1790033406784467659",
+    "attributes": [
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 5.938899999999997e-05
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "xfNBAIOLSOcHqav71XNQ7A==",
+    "spanId": "m47j40lJpa0=",
+    "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+    "kind": "SPAN_KIND_SERVER",
+    "startTimeUnixNano": "1790033406541759500",
+    "endTimeUnixNano": "1790033407406462617",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0092"
+        }
+      },
+      {
+        "key": "http.request.body.size",
+        "value": {
+          "intValue": "244"
+        }
+      },
+      {
+        "key": "http.response.status_code",
+        "value": {
+          "intValue": "200"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.008139617
+        }
+      },
+      {
+        "key": "http.request.method",
+        "value": {
+          "stringValue": "POST"
+        }
+      },
+      {
+        "key": "url.path",
+        "value": {
+          "stringValue": "/v1/sandboxes/relay-load-54345a8ff724-0092/wake"
+        }
+      },
+      {
+        "key": "http.route",
+        "value": {
+          "stringValue": "/v1/sandboxes/{sandbox_id}/wake"
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "UJPj6Q6zV14L5Tkv9OEoiA==",
+    "spanId": "kv9eXE78Gls=",
+    "parentSpanId": "uPb0DmldawU=",
+    "name": "sandbox.wake.ensure_network",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033406779326068",
+    "endTimeUnixNano": "1790033406822238857",
+    "attributes": [
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.009227698
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "UJPj6Q6zV14L5Tkv9OEoiA==",
+    "spanId": "uPb0DmldawU=",
+    "parentSpanId": "2bn5hFcWV+4=",
+    "name": "sandbox.wake",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033406778656447",
+    "endTimeUnixNano": "1790033407220704396",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0151"
+        }
+      },
+      {
+        "key": "sandbox.generation",
+        "value": {
+          "intValue": "1"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.021505191
+        }
+      }
+    ],
+    "events": [
+      {
+        "timeUnixNano": "1790033407220566418",
+        "name": "sandbox.wake.timings",
+        "attributes": [
+          {
+            "key": "restore_queue",
+            "value": {
+              "doubleValue": 0.07749699989290093
+            }
+          },
+          {
+            "key": "network_prepare",
+            "value": {
+              "doubleValue": 43.20235600016531
+            }
+          },
+          {
+            "key": "validate_artifact",
+            "value": {
+              "doubleValue": 118.36522699968555
+            }
+          },
+          {
+            "key": "begin_restore_journal",
+            "value": {
+              "doubleValue": 3.014232999703381
+            }
+          },
+          {
+            "key": "runsc_restore",
+            "value": {
+              "doubleValue": 245.16039599984651
+            }
+          },
+          {
+            "key": "runsc_state",
+            "value": {
+              "doubleValue": 16.53724500010867
+            }
+          },
+          {
+            "key": "candidate_fence",
+            "value": {
+              "doubleValue": 1.2304990000302496
+            }
+          },
+          {
+            "key": "candidate_journal",
+            "value": {
+              "doubleValue": 2.1184090001042932
+            }
+          },
+          {
+            "key": "candidate_resume",
+            "value": {
+              "doubleValue": 24.864480999895022
+            }
+          },
+          {
+            "key": "readiness_exec",
+            "value": {
+              "doubleValue": 23.017992000404774
+            }
+          },
+          {
+            "key": "commit_running_journal",
+            "value": {
+              "doubleValue": 2.851908000138792
+            }
+          },
+          {
+            "key": "artifact_cleanup",
+            "value": {
+              "doubleValue": 2.197528999658971
+            }
+          },
+          {
+            "key": "warden_total",
+            "value": {
+              "doubleValue": 440.00859900006617
+            }
+          }
+        ]
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "UJPj6Q6zV14L5Tkv9OEoiA==",
+    "spanId": "2bn5hFcWV+4=",
+    "parentSpanId": "vPj+4aq9ZeI=",
+    "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+    "kind": "SPAN_KIND_SERVER",
+    "startTimeUnixNano": "1790033406772096180",
+    "endTimeUnixNano": "1790033407222450985",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0151"
+        }
+      },
+      {
+        "key": "http.request.body.size",
+        "value": {
+          "intValue": "131"
+        }
+      },
+      {
+        "key": "http.response.status_code",
+        "value": {
+          "intValue": "200"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.027335648
+        }
+      },
+      {
+        "key": "http.request.method",
+        "value": {
+          "stringValue": "POST"
+        }
+      },
+      {
+        "key": "url.path",
+        "value": {
+          "stringValue": "/v1/sandboxes/relay-load-54345a8ff724-0151/wake"
+        }
+      },
+      {
+        "key": "http.route",
+        "value": {
+          "stringValue": "/v1/sandboxes/{sandbox_id}/wake"
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "UJPj6Q6zV14L5Tkv9OEoiA==",
+    "spanId": "gqSd0wXoQv8=",
+    "parentSpanId": "vPj+4aq9ZeI=",
+    "name": "gateway.wake.await_admission",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033406384906806",
+    "endTimeUnixNano": "1790033406651121654",
+    "attributes": [
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 6.16429999999999e-05
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "UJPj6Q6zV14L5Tkv9OEoiA==",
+    "spanId": "vPj+4aq9ZeI=",
+    "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+    "kind": "SPAN_KIND_SERVER",
+    "startTimeUnixNano": "1790033406229307487",
+    "endTimeUnixNano": "1790033407355590587",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0151"
+        }
+      },
+      {
+        "key": "http.request.body.size",
+        "value": {
+          "intValue": "244"
+        }
+      },
+      {
+        "key": "http.response.status_code",
+        "value": {
+          "intValue": "200"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.008835426
+        }
+      },
+      {
+        "key": "http.request.method",
+        "value": {
+          "stringValue": "POST"
+        }
+      },
+      {
+        "key": "url.path",
+        "value": {
+          "stringValue": "/v1/sandboxes/relay-load-54345a8ff724-0151/wake"
+        }
+      },
+      {
+        "key": "http.route",
+        "value": {
+          "stringValue": "/v1/sandboxes/{sandbox_id}/wake"
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "zxXxa7nbcUcNpVrEjtSlrQ==",
+    "spanId": "dKfC00cXnGk=",
+    "parentSpanId": "IYNKF/U1td4=",
+    "name": "sandbox.wake.ensure_network",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033406803998516",
+    "endTimeUnixNano": "1790033406822459885",
+    "attributes": [
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.003198842
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "zxXxa7nbcUcNpVrEjtSlrQ==",
+    "spanId": "IYNKF/U1td4=",
+    "parentSpanId": "t0yBWO8K/SM=",
+    "name": "sandbox.wake",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033406803725884",
+    "endTimeUnixNano": "1790033407120557257",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0077"
+        }
+      },
+      {
+        "key": "sandbox.generation",
+        "value": {
+          "intValue": "1"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.010901588
+        }
+      }
+    ],
+    "events": [
+      {
+        "timeUnixNano": "1790033407120438087",
+        "name": "sandbox.wake.timings",
+        "attributes": [
+          {
+            "key": "restore_queue",
+            "value": {
+              "doubleValue": 0.030515999696945073
+            }
+          },
+          {
+            "key": "network_prepare",
+            "value": {
+              "doubleValue": 18.599098999857233
+            }
+          },
+          {
+            "key": "validate_artifact",
+            "value": {
+              "doubleValue": 59.56861599997865
+            }
+          },
+          {
+            "key": "begin_restore_journal",
+            "value": {
+              "doubleValue": 1.4898400004312862
+            }
+          },
+          {
+            "key": "runsc_restore",
+            "value": {
+              "doubleValue": 204.74354099997072
+            }
+          },
+          {
+            "key": "runsc_state",
+            "value": {
+              "doubleValue": 12.151555000400549
+            }
+          },
+          {
+            "key": "candidate_fence",
+            "value": {
+              "doubleValue": 0.5306900002324255
+            }
+          },
+          {
+            "key": "candidate_journal",
+            "value": {
+              "doubleValue": 1.3285969998833025
+            }
+          },
+          {
+            "key": "candidate_resume",
+            "value": {
+              "doubleValue": 17.151321999790525
+            }
+          },
+          {
+            "key": "readiness_exec",
+            "value": {
+              "doubleValue": 15.483814999697643
+            }
+          },
+          {
+            "key": "commit_running_journal",
+            "value": {
+              "doubleValue": 1.6054339998845535
+            }
+          },
+          {
+            "key": "artifact_cleanup",
+            "value": {
+              "doubleValue": 1.7561399999976857
+            }
+          },
+          {
+            "key": "warden_total",
+            "value": {
+              "doubleValue": 315.93429799977457
+            }
+          }
+        ]
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "zxXxa7nbcUcNpVrEjtSlrQ==",
+    "spanId": "t0yBWO8K/SM=",
+    "parentSpanId": "9zmLQ9D6t4U=",
+    "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+    "kind": "SPAN_KIND_SERVER",
+    "startTimeUnixNano": "1790033406779649397",
+    "endTimeUnixNano": "1790033407123478587",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0077"
+        }
+      },
+      {
+        "key": "http.request.body.size",
+        "value": {
+          "intValue": "131"
+        }
+      },
+      {
+        "key": "http.response.status_code",
+        "value": {
+          "intValue": "200"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.015641943
+        }
+      },
+      {
+        "key": "http.request.method",
+        "value": {
+          "stringValue": "POST"
+        }
+      },
+      {
+        "key": "url.path",
+        "value": {
+          "stringValue": "/v1/sandboxes/relay-load-54345a8ff724-0077/wake"
+        }
+      },
+      {
+        "key": "http.route",
+        "value": {
+          "stringValue": "/v1/sandboxes/{sandbox_id}/wake"
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "zxXxa7nbcUcNpVrEjtSlrQ==",
+    "spanId": "NQB1EeK+DiI=",
+    "parentSpanId": "9zmLQ9D6t4U=",
+    "name": "gateway.wake.await_admission",
+    "kind": "SPAN_KIND_INTERNAL",
+    "startTimeUnixNano": "1790033406350396847",
+    "endTimeUnixNano": "1790033406648272679",
+    "attributes": [
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 2.8163000000000103e-05
+        }
+      }
+    ],
+    "status": {}
+  },
+  {
+    "traceId": "zxXxa7nbcUcNpVrEjtSlrQ==",
+    "spanId": "9zmLQ9D6t4U=",
+    "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+    "kind": "SPAN_KIND_SERVER",
+    "startTimeUnixNano": "1790033406179549061",
+    "endTimeUnixNano": "1790033407237780414",
+    "attributes": [
+      {
+        "key": "sandbox.id",
+        "value": {
+          "stringValue": "relay-load-54345a8ff724-0077"
+        }
+      },
+      {
+        "key": "http.request.body.size",
+        "value": {
+          "intValue": "244"
+        }
+      },
+      {
+        "key": "http.response.status_code",
+        "value": {
+          "intValue": "200"
+        }
+      },
+      {
+        "key": "ucloud.span.thread_cpu.duration",
+        "value": {
+          "doubleValue": 0.006891016
+        }
+      },
+      {
+        "key": "http.request.method",
+        "value": {
+          "stringValue": "POST"
+        }
+      },
+      {
+        "key": "url.path",
+        "value": {
+          "stringValue": "/v1/sandboxes/relay-load-54345a8ff724-0077/wake"
+        }
+      },
+      {
+        "key": "http.route",
+        "value": {
+          "stringValue": "/v1/sandboxes/{sandbox_id}/wake"
+        }
+      }
+    ],
+    "status": {}
+  }
+]

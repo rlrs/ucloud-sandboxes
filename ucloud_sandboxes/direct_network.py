@@ -128,6 +128,7 @@ class DirectNetworkManager:
         nft_runner: Callable[[str], None] | None = None,
         runner: Callable[[Sequence[str]], None] | None = None,
         resolver: Callable[[str], Sequence[str]] | None = None,
+        ip_batch_runner: Callable[[Sequence[str], str], None] | None = None,
         resolve_interval_seconds: float = DEFAULT_EGRESS_RESOLVE_INTERVAL_SECONDS,
     ) -> None:
         if not state_path.is_absolute() or not namespace_root.is_absolute():
@@ -153,6 +154,8 @@ class DirectNetworkManager:
         self._relay_resolution: dict[str, tuple[float, tuple[str, ...]]] = {}
         self._relay_applied: dict[int, str] = {}
         self.runner = runner or self._run
+        self.ip_batch_runner = ip_batch_runner or (self._run_ip_batch if runner is None else None)
+        self._host_rules_observed_at = float("-inf")
         self.resolver = resolver or self._resolve_ipv4
         self.resolve_interval_seconds = float(resolve_interval_seconds)
         self._egress_guard = threading.Lock()
@@ -194,6 +197,7 @@ class DirectNetworkManager:
         network_policy: SandboxNetworkPolicy = SandboxNetworkPolicy(),
         host_rules_ready: bool = False,
     ) -> DirectNetworkLease:
+        requested_at = time.monotonic()
         self.validate_policy(network_policy)
         if sandbox_generation < 0:
             raise ValueError("sandbox generation cannot be negative")
@@ -238,8 +242,13 @@ class DirectNetworkManager:
                     raise DirectNetworkError(
                         "existing direct network lease reuses a forbidden guest IP"
                     )
-                if not host_rules_ready:
+                if not host_rules_ready and self._host_rules_observed_at < requested_at:
+                    # Requests already queued share this fresh reconciliation.
+                    # No TTL: a later request must take a new kernel snapshot.
+                    observed_at = time.monotonic()
+                    self._host_rules_observed_at = float("-inf")
                     self._ensure_host_rules()
+                    self._host_rules_observed_at = observed_at
                 if network_policy.egress == "relay":
                     addresses = self._resolve_relay(network_policy.relay)
                     self._install_relay_policy(
@@ -692,8 +701,7 @@ class DirectNetworkManager:
         )
         guest_interface_exists = namespace_exists and self._command_ok(
             (
-                "ip", "netns", "exec", lease.namespace,
-                "ip", "link", "show", "dev", "eth0",
+                "ip", "-n", lease.namespace, "link", "show", "dev", "eth0",
             )
         )
         if namespace_exists and interface_exists and guest_interface_exists:
@@ -722,6 +730,18 @@ class DirectNetworkManager:
             raise
 
     def _configure_kernel_lease(self, lease: DirectNetworkLease) -> None:
+        if self.ip_batch_runner is not None:
+            # ip processes each line synchronously and stops at the first
+            # failure. One namespace entry configures the complete guest side.
+            self.ip_batch_runner(("ip", "-batch", "-"),
+                f"link set dev {lease.host_interface} mtu {NETWORK_MTU} up\n"
+                f"address replace {lease.host_ip}/31 dev {lease.host_interface}\n")
+            self.ip_batch_runner(("ip", "-n", lease.namespace, "-batch", "-"),
+                "link set lo up\n"
+                f"link set dev eth0 mtu {NETWORK_MTU} up\n"
+                f"address replace {lease.guest_ip}/31 dev eth0\n"
+                f"route replace default via {lease.host_ip} dev eth0\n")
+            return
         self._ensure_lease_mtu(lease)
         self.runner(
             (
@@ -732,25 +752,23 @@ class DirectNetworkManager:
         self.runner(("ip", "link", "set", lease.host_interface, "up"))
         self.runner(
             (
-                "ip", "netns", "exec", lease.namespace,
-                "ip", "link", "set", "lo", "up",
+                "ip", "-n", lease.namespace, "link", "set", "lo", "up",
             )
         )
         self.runner(
             (
-                "ip", "netns", "exec", lease.namespace, "ip", "address",
+                "ip", "-n", lease.namespace, "address",
                 "replace", f"{lease.guest_ip}/31", "dev", "eth0",
             )
         )
         self.runner(
             (
-                "ip", "netns", "exec", lease.namespace,
-                "ip", "link", "set", "eth0", "up",
+                "ip", "-n", lease.namespace, "link", "set", "eth0", "up",
             )
         )
         self.runner(
             (
-                "ip", "netns", "exec", lease.namespace, "ip", "route",
+                "ip", "-n", lease.namespace, "route",
                 "replace", "default", "via", lease.host_ip, "dev", "eth0",
             )
         )
@@ -764,7 +782,7 @@ class DirectNetworkManager:
         )
         self.runner(
             (
-                "ip", "netns", "exec", lease.namespace, "ip", "link", "set",
+                "ip", "-n", lease.namespace, "link", "set",
                 "dev", "eth0", "mtu", str(NETWORK_MTU),
             )
         )
@@ -892,6 +910,13 @@ class DirectNetworkManager:
                 f"direct network command failed ({result.returncode}): "
                 f"{' '.join(argv)}: {detail}"
             )
+
+    @staticmethod
+    def _run_ip_batch(argv: Sequence[str], commands: str) -> None:
+        result = subprocess.run(tuple(argv), input=commands, text=True,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+        if result.returncode != 0:
+            raise DirectNetworkError(f"ip batch failed: {result.stderr.strip()}")
 
     @staticmethod
     def _command_ok(argv: Sequence[str]) -> bool:

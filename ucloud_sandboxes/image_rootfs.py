@@ -19,6 +19,7 @@ from .direct_warden import (
     DirectWardenError,
     SubprocessCommandRunner,
 )
+from .mount_status import linux_mount_root
 
 
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
@@ -26,6 +27,21 @@ _SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z")
 _OVERLAY2_ROOTFS_SCHEMA = 1
 _OVERLAY_METADATA = ".ucloud-overlay.json"
 _OVERLAY_METADATA_SCHEMA = 1
+
+
+def _mount_present(path: Path, runner: CommandRunner, binary: str) -> bool:
+    if type(runner) is SubprocessCommandRunner and binary == "mountpoint":
+        mounted = linux_mount_root(path)
+        if mounted is not None:
+            return mounted
+    result = runner.run((binary, "--quiet", str(path)), timeout=60)
+    if result.returncode == 0:
+        return True
+    if result.returncode in {1, 32}:
+        return False
+    raise DirectWardenError(
+        f"could not inspect overlay mount: {result.stderr or result.stdout}"
+    )
 
 
 def _canonical_json(payload: object) -> bytes:
@@ -346,6 +362,36 @@ class DockerOverlay2RootfsStore:
         finally:
             fcntl.flock(descriptor, fcntl.LOCK_UN)
             os.close(descriptor)
+
+    @contextmanager
+    def mounted_rootfs_lease(
+        self, image_id: str, *, rootfs_identity_sha256: str,
+    ) -> Iterator[Path]:
+        """Lease a known immutable mount for resume, falling back to recovery.
+
+        Resume already owns the durable digest/config binding in its OCI bundle.
+        Reinspect mutable Docker tags only during materialization; a validated
+        COMPLETE marker and live mount under the shared GC fence suffice here.
+        """
+        if not image_id.startswith("sha256:") or not _DIGEST.fullmatch(image_id[7:]):
+            raise DirectWardenError("resume image must be an exact digest")
+        if self._rootfs_identity(image_id) != rootfs_identity_sha256:
+            raise DirectWardenError("overlay image identity changed during remount")
+        descriptor = self._open_digest_lock(image_id[7:])
+        try:
+            self._acquire_digest_lock(descriptor, fcntl.LOCK_SH)
+            rootfs = self._load_overlay2_rootfs(image_id[7:])
+            if rootfs is not None and self._overlay2_mount_present(rootfs):
+                yield rootfs
+                return
+        finally:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+            os.close(descriptor)
+        # Release SH before recovery, which may need the exclusive digest lock.
+        with self.operation_lease(image_id) as image:
+            if image.image_id != image_id or image.rootfs_identity_sha256 != rootfs_identity_sha256:
+                raise DirectWardenError("overlay image identity changed during remount")
+            yield image.rootfs
 
     def _materialize_locked(
         self,
@@ -750,6 +796,19 @@ class DockerOverlay2RootfsStore:
         image_ref: str,
         image_config: DockerImageConfig,
     ) -> MaterializedRootfs | None:
+        rootfs = self._load_overlay2_rootfs(digest)
+        if rootfs is None:
+            return None
+        image_id = f"sha256:{digest}"
+        return MaterializedRootfs(
+            image_ref=image_ref,
+            image_id=image_id,
+            rootfs_identity_sha256=self._rootfs_identity(image_id),
+            rootfs=rootfs,
+            image_config=image_config,
+        )
+
+    def _load_overlay2_rootfs(self, digest: str) -> Path | None:
         target = self.images / digest
         if not target.exists():
             return None
@@ -774,13 +833,7 @@ class DockerOverlay2RootfsStore:
             }
         ):
             raise DirectWardenError("overlay2 rootfs identity is invalid")
-        return MaterializedRootfs(
-            image_ref=image_ref,
-            image_id=image_id,
-            rootfs_identity_sha256=identity,
-            rootfs=rootfs,
-            image_config=image_config,
-        )
+        return rootfs
 
     def _discard_overlay2_target(self, target: Path) -> None:
         rootfs = target / "rootfs"
@@ -816,18 +869,7 @@ class DockerOverlay2RootfsStore:
         self._mount_overlay2(rootfs, layers)
 
     def _overlay2_mount_present(self, rootfs: Path) -> bool:
-        mounted = self.runner.run(
-            (self.mountpoint_binary, "--quiet", str(rootfs)),
-            timeout=60,
-        )
-        if mounted.returncode == 0:
-            return True
-        if mounted.returncode not in {1, 32}:
-            raise DirectWardenError(
-                f"could not inspect overlay2 image mount: "
-                f"{mounted.stderr or mounted.stdout}"
-            )
-        return False
+        return _mount_present(rootfs, self.runner, self.mountpoint_binary)
 
     def _mount_overlay2(self, rootfs: Path, layers: tuple[Path, ...]) -> None:
         if len(layers) == 1:
@@ -1124,16 +1166,8 @@ class OverlayRootfsManager:
         work.mkdir(mode=0o700, exist_ok=True)
         _require_private_directory(work)
         _require_real_directory(merged)
-        mounted = self.runner.run(
-            (self.mountpoint_binary, "--quiet", str(merged)),
-            timeout=60,
-        )
-        if mounted.returncode == 0:
+        if _mount_present(merged, self.runner, self.mountpoint_binary):
             return
-        if mounted.returncode not in {1, 32}:
-            raise DirectWardenError(
-                f"could not inspect overlay mount: {mounted.stderr or mounted.stdout}"
-            )
         metadata_path = bundle / _OVERLAY_METADATA
         try:
             metadata = json.loads(metadata_path.read_text(encoding="ascii"))
@@ -1152,14 +1186,9 @@ class OverlayRootfsManager:
             or metadata.get("rootfs_identity_sha256") != sandbox.rootfs_sha256
         ):
             raise DirectWardenError("overlay bundle metadata changed")
-        with self.image_store.operation_lease(str(metadata["image_id"])) as image:
-            if (
-                image.rootfs_identity_sha256 != sandbox.rootfs_sha256
-                or image.image_id != metadata["image_id"]
-            ):
-                raise DirectWardenError(
-                    "overlay image identity changed during remount"
-                )
+        with self.image_store.mounted_rootfs_lease(
+            str(metadata["image_id"]), rootfs_identity_sha256=sandbox.rootfs_sha256,
+        ) as rootfs:
             try:
                 lower = Path(str(metadata["lowerdir"])).resolve(strict=True)
                 lower.relative_to(self.image_store.images.resolve(strict=True))
@@ -1168,7 +1197,7 @@ class OverlayRootfsManager:
                     "overlay lower escaped the immutable image store"
                 ) from exc
             _require_real_directory(lower)
-            if lower != image.rootfs.resolve(strict=True):
+            if lower != rootfs.resolve(strict=True):
                 raise DirectWardenError("overlay lower changed during remount")
             result = self.runner.run(
                 (
@@ -1212,16 +1241,8 @@ class OverlayRootfsManager:
                 shutil.rmtree(writable)
 
     def _unmount_if_mounted(self, path: Path) -> None:
-        mounted = self.runner.run(
-            (self.mountpoint_binary, "--quiet", str(path)),
-            timeout=60,
-        )
-        if mounted.returncode in {1, 32}:
+        if not _mount_present(path, self.runner, self.mountpoint_binary):
             return
-        if mounted.returncode != 0:
-            raise DirectWardenError(
-                f"could not inspect overlay mount: {mounted.stderr or mounted.stdout}"
-            )
         result = self.runner.run(
             (self.umount_binary, str(path)),
             timeout=60,

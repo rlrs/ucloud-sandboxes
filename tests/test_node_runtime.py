@@ -20,6 +20,15 @@ class _Registry:
     def list(self) -> tuple[object, ...]:
         return self._registrations
 
+    def get(self, sandbox_id):
+        return next((r for r in self._registrations if r.sandbox_id == sandbox_id), None)
+
+    def activity_revision(self) -> int:
+        return 1
+
+    def snapshot(self) -> object:
+        return SimpleNamespace(records=self._registrations, activity_revision=1)
+
 
 class _IdleService:
     idle_park_seconds = 0.01
@@ -48,7 +57,7 @@ class _WakeService(_IdleService):
             phase="owned",
             sandbox_id="agent",
             sandbox_generation=1,
-            spec=SimpleNamespace(parkable=True, managed_process=True),
+            spec=SimpleNamespace(parkable=True, managed_process=True, memory_mb=256),
         )
         super().__init__((registration,))
         self.wake_calls: list[tuple[str, int, str]] = []
@@ -214,6 +223,86 @@ class DirectNodeRuntimeTests(unittest.TestCase):
         )
         self.assertTrue(all(background for _sandbox_id, background in calls))
 
+    def test_idle_parker_reuses_inventory_until_external_registry_revision_changes(self) -> None:
+        managed = SimpleNamespace(phase='owned', sandbox_id='managed', sandbox_generation=1,
+                                  spec=SimpleNamespace(parkable=True, managed_process=True))
+        interactive = SimpleNamespace(phase='owned', sandbox_id='interactive', sandbox_generation=1,
+                                      spec=SimpleNamespace(parkable=True, managed_process=False))
+        service = _IdleService((managed,))
+        registry = service.provisioner.registry
+        registry.activity_revision = Mock(side_effect=[1, 1, 2, 2])
+        registry.snapshot = Mock(side_effect=[
+            SimpleNamespace(records=(managed,), activity_revision=1),
+            SimpleNamespace(records=(managed, interactive), activity_revision=2),
+        ])
+        manager = DirectNodeRuntime(service)  # type: ignore[arg-type]
+        manager._background_stop = Mock()
+        manager._background_stop.wait.side_effect = [False, False, False, False, True]
+        manager.park = Mock()
+        manager._idle_parking_loop()
+        self.assertEqual(registry.snapshot.call_count, 2)
+        self.assertEqual([call.args[0] for call in manager.park.call_args_list], ['interactive', 'interactive'])
+
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RelayLifecycleFenceTests(unittest.TestCase):
+    def test_wake_intent_prevents_late_park_even_when_restore_failed(self):
+        from unittest.mock import Mock
+        from ucloud_sandboxes.sandbox import SandboxConflictError
+        seen=set()
+        registry=Mock()
+        def fence(sandbox,generation,request,*,record=False):
+            if record:
+                seen.add((sandbox,generation,request))
+            return (sandbox,generation,request) in seen
+        registry.relay_wake_fence.side_effect=fence
+        service=Mock()
+        service.provisioner.registry=registry
+        service.wake.side_effect=RuntimeError('restore temporarily blocked')
+        manager=DirectNodeRuntime(service)
+        with self.assertRaisesRegex(RuntimeError,'temporarily blocked'):
+            manager.wake_with_activity_revision('s1',generation=1,operation_id='wake:r',relay_request_id='r')
+        with self.assertRaisesRegex(SandboxConflictError,'superseded'):
+            manager.park_with_activity_revision('s1',generation=1,operation_id='park:r',relay_request_id='r')
+        service.park.assert_not_called()
+
+
+class WarmRelayParkTests(unittest.TestCase):
+    def test_reply_during_grace_avoids_checkpoint_and_durable_fence_survives_new_manager(self):
+        from ucloud_sandboxes.background_io import Pressure
+        from ucloud_sandboxes.warm_park import WarmParkPolicy
+        from ucloud_sandboxes.sandbox import SandboxConflictError
+        from concurrent.futures import ThreadPoolExecutor
+        import time
+        seen = set()
+        service = _WakeService()
+        def fence(sandbox, generation, request, *, record=False):
+            key = (sandbox, generation, request)
+            if record:
+                seen.add(key)
+            return key in seen
+        service.provisioner.registry.relay_wake_fence = fence
+        manager = DirectNodeRuntime(service)
+        manager._warm_parks = WarmParkPolicy(lambda: Pressure(.8, 0), max_delay=2)
+        key = ('agent', 1, 'request')
+        with ThreadPoolExecutor() as pool:
+            parked = pool.submit(manager.park_with_activity_revision, 'agent', generation=1,
+                                 operation_id='park:req', relay_request_id='request')
+            deadline = time.monotonic() + 2
+            while key not in manager._warm_parks._pending and time.monotonic() < deadline:
+                time.sleep(.001)
+            self.assertIn(key, manager._warm_parks._pending)
+            record, _ = manager.wake_with_activity_revision('agent', generation=1,
+                          operation_id='wake:req', relay_request_id='request')
+            self.assertEqual(record.state, 'running')
+            with self.assertRaisesRegex(SandboxConflictError, 'superseded'):
+                parked.result(2)
+        self.assertFalse(service.park_calls)
+        restarted = DirectNodeRuntime(service)
+        with self.assertRaisesRegex(SandboxConflictError, 'durable wake'):
+            restarted.park_with_activity_revision('agent', generation=1,
+                operation_id='park:replay', relay_request_id='request')
+        self.assertFalse(service.park_calls)

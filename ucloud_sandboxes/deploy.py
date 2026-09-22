@@ -756,7 +756,9 @@ def render_remote_deploy_script(
         'rm -rf "$NODE_PACKAGE_WORK"',
         "trap - EXIT",
         # Publish package metadata only after every node artifact is complete.
-        '"$VENV_DIR/bin/pip" install --force-reinstall "$REMOTE_WHEEL"',
+        ('"$VENV_DIR/bin/pip" install --force-reinstall "$REMOTE_WHEEL[postgres]"'
+         if plan.config.relay_postgres is not None else
+         '"$VENV_DIR/bin/pip" install --force-reinstall "$REMOTE_WHEEL"'),
         "",
         "for unit in \\",
         "  ucloud-sandbox-registry-prune.timer \\",

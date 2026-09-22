@@ -84,6 +84,7 @@ from .managed_registry import (
 )
 from .managed_process import ManagedProcessRecord
 from .metrics import (
+    BufferedMetricsStore,
     GatewayBusySampler,
     MetricsStore,
     build_metrics_snapshot,
@@ -291,6 +292,7 @@ class NodePlacementState:
     inflight_image_identities: frozenset[str]
     projected_image_identities: frozenset[str]
     active_creates: int
+    assigned_shape_pressure: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -512,6 +514,11 @@ class _WakeCapacityRefreshPending(Exception):
     pass
 
 
+class _WakeCapacityRefreshRequired(Exception):
+    def __init__(self, route: SandboxRoute):
+        self.route = route
+
+
 class SandboxShapeUnschedulableError(ValueError):
     def __init__(
         self,
@@ -595,6 +602,63 @@ class CreateImagePullTasks:
             with self.lock:
                 if task.done() and self.tasks.get(key) is task:
                     del self.tasks[key]
+
+
+class _LocalWakeBatcher:
+    """Coalesce waiting local admissions without a timer or a concurrency cap."""
+
+    def __init__(self):
+        self.lock = RLock()
+        self.pending = []
+        self.running = False
+
+    def reserve(self, handler, route):
+        future = Future()
+        with self.lock:
+            self.pending.append((handler, route, future))
+            if not self.running:
+                self.running = True
+                Thread(target=self._drain, name="local-wake-admission", daemon=True).start()
+        observation = (handler.telemetry.span("gateway.wake.await_admission")
+                       if handler.telemetry is not None else nullcontext())
+        with observation:
+            return future.result()
+
+    def _drain(self):
+        while True:
+            with self.lock:
+                if not self.pending:
+                    self.running = False
+                    return
+                leader = self.pending[0][0]
+            batch = []
+            try:
+                # Gather after acquiring placement, so callers that arrived
+                # while another reservation held it share this inventory read
+                # and durable commit. Creates and migrations use the same lock.
+                with leader._wake_placement_reservation() as span:
+                    with self.lock:
+                        batch, self.pending = self.pending, []
+                    if span is not None:
+                        span.set_attribute("gateway.wake.batch_size", len(batch))
+                    results = leader._reserve_local_wake_batch(batch)
+                for (_, _, future), result in zip(batch, results, strict=True):
+                    future.set_result(result)
+            except BaseException as exc:
+                if not batch:
+                    with self.lock:
+                        batch, self.pending = self.pending, []
+                for _, _, future in batch:
+                    future.set_exception(exc)
+
+
+_LOCAL_WAKE_BATCHERS_LOCK = RLock()
+_LOCAL_WAKE_BATCHERS: dict[Path, _LocalWakeBatcher] = {}
+
+
+def _local_wake_batcher(path: Path) -> _LocalWakeBatcher:
+    with _LOCAL_WAKE_BATCHERS_LOCK:
+        return _LOCAL_WAKE_BATCHERS.setdefault(path.resolve(), _LocalWakeBatcher())
 
 
 def _create_image_pull_pending_response() -> ProxiedResponse:
@@ -4234,7 +4298,9 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             )
             return
 
-        self._prepare_program_lifecycle(route, lifecycle_action, lifecycle_payload)
+        self._prepare_program_lifecycle(
+            route, lifecycle_action, lifecycle_payload, defer_local_shadow=True,
+        )
 
         implicit_wake = bool(
             not lifecycle_action
@@ -4242,7 +4308,15 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             and (route.state or "unknown").lower() in {"parked", "waking"}
         )
         if (route.state or "unknown").lower() == "parked" and request_wakes:
-            placement = self._prepare_wake_placement(route)
+            try:
+                placement = self._prepare_wake_placement(route)
+            finally:
+                # Reuse the exact pre-reservation view for observational
+                # planning, after releasing placement locks.
+                try:
+                    self._flush_program_wake_shadow()
+                except (OSError, sqlite3.Error, ValueError) as exc:
+                    self.log_error("wake shadow observation failed: %s", exc)
             if placement is None:
                 return
             route, transport_reset = placement
@@ -4396,7 +4470,11 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         route: SandboxRoute,
         action: str,
         payload: dict[str, Any],
+        *,
+        defer_local_shadow: bool = False,
     ) -> None:
+        self._deferred_program_wake_shadow = None
+        self._program_wake_owner_view = None
         request_id = str(payload.get("request_id") or "").strip()
         if not action or not request_id:
             return
@@ -4406,6 +4484,13 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             state=("model_wait" if action == "park" else "ready_to_wake"),
         )
         if action != "wake" or program is None or not became_ready:
+            return
+        if (
+            defer_local_shadow and route.state.lower() == "parked"
+            and route.worker_state == "attached"
+            and not is_portable_parked_route(route)
+        ):
+            self._deferred_program_wake_shadow = (route, payload, program)
             return
         if not is_portable_parked_route(route):
             # An unpublished checkpoint can only wake on its current owner.
@@ -4426,6 +4511,30 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             payload,
             program,
             self._placement_routes(),
+        )
+
+    def _flush_program_wake_shadow(self) -> None:
+        pending = getattr(self, "_deferred_program_wake_shadow", None)
+        self._deferred_program_wake_shadow = None
+        view = getattr(self, "_program_wake_owner_view", None)
+        self._program_wake_owner_view = None
+        if pending is None:
+            return
+        route, payload, program = pending
+        if view is None:
+            # Admission may observe a concurrent wake before reading capacity.
+            owner = self._heartbeat_for_route(job_id=route.job_id)
+            routes = self._placement_routes_for_node(owner) if owner is not None else [route]
+        else:
+            owner, routes = view
+        ready = bool(
+            owner is not None and owner.node_url and not owner.draining
+            and "sandbox" in owner.capabilities
+            and owner.is_fresh(utc_now(), self.heartbeat_ttl_seconds)
+        )
+        self._record_program_wake_shadow_plan(
+            payload, program, routes if ready else [route],
+            heartbeats=[owner] if ready else [],
         )
 
     def _prepare_wake_placement(
@@ -4454,6 +4563,18 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         node_payload: dict[str, Any] = {
             "operation_id": str(payload["operation_id"]).strip(),
         }
+        if payload.get("durable_lifecycle"):
+            from .capabilities import RELAY_WAKE_FENCE_CAPABILITY
+            owner = self._heartbeat_for_route(job_id=route.job_id)
+            if owner is None or RELAY_WAKE_FENCE_CAPABILITY not in owner.capabilities:
+                self._write_json(
+                    {"error": "worker upgrade required for durable relay lifecycle", "retryable": True},
+                    status=HTTPStatus.SERVICE_UNAVAILABLE,
+                    headers={"X-UCloud-Sandbox-Retryable": "true"},
+                )
+                return None
+            node_payload["relay_request_id"] = payload["request_id"]
+            node_payload["generation"] = route.generation
         if action == "wake":
             node_payload["generation"] = route.generation
         elif "background" in payload:
@@ -4480,6 +4601,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 raise ValueError("sandbox lifecycle payload must be an object")
             request_id = str(payload.get("request_id") or "").strip()
             rollout_id = str(payload.get("rollout_id") or "").strip()
+            if "durable_lifecycle" in payload and (payload["durable_lifecycle"] is not True or not request_id):
+                raise ValueError("durable lifecycle requires a request binding")
             if bool(request_id) != bool(rollout_id):
                 raise ValueError(
                     "program lifecycle requires both request_id and rollout_id"
@@ -4517,6 +4640,13 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 status=HTTPStatus.CONFLICT,
             )
             return None
+        if action == "park" and payload.get("durable_lifecycle"):
+            program = self.routing_store.program_request_readonly(request_id)
+            if (program is not None and program.sandbox_id == route.sandbox_id
+                    and program.sandbox_generation == route.generation
+                    and program.rollout_id == rollout_id and program.state != "model_wait"):
+                self._write_json({"skipped": True, "reason": "model_result_ready"})
+                return None
         return payload
 
     def _prepare_delete_route(self, route: SandboxRoute) -> SandboxRoute | None:
@@ -5014,8 +5144,13 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         route: SandboxRoute,
     ) -> SandboxRoute | None:
         try:
-            if route.worker_state == "attached":
-                self._refresh_wake_capacity(route)
+            try:
+                return self._reserve_parked_sandbox_wake(route, refresh_if_blocked=True)
+            except _WakeCapacityRefreshRequired as blocked:
+                # The admission decision already read the owner inventory.
+                # Refresh only a blocked owner, after releasing placement locks.
+                self._refresh_wake_capacity(blocked.route)
+                return self._reserve_parked_sandbox_wake(blocked.route)
         except _WakeCapacityRefreshPending:
             self._write_json(
                 {"error": "source node capacity is being refreshed",
@@ -5024,8 +5159,6 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 headers={"Retry-After": "1", "X-UCloud-Sandbox-Retryable": "true"},
             )
             return None
-        try:
-            return self._reserve_parked_sandbox_wake(route)
         except _WakeSnapshotPublicationRequired as pending:
             # Explicit relay parks need not publish every checkpoint. Request
             # publication only when local admission is blocked, and never hold
@@ -5147,12 +5280,80 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             with _GATEWAY_SCHEDULING_LOCK, _gateway_placement_lock(self.routing_store.path):
                 if span is not None:
                     span.set_attribute("gateway.placement.lock_wait_seconds", time.monotonic() - started)
-                yield
+                yield span
+
+    def _reserve_local_wake_batch(self, batch):
+        """Account for queued same-owner wakes in one placement critical section.
+
+        A None result takes the existing refresh/migration path. This fast path
+        never relocates, skips pressure checks, or sends a worker request.
+        """
+        views = {}
+        admitted = {}
+        results = [None] * len(batch)
+        active_migrations = {
+            m.sandbox_id for m in self.routing_store.sandbox_migrations(active_only=True)
+        }
+        for index, (handler, requested, _future) in enumerate(batch):
+            if requested.job_id not in views:
+                owner = handler._heartbeat_for_route(job_id=requested.job_id)
+                views[requested.job_id] = (
+                    owner, handler._placement_routes_for_node(owner) if owner is not None else [],
+                )
+            owner, routes = views[requested.job_id]
+            current = next((r for r in routes if isinstance(r, SandboxRoute)
+                            and r.sandbox_id == requested.sandbox_id), None)
+            if current is None or (
+                current.generation, current.create_operation_id, current.spec_hash,
+                current.node_id, current.job_id, current.node_url,
+            ) != (
+                requested.generation, requested.create_operation_id, requested.spec_hash,
+                requested.node_id, requested.job_id, requested.node_url,
+            ) or current.delete_operation_id:
+                continue
+            if current.state in {"running", "waking"}:
+                results[index] = current
+                continue
+            if (
+                current.state != "parked" or current.worker_state != "attached"
+                or current.sandbox_id in active_migrations
+                or owner is None or not owner.node_url or owner.draining
+                or not owner.admission_open or "sandbox" not in owner.capabilities
+                or not owner.is_fresh(utc_now(), handler.heartbeat_ttl_seconds)
+                or (is_portable_parked_route(current)
+                    and handler.wake_consolidation_policy.parked_wake_consolidation_enabled)
+                or not _node_has_storage_device_capacity(owner, routes)
+                or not _node_can_fit_available(
+                    owner, ResourceQuantity(vcpu=current.resources.vcpu,
+                                            memory_mb=current.resources.memory_mb),
+                    _node_available_resources(owner, routes),
+                )
+            ):
+                continue
+            if getattr(handler, "_deferred_program_wake_shadow", None) is not None:
+                handler._program_wake_owner_view = (owner, routes)
+            admitted[current.sandbox_id] = current
+            waking = replace(current, state="waking")
+            results[index] = waking
+            views[requested.job_id] = (owner, [
+                waking if isinstance(r, SandboxRoute) and r.sandbox_id == current.sandbox_id else r
+                for r in routes
+            ])
+        committed = self.routing_store.reserve_sandbox_wakes([
+            (route, _wake_pending_demand_id(route.sandbox_id)) for route in admitted.values()
+        ])
+        return [committed.get(r.sandbox_id) if r is not None and r.sandbox_id in admitted else r
+                for r in results]
 
     def _reserve_parked_sandbox_wake(
-        self, route: SandboxRoute,
+        self, route: SandboxRoute, *, refresh_if_blocked: bool = False,
     ) -> SandboxRoute | None:
         """Reserve wake placement briefly, then relocate without global locks."""
+
+        if route.worker_state == "attached":
+            local = _local_wake_batcher(self.routing_store.path).reserve(self, route)
+            if local is not None:
+                return local
 
         if route.worker_state == "detaching":
             detached, error_message = self._finish_sandbox_detach(route)
@@ -5203,6 +5404,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 self._placement_routes_for_node(source_heartbeat)
                 if source_heartbeat is not None else []
             )
+            if getattr(self, "_deferred_program_wake_shadow", None) is not None:
+                self._program_wake_owner_view = (source_heartbeat, routes)
             active_request = ResourceQuantity(
                 vcpu=route.resources.vcpu,
                 memory_mb=route.resources.memory_mb,
@@ -5232,6 +5435,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     _node_available_resources(source_heartbeat, routes),
                 )
             )
+            if not local_can_wake and route.worker_state == 'attached' and refresh_if_blocked:
+                raise _WakeCapacityRefreshRequired(route)
             if (
                 local_can_wake
                 and active_migration is None
@@ -5248,9 +5453,6 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 and active_migration is None
                 and consolidation_destination is None
             ):
-                self.routing_store.clear_pending(
-                    _wake_pending_demand_id(route.sandbox_id)
-                )
                 return self._mark_sandbox_waking(route)
 
             if route.worker_state == "attached" and not is_portable_parked_route(route):
@@ -5402,10 +5604,9 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         self,
         route: SandboxRoute,
     ) -> SandboxRoute | None:
-        waking = self.routing_store.set_sandbox_state_if_current(
+        waking = self.routing_store.reserve_sandbox_wake(
             route,
-            expected_states={"parked"},
-            state="waking",
+            pending_id=_wake_pending_demand_id(route.sandbox_id),
         )
         if waking is not None:
             return waking
@@ -5443,7 +5644,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             raise ValueError("activity_epoch must be an integer")
         if activity_epoch < 0:
             raise ValueError("activity_epoch must be non-negative")
-        heartbeat = self._heartbeat_for_route(job_id=route.job_id)
+        heartbeat = self._heartbeat_for_route(job_id=route.job_id, include_inventory=False)
         if (
             heartbeat is None
             or heartbeat.node_id != route.node_id
@@ -5601,15 +5802,19 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         self,
         *,
         job_id: str,
+        include_inventory: bool = True,
     ) -> NodeHeartbeat | None:
         # Every persisted sandbox and exec route has a non-empty immutable job
         # binding. An exact miss means that worker heartbeat is unavailable;
         # scanning unrelated node inventories cannot make the route current.
-        return self.store.get_heartbeat(job_id)
+        if include_inventory:
+            return self.store.get_heartbeat(job_id)
+        return self.store.get_heartbeat(job_id, include_inventory=False)
 
     def _route_worker_is_fresh(self, route: SandboxRoute | ExecRoute) -> bool:
         heartbeat = self._heartbeat_for_route(
             job_id=route.job_id,
+            include_inventory=False,
         )
         return bool(
             heartbeat is not None
@@ -5684,37 +5889,6 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             for heartbeat, state in candidate_states
             if image_identity and image_identity in state.inflight_image_identities
         }
-        cached_nodes_have_headroom = any(
-            heartbeat.node_id in image_node_ids
-            and state.active_creates < self.create_target_concurrency_per_node
-            for heartbeat, state in candidate_states
-        )
-        inflight_nodes_have_headroom = any(
-            heartbeat.node_id in inflight_image_node_ids
-            and state.active_creates < self.create_target_concurrency_per_node
-            for heartbeat, state in candidate_states
-        )
-        if image_node_ids and cached_nodes_have_headroom:
-            candidate_states = [
-                (heartbeat, state)
-                for heartbeat, state in candidate_states
-                if heartbeat.node_id in image_node_ids
-            ]
-        elif inflight_image_node_ids and inflight_nodes_have_headroom:
-            # Follow an in-flight copy of the exact immutable image instead
-            # of transferring the same layers to another node.
-            candidate_states = [
-                (heartbeat, state)
-                for heartbeat, state in candidate_states
-                if heartbeat.node_id in inflight_image_node_ids
-            ]
-        spread_cold_image = bool(
-            image
-            and not (
-                (image_node_ids and cached_nodes_have_headroom)
-                or (inflight_image_node_ids and inflight_nodes_have_headroom)
-            )
-        )
         layer_cache = getattr(self, "registry_layer_cache", None)
         target_manifest = (
             layer_cache.get(image or "") if layer_cache is not None else None
@@ -5722,17 +5896,17 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         return min(
             candidate_states,
             key=lambda item: (
-                _cold_image_placement_cost_for_state(
-                    item[1],
-                    target_manifest,
-                    layer_cache,
-                    spread_cold_image=spread_cold_image,
-                ),
-                # Prefer pressure headroom before packing disk onto older
-                # workers. Count newly reserved creates immediately so a burst
-                # cannot all follow the same low-pressure heartbeat sample.
-                node_pressure_score(item[0])
+                # Cache affinity must not trap work on a busy worker while
+                # another worker has headroom. Pressure and newly reserved
+                # creates rank first; image locality breaks comparable choices.
+                node_pressure_score(item[0]) + item[1].assigned_shape_pressure
                 + item[1].active_creates / max(1, self.create_target_concurrency_per_node),
+                (0 if item[0].node_id in image_node_ids else
+                 1 if item[0].node_id in inflight_image_node_ids else 2),
+                _cold_image_placement_cost_for_state(
+                    item[1], target_manifest, layer_cache,
+                    spread_cold_image=bool(image),
+                ),
                 item[1].active_creates,
                 _resource_slack(
                     item[1].available_resources,
@@ -6986,7 +7160,7 @@ def build_server(
     resolved_telemetry = telemetry or Telemetry.disabled("ucloud-sandbox-gateway")
     store = ControlStateStore(control_state_file)
     routing_store = RoutingStore(routing_file)
-    metrics_store = MetricsStore(metrics_file)
+    metrics_store = BufferedMetricsStore(metrics_file)
     registry_usage_store = (
         RegistryUsageStore(registry_usage_file)
         if registry_usage_file is not None
@@ -7072,11 +7246,20 @@ def build_server(
     BoundHandler.sandbox_create_busy_sampler = GatewayBusySampler(metrics_store)
     BoundHandler.create_image_pull_tasks = CreateImagePullTasks()
     BoundHandler.telemetry = resolved_telemetry
-    return HighBacklogThreadingHTTPServer(
-        (host, port),
-        BoundHandler,
-        max_request_threads=max_http_request_threads,
-    )
+    class GatewayHTTPServer(HighBacklogThreadingHTTPServer):
+        def server_close(self):
+            try:
+                super().server_close()
+            finally:
+                metrics_store.close()
+
+    try:
+        return GatewayHTTPServer(
+            (host, port), BoundHandler, max_request_threads=max_http_request_threads,
+        )
+    except BaseException:
+        metrics_store.close()
+        raise
 
 
 def _collection_id_from_path(path: str, prefix: str) -> str | None:
@@ -7640,7 +7823,18 @@ def _node_placement_state(
         if route.state.lower() in {"creating", "unknown", "running"}
         and (identity := _route_image_identity(route))
     )
+    # Completed creates still own future work, including parked programs.
+    # Their shape is a relative load estimate, not a capacity reservation or
+    # an admission limit. Live pressure alone lags a burst by a heartbeat and
+    # otherwise rewards repeatedly placing onto the same quiet worker.
+    assigned = [r for r in node_routes if r.state.lower() not in {"deleted", "failed"}]
+    total = heartbeat.total_resources
+    assigned_pressure = max(
+        sum(r.resources.vcpu for r in assigned) / max(1, total.vcpu),
+        sum(r.resources.memory_mb for r in assigned) / max(1, total.memory_mb),
+    )
     return NodePlacementState(
+        assigned_shape_pressure=assigned_pressure,
         available_resources=_node_available_resources(heartbeat, node_routes),
         inflight_image_identities=inflight_images,
         projected_image_identities=frozenset(projected_images),

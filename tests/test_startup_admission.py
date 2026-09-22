@@ -38,9 +38,11 @@ class StartupAdmissionTests(unittest.TestCase):
             limiter.release(weight=8)
 
         def small():
-            self.assertTrue(limiter.acquire(timeout=2, weight=1))
+            # Both requests may otherwise be admitted by the same release;
+            # FIFO reservations do not order concurrently executing threads.
+            self.assertTrue(limiter.acquire(timeout=2, weight=3))
             order.append("small")
-            limiter.release()
+            limiter.release(weight=3)
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             first = pool.submit(large)
@@ -203,3 +205,42 @@ class StartupAdmissionTests(unittest.TestCase):
                 finally:
                     connection.close()
                     uploads.release(weight=uploads.capacity)
+
+
+class WarmDemandTests(unittest.TestCase):
+    def test_queued_restore_exposes_demand_and_failure_cleans_it_up(self):
+        from ucloud_sandboxes.models import ResourceQuantity
+        from ucloud_sandboxes.direct_service import SandboxRestoreBusyError
+        with TemporaryDirectory() as directory:
+            provisioner, *_ = direct_fixtures.DirectProvisionerTests().make(Path(directory).resolve())
+            service = DirectSandboxService(provisioner, max_concurrent_restores=1)
+            service.admission_wait_seconds = 0.1
+            service._restore_slots.acquire()
+            requested = ResourceQuantity(vcpu=1, memory_mb=1024)
+
+            def restore():
+                with service._restore_admission('queued', 1, requested):
+                    self.fail('restore must not acquire held slot')
+
+            try:
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    future = pool.submit(restore)
+                    wait_queued(service._restore_slots, 1)
+                    self.assertEqual(service.warm_park_demand_bytes(), 1024**3)
+                    with self.assertRaises(SandboxRestoreBusyError):
+                        future.result(3)
+                self.assertEqual(service.warm_park_demand_bytes(), 0)
+                self.assertEqual(service._restore_demands, {})
+            finally:
+                service._restore_slots.release()
+
+    def test_restore_demand_and_active_reservation_are_not_double_counted(self):
+        from ucloud_sandboxes.models import ResourceQuantity
+        with TemporaryDirectory() as directory:
+            provisioner, *_ = direct_fixtures.DirectProvisionerTests().make(Path(directory).resolve())
+            service = DirectSandboxService(provisioner)
+            requested = ResourceQuantity(vcpu=1, memory_mb=256)
+            service._active_reservations[('same', 1)] = requested
+            with service._restore_admission('same', 1, requested):
+                self.assertEqual(service.warm_park_demand_bytes(), 256*1024**2)
+            self.assertEqual(service._restore_demands, {})

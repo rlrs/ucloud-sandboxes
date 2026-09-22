@@ -1,0 +1,579 @@
+[
+  {
+    "host": "gateway-live-ucloud-20260824a",
+    "cpus": 2,
+    "cpu_pct": {
+      "user": 37.5,
+      "nice": 0.0,
+      "system": 34.8,
+      "idle": 25.9,
+      "iowait": 0.6,
+      "irq": 0.0,
+      "softirq": 1.1,
+      "steal": 0.1
+    },
+    "processes": [
+      {
+        "pid": "1105808",
+        "name": "registry",
+        "cpu_cores": 0.35,
+        "state": "S",
+        "wait": "request_wait_answer"
+      },
+      {
+        "pid": "943433",
+        "name": "python",
+        "cpu_cores": 0.24,
+        "state": "S",
+        "wait": "ep_poll"
+      },
+      {
+        "pid": "1114754",
+        "name": "ucloud-sandboxe",
+        "cpu_cores": 0.16,
+        "state": "S",
+        "wait": "poll_schedule_timeout.constprop.0"
+      },
+      {
+        "pid": "1114512",
+        "name": "kworker/1:3-events",
+        "cpu_cores": 0.15,
+        "state": "R",
+        "wait": "0"
+      },
+      {
+        "pid": "895408",
+        "name": "docker-proxy",
+        "cpu_cores": 0.03,
+        "state": "S",
+        "wait": "futex_do_wait"
+      },
+      {
+        "pid": "1059400",
+        "name": "postgres",
+        "cpu_cores": 0.03,
+        "state": "S",
+        "wait": "ep_poll"
+      },
+      {
+        "pid": "1114757",
+        "name": "ucloud-sandboxe",
+        "cpu_cores": 0.03,
+        "state": "S",
+        "wait": "futex_do_wait"
+      },
+      {
+        "pid": "1046322",
+        "name": "postgres",
+        "cpu_cores": 0.02,
+        "state": "S",
+        "wait": "ep_poll"
+      },
+      {
+        "pid": "1050457",
+        "name": "postgres",
+        "cpu_cores": 0.02,
+        "state": "S",
+        "wait": "ep_poll"
+      },
+      {
+        "pid": "1057246",
+        "name": "postgres",
+        "cpu_cores": 0.02,
+        "state": "S",
+        "wait": "ep_poll"
+      },
+      {
+        "pid": "1057323",
+        "name": "postgres",
+        "cpu_cores": 0.02,
+        "state": "S",
+        "wait": "ep_poll"
+      },
+      {
+        "pid": "1057562",
+        "name": "postgres",
+        "cpu_cores": 0.02,
+        "state": "S",
+        "wait": "ep_poll"
+      },
+      {
+        "pid": "1057564",
+        "name": "postgres",
+        "cpu_cores": 0.02,
+        "state": "S",
+        "wait": "ep_poll"
+      },
+      {
+        "pid": "1057698",
+        "name": "postgres",
+        "cpu_cores": 0.02,
+        "state": "R",
+        "wait": "0"
+      },
+      {
+        "pid": "1057701",
+        "name": "postgres",
+        "cpu_cores": 0.02,
+        "state": "S",
+        "wait": "ep_poll"
+      }
+    ],
+    "blocked": [],
+    "disk": [
+      {
+        "device": "vda",
+        "read_mb_s": 0.0,
+        "write_mb_s": 6.5,
+        "await_ms": 1.5,
+        "util_pct": 3.1,
+        "weighted_queue": 0.5
+      },
+      {
+        "device": "vda1",
+        "read_mb_s": 0.0,
+        "write_mb_s": 6.5,
+        "await_ms": 1.5,
+        "util_pct": 3.4,
+        "weighted_queue": 0.5
+      }
+    ],
+    "vm_delta": {
+      "pgmajfault": 12,
+      "compact_migrate_scanned": 111136,
+      "compact_free_scanned": 164695,
+      "compact_isolated": 19045,
+      "compact_daemon_migrate_scanned": 111136,
+      "compact_daemon_free_scanned": 164695
+    },
+    "psi": {
+      "cpu": "some avg10=47.56 avg60=57.24 avg300=40.25 total=23340640176\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=1351193402\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=1023790292",
+      "io": "some avg10=0.96 avg60=1.94 avg300=1.19 total=5490134495\nfull avg10=0.05 avg60=0.10 avg300=0.07 total=3850316129"
+    }
+  },
+  {
+    "host": "sandbox-node-c58d8d996a-1",
+    "cpus": 32,
+    "cpu_pct": {
+      "user": 2.6,
+      "nice": 0.0,
+      "system": 8.2,
+      "idle": 88.6,
+      "iowait": 0.5,
+      "irq": 0.0,
+      "softirq": 0.1,
+      "steal": 0.0
+    },
+    "processes": [
+      {
+        "pid": "397136",
+        "name": "python3",
+        "cpu_cores": 1.02,
+        "state": "S",
+        "wait": "poll_schedule_timeout.constprop.0"
+      },
+      {
+        "pid": "397140",
+        "name": "python3",
+        "cpu_cores": 0.29,
+        "state": "S",
+        "wait": "poll_schedule_timeout.constprop.0"
+      },
+      {
+        "pid": "1703",
+        "name": "udisksd",
+        "cpu_cores": 0.13,
+        "state": "S",
+        "wait": "poll_schedule_timeout.constprop.0"
+      },
+      {
+        "pid": "495587",
+        "name": "kworker/24:4-events",
+        "cpu_cores": 0.05,
+        "state": "I",
+        "wait": "worker_thread"
+      },
+      {
+        "pid": "1",
+        "name": "systemd",
+        "cpu_cores": 0.04,
+        "state": "S",
+        "wait": "ep_poll"
+      },
+      {
+        "pid": "292412",
+        "name": "kworker/14:1-events",
+        "cpu_cores": 0.04,
+        "state": "I",
+        "wait": "worker_thread"
+      },
+      {
+        "pid": "5504",
+        "name": "ucloud-storage-",
+        "cpu_cores": 0.03,
+        "state": "S",
+        "wait": "futex_do_wait"
+      },
+      {
+        "pid": "583195",
+        "name": "systemd",
+        "cpu_cores": 0.03,
+        "state": "S",
+        "wait": "ep_poll"
+      },
+      {
+        "pid": "1507",
+        "name": "systemd-network",
+        "cpu_cores": 0.02,
+        "state": "S",
+        "wait": "ep_poll"
+      },
+      {
+        "pid": "1677",
+        "name": "dbus-daemon",
+        "cpu_cores": 0.02,
+        "state": "S",
+        "wait": "ep_poll"
+      },
+      {
+        "pid": "1684",
+        "name": "networkd-dispat",
+        "cpu_cores": 0.02,
+        "state": "S",
+        "wait": "poll_schedule_timeout.constprop.0"
+      },
+      {
+        "pid": "5022",
+        "name": "dockerd",
+        "cpu_cores": 0.02,
+        "state": "S",
+        "wait": "futex_do_wait"
+      },
+      {
+        "pid": "580879",
+        "name": "kworker/u128:31-flush-253:0",
+        "cpu_cores": 0.02,
+        "state": "I",
+        "wait": "worker_thread"
+      },
+      {
+        "pid": "16",
+        "name": "rcu_exp_par_gp_kthread_worker/1",
+        "cpu_cores": 0.01,
+        "state": "S",
+        "wait": "kthread_worker_fn"
+      },
+      {
+        "pid": "17",
+        "name": "rcu_exp_gp_kthread_worker",
+        "cpu_cores": 0.01,
+        "state": "S",
+        "wait": "kthread_worker_fn"
+      }
+    ],
+    "blocked": [],
+    "disk": [
+      {
+        "device": "vda",
+        "read_mb_s": 0.3,
+        "write_mb_s": 7.5,
+        "await_ms": 0.5,
+        "util_pct": 11.4,
+        "weighted_queue": 0.3
+      },
+      {
+        "device": "vda1",
+        "read_mb_s": 0.3,
+        "write_mb_s": 7.5,
+        "await_ms": 0.5,
+        "util_pct": 12.5,
+        "weighted_queue": 0.2
+      },
+      {
+        "device": "ublkb6",
+        "read_mb_s": 0.0,
+        "write_mb_s": 0.0,
+        "await_ms": 0.4,
+        "util_pct": 0.0,
+        "weighted_queue": 0.0
+      },
+      {
+        "device": "ublkb19",
+        "read_mb_s": 0.0,
+        "write_mb_s": 0.0,
+        "await_ms": 0.5,
+        "util_pct": 0.0,
+        "weighted_queue": 0.0
+      },
+      {
+        "device": "ublkb25",
+        "read_mb_s": 0.0,
+        "write_mb_s": 0.0,
+        "await_ms": 0.4,
+        "util_pct": 0.0,
+        "weighted_queue": 0.0
+      },
+      {
+        "device": "ublkb29",
+        "read_mb_s": 0.0,
+        "write_mb_s": 0.0,
+        "await_ms": 0.8,
+        "util_pct": 0.0,
+        "weighted_queue": 0.0
+      },
+      {
+        "device": "ublkb10",
+        "read_mb_s": 0.0,
+        "write_mb_s": 0.0,
+        "await_ms": 0.4,
+        "util_pct": 0.0,
+        "weighted_queue": 0.0
+      },
+      {
+        "device": "ublkb28",
+        "read_mb_s": 0.0,
+        "write_mb_s": 0.0,
+        "await_ms": 0.4,
+        "util_pct": 0.0,
+        "weighted_queue": 0.0
+      },
+      {
+        "device": "ublkb33",
+        "read_mb_s": 0.0,
+        "write_mb_s": 0.0,
+        "await_ms": 0.4,
+        "util_pct": 0.0,
+        "weighted_queue": 0.0
+      },
+      {
+        "device": "ublkb2",
+        "read_mb_s": 0.0,
+        "write_mb_s": 0.0,
+        "await_ms": 0.5,
+        "util_pct": 0.0,
+        "weighted_queue": 0.0
+      }
+    ],
+    "vm_delta": {
+      "pgmajfault": 8
+    },
+    "psi": {
+      "cpu": "some avg10=5.85 avg60=12.41 avg300=7.38 total=148192272\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "memory": "some avg10=0.18 avg60=0.16 avg300=0.04 total=300879\nfull avg10=0.18 avg60=0.16 avg300=0.04 total=299180",
+      "io": "some avg10=2.16 avg60=5.06 avg300=3.77 total=111797980\nfull avg10=1.40 avg60=2.56 avg300=1.85 total=79597012"
+    }
+  },
+  {
+    "host": "sandbox-node-c58d8d996a-2",
+    "cpus": 32,
+    "cpu_pct": {
+      "user": 2.7,
+      "nice": 0.0,
+      "system": 7.6,
+      "idle": 88.3,
+      "iowait": 1.3,
+      "irq": 0.0,
+      "softirq": 0.1,
+      "steal": 0.0
+    },
+    "processes": [
+      {
+        "pid": "493386",
+        "name": "python3",
+        "cpu_cores": 0.92,
+        "state": "S",
+        "wait": "poll_schedule_timeout.constprop.0"
+      },
+      {
+        "pid": "493390",
+        "name": "python3",
+        "cpu_cores": 0.29,
+        "state": "S",
+        "wait": "poll_schedule_timeout.constprop.0"
+      },
+      {
+        "pid": "1720",
+        "name": "udisksd",
+        "cpu_cores": 0.15,
+        "state": "S",
+        "wait": "poll_schedule_timeout.constprop.0"
+      },
+      {
+        "pid": "607022",
+        "name": "kworker/20:3-events",
+        "cpu_cores": 0.07,
+        "state": "I",
+        "wait": "worker_thread"
+      },
+      {
+        "pid": "1",
+        "name": "systemd",
+        "cpu_cores": 0.05,
+        "state": "S",
+        "wait": "ep_poll"
+      },
+      {
+        "pid": "697972",
+        "name": "systemd",
+        "cpu_cores": 0.04,
+        "state": "S",
+        "wait": "ep_poll"
+      },
+      {
+        "pid": "5493",
+        "name": "ucloud-storage-",
+        "cpu_cores": 0.03,
+        "state": "S",
+        "wait": "futex_do_wait"
+      },
+      {
+        "pid": "17",
+        "name": "rcu_exp_gp_kthread_worker",
+        "cpu_cores": 0.02,
+        "state": "S",
+        "wait": "kthread_worker_fn"
+      },
+      {
+        "pid": "1002",
+        "name": "systemd-journal",
+        "cpu_cores": 0.02,
+        "state": "S",
+        "wait": "ep_poll"
+      },
+      {
+        "pid": "1512",
+        "name": "systemd-network",
+        "cpu_cores": 0.02,
+        "state": "S",
+        "wait": "ep_poll"
+      },
+      {
+        "pid": "1681",
+        "name": "dbus-daemon",
+        "cpu_cores": 0.02,
+        "state": "S",
+        "wait": "ep_poll"
+      },
+      {
+        "pid": "1688",
+        "name": "networkd-dispat",
+        "cpu_cores": 0.02,
+        "state": "S",
+        "wait": "poll_schedule_timeout.constprop.0"
+      },
+      {
+        "pid": "5013",
+        "name": "dockerd",
+        "cpu_cores": 0.02,
+        "state": "S",
+        "wait": "futex_do_wait"
+      },
+      {
+        "pid": "589969",
+        "name": "kworker/u128:10-ext4-rsv-conversion",
+        "cpu_cores": 0.02,
+        "state": "I",
+        "wait": "worker_thread"
+      },
+      {
+        "pid": "892",
+        "name": "jbd2/vda1-8",
+        "cpu_cores": 0.01,
+        "state": "S",
+        "wait": "kjournald2"
+      }
+    ],
+    "blocked": [],
+    "disk": [
+      {
+        "device": "vda",
+        "read_mb_s": 0.2,
+        "write_mb_s": 55.3,
+        "await_ms": 3.7,
+        "util_pct": 15.6,
+        "weighted_queue": 1.9
+      },
+      {
+        "device": "vda1",
+        "read_mb_s": 0.2,
+        "write_mb_s": 55.3,
+        "await_ms": 3.7,
+        "util_pct": 18.3,
+        "weighted_queue": 1.9
+      },
+      {
+        "device": "ublkb16",
+        "read_mb_s": 0.0,
+        "write_mb_s": 0.0,
+        "await_ms": 0.1,
+        "util_pct": 0.0,
+        "weighted_queue": 0.0
+      },
+      {
+        "device": "ublkb5",
+        "read_mb_s": 0.0,
+        "write_mb_s": 0.0,
+        "await_ms": 0.2,
+        "util_pct": 0.0,
+        "weighted_queue": 0.0
+      },
+      {
+        "device": "ublkb18",
+        "read_mb_s": 0.0,
+        "write_mb_s": 0.0,
+        "await_ms": 0.4,
+        "util_pct": 0.0,
+        "weighted_queue": 0.0
+      },
+      {
+        "device": "ublkb1",
+        "read_mb_s": 0.0,
+        "write_mb_s": 0.0,
+        "await_ms": 0.1,
+        "util_pct": 0.0,
+        "weighted_queue": 0.0
+      },
+      {
+        "device": "ublkb3",
+        "read_mb_s": 0.0,
+        "write_mb_s": 0.0,
+        "await_ms": 0.1,
+        "util_pct": 0.0,
+        "weighted_queue": 0.0
+      },
+      {
+        "device": "ublkb9",
+        "read_mb_s": 0.0,
+        "write_mb_s": 0.0,
+        "await_ms": 0.1,
+        "util_pct": 0.0,
+        "weighted_queue": 0.0
+      },
+      {
+        "device": "ublkb11",
+        "read_mb_s": 0.0,
+        "write_mb_s": 0.0,
+        "await_ms": 0.2,
+        "util_pct": 0.0,
+        "weighted_queue": 0.0
+      },
+      {
+        "device": "ublkb12",
+        "read_mb_s": 0.0,
+        "write_mb_s": 0.0,
+        "await_ms": 0.1,
+        "util_pct": 0.0,
+        "weighted_queue": 0.0
+      }
+    ],
+    "vm_delta": {
+      "pgmajfault": 8
+    },
+    "psi": {
+      "cpu": "some avg10=1.06 avg60=6.86 avg300=5.17 total=119460274\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "memory": "some avg10=0.00 avg60=0.09 avg300=0.03 total=1133101\nfull avg10=0.00 avg60=0.09 avg300=0.03 total=1032096",
+      "io": "some avg10=1.15 avg60=4.27 avg300=3.54 total=87616374\nfull avg10=1.09 avg60=2.56 avg300=1.99 total=54954566"
+    }
+  }
+]

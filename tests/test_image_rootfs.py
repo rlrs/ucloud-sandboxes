@@ -221,6 +221,60 @@ class ImageRootfsTests(unittest.TestCase):
                 runner.commands,
             )
 
+    def test_resume_leases_exact_mounted_image_without_docker_inspection(self):
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            runner = Overlay2Runner(root / "docker")
+            store = image_store(root, runner)
+            with store.operation_lease("example/image:latest") as image:
+                pass
+            runner.commands.clear()
+            with store.mounted_rootfs_lease(image.image_id, rootfs_identity_sha256=image.rootfs_identity_sha256) as path:
+                self.assertEqual(path, image.rootfs)
+            self.assertFalse(any(c[0] == "docker" for c in runner.commands))
+            # An absent mount still uses full Docker inspection/recovery.
+            runner.mounted.remove(str(image.rootfs))
+            runner.commands.clear()
+            with store.mounted_rootfs_lease(image.image_id, rootfs_identity_sha256=image.rootfs_identity_sha256) as path:
+                self.assertIn(str(path), runner.mounted)
+            self.assertTrue(any(c[:3] == ("docker", "image", "inspect") for c in runner.commands))
+            with self.assertRaises(DirectWardenError):
+                with store.mounted_rootfs_lease("example/image:latest", rootfs_identity_sha256=image.rootfs_identity_sha256):
+                    self.fail("mutable tag was accepted")
+            with self.assertRaises(DirectWardenError):
+                with store.mounted_rootfs_lease(image.image_id, rootfs_identity_sha256="0" * 64):
+                    self.fail("wrong rootfs was accepted")
+            (image.rootfs.parent / store.COMPLETE).write_text('{}')
+            with self.assertRaises(DirectWardenError):
+                with store.mounted_rootfs_lease(image.image_id, rootfs_identity_sha256=image.rootfs_identity_sha256):
+                    self.fail("changed marker was accepted")
+
+    def test_mounted_resume_lease_holds_gc_fence_until_mount_finishes(self):
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            runner = Overlay2Runner(root / "docker")
+            store = image_store(root, runner)
+            with store.operation_lease("example/image:latest") as image:
+                pass
+            finished = Event()
+            errors = []
+            def collect():
+                try:
+                    store.reconcile_images((), is_referenced=lambda _: False)
+                except BaseException as exc:
+                    errors.append(exc)
+                finally:
+                    finished.set()
+            with store.mounted_rootfs_lease(image.image_id, rootfs_identity_sha256=image.rootfs_identity_sha256):
+                thread = Thread(target=collect)
+                thread.start()
+                self.assertFalse(finished.wait(.1))
+                self.assertIn(str(image.rootfs), runner.mounted)
+            thread.join(5)
+            self.assertTrue(finished.is_set())
+            self.assertEqual(errors, [])
+            self.assertFalse(image.rootfs.parent.exists())
+
     def test_overlay2_gc_evicts_only_unreferenced_cache_and_private_pin(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw)

@@ -1,0 +1,60 @@
+local checkpoint compaction failed for f148dcd2d25d4709b521d742e9f9af74.sandbox-1
+Traceback (most recent call last):
+  File "/var/cache/ucloud-sandboxes/init-packages/1c5396483a948288c0099a7fca4dee6e5035d778e6bdc6b1c3abdc65db7e029b/agent-runtime/site-packages/ucloud_sandboxes/storage_native_compaction.py", line 107, in _run
+    self._compact(current)
+    ~~~~~~~~~~~~~^^^^^^^^^
+  File "/var/cache/ucloud-sandboxes/init-packages/1c5396483a948288c0099a7fca4dee6e5035d778e6bdc6b1c3abdc65db7e029b/agent-runtime/site-packages/ucloud_sandboxes/storage_native_compaction.py", line 286, in _compact
+    descriptor = consume_export_stream(
+        lambda sock: self.exporter.export_compacted_image(
+    ...<5 lines>...
+        timeout_seconds=self.timeout_seconds, consume=consume, check_current=check_current,
+    )
+  File "/var/cache/ucloud-sandboxes/init-packages/1c5396483a948288c0099a7fca4dee6e5035d778e6bdc6b1c3abdc65db7e029b/agent-runtime/site-packages/ucloud_sandboxes/storage_native_registry.py", line 798, in consume_export_stream
+    raise failure[0]
+  File "/var/cache/ucloud-sandboxes/init-packages/1c5396483a948288c0099a7fca4dee6e5035d778e6bdc6b1c3abdc65db7e029b/agent-runtime/site-packages/ucloud_sandboxes/storage_native_registry.py", line 729, in export
+    result.append(export_layer(socket_path))
+                  ~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/var/cache/ucloud-sandboxes/init-packages/1c5396483a948288c0099a7fca4dee6e5035d778e6bdc6b1c3abdc65db7e029b/agent-runtime/site-packages/ucloud_sandboxes/storage_native_compaction.py", line 287, in <lambda>
+    lambda sock: self.exporter.export_compacted_image(
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        source_image_config=source, global_config=self.global_config,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        stream_socket_path=sock,
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+    ),
+    ^
+  File "/var/cache/ucloud-sandboxes/init-packages/1c5396483a948288c0099a7fca4dee6e5035d778e6bdc6b1c3abdc65db7e029b/agent-runtime/site-packages/ucloud_sandboxes/storage_native.py", line 290, in export_compacted_image
+    response = self._call(
+        {
+    ...<4 lines>...
+        }
+    )
+  File "/var/cache/ucloud-sandboxes/init-packages/1c5396483a948288c0099a7fca4dee6e5035d778e6bdc6b1c3abdc65db7e029b/agent-runtime/site-packages/ucloud_sandboxes/storage_native.py", line 350, in _call
+    length = struct.unpack(">I", self._recv_protocol_bytes(connection, 4))[0]
+                                 ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/var/cache/ucloud-sandboxes/init-packages/1c5396483a948288c0099a7fca4dee6e5035d778e6bdc6b1c3abdc65db7e029b/agent-runtime/site-packages/ucloud_sandboxes/storage_native.py", line 386, in _recv_protocol_bytes
+    return cls._recv_exact(connection, size)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/var/cache/ucloud-sandboxes/init-packages/1c5396483a948288c0099a7fca4dee6e5035d778e6bdc6b1c3abdc65db7e029b/agent-runtime/site-packages/ucloud_sandboxes/storage_native.py", line 377, in _recv_exact
+    chunk = connection.recv(size - len(result))
+TimeoutError: timed out
+local checkpoint compaction failed for 8e7c05ca753748e5a3390a84153f48de.sandbox-1
+Traceback (most recent call last):
+  File "/var/cache/ucloud-sandboxes/init-packages/1c5396483a948288c0099a7fca4dee6e5035d778e6bdc6b1c3abdc65db7e029b/agent-runtime/site-packages/ucloud_sandboxes/storage_native_compaction.py", line 107, in _run
+    self._compact(current)
+    ~~~~~~~~~~~~~^^^^^^^^^
+  File "/var/cache/ucloud-sandboxes/init-packages/1c5396483a948288c0099a7fca4dee6e5035d778e6bdc6b1c3abdc65db7e029b/agent-runtime/site-packages/ucloud_sandboxes/storage_native_compaction.py", line 286, in _compact
+    descriptor = consume_export_stream(
+        lambda sock: self.exporter.export_compacted_image(
+    ...<5 lines>...
+        timeout_seconds=self.timeout_seconds, consume=consume, check_current=check_current,
+    )
+  File "/var/cache/ucloud-sandboxes/init-packages/1c5396483a948288c0099a7fca4dee6e5035d778e6bdc6b1c3abdc65db7e029b/agent-runtime/site-packages/ucloud_sandboxes/storage_native_registry.py", line 784, in consume_export_stream
+    consume(bytes(pending))
+    ~~~~~~~^^^^^^^^^^^^^^^^
+  File "/var/cache/ucloud-sandboxes/init-packages/1c5396483a948288c0099a7fca4dee6e5035d778e6bdc6b1c3abdc65db7e029b/agent-runtime/site-packages/ucloud_sandboxes/storage_native_compaction.py", line 281, in consume
+    or shutil.disk_usage(manifest.parent).free - len(chunk) < reserve):
+       ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/shutil.py", line 1449, in disk_usage
+    st = os.statvfs(path)
+FileNotFoundError: [Errno 2] No such file or directory: '/var/lib/ucloud-sandboxes/storage-native/runtime/8e7c05ca753748e5a3390a84153f48de.sandbox-1'

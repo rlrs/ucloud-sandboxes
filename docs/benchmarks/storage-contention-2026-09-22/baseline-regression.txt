@@ -1,0 +1,14 @@
+F
+======================================================================
+FAIL: test_slow_adoption_does_not_block_metrics_or_other_volume_adoption (tests.test_storage_native_compaction.LocalCompactionTests.test_slow_adoption_does_not_block_metrics_or_other_volume_adoption)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/src/tests/test_storage_native_compaction.py", line 100, in test_slow_adoption_does_not_block_metrics_or_other_volume_adoption
+    self.assertTrue(finished.wait(2), "unrelated work waited for disk I/O")
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : unrelated work waited for disk I/O
+
+----------------------------------------------------------------------
+Ran 1 test in 2.261s
+
+FAILED (failures=1)

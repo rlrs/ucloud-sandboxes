@@ -56,13 +56,14 @@ small update. These are compaction triggers, not snapshot size limits. They boun
 lookup depth and Registry metadata without putting a
 large temporary flattened file on the worker's constrained local disk.
 
-When only depth triggers maintenance and the published base is larger than all
-newer layers combined, the publisher retains that immutable base and merges only
-the newer layers into one delta. The result has two layers and avoids reading or
-uploading the base. This applies with a depth threshold of at least two; an
-explicit one-layer threshold still forces a full merge. Accumulated delta bytes
-above the byte threshold, a non-dominant base, or a blob-origin change triggers a
-full merge. Thus delta growth eventually reclaims obsolete base data.
+Compaction selects a size-tiered suffix. It starts at the newest layer and
+includes an older layer when the selected suffix is at least as large, or when
+retaining it would exceed the depth target. This keeps both a large base and
+large previously merged deltas out of repeated small merges. Exceeding the byte
+trigger alone does not rewrite a single large delta. Growth eventually includes
+older tiers; forcing one layer or changing blob origin still requires a full
+merge. Publishers retain only already-published tiers and include every local
+input in the exported suffix.
 
 Compaction opens the selected remote-plus-local layers through AgentEnv's shared
 bounded cache, flattens them with ordered writes, and streams one content-addressed
@@ -208,14 +209,17 @@ coalesced by volume and physical disk headroom checked during export.
 
 A wake can continue while compaction runs. The next journaled mount or publication
 adopts a completed replacement if its immutable source prefix still matches,
-preserving newer deltas. Depth-only maintenance retains a dominant local base;
-delta-byte pressure merges the entire local chain. Existing remote layers remain
+preserving newer deltas. Size-tiered suffix selection also applies to entirely
+local chains. Existing remote layers remain
 unchanged. Compaction does not make a checkpoint portable to another node.
 
 Storage-native metrics expose `local_compaction_active`, `local_compaction_waiting`,
 `local_compaction_completed`, `local_compaction_adopted`, `local_compaction_failed`,
 `local_compaction_deferred`, `local_compaction_input_bytes`, and
-`local_compaction_output_bytes`. Counters reset with the service process.
+`local_compaction_output_bytes`. Deletion cancels pending and active exports;
+`local_compaction_cancelled` counts cancelled operations and
+`local_compaction_discarded_bytes` measures locally written output discarded before
+candidate commit. Counters reset with the service process.
 
 Qualify the local path using an isolated backend process and temporary files:
 
@@ -268,3 +272,36 @@ The qualifier uses an isolated backend and temporary files without creating bloc
 devices. It compares native restacking of local pins and dense exported layers,
 with the original names removed, cache entries evicted and the remote origin
 unreachable. See the [qualification report](../../docs/reviews/published-local-cache-2026-09-21.md).
+
+## Write-volume qualification
+
+Run `benchmark_tiered_compaction.py --backend-binary /absolute/path/to/backend`
+with the repository on `PYTHONPATH` on isolated Linux. It starts a private daemon
+without devices and compares repeated native export bytes, verifying logical
+contents after every merge. Use a kernel supported by the native backend (Linux
+5.15 cannot support its required io_uring flags). Docker also requires allowing
+io_uring (for example,
+`--security-opt seccomp=unconfined` on the isolated test container).
+
+Automatic filesystem trim remains disabled. On an idle worker authorized for qualification
+with `/dev/ublk-control`, run as root:
+
+```sh
+PYTHONPATH=. python3 runtime/storage_native/qualify_xfs_trim.py \
+  --backend-binary /absolute/path/to/deployment-backend \
+  --output /tmp/xfs-trim-result.json
+```
+
+The test creates a private daemon and disposable XFS devices. It compares deleted
+file export volume with and without 64 MiB FITRIM windows and verifies retained
+files, zeros, holes and deleted-file absence after full and partial compaction
+and native remount. It never trims an existing sandbox. Passing this is a
+prerequisite for designing/enabling an incremental runtime trim policy; it does
+not qualify concurrent trim latency or production load.
+
+The [2026-09-22 production-worker qualification](../../docs/benchmarks/write-volume-prod-2026-09-22/README.md)
+passed native tiered-compaction and XFS trim checks with the deployed backend.
+Tiered selection reduced exported bytes by 87.48% on the synthetic overwrite
+trace; trim removed 64.125 MiB of deleted payload, including with concurrent
+foreground I/O. This does not establish full-load wake latency or authorize
+turning on automatic trimming on other kernel/backend combinations.

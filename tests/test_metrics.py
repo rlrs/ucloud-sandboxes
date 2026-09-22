@@ -46,6 +46,28 @@ def sandbox_route(**values: object) -> SandboxRoute:
 
 
 class MetricsTests(unittest.TestCase):
+    def test_vacuum_reclaims_free_pages_without_evicting_retained_history(self):
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "metrics.sqlite"
+            store = MetricsStore(path, max_bytes=128 * 1024)
+            connection = store._sqlite_connection
+            payload = json.dumps({"padding": "x" * 4096})
+            connection.executemany(
+                "INSERT INTO metric_events(timestamp,timestamp_epoch,kind,data_json,payload_bytes) VALUES (?,?,?,?,?)",
+                [(utc_now().isoformat(), time.time(), "kept", payload, len(payload))] * 2000,
+            )
+            connection.commit()
+            connection.execute("DELETE FROM metric_events WHERE sequence <= 1990")
+            connection.commit()
+            self.assertGreater(connection.execute("PRAGMA freelist_count").fetchone()[0], 1000)
+            store._reclaim_sqlite_space_locked(connection)
+            self.assertEqual(len(store.load_events()), 10)
+            self.assertEqual(connection.execute("PRAGMA freelist_count").fetchone()[0], 0)
+            self.assertLessEqual(
+                sum(p.stat().st_size for p in (path, Path(f"{path}-wal")) if p.exists()),
+                128 * 1024,
+            )
+
     def test_interrupted_maintenance_preserves_committed_events(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = MetricsStore(Path(raw_dir) / "metrics.sqlite")

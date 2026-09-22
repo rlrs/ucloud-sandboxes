@@ -1,0 +1,362 @@
+[
+  {
+    "job": "gateway",
+    "host": "gateway-live-ucloud-20260824a",
+    "cpus": 2,
+    "cpu_pct": {
+      "user": 17.0,
+      "nice": 0.0,
+      "system": 6.7,
+      "idle": 72.7,
+      "iowait": 2.4,
+      "irq": 0.0,
+      "softirq": 1.1,
+      "steal": 0.0
+    },
+    "processes": [
+      {
+        "pid": "898279",
+        "name": "python",
+        "cpu_cores": 0.21,
+        "state": "R",
+        "wait": "0"
+      },
+      {
+        "pid": "897698",
+        "name": "ucloud-sandboxe",
+        "cpu_cores": 0.16,
+        "state": "S",
+        "wait": "poll_schedule_timeout.constprop.0"
+      },
+      {
+        "pid": "895408",
+        "name": "docker-proxy",
+        "cpu_cores": 0.03,
+        "state": "S",
+        "wait": "futex_do_wait"
+      },
+      {
+        "pid": "897660",
+        "name": "ucloud-sandboxe",
+        "cpu_cores": 0.02,
+        "state": "S",
+        "wait": "futex_do_wait"
+      },
+      {
+        "pid": "159556",
+        "name": "otelcol-contrib",
+        "cpu_cores": 0.01,
+        "state": "S",
+        "wait": "futex_do_wait"
+      },
+      {
+        "pid": "1",
+        "name": "systemd",
+        "cpu_cores": 0.0,
+        "state": "S",
+        "wait": "ep_poll"
+      },
+      {
+        "pid": "2",
+        "name": "kthreadd",
+        "cpu_cores": 0.0,
+        "state": "S",
+        "wait": "kthreadd"
+      },
+      {
+        "pid": "3",
+        "name": "pool_workqueue_release",
+        "cpu_cores": 0.0,
+        "state": "S",
+        "wait": "kthread_worker_fn"
+      },
+      {
+        "pid": "4",
+        "name": "kworker/R-rcu_gp",
+        "cpu_cores": 0.0,
+        "state": "I",
+        "wait": "rescuer_thread"
+      },
+      {
+        "pid": "5",
+        "name": "kworker/R-sync_wq",
+        "cpu_cores": 0.0,
+        "state": "I",
+        "wait": "rescuer_thread"
+      },
+      {
+        "pid": "6",
+        "name": "kworker/R-kvfree_rcu_reclaim",
+        "cpu_cores": 0.0,
+        "state": "I",
+        "wait": "rescuer_thread"
+      },
+      {
+        "pid": "7",
+        "name": "kworker/R-slub_flushwq",
+        "cpu_cores": 0.0,
+        "state": "I",
+        "wait": "rescuer_thread"
+      },
+      {
+        "pid": "8",
+        "name": "kworker/R-netns",
+        "cpu_cores": 0.0,
+        "state": "I",
+        "wait": "rescuer_thread"
+      },
+      {
+        "pid": "13",
+        "name": "kworker/R-mm_percpu_wq",
+        "cpu_cores": 0.0,
+        "state": "I",
+        "wait": "rescuer_thread"
+      },
+      {
+        "pid": "14",
+        "name": "ksoftirqd/0",
+        "cpu_cores": 0.0,
+        "state": "S",
+        "wait": "smpboot_thread_fn"
+      }
+    ],
+    "blocked": [],
+    "disk": [
+      {
+        "device": "vda",
+        "read_mb_s": 0.0,
+        "write_mb_s": 4.7,
+        "await_ms": 0.2,
+        "util_pct": 6.6,
+        "weighted_queue": 0.1
+      },
+      {
+        "device": "vda1",
+        "read_mb_s": 0.0,
+        "write_mb_s": 4.7,
+        "await_ms": 0.2,
+        "util_pct": 6.7,
+        "weighted_queue": 0.1
+      }
+    ],
+    "vm_delta": {},
+    "psi": {
+      "cpu": "some avg10=7.67 avg60=3.93 avg300=5.69 total=22077766903\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=1350815619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=1023501064",
+      "io": "some avg10=2.66 avg60=1.27 avg300=0.56 total=5332335530\nfull avg10=1.85 avg60=0.82 avg300=0.38 total=3783983458"
+    }
+  },
+  {
+    "job": "12398310",
+    "host": "sandbox-node-3cd17fa8ac-1",
+    "cpus": 32,
+    "cpu_pct": {
+      "user": 5.5,
+      "nice": 3.7,
+      "system": 9.1,
+      "idle": 75.3,
+      "iowait": 6.2,
+      "irq": 0.0,
+      "softirq": 0.1,
+      "steal": 0.0
+    },
+    "processes": [
+      {
+        "pid": "5505",
+        "name": "ucloud-storage-",
+        "cpu_cores": 0.58,
+        "state": "S",
+        "wait": "futex_do_wait"
+      },
+      {
+        "pid": "5584",
+        "name": "python3",
+        "cpu_cores": 0.53,
+        "state": "S",
+        "wait": "poll_schedule_timeout.constprop.0"
+      },
+      {
+        "pid": "5519",
+        "name": "python3",
+        "cpu_cores": 0.14,
+        "state": "S",
+        "wait": "poll_schedule_timeout.constprop.0"
+      },
+      {
+        "pid": "14771",
+        "name": "kworker/u128:17-writeback",
+        "cpu_cores": 0.07,
+        "state": "I",
+        "wait": "worker_thread"
+      },
+      {
+        "pid": "1729",
+        "name": "udisksd",
+        "cpu_cores": 0.06,
+        "state": "S",
+        "wait": "poll_schedule_timeout.constprop.0"
+      },
+      {
+        "pid": "1",
+        "name": "systemd",
+        "cpu_cores": 0.04,
+        "state": "S",
+        "wait": "ep_poll"
+      },
+      {
+        "pid": "33071",
+        "name": "systemd",
+        "cpu_cores": 0.04,
+        "state": "S",
+        "wait": "ep_poll"
+      },
+      {
+        "pid": "893",
+        "name": "jbd2/vda1-8",
+        "cpu_cores": 0.02,
+        "state": "S",
+        "wait": "kjournald2"
+      },
+      {
+        "pid": "6863",
+        "name": "kworker/14:8-events",
+        "cpu_cores": 0.02,
+        "state": "I",
+        "wait": "worker_thread"
+      },
+      {
+        "pid": "14643",
+        "name": "kworker/u128:14-ext4-rsv-conversion",
+        "cpu_cores": 0.02,
+        "state": "I",
+        "wait": "worker_thread"
+      },
+      {
+        "pid": "87",
+        "name": "kworker/22:0-events",
+        "cpu_cores": 0.01,
+        "state": "I",
+        "wait": "worker_thread"
+      },
+      {
+        "pid": "93",
+        "name": "kworker/24:0-inode_switch_wbs",
+        "cpu_cores": 0.01,
+        "state": "I",
+        "wait": "worker_thread"
+      },
+      {
+        "pid": "217",
+        "name": "kworker/u128:2-events_power_efficient",
+        "cpu_cores": 0.01,
+        "state": "I",
+        "wait": "worker_thread"
+      },
+      {
+        "pid": "240",
+        "name": "kworker/5:1-events",
+        "cpu_cores": 0.01,
+        "state": "I",
+        "wait": "worker_thread"
+      },
+      {
+        "pid": "252",
+        "name": "kworker/18:1-events",
+        "cpu_cores": 0.01,
+        "state": "I",
+        "wait": "worker_thread"
+      }
+    ],
+    "blocked": [],
+    "disk": [
+      {
+        "device": "vda",
+        "read_mb_s": 0.0,
+        "write_mb_s": 570.1,
+        "await_ms": 16.8,
+        "util_pct": 43.5,
+        "weighted_queue": 28.0
+      },
+      {
+        "device": "vda1",
+        "read_mb_s": 0.0,
+        "write_mb_s": 570.1,
+        "await_ms": 16.8,
+        "util_pct": 54.5,
+        "weighted_queue": 27.8
+      },
+      {
+        "device": "ublkb16",
+        "read_mb_s": 20.0,
+        "write_mb_s": 9.8,
+        "await_ms": 1.0,
+        "util_pct": 4.7,
+        "weighted_queue": 0.4
+      },
+      {
+        "device": "ublkb26",
+        "read_mb_s": 57.1,
+        "write_mb_s": 16.8,
+        "await_ms": 0.5,
+        "util_pct": 8.3,
+        "weighted_queue": 0.4
+      },
+      {
+        "device": "ublkb32",
+        "read_mb_s": 19.0,
+        "write_mb_s": 9.1,
+        "await_ms": 1.2,
+        "util_pct": 3.8,
+        "weighted_queue": 0.4
+      },
+      {
+        "device": "ublkb14",
+        "read_mb_s": 38.1,
+        "write_mb_s": 15.2,
+        "await_ms": 0.4,
+        "util_pct": 6.2,
+        "weighted_queue": 0.3
+      },
+      {
+        "device": "ublkb25",
+        "read_mb_s": 0.0,
+        "write_mb_s": 3.6,
+        "await_ms": 3.5,
+        "util_pct": 1.7,
+        "weighted_queue": 0.3
+      },
+      {
+        "device": "ublkb30",
+        "read_mb_s": 0.0,
+        "write_mb_s": 3.6,
+        "await_ms": 4.0,
+        "util_pct": 2.4,
+        "weighted_queue": 0.3
+      },
+      {
+        "device": "ublkb36",
+        "read_mb_s": 39.4,
+        "write_mb_s": 15.5,
+        "await_ms": 0.4,
+        "util_pct": 7.1,
+        "weighted_queue": 0.3
+      },
+      {
+        "device": "ublkb41",
+        "read_mb_s": 40.8,
+        "write_mb_s": 15.5,
+        "await_ms": 0.3,
+        "util_pct": 6.0,
+        "weighted_queue": 0.3
+      }
+    ],
+    "vm_delta": {
+      "pgmajfault": 6937
+    },
+    "psi": {
+      "cpu": "some avg10=13.12 avg60=7.68 avg300=2.46 total=9240710\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=27\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=10",
+      "io": "some avg10=8.58 avg60=8.33 avg300=3.56 total=14859122\nfull avg10=6.74 avg60=5.69 avg300=2.65 total=11704880"
+    }
+  }
+]

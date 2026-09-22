@@ -1,0 +1,28 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U postgres]
+      interval: 1s
+      timeout: 5s
+      retries: 60
+    networks: [qualification]
+  tests:
+    build:
+      context: ../..
+      dockerfile: tests/linux_shared_control/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      UCLOUD_TEST_POSTGRES_DSN: host=postgres user=postgres dbname=postgres
+      HYPOTHESIS_STORAGE_DIRECTORY: /tmp/hypothesis
+    volumes:
+      - ../..:/src:ro
+    command: python -m unittest tests.test_postgres_relay tests.test_shared_control_postgres
+    networks: [qualification]
+networks:
+  qualification:
+    internal: true

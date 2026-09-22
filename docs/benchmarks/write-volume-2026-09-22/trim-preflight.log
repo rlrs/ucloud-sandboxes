@@ -1,0 +1,3 @@
+usage: qualify_xfs_trim.py [-h] --backend-binary BACKEND_BINARY
+                           [--work-root WORK_ROOT] --output OUTPUT
+qualify_xfs_trim.py: error: /dev/ublk-control unavailable; no devices or mounts created

@@ -1,0 +1,74 @@
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
+from pathlib import Path
+from tempfile import TemporaryDirectory
+import os
+import sqlite3
+import threading
+import unittest
+from unittest.mock import patch
+
+from ucloud_sandboxes.direct_registry import DirectRegistryError, DirectSandboxRegistry
+
+
+class DirectRegistryPoolTests(unittest.TestCase):
+    def test_reuses_validation_but_detects_schema_and_metadata_changes(self):
+        changes = [
+            "CREATE TABLE extra (value TEXT)",
+            "CREATE VIEW extra AS SELECT 1",
+            "CREATE TRIGGER extra AFTER UPDATE ON registry_metadata BEGIN SELECT 1; END",
+            "PRAGMA user_version = 2",
+            "DELETE FROM registry_metadata",
+        ]
+        for change in changes:
+            with self.subTest(change=change), TemporaryDirectory() as tmp:
+                registry = DirectSandboxRegistry(Path(tmp) / 'registry.sqlite')
+                with patch.object(registry, '_ensure_schema', wraps=registry._ensure_schema) as validate:
+                    for _ in range(10):
+                        self.assertIsNone(registry.get('absent'))
+                    validate.assert_called_once()
+                with closing(sqlite3.connect(registry.path)) as conn:
+                    conn.execute(change)
+                    conn.commit()
+                with self.assertRaises(DirectRegistryError):
+                    registry.get('absent')
+
+    def test_replacement_file_does_not_reuse_old_connection(self):
+        with TemporaryDirectory() as tmp:
+            registry = DirectSandboxRegistry(Path(tmp) / 'registry.sqlite')
+            registry.snapshot()
+            replacement = Path(tmp) / 'replacement.sqlite'
+            replacement.touch(mode=0o600)
+            os.replace(replacement, registry.path)
+            with self.assertRaisesRegex(DirectRegistryError, 'replaced'):
+                registry.snapshot()
+
+    def test_connections_are_exclusive_and_idle_retention_is_not_admission(self):
+        with TemporaryDirectory() as tmp:
+            registry = DirectSandboxRegistry(Path(tmp) / 'registry.sqlite')
+            registry.snapshot()
+            barrier = threading.Barrier(24)
+            ids = []
+            guard = threading.Lock()
+            def read(_):
+                with registry._transaction(write=False) as conn:
+                    with guard:
+                        ids.append(id(conn))
+                    barrier.wait(timeout=10)
+                    self.assertEqual(conn.execute('PRAGMA synchronous').fetchone()[0], 2)
+                    self.assertEqual(conn.execute('PRAGMA trusted_schema').fetchone()[0], 0)
+            with ThreadPoolExecutor(max_workers=24) as pool:
+                list(pool.map(read, range(24)))
+            self.assertEqual(len(set(ids)), 24)
+            self.assertLessEqual(len(registry._connections), 16)
+            self.assertTrue(all(not e.connection.in_transaction for e in registry._connections))
+
+    def test_exception_rolls_back_and_discards_connection(self):
+        with TemporaryDirectory() as tmp:
+            registry = DirectSandboxRegistry(Path(tmp) / 'registry.sqlite')
+            initial = registry.activity_revision()
+            with self.assertRaisesRegex(RuntimeError, 'injected'):
+                with registry._transaction(write=True) as conn:
+                    registry._bump_activity(conn)
+                    raise RuntimeError('injected')
+            self.assertEqual(registry.activity_revision(), initial)

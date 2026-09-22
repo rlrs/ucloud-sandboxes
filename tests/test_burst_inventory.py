@@ -1,5 +1,6 @@
 """Status polling must stay independent of cold-start and storage work."""
 
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
@@ -15,6 +16,23 @@ from ucloud_sandboxes.sandbox import SandboxRestoreBusyError
 
 
 class BurstInventoryTests(unittest.TestCase):
+    def test_lifecycle_response_clock_does_not_materialize_inventory(self):
+        with TemporaryDirectory() as directory:
+            fixture = direct_fixtures.DirectProvisionerTests()
+            provisioner, *_ = fixture.make(Path(directory).resolve())
+            service = DirectSandboxService(provisioner)
+            fixture.create(service, fixture.spec())
+            with patch.object(provisioner.registry, 'snapshot', side_effect=AssertionError('inventory scan')):
+                first = service.advance_lifecycle_activity_revision()
+                second = service.advance_lifecycle_activity_revision()
+            self.assertGreater(second, first)
+            # A durable create changes the same clock seen by full heartbeats.
+            provisioner.registry.plan(
+                spec=replace(fixture.spec(), id='another'), sandbox_generation=1,
+                operation_id='create:another', runtime_compatibility_sha256=provisioner.registry.snapshot().records[0].runtime_compatibility_sha256,
+            )
+            self.assertGreater(service.advance_lifecycle_activity_revision(), second)
+
     def test_filtered_inventory_avoids_full_scan_and_storage(self):
         with TemporaryDirectory() as directory:
             fixture = direct_fixtures.DirectProvisionerTests()

@@ -145,6 +145,74 @@ def seed_routing_state(store: RoutingStore, state: RoutingState) -> None:
 
 
 class RoutingStoreTests(unittest.TestCase):
+    def test_writer_handoff_rolls_back_failure_and_keeps_reads_independent(self):
+        with routing_store() as store, ThreadPoolExecutor(max_workers=2) as executor:
+            peer = RoutingStore(store.path)
+            route = store.upsert_sandbox(sandbox_route(
+                sandbox_id="agent", node_id="node", job_id="job", node_url="http://node", state="parked",
+            ))
+            entered = Event()
+            release = Event()
+
+            def failing_writer():
+                with store._transaction() as conn:
+                    conn.execute("UPDATE sandboxes SET state='waking' WHERE sandbox_id='agent'")
+                    entered.set()
+                    self.assertTrue(release.wait(timeout=5))
+                    raise RuntimeError("abort write")
+
+            first = executor.submit(failing_writer)
+            self.assertTrue(entered.wait(timeout=5))
+            try:
+                # Separate RoutingStore objects share coordination; ordinary
+                # reads still see the last committed WAL snapshot immediately.
+                self.assertIs(store._write_batches, peer._write_batches)
+                read = executor.submit(peer.get_sandbox_readonly, route.sandbox_id)
+                self.assertEqual(read.result(timeout=2).state, "parked")
+                write = executor.submit(peer.reserve_sandbox_wake, route, pending_id="wake:agent")
+            finally:
+                release.set()
+            with self.assertRaisesRegex(RuntimeError, "abort write"):
+                first.result(timeout=2)
+            self.assertEqual(write.result(timeout=2).state, "waking")
+
+    def test_wake_reservation_clears_demand_only_with_successful_fenced_transition(self):
+        with routing_store() as store:
+            route = store.upsert_sandbox(sandbox_route(
+                sandbox_id='agent', node_id='node', job_id='job', node_url='http://node', state='parked',
+            ))
+            store.upsert_pending('wake:agent', ResourceQuantity(vcpu=1))
+            stale = replace(route, generation=route.generation + 1)
+            self.assertIsNone(store.reserve_sandbox_wake(
+                stale, pending_id='wake:agent',
+            ))
+            self.assertIsNotNone(store.get_pending('wake:agent'))
+            with patch.object(store, '_transaction', wraps=store._transaction) as transactions:
+                stored = store.reserve_sandbox_wake(
+                    route, pending_id='wake:agent',
+                )
+            self.assertEqual(stored.state, 'waking')
+            self.assertIsNone(store.get_pending('wake:agent'))
+            self.assertEqual(transactions.call_count, 1)
+
+    def test_wake_reservation_preserves_owner_fences_and_bypasses_unrelated_process_lock(self):
+        with routing_store() as store:
+            route = store.upsert_sandbox(sandbox_route(
+                sandbox_id='agent', node_id='node', job_id='job', node_url='http://node', state='parked',
+                activity_epoch=7, storage_snapshot={'opaque': ['preserved']},
+            ))
+            for changes in ({'node_id': 'other'}, {'job_id': 'other'}, {'node_url': 'http://other'},
+                            {'create_operation_id': 'other'}, {'spec_hash': 'b' * 64}):
+                with self.subTest(changes=changes):
+                    self.assertIsNone(store.reserve_sandbox_wake(replace(route, **changes), pending_id='wake:agent'))
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                with store._lock, patch.object(store, '_write_sandbox', side_effect=AssertionError('payload rewrite')):
+                    stored = pool.submit(store.reserve_sandbox_wake, route, pending_id='wake:agent').result(timeout=2)
+            self.assertEqual(stored.activity_epoch, 7)
+            self.assertEqual(stored.storage_snapshot, route.storage_snapshot)
+            self.assertEqual(store.get_sandbox_readonly('agent'), stored)
+            self.assertIsNone(store.reserve_sandbox_wake(route, pending_id='wake:agent'))
+
     def test_scoped_epoch_history_preserves_completed_handoffs(self) -> None:
         with routing_store() as store:
             for name in ("one", "two"):
@@ -530,6 +598,31 @@ class RoutingStoreTests(unittest.TestCase):
                     replace(moved, generation=moved.generation + 1),
                     running,
                 )
+
+    def test_lifecycle_mutations_progress_during_inventory_projection(self) -> None:
+        with routing_store() as store, ThreadPoolExecutor(max_workers=1) as pool:
+            route = store.upsert_sandbox(sandbox_route(
+                sandbox_id="independent-wake", node_id="n", job_id="j",
+                node_url="http://node:8090", state="parked",
+            ))
+            # Inventory may retain its last committed snapshot while decoding
+            # it under the projection lock. Row mutations use the SQL fence.
+            with store._lock, store._connect() as reader:
+                reader.execute("BEGIN")
+                self.assertEqual(reader.execute("SELECT state FROM sandboxes").fetchone()[0], "parked")
+                updated = pool.submit(
+                    store.set_sandbox_state_if_current, route,
+                    expected_states={"parked"}, state="running",
+                ).result(timeout=2)
+                self.assertEqual(updated.state, "running")
+                program, changed = pool.submit(
+                    store.upsert_program_request_transition_with_change, updated,
+                    request_id="r", rollout_id="agent", state="acting",
+                ).result(timeout=2)
+                self.assertTrue(changed)
+                self.assertEqual(program.state, "acting")
+                self.assertEqual(reader.execute("SELECT state FROM sandboxes").fetchone()[0], "parked")
+            self.assertEqual(store.get_sandbox_readonly(route.sandbox_id).state, "running")
 
     def test_program_request_lifecycle_is_monotonic_durable_and_terminal(self) -> None:
         with TemporaryDirectory() as raw_dir:

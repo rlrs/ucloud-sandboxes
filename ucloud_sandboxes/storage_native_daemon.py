@@ -22,9 +22,11 @@ import tempfile
 import threading
 import time
 from typing import Any, Callable, Literal, Protocol
+import weakref
 
 from opentelemetry.trace import SpanKind
 
+from .durable_batch import DurableSqliteBatch
 from .storage_native import (
     StorageNativeDevice,
     StorageNativeDeviceOwner,
@@ -676,6 +678,51 @@ class StorageNativeJournal:
                 "CREATE INDEX IF NOT EXISTS retired_devices_volume "
                 "ON retired_devices(volume_id)"
             )
+        self._connection_guard = threading.Lock()
+        self._idle_connections: list[sqlite3.Connection] = []
+        self._connection_pid = os.getpid()
+        info = self.path.stat()
+        self._connection_identity = (info.st_dev, info.st_ino)
+        self._write_batches = DurableSqliteBatch(lambda: self._connect(), self._check_connection_identity)
+        weakref.finalize(self, self._close_idle_connections, self._idle_connections)
+
+    @staticmethod
+    def _close_idle_connections(connections: list[sqlite3.Connection]) -> None:
+        while connections:
+            connections.pop().close()
+
+    def _check_connection_identity(self) -> None:
+        if os.getpid() != self._connection_pid:
+            raise StorageNativeNodeError("storage journal must be reopened after fork")
+        info = self.path.stat()
+        if (info.st_dev, info.st_ino) != self._connection_identity:
+            raise StorageNativeNodeError("storage journal file was replaced")
+
+    @contextmanager
+    def _connection(self):
+        self._check_connection_identity()
+        with self._connection_guard:
+            connection = self._idle_connections.pop() if self._idle_connections else None
+        if connection is None:
+            connection = self._connect()
+        try:
+            self._check_connection_identity()
+            yield connection
+            # Monitoring reads may leave a snapshot open. A reused connection
+            # must not retain it or a failed mutation's unfinished transaction.
+            if connection.in_transaction:
+                connection.rollback()
+            self._check_connection_identity()
+        except BaseException:
+            connection.close()
+            raise
+        else:
+            with self._connection_guard:
+                # Retain idle connections, without limiting active operations.
+                if len(self._idle_connections) < 16:
+                    self._idle_connections.append(connection)
+                    return
+            connection.close()
 
     @staticmethod
     def _require_schema(
@@ -1028,7 +1075,7 @@ class StorageNativeJournal:
             connection.commit()
 
     def load(self, volume_id: str) -> StorageVolumeRecord | None:
-        with closing(self._connect()) as connection:
+        with self._connection() as connection:
             row = connection.execute(
                 "SELECT volume_id, state, virtual_size, accounting_id, record_json "
                 "FROM volumes WHERE volume_id = ?",
@@ -1039,7 +1086,7 @@ class StorageNativeJournal:
         return self._decode_record_row(row)
 
     def list(self) -> tuple[StorageVolumeRecord, ...]:
-        with closing(self._connect()) as connection:
+        with self._connection() as connection:
             rows = connection.execute(
                 "SELECT volume_id, state, virtual_size, accounting_id, record_json "
                 "FROM volumes ORDER BY volume_id"
@@ -1049,7 +1096,7 @@ class StorageNativeJournal:
     def metrics_inventory(self) -> tuple[tuple[StorageVolumeRecord, ...], int]:
         # Keep the historical volume_count metric, but do not read and decode
         # deleted checkpoint records on every heartbeat. Use one read snapshot.
-        with closing(self._connect()) as connection:
+        with self._connection() as connection:
             connection.execute("BEGIN")
             count = connection.execute("SELECT COUNT(*) FROM volumes").fetchone()[0]
             rows = connection.execute(
@@ -1059,7 +1106,7 @@ class StorageNativeJournal:
         return tuple(self._decode_record_row(row) for row in rows), count
 
     def is_failed_snapshot_mount(self, record: StorageVolumeRecord) -> bool:
-        with closing(self._connect()) as connection:
+        with self._connection() as connection:
             row = connection.execute(
                 "SELECT kind, status FROM operations WHERE operation_id = ? AND volume_id = ?",
                 (record.operation_id, record.volume_id),
@@ -1069,7 +1116,7 @@ class StorageNativeJournal:
     def list_live_page(
         self, after_volume_id: str, *, limit: int = 128
     ) -> tuple[StorageVolumeRecord, ...]:
-        with closing(self._connect()) as connection:
+        with self._connection() as connection:
             rows = connection.execute(
                 "SELECT volume_id, state, virtual_size, accounting_id, record_json "
                 "FROM volumes WHERE state != 'deleted' AND volume_id > ? "
@@ -1294,13 +1341,13 @@ class StorageNativeJournal:
             )
 
     def retired_devices(self) -> list[tuple[str, int, str, int]]:
-        with closing(self._connect()) as connection:
+        with self._connection() as connection:
             return connection.execute(
                 "SELECT owner_id, device_id, volume_id, virtual_size FROM retired_devices"
             ).fetchall()
 
     def has_retired_devices(self, volume_id: str) -> bool:
-        with closing(self._connect()) as connection:
+        with self._connection() as connection:
             return connection.execute(
                 "SELECT 1 FROM retired_devices WHERE volume_id = ? LIMIT 1", (volume_id,)
             ).fetchone() is not None
@@ -1313,25 +1360,15 @@ class StorageNativeJournal:
 
     @contextmanager
     def _write_connection(self):
-        # SQLite permits one writer. Coordinate this process's short journal
-        # transactions without SQLite's busy-handler retry/backoff competing
-        # with other local requests. Keep independent connections and SQLite's
-        # own cross-process fencing; reads do not acquire this guard.
-        with closing(self._connect()) as connection:
-            with self._writer_guard:
-                try:
-                    yield connection
-                finally:
-                    # Replay returns and failed fences may leave BEGIN open.
-                    # Roll back before handing the writer slot to another call.
-                    if connection.in_transaction:
-                        connection.rollback()
+        with self._write_batches.transaction() as connection:
+            yield connection
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(
             self.path,
             timeout=30,
             isolation_level=None,
+            check_same_thread=False,
         )
         connection.execute("PRAGMA journal_mode = WAL")
         connection.execute("PRAGMA synchronous = FULL")
@@ -1371,6 +1408,10 @@ class _StorageOperationGate:
                 self._local.depth = 0
                 self._active -= 1
                 self._condition.notify_all()
+
+    def busy(self) -> bool:
+        with self._condition:
+            return bool(self._active or self._waiting or self._maintenance)
 
     @contextmanager
     def maintenance(self):
@@ -1454,6 +1495,7 @@ class StorageNativeNodeService:
             max_layers=config.local_compact_after_layers,
             max_delta_bytes=config.local_compact_after_bytes,
             timeout_seconds=config.command_timeout_seconds,
+            foreground=self._operations.busy,
         ) if callable(getattr(backend, "export_compacted_image", None)) else None
 
     def metrics(self) -> dict[str, Any]:
@@ -1496,6 +1538,7 @@ class StorageNativeNodeService:
                 "device_pool_discards": self._pool_discards,
             }
         return {
+            **self.journal._write_batches.metrics(),
             "retired_devices": len(retired),
             "retired_reserved_bytes": retired_bytes,
             "cache_bytes": cache_bytes,
@@ -2509,6 +2552,8 @@ class StorageNativeNodeService:
         }
 
     def _complete_delete(self, record: StorageVolumeRecord) -> StorageVolumeRecord:
+        if self._local_compactor is not None:
+            self._local_compactor.cancel(record.volume_id)
         self._best_effort_release(record, require_backend=True)
         released = replace(
             record,

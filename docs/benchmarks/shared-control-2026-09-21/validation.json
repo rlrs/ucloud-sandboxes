@@ -1,0 +1,15 @@
+{
+  "postgres_version": "PostgreSQL 17.11 (Homebrew) on aarch64-apple-darwin25.6.0, compiled by Apple clang version 21.0.0 (clang-2100.1.1.101), 64-bit",
+  "fsync": "on",
+  "synchronous_commit": "on",
+  "full_page_writes": "on",
+  "database_crash_recovery": "passed after pg_ctl immediate stop and restart",
+  "server_tests": {
+    "run": 1089,
+    "skipped": 6,
+    "passed": true
+  },
+  "platform": "macOS-26.5.1-arm64-arm-64bit",
+  "production_changed": false,
+  "qualification_scope": "result/wake coordination with simulated workers; not complete production backend"
+}

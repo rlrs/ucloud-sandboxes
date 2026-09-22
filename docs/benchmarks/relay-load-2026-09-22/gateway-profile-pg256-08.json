@@ -1,0 +1,101 @@
+[
+  {
+    "window_seconds": 30,
+    "completed_calls": {
+      "_reserve_local_wake_batch": {
+        "calls": 172,
+        "wall_seconds": 18.39481315249577,
+        "thread_cpu_seconds": 1.6688474770000006
+      },
+      "_proxy_request": {
+        "calls": 2671,
+        "wall_seconds": 642.8011329374276,
+        "thread_cpu_seconds": 2.583620906999999
+      },
+      "_prepare_program_lifecycle": {
+        "calls": 1778,
+        "wall_seconds": 115.23985717329197,
+        "thread_cpu_seconds": 1.3316050529999999
+      },
+      "_flush_program_wake_shadow": {
+        "calls": 498,
+        "wall_seconds": 12.315653331344947,
+        "thread_cpu_seconds": 0.8316464769999997
+      },
+      "_commit_successful_wake": {
+        "calls": 501,
+        "wall_seconds": 81.32658382877707,
+        "thread_cpu_seconds": 1.137946381000001
+      },
+      "_commit_successful_park": {
+        "calls": 386,
+        "wall_seconds": 33.74863274558447,
+        "thread_cpu_seconds": 0.8747967649999999
+      },
+      "_record_completed_program_lifecycle": {
+        "calls": 891,
+        "wall_seconds": 118.14838739810511,
+        "thread_cpu_seconds": 1.4875801320000017
+      },
+      "_heartbeat_for_route": {
+        "calls": 5658,
+        "wall_seconds": 18.937327701365575,
+        "thread_cpu_seconds": 4.430296320000012
+      },
+      "append": {
+        "calls": 3292,
+        "wall_seconds": 17.191760631510988,
+        "thread_cpu_seconds": 0.9560454230000014
+      },
+      "transaction:reserve_sandbox_wakes": {
+        "calls": 173,
+        "wait_seconds": 12.977036976953968,
+        "held_seconds": 0.1813078687991947,
+        "max_wait": 0.46776592289097607,
+        "max_held": 0.00816292711533606
+      },
+      "transaction:upsert_program_request_transition_with_change": {
+        "calls": 2265,
+        "wait_seconds": 282.8913863452617,
+        "held_seconds": 3.327624569879845,
+        "max_wait": 0.5233548290561885,
+        "max_held": 0.02856457093730569
+      },
+      "transaction:set_sandbox_state_if_current": {
+        "calls": 887,
+        "wait_seconds": 105.66334715485573,
+        "held_seconds": 1.6904761851765215,
+        "max_wait": 0.5209748621564358,
+        "max_held": 0.026966296834871173
+      },
+      "transaction:upsert_exec": {
+        "calls": 396,
+        "wait_seconds": 21.925008557271212,
+        "held_seconds": 0.3555065549444407,
+        "max_wait": 0.4407354900613427,
+        "max_held": 0.010344834998250008
+      },
+      "transaction:reconcile_sandboxes_for_node": {
+        "calls": 7,
+        "wait_seconds": 0.3161003568675369,
+        "held_seconds": 0.18719849782064557,
+        "max_wait": 0.10865139402449131,
+        "max_held": 0.058453605975955725
+      },
+      "transaction:_active_image_warmups_unlocked": {
+        "calls": 5,
+        "wait_seconds": 0.11315069510601461,
+        "held_seconds": 0.006750263040885329,
+        "max_wait": 0.07792358193546534,
+        "max_held": 0.0049761098343878984
+      },
+      "transaction:mark_image_warmup_node": {
+        "calls": 16,
+        "wait_seconds": 0.10453933430835605,
+        "held_seconds": 0.02177037624642253,
+        "max_wait": 0.03520730114541948,
+        "max_held": 0.00901776016689837
+      }
+    }
+  }
+]

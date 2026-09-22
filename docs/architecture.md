@@ -3,6 +3,12 @@
 The crash-safe generation, operation-id, inventory, and drain invariants are
 specified in [Distributed sandbox state protocol](distributed-state-protocol.md).
 
+The proposed [shared control-plane design](shared-control-plane-design.md)
+describes PostgreSQL-backed scheduling and overload recovery. It is a future
+design, not the currently deployed architecture described below.
+The [PostgreSQL relay backend](postgres-relay.md) is now selectable separately;
+it replaces relay state only and does not create a second sandbox owner authority.
+
 ## Runtime ownership
 
 The sandbox-node runtime is one privileged direct-runsc Warden per node.

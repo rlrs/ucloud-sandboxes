@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import replace
 from pathlib import Path
 from threading import Event, Lock, RLock, Thread, local
@@ -10,6 +10,7 @@ from typing import BinaryIO, Iterator
 from uuid import uuid4
 
 from .direct_service import DirectSandboxService
+from .warm_park import WarmParkPolicy
 from .managed_process import (
     ManagedProcessLogChunk,
     ManagedProcessRecord,
@@ -264,6 +265,9 @@ class DirectNodeRuntime:
         service: DirectSandboxService,
     ) -> None:
         self.service = service
+        self._warm_parks = WarmParkPolicy(
+            demand_bytes=getattr(service, "warm_park_demand_bytes", lambda: 0),
+        )
         self.lifecycle = DirectLifecycle(self)
         self.runtime = DirectExecRuntime(self)
         self._exec_leases: dict[str, object] = {}
@@ -306,18 +310,23 @@ class DirectNodeRuntime:
     def _idle_parking_loop(self) -> None:
         idle_seconds = self.service.idle_park_seconds
         interval = min(1.0, max(0.05, idle_seconds / 4))
+        registry_revision = None
+        candidates = ()
         while not self._background_stop.wait(interval):
             now = time.monotonic()
-            for registration in self.service.provisioner.registry.list():
+            registry = self.service.provisioner.registry
+            if registry.activity_revision() != registry_revision:
+                snapshot = registry.snapshot()
                 # Managed agents own their park points through the SDK/relay
                 # model-wait protocol. Local request inactivity is not evidence
                 # that their primary process is idle.
-                if (
-                    registration.phase != "owned"
-                    or not registration.spec.parkable
-                    or registration.spec.managed_process
-                ):
-                    continue
+                candidates = tuple(
+                    registration for registration in snapshot.records
+                    if registration.phase == 'owned' and registration.spec.parkable
+                    and not registration.spec.managed_process
+                )
+                registry_revision = snapshot.activity_revision
+            for registration in candidates:
                 if (
                     self.service.idle_for_seconds(
                         registration.sandbox_id,
@@ -411,27 +420,51 @@ class DirectNodeRuntime:
         *,
         operation_id: str,
         background: bool = False,
+        relay_request_id: str | None = None,
+        generation: int | None = None,
     ) -> tuple[SandboxRecord, int]:
         if not isinstance(operation_id, str) or not OPERATION_ID_RE.fullmatch(
             operation_id
         ):
             raise ValueError("park operation id is invalid")
+        if relay_request_id is not None and generation is None:
+            raise ValueError("relay park requires generation")
+        if relay_request_id is not None and self.service.provisioner.registry.relay_wake_fence(
+            sandbox_id, generation, relay_request_id,
+        ):
+            raise SandboxConflictError("relay park was superseded by durable wake")
+        key = (sandbox_id, generation, relay_request_id)
+        memory_bytes = 0
+        if relay_request_id is not None:
+            registration = self.service.provisioner.registry.get(sandbox_id)
+            if registration is not None:
+                memory_bytes = (registration.spec.memory_mb or 0) * 1024**2
+        delay = (
+            self._warm_parks.defer(key, memory_bytes=memory_bytes)
+            if relay_request_id is not None else nullcontext(None)
+        )
         try:
-            # Join a concurrent park/wake and then re-evaluate the stable
-            # runtime state. This makes exact replays and crossed lifecycle
-            # calls idempotent without weakening the attached-activity fence.
-            with self.lifecycle.exclusive(
-                sandbox_id,
-                join_transition=True,
-                transition_timeout_seconds=60.0,
-            ):
-                record = self.service.park(
+            with delay as cancelled:
+                # Join a concurrent park/wake and then re-evaluate the stable
+                # runtime state. This makes exact replays and crossed lifecycle
+                # calls idempotent without weakening the attached-activity fence.
+                with self.lifecycle.exclusive(
                     sandbox_id,
-                    operation_id=operation_id,
-                    background=background,
-                )
-                activity_revision = self.service.advance_lifecycle_activity_revision()
-                return record, activity_revision
+                    join_transition=True,
+                    transition_timeout_seconds=60.0,
+                ):
+                    if relay_request_id is not None:
+                        if cancelled is not None and cancelled.is_set():
+                            raise SandboxConflictError("relay park was superseded by wake")
+                        if self.service.provisioner.registry.relay_wake_fence(sandbox_id, generation, relay_request_id):
+                            raise SandboxConflictError("relay park was superseded by durable wake")
+                    record = self.service.park(
+                        sandbox_id,
+                        operation_id=operation_id,
+                        background=background,
+                    )
+                    activity_revision = self.service.advance_lifecycle_activity_revision()
+                    return record, activity_revision
         except SandboxBusyError as exc:
             raise SandboxBusyError(
                 "sandbox has active exec/file activity that cannot survive park: "
@@ -459,6 +492,7 @@ class DirectNodeRuntime:
         *,
         generation: int,
         operation_id: str,
+        relay_request_id: str | None = None,
     ) -> tuple[SandboxRecord, int]:
         if generation <= 0:
             raise ValueError("wake generation must be positive")
@@ -466,6 +500,8 @@ class DirectNodeRuntime:
             operation_id
         ):
             raise ValueError("wake operation id is invalid")
+        if relay_request_id is not None:
+            self._warm_parks.wake((sandbox_id, generation, relay_request_id))
         # Waking an already-running sandbox is a successful no-op. Attached
         # activity is proof that the current runtime is live, not a reason to
         # reject that idempotent result. We still take the exclusive transition
@@ -476,6 +512,10 @@ class DirectNodeRuntime:
             join_transition=True,
             transition_timeout_seconds=60.0,
         ):
+            if relay_request_id is not None:
+                self.service.provisioner.registry.relay_wake_fence(
+                    sandbox_id, generation, relay_request_id, record=True,
+                )
             # Local wake takes precedence over background publication. The
             # storage journal supersedes/fences the upload while retaining the
             # sealed checkpoint; an uploader thread is not an admission limit.

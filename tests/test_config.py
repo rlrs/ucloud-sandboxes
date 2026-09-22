@@ -322,3 +322,17 @@ class ConfigTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RelayPostgresConfigTests(unittest.TestCase):
+    def test_optional_backend_is_explicit_private_file_and_strict(self):
+        raw=DeploymentConfig.default().to_dict()
+        self.assertNotIn('relay_postgres',raw)
+        raw['relay_postgres']={'dsn_file':'/etc/ucloud-sandboxes/postgres-dsn'}
+        config=DeploymentConfig.from_dict(raw)
+        self.assertEqual(config.relay_postgres.max_connections,16)
+        self.assertEqual(DeploymentConfig.from_dict(config.to_dict()),config)
+        for invalid in ({'dsn_file':'relative'}, {'dsn_file':'/private/dsn','dsn':'password'},
+                        {'dsn_file':'/private/dsn','schema':'public'}, {'dsn_file':'/private/dsn','max_connections':True}):
+            with self.subTest(invalid=invalid),self.assertRaises(ValueError):
+                DeploymentConfig.from_dict({**raw,'relay_postgres':invalid})

@@ -1,0 +1,66 @@
+{
+  "python": "3.13.12",
+  "system": "Linux",
+  "runs": [
+    {
+      "grouped": false,
+      "simulated_commit_delay_seconds": 0,
+      "count": 512,
+      "seconds": 1.5916139481123537,
+      "commits": 512,
+      "p95_seconds": 0.10087595204822719,
+      "metrics": {}
+    },
+    {
+      "grouped": true,
+      "simulated_commit_delay_seconds": 0,
+      "count": 512,
+      "seconds": 0.08976240106858313,
+      "commits": 18,
+      "p95_seconds": 0.00933357491157949,
+      "metrics": {
+        "journal_batch_queue_wait_ms": 664.508651709184,
+        "journal_batch_transaction_ms": 8.039231644943357,
+        "journal_batch_commit_ms": 54.599674651399255,
+        "journal_batch_failed_batches": 0.0,
+        "journal_batch_commits": 18,
+        "journal_batch_operations": 512
+      }
+    },
+    {
+      "grouped": false,
+      "simulated_commit_delay_seconds": 0.005,
+      "count": 512,
+      "seconds": 4.232882682001218,
+      "commits": 512,
+      "p95_seconds": 0.27249141805805266,
+      "metrics": {}
+    },
+    {
+      "grouped": true,
+      "simulated_commit_delay_seconds": 0.005,
+      "count": 512,
+      "seconds": 0.2545372499153018,
+      "commits": 22,
+      "p95_seconds": 0.02965945308096707,
+      "metrics": {
+        "journal_batch_queue_wait_ms": 2299.7020401526242,
+        "journal_batch_transaction_ms": 9.989728685468435,
+        "journal_batch_commit_ms": 178.201618604362,
+        "journal_batch_failed_batches": 0.0,
+        "journal_batch_commits": 22,
+        "journal_batch_operations": 512
+      }
+    }
+  ],
+  "crash": {
+    "before": {
+      "surviving_rows": 0,
+      "integrity": "ok"
+    },
+    "after": {
+      "surviving_rows": 1,
+      "integrity": "ok"
+    }
+  }
+}

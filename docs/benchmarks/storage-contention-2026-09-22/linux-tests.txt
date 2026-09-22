@@ -1,0 +1,5 @@
+Linux Python 3.13.12, ucloud-pg-qualification-tests container.
+
+Ran 67 tests in 14.740s
+
+OK

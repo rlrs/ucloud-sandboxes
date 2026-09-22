@@ -1,0 +1,39 @@
+{
+  "status": "passed",
+  "kernel": "7.0.0-30-generic",
+  "backend_sha256": "75a20bd1ab96e2dff63ff877d0abe63383092e34c8fabdba927128eae062a7f7",
+  "saved_export_bytes": 67239936,
+  "results": {
+    "baseline": {
+      "full_export_bytes": 273473536,
+      "suffix_export_bytes": 2158592,
+      "trim_window_seconds": [],
+      "remount_contents_verified": true
+    },
+    "trim": {
+      "full_export_bytes": 206233600,
+      "suffix_export_bytes": 2158592,
+      "trim_window_seconds": [
+        0.008658826999635494,
+        0.00809729899992817,
+        0.008082757000011043,
+        0.008894373000657652,
+        0.008728421999876446,
+        0.00788817300053779,
+        0.008583122000345611,
+        0.008791387999735889,
+        0.0037167729997236165,
+        0.004130206999434449,
+        0.003575740000087535,
+        0.009144050000031712,
+        0.008525555999767676,
+        0.009073313000044436,
+        0.007703705000494665,
+        0.007961494000483071
+      ],
+      "remount_contents_verified": true
+    }
+  },
+  "scope": "Isolated XFS deletion/zero/hole/restack qualification; not concurrent load.",
+  "artifact_root": "/var/tmp/xfs-trim-bdi9bp31"
+}

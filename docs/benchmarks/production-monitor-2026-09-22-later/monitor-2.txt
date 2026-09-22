@@ -1,0 +1,10 @@
+UTC 2026-09-22T08:31:24.990626+00:00
+fleet latency_seconds 0.112 {"count": 58, "states": {"running": 41, "waking": 4, "parked": 13}}
+relay latency_seconds 0.04 {"backend": "postgres", "inflight": 10, "delivery_pending": 13, "oldest_delivery_pending_seconds": 7.405787944793701, "completed_retained": 14344, "lifecycle": [{"action": "park", "n": 7, "max_attempts": 1}, {"action": "wake", "n": 13, "max_attempts": 1}], "database_pool": {"connections_num": 37, "connections_ms": 985, "requests_num": 1340080, "usage_ms": 13989239, "requests_queued": 78602, "requests_wait_ms": 3510966, "requests_errors": 6, "pool_min": 1, "pool_max": 16, "pool_size": 16, "pool_available": 16, "requests_waiting": 0}, "reserved_storage_bytes": 1310094887}
+METRIC_COUNTS_10M {"program_wake_actual": 1437, "program_state_transition": 7331, "program_wake_shadow_plan": 1434, "node_heartbeat": 196, "autoscaler_cycle": 109, "sandbox_scheduled": 5}
+RECENT_ERRORS {} {}
+PG_ACTIVITY [('active', None, None, 1), ('idle', 'Client', 'ClientRead', 17)]
+PG_DB [(18, 1342450, 543, 526, 102853943, 0, 0)]
+PG_LOCK_WAITS 0
+PG_SIZE_BYTES 78231219
+WAKE_RELEASE_LAST5M (724, 5.4711480140686035, 12.193232274055488, 22.309195041656494)

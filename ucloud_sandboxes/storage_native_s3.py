@@ -541,6 +541,8 @@ class S3SnapshotPublisher:
             ),
         )
         should_compact = compact_start is not None
+        if should_compact:
+            compact_start = min(compact_start, len(existing_layers))
         retained_layers = existing_layers[:compact_start] if should_compact else ()
         uploaded_bytes = 0
 

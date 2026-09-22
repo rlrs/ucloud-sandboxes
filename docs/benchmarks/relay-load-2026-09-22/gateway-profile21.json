@@ -1,0 +1,132 @@
+{
+  "window_seconds": 50,
+  "completed_calls": {
+    "_reserve_local_wake_batch": {
+      "calls": 193,
+      "wall_seconds": 38.8619316292461,
+      "thread_cpu_seconds": 1.583685154,
+      "max_seconds": 1.196118134073913
+    },
+    "_proxy_request": {
+      "calls": 5381,
+      "wall_seconds": 937.0128964716569,
+      "thread_cpu_seconds": 5.1519867770000065,
+      "max_seconds": 1.4372600831557065
+    },
+    "_prepare_program_lifecycle": {
+      "calls": 3235,
+      "wall_seconds": 375.2714325450361,
+      "thread_cpu_seconds": 1.312803564000001,
+      "max_seconds": 1.0432947929948568
+    },
+    "_flush_program_wake_shadow": {
+      "calls": 823,
+      "wall_seconds": 41.34909931081347,
+      "thread_cpu_seconds": 1.3014113689999995,
+      "max_seconds": 0.23458787915296853
+    },
+    "_commit_successful_wake": {
+      "calls": 822,
+      "wall_seconds": 272.62684132694267,
+      "thread_cpu_seconds": 1.2000456620000006,
+      "max_seconds": 1.0662862351164222
+    },
+    "_commit_successful_park": {
+      "calls": 758,
+      "wall_seconds": 137.2402214712929,
+      "thread_cpu_seconds": 1.1011542220000001,
+      "max_seconds": 1.015809235163033
+    },
+    "_record_completed_program_lifecycle": {
+      "calls": 1572,
+      "wall_seconds": 417.96888898219913,
+      "thread_cpu_seconds": 1.5708903810000021,
+      "max_seconds": 1.1516154240816832
+    },
+    "_heartbeat_for_route": {
+      "calls": 11217,
+      "wall_seconds": 86.93424211302772,
+      "thread_cpu_seconds": 7.947639904999992,
+      "max_seconds": 0.10188359906896949
+    },
+    "_record_program_request_transition": {
+      "calls": 3988,
+      "wall_seconds": 1025.8600947877858,
+      "thread_cpu_seconds": 3.318666235000012,
+      "max_seconds": 1.0989119661971927
+    },
+    "_route_worker_is_fresh": {
+      "calls": 5402,
+      "wall_seconds": 39.42687170091085,
+      "thread_cpu_seconds": 3.8103642969999987,
+      "max_seconds": 0.10190742509439588
+    },
+    "_record_successful_sandbox_proxy_state": {
+      "calls": 3224,
+      "wall_seconds": 262.2559622293338,
+      "thread_cpu_seconds": 0.2965124549999994,
+      "max_seconds": 1.0019713719375432
+    },
+    "_handle_lifecycle_proxy_response": {
+      "calls": 1572,
+      "wall_seconds": 826.2784608383663,
+      "thread_cpu_seconds": 3.881549930000012,
+      "max_seconds": 1.9034310781862587
+    },
+    "append": {
+      "calls": 5647,
+      "wall_seconds": 53.92434612917714,
+      "thread_cpu_seconds": 1.5912582929999963,
+      "max_seconds": 0.22595577710308135
+    },
+    "transaction:set_sandbox_state_if_current": {
+      "calls": 1580,
+      "wait_seconds": 384.8118594302796,
+      "held_seconds": 3.966001463821158,
+      "max_wait": 1.0061530948150903,
+      "max_held": 0.06769626797176898
+    },
+    "transaction:upsert_program_request_transition_with_change": {
+      "calls": 3988,
+      "wait_seconds": 979.6307305886876,
+      "held_seconds": 9.182966124266386,
+      "max_wait": 1.063793808920309,
+      "max_held": 0.05436345795169473
+    },
+    "transaction:upsert_exec": {
+      "calls": 824,
+      "wait_seconds": 259.84593372559175,
+      "held_seconds": 0.5562961006071419,
+      "max_wait": 0.9999224431812763,
+      "max_held": 0.04040860803797841
+    },
+    "transaction:reserve_sandbox_wakes": {
+      "calls": 193,
+      "wait_seconds": 25.24930385244079,
+      "held_seconds": 0.5885318564251065,
+      "max_wait": 0.9778033788315952,
+      "max_held": 0.03644682792946696
+    },
+    "transaction:reconcile_sandboxes_for_node": {
+      "calls": 14,
+      "wait_seconds": 3.8531504657585174,
+      "held_seconds": 0.700883154058829,
+      "max_wait": 0.8112991431262344,
+      "max_held": 0.21076554316096008
+    },
+    "transaction:_active_image_warmups_unlocked": {
+      "calls": 14,
+      "wait_seconds": 2.4603214878588915,
+      "held_seconds": 0.010293864645063877,
+      "max_wait": 0.5871016629971564,
+      "max_held": 0.008045313879847527
+    },
+    "transaction:mark_image_warmup_node": {
+      "calls": 84,
+      "wait_seconds": 10.434052539989352,
+      "held_seconds": 0.05093750637024641,
+      "max_wait": 0.8402090750169009,
+      "max_held": 0.008455504896119237
+    }
+  }
+}

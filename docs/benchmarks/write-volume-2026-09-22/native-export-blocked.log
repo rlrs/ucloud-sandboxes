@@ -1,0 +1,44 @@
+Traceback (most recent call last):
+  File "/src/runtime/storage_native/benchmark_tiered_compaction.py", line 60, in run
+    result = consume_export_stream(lambda sock: qualifier.client.export_compacted_image(
+        source_image_config=config, global_config=root / 'global.json',
+        stream_socket_path=sock), stream_socket_root=root, chunk_bytes=MIB,
+        timeout_seconds=120, consume=stream.write)
+  File "/src/ucloud_sandboxes/storage_native_registry.py", line 805, in consume_export_stream
+    raise failure[0]
+  File "/src/ucloud_sandboxes/storage_native_registry.py", line 734, in export
+    result.append(export_layer(socket_path))
+                  ~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/src/runtime/storage_native/benchmark_tiered_compaction.py", line 60, in <lambda>
+    result = consume_export_stream(lambda sock: qualifier.client.export_compacted_image(
+                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        source_image_config=config, global_config=root / 'global.json',
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        stream_socket_path=sock), stream_socket_root=root, chunk_bytes=MIB,
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/src/ucloud_sandboxes/storage_native.py", line 291, in export_compacted_image
+    response = self._call(
+        {
+    ...<5 lines>...
+        **({"progress": progress} if progress is not None else {}),
+    )
+  File "/src/ucloud_sandboxes/storage_native.py", line 388, in _call
+    raise StorageNativeError(
+        str(response.get("message") or "ublk daemon request failed")
+    )
+ucloud_sandboxes.storage_native.StorageNativeError: open overlaybd image for compacted export /tmp/tiered-8g5aow1b/previous-1.json: failed to open lower layer 0: channel closed
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/src/runtime/storage_native/benchmark_tiered_compaction.py", line 93, in <module>
+    print(json.dumps(run(args.backend_binary.resolve(), Path(directory), args.cycles), indent=2))
+                     ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/src/runtime/storage_native/benchmark_tiered_compaction.py", line 80, in run
+    raise RuntimeError(f'{exc}\nNative daemon log:\n{tail}') from exc
+RuntimeError: open overlaybd image for compacted export /tmp/tiered-8g5aow1b/previous-1.json: failed to open lower layer 0: channel closed
+Native daemon log:
+[2m2026-09-22T08:59:19.744245Z[0m [32m INFO[0m [2muvm_ublk_daemon::metrics_server[0m[2m:[0m ublk daemon metrics server disabled
+[2m2026-09-22T08:59:19.744514Z[0m [32m INFO[0m [2muvm_ublk_daemon::server[0m[2m:[0m ublk daemon listening [3mpath[0m[2m=[0m/tmp/tiered-8g5aow1b/ublk.sock [3mresize_global_config[0m[2m=[0m/tmp/tiered-8g5aow1b/resize-global.json
+ready
+

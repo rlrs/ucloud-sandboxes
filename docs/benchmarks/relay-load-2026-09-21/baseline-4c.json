@@ -1,0 +1,273 @@
+{
+  "run_id": "relay-load-2a950a8d72aa",
+  "started_at": "2026-09-21T18:39:58.000234+00:00",
+  "configuration": {
+    "gateway_url": "https://app-sandboxes.cloud.sdu.dk",
+    "relay_url": "https://app-sandboxes-relay-v2.cloud.sdu.dk",
+    "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+    "sandboxes": 4,
+    "cycles": 3,
+    "resident_mb": 128,
+    "dirty_mb": 16,
+    "files": 64,
+    "file_kib": 64,
+    "payload_kib": 32,
+    "cpu_ms": 100,
+    "model_seconds": 10,
+    "model_jitter": 5,
+    "cpus": 1,
+    "memory_mb": 1024,
+    "disk_mb": 4096,
+    "create_concurrency": 32,
+    "warmup_cycles": 1,
+    "deadline_seconds": 300.0,
+    "wake_p95_seconds": 1,
+    "seed": 1
+  },
+  "cycles": [
+    {
+      "sandbox_id": "relay-load-2a950a8d72aa-0000",
+      "cycle": 0,
+      "request_id": "279977ecf97b4baebf120c0a3d9892e9",
+      "model_seconds": 10.671821220562006,
+      "commit_and_wake_seconds": 0.7791415420069825,
+      "usable_exec_seconds": 1.1335937079857104,
+      "pid": 19,
+      "delivery_count": 1
+    },
+    {
+      "sandbox_id": "relay-load-2a950a8d72aa-0003",
+      "cycle": 0,
+      "request_id": "c3b8d517f8cd40c09f268f82b37d7ed8",
+      "model_seconds": 11.180240448687172,
+      "commit_and_wake_seconds": 0.7873669170076028,
+      "usable_exec_seconds": 1.1845501670031808,
+      "pid": 19,
+      "delivery_count": 1
+    },
+    {
+      "sandbox_id": "relay-load-2a950a8d72aa-0002",
+      "cycle": 0,
+      "request_id": "a19e66cefb314382b0f2d385cad3e175",
+      "model_seconds": 11.189823135459458,
+      "commit_and_wake_seconds": 0.9923571250110399,
+      "usable_exec_seconds": 1.4829912910063285,
+      "pid": 20,
+      "delivery_count": 1
+    },
+    {
+      "sandbox_id": "relay-load-2a950a8d72aa-0001",
+      "cycle": 0,
+      "request_id": "3aca91d9945642278aca92259a898816",
+      "model_seconds": 14.780171359446246,
+      "commit_and_wake_seconds": 0.16932962500141002,
+      "usable_exec_seconds": 0.5011348330008332,
+      "pid": 18,
+      "delivery_count": 1
+    },
+    {
+      "sandbox_id": "relay-load-2a950a8d72aa-0003",
+      "cycle": 1,
+      "request_id": "95bf2955174943a190ae31a736b3f36a",
+      "model_seconds": 10.51583017115358,
+      "commit_and_wake_seconds": 0.6808233330084477,
+      "usable_exec_seconds": 1.1272788750065956,
+      "pid": 19,
+      "delivery_count": 1
+    },
+    {
+      "sandbox_id": "relay-load-2a950a8d72aa-0002",
+      "cycle": 1,
+      "request_id": "cfc94b3032694850acb2d4e85a237355",
+      "model_seconds": 12.72114612647976,
+      "commit_and_wake_seconds": 0.7334297919878736,
+      "usable_exec_seconds": 1.1007641670003068,
+      "pid": 20,
+      "delivery_count": 1
+    },
+    {
+      "sandbox_id": "relay-load-2a950a8d72aa-0000",
+      "cycle": 1,
+      "request_id": "5d4869ff822c47138c49bc93f75280d9",
+      "model_seconds": 14.237168684686164,
+      "commit_and_wake_seconds": 0.5229661659977864,
+      "usable_exec_seconds": 0.9518559999996796,
+      "pid": 19,
+      "delivery_count": 1
+    },
+    {
+      "sandbox_id": "relay-load-2a950a8d72aa-0001",
+      "cycle": 1,
+      "request_id": "51a51b9f6b8b42f29732fa13a6508e32",
+      "model_seconds": 14.739137435296747,
+      "commit_and_wake_seconds": 0.8031546669953968,
+      "usable_exec_seconds": 1.1719581669894978,
+      "pid": 18,
+      "delivery_count": 1
+    },
+    {
+      "sandbox_id": "relay-load-2a950a8d72aa-0003",
+      "cycle": 2,
+      "request_id": "3cb14a168b2e45a1810a4ea07419ae75",
+      "model_seconds": 11.980291213053405,
+      "commit_and_wake_seconds": 0.9431722500012256,
+      "usable_exec_seconds": 1.394249208009569,
+      "pid": 19,
+      "delivery_count": 1
+    },
+    {
+      "sandbox_id": "relay-load-2a950a8d72aa-0002",
+      "cycle": 2,
+      "request_id": "e8855793d5784036816a9642ef1d72eb",
+      "model_seconds": 11.849775832740397,
+      "commit_and_wake_seconds": 0.7545540000137407,
+      "usable_exec_seconds": 1.1798904160095844,
+      "pid": 20,
+      "delivery_count": 1
+    },
+    {
+      "sandbox_id": "relay-load-2a950a8d72aa-0000",
+      "cycle": 2,
+      "request_id": "1091f966d8a247a2b76d666d526a67de",
+      "model_seconds": 13.81887309488307,
+      "commit_and_wake_seconds": 0.6896882500150241,
+      "usable_exec_seconds": 1.1606822910252959,
+      "pid": 19,
+      "delivery_count": 1
+    },
+    {
+      "sandbox_id": "relay-load-2a950a8d72aa-0001",
+      "cycle": 2,
+      "request_id": "cf6c21e32e1a42cdb642c897240a3340",
+      "model_seconds": 10.282756838634043,
+      "commit_and_wake_seconds": 1.0832230420201086,
+      "usable_exec_seconds": 1.800890958023956,
+      "pid": 18,
+      "delivery_count": 1
+    }
+  ],
+  "errors": [],
+  "cleanup_errors": [],
+  "health": [
+    {
+      "seconds": 0.36328720799065195,
+      "ok": true
+    },
+    {
+      "seconds": 0.07033491699257866,
+      "ok": true
+    },
+    {
+      "seconds": 0.04798741699778475,
+      "ok": true
+    },
+    {
+      "seconds": 0.03982412500772625,
+      "ok": true
+    },
+    {
+      "seconds": 0.056131791992811486,
+      "ok": true
+    },
+    {
+      "seconds": 0.061756915994919837,
+      "ok": true
+    },
+    {
+      "seconds": 0.05724120800732635,
+      "ok": true
+    },
+    {
+      "seconds": 0.051890041009755805,
+      "ok": true
+    },
+    {
+      "seconds": 0.04767775000073016,
+      "ok": true
+    },
+    {
+      "seconds": 0.04957199998898432,
+      "ok": true
+    },
+    {
+      "seconds": 0.03959000000031665,
+      "ok": true
+    },
+    {
+      "seconds": 0.04682595899794251,
+      "ok": true
+    },
+    {
+      "seconds": 0.04168795800069347,
+      "ok": true
+    },
+    {
+      "seconds": 0.05622425000183284,
+      "ok": true
+    },
+    {
+      "seconds": 0.05517808301374316,
+      "ok": true
+    },
+    {
+      "seconds": 0.03753229198628105,
+      "ok": true
+    },
+    {
+      "seconds": 0.04622445799759589,
+      "ok": true
+    },
+    {
+      "seconds": 0.06266316698747687,
+      "ok": true
+    },
+    {
+      "seconds": 0.038574415986659005,
+      "ok": true
+    },
+    {
+      "seconds": 0.04761024998151697,
+      "ok": true
+    },
+    {
+      "seconds": 0.03745591698680073,
+      "ok": true
+    },
+    {
+      "seconds": 0.03805620799539611,
+      "ok": true
+    },
+    {
+      "seconds": 0.045445833005942404,
+      "ok": true
+    },
+    {
+      "seconds": 0.040713958005653694,
+      "ok": true
+    }
+  ],
+  "placements": {},
+  "deployed_health": {
+    "ok": true,
+    "service": "control-plane",
+    "version": "0.5.74"
+  },
+  "commit_and_wake_seconds": {
+    "count": 8,
+    "p50": 0.7439918960008072,
+    "p95": 1.0832230420201086,
+    "p99": 1.0832230420201086,
+    "max": 1.0832230420201086
+  },
+  "usable_exec_seconds": {
+    "count": 8,
+    "p50": 1.1663202290073968,
+    "p95": 1.800890958023956,
+    "p99": 1.800890958023956,
+    "max": 1.800890958023956
+  },
+  "completed_cycles": 12,
+  "correct": true,
+  "slo_passed": false,
+  "finished_at": "2026-09-21T18:40:47.028930+00:00"
+}

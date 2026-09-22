@@ -1,0 +1,19 @@
+{
+  "cycles": 32,
+  "results": {
+    "previous": {
+      "exported_bytes": 1073938432,
+      "merges": 16,
+      "seconds_including_verification": 5.794147184999929,
+      "final_layers": 1
+    },
+    "tiered": {
+      "exported_bytes": 134479872,
+      "merges": 16,
+      "seconds_including_verification": 3.2963825039996664,
+      "final_layers": 2
+    }
+  },
+  "logical_verification_each_cycle": true,
+  "scope": "Synthetic local overwrite/export trace; excludes publication and production load."
+}

@@ -100,8 +100,38 @@ class StorageCompactionPolicyTests(unittest.TestCase):
                     existing_repo_blob_url=publisher.repo_blob_url, global_config_path=config,
                 )
                 self.assertEqual(len(exporter.compact_calls), 1)
-                self.assertEqual(len(publication.layers), 1)
+                self.assertEqual(len(publication.layers), 2)
                 self.assertEqual(publisher.verify(publication), publication)
+
+    def test_retains_multiple_published_tiers_and_exports_every_local_input(self):
+        for backend in ("registry", "s3"):
+            for published_tiers in (1, 2):
+                with self.subTest(backend=backend, published=published_tiers), TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    publisher = self.publisher(backend, root, depth=8)
+                    paths = tuple(root / str(i) for i in range(4))
+                    for path, size in zip(paths, (128*1024, 64*1024, 4096, 4096)):
+                        path.write_bytes(path.name.encode() * size)
+                    exporter = FakeExporter({p: p.read_bytes() for p in paths})
+                    initial = publisher.publish(exporter=exporter,
+                        source_layer_paths=paths[:1], virtual_size=1024**2)
+                    if published_tiers == 2:
+                        initial = publisher.publish(exporter=exporter,
+                            source_layer_paths=paths[1:2], virtual_size=1024**2,
+                            existing_layers=initial.layers,
+                            existing_repo_blob_url=publisher.repo_blob_url)
+                    config = root / "global.json"
+                    config.write_text("{}")
+                    result = publisher.publish(exporter=exporter,
+                        source_layer_paths=paths[published_tiers:], virtual_size=1024**2,
+                        existing_layers=initial.layers, existing_repo_blob_url=publisher.repo_blob_url,
+                        global_config_path=config)
+                    self.assertEqual(result.layers[:-1], initial.layers)
+                    self.assertEqual(len(exporter.compact_calls), 1)
+                    lowers = exporter.compact_calls[0][0]["lowers"]
+                    self.assertEqual([item["file"] for item in lowers],
+                                     [str(p) for p in paths[published_tiers:]])
+                    self.assertEqual(publisher.verify(result), result)
 
     def test_failed_delta_merge_preserves_prior_publication(self):
         for backend in ("registry", "s3"):
@@ -134,7 +164,7 @@ class CompactionSelectionTests(unittest.TestCase):
             ((1000, 10), 4, 100, True, False, None),
             ((1000, 10, 10), 2, 100, True, False, 1),
             ((1000, 10, 10), 1, 100, True, False, 0),
-            ((1000, 60, 60), 4, 100, True, False, 0),
+            ((1000, 60, 60), 4, 100, True, False, 1),
             ((100, 60, 60), 2, 1000, True, False, 0),
             ((1000, 10, 10), 2, 100, False, False, 0),
             ((1000, 10), 4, 100, True, True, 0),
@@ -151,7 +181,7 @@ class CompactionSelectionTests(unittest.TestCase):
         layers = (1000,)
         partial = 0
         full = 0
-        for _ in range(30):
+        for _ in range(300):
             layers = (*layers, 10)
             start = snapshot_compaction_start(
                 layers, max_layers=4, max_delta_bytes=100, reusable_base=True,
@@ -162,4 +192,28 @@ class CompactionSelectionTests(unittest.TestCase):
                 layers = (*layers[:start], sum(layers[start:]))
             self.assertLessEqual(len(layers), 4)
         self.assertGreater(partial, 1)
-        self.assertGreater(full, 1)
+        self.assertGreater(full, 0)
+
+    def test_large_delta_does_not_force_rewriting_old_base_on_every_append(self):
+        mib = 1024**2
+        sizes = (20000*mib, 5000*mib, 1*mib)
+        self.assertIsNone(snapshot_compaction_start(sizes, max_layers=8,
+            max_delta_bytes=4096*mib, reusable_base=True))
+        self.assertEqual(snapshot_compaction_start((*sizes, 1*mib), max_layers=8,
+            max_delta_bytes=4096*mib, reusable_base=True), 2)
+        self.assertIsNone(snapshot_compaction_start((20000*mib, 5000*mib), max_layers=8,
+            max_delta_bytes=4096*mib, reusable_base=True))
+
+    def test_depth_bound_and_order_hold_for_diverse_tiers(self):
+        import random
+        rng = random.Random(7)
+        for _ in range(1000):
+            sizes = tuple(rng.randrange(0, 100000) for _ in range(rng.randrange(1, 30)))
+            start = snapshot_compaction_start(sizes, max_layers=8,
+                max_delta_bytes=4000, reusable_base=True)
+            if start is not None:
+                self.assertGreaterEqual(start, 0)
+                self.assertLess(start, len(sizes)-1)
+                self.assertLessEqual(start+1, 8)
+            else:
+                self.assertLessEqual(len(sizes), 8)

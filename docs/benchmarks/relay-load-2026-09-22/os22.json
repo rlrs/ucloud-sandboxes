@@ -1,0 +1,152 @@
+[
+  {
+    "node": "gateway",
+    "returncode": 0,
+    "sample": {
+      "host": "gateway-live-ucloud-20260824a",
+      "cpus": 2,
+      "cpu_pct": {
+        "user": 50.9,
+        "nice": 0.0,
+        "system": 35.3,
+        "idle": 8.5,
+        "iowait": 0.4,
+        "irq": 0.0,
+        "softirq": 4.5,
+        "steal": 0.4
+      },
+      "processes": [
+        {
+          "pid": "1136730",
+          "name": "ucloud-sandboxe",
+          "cpu_cores": 0.52,
+          "state": "R",
+          "wait": "0"
+        },
+        {
+          "pid": "943433",
+          "name": "python",
+          "cpu_cores": 0.51,
+          "state": "R",
+          "wait": "0"
+        },
+        {
+          "pid": "1105808",
+          "name": "registry",
+          "cpu_cores": 0.22,
+          "state": "S",
+          "wait": "futex_do_wait"
+        },
+        {
+          "pid": "895408",
+          "name": "docker-proxy",
+          "cpu_cores": 0.1,
+          "state": "S",
+          "wait": "futex_do_wait"
+        },
+        {
+          "pid": "1114735",
+          "name": "kworker/1:0-events",
+          "cpu_cores": 0.09,
+          "state": "I",
+          "wait": "worker_thread"
+        },
+        {
+          "pid": "159556",
+          "name": "otelcol-contrib",
+          "cpu_cores": 0.02,
+          "state": "S",
+          "wait": "futex_do_wait"
+        },
+        {
+          "pid": "1046322",
+          "name": "postgres",
+          "cpu_cores": 0.02,
+          "state": "S",
+          "wait": "ep_poll"
+        },
+        {
+          "pid": "1050457",
+          "name": "postgres",
+          "cpu_cores": 0.02,
+          "state": "S",
+          "wait": "ep_poll"
+        },
+        {
+          "pid": "1057542",
+          "name": "postgres",
+          "cpu_cores": 0.02,
+          "state": "S",
+          "wait": "ep_poll"
+        },
+        {
+          "pid": "1057835",
+          "name": "postgres",
+          "cpu_cores": 0.02,
+          "state": "S",
+          "wait": "ep_poll"
+        },
+        {
+          "pid": "1058527",
+          "name": "postgres",
+          "cpu_cores": 0.02,
+          "state": "S",
+          "wait": "ep_poll"
+        },
+        {
+          "pid": "1058847",
+          "name": "postgres",
+          "cpu_cores": 0.02,
+          "state": "S",
+          "wait": "ep_poll"
+        },
+        {
+          "pid": "1136704",
+          "name": "ucloud-sandboxe",
+          "cpu_cores": 0.02,
+          "state": "S",
+          "wait": "futex_do_wait"
+        },
+        {
+          "pid": "1528430",
+          "name": "systemd-resolve",
+          "cpu_cores": 0.02,
+          "state": "S",
+          "wait": "ep_poll"
+        },
+        {
+          "pid": "159515",
+          "name": "tempo",
+          "cpu_cores": 0.01,
+          "state": "S",
+          "wait": "futex_do_wait"
+        }
+      ],
+      "blocked": [],
+      "disk": [
+        {
+          "device": "vda",
+          "read_mb_s": 0.0,
+          "write_mb_s": 8.4,
+          "await_ms": 0.6,
+          "util_pct": 8.1,
+          "weighted_queue": 0.5
+        },
+        {
+          "device": "vda1",
+          "read_mb_s": 0.0,
+          "write_mb_s": 8.4,
+          "await_ms": 0.6,
+          "util_pct": 8.8,
+          "weighted_queue": 0.5
+        }
+      ],
+      "vm_delta": {},
+      "psi": {
+        "cpu": "some avg10=77.76 avg60=63.62 avg300=45.27 total=23662924824\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=1351250571\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=1023839647",
+        "io": "some avg10=3.94 avg60=3.09 avg300=1.57 total=5498764185\nfull avg10=0.00 avg60=0.15 avg300=0.08 total=3852052897"
+      }
+    }
+  }
+]

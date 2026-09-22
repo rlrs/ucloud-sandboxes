@@ -9,6 +9,8 @@ import re
 import sqlite3
 import stat
 import time
+from threading import Lock
+import weakref
 from types import MappingProxyType
 from typing import Any, Iterator, Mapping
 
@@ -38,7 +40,7 @@ DIRECT_REGISTRATION_PHASES = _ROOTFS_PHASES | {
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 _CONTAINER_ID = re.compile(r"[0-9a-f]{64}\Z")
 _DIRECT_REGISTRY_APPLICATION_ID = 0x55435247
-_DIRECT_REGISTRY_SCHEMA_VERSION = 3
+_DIRECT_REGISTRY_SCHEMA_VERSION = 4
 _DIRECT_REGISTRY_IDENTITY = (
     _DIRECT_REGISTRY_APPLICATION_ID,
     _DIRECT_REGISTRY_SCHEMA_VERSION,
@@ -245,6 +247,19 @@ class DirectRegistrySnapshot:
         return self.by_sandbox_id.get(sandbox_id)
 
 
+@dataclass
+class _RegistryConnection:
+    connection: sqlite3.Connection
+    schema_stamp: tuple[Any, ...] | None = None
+
+
+def _close_idle_registry_connections(idle, guard):
+    with guard:
+        entries, idle[:] = list(idle), []
+    for entry in entries:
+        entry.connection.close()
+
+
 class DirectSandboxRegistry:
     """SQLite-backed ownership bridge from admission through Warden create."""
 
@@ -275,6 +290,12 @@ class DirectSandboxRegistry:
             PRIMARY KEY (sandbox_id, migration_id)
         ) STRICT;
         CREATE INDEX registrations_image_id ON registrations (image_id);
+        CREATE TABLE relay_wake_fences (
+            sandbox_id TEXT NOT NULL,
+            generation INTEGER NOT NULL CHECK (generation > 0),
+            request_id TEXT NOT NULL,
+            PRIMARY KEY (sandbox_id, generation, request_id)
+        ) STRICT;
         INSERT INTO registry_metadata VALUES (
             1,
             0,
@@ -287,6 +308,13 @@ class DirectSandboxRegistry:
         if not path.is_absolute():
             raise ValueError("direct registry path must be absolute")
         self.path = path
+        self._connections: list[_RegistryConnection] = []
+        self._connections_guard = Lock()
+        self._file_identity: tuple[int, int] | None = None
+        self._connection_pid = os.getpid()
+        self._connection_finalizer = weakref.finalize(
+            self, _close_idle_registry_connections, self._connections, self._connections_guard,
+        )
 
     def bind_runtime_compatibility(
         self,
@@ -631,6 +659,7 @@ class DirectSandboxRegistry:
             )
             if record.migration_id:
                 self._retire(connection, sandbox_id, record.migration_id)
+            connection.execute("DELETE FROM relay_wake_fences WHERE sandbox_id=? AND generation=?", (sandbox_id, sandbox_generation))
             if (
                 connection.execute(
                     "DELETE FROM registrations WHERE sandbox_id = ?",
@@ -641,12 +670,39 @@ class DirectSandboxRegistry:
                 raise DirectRegistryError("direct registration disappeared")
             self._bump_activity(connection)
 
+    def relay_wake_fence(self, sandbox_id: str, generation: int, request_id: str, *, record: bool = False) -> bool:
+        """A committed wake intent permanently supersedes this request's park.
+
+        Caller holds the runtime lifecycle lock. Persist before attempting wake:
+        an uncertain/overloaded restore must not allow an older park to win later.
+        """
+        if generation < 1 or not OPERATION_ID_RE.fullmatch(request_id):
+            raise ValueError("invalid relay lifecycle identity")
+        with self._transaction(write=record) as connection:
+            owner = self._require(connection, sandbox_id)
+            if owner.sandbox_generation != generation:
+                raise DirectRegistryConflictError("relay lifecycle generation changed")
+            if record:
+                connection.execute("INSERT OR IGNORE INTO relay_wake_fences VALUES (?,?,?)", (sandbox_id, generation, request_id))
+                return True
+            return connection.execute("SELECT 1 FROM relay_wake_fences WHERE sandbox_id=? AND generation=? AND request_id=?", (sandbox_id, generation, request_id)).fetchone() is not None
+
     def get(self, sandbox_id: str) -> DirectSandboxRegistration | None:
         with self._transaction(write=False) as connection:
             return self._get(connection, sandbox_id)
 
     def list(self) -> tuple[DirectSandboxRegistration, ...]:
         return self.snapshot().records
+
+    def activity_revision(self) -> int:
+        """Read the durable clock without materializing the node inventory.
+
+        Lifecycle responses need only this clock. Registration reads and full
+        heartbeat snapshots still validate their records independently.
+        """
+
+        with self._transaction(write=False) as connection:
+            return self._metadata(connection)[0]
 
     def snapshot(self) -> DirectRegistrySnapshot:
         """Return records, indexes, roots, and revision from one durable read."""
@@ -989,27 +1045,68 @@ class DirectSandboxRegistry:
         *,
         write: bool,
     ) -> Iterator[sqlite3.Connection]:
-        connection: sqlite3.Connection | None = None
+        entry: _RegistryConnection | None = None
+        reusable = False
         try:
             self._prepare_file()
-            connection = sqlite3.connect(self.path, timeout=30.0, isolation_level=None)
-            connection.execute("PRAGMA trusted_schema = OFF")
-            connection.execute("PRAGMA synchronous = FULL")
-            self._ensure_schema(connection)
+            info = self.path.lstat()
+            identity = (info.st_dev, info.st_ino)
+            with self._connections_guard:
+                if os.getpid() != self._connection_pid:
+                    raise DirectRegistryError("reopen direct registry after fork")
+                if self._file_identity is not None and self._file_identity != identity:
+                    raise DirectRegistryError("direct registry file was replaced; reopen it")
+                self._file_identity = identity
+                if self._connections:
+                    entry = self._connections.pop()
+            if entry is None:
+                entry = _RegistryConnection(sqlite3.connect(
+                    self.path, timeout=30.0, isolation_level=None, check_same_thread=False,
+                ))
+                entry.connection.execute("PRAGMA trusted_schema = OFF")
+                entry.connection.execute("PRAGMA synchronous = FULL")
+            connection = entry.connection
+            # A retained connection caches SQLite's parsed schema/statements.
+            # Its schema cookie and durable identity are checked on every use;
+            # changed DDL goes through full validation before any row access.
+            if entry.schema_stamp is None:
+                self._ensure_schema(connection)
+                entry.schema_stamp = self._schema_stamp(connection)
             connection.execute("BEGIN IMMEDIATE" if write else "BEGIN")
+            stamp = self._schema_stamp(connection)
+            if stamp != entry.schema_stamp:
+                self._validate_schema(connection)
+                entry.schema_stamp = stamp
+            else:
+                self._metadata(connection)
             yield connection
             connection.commit()
+            reusable = True
         except BaseException as exc:
-            if connection is not None:
-                connection.rollback()
+            if entry is not None:
+                entry.connection.rollback()
             if isinstance(exc, DirectRegistryError):
                 raise
             if isinstance(exc, (OSError, sqlite3.DatabaseError)):
                 raise DirectRegistryError("direct registry is unreadable") from exc
             raise
         finally:
-            if connection is not None:
-                connection.close()
+            if entry is not None:
+                # This only bounds idle handles, never admitted operations.
+                with self._connections_guard:
+                    if reusable and len(self._connections) < 16:
+                        self._connections.append(entry)
+                        entry = None
+                if entry is not None:
+                    entry.connection.close()
+
+    @staticmethod
+    def _schema_stamp(connection: sqlite3.Connection) -> tuple[Any, ...]:
+        return tuple(connection.execute(
+            "SELECT schema_version, application_id, user_version, journal_mode "
+            "FROM pragma_schema_version, pragma_application_id, "
+            "pragma_user_version, pragma_journal_mode"
+        ).fetchone())
 
     def _prepare_file(self) -> None:
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -1064,6 +1161,11 @@ class DirectSandboxRegistry:
             has_schema = connection.execute(
                 "SELECT 1 FROM sqlite_schema " "WHERE name NOT LIKE 'sqlite_%' LIMIT 1"
             ).fetchone()
+            if cls._versions(connection) == (_DIRECT_REGISTRY_APPLICATION_ID, 3):
+                cls._validate_schema(connection, legacy=True)
+                statement = next(raw.strip() for raw in cls._SCHEMA.split(";") if raw.strip().startswith("CREATE TABLE relay_wake_fences"))
+                connection.execute(statement)
+                connection.execute(f"PRAGMA user_version = {_DIRECT_REGISTRY_SCHEMA_VERSION}")
             if cls._versions(connection) == (0, 0) and not has_schema:
                 for statement in cls._SCHEMA.split(";"):
                     if statement.strip():
@@ -1103,20 +1205,22 @@ class DirectSandboxRegistry:
         )
 
     @classmethod
-    def _validate_schema(cls, connection: sqlite3.Connection) -> None:
+    def _validate_schema(cls, connection: sqlite3.Connection, *, legacy: bool = False) -> None:
         expected = {
             statement.split()[2]: statement
             for raw in cls._SCHEMA.split(";")
             if (statement := raw.strip()).startswith("CREATE ")
         }
+        if legacy:
+            expected.pop("relay_wake_fences")
         actual = dict(
             connection.execute(
                 "SELECT name, sql FROM sqlite_schema "
-                "WHERE type IN ('table', 'index') AND name NOT LIKE 'sqlite_%'"
+                "WHERE type IN ('table', 'index', 'view', 'trigger') AND name NOT LIKE 'sqlite_%'"
             )
         )
         if (
-            cls._versions(connection) != _DIRECT_REGISTRY_IDENTITY
+            cls._versions(connection) != ((_DIRECT_REGISTRY_APPLICATION_ID, 3) if legacy else _DIRECT_REGISTRY_IDENTITY)
             or connection.execute("PRAGMA journal_mode").fetchone() != ("wal",)
             or actual != expected
         ):

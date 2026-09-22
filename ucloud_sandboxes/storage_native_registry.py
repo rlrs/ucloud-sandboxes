@@ -389,6 +389,10 @@ class RegistrySnapshotPublisher:
             ),
         )
         should_compact = compact_start is not None
+        if should_compact:
+            # Local inputs still need publication. Only already-published
+            # descriptors can be retained without exporting them first.
+            compact_start = min(compact_start, len(existing_layers))
         retained_layers = existing_layers[:compact_start] if should_compact else ()
         if should_compact:
             if global_config_path is None or not global_config_path.is_absolute():
@@ -706,6 +710,7 @@ def consume_export_stream(
     timeout_seconds: float,
     consume: Callable[[bytes], None],
     check_current: Callable[[], None] | None = None,
+    on_progress: Callable[[], None] | None = None,
 ) -> StorageNativeLayer:
     """Validate an AgentEnv export while forwarding bounded chunks."""
 
@@ -776,6 +781,8 @@ def consume_export_stream(
                         if not received:
                             break
                         byte_count += received
+                        if on_progress is not None:
+                            on_progress()
                         pending_size += received
                         if pending_size == chunk_bytes:
                             hasher.update(pending_view)

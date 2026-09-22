@@ -1,0 +1,1102 @@
+[
+  {
+    "job_id": "12398319",
+    "exit_code": 0,
+    "profile": {
+      "samples": 100,
+      "placement_lock_owner": [],
+      "all_threads": [
+        [
+          "threading.py:373:wait <- admission.py:43:acquire <- direct_service.py:1622:_restore_slot <- contextlib.py:141:__enter__ <- contextlib.py:530:enter_context <- direct_service.py:1635:_restore_admission <- contextlib.py:141:__enter__ <- direct_service.py:877:wake <- node_runtime.py:499:wake_with_activity_revision",
+          917
+        ],
+        [
+          "thread.py:116:_worker <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          856
+        ],
+        [
+          "socket.py:725:readinto <- server.py:464:handle_one_request <- server.py:498:handle <- socketserver.py:766:__init__ <- socketserver.py:362:finish_request <- socketserver.py:697:process_request_thread <- http_server.py:376:process_request_thread <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner",
+          647
+        ],
+        [
+          "threading.py:373:wait <- sandbox_exec.py:253:events_after <- node_agent.py:1130:_exec_events <- node_agent.py:289:do_GET <- http_server.py:204:wrapped <- server.py:484:handle_one_request <- server.py:498:handle <- socketserver.py:766:__init__ <- socketserver.py:362:finish_request",
+          140
+        ],
+        [
+          "direct_warden.py:105:_wait <- direct_warden.py:133:run <- direct_warden.py:1636:_checked <- direct_warden.py:743:resume <- direct_service.py:1658:_resume_with_network <- direct_service.py:898:wake <- node_runtime.py:499:wake_with_activity_revision <- node_agent.py:876:_wake_sandbox <- node_agent.py:410:do_POST",
+          117
+        ],
+        [
+          "sandbox_exec.py:402:_pump_stream <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          104
+        ],
+        [
+          "<string>:12:sample <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          100
+        ],
+        [
+          "threading.py:373:wait <- threading.py:670:wait <- __init__.py:553:_ticker <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          100
+        ],
+        [
+          "threading.py:373:wait <- threading.py:670:wait <- telemetry.py:271:_run <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          99
+        ],
+        [
+          "threading.py:373:wait <- threading.py:670:wait <- direct_service.py:519:_network_reconciliation_loop <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          93
+        ],
+        [
+          "threading.py:373:wait <- threading.py:670:wait <- direct_service.py:461:_deletion_reconciliation_loop <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          83
+        ],
+        [
+          "selectors.py:398:select <- socketserver.py:235:serve_forever <- cli.py:1194:cmd_serve_direct_node_agent <- cli.py:239:main <- cli.py:6628:<module> <- <frozen runpy>:88:_run_code <- <frozen runpy>:198:_run_module_as_main",
+          73
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1836:validate_owner <- direct_service.py:1766:_active_admission_guard <- contextlib.py:141:__enter__",
+          53
+        ],
+        [
+          "subprocess.py:2042:_try_wait <- subprocess.py:2084:_wait <- subprocess.py:1279:wait <- sandbox_exec.py:472:_wait_process_unobserved <- sandbox_exec.py:457:_wait_process <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          46
+        ],
+        [
+          "selectors.py:452:select <- direct_service.py:203:run <- direct_service.py:1222:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file <- direct_service.py:1484:write_file <- node_runtime.py:592:upload_file <- node_agent.py:1233:_upload_file <- node_agent.py:502:do_PUT",
+          45
+        ],
+        [
+          "threading.py:373:wait <- threading.py:670:wait <- node_runtime.py:311:_idle_parking_loop <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          42
+        ],
+        [
+          "<frozen posixpath>:457:realpath <- __init__.py:939:resolve <- image_rootfs.py:697:_validate_overlay2_layer <- image_rootfs.py:660:<genexpr> <- image_rootfs.py:660:_inspect_overlay2 <- image_rootfs.py:295:operation_lease <- contextlib.py:141:__enter__ <- image_rootfs.py:1155:resume_sandbox <- direct_warden.py:698:resume",
+          34
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1195:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file",
+          33
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1199:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file",
+          33
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1514:_write_file <- direct_service.py:1484:write_file <- node_runtime.py:592:upload_file",
+          31
+        ],
+        [
+          "storage_native_daemon.py:3538:_recv_exact <- storage_native_daemon.py:3126:_call_unobserved <- storage_native_daemon.py:3110:_call <- storage_native_daemon.py:3074:_record_call <- storage_native_daemon.py:2977:ensure_mounted <- direct_warden.py:1884:_mount_storage <- direct_warden.py:694:resume <- direct_service.py:1658:_resume_with_network <- direct_service.py:898:wake",
+          29
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1829:acquire_exec_capacity <- direct_service.py:1206:exec <- direct_service.py:1562:_file_exec",
+          29
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_runtime.py:562:acquire_exec_capacity <- sandbox_exec.py:180:start <- node_agent.py:595:_start_exec",
+          26
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_agent.py:1220:_upload_file <- node_agent.py:502:do_PUT <- http_server.py:204:wrapped",
+          26
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:682:activity_revision <- direct_service.py:1890:advance_lifecycle_activity_revision <- node_runtime.py:504:wake_with_activity_revision <- node_agent.py:876:_wake_sandbox <- node_agent.py:410:do_POST",
+          25
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1836:validate_owner <- direct_service.py:1766:_active_admission_guard <- contextlib.py:141:__enter__",
+          25
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:564:get <- node_runtime.py:556:require_activity_sandbox <- sandbox_exec.py:173:start <- node_agent.py:595:_start_exec",
+          25
+        ],
+        [
+          "direct_registry.py:1161:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1836:validate_owner <- direct_service.py:1766:_active_admission_guard <- contextlib.py:141:__enter__",
+          24
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1829:acquire_exec_capacity <- node_runtime.py:563:acquire_exec_capacity <- sandbox_exec.py:180:start",
+          24
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- node_runtime.py:224:release_shared <- sandbox_exec.py:607:_complete <- sandbox_exec.py:486:_wait_process_unobserved <- sandbox_exec.py:457:_wait_process",
+          23
+        ],
+        [
+          "direct_registry.py:1141:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1836:validate_owner <- direct_service.py:1766:_active_admission_guard <- contextlib.py:141:__enter__",
+          23
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_runtime.py:155:exec_command <- sandbox_exec.py:181:start <- node_agent.py:595:_start_exec",
+          23
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_runtime.py:205:acquire_shared <- sandbox_exec.py:169:start <- node_agent.py:595:_start_exec",
+          23
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:886:wake <- node_runtime.py:499:wake_with_activity_revision <- node_agent.py:876:_wake_sandbox",
+          19
+        ],
+        [
+          "direct_registry.py:1141:_versions <- direct_registry.py:1160:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1514:_write_file <- direct_service.py:1484:write_file",
+          17
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1160:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1836:validate_owner <- direct_service.py:1766:_active_admission_guard",
+          17
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:564:get <- node_runtime.py:556:require_activity_sandbox <- sandbox_exec.py:173:start <- node_agent.py:595:_start_exec",
+          16
+        ],
+        [
+          "direct_registry.py:1141:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_agent.py:1220:_upload_file <- node_agent.py:502:do_PUT <- http_server.py:204:wrapped",
+          16
+        ],
+        [
+          "direct_registry.py:1141:_versions <- direct_registry.py:1160:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1836:validate_owner <- direct_service.py:1766:_active_admission_guard",
+          16
+        ],
+        [
+          "direct_registry.py:1141:_versions <- direct_registry.py:1160:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1195:exec <- direct_service.py:1562:_file_exec",
+          16
+        ],
+        [
+          "direct_registry.py:1141:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:682:activity_revision <- direct_service.py:1890:advance_lifecycle_activity_revision <- node_runtime.py:504:wake_with_activity_revision <- node_agent.py:876:_wake_sandbox <- node_agent.py:410:do_POST",
+          16
+        ],
+        [
+          "direct_registry.py:1141:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1514:_write_file <- direct_service.py:1484:write_file <- node_runtime.py:592:upload_file",
+          15
+        ],
+        [
+          "direct_registry.py:1141:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_runtime.py:205:acquire_shared <- sandbox_exec.py:169:start <- node_agent.py:595:_start_exec",
+          15
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_runtime.py:562:acquire_exec_capacity <- sandbox_exec.py:180:start <- node_agent.py:595:_start_exec",
+          14
+        ],
+        [
+          "direct_registry.py:1046:_transaction <- contextlib.py:148:__exit__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1514:_write_file <- direct_service.py:1484:write_file <- node_runtime.py:592:upload_file <- node_agent.py:1233:_upload_file <- node_agent.py:502:do_PUT",
+          14
+        ],
+        [
+          "direct_registry.py:1141:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1195:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file",
+          14
+        ],
+        [
+          "direct_registry.py:1161:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1199:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file",
+          14
+        ],
+        [
+          "direct_registry.py:1154:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1836:validate_owner <- direct_service.py:1766:_active_admission_guard <- contextlib.py:141:__enter__",
+          13
+        ],
+        [
+          "direct_registry.py:692:<genexpr> <- direct_registry.py:690:snapshot <- direct_registry.py:673:list <- direct_service.py:487:_deletion_reconciliation_loop <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          13
+        ],
+        [
+          "direct_registry.py:1161:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1195:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file",
+          13
+        ],
+        [
+          "direct_registry.py:984:_metadata <- direct_registry.py:1165:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1836:validate_owner <- direct_service.py:1766:_active_admission_guard",
+          13
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1160:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_runtime.py:155:exec_command <- sandbox_exec.py:181:start",
+          13
+        ],
+        [
+          "direct_registry.py:1046:_transaction <- contextlib.py:148:__exit__ <- direct_registry.py:669:get <- node_runtime.py:224:release_shared <- sandbox_exec.py:607:_complete <- sandbox_exec.py:486:_wait_process_unobserved <- sandbox_exec.py:457:_wait_process <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner",
+          13
+        ],
+        [
+          "threading.py:369:wait <- threading.py:670:wait <- singleflight_cache.py:52:get_or_load <- runtime_metrics.py:41:__call__ <- direct_service.py:1764:_active_admission_guard <- contextlib.py:141:__enter__ <- direct_service.py:1849:acquire_exec_capacity <- node_runtime.py:563:acquire_exec_capacity <- sandbox_exec.py:180:start",
+          13
+        ],
+        [
+          "direct_registry.py:1141:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1199:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file",
+          13
+        ],
+        [
+          "direct_warden.py:105:_wait <- direct_warden.py:133:run <- image_rootfs.py:203:_checked <- image_rootfs.py:625:_inspect_overlay2 <- image_rootfs.py:295:operation_lease <- contextlib.py:141:__enter__ <- image_rootfs.py:1155:resume_sandbox <- direct_warden.py:698:resume <- direct_service.py:1658:_resume_with_network",
+          13
+        ],
+        [
+          "direct_registry.py:1046:_transaction <- contextlib.py:148:__exit__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_runtime.py:205:acquire_shared <- sandbox_exec.py:169:start <- node_agent.py:595:_start_exec <- node_agent.py:413:do_POST <- http_server.py:204:wrapped",
+          13
+        ],
+        [
+          "storage_native_daemon.py:3538:_recv_exact <- storage_native_daemon.py:3126:_call_unobserved <- storage_native_daemon.py:3110:_call <- storage_native_daemon.py:3074:_record_call <- storage_native_daemon.py:2985:ensure_released <- direct_warden.py:666:park <- direct_service.py:756:park <- node_runtime.py:440:park_with_activity_revision <- node_agent.py:735:_park_sandbox",
+          13
+        ],
+        [
+          "direct_registry.py:1046:_transaction <- contextlib.py:148:__exit__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1199:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file <- direct_service.py:1484:write_file <- node_runtime.py:592:upload_file",
+          13
+        ],
+        [
+          "direct_registry.py:1141:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1829:acquire_exec_capacity <- direct_service.py:1206:exec <- direct_service.py:1562:_file_exec",
+          13
+        ],
+        [
+          "direct_registry.py:981:_metadata <- direct_registry.py:1165:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1514:_write_file <- direct_service.py:1484:write_file",
+          12
+        ],
+        [
+          "direct_registry.py:1033:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_runtime.py:562:acquire_exec_capacity <- sandbox_exec.py:180:start <- node_agent.py:595:_start_exec <- node_agent.py:413:do_POST <- http_server.py:204:wrapped",
+          12
+        ],
+        [
+          "hibernation.py:837:delete_published <- direct_warden.py:1306:_finalize_restore_artifacts <- direct_warden.py:812:resume <- direct_service.py:1658:_resume_with_network <- direct_service.py:898:wake <- node_runtime.py:499:wake_with_activity_revision <- node_agent.py:876:_wake_sandbox <- node_agent.py:410:do_POST <- http_server.py:204:wrapped",
+          12
+        ],
+        [
+          "direct_registry.py:981:_metadata <- direct_registry.py:1165:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1836:validate_owner <- direct_service.py:1766:_active_admission_guard",
+          12
+        ],
+        [
+          "direct_registry.py:1046:_transaction <- contextlib.py:148:__exit__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_runtime.py:155:exec_command <- sandbox_exec.py:181:start <- node_agent.py:595:_start_exec <- node_agent.py:413:do_POST <- http_server.py:204:wrapped",
+          12
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1195:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file",
+          12
+        ],
+        [
+          "direct_registry.py:1141:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:886:wake <- node_runtime.py:499:wake_with_activity_revision <- node_agent.py:876:_wake_sandbox",
+          12
+        ],
+        [
+          "direct_registry.py:1046:_transaction <- contextlib.py:148:__exit__ <- direct_registry.py:669:get <- direct_service.py:564:get <- node_runtime.py:556:require_activity_sandbox <- sandbox_exec.py:173:start <- node_agent.py:595:_start_exec <- node_agent.py:413:do_POST <- http_server.py:204:wrapped",
+          12
+        ],
+        [
+          "direct_registry.py:1161:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- node_runtime.py:224:release_shared <- sandbox_exec.py:607:_complete <- sandbox_exec.py:486:_wait_process_unobserved <- sandbox_exec.py:457:_wait_process",
+          12
+        ],
+        [
+          "direct_registry.py:1033:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1195:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file <- direct_service.py:1484:write_file <- node_runtime.py:592:upload_file",
+          12
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1514:_write_file <- direct_service.py:1484:write_file <- node_runtime.py:592:upload_file",
+          12
+        ],
+        [
+          "direct_registry.py:1141:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_runtime.py:155:exec_command <- sandbox_exec.py:181:start <- node_agent.py:595:_start_exec",
+          12
+        ],
+        [
+          "direct_registry.py:925:_get <- direct_registry.py:670:get <- direct_service.py:1900:_require_registration <- direct_service.py:1199:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file <- direct_service.py:1484:write_file <- node_runtime.py:592:upload_file <- node_agent.py:1233:_upload_file",
+          12
+        ],
+        [
+          "direct_registry.py:1046:_transaction <- contextlib.py:148:__exit__ <- direct_registry.py:682:activity_revision <- direct_service.py:1890:advance_lifecycle_activity_revision <- node_runtime.py:504:wake_with_activity_revision <- node_agent.py:876:_wake_sandbox <- node_agent.py:410:do_POST <- http_server.py:204:wrapped <- server.py:484:handle_one_request",
+          12
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1160:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1829:acquire_exec_capacity <- direct_service.py:1206:exec",
+          12
+        ],
+        [
+          "direct_registry.py:1161:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1829:acquire_exec_capacity <- node_runtime.py:563:acquire_exec_capacity <- sandbox_exec.py:180:start",
+          11
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- node_runtime.py:224:release_shared <- sandbox_exec.py:607:_complete <- sandbox_exec.py:486:_wait_process_unobserved <- sandbox_exec.py:457:_wait_process",
+          11
+        ],
+        [
+          "direct_registry.py:1033:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1514:_write_file <- direct_service.py:1484:write_file <- node_runtime.py:592:upload_file <- node_agent.py:1233:_upload_file <- node_agent.py:502:do_PUT",
+          11
+        ],
+        [
+          "direct_warden.py:105:_wait <- direct_warden.py:133:run <- direct_warden.py:1636:_checked <- direct_warden.py:779:resume <- direct_service.py:1658:_resume_with_network <- direct_service.py:898:wake <- node_runtime.py:499:wake_with_activity_revision <- node_agent.py:876:_wake_sandbox <- node_agent.py:410:do_POST",
+          11
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1160:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:886:wake <- node_runtime.py:499:wake_with_activity_revision",
+          11
+        ]
+      ]
+    }
+  },
+  {
+    "job_id": "12398320",
+    "exit_code": 0,
+    "profile": {
+      "samples": 100,
+      "placement_lock_owner": [],
+      "all_threads": [
+        [
+          "threading.py:373:wait <- admission.py:43:acquire <- direct_service.py:1622:_restore_slot <- contextlib.py:141:__enter__ <- contextlib.py:530:enter_context <- direct_service.py:1635:_restore_admission <- contextlib.py:141:__enter__ <- direct_service.py:877:wake <- node_runtime.py:499:wake_with_activity_revision",
+          679
+        ],
+        [
+          "thread.py:116:_worker <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          667
+        ],
+        [
+          "socket.py:725:readinto <- server.py:464:handle_one_request <- server.py:498:handle <- socketserver.py:766:__init__ <- socketserver.py:362:finish_request <- socketserver.py:697:process_request_thread <- http_server.py:376:process_request_thread <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner",
+          574
+        ],
+        [
+          "threading.py:373:wait <- sandbox_exec.py:253:events_after <- node_agent.py:1130:_exec_events <- node_agent.py:289:do_GET <- http_server.py:204:wrapped <- server.py:484:handle_one_request <- server.py:498:handle <- socketserver.py:766:__init__ <- socketserver.py:362:finish_request",
+          130
+        ],
+        [
+          "direct_warden.py:105:_wait <- direct_warden.py:133:run <- direct_warden.py:1636:_checked <- direct_warden.py:743:resume <- direct_service.py:1658:_resume_with_network <- direct_service.py:898:wake <- node_runtime.py:499:wake_with_activity_revision <- node_agent.py:876:_wake_sandbox <- node_agent.py:410:do_POST",
+          123
+        ],
+        [
+          "sandbox_exec.py:402:_pump_stream <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          121
+        ],
+        [
+          "<string>:12:sample <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          100
+        ],
+        [
+          "threading.py:373:wait <- threading.py:670:wait <- __init__.py:553:_ticker <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          100
+        ],
+        [
+          "threading.py:373:wait <- threading.py:670:wait <- telemetry.py:271:_run <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          100
+        ],
+        [
+          "threading.py:373:wait <- threading.py:670:wait <- direct_service.py:519:_network_reconciliation_loop <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          96
+        ],
+        [
+          "threading.py:373:wait <- threading.py:670:wait <- direct_service.py:461:_deletion_reconciliation_loop <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          87
+        ],
+        [
+          "selectors.py:398:select <- socketserver.py:235:serve_forever <- cli.py:1194:cmd_serve_direct_node_agent <- cli.py:239:main <- cli.py:6628:<module> <- <frozen runpy>:88:_run_code <- <frozen runpy>:198:_run_module_as_main",
+          63
+        ],
+        [
+          "threading.py:373:wait <- threading.py:670:wait <- node_runtime.py:311:_idle_parking_loop <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          55
+        ],
+        [
+          "subprocess.py:2042:_try_wait <- subprocess.py:2084:_wait <- subprocess.py:1279:wait <- sandbox_exec.py:472:_wait_process_unobserved <- sandbox_exec.py:457:_wait_process <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          52
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1836:validate_owner <- direct_service.py:1766:_active_admission_guard <- contextlib.py:141:__enter__",
+          52
+        ],
+        [
+          "selectors.py:452:select <- direct_service.py:203:run <- direct_service.py:1222:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file <- direct_service.py:1484:write_file <- node_runtime.py:592:upload_file <- node_agent.py:1233:_upload_file <- node_agent.py:502:do_PUT",
+          46
+        ],
+        [
+          "http_server.py:316:shutdown_request <- socketserver.py:701:process_request_thread <- http_server.py:376:process_request_thread <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          34
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_runtime.py:155:exec_command <- sandbox_exec.py:181:start <- node_agent.py:595:_start_exec",
+          30
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- node_runtime.py:224:release_shared <- sandbox_exec.py:607:_complete <- sandbox_exec.py:486:_wait_process_unobserved <- sandbox_exec.py:457:_wait_process",
+          27
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1829:acquire_exec_capacity <- direct_service.py:1206:exec <- direct_service.py:1562:_file_exec",
+          26
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1829:acquire_exec_capacity <- node_runtime.py:563:acquire_exec_capacity <- sandbox_exec.py:180:start",
+          25
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_runtime.py:205:acquire_shared <- sandbox_exec.py:169:start <- node_agent.py:595:_start_exec",
+          25
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1514:_write_file <- direct_service.py:1484:write_file <- node_runtime.py:592:upload_file",
+          24
+        ],
+        [
+          "storage_native_daemon.py:3538:_recv_exact <- storage_native_daemon.py:3126:_call_unobserved <- storage_native_daemon.py:3110:_call <- storage_native_daemon.py:3074:_record_call <- storage_native_daemon.py:2977:ensure_mounted <- direct_warden.py:1884:_mount_storage <- direct_warden.py:694:resume <- direct_service.py:1658:_resume_with_network <- direct_service.py:898:wake",
+          24
+        ],
+        [
+          "direct_registry.py:1141:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1836:validate_owner <- direct_service.py:1766:_active_admission_guard <- contextlib.py:141:__enter__",
+          24
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_agent.py:1220:_upload_file <- node_agent.py:502:do_PUT <- http_server.py:204:wrapped",
+          24
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1195:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file",
+          23
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1199:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file",
+          22
+        ],
+        [
+          "<frozen posixpath>:457:realpath <- __init__.py:939:resolve <- image_rootfs.py:697:_validate_overlay2_layer <- image_rootfs.py:660:<genexpr> <- image_rootfs.py:660:_inspect_overlay2 <- image_rootfs.py:295:operation_lease <- contextlib.py:141:__enter__ <- image_rootfs.py:1155:resume_sandbox <- direct_warden.py:698:resume",
+          22
+        ],
+        [
+          "direct_warden.py:105:_wait <- direct_warden.py:133:run <- direct_warden.py:1636:_checked <- direct_warden.py:779:resume <- direct_service.py:1658:_resume_with_network <- direct_service.py:898:wake <- node_runtime.py:499:wake_with_activity_revision <- node_agent.py:876:_wake_sandbox <- node_agent.py:410:do_POST",
+          21
+        ],
+        [
+          "direct_registry.py:1161:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1836:validate_owner <- direct_service.py:1766:_active_admission_guard <- contextlib.py:141:__enter__",
+          21
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:682:activity_revision <- direct_service.py:1890:advance_lifecycle_activity_revision <- node_runtime.py:504:wake_with_activity_revision <- node_agent.py:876:_wake_sandbox <- node_agent.py:410:do_POST",
+          20
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_runtime.py:562:acquire_exec_capacity <- sandbox_exec.py:180:start <- node_agent.py:595:_start_exec",
+          19
+        ],
+        [
+          "storage_native_daemon.py:3538:_recv_exact <- storage_native_daemon.py:3126:_call_unobserved <- storage_native_daemon.py:3110:_call <- storage_native_daemon.py:3074:_record_call <- storage_native_daemon.py:2985:ensure_released <- direct_warden.py:666:park <- direct_service.py:756:park <- node_runtime.py:440:park_with_activity_revision <- node_agent.py:735:_park_sandbox",
+          18
+        ],
+        [
+          "threading.py:369:wait <- threading.py:670:wait <- singleflight_cache.py:52:get_or_load <- runtime_metrics.py:41:__call__ <- direct_service.py:1764:_active_admission_guard <- contextlib.py:141:__enter__ <- direct_service.py:1816:_reserve_active_capacity <- contextlib.py:141:__enter__ <- contextlib.py:530:enter_context",
+          16
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1836:validate_owner <- direct_service.py:1766:_active_admission_guard <- contextlib.py:141:__enter__",
+          16
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1160:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1836:validate_owner <- direct_service.py:1766:_active_admission_guard",
+          16
+        ],
+        [
+          "direct_registry.py:984:_metadata <- direct_registry.py:1165:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1836:validate_owner <- direct_service.py:1766:_active_admission_guard",
+          16
+        ],
+        [
+          "direct_registry.py:1031:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1836:validate_owner <- direct_service.py:1766:_active_admission_guard <- contextlib.py:141:__enter__ <- direct_service.py:1849:acquire_exec_capacity <- direct_service.py:1206:exec",
+          16
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:886:wake <- node_runtime.py:499:wake_with_activity_revision <- node_agent.py:876:_wake_sandbox",
+          15
+        ],
+        [
+          "direct_registry.py:1046:_transaction <- contextlib.py:148:__exit__ <- direct_registry.py:669:get <- node_runtime.py:224:release_shared <- sandbox_exec.py:607:_complete <- sandbox_exec.py:486:_wait_process_unobserved <- sandbox_exec.py:457:_wait_process <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner",
+          15
+        ],
+        [
+          "direct_warden.py:105:_wait <- direct_warden.py:133:run <- image_rootfs.py:203:_checked <- image_rootfs.py:625:_inspect_overlay2 <- image_rootfs.py:295:operation_lease <- contextlib.py:141:__enter__ <- image_rootfs.py:1155:resume_sandbox <- direct_warden.py:698:resume <- direct_service.py:1658:_resume_with_network",
+          15
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1829:acquire_exec_capacity <- direct_service.py:1206:exec <- direct_service.py:1562:_file_exec",
+          15
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:564:get <- node_runtime.py:556:require_activity_sandbox <- sandbox_exec.py:173:start <- node_agent.py:595:_start_exec",
+          15
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- node_runtime.py:224:release_shared <- sandbox_exec.py:607:_complete <- sandbox_exec.py:486:_wait_process_unobserved <- sandbox_exec.py:457:_wait_process",
+          15
+        ],
+        [
+          "direct_registry.py:1031:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- node_runtime.py:224:release_shared <- sandbox_exec.py:607:_complete <- sandbox_exec.py:486:_wait_process_unobserved <- sandbox_exec.py:457:_wait_process <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner",
+          14
+        ],
+        [
+          "hibernation.py:658:publish_complete <- direct_warden.py:639:park <- direct_service.py:756:park <- node_runtime.py:440:park_with_activity_revision <- node_agent.py:735:_park_sandbox <- node_agent.py:407:do_POST <- http_server.py:204:wrapped <- server.py:484:handle_one_request <- server.py:496:handle",
+          14
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_runtime.py:155:exec_command <- sandbox_exec.py:181:start <- node_agent.py:595:_start_exec",
+          14
+        ],
+        [
+          "direct_warden.py:105:_wait <- direct_warden.py:133:run <- direct_warden.py:1636:_checked <- direct_warden.py:626:park <- direct_service.py:756:park <- node_runtime.py:440:park_with_activity_revision <- node_agent.py:735:_park_sandbox <- node_agent.py:407:do_POST <- http_server.py:204:wrapped",
+          13
+        ],
+        [
+          "hibernation.py:837:delete_published <- direct_warden.py:1306:_finalize_restore_artifacts <- direct_warden.py:812:resume <- direct_service.py:1658:_resume_with_network <- direct_service.py:898:wake <- node_runtime.py:499:wake_with_activity_revision <- node_agent.py:876:_wake_sandbox <- node_agent.py:410:do_POST <- http_server.py:204:wrapped",
+          13
+        ],
+        [
+          "direct_registry.py:1154:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1836:validate_owner <- direct_service.py:1766:_active_admission_guard <- contextlib.py:141:__enter__",
+          13
+        ],
+        [
+          "direct_registry.py:1141:_versions <- direct_registry.py:1160:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:564:get <- node_runtime.py:556:require_activity_sandbox <- sandbox_exec.py:173:start",
+          13
+        ],
+        [
+          "threading.py:1133:join <- sandbox_exec.py:474:_wait_process_unobserved <- sandbox_exec.py:457:_wait_process <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          13
+        ],
+        [
+          "direct_warden.py:105:_wait <- direct_warden.py:133:run <- direct_warden.py:1636:_checked <- direct_warden.py:1547:_state_identity_status <- direct_warden.py:755:resume <- direct_service.py:1658:_resume_with_network <- direct_service.py:898:wake <- node_runtime.py:499:wake_with_activity_revision <- node_agent.py:876:_wake_sandbox",
+          13
+        ],
+        [
+          "direct_network.py:888:__enter__ <- direct_network.py:212:ensure <- direct_provisioner.py:891:_network_namespace <- direct_provisioner.py:903:ensure_network <- direct_service.py:1648:network <- thread.py:73:run <- thread.py:86:run <- thread.py:119:_worker <- threading.py:1024:run",
+          12
+        ],
+        [
+          "direct_registry.py:1161:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- node_runtime.py:224:release_shared <- sandbox_exec.py:607:_complete <- sandbox_exec.py:486:_wait_process_unobserved <- sandbox_exec.py:457:_wait_process",
+          12
+        ],
+        [
+          "direct_registry.py:1161:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1514:_write_file <- direct_service.py:1484:write_file <- node_runtime.py:592:upload_file",
+          12
+        ],
+        [
+          "threading.py:369:wait <- threading.py:670:wait <- threading.py:1011:start <- socketserver.py:711:process_request <- http_server.py:295:process_request <- socketserver.py:318:_handle_request_noblock <- socketserver.py:240:serve_forever <- cli.py:1194:cmd_serve_direct_node_agent <- cli.py:239:main",
+          12
+        ],
+        [
+          "direct_registry.py:1141:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_runtime.py:205:acquire_shared <- sandbox_exec.py:169:start <- node_agent.py:595:_start_exec",
+          12
+        ],
+        [
+          "direct_registry.py:1031:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_runtime.py:155:exec_command <- sandbox_exec.py:181:start <- node_agent.py:595:_start_exec <- node_agent.py:413:do_POST <- http_server.py:204:wrapped",
+          12
+        ],
+        [
+          "direct_registry.py:1031:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_agent.py:1220:_upload_file <- node_agent.py:502:do_PUT <- http_server.py:204:wrapped <- server.py:484:handle_one_request <- server.py:496:handle",
+          12
+        ],
+        [
+          "threading.py:369:wait <- threading.py:670:wait <- singleflight_cache.py:52:get_or_load <- runtime_metrics.py:41:__call__ <- direct_service.py:1764:_active_admission_guard <- contextlib.py:141:__enter__ <- direct_service.py:1849:acquire_exec_capacity <- node_runtime.py:563:acquire_exec_capacity <- sandbox_exec.py:180:start",
+          12
+        ],
+        [
+          "direct_registry.py:1046:_transaction <- contextlib.py:148:__exit__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_agent.py:1220:_upload_file <- node_agent.py:502:do_PUT <- http_server.py:204:wrapped <- server.py:484:handle_one_request <- server.py:496:handle",
+          12
+        ],
+        [
+          "direct_registry.py:1046:_transaction <- contextlib.py:148:__exit__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1199:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file <- direct_service.py:1484:write_file <- node_runtime.py:592:upload_file",
+          12
+        ],
+        [
+          "direct_registry.py:1141:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1514:_write_file <- direct_service.py:1484:write_file <- node_runtime.py:592:upload_file",
+          12
+        ],
+        [
+          "direct_registry.py:1161:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1829:acquire_exec_capacity <- direct_service.py:1206:exec <- direct_service.py:1562:_file_exec",
+          12
+        ],
+        [
+          "direct_registry.py:919:_get <- direct_registry.py:670:get <- node_runtime.py:224:release_shared <- sandbox_exec.py:607:_complete <- sandbox_exec.py:486:_wait_process_unobserved <- sandbox_exec.py:457:_wait_process <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          12
+        ],
+        [
+          "direct_registry.py:1046:_transaction <- contextlib.py:148:__exit__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1829:acquire_exec_capacity <- direct_service.py:1206:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file <- direct_service.py:1484:write_file",
+          12
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1160:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1829:acquire_exec_capacity <- node_runtime.py:563:acquire_exec_capacity",
+          11
+        ],
+        [
+          "direct_registry.py:1141:_versions <- direct_registry.py:1160:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1514:_write_file <- direct_service.py:1484:write_file",
+          11
+        ],
+        [
+          "direct_registry.py:1046:_transaction <- contextlib.py:148:__exit__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1829:acquire_exec_capacity <- node_runtime.py:563:acquire_exec_capacity <- sandbox_exec.py:180:start <- node_agent.py:595:_start_exec <- node_agent.py:413:do_POST",
+          11
+        ],
+        [
+          "direct_registry.py:1031:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_runtime.py:205:acquire_shared <- sandbox_exec.py:169:start <- node_agent.py:595:_start_exec <- node_agent.py:413:do_POST <- http_server.py:204:wrapped",
+          11
+        ],
+        [
+          "direct_registry.py:1141:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1199:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file",
+          11
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1160:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:682:activity_revision <- direct_service.py:1890:advance_lifecycle_activity_revision <- node_runtime.py:504:wake_with_activity_revision <- node_agent.py:876:_wake_sandbox",
+          11
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_runtime.py:205:acquire_shared <- sandbox_exec.py:169:start <- node_agent.py:595:_start_exec",
+          11
+        ],
+        [
+          "direct_registry.py:1161:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1199:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file",
+          11
+        ],
+        [
+          "direct_registry.py:1161:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_runtime.py:155:exec_command <- sandbox_exec.py:181:start <- node_agent.py:595:_start_exec",
+          11
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_runtime.py:562:acquire_exec_capacity <- sandbox_exec.py:180:start <- node_agent.py:595:_start_exec",
+          11
+        ],
+        [
+          "direct_registry.py:1046:_transaction <- contextlib.py:148:__exit__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1836:validate_owner <- direct_service.py:1766:_active_admission_guard <- contextlib.py:141:__enter__ <- direct_service.py:1849:acquire_exec_capacity <- node_runtime.py:563:acquire_exec_capacity",
+          11
+        ],
+        [
+          "direct_registry.py:1161:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1195:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file",
+          11
+        ]
+      ]
+    }
+  },
+  {
+    "job_id": "12398321",
+    "exit_code": 0,
+    "profile": {
+      "samples": 100,
+      "placement_lock_owner": [],
+      "all_threads": [
+        [
+          "thread.py:116:_worker <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          939
+        ],
+        [
+          "threading.py:373:wait <- admission.py:43:acquire <- direct_service.py:1622:_restore_slot <- contextlib.py:141:__enter__ <- contextlib.py:530:enter_context <- direct_service.py:1635:_restore_admission <- contextlib.py:141:__enter__ <- direct_service.py:877:wake <- node_runtime.py:499:wake_with_activity_revision",
+          756
+        ],
+        [
+          "socket.py:725:readinto <- server.py:464:handle_one_request <- server.py:498:handle <- socketserver.py:766:__init__ <- socketserver.py:362:finish_request <- socketserver.py:697:process_request_thread <- http_server.py:376:process_request_thread <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner",
+          529
+        ],
+        [
+          "storage_native_daemon.py:3538:_recv_exact <- storage_native_daemon.py:3126:_call_unobserved <- storage_native_daemon.py:3110:_call <- storage_native_daemon.py:3074:_record_call <- storage_native_daemon.py:2977:ensure_mounted <- direct_warden.py:1884:_mount_storage <- direct_warden.py:694:resume <- direct_service.py:1658:_resume_with_network <- direct_service.py:898:wake",
+          246
+        ],
+        [
+          "threading.py:373:wait <- sandbox_exec.py:253:events_after <- node_agent.py:1130:_exec_events <- node_agent.py:289:do_GET <- http_server.py:204:wrapped <- server.py:484:handle_one_request <- server.py:498:handle <- socketserver.py:766:__init__ <- socketserver.py:362:finish_request",
+          147
+        ],
+        [
+          "storage_native_daemon.py:3538:_recv_exact <- storage_native_daemon.py:3126:_call_unobserved <- storage_native_daemon.py:3110:_call <- storage_native_daemon.py:3074:_record_call <- storage_native_daemon.py:2985:ensure_released <- direct_warden.py:666:park <- direct_service.py:756:park <- node_runtime.py:440:park_with_activity_revision <- node_agent.py:735:_park_sandbox",
+          139
+        ],
+        [
+          "sandbox_exec.py:402:_pump_stream <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          125
+        ],
+        [
+          "direct_warden.py:105:_wait <- direct_warden.py:133:run <- direct_warden.py:1636:_checked <- direct_warden.py:743:resume <- direct_service.py:1658:_resume_with_network <- direct_service.py:898:wake <- node_runtime.py:499:wake_with_activity_revision <- node_agent.py:876:_wake_sandbox <- node_agent.py:410:do_POST",
+          110
+        ],
+        [
+          "<string>:12:sample <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          100
+        ],
+        [
+          "threading.py:373:wait <- threading.py:670:wait <- __init__.py:553:_ticker <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          100
+        ],
+        [
+          "threading.py:373:wait <- threading.py:670:wait <- telemetry.py:271:_run <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          100
+        ],
+        [
+          "threading.py:373:wait <- threading.py:670:wait <- direct_service.py:519:_network_reconciliation_loop <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          94
+        ],
+        [
+          "threading.py:373:wait <- threading.py:670:wait <- direct_service.py:461:_deletion_reconciliation_loop <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          85
+        ],
+        [
+          "selectors.py:452:select <- direct_service.py:203:run <- direct_service.py:1222:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file <- direct_service.py:1484:write_file <- node_runtime.py:592:upload_file <- node_agent.py:1233:_upload_file <- node_agent.py:502:do_PUT",
+          74
+        ],
+        [
+          "selectors.py:398:select <- socketserver.py:235:serve_forever <- cli.py:1194:cmd_serve_direct_node_agent <- cli.py:239:main <- cli.py:6628:<module> <- <frozen runpy>:88:_run_code <- <frozen runpy>:198:_run_module_as_main",
+          65
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1836:validate_owner <- direct_service.py:1766:_active_admission_guard <- contextlib.py:141:__enter__",
+          56
+        ],
+        [
+          "subprocess.py:2042:_try_wait <- subprocess.py:2084:_wait <- subprocess.py:1279:wait <- sandbox_exec.py:472:_wait_process_unobserved <- sandbox_exec.py:457:_wait_process <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          53
+        ],
+        [
+          "threading.py:373:wait <- threading.py:670:wait <- node_runtime.py:311:_idle_parking_loop <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          45
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1829:acquire_exec_capacity <- direct_service.py:1206:exec <- direct_service.py:1562:_file_exec",
+          36
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1195:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file",
+          32
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1199:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file",
+          32
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1514:_write_file <- direct_service.py:1484:write_file <- node_runtime.py:592:upload_file",
+          31
+        ],
+        [
+          "direct_registry.py:1161:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1836:validate_owner <- direct_service.py:1766:_active_admission_guard <- contextlib.py:141:__enter__",
+          29
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- node_runtime.py:224:release_shared <- sandbox_exec.py:607:_complete <- sandbox_exec.py:486:_wait_process_unobserved <- sandbox_exec.py:457:_wait_process",
+          28
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1836:validate_owner <- direct_service.py:1766:_active_admission_guard <- contextlib.py:141:__enter__",
+          28
+        ],
+        [
+          "<frozen posixpath>:457:realpath <- __init__.py:939:resolve <- image_rootfs.py:697:_validate_overlay2_layer <- image_rootfs.py:660:<genexpr> <- image_rootfs.py:660:_inspect_overlay2 <- image_rootfs.py:295:operation_lease <- contextlib.py:141:__enter__ <- image_rootfs.py:1155:resume_sandbox <- direct_warden.py:698:resume",
+          25
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_agent.py:1220:_upload_file <- node_agent.py:502:do_PUT <- http_server.py:204:wrapped",
+          24
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_runtime.py:562:acquire_exec_capacity <- sandbox_exec.py:180:start <- node_agent.py:595:_start_exec",
+          23
+        ],
+        [
+          "direct_registry.py:1046:_transaction <- contextlib.py:148:__exit__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1195:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file <- direct_service.py:1484:write_file <- node_runtime.py:592:upload_file",
+          22
+        ],
+        [
+          "direct_registry.py:1141:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1836:validate_owner <- direct_service.py:1766:_active_admission_guard <- contextlib.py:141:__enter__",
+          22
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_runtime.py:205:acquire_shared <- sandbox_exec.py:169:start <- node_agent.py:595:_start_exec",
+          21
+        ],
+        [
+          "direct_registry.py:1141:_versions <- direct_registry.py:1160:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1836:validate_owner <- direct_service.py:1766:_active_admission_guard",
+          21
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1829:acquire_exec_capacity <- direct_service.py:1206:exec <- direct_service.py:1562:_file_exec",
+          21
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:564:get <- node_runtime.py:556:require_activity_sandbox <- sandbox_exec.py:173:start <- node_agent.py:595:_start_exec",
+          20
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_runtime.py:155:exec_command <- sandbox_exec.py:181:start <- node_agent.py:595:_start_exec",
+          19
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1160:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1829:acquire_exec_capacity <- direct_service.py:1206:exec",
+          19
+        ],
+        [
+          "hibernation.py:658:publish_complete <- direct_warden.py:639:park <- direct_service.py:756:park <- node_runtime.py:440:park_with_activity_revision <- node_agent.py:735:_park_sandbox <- node_agent.py:407:do_POST <- http_server.py:204:wrapped <- server.py:484:handle_one_request <- server.py:496:handle",
+          19
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1829:acquire_exec_capacity <- node_runtime.py:563:acquire_exec_capacity <- sandbox_exec.py:180:start",
+          19
+        ],
+        [
+          "direct_registry.py:1141:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1195:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file",
+          18
+        ],
+        [
+          "direct_registry.py:1046:_transaction <- contextlib.py:148:__exit__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_runtime.py:155:exec_command <- sandbox_exec.py:181:start <- node_agent.py:595:_start_exec <- node_agent.py:413:do_POST <- http_server.py:204:wrapped",
+          18
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:682:activity_revision <- direct_service.py:1890:advance_lifecycle_activity_revision <- node_runtime.py:504:wake_with_activity_revision <- node_agent.py:876:_wake_sandbox <- node_agent.py:410:do_POST",
+          18
+        ],
+        [
+          "direct_registry.py:1161:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1195:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file",
+          18
+        ],
+        [
+          "direct_registry.py:1141:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1199:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file",
+          17
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1199:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file",
+          17
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1514:_write_file <- direct_service.py:1484:write_file <- node_runtime.py:592:upload_file",
+          16
+        ],
+        [
+          "direct_registry.py:984:_metadata <- direct_registry.py:1165:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1836:validate_owner <- direct_service.py:1766:_active_admission_guard",
+          16
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1160:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1514:_write_file <- direct_service.py:1484:write_file",
+          16
+        ],
+        [
+          "direct_registry.py:919:_get <- direct_registry.py:670:get <- direct_service.py:1900:_require_registration <- direct_service.py:1829:acquire_exec_capacity <- direct_service.py:1206:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file <- direct_service.py:1484:write_file <- node_runtime.py:592:upload_file",
+          16
+        ],
+        [
+          "direct_registry.py:1046:_transaction <- contextlib.py:148:__exit__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1199:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file <- direct_service.py:1484:write_file <- node_runtime.py:592:upload_file",
+          16
+        ],
+        [
+          "direct_registry.py:1161:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1199:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file",
+          16
+        ],
+        [
+          "direct_registry.py:1153:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:886:wake <- node_runtime.py:499:wake_with_activity_revision <- node_agent.py:876:_wake_sandbox",
+          15
+        ],
+        [
+          "direct_registry.py:1141:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1829:acquire_exec_capacity <- direct_service.py:1206:exec <- direct_service.py:1562:_file_exec",
+          15
+        ],
+        [
+          "direct_warden.py:105:_wait <- direct_warden.py:133:run <- direct_warden.py:1636:_checked <- direct_warden.py:626:park <- direct_service.py:756:park <- node_runtime.py:440:park_with_activity_revision <- node_agent.py:735:_park_sandbox <- node_agent.py:407:do_POST <- http_server.py:204:wrapped",
+          15
+        ],
+        [
+          "direct_registry.py:981:_metadata <- direct_registry.py:1165:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1836:validate_owner <- direct_service.py:1766:_active_admission_guard",
+          15
+        ],
+        [
+          "direct_registry.py:1046:_transaction <- contextlib.py:148:__exit__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1829:acquire_exec_capacity <- direct_service.py:1206:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file <- direct_service.py:1484:write_file",
+          15
+        ],
+        [
+          "direct_registry.py:1031:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- node_runtime.py:224:release_shared <- sandbox_exec.py:607:_complete <- sandbox_exec.py:486:_wait_process_unobserved <- sandbox_exec.py:457:_wait_process <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner",
+          15
+        ],
+        [
+          "http_server.py:316:shutdown_request <- socketserver.py:701:process_request_thread <- http_server.py:376:process_request_thread <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          15
+        ],
+        [
+          "direct_registry.py:1161:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1829:acquire_exec_capacity <- node_runtime.py:563:acquire_exec_capacity <- sandbox_exec.py:180:start",
+          14
+        ],
+        [
+          "direct_registry.py:1161:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1514:_write_file <- direct_service.py:1484:write_file <- node_runtime.py:592:upload_file",
+          14
+        ],
+        [
+          "threading.py:369:wait <- threading.py:670:wait <- singleflight_cache.py:52:get_or_load <- runtime_metrics.py:41:__call__ <- direct_service.py:1764:_active_admission_guard <- contextlib.py:141:__enter__ <- direct_service.py:1849:acquire_exec_capacity <- direct_service.py:1206:exec <- direct_service.py:1562:_file_exec",
+          14
+        ],
+        [
+          "direct_registry.py:1046:_transaction <- contextlib.py:148:__exit__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1836:validate_owner <- direct_service.py:1766:_active_admission_guard <- contextlib.py:141:__enter__ <- direct_service.py:1849:acquire_exec_capacity <- direct_service.py:1206:exec",
+          14
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_agent.py:1220:_upload_file <- node_agent.py:502:do_PUT <- http_server.py:204:wrapped",
+          14
+        ],
+        [
+          "direct_registry.py:1046:_transaction <- contextlib.py:148:__exit__ <- direct_registry.py:669:get <- node_runtime.py:224:release_shared <- sandbox_exec.py:607:_complete <- sandbox_exec.py:486:_wait_process_unobserved <- sandbox_exec.py:457:_wait_process <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner",
+          14
+        ],
+        [
+          "direct_registry.py:1161:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1829:acquire_exec_capacity <- direct_service.py:1206:exec <- direct_service.py:1562:_file_exec",
+          13
+        ],
+        [
+          "direct_registry.py:1141:_versions <- direct_registry.py:1160:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1199:exec <- direct_service.py:1562:_file_exec",
+          13
+        ],
+        [
+          "direct_registry.py:1046:_transaction <- contextlib.py:148:__exit__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1829:acquire_exec_capacity <- node_runtime.py:563:acquire_exec_capacity <- sandbox_exec.py:180:start <- node_agent.py:595:_start_exec <- node_agent.py:413:do_POST",
+          13
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:659:relay_wake_fence <- node_runtime.py:438:park_with_activity_revision <- node_agent.py:735:_park_sandbox <- node_agent.py:407:do_POST <- http_server.py:204:wrapped",
+          13
+        ],
+        [
+          "direct_registry.py:1031:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1836:validate_owner <- direct_service.py:1766:_active_admission_guard <- contextlib.py:141:__enter__ <- direct_service.py:1849:acquire_exec_capacity <- node_runtime.py:563:acquire_exec_capacity",
+          13
+        ],
+        [
+          "direct_network.py:888:__enter__ <- direct_network.py:212:ensure <- direct_provisioner.py:891:_network_namespace <- direct_provisioner.py:903:ensure_network <- direct_service.py:1648:network <- thread.py:73:run <- thread.py:86:run <- thread.py:119:_worker <- threading.py:1024:run",
+          13
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1160:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1836:validate_owner <- direct_service.py:1766:_active_admission_guard",
+          13
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:564:get <- node_runtime.py:556:require_activity_sandbox <- sandbox_exec.py:173:start <- node_agent.py:595:_start_exec",
+          13
+        ],
+        [
+          "direct_registry.py:981:_metadata <- direct_registry.py:1165:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1195:exec <- direct_service.py:1562:_file_exec",
+          12
+        ],
+        [
+          "direct_registry.py:1046:_transaction <- contextlib.py:148:__exit__ <- direct_registry.py:669:get <- direct_service.py:564:get <- node_runtime.py:556:require_activity_sandbox <- sandbox_exec.py:173:start <- node_agent.py:595:_start_exec <- node_agent.py:413:do_POST <- http_server.py:204:wrapped",
+          12
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1160:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1195:exec <- direct_service.py:1562:_file_exec",
+          12
+        ],
+        [
+          "direct_registry.py:1030:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- node_runtime.py:224:release_shared <- sandbox_exec.py:607:_complete <- sandbox_exec.py:486:_wait_process_unobserved <- sandbox_exec.py:457:_wait_process <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner",
+          12
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1195:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file",
+          12
+        ],
+        [
+          "direct_registry.py:1141:_versions <- direct_registry.py:1160:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1195:exec <- direct_service.py:1562:_file_exec",
+          12
+        ],
+        [
+          "direct_registry.py:1141:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_runtime.py:155:exec_command <- sandbox_exec.py:181:start <- node_agent.py:595:_start_exec",
+          12
+        ],
+        [
+          "direct_registry.py:1140:_versions <- direct_registry.py:1092:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_runtime.py:155:exec_command <- sandbox_exec.py:181:start <- node_agent.py:595:_start_exec",
+          12
+        ],
+        [
+          "direct_registry.py:1141:_versions <- direct_registry.py:1160:_validate_schema <- direct_registry.py:1119:_ensure_schema <- direct_registry.py:1032:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_runtime.py:205:acquire_shared <- sandbox_exec.py:169:start",
+          12
+        ]
+      ]
+    }
+  },
+  {
+    "job_id": "12398322",
+    "exit_code": 0,
+    "profile": {
+      "samples": 100,
+      "placement_lock_owner": [],
+      "all_threads": [
+        [
+          "socket.py:725:readinto <- server.py:464:handle_one_request <- server.py:498:handle <- socketserver.py:766:__init__ <- socketserver.py:362:finish_request <- socketserver.py:697:process_request_thread <- http_server.py:376:process_request_thread <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner",
+          193
+        ],
+        [
+          "<string>:12:sample <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          100
+        ],
+        [
+          "threading.py:373:wait <- threading.py:670:wait <- node_runtime.py:311:_idle_parking_loop <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          100
+        ],
+        [
+          "threading.py:373:wait <- threading.py:670:wait <- direct_service.py:519:_network_reconciliation_loop <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          100
+        ],
+        [
+          "threading.py:373:wait <- threading.py:670:wait <- direct_service.py:461:_deletion_reconciliation_loop <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          100
+        ],
+        [
+          "threading.py:373:wait <- threading.py:670:wait <- __init__.py:553:_ticker <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          100
+        ],
+        [
+          "threading.py:373:wait <- threading.py:670:wait <- telemetry.py:271:_run <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          100
+        ],
+        [
+          "selectors.py:398:select <- socketserver.py:235:serve_forever <- cli.py:1194:cmd_serve_direct_node_agent <- cli.py:239:main <- cli.py:6628:<module> <- <frozen runpy>:88:_run_code <- <frozen runpy>:198:_run_module_as_main",
+          99
+        ],
+        [
+          "sandbox_exec.py:402:_pump_stream <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          20
+        ],
+        [
+          "thread.py:116:_worker <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          15
+        ],
+        [
+          "direct_warden.py:105:_wait <- direct_warden.py:133:run <- direct_warden.py:1636:_checked <- direct_warden.py:743:resume <- direct_service.py:1658:_resume_with_network <- direct_service.py:898:wake <- node_runtime.py:499:wake_with_activity_revision <- node_agent.py:876:_wake_sandbox <- node_agent.py:410:do_POST",
+          10
+        ],
+        [
+          "subprocess.py:2042:_try_wait <- subprocess.py:2084:_wait <- subprocess.py:1279:wait <- sandbox_exec.py:472:_wait_process_unobserved <- sandbox_exec.py:457:_wait_process <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+          10
+        ],
+        [
+          "threading.py:373:wait <- sandbox_exec.py:253:events_after <- node_agent.py:1130:_exec_events <- node_agent.py:289:do_GET <- http_server.py:204:wrapped <- server.py:484:handle_one_request <- server.py:498:handle <- socketserver.py:766:__init__ <- socketserver.py:362:finish_request",
+          7
+        ],
+        [
+          "storage_native_daemon.py:3538:_recv_exact <- storage_native_daemon.py:3126:_call_unobserved <- storage_native_daemon.py:3110:_call <- storage_native_daemon.py:3074:_record_call <- storage_native_daemon.py:2977:ensure_mounted <- direct_warden.py:1884:_mount_storage <- direct_warden.py:694:resume <- direct_service.py:1658:_resume_with_network <- direct_service.py:898:wake",
+          2
+        ],
+        [
+          "direct_warden.py:105:_wait <- direct_warden.py:133:run <- image_rootfs.py:203:_checked <- image_rootfs.py:625:_inspect_overlay2 <- image_rootfs.py:295:operation_lease <- contextlib.py:141:__enter__ <- image_rootfs.py:1155:resume_sandbox <- direct_warden.py:698:resume <- direct_service.py:1658:_resume_with_network",
+          2
+        ],
+        [
+          "direct_warden.py:105:_wait <- direct_warden.py:133:run <- direct_warden.py:1636:_checked <- direct_warden.py:1547:_state_identity_status <- direct_warden.py:1292:_ensure_candidate_running <- direct_warden.py:771:resume <- direct_service.py:1658:_resume_with_network <- direct_service.py:898:wake <- node_runtime.py:499:wake_with_activity_revision",
+          2
+        ],
+        [
+          "selectors.py:452:select <- direct_service.py:203:run <- direct_service.py:1222:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file <- direct_service.py:1484:write_file <- node_runtime.py:592:upload_file <- node_agent.py:1233:_upload_file <- node_agent.py:502:do_PUT",
+          2
+        ],
+        [
+          "threading.py:369:wait <- threading.py:670:wait <- threading.py:1011:start <- <string>:17:<module> <- selectors.py:398:select <- socketserver.py:235:serve_forever <- cli.py:1194:cmd_serve_direct_node_agent <- cli.py:239:main <- cli.py:6628:<module>",
+          1
+        ],
+        [
+          "runtime_metrics.py:53:sample_node_runtime_metrics <- singleflight_cache.py:55:get_or_load <- runtime_metrics.py:41:__call__ <- direct_service.py:1764:_active_admission_guard <- contextlib.py:141:__enter__ <- direct_service.py:1816:_reserve_active_capacity <- contextlib.py:141:__enter__ <- contextlib.py:530:enter_context <- direct_service.py:1636:_restore_admission",
+          1
+        ],
+        [
+          "direct_registry.py:1046:_transaction <- contextlib.py:148:__exit__ <- direct_registry.py:659:relay_wake_fence <- node_runtime.py:493:wake_with_activity_revision <- node_agent.py:876:_wake_sandbox <- node_agent.py:410:do_POST <- http_server.py:204:wrapped <- server.py:484:handle_one_request <- server.py:496:handle",
+          1
+        ],
+        [
+          "subprocess.py:1920:_execute_child <- subprocess.py:1039:__init__ <- subprocess.py:555:run <- direct_network.py:643:_iptables_snapshot <- direct_network.py:408:_ensure_host_rules <- direct_network.py:250:ensure <- direct_provisioner.py:891:_network_namespace <- direct_provisioner.py:903:ensure_network <- direct_service.py:1648:network",
+          1
+        ],
+        [
+          "direct_registry.py:1046:_transaction <- contextlib.py:148:__exit__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- direct_service.py:1829:acquire_exec_capacity <- direct_service.py:1206:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file <- direct_service.py:1484:write_file",
+          1
+        ],
+        [
+          "threading.py:369:wait <- threading.py:670:wait <- threading.py:1011:start <- sandbox_exec.py:363:_start_process <- sandbox_exec.py:223:start <- node_agent.py:595:_start_exec <- node_agent.py:413:do_POST <- http_server.py:204:wrapped <- server.py:484:handle_one_request",
+          1
+        ],
+        [
+          "direct_registry.py:1031:_transaction <- contextlib.py:141:__enter__ <- direct_registry.py:669:get <- direct_service.py:1900:_require_registration <- node_agent.py:1220:_upload_file <- node_agent.py:502:do_PUT <- http_server.py:204:wrapped <- server.py:484:handle_one_request <- server.py:496:handle",
+          1
+        ],
+        [
+          "runtime_metrics.py:53:sample_node_runtime_metrics <- singleflight_cache.py:55:get_or_load <- runtime_metrics.py:41:__call__ <- direct_service.py:1764:_active_admission_guard <- contextlib.py:141:__enter__ <- direct_service.py:1849:acquire_exec_capacity <- direct_service.py:1206:exec <- direct_service.py:1562:_file_exec <- direct_service.py:1526:_write_file",
+          1
+        ]
+      ]
+    }
+  }
+]

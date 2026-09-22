@@ -23,6 +23,7 @@ from .capabilities import (
     STATIC_FILE_MANAGEMENT_CAPABILITY,
     DISK_QUOTA_CAPABILITY,
     HIBERNATE_LOCAL_CAPABILITY,
+    RELAY_WAKE_FENCE_CAPABILITY,
     MANAGED_PRIMARY_CAPABILITY,
     STORAGE_NATIVE_CAPABILITY,
     STORAGE_NATIVE_DETACH_CAPABILITY,
@@ -720,8 +721,10 @@ class NodeAgentHandler(BuildContextHttpHandler):
             raw = self._read_json_body()
             if not isinstance(raw, dict):
                 raise ValueError("park payload must be a JSON object")
-            if set(raw) not in ({"operation_id"}, {"background", "operation_id"}):
+            relay_fields = {"relay_request_id", "generation"} if "relay_request_id" in raw else set()
+            if set(raw) - relay_fields not in ({"operation_id"}, {"background", "operation_id"}):
                 raise ValueError("park payload has an invalid schema")
+            relay_args = _relay_lifecycle_args(raw)
             operation_id = raw.get("operation_id")
             if not isinstance(operation_id, str) or not operation_id.strip():
                 raise ValueError("operation_id must be a nonempty string")
@@ -733,6 +736,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 sandbox_id,
                 operation_id=operation_id,
                 background=background,
+                **relay_args,
             )
         except SandboxConflictError as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
@@ -855,8 +859,10 @@ class NodeAgentHandler(BuildContextHttpHandler):
             raw = self._read_json_body()
             if not isinstance(raw, dict):
                 raise ValueError("wake payload must be a JSON object")
-            if set(raw) != {"generation", "operation_id"}:
+            if set(raw) - {"relay_request_id"} != {"generation", "operation_id"}:
                 raise ValueError("wake payload has an invalid schema")
+            relay_args = _relay_lifecycle_args(raw)
+            relay_args.pop("generation", None)
             operation_id = raw.get("operation_id")
             if not isinstance(operation_id, str) or not operation_id.strip():
                 raise ValueError("operation_id must be a nonempty string")
@@ -871,6 +877,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 sandbox_id,
                 generation=generation,
                 operation_id=operation_id,
+                **relay_args,
             )
         except (SandboxRestoreBusyError, SandboxStartupBusyError) as exc:
             self._write_exception(exc)
@@ -1795,6 +1802,7 @@ def build_direct_node_agent_server(
         "image-cache",
         DISK_QUOTA_CAPABILITY,
         HIBERNATE_LOCAL_CAPABILITY,
+        RELAY_WAKE_FENCE_CAPABILITY,
         "direct-runsc-v1",
     ]
     if service.provisioner.network_manager is not None:
@@ -1972,3 +1980,15 @@ def _file_path_from_query(parsed: Any) -> str | None:
     value = (parse_qs(parsed.query).get("path") or [""])[0]
     value = value.strip()
     return value or None
+
+
+def _relay_lifecycle_args(raw: dict[str, Any]) -> dict[str, Any]:
+    if 'relay_request_id' not in raw:
+        return {}
+    request_id, generation = raw['relay_request_id'], raw.get('generation')
+    from .sandbox import OPERATION_ID_RE
+    if not isinstance(request_id, str) or not OPERATION_ID_RE.fullmatch(request_id):
+        raise ValueError('invalid relay request identity')
+    if type(generation) is not int or generation < 1:
+        raise ValueError('relay lifecycle requires positive generation')
+    return {'relay_request_id': request_id, 'generation': generation}

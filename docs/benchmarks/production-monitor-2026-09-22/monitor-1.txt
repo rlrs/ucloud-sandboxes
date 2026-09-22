@@ -1,0 +1,13 @@
+UTC 2026-09-22T07:20:58.851772+00:00
+fleet latency_seconds 0.093 {"count": 115, "states": {"creating": 44, "running": 60, "parked": 8, "waking": 3}}
+nodes latency_seconds 0.025 [{"node_id": "sandbox-node-da929481be-1", "job_id": "12397503", "state": null, "last_heartbeat_at": null, "resources": null, "capacity": null, "sandbox_count": null, "ready": null}, {"node_id": "sandbox-node-438962a5bc-1", "job_id": "12398499", "state": null, "last_heartbeat_at": null, "resources": null, "capacity": null, "sandbox_count": null, "ready": null}, {"node_id": "sandbox-node-438962a5bc-2", "job_id": "12398500", "state": null, "last_heartbeat_at": null, "resources": null, "capacity": null, "sandbox_count": null, "ready": null}, {"node_id": "sandbox-builder-9c50125ec8-builder-1", "job_id": "12398529", "state": null, "last_heartbeat_at": null, "resources": null, "capacity": null, "sandbox_count": null, "ready": null}, {"node_id": "sandbox-builder-df0043c81e-builder-1", "job_id": "12398530", "state": null, "last_heartbeat_at": null, "resources": null, "capacity": null, "sandbox_count": null, "ready": null}, {"node_id": "sandbox-builder-9c69fe26bf-builder-1", "job_id": "12398531", "state": null, "last_heartbeat_at": null, "resources": null, "capacity": null, "sandbox_count": null, "ready": null}, {"node_id": "sandbox-node-cb35cd1d25-1", "job_id": "12398536", "state": null, "last_heartbeat_at": null, "resources": null, "capacity": null, "sandbox_count": null, "ready": null}]
+relay latency_seconds 0.009 {"backend": "postgres", "inflight": 5, "delivery_pending": 21, "oldest_delivery_pending_seconds": 13.727751970291138, "completed_retained": 519, "lifecycle": [{"action": "park", "n": 14, "max_attempts": 1}, {"action": "wake", "n": 21, "max_attempts": 1}], "database_pool": {"connections_num": 21, "connections_ms": 626, "requests_num": 57744, "usage_ms": 106602, "requests_queued": 84, "requests_wait_ms": 1442, "pool_min": 1, "pool_max": 16, "pool_size": 16, "pool_available": 11, "requests_waiting": 0}, "reserved_storage_bytes": 237035129}
+METRIC_COUNTS_10M {"program_state_transition": 2454, "program_wake_shadow_plan": 490, "program_wake_actual": 469, "autoscaler_cycle": 117, "node_heartbeat": 91, "vm_observed": 16, "vm_submitted": 5, "vm_init_attempt": 4, "node_first_heartbeat": 4, "sandbox_scheduled": 1}
+RECENT_ERRORS {} {}
+TIMING vm_init_attempt:duration_ms {"n": 4, "p50": 24032, "p95": 24374, "max": 30764}
+TIMING vm_init_attempt:run_duration_ms {"n": 4, "p50": 10753, "p95": 11119, "max": 13752}
+TIMING vm_init_attempt:stage_duration_ms {"n": 4, "p50": 13253, "p95": 13276, "max": 17009}
+PG_ACTIVITY [('active', None, None, 1), ('idle', 'Client', 'ClientRead', 17)]
+PG_DB [(18, 58255, 13, 523, 824741, 0, 0)]
+PG_LOCK_WAITS 0
+PG_SIZE_BYTES 15742643

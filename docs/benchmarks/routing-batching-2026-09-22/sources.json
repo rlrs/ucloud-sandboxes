@@ -1,0 +1,7 @@
+{
+  "ucloud_sandboxes/routing.py": "b486a9ea5f32abef74cd650f9b7e0e5d92cb097337c46fc76917524d7f590276",
+  "ucloud_sandboxes/durable_batch.py": "627bf02e8087a6acb7dd3a18c9702fa3374dc6adf920a28cde437ab911d3385b",
+  "tests/test_routing.py": "22ac161a5f7ab38f2de4eb5b9fceb7117e6fb6c7cd6018e05e91f93ee4b76b2b",
+  "tests/test_lifecycle_durability_batch.py": "4eb0db2cf3122afb2d64b2766ce3fc94538f0e3f8ee10ccd90bc73027ee56bc3",
+  "scripts/benchmark_lifecycle_batch.py": "f4dc5d5e36cd4b9a801885c20692da138e5a2968750153d2216eea8111e9480a"
+}

@@ -6,7 +6,7 @@ import struct
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 AGENTENV_UBLK_PROTOCOL_MAX_BYTES = 16 * 1024 * 1024
 
@@ -277,6 +277,7 @@ class AgentEnvUblkClient:
         source_image_config: Path,
         global_config: Path,
         stream_socket_path: Path,
+        progress: Callable[[], float] | None = None,
     ) -> StorageNativeLayer:
         """Flatten a complete local/remote image stack to a sequential stream."""
 
@@ -293,7 +294,8 @@ class AgentEnvUblkClient:
                 "source_image_config": str(source_image_config),
                 "global_config": str(global_config),
                 "stream_socket_path": str(stream_socket_path),
-            }
+            },
+            **({"progress": progress} if progress is not None else {}),
         )
         if response.get("status") != "dense_layer_exported":
             raise StorageNativeError(
@@ -333,7 +335,7 @@ class AgentEnvUblkClient:
         if response.get("status") != "ok":
             raise StorageNativeError("ublk daemon did not acknowledge shutdown")
 
-    def _call(self, request: dict[str, Any]) -> dict[str, Any]:
+    def _call(self, request: dict[str, Any], *, progress=None) -> dict[str, Any]:
         payload = json.dumps(
             request,
             ensure_ascii=True,
@@ -347,10 +349,28 @@ class AgentEnvUblkClient:
             connection.connect(str(self.socket_path))
             connection.sendall(struct.pack(">I", len(payload)))
             connection.sendall(payload)
-            length = struct.unpack(">I", self._recv_protocol_bytes(connection, 4))[0]
+            def receive(size):
+                if progress is None:
+                    return self._recv_protocol_bytes(connection, size)
+                connection.settimeout(min(0.25, self.timeout_seconds))
+                data = bytearray()
+                last_control = time.monotonic()
+                while len(data) < size:
+                    try:
+                        chunk = connection.recv(size - len(data))
+                    except socket.timeout:
+                        if time.monotonic() - max(progress(), last_control) >= self.timeout_seconds:
+                            raise
+                        continue
+                    if not chunk:
+                        raise StorageNativeError("ublk daemon returned a truncated response")
+                    data.extend(chunk)
+                    last_control = time.monotonic()
+                return bytes(data)
+            length = struct.unpack(">I", receive(4))[0]
             if length > AGENTENV_UBLK_PROTOCOL_MAX_BYTES:
                 raise StorageNativeError("ublk daemon response is too large")
-            raw_response = self._recv_protocol_bytes(connection, length)
+            raw_response = receive(length)
             try:
                 response = json.loads(raw_response.decode("utf-8"))
             except (UnicodeDecodeError, json.JSONDecodeError) as exc:

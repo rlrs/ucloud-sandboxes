@@ -11,6 +11,7 @@ import stat
 from threading import Lock
 import time
 from typing import Any, Iterable, Iterator
+import weakref
 
 from .bootstrap import VmBootstrapRecord
 from .models import NodeHeartbeat
@@ -62,6 +63,12 @@ _TABLE_SQL = """CREATE TABLE control_records (
 ) STRICT, WITHOUT ROWID"""
 
 
+def _close_control_connections(connections, guard):
+    with guard:
+        while connections:
+            connections.pop().close()
+
+
 class ControlStateStore:
     """The gateway/autoscaler authority for heartbeats and VM bootstrap state."""
 
@@ -70,6 +77,13 @@ class ControlStateStore:
         self._heartbeat_cache: OrderedDict[str, tuple[str, NodeHeartbeat]] = OrderedDict()
         self._heartbeat_cache_bytes = 0
         self._heartbeat_cache_lock = Lock()
+        self._connections: list[sqlite3.Connection] = []
+        self._connections_guard = Lock()
+        self._connection_pid = os.getpid()
+        self._connection_identity: tuple[int, int] | None = None
+        self._connection_finalizer = weakref.finalize(
+            self, _close_control_connections, self._connections, self._connections_guard,
+        )
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._prepare_file()
         connection = self._connect()
@@ -111,7 +125,9 @@ class ControlStateStore:
                 for k, v in self._load_heartbeats(connection).items()
             }
 
-    def get_heartbeat(self, job_id: str) -> NodeHeartbeat | None:
+    def get_heartbeat(
+        self, job_id: str, *, include_inventory: bool = True,
+    ) -> NodeHeartbeat | None:
         """Load one heartbeat without decoding every node inventory."""
 
         if not job_id:
@@ -124,7 +140,9 @@ class ControlStateStore:
             ).fetchone()
             if row is None:
                 return None
-            return _placement_heartbeat(self._read_heartbeat(job_id, row[0]))
+            return _placement_heartbeat(self._read_heartbeat(
+                job_id, row[0], include_inventory=include_inventory,
+            ))
 
     def quarantine_node(self, job_id: str, reason: str) -> NodeHeartbeat | None:
         """Close placement durably without discarding authenticated inventory."""
@@ -291,7 +309,9 @@ class ControlStateStore:
             result[job_id] = heartbeat
         return result
 
-    def _read_heartbeat(self, job_id: str, payload: str) -> NodeHeartbeat:
+    def _read_heartbeat(
+        self, job_id: str, payload: str, *, include_inventory: bool = True,
+    ) -> NodeHeartbeat:
         with self._heartbeat_cache_lock:
             cached = self._heartbeat_cache.get(job_id)
             if cached is not None and cached[0] == payload:
@@ -329,7 +349,11 @@ class ControlStateStore:
                     storage_dependency=_copy_json_value(entry.storage_dependency),
                 )
                 for entry in heartbeat.inventory
-            ),
+            ) if include_inventory else (),
+            # A header-only read must never be interpreted as proof that the
+            # worker has no sandboxes. Validation above still covers the full
+            # durable row, including inventory and canonical encoding.
+            inventory_complete=heartbeat.inventory_complete if include_inventory else False,
         )
 
     @staticmethod
@@ -358,7 +382,9 @@ class ControlStateStore:
 
     def _connect(self) -> sqlite3.Connection:
         try:
-            connection = sqlite3.connect(self.path, timeout=30, isolation_level=None)
+            connection = sqlite3.connect(
+                self.path, timeout=30, isolation_level=None, check_same_thread=False,
+            )
             connection.execute("PRAGMA busy_timeout = 30000")
             connection.execute("PRAGMA synchronous = FULL")
             return connection
@@ -366,19 +392,51 @@ class ControlStateStore:
             raise ValueError(_ERROR) from exc
 
     @contextmanager
-    def _transaction(self, *, write: bool) -> Iterator[sqlite3.Connection]:
-        connection = self._connect()
+    def _connection(self) -> Iterator[sqlite3.Connection]:
+        connection = None
+        reusable = False
         try:
-            connection.execute("BEGIN IMMEDIATE" if write else "BEGIN")
-            self._secure_files()
+            with self._connections_guard:
+                if os.getpid() != self._connection_pid:
+                    raise sqlite3.DatabaseError("reopen control state after fork")
+                info = self.path.stat()
+                identity = (info.st_dev, info.st_ino)
+                if self._connection_identity is not None and identity != self._connection_identity:
+                    raise sqlite3.DatabaseError("control state database file was replaced")
+                self._connection_identity = identity
+                if self._connections:
+                    connection = self._connections.pop()
+            if connection is None:
+                connection = self._connect()
             yield connection
-            connection.commit()
-        except BaseException as exc:
             if connection.in_transaction:
                 connection.rollback()
+            reusable = True
+        except BaseException as exc:
             _reraise(exc)
         finally:
-            connection.close()
+            if connection is not None:
+                with self._connections_guard:
+                    # Bound idle retention, never concurrent readers. Every
+                    # caller owns its connection until its snapshot is closed.
+                    if reusable and len(self._connections) < 16:
+                        self._connections.append(connection)
+                        connection = None
+                if connection is not None:
+                    connection.close()
+
+    @contextmanager
+    def _transaction(self, *, write: bool) -> Iterator[sqlite3.Connection]:
+        with self._connection() as connection:
+            try:
+                connection.execute("BEGIN IMMEDIATE" if write else "BEGIN")
+                self._secure_files()
+                yield connection
+                connection.commit()
+            except BaseException:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
 
     def _prepare_file(self) -> None:
         flags = os.O_RDWR | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)

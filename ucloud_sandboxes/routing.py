@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import defaultdict, OrderedDict
+from collections import defaultdict
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
@@ -10,11 +10,13 @@ import os
 from pathlib import Path
 import sqlite3
 import stat
-from threading import RLock
+from threading import Lock, RLock
 from typing import Any, Iterable, Iterator
 from uuid import uuid4
+import weakref
 
 from .capabilities import STORAGE_NATIVE_CAPABILITY
+from .durable_batch import DurableSqliteBatch
 from .models import (
     ResourceQuantity,
     SandboxDemand,
@@ -30,17 +32,11 @@ from .storage_native_registry import StorageSnapshotPublication
 
 _ROUTE_LOCKS_GUARD = RLock()
 _ROUTE_LOCKS: defaultdict[Path, RLock] = defaultdict(RLock)
-_EXEC_ROUTE_CACHES: defaultdict[Path, OrderedDict[str, ExecRoute]] = defaultdict(
-    OrderedDict
-)
-_EXEC_ROUTE_CACHE_SANDBOX_INDEXES: defaultdict[Path, dict[str, set[str]]] = defaultdict(
-    dict
-)
+_ROUTE_WRITE_BATCHES: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
 PENDING_DEMAND_TTL_SECONDS = 300
 # SQLite stores the durable demand count as a signed 64-bit integer. This is a
 # representation bound, not an admission limit; fleet policy governs capacity.
 MAX_PREPARED_CAPACITY_COUNT = (1 << 63) - 1
-EXEC_ROUTE_CACHE_MAX_ENTRIES = 65_536
 PROGRAM_TERMINAL_RETENTION_SECONDS = 7 * 24 * 60 * 60
 ROUTING_SCHEMA_VERSION = 3
 SANDBOX_WORKER_STATES = ("attached", "detaching", "detached")
@@ -600,14 +596,27 @@ class RoutingState:
     image_warmups: dict[str, PendingImageWarmup] = field(default_factory=dict)
 
 
+def _close_routing_connections(connections, guard):
+    with guard:
+        idle, connections[:] = list(connections), []
+    for connection in idle:
+        connection.close()
+
+
 class RoutingStore:
     def __init__(self, path: Path) -> None:
         self.path = path
+        self._connections: list[sqlite3.Connection] = []
+        self._connections_guard = Lock()
+        self._connection_identity: tuple[int, int] | None = None
+        self._connection_pid = os.getpid()
+        self._connection_finalizer = weakref.finalize(
+            self, _close_routing_connections, self._connections, self._connections_guard,
+        )
         self._lock = _route_lock(path)
-        self._exec_route_cache = _exec_route_cache(path)
-        self._exec_route_cache_sandbox_index = _exec_route_cache_sandbox_index(path)
         with self._lock:
             self._ensure_db()
+        self._write_batches = _route_write_batch(path)
 
     def load(self) -> RoutingState:
         with self._lock:
@@ -918,146 +927,161 @@ class RoutingStore:
         if state not in _PROGRAM_STATE_RANK:
             raise ValueError(f"unsupported program request state: {state}")
         transition_at = transition_at or utc_now().isoformat()
-        with self._lock:
-            with self._transaction() as conn:
-                current_route = self._get_sandbox_unlocked(conn, route.sandbox_id)
-                if (
-                    current_route is None
-                    or current_route.generation != route.generation
-                ):
-                    raise SandboxRouteConflictError(
-                        "program transition does not own the current sandbox generation"
-                    )
-                existing_row = conn.execute(
-                    """
-                    SELECT request_id, rollout_id, sandbox_id,
-                           sandbox_generation, state, resources_json,
-                           accepted_at, parked_at, response_ready_at,
-                           wake_started_at, wake_completed_at, updated_at,
-                           last_error
-                    FROM program_requests
-                    WHERE request_id = ?
-                    """,
-                    (request_id,),
-                ).fetchone()
-                existing = (
-                    _program_request_from_row(existing_row)
-                    if existing_row is not None
-                    else None
+        # SQLite and the shared writer serialize this database-only
+        # mutation. Inventory projection must not block lifecycle progress.
+        with self._transaction() as conn:
+            # Only the incarnation fences this transition. Loading the complete
+            # route here decoded the spec and storage snapshot on every model
+            # lifecycle event, while holding the shared writer.
+            current_route = conn.execute(
+                "SELECT generation FROM sandboxes WHERE sandbox_id = ?",
+                (route.sandbox_id,),
+            ).fetchone()
+            if (
+                current_route is None
+                or current_route["generation"] != route.generation
+            ):
+                raise SandboxRouteConflictError(
+                    "program transition does not own the current sandbox generation"
                 )
-                if existing is not None and (
-                    existing.rollout_id != rollout_id
-                    or existing.sandbox_id != route.sandbox_id
-                    or existing.sandbox_generation != route.generation
-                ):
-                    raise SandboxRouteConflictError(
-                        "program request id belongs to another rollout or sandbox"
-                    )
-                effective_state = state
-                if (
-                    existing is not None
-                    and _PROGRAM_STATE_RANK[existing.state] > _PROGRAM_STATE_RANK[state]
-                ):
-                    effective_state = existing.state
-                timestamps = {
-                    "accepted_at": existing.accepted_at if existing else "",
-                    "parked_at": existing.parked_at if existing else "",
-                    "response_ready_at": (
-                        existing.response_ready_at if existing else ""
-                    ),
-                    "wake_started_at": existing.wake_started_at if existing else "",
-                    "wake_completed_at": (
-                        existing.wake_completed_at if existing else ""
-                    ),
-                }
-                if accepted_at and not timestamps["accepted_at"]:
-                    timestamps["accepted_at"] = accepted_at
-                if not timestamps["accepted_at"]:
-                    timestamps["accepted_at"] = transition_at
-                if parked_at and not timestamps["parked_at"]:
-                    timestamps["parked_at"] = parked_at
-                transition_field = {
-                    "ready_to_wake": "response_ready_at",
-                    "waking": "wake_started_at",
-                    "acting": "wake_completed_at",
-                }.get(state)
-                if transition_field and not timestamps[transition_field]:
-                    timestamps[transition_field] = transition_at
-                advanced = bool(
-                    existing is not None
-                    and _PROGRAM_STATE_RANK[effective_state]
-                    > _PROGRAM_STATE_RANK[existing.state]
+            existing_row = conn.execute(
+                """
+                SELECT request_id, rollout_id, sandbox_id,
+                       sandbox_generation, state, resources_json,
+                       accepted_at, parked_at, response_ready_at,
+                       wake_started_at, wake_completed_at, updated_at,
+                       last_error
+                FROM program_requests
+                WHERE request_id = ?
+                """,
+                (request_id,),
+            ).fetchone()
+            existing = (
+                _program_request_from_row(existing_row)
+                if existing_row is not None
+                else None
+            )
+            if existing is not None and (
+                existing.rollout_id != rollout_id
+                or existing.sandbox_id != route.sandbox_id
+                or existing.sandbox_generation != route.generation
+            ):
+                raise SandboxRouteConflictError(
+                    "program request id belongs to another rollout or sandbox"
                 )
-                error = (
-                    last_error
-                    if last_error
-                    else (
-                        ""
-                        if clear_error or advanced
-                        else (existing.last_error if existing else "")
-                    )
+            effective_state = state
+            if (
+                existing is not None
+                and _PROGRAM_STATE_RANK[existing.state] > _PROGRAM_STATE_RANK[state]
+            ):
+                effective_state = existing.state
+            timestamps = {
+                "accepted_at": existing.accepted_at if existing else "",
+                "parked_at": existing.parked_at if existing else "",
+                "response_ready_at": (
+                    existing.response_ready_at if existing else ""
+                ),
+                "wake_started_at": existing.wake_started_at if existing else "",
+                "wake_completed_at": (
+                    existing.wake_completed_at if existing else ""
+                ),
+            }
+            if accepted_at and not timestamps["accepted_at"]:
+                timestamps["accepted_at"] = accepted_at
+            if not timestamps["accepted_at"]:
+                timestamps["accepted_at"] = transition_at
+            if parked_at and not timestamps["parked_at"]:
+                timestamps["parked_at"] = parked_at
+            transition_field = {
+                "ready_to_wake": "response_ready_at",
+                "waking": "wake_started_at",
+                "acting": "wake_completed_at",
+            }.get(state)
+            if transition_field and not timestamps[transition_field]:
+                timestamps[transition_field] = transition_at
+            advanced = bool(
+                existing is not None
+                and _PROGRAM_STATE_RANK[effective_state]
+                > _PROGRAM_STATE_RANK[existing.state]
+            )
+            error = (
+                last_error
+                if last_error
+                else (
+                    ""
+                    if clear_error or advanced
+                    else (existing.last_error if existing else "")
                 )
-                if existing is not None and (
-                    existing.state == effective_state
-                    and existing.resources == route.resources
-                    and existing.accepted_at == timestamps["accepted_at"]
-                    and existing.parked_at == timestamps["parked_at"]
-                    and existing.response_ready_at == timestamps["response_ready_at"]
-                    and existing.wake_started_at == timestamps["wake_started_at"]
-                    and existing.wake_completed_at == timestamps["wake_completed_at"]
-                    and existing.last_error == error
-                ):
-                    return existing, False
-                conn.execute(
-                    """
-                    INSERT INTO program_requests (
-                        request_id, rollout_id, sandbox_id, sandbox_generation,
-                        state, resources_json, accepted_at, parked_at,
-                        response_ready_at, wake_started_at, wake_completed_at,
-                        updated_at, last_error
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(request_id) DO UPDATE SET
-                        state = excluded.state,
-                        resources_json = excluded.resources_json,
-                        accepted_at = excluded.accepted_at,
-                        parked_at = excluded.parked_at,
-                        response_ready_at = excluded.response_ready_at,
-                        wake_started_at = excluded.wake_started_at,
-                        wake_completed_at = excluded.wake_completed_at,
-                        updated_at = excluded.updated_at,
-                        last_error = excluded.last_error
-                    """,
-                    (
-                        request_id,
-                        rollout_id,
-                        route.sandbox_id,
-                        route.generation,
-                        effective_state,
-                        _resources_json(route.resources),
-                        timestamps["accepted_at"],
-                        timestamps["parked_at"],
-                        timestamps["response_ready_at"],
-                        timestamps["wake_started_at"],
-                        timestamps["wake_completed_at"],
-                        transition_at,
-                        error,
-                    ),
+            )
+            if existing is not None and (
+                existing.state == effective_state
+                and existing.resources == route.resources
+                and existing.accepted_at == timestamps["accepted_at"]
+                and existing.parked_at == timestamps["parked_at"]
+                and existing.response_ready_at == timestamps["response_ready_at"]
+                and existing.wake_started_at == timestamps["wake_started_at"]
+                and existing.wake_completed_at == timestamps["wake_completed_at"]
+                and existing.last_error == error
+            ):
+                return existing, False
+            conn.execute(
+                """
+                INSERT INTO program_requests (
+                    request_id, rollout_id, sandbox_id, sandbox_generation,
+                    state, resources_json, accepted_at, parked_at,
+                    response_ready_at, wake_started_at, wake_completed_at,
+                    updated_at, last_error
                 )
-                row = conn.execute(
-                    """
-                    SELECT request_id, rollout_id, sandbox_id,
-                           sandbox_generation, state, resources_json,
-                           accepted_at, parked_at, response_ready_at,
-                           wake_started_at, wake_completed_at, updated_at,
-                           last_error
-                    FROM program_requests
-                    WHERE request_id = ?
-                    """,
-                    (request_id,),
-                ).fetchone()
-                assert row is not None
-                return _program_request_from_row(row), True
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(request_id) DO UPDATE SET
+                    state = excluded.state,
+                    resources_json = excluded.resources_json,
+                    accepted_at = excluded.accepted_at,
+                    parked_at = excluded.parked_at,
+                    response_ready_at = excluded.response_ready_at,
+                    wake_started_at = excluded.wake_started_at,
+                    wake_completed_at = excluded.wake_completed_at,
+                    updated_at = excluded.updated_at,
+                    last_error = excluded.last_error
+                """,
+                (
+                    request_id,
+                    rollout_id,
+                    route.sandbox_id,
+                    route.generation,
+                    effective_state,
+                    _resources_json(route.resources),
+                    timestamps["accepted_at"],
+                    timestamps["parked_at"],
+                    timestamps["response_ready_at"],
+                    timestamps["wake_started_at"],
+                    timestamps["wake_completed_at"],
+                    transition_at,
+                    error,
+                ),
+            )
+            row = conn.execute(
+                """
+                SELECT request_id, rollout_id, sandbox_id,
+                       sandbox_generation, state, resources_json,
+                       accepted_at, parked_at, response_ready_at,
+                       wake_started_at, wake_completed_at, updated_at,
+                       last_error
+                FROM program_requests
+                WHERE request_id = ?
+                """,
+                (request_id,),
+            ).fetchone()
+            assert row is not None
+            return _program_request_from_row(row), True
+
+    def program_request_readonly(self, request_id: str) -> ProgramRequestState | None:
+        with self._connect() as conn:
+            row = conn.execute("""SELECT request_id, rollout_id, sandbox_id,
+                sandbox_generation, state, resources_json, accepted_at, parked_at,
+                response_ready_at, wake_started_at, wake_completed_at, updated_at,
+                last_error FROM program_requests WHERE request_id=?""", (request_id,)).fetchone()
+            return _program_request_from_row(row) if row else None
 
     def program_requests_readonly(
         self,
@@ -1124,73 +1148,116 @@ class RoutingStore:
             if activity_epoch < 0:
                 raise ValueError("lifecycle activity_epoch must be non-negative")
             lifecycle_activity_epoch = activity_epoch
-        with self._lock:
-            with self._transaction() as conn:
+        # SQLite and the shared writer serialize this database-only
+        # mutation. Inventory projection must not block lifecycle progress.
+        with self._transaction() as conn:
+            current = self._get_sandbox_unlocked(conn, route.sandbox_id)
+            if (
+                current is None
+                or (current.state or "unknown").lower() not in expected
+                or not _same_sandbox_route_incarnation(current, route)
+                or current.worker_state != route.worker_state
+                or bool(current.delete_operation_id)
+                or (
+                    lifecycle_node_epoch is not None
+                    and (
+                        lifecycle_activity_epoch is None
+                        or lifecycle_activity_epoch <= route.activity_epoch
+                        or bool(
+                            route.node_epoch
+                            and route.node_epoch != lifecycle_node_epoch
+                        )
+                        or bool(
+                            current.node_epoch
+                            and current.node_epoch != lifecycle_node_epoch
+                        )
+                        or current.activity_epoch > lifecycle_activity_epoch
+                    )
+                )
+            ):
+                return None
+            stored = replace(
+                current,
+                state=cleaned_state,
+                node_epoch=(
+                    current.node_epoch
+                    if lifecycle_node_epoch is None
+                    else lifecycle_node_epoch
+                ),
+                activity_epoch=(
+                    current.activity_epoch
+                    if lifecycle_activity_epoch is None
+                    else lifecycle_activity_epoch
+                ),
+                storage_schema=(
+                    current.storage_schema
+                    if storage_schema is None
+                    else storage_schema
+                ),
+                snapshot_manifest_digest=(
+                    current.snapshot_manifest_digest
+                    if snapshot_manifest_digest is None
+                    else snapshot_manifest_digest
+                ),
+                snapshot_repository=(
+                    current.snapshot_repository
+                    if snapshot_repository is None
+                    else snapshot_repository
+                ),
+                snapshot_tag=(
+                    current.snapshot_tag if snapshot_tag is None else snapshot_tag
+                ),
+                storage_snapshot=(
+                    current.storage_snapshot
+                    if storage_snapshot is None
+                    else dict(storage_snapshot)
+                ),
+                updated_at=utc_now().isoformat(),
+            )
+            self._write_sandbox(conn, stored)
+        return stored
+
+    def reserve_sandbox_wake(self, route: SandboxRoute, *, pending_id: str) -> SandboxRoute | None:
+        """Atomically reserve an exact owner and remove its wake demand.
+
+        SQLite's write transaction supplies the cross-process fence. This
+        state-only mutation changes no exec-cache identity, so it need not
+        queue behind the process lock held by unrelated inventory projection.
+        It also leaves spec and checkpoint payload columns untouched.
+        """
+        return self.reserve_sandbox_wakes([(route, pending_id)])[route.sandbox_id]
+
+    def reserve_sandbox_wakes(
+        self, requests: list[tuple[SandboxRoute, str]],
+    ) -> dict[str, SandboxRoute | None]:
+        """Commit a placement batch once, rechecking every owner under the writer fence.
+
+        The caller holds the cross-process placement lock while accounting for
+        this batch. A stale item is rejected independently; no response may be
+        released until the entire transaction has committed.
+        """
+        result: dict[str, SandboxRoute | None] = {}
+        if not requests:
+            return result
+        with self._transaction() as conn:
+            for route, pending_id in requests:
                 current = self._get_sandbox_unlocked(conn, route.sandbox_id)
                 if (
-                    current is None
-                    or (current.state or "unknown").lower() not in expected
+                    current is None or current.state.lower() != "parked"
                     or not _same_sandbox_route_incarnation(current, route)
                     or current.worker_state != route.worker_state
-                    or bool(current.delete_operation_id)
-                    or (
-                        lifecycle_node_epoch is not None
-                        and (
-                            lifecycle_activity_epoch is None
-                            or lifecycle_activity_epoch <= route.activity_epoch
-                            or bool(
-                                route.node_epoch
-                                and route.node_epoch != lifecycle_node_epoch
-                            )
-                            or bool(
-                                current.node_epoch
-                                and current.node_epoch != lifecycle_node_epoch
-                            )
-                            or current.activity_epoch > lifecycle_activity_epoch
-                        )
-                    )
+                    or current.delete_operation_id
                 ):
-                    return None
-                stored = replace(
-                    current,
-                    state=cleaned_state,
-                    node_epoch=(
-                        current.node_epoch
-                        if lifecycle_node_epoch is None
-                        else lifecycle_node_epoch
-                    ),
-                    activity_epoch=(
-                        current.activity_epoch
-                        if lifecycle_activity_epoch is None
-                        else lifecycle_activity_epoch
-                    ),
-                    storage_schema=(
-                        current.storage_schema
-                        if storage_schema is None
-                        else storage_schema
-                    ),
-                    snapshot_manifest_digest=(
-                        current.snapshot_manifest_digest
-                        if snapshot_manifest_digest is None
-                        else snapshot_manifest_digest
-                    ),
-                    snapshot_repository=(
-                        current.snapshot_repository
-                        if snapshot_repository is None
-                        else snapshot_repository
-                    ),
-                    snapshot_tag=(
-                        current.snapshot_tag if snapshot_tag is None else snapshot_tag
-                    ),
-                    storage_snapshot=(
-                        current.storage_snapshot
-                        if storage_snapshot is None
-                        else dict(storage_snapshot)
-                    ),
-                    updated_at=utc_now().isoformat(),
+                    result[route.sandbox_id] = None
+                    continue
+                stored = replace(current, state="waking", updated_at=utc_now().isoformat())
+                conn.execute(
+                    "UPDATE sandboxes SET state = ?, updated_at = ? WHERE sandbox_id = ?",
+                    (stored.state, stored.updated_at, stored.sandbox_id),
                 )
-                self._write_sandbox(conn, stored)
-            return stored
+                conn.execute("DELETE FROM pending WHERE sandbox_id = ?", (pending_id,))
+                result[route.sandbox_id] = stored
+        return result
 
     def begin_sandbox_detach(
         self,
@@ -1223,7 +1290,6 @@ class RoutingStore:
                     "DELETE FROM exec_sessions WHERE sandbox_id = ?",
                     (stored.sandbox_id,),
                 )
-            self._drop_cached_exec_routes_for_sandbox_unlocked(route.sandbox_id)
             return stored
 
     def complete_sandbox_detach(
@@ -1810,7 +1876,6 @@ class RoutingStore:
                     error="",
                 )
                 self._write_sandbox_migration(conn, migration)
-            self._drop_cached_exec_routes_for_sandbox_unlocked(migration.sandbox_id)
             return migration, route
 
     def delete_sandbox_if_current(
@@ -1839,7 +1904,6 @@ class RoutingStore:
                 ):
                     return None
                 self._delete_sandbox_unlocked(conn, existing)
-            self._drop_cached_exec_routes_for_sandbox_unlocked(sandbox_id)
             return existing
 
     def reconcile_sandboxes_for_node(
@@ -2065,15 +2129,12 @@ class RoutingStore:
                         continue
                     removed_routes.append(route)
                     removed_sandbox_ids.append(sandbox_id)
-            for sandbox_id in removed_sandbox_ids:
-                self._drop_cached_exec_routes_for_sandbox_unlocked(sandbox_id)
             return removed_routes, stale_snapshot_routes
 
     def delete_sandbox(self, sandbox_id: str) -> None:
         with self._lock:
             with self._transaction() as conn:
                 self._delete_sandbox_unlocked(conn, sandbox_id)
-            self._drop_cached_exec_routes_for_sandbox_unlocked(sandbox_id)
 
     def delete_sandboxes_for_jobs(self, job_ids: Iterable[str]) -> list[SandboxRoute]:
         return self.delete_sandboxes_for_jobs_with_error(job_ids)
@@ -2144,8 +2205,6 @@ class RoutingStore:
                     )
             if not removed and not preserved:
                 return []
-            for route in (*removed, *preserved):
-                self._drop_cached_exec_routes_for_sandbox_unlocked(route.sandbox_id)
             return removed
 
     def delete_stale_sandboxes(
@@ -2204,8 +2263,6 @@ class RoutingStore:
                     self._delete_sandbox_unlocked(conn, route)
             if not removed and not preserved:
                 return []
-            for route in (*removed, *preserved):
-                self._drop_cached_exec_routes_for_sandbox_unlocked(route.sandbox_id)
             return removed
 
     def _detach_owner_lost_route_unlocked(
@@ -2365,31 +2422,32 @@ class RoutingStore:
             return self._get_pending_unlocked(conn, sandbox_id)
 
     def upsert_exec(self, route: ExecRoute) -> None:
-        with self._lock:
-            now = utc_now().isoformat()
-            with self._transaction() as conn:
-                existing = self._get_exec_unlocked(conn, route.session_id)
-                if existing is not None and (
-                    existing.sandbox_id != route.sandbox_id
-                    or existing.node_id != route.node_id
-                    or existing.job_id != route.job_id
-                    or existing.node_url != route.node_url
-                ):
-                    raise SandboxRouteConflictError(
-                        "exec session id belongs to another sandbox or worker"
-                    )
-                stored = ExecRoute(
-                    session_id=route.session_id,
-                    sandbox_id=route.sandbox_id,
-                    node_id=route.node_id,
-                    job_id=route.job_id,
-                    node_url=route.node_url,
-                    created_at=route.created_at
-                    or (existing.created_at if existing else now),
-                    updated_at=now,
+        # Reads already use the durable row because another process may retire
+        # the worker. An unused process cache must not put exec acknowledgments
+        # behind the fleet projection lock; the writer transaction fences IDs.
+        now = utc_now().isoformat()
+        with self._transaction() as conn:
+            existing = self._get_exec_unlocked(conn, route.session_id)
+            if existing is not None and (
+                existing.sandbox_id != route.sandbox_id
+                or existing.node_id != route.node_id
+                or existing.job_id != route.job_id
+                or existing.node_url != route.node_url
+            ):
+                raise SandboxRouteConflictError(
+                    "exec session id belongs to another sandbox or worker"
                 )
-                self._write_exec(conn, stored)
-            self._cache_exec_route_unlocked(stored)
+            stored = ExecRoute(
+                session_id=route.session_id,
+                sandbox_id=route.sandbox_id,
+                node_id=route.node_id,
+                job_id=route.job_id,
+                node_url=route.node_url,
+                created_at=route.created_at
+                or (existing.created_at if existing else now),
+                updated_at=now,
+            )
+            self._write_exec(conn, stored)
 
     def delete_exec(self, session_id: str) -> ExecRoute | None:
         with self._lock:
@@ -2399,42 +2457,7 @@ class RoutingStore:
                     "DELETE FROM exec_sessions WHERE session_id = ?",
                     (session_id,),
                 )
-            cached = self._exec_route_cache.pop(session_id, None)
-            if cached is not None:
-                self._remove_exec_route_from_sandbox_index_unlocked(cached)
-            return existing or cached
-
-    def _cache_exec_route_unlocked(self, route: ExecRoute) -> None:
-        previous = self._exec_route_cache.pop(route.session_id, None)
-        if previous is not None:
-            self._remove_exec_route_from_sandbox_index_unlocked(previous)
-        self._exec_route_cache[route.session_id] = route
-        self._exec_route_cache_sandbox_index.setdefault(
-            route.sandbox_id,
-            set(),
-        ).add(route.session_id)
-        while len(self._exec_route_cache) > EXEC_ROUTE_CACHE_MAX_ENTRIES:
-            _, evicted = self._exec_route_cache.popitem(last=False)
-            self._remove_exec_route_from_sandbox_index_unlocked(evicted)
-
-    def _remove_exec_route_from_sandbox_index_unlocked(
-        self,
-        route: ExecRoute,
-    ) -> None:
-        session_ids = self._exec_route_cache_sandbox_index.get(route.sandbox_id)
-        if session_ids is None:
-            return
-        session_ids.discard(route.session_id)
-        if not session_ids:
-            del self._exec_route_cache_sandbox_index[route.sandbox_id]
-
-    def _drop_cached_exec_routes_for_sandbox_unlocked(
-        self,
-        sandbox_id: str,
-    ) -> None:
-        session_ids = self._exec_route_cache_sandbox_index.pop(sandbox_id, set())
-        for session_id in session_ids:
-            self._exec_route_cache.pop(session_id, None)
+            return existing
 
     def upsert_pending(
         self,
@@ -3459,27 +3482,51 @@ class RoutingStore:
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
-        conn = sqlite3.connect(self.path, timeout=30)
+        conn = None
+        reusable = False
         _chmod_sqlite_state_files(self.path)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA busy_timeout=30000")
         try:
+            with self._connections_guard:
+                if os.getpid() != self._connection_pid:
+                    raise sqlite3.DatabaseError("reopen routing store after fork")
+                if self._connection_identity is not None:
+                    info = self.path.stat()
+                    if (info.st_dev, info.st_ino) != self._connection_identity:
+                        raise sqlite3.DatabaseError("routing database file was replaced")
+                if self._connections:
+                    conn = self._connections.pop()
+            if conn is None:
+                conn = sqlite3.connect(self.path, timeout=30, check_same_thread=False)
+                conn.row_factory = sqlite3.Row
+                conn.execute("PRAGMA busy_timeout=30000")
+                conn.execute("PRAGMA synchronous=FULL")
+                info = self.path.stat()
+                with self._connections_guard:
+                    self._connection_identity = (info.st_dev, info.st_ino)
             yield conn
+            # Returning a read connection must never retain a snapshot; closing
+            # the old per-call connection also rolled back unfinished work.
+            if conn.in_transaction:
+                conn.rollback()
+            reusable = True
         finally:
-            conn.close()
+            if conn is not None:
+                with self._connections_guard:
+                    if reusable and len(self._connections) < 16:
+                        self._connections.append(conn)
+                        conn = None
+                if conn is not None:
+                    conn.close()
             _chmod_sqlite_state_files(self.path)
 
     @contextmanager
     def _transaction(self) -> Iterator[sqlite3.Connection]:
-        with self._connect() as conn:
-            conn.execute("BEGIN IMMEDIATE")
-            try:
-                yield conn
-            except BaseException:
-                conn.rollback()
-                raise
-            else:
-                conn.commit()
+        # Each operation retains its own savepoint and generation checks. A
+        # short group shares the FULL WAL commit; callers wait for durability,
+        # and pooled readers see only committed state. All stores for this
+        # database identity share the writer, without taking the fleet lock.
+        with self._write_batches.transaction() as conn:
+            yield conn
 
     def _load_unlocked(
         self,
@@ -4287,14 +4334,39 @@ def _route_lock(path: Path) -> RLock:
         return _ROUTE_LOCKS[path.resolve()]
 
 
-def _exec_route_cache(path: Path) -> OrderedDict[str, ExecRoute]:
-    with _ROUTE_LOCKS_GUARD:
-        return _EXEC_ROUTE_CACHES[path.resolve()]
+def _route_write_batch(path: Path) -> DurableSqliteBatch:
+    path = path.resolve()
+    info = path.stat()
+    identity = (info.st_dev, info.st_ino)
+    pid = os.getpid()
+    key = (path, pid, *identity)
 
+    def validate():
+        if os.getpid() != pid:
+            raise sqlite3.DatabaseError("reopen routing store after fork")
+        current = path.stat()
+        if (current.st_dev, current.st_ino) != identity:
+            raise sqlite3.DatabaseError("routing database file was replaced")
+        _chmod_sqlite_state_files(path)
 
-def _exec_route_cache_sandbox_index(path: Path) -> dict[str, set[str]]:
+    def connect():
+        validate()
+        conn = sqlite3.connect(path, timeout=30, check_same_thread=False)
+        try:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA synchronous=FULL")
+            validate()
+            return conn
+        except BaseException:
+            conn.close()
+            raise
+
     with _ROUTE_LOCKS_GUARD:
-        return _EXEC_ROUTE_CACHE_SANDBOX_INDEXES[path.resolve()]
+        batch = _ROUTE_WRITE_BATCHES.get(key)
+        if batch is None:
+            batch = DurableSqliteBatch(connect, validate)
+            _ROUTE_WRITE_BATCHES[key] = batch
+        return batch
 
 
 def _is_sqlite_file(path: Path) -> bool:

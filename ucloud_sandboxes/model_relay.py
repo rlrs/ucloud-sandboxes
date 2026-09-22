@@ -157,6 +157,7 @@ class RelayRequest:
     parked_transport_epoch: str | None = None
     reattachable: bool = False
     delivery_pending: bool = False
+    durable_lifecycle: bool = False
 
     def envelope(self) -> JsonObject:
         if self.body is None:
@@ -242,6 +243,11 @@ class RelaySqliteStore:
         version = self._connection.execute(
             "SELECT value FROM relay_meta WHERE key = 'version'"
         ).fetchone()
+        try:
+            self._check_authority_locked()
+        except BaseException:
+            self._connection.close()
+            raise
         if version is None:
             self._connection.execute(
                 "INSERT INTO relay_meta(key, value) VALUES ('version', ?)",
@@ -249,6 +255,10 @@ class RelaySqliteStore:
             )
         elif int(version[0]) != self.VERSION:
             raise ValueError("relay state database has an unsupported version")
+
+    def _check_authority_locked(self):
+        if self._connection.execute("SELECT 1 FROM relay_meta WHERE key='postgres_authority'").fetchone():
+            raise ValueError("relay journal was migrated to PostgreSQL; SQLite authority is fenced")
 
     def close(self) -> None:
         with self._lock:
@@ -265,6 +275,7 @@ class RelaySqliteStore:
 
         self._connection.execute("BEGIN IMMEDIATE")
         try:
+            self._check_authority_locked()
             yield
             self._connection.execute("COMMIT")
         except BaseException:
@@ -287,7 +298,7 @@ class RelaySqliteStore:
         return [_json_mapping(row[0]) for row in rows]
 
     def save_rollout(self, record: JsonObject) -> None:
-        with self._lock:
+        with self._lock, self._transaction_locked():
             self._connection.execute(
                 """
                 INSERT INTO relay_rollouts(rollout_id, payload) VALUES (?, ?)
@@ -300,7 +311,7 @@ class RelaySqliteStore:
             )
 
     def delete_rollout(self, rollout_id: str) -> None:
-        with self._lock:
+        with self._lock, self._transaction_locked():
             self._connection.execute(
                 "DELETE FROM relay_rollouts WHERE rollout_id = ?",
                 (rollout_id,),
@@ -2266,6 +2277,8 @@ def create_model_relay_app(
     max_completed_bytes: int = DEFAULT_MAX_COMPLETED_BYTES,
     max_workers: int = DEFAULT_MAX_WORKERS,
     state_path: Path | None = None,
+    postgres_store=None,
+    postgres_storage_budget_bytes: int = 64 * 1024**3,
     accepted_notifier: Callable[[RelayRequest], Awaitable[str | None]] | None = None,
     result_notifier: Callable[[RelayRequest], Awaitable[str | None]] | None = None,
     unavailable_callers: Callable[[], Awaitable[dict[tuple[str, int], str]]] | None = None,
@@ -2282,6 +2295,8 @@ def create_model_relay_app(
         middlewares=[_telemetry_middleware] if resolved_telemetry.enabled else (),
     )
     app[TELEMETRY_KEY] = resolved_telemetry
+    if postgres_store is not None and state_path is not None:
+        raise ValueError("select exactly one relay authority")
     app[STATE_KEY] = ModelRelayState(
         state_path=state_path,
         request_timeout_seconds=request_timeout_seconds,
@@ -2294,6 +2309,17 @@ def create_model_relay_app(
         max_completed_bytes=max_completed_bytes,
         max_workers=max_workers,
     )
+    if postgres_store is not None:
+        from .shared_control.relay import PostgresRelayState
+        app[STATE_KEY] = PostgresRelayState(
+            postgres_store,
+            request_timeout_seconds=request_timeout_seconds,
+            completed_request_retention_seconds=completed_request_retention_seconds,
+            worker_retention_seconds=worker_retention_seconds,
+            storage_budget_bytes=postgres_storage_budget_bytes,
+            accepted_notifier=accepted_notifier,
+            result_notifier=result_notifier,
+        )
     app[SANDBOX_TOKEN_KEY] = sandbox_bearer_token
     app[WORKER_TOKEN_KEY] = worker_bearer_token
     app[POLL_TIMEOUT_KEY] = worker_poll_timeout_seconds
@@ -2303,6 +2329,8 @@ def create_model_relay_app(
     app[RESULT_NOTIFIER_KEY] = result_notifier
 
     async def maintain_state(_app: web.Application):
+        if postgres_store is not None:
+            await _app[STATE_KEY].open()
         interval = max(0.01, maintenance_interval_seconds)
         task = asyncio.create_task(
             _model_relay_maintenance_loop(_app[STATE_KEY], interval, unavailable_callers)
@@ -2622,6 +2650,21 @@ async def _worker_completion_response(
     request: web.Request,
     result: RelayRespondResult,
 ) -> web.Response:
+    if getattr(_state(request), "durable_lifecycle", False):
+        # Preserve the existing worker acknowledgment contract: wait for wake,
+        # while the durable dispatcher (not this HTTP request) owns retries.
+        try:
+            await _state(request).wait_for_delivery(
+                result.request, timeout_seconds=request.app[REQUEST_TIMEOUT_KEY],
+            )
+        except asyncio.TimeoutError:
+            return web.json_response(
+                {"error": "model response committed; delivery is still pending",
+                 "request_id": result.request.request_id, "committed": True},
+                status=504, headers={"Retry-After": "1"},
+            )
+        return web.json_response({"ok": True, "request_id": result.request.request_id,
+                                  "duplicate": result.duplicate})
     await _notify_result(request, result)
     if request.app[RESULT_NOTIFIER_KEY] is not None:
         await _state(request).release_completed_response(result.request.request_id)
@@ -2819,6 +2862,8 @@ async def _notify_accepted(
     request: web.Request,
     relay_request: RelayRequest,
 ) -> None:
+    if getattr(_state(request), "durable_lifecycle", False):
+        return  # The park intent was committed atomically with enqueue.
     notifier = request.app[ACCEPTED_NOTIFIER_KEY]
     if notifier is None or relay_request.sandbox_id is None:
         return

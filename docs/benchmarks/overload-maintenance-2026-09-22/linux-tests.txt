@@ -1,0 +1,5 @@
+Isolated rasmus-dev container ucloud-pg-qualification-tests, Python 3.13.12.
+
+Ran 1183 tests in 92.090s
+
+OK (skipped=61)

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections import deque
 import json
+import logging
 import os
 from pathlib import Path
 import sqlite3
-from threading import RLock
+from threading import Condition, RLock, Thread
 import time
 from typing import Any
 
@@ -105,15 +107,21 @@ class MetricsStore:
                     "original_bytes": payload_bytes,
                 },
             )
+        self._append_events([event])
+        return event
+
+    def _append_events(self, events: list[MetricEvent]) -> None:
+        if not events:
+            return
         with self._lock:
             connection = self._sqlite_connect_locked()
             try:
-                stored_events = [event]
+                stored_events = list(events)
                 if self._dropped_sqlite_events:
                     stored_events.insert(
                         0,
                         MetricEvent(
-                            event.timestamp,
+                            events[0].timestamp,
                             "metrics_dropped_events",
                             {
                                 "count": self._dropped_sqlite_events,
@@ -151,8 +159,7 @@ class MetricsStore:
                 self._dropped_sqlite_events = 0
             except sqlite3.OperationalError:
                 connection.rollback()
-                self._dropped_sqlite_events += 1
-        return event
+                self._dropped_sqlite_events += len(events)
 
     def load_events(
         self,
@@ -416,7 +423,7 @@ class MetricsStore:
             return
         free_pages = int(connection.execute("PRAGMA freelist_count").fetchone()[0])
         if free_pages:
-            connection.execute(f"PRAGMA incremental_vacuum({free_pages})")
+            self._vacuum_free_pages(connection, free_pages)
             checkpoint = connection.execute(
                 "PRAGMA wal_checkpoint(TRUNCATE)"
             ).fetchone()
@@ -445,7 +452,7 @@ class MetricsStore:
             connection.commit()
             free_pages = int(connection.execute("PRAGMA freelist_count").fetchone()[0])
             if free_pages:
-                connection.execute(f"PRAGMA incremental_vacuum({free_pages})")
+                self._vacuum_free_pages(connection, free_pages)
             checkpoint = connection.execute(
                 "PRAGMA wal_checkpoint(TRUNCATE)"
             ).fetchone()
@@ -454,6 +461,121 @@ class MetricsStore:
             attempts += 1
             if attempts >= 64:
                 break
+
+    @staticmethod
+    def _vacuum_free_pages(connection: sqlite3.Connection, pages: int) -> None:
+        # This PRAGMA returns progress rows. execute() alone performs only the
+        # first step, leaving free pages behind and causing every later append
+        # to repeat maintenance (and evict more useful history). Drain without
+        # retaining a tuple for every page in a large metrics database.
+        for _ in connection.execute(f"PRAGMA incremental_vacuum({pages})"):
+            pass
+
+
+class BufferedMetricsStore(MetricsStore):
+    """Best-effort telemetry, never a lifecycle/admission durability boundary.
+
+    Bound queued bytes and event count; a stalled metrics database drops
+    telemetry with an explicit counter instead of blocking sandbox requests.
+    Event timestamps and ordering are retained. Normal shutdown drains the queue;
+    an abrupt process loss can lose queued events, just like the existing NORMAL
+    synchronous telemetry journal can lose its latest unsynced events.
+    """
+
+    def __init__(self, path: Path, *, queue_bytes: int = 8 * 1024**2,
+                 queue_events: int = 4096, **kwargs) -> None:
+        if queue_bytes < 1 or queue_events < 1:
+            raise ValueError("metrics queue bounds must be positive")
+        super().__init__(path, **kwargs)
+        self._queue_condition = Condition()
+        self._queue: deque[tuple[MetricEvent, int]] = deque()
+        self._queue_bytes = 0
+        self._queue_byte_limit, self._queue_event_limit = queue_bytes, queue_events
+        self._queue_dropped = 0
+        self._writing = False
+        self._stopping = False
+        self._writer = Thread(target=self._write_queued_events, name="gateway-metrics", daemon=True)
+        self._writer.start()
+
+    def append(self, kind, data=None, *, timestamp=None) -> MetricEvent:
+        event = MetricEvent(timestamp or utc_now().isoformat(), kind, data or {})
+        payload = json.dumps(event.to_dict(), sort_keys=True, separators=(",", ":"))
+        if len(payload.encode("utf-8")) > self._max_event_bytes:
+            event = MetricEvent(event.timestamp, kind, {
+                "metrics_payload_truncated": True,
+                "original_bytes": len(payload.encode("utf-8")),
+            })
+            payload = json.dumps(event.to_dict(), sort_keys=True, separators=(",", ":"))
+        size = len(payload.encode("utf-8"))
+        # Snapshot caller-owned containers before handing work to another thread.
+        detached = MetricEvent(**json.loads(payload))
+        with self._queue_condition:
+            if self._stopping:
+                raise RuntimeError("metrics writer is closed")
+            if (len(self._queue) >= self._queue_event_limit
+                    or self._queue_bytes + size > self._queue_byte_limit):
+                self._queue_dropped += 1
+            else:
+                self._queue.append((detached, size))
+                self._queue_bytes += size
+            self._queue_condition.notify()
+        return event
+
+    def _write_queued_events(self) -> None:
+        while True:
+            with self._queue_condition:
+                self._queue_condition.wait_for(
+                    lambda: self._queue or self._queue_dropped or self._stopping,
+                )
+                if not self._queue and not self._queue_dropped and self._stopping:
+                    return
+                events = []
+                if self._queue_dropped:
+                    events.append(MetricEvent(utc_now().isoformat(), "metrics_dropped_events", {
+                        "count": self._queue_dropped, "reason": "queue_full",
+                    }))
+                    self._queue_dropped = 0
+                # Coalesce only already queued work; no artificial batching delay.
+                while self._queue and len(events) < 128:
+                    event, size = self._queue.popleft()
+                    self._queue_bytes -= size
+                    events.append(event)
+                self._writing = True
+            try:
+                self._append_events(events)
+            except Exception:
+                # Telemetry errors cannot kill the writer or poison admission.
+                # Log outside the queue lock and report losses on recovery.
+                with self._lock:
+                    if self._sqlite_connection is not None:
+                        self._sqlite_connection.rollback()
+                    self._dropped_sqlite_events += len(events)
+                logging.getLogger(__name__).exception("gateway metrics batch was dropped")
+            finally:
+                with self._queue_condition:
+                    self._writing = False
+                    self._queue_condition.notify_all()
+
+    def flush(self, timeout: float = 5) -> bool:
+        with self._queue_condition:
+            return self._queue_condition.wait_for(
+                lambda: not self._queue and not self._queue_dropped and not self._writing,
+                timeout=timeout,
+            )
+
+    def close(self, timeout: float = 5) -> bool:
+        with self._queue_condition:
+            self._stopping = True
+            self._queue_condition.notify_all()
+        self._writer.join(timeout=timeout)
+        if self._writer.is_alive():
+            logging.getLogger(__name__).warning("gateway metrics drain timed out")
+            return False
+        with self._lock:
+            if self._sqlite_connection is not None:
+                self._sqlite_connection.close()
+                self._sqlite_connection = None
+        return True
 
 
 def _timestamp_epoch(value: str) -> float:

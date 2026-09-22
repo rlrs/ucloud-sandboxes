@@ -189,7 +189,9 @@ class WakeCapacityTests(unittest.TestCase):
             refreshed = replace(heartbeat, runtime_metrics=replace(
                 heartbeat.runtime_metrics, storage_ublk_active_devices=0,
             ))
-            handler._reserve_parked_sandbox_wake = Mock(return_value=replace(route, state="waking"))
+            handler._reserve_parked_sandbox_wake = Mock(side_effect=[
+                control_plane._WakeCapacityRefreshRequired(route), replace(route, state='waking'),
+            ])
             acquired = []
             def refresh(url, path, **kwargs):
                 def check_lock():
@@ -216,6 +218,25 @@ class WakeCapacityTests(unittest.TestCase):
             handler.store.upsert_heartbeat(heartbeat)
             self.assertFalse(handler._refresh_wake_capacity(route))
             self.assertEqual(handler._proxy_request.call_count, 1)
+
+    def test_unblocked_wake_reads_owner_inventory_once_without_capacity_refresh(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            server = fixtures._gateway_server(root)
+            try:
+                handler = object.__new__(server.RequestHandlerClass)
+                handler.store.upsert_heartbeat(self.heartbeat(active=0))
+                route = handler.routing_store.upsert_sandbox(self.route())
+                handler._write_json = Mock()
+                with (
+                    patch.object(handler, '_refresh_wake_capacity', side_effect=AssertionError('redundant refresh')),
+                    patch.object(handler, '_placement_routes_for_node', wraps=handler._placement_routes_for_node) as inventory,
+                ):
+                    result = handler._ensure_parked_sandbox_wake_placement(route)
+                self.assertEqual(result.state, 'waking')
+                self.assertEqual(inventory.call_count, 1)
+            finally:
+                server.server_close()
 
     def test_completed_publication_is_used_without_waiting_for_heartbeat(self):
         with TemporaryDirectory() as directory:

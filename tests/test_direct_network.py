@@ -347,6 +347,45 @@ class DirectNetworkManagerTests(unittest.TestCase):
             ):
                 self.manager(root).lease("sandbox-a", 1)
 
+    def test_concurrent_ensures_share_only_a_fresh_host_check(self):
+        with TemporaryDirectory() as raw:
+            manager = self.manager(Path(raw).resolve())
+            barrier = threading.Barrier(8)
+            validate = manager.validate_policy
+            def concurrent_validate(policy):
+                validate(policy)
+                barrier.wait(timeout=5)
+            with (patch.object(manager, "validate_policy", side_effect=concurrent_validate),
+                  patch.object(manager, "_ensure_host_rules") as reconcile,
+                  patch.object(manager, "_ensure_kernel_lease")):
+                with ThreadPoolExecutor(max_workers=8) as pool:
+                    list(pool.map(lambda n: manager.ensure(f"sandbox-{n}", 1), range(8)))
+                reconcile.assert_called_once()
+            with (patch.object(manager, "_ensure_host_rules") as reconcile,
+                  patch.object(manager, "_ensure_kernel_lease")):
+                manager.ensure("sandbox-0", 1)
+                reconcile.assert_called_once()
+            with (patch.object(manager, "_ensure_host_rules", side_effect=DirectNetworkError("repair failed")),
+                  patch.object(manager, "_ensure_kernel_lease") as kernel):
+                with self.assertRaises(DirectNetworkError):
+                    manager.ensure("sandbox-0", 1)
+                kernel.assert_not_called()
+
+    def test_ip_batches_propagate_errors_and_configure_both_namespaces(self):
+        with TemporaryDirectory() as raw:
+            batch = Mock()
+            manager = DirectNetworkManager(Path(raw).resolve() / "network.json", ip_batch_runner=batch)
+            lease = manager._lease("sandbox-a", 1, 1)
+            manager._configure_kernel_lease(lease)
+            self.assertEqual(batch.call_count, 2)
+            self.assertEqual(batch.call_args_list[0].args[0], ("ip", "-batch", "-"))
+            self.assertEqual(batch.call_args_list[1].args[0], ("ip", "-n", lease.namespace, "-batch", "-"))
+            self.assertIn(f"address replace {lease.guest_ip}/31", batch.call_args.args[1])
+            self.assertIn(f"route replace default via {lease.host_ip}", batch.call_args.args[1])
+            batch.side_effect = DirectNetworkError("batch failed")
+            with self.assertRaises(DirectNetworkError):
+                manager._configure_kernel_lease(lease)
+
     def test_reconciles_complete_existing_lease_before_restore(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()

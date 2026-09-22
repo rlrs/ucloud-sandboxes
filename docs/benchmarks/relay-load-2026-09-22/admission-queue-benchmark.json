@@ -1,0 +1,30 @@
+[
+  {
+    "implementation": "broadcast",
+    "requests": 2560,
+    "slots": 8,
+    "wall_seconds": 2.321602983167395,
+    "cpu_seconds": 2.487141975
+  },
+  {
+    "implementation": "targeted",
+    "requests": 2560,
+    "slots": 8,
+    "wall_seconds": 0.696329192025587,
+    "cpu_seconds": 0.12700102699999993
+  },
+  {
+    "implementation": "broadcast",
+    "requests": 2560,
+    "slots": 8,
+    "wall_seconds": 2.3432828329969198,
+    "cpu_seconds": 2.506227726
+  },
+  {
+    "implementation": "targeted",
+    "requests": 2560,
+    "slots": 8,
+    "wall_seconds": 0.6920134860556573,
+    "cpu_seconds": 0.12683833
+  }
+]

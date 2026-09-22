@@ -1,5 +1,4 @@
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
 from contextvars import ContextVar
 from threading import Event
 from types import SimpleNamespace
@@ -7,12 +6,76 @@ import unittest
 from unittest.mock import patch
 
 from aiohttp import web
+from aiohttp import ClientSession
 from aiohttp.test_utils import TestServer
 
 from ucloud_sandboxes import cli
 
 
 class RelayLifecycleDispatchTests(unittest.IsolatedAsyncioTestCase):
+    async def test_async_transport_preserves_failure_fences_and_rejects_redirects(self):
+        cases = {
+            'missing': (404, {}, cli.RelayCallerUnavailable),
+            'lost': (410, {}, cli.RelayCallerUnavailable),
+            'obsolete': (409, {'retryable': False}, cli.RelayCallerUnavailable),
+            'busy': (409, {}, cli._RelayLifecycleRetry),
+            'capacity': (503, {'retryable': True}, cli._RelayLifecycleRetry),
+            'overload': (429, {'retryable': True}, cli._RelayLifecycleRetry),
+            'failure': (503, {}, cli.HTTPError),
+            'redirect': (307, {}, cli.HTTPError),
+        }
+        seen = []
+
+        async def reply(request):
+            name = request.match_info['sandbox']
+            seen.append(name)
+            status, body, _error = cases[name]
+            return web.json_response(body, status=status, headers={'Location': '/unexpected'})
+
+        app = web.Application()
+        app.router.add_post('/v1/sandboxes/{sandbox}/wake', reply)
+        async with TestServer(app) as server, ClientSession() as session:
+            for name, (_status, _body, error) in cases.items():
+                request = SimpleNamespace(sandbox_id=name, sandbox_generation=7,
+                                          request_id=name, rollout_id='r', created_at=0)
+                with self.subTest(name=name), self.assertRaises(error):
+                    await cli._post_gateway_sandbox_lifecycle_once_async(
+                        session, str(server.make_url('/')), 'token', request,
+                        action='wake', attempt=0, deadline=cli.time.monotonic()+30,
+                    )
+        self.assertEqual(seen, list(cases))
+
+    async def test_async_transport_bounds_streamed_bodies_and_actual_http_deadline(self):
+        release = asyncio.Event()
+
+        async def reply(request):
+            if request.match_info['sandbox'] == 'slow':
+                await release.wait()
+                return web.json_response({})
+            response = web.StreamResponse()
+            await response.prepare(request)
+            try:
+                for _ in range(18):
+                    await response.write(b'x' * 65536)
+            except ConnectionResetError:
+                pass
+            return response
+
+        app = web.Application()
+        app.router.add_post('/v1/sandboxes/{sandbox}/wake', reply)
+        async with TestServer(app) as server, ClientSession() as session:
+            try:
+                for name, error, seconds in [('large', ValueError, 5), ('slow', asyncio.TimeoutError, .03)]:
+                    request = SimpleNamespace(sandbox_id=name, sandbox_generation=7,
+                                              request_id=name, rollout_id='r', created_at=0)
+                    with self.subTest(name=name), self.assertRaises(error):
+                        await cli._post_gateway_sandbox_lifecycle_once_async(
+                            session, str(server.make_url('/')), 'token', request,
+                            action='wake', attempt=0, deadline=cli.time.monotonic()+seconds,
+                        )
+            finally:
+                release.set()
+
     async def test_completed_response_bypasses_queued_park_without_waiting_for_slot(self):
         dispatcher = cli._RelayLifecycleDispatcher("http://gateway", "token")
         dispatcher._slots["park"] = asyncio.Semaphore(1)
@@ -91,65 +154,52 @@ class RelayLifecycleDispatchTests(unittest.IsolatedAsyncioTestCase):
                 release.set()
                 await dispatcher.close()
 
-    async def test_park_wake_isolation_bounds_context_and_cancellation(self):
-        loop = asyncio.get_running_loop()
-        loop.set_default_executor(ThreadPoolExecutor(max_workers=1))
-        trace = ContextVar("test_trace", default="missing")
-        trace.set("request-trace")
-        entered = {"park": 0, "wake": 0}
-        ready = {action: asyncio.Event() for action in entered}
-        release = {action: Event() for action in entered}
-        limits = {"park": 16, "wake": 48}
-        dispatcher = cli._RelayLifecycleDispatcher("http://gateway", "token")
-        tasks = []
+    async def test_park_threads_do_not_limit_async_wakes_or_lose_context(self):
+        trace = ContextVar('test_trace', default='missing')
+        trace.set('request-trace')
+        dispatcher = cli._RelayLifecycleDispatcher('http://gateway', 'token')
+        entered = asyncio.Event()
+        release = asyncio.Event()
+        count = 0
 
-        def record(action):
-            entered[action] += 1
-            if entered[action] == limits[action]:
-                ready[action].set()
+        async def post(_session, _url, _token, _request, **_kwargs):
+            nonlocal count
+            self.assertEqual(trace.get(), 'request-trace')
+            count += 1
+            if count == 256:
+                entered.set()
+            await release.wait()
+            return 'epoch'
 
-        def post(_url, _token, _request, *, action, attempt, deadline):
-            self.assertEqual(trace.get(), "request-trace")
-            loop.call_soon_threadsafe(record, action)
-            if not release[action].wait(10):
-                raise TimeoutError("test lifecycle gate not released")
-            return "epoch"
-
-        with patch.object(cli, "_post_gateway_sandbox_lifecycle_once", side_effect=post):
+        # Exhaust checkpoint dispatch. Every wake can still reach HTTP without
+        # waiting for the old 48-thread fleet-wide limit or default executor.
+        for _ in range(16):
+            await dispatcher._slots['park'].acquire()
+        with patch.object(cli, '_post_gateway_sandbox_lifecycle_once_async', side_effect=post):
+            tasks = [asyncio.create_task(dispatcher.notify(SimpleNamespace(), action='wake'))
+                     for _ in range(256)]
             try:
-                parks = [asyncio.create_task(dispatcher.notify(SimpleNamespace(), action="park"))
-                         for _ in range(17)]
-                tasks.extend(parks)
-                await asyncio.wait_for(ready["park"].wait(), 3)
-                parks[0].cancel()
-                await asyncio.sleep(0.05)
-                self.assertEqual(entered["park"], 16)
-                self.assertFalse(parks[0].done())
-                wakes = [asyncio.create_task(dispatcher.notify(SimpleNamespace(), action="wake"))
-                         for _ in range(48)]
-                tasks.extend(wakes)
-                await asyncio.wait_for(ready["wake"].wait(), 3)
-                release["wake"].set()
-                self.assertEqual(await asyncio.wait_for(asyncio.gather(*wakes), 3), ["epoch"] * 48)
-                self.assertEqual(entered["park"], 16)
-                release["park"].set()
-                outcomes = await asyncio.wait_for(asyncio.gather(*parks, return_exceptions=True), 3)
-                self.assertIsInstance(outcomes[0], asyncio.CancelledError)
-                self.assertEqual(outcomes[1:], ["epoch"] * 16)
+                await asyncio.wait_for(entered.wait(), 3)
+                tasks[0].cancel()
+                await asyncio.sleep(.01)
+                self.assertFalse(tasks[0].done())
             finally:
-                for event in release.values():
-                    event.set()
-                await asyncio.gather(*tasks, return_exceptions=True)
+                release.set()
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                for _ in range(16):
+                    dispatcher._slots['park'].release()
                 await dispatcher.close()
-        for pool in dispatcher._pools.values():
-            self.assertTrue(all(not thread.is_alive() for thread in pool._threads))
-        with self.assertRaisesRegex(RuntimeError, "closed"):
-            await dispatcher.notify(SimpleNamespace(), action="wake")
+        self.assertIsInstance(results[0], asyncio.CancelledError)
+        self.assertEqual(results[1:], ['epoch'] * 255)
+        self.assertTrue(dispatcher._wake_session.closed)
+        self.assertEqual(set(dispatcher._pools), {'park'})
+        with self.assertRaisesRegex(RuntimeError, 'closed'):
+            await dispatcher.notify(SimpleNamespace(), action='wake')
 
     async def test_lifecycle_failure_releases_slot_and_propagates(self):
         dispatcher = cli._RelayLifecycleDispatcher("http://gateway", "token")
         try:
-            with patch.object(cli, "_post_gateway_sandbox_lifecycle_once", side_effect=[ValueError("failed"), "epoch"]):
+            with patch.object(cli, "_post_gateway_sandbox_lifecycle_once_async", side_effect=[ValueError("failed"), "epoch"]):
                 with self.assertRaisesRegex(ValueError, "failed"):
                     await dispatcher.notify(SimpleNamespace(), action="wake")
                 self.assertEqual(await dispatcher.notify(SimpleNamespace(), action="wake"), "epoch")
@@ -171,7 +221,7 @@ class RelayLifecycleDispatchTests(unittest.IsolatedAsyncioTestCase):
                 sleeping.set()
             await resume.wait()
 
-        def post(_url, _token, request, *, action, attempt, deadline):
+        def post(_session, _url, _token, request, *, action, attempt, deadline):
             calls = attempts.setdefault(request.request_id, [])
             calls.append((attempt, deadline))
             if request.request_id != "ready" and attempt == 0:
@@ -180,7 +230,7 @@ class RelayLifecycleDispatchTests(unittest.IsolatedAsyncioTestCase):
 
         tasks = []
         with (
-            patch.object(cli, "_post_gateway_sandbox_lifecycle_once", side_effect=post),
+            patch.object(cli, "_post_gateway_sandbox_lifecycle_once_async", side_effect=post),
             patch.object(cli.asyncio, "sleep", side_effect=backoff),
         ):
             try:
@@ -206,21 +256,14 @@ class RelayLifecycleDispatchTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual([call[0] for call in calls], [0, 1])
             self.assertEqual(calls[0][1], calls[1][1])
 
-    async def test_expired_wake_never_sends_http_after_dispatch_queue(self):
-        dispatcher = cli._RelayLifecycleDispatcher("http://gateway", "token")
-        # Exhaust dispatch capacity; expiry must include time spent queued.
-        for _ in range(48):
-            await dispatcher._slots["wake"].acquire()
+    async def test_expired_wake_never_sends_http(self):
+        dispatcher = cli._RelayLifecycleDispatcher('http://gateway', 'token')
         try:
-            with patch.object(cli, "_post_gateway_sandbox_lifecycle_once") as post:
+            with patch.object(cli, '_post_gateway_sandbox_lifecycle_once_async') as post:
                 with self.assertRaises(TimeoutError):
-                    await asyncio.wait_for(dispatcher.notify(SimpleNamespace(
-                        expires_at=cli.time.time() + 0.05,
-                    ), action="wake"), 3)
+                    await dispatcher.notify(SimpleNamespace(expires_at=cli.time.time() - 1), action='wake')
                 post.assert_not_called()
         finally:
-            for _ in range(48):
-                dispatcher._slots["wake"].release()
             await dispatcher.close()
 
     async def test_shutdown_drains_async_backoff_without_another_attempt(self):
@@ -232,7 +275,7 @@ class RelayLifecycleDispatchTests(unittest.IsolatedAsyncioTestCase):
             await resume.wait()
 
         with (
-            patch.object(cli, "_post_gateway_sandbox_lifecycle_once",
+            patch.object(cli, "_post_gateway_sandbox_lifecycle_once_async",
                          side_effect=cli._RelayLifecycleRetry(1)) as post,
             patch.object(cli.asyncio, "sleep", side_effect=backoff),
         ):
@@ -280,7 +323,6 @@ class RelayLifecycleDispatchTests(unittest.IsolatedAsyncioTestCase):
         app.router.add_post("/v1/sandboxes/{sandbox}/wake", wake)
         async with TestServer(app) as server:
             dispatcher = cli._RelayLifecycleDispatcher(str(server.make_url("/")), "token")
-            dispatcher._slots["wake"] = asyncio.Semaphore(2)
             tasks = [asyncio.create_task(dispatcher.notify(request(str(index)), action="wake"))
                      for index in range(2)]
             try:

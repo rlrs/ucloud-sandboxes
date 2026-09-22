@@ -1,0 +1,144 @@
+{
+  "window_seconds": 50,
+  "completed_calls": {
+    "_reserve_local_wake_batch": {
+      "calls": 611,
+      "wall_seconds": 13.552216881653294,
+      "thread_cpu_seconds": 1.9437625850000015,
+      "max_seconds": 0.28682927414774895
+    },
+    "_proxy_request": {
+      "calls": 6961,
+      "wall_seconds": 1395.623303728411,
+      "thread_cpu_seconds": 5.681984521999994,
+      "max_seconds": 3.918040912831202
+    },
+    "_prepare_program_lifecycle": {
+      "calls": 3510,
+      "wall_seconds": 33.157933122245595,
+      "thread_cpu_seconds": 0.8563096799999995,
+      "max_seconds": 0.25025826087221503
+    },
+    "_flush_program_wake_shadow": {
+      "calls": 831,
+      "wall_seconds": 8.982967935036868,
+      "thread_cpu_seconds": 1.2052253089999991,
+      "max_seconds": 0.06353833479806781
+    },
+    "_commit_successful_wake": {
+      "calls": 859,
+      "wall_seconds": 24.10664711985737,
+      "thread_cpu_seconds": 0.6337680570000008,
+      "max_seconds": 0.2748630619607866
+    },
+    "_commit_successful_park": {
+      "calls": 936,
+      "wall_seconds": 18.12590989936143,
+      "thread_cpu_seconds": 0.6380363219999998,
+      "max_seconds": 0.251100174151361
+    },
+    "_record_completed_program_lifecycle": {
+      "calls": 1807,
+      "wall_seconds": 35.72466105944477,
+      "thread_cpu_seconds": 0.8328301669999971,
+      "max_seconds": 0.25183548708446324
+    },
+    "_heartbeat_for_route": {
+      "calls": 14722,
+      "wall_seconds": 36.386985728750005,
+      "thread_cpu_seconds": 3.0925296319999966,
+      "max_seconds": 0.11624672706238925
+    },
+    "_record_program_request_transition": {
+      "calls": 4375,
+      "wall_seconds": 85.1544965589419,
+      "thread_cpu_seconds": 2.0180284040000003,
+      "max_seconds": 0.2518151649273932
+    },
+    "_route_worker_is_fresh": {
+      "calls": 6977,
+      "wall_seconds": 16.37238847091794,
+      "thread_cpu_seconds": 0.8464116929999987,
+      "max_seconds": 0.112562146037817
+    },
+    "_record_successful_sandbox_proxy_state": {
+      "calls": 3574,
+      "wall_seconds": 20.66270855325274,
+      "thread_cpu_seconds": 0.26919477899999994,
+      "max_seconds": 0.2513074269518256
+    },
+    "_handle_lifecycle_proxy_response": {
+      "calls": 1795,
+      "wall_seconds": 75.19959971215576,
+      "thread_cpu_seconds": 2.1159704370000045,
+      "max_seconds": 0.46361963800154626
+    },
+    "append": {
+      "calls": 6148,
+      "wall_seconds": 0.49877106002531946,
+      "thread_cpu_seconds": 0.2801431670000003,
+      "max_seconds": 0.006914043100550771
+    },
+    "_append_events": {
+      "calls": 4928,
+      "wall_seconds": 5.9312777779996395,
+      "thread_cpu_seconds": 1.162606355999999,
+      "max_seconds": 0.10367948492057621
+    },
+    "connection_commit": {
+      "calls": 7844,
+      "wall_seconds": 9.426666930317879,
+      "thread_cpu_seconds": 0.6797135629999991,
+      "max_seconds": 0.04064551298506558
+    },
+    "transaction:set_sandbox_state_if_current": {
+      "calls": 1795,
+      "wait_seconds": 32.705299366265535,
+      "held_seconds": 1.6638926754239947,
+      "max_wait": 0.2508118790574372,
+      "max_held": 0.0367812009062618
+    },
+    "transaction:upsert_program_request_transition_with_change": {
+      "calls": 4375,
+      "wait_seconds": 76.16731717111543,
+      "held_seconds": 2.5145410308614373,
+      "max_wait": 0.24963983590714633,
+      "max_held": 0.019747065845876932
+    },
+    "transaction:upsert_exec": {
+      "calls": 890,
+      "wait_seconds": 19.136167239630595,
+      "held_seconds": 0.25092170760035515,
+      "max_wait": 0.24029553891159594,
+      "max_held": 0.05925663304515183
+    },
+    "transaction:reserve_sandbox_wakes": {
+      "calls": 611,
+      "wait_seconds": 5.161465426674113,
+      "held_seconds": 0.22499009990133345,
+      "max_wait": 0.2165939249098301,
+      "max_held": 0.015924987848848104
+    },
+    "transaction:mark_image_warmup_node": {
+      "calls": 84,
+      "wait_seconds": 0.8695155992172658,
+      "held_seconds": 0.029124230379238725,
+      "max_wait": 0.23185525787994266,
+      "max_held": 0.006901775021106005
+    },
+    "transaction:reconcile_sandboxes_for_node": {
+      "calls": 13,
+      "wait_seconds": 0.1371161569841206,
+      "held_seconds": 0.1899448202457279,
+      "max_wait": 0.04638407891616225,
+      "max_held": 0.03677142504602671
+    },
+    "transaction:_active_image_warmups_unlocked": {
+      "calls": 13,
+      "wait_seconds": 0.15285814786329865,
+      "held_seconds": 0.0024729748256504536,
+      "max_wait": 0.044292397098615766,
+      "max_held": 0.00144827994517982
+    }
+  }
+}

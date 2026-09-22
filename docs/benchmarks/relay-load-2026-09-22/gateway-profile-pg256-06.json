@@ -1,0 +1,101 @@
+[
+  {
+    "window_seconds": 30,
+    "completed_calls": {
+      "_reserve_local_wake_batch": {
+        "calls": 235,
+        "wall_seconds": 21.045183553360403,
+        "thread_cpu_seconds": 2.1768237529999994
+      },
+      "_proxy_request": {
+        "calls": 2734,
+        "wall_seconds": 1661.5400840162765,
+        "thread_cpu_seconds": 2.5638997210000025
+      },
+      "_prepare_program_lifecycle": {
+        "calls": 1783,
+        "wall_seconds": 77.01761691109277,
+        "thread_cpu_seconds": 1.3225200089999996
+      },
+      "_flush_program_wake_shadow": {
+        "calls": 498,
+        "wall_seconds": 7.915899916086346,
+        "thread_cpu_seconds": 0.919199748
+      },
+      "_commit_successful_wake": {
+        "calls": 475,
+        "wall_seconds": 42.246679935837165,
+        "thread_cpu_seconds": 1.1136132920000013
+      },
+      "_commit_successful_park": {
+        "calls": 396,
+        "wall_seconds": 30.842191736679524,
+        "thread_cpu_seconds": 0.9021264850000006
+      },
+      "_record_completed_program_lifecycle": {
+        "calls": 870,
+        "wall_seconds": 73.63008108292706,
+        "thread_cpu_seconds": 1.372915793000001
+      },
+      "_heartbeat_for_route": {
+        "calls": 5988,
+        "wall_seconds": 19.607956466032192,
+        "thread_cpu_seconds": 4.898457425000017
+      },
+      "append": {
+        "calls": 3240,
+        "wall_seconds": 7.165030647069216,
+        "thread_cpu_seconds": 0.8505064200000004
+      },
+      "transaction:upsert_program_request_transition_with_change": {
+        "calls": 2262,
+        "wait_seconds": 172.785461417865,
+        "held_seconds": 3.3693477995693684,
+        "max_wait": 0.2916109529323876,
+        "max_held": 0.028814116958528757
+      },
+      "transaction:reserve_sandbox_wakes": {
+        "calls": 235,
+        "wait_seconds": 13.260403990745544,
+        "held_seconds": 0.2739258671645075,
+        "max_wait": 0.2901284908875823,
+        "max_held": 0.016696397913619876
+      },
+      "transaction:set_sandbox_state_if_current": {
+        "calls": 871,
+        "wait_seconds": 64.3535192979034,
+        "held_seconds": 1.5846471425611526,
+        "max_wait": 0.29010456590913236,
+        "max_held": 0.032132883090525866
+      },
+      "transaction:upsert_exec": {
+        "calls": 415,
+        "wait_seconds": 19.450959464767948,
+        "held_seconds": 0.38131784554570913,
+        "max_wait": 0.25048138899728656,
+        "max_held": 0.01212544902227819
+      },
+      "transaction:reconcile_sandboxes_for_node": {
+        "calls": 5,
+        "wait_seconds": 0.03746658726595342,
+        "held_seconds": 0.1312979757785797,
+        "max_wait": 0.03129312419332564,
+        "max_held": 0.06652663392014802
+      },
+      "transaction:_active_image_warmups_unlocked": {
+        "calls": 5,
+        "wait_seconds": 0.054962675319984555,
+        "held_seconds": 0.0019080531783401966,
+        "max_wait": 0.039316722890362144,
+        "max_held": 0.0009393400978296995
+      },
+      "transaction:mark_image_warmup_node": {
+        "calls": 20,
+        "wait_seconds": 0.4253311790525913,
+        "held_seconds": 0.01713902922347188,
+        "max_wait": 0.0911547839641571,
+        "max_held": 0.00281476485542953
+      }
+    }
+  }
+]

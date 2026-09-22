@@ -1,0 +1,1 @@
+{"reads": 1600, "readers": 16, "inventory_entries": 128, "results": {"before": {"wall_seconds": 2.0201962229330093, "cpu_seconds": 2.675397602}, "pool_full": {"wall_seconds": 1.5597905979957432, "cpu_seconds": 1.6553384460000005}, "pool_header": {"wall_seconds": 0.2999161530751735, "cpu_seconds": 0.4850638740000006}}}

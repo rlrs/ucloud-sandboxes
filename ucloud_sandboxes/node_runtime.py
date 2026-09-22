@@ -440,7 +440,7 @@ class DirectNodeRuntime:
             if registration is not None:
                 memory_bytes = (registration.spec.memory_mb or 0) * 1024**2
         delay = (
-            self._warm_parks.defer(key, memory_bytes=memory_bytes)
+            self._warm_parks.defer(key, memory_bytes=memory_bytes, blocking=False)
             if relay_request_id is not None else nullcontext(None)
         )
         try:

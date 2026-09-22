@@ -248,6 +248,56 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
         await state.wait_for_delivery(result.request, timeout_seconds=2)
         self.assertEqual((await state.wait_for_response(request, timeout_seconds=2)).body, b"answer")
 
+    async def test_wake_progresses_while_park_dispatch_is_full(self):
+        entered, release, woke = asyncio.Event(), asyncio.Event(), asyncio.Event()
+
+        async def park(request):
+            entered.set()
+            await release.wait()
+            return "old-epoch"
+
+        async def wake(request):
+            woke.set()
+            return "new-epoch"
+
+        state = await self.bound_state(
+            accepted_notifier=park, result_notifier=wake, lifecycle_concurrency=1,
+        )
+        await self.enqueue(state)
+        await asyncio.wait_for(entered.wait(), 2)
+        (leased,) = await self.poll(state)
+        try:
+            result = await self.respond(leased, state, defer_delivery=True)
+            await asyncio.wait_for(woke.wait(), 2)
+            await state.wait_for_delivery(result.request, timeout_seconds=2)
+            self.assertFalse(release.is_set())
+        finally:
+            release.set()
+
+    async def test_deferred_park_releases_durable_claim_without_losing_intent(self):
+        entered = asyncio.Event()
+
+        async def park(request):
+            entered.set()
+            raise api.RelayLifecycleDeferred(10)
+
+        state = await self.bound_state(accepted_notifier=park)
+        request = await self.enqueue(state)
+        await asyncio.wait_for(entered.wait(), 2)
+        for _ in range(100):
+            async with state.store.transaction("test_deferred") as conn:
+                row = await (await conn.execute(
+                    "SELECT claim_token,done,last_error,next_attempt_at>clock_timestamp() AS deferred FROM relay_lifecycle WHERE request_id=%s",
+                    (request.request_id,),
+                )).fetchone()
+            if row["claim_token"] is None:
+                break
+            await asyncio.sleep(.01)
+        self.assertIsNone(row["claim_token"])
+        self.assertFalse(row["done"])
+        self.assertIsNone(row["last_error"])
+        self.assertTrue(row["deferred"])
+
     async def test_result_and_wake_commit_atomically_and_retry_without_client(self):
         attempts = 0
         parked = asyncio.Event()

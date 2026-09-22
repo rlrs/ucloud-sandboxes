@@ -1,6 +1,5 @@
 import asyncio
 from contextvars import ContextVar
-from threading import Event
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -45,6 +44,22 @@ class RelayLifecycleDispatchTests(unittest.IsolatedAsyncioTestCase):
                     )
         self.assertEqual(seen, list(cases))
 
+    async def test_async_park_honors_worker_deferral_without_treating_it_as_success(self):
+        async def reply(request):
+            return web.json_response({"error_code": "park_deferred", "retryable": True,
+                                      "retry_after_seconds": 12}, status=409)
+        app = web.Application()
+        app.router.add_post('/v1/sandboxes/s/park', reply)
+        async with TestServer(app) as server, ClientSession() as session:
+            with self.assertRaises(cli._RelayLifecycleRetry) as caught:
+                await cli._post_gateway_sandbox_lifecycle_once_async(
+                    session, str(server.make_url('/')), 'token',
+                    SimpleNamespace(sandbox_id='s', sandbox_generation=1, request_id='r',
+                                    rollout_id='rollout', created_at=0),
+                    action='park', attempt=0, deadline=cli.time.monotonic()+30,
+                )
+            self.assertEqual(caught.exception.delay_seconds, 12)
+
     async def test_async_transport_bounds_streamed_bodies_and_actual_http_deadline(self):
         release = asyncio.Event()
 
@@ -76,48 +91,39 @@ class RelayLifecycleDispatchTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 release.set()
 
-    async def test_completed_response_bypasses_queued_park_without_waiting_for_slot(self):
+    async def test_completed_response_skips_park(self):
         dispatcher = cli._RelayLifecycleDispatcher("http://gateway", "token")
-        dispatcher._slots["park"] = asyncio.Semaphore(1)
-        await dispatcher._slots["park"].acquire()
-        request = SimpleNamespace(completed_at=None, response_committed=asyncio.Event())
-        with patch.object(cli, "_post_gateway_sandbox_lifecycle_once", return_value="epoch") as post:
-            task = asyncio.create_task(dispatcher.notify(request, action="park"))
+        with patch.object(cli, "_post_gateway_sandbox_lifecycle_once_async") as post:
             try:
-                await asyncio.sleep(0.01)
-                request.completed_at = cli.time.time()
-                request.response_committed.set()
-                self.assertIsNone(await asyncio.wait_for(task, .5))
+                self.assertIsNone(await dispatcher.notify(SimpleNamespace(completed_at=1), action="park"))
                 post.assert_not_called()
-                self.assertTrue(dispatcher._slots["park"].locked())
-                dispatcher._slots["park"].release()
-                other = SimpleNamespace(completed_at=None, response_committed=asyncio.Event())
-                self.assertEqual(await dispatcher.notify(other, action="park"), "epoch")
-                self.assertEqual(dispatcher._slots["park"]._value, 1)
             finally:
                 await dispatcher.close()
 
-    async def test_response_and_park_admission_race_returns_slot(self):
+    async def test_durable_deferral_releases_dispatch_without_sleep(self):
+        from ucloud_sandboxes.model_relay import RelayLifecycleDeferred
         dispatcher = cli._RelayLifecycleDispatcher("http://gateway", "token")
-        request = SimpleNamespace(completed_at=None, response_committed=asyncio.Event())
-        request.response_committed.set()
-        try:
-            self.assertFalse(await dispatcher._acquire_park_slot(request))
-            self.assertEqual(dispatcher._slots["park"]._value, 16)
-        finally:
-            await dispatcher.close()
+        with patch.object(cli, "_post_gateway_sandbox_lifecycle_once_async",
+                          side_effect=cli._RelayLifecycleRetry(12)):
+            try:
+                with self.assertRaises(RelayLifecycleDeferred) as caught:
+                    await asyncio.wait_for(dispatcher.notify(
+                        SimpleNamespace(durable_lifecycle=True), action="park"), .5)
+                self.assertEqual(caught.exception.seconds, 12)
+                self.assertFalse(dispatcher._active)
+            finally:
+                await dispatcher.close()
 
     async def test_completed_response_interrupts_park_retry_backoff(self):
         dispatcher = cli._RelayLifecycleDispatcher("http://gateway", "token")
         attempted = asyncio.Event()
-        loop = asyncio.get_running_loop()
         request = SimpleNamespace(completed_at=None, response_committed=asyncio.Event())
 
-        def retry(*_args, **_kwargs):
-            loop.call_soon_threadsafe(attempted.set)
+        async def retry(*_args, **_kwargs):
+            attempted.set()
             raise cli._RelayLifecycleRetry(5)
 
-        with patch.object(cli, "_post_gateway_sandbox_lifecycle_once", side_effect=retry) as post:
+        with patch.object(cli, "_post_gateway_sandbox_lifecycle_once_async", side_effect=retry) as post:
             try:
                 task = asyncio.create_task(dispatcher.notify(request, action="park"))
                 await asyncio.wait_for(attempted.wait(), 1)
@@ -130,17 +136,15 @@ class RelayLifecycleDispatchTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_committed_response_does_not_abandon_inflight_park(self):
         dispatcher = cli._RelayLifecycleDispatcher("http://gateway", "token")
-        loop = asyncio.get_running_loop()
-        entered, release = asyncio.Event(), Event()
+        entered, release = asyncio.Event(), asyncio.Event()
         request = SimpleNamespace(completed_at=None, response_committed=asyncio.Event())
 
-        def post(*_args, **_kwargs):
-            loop.call_soon_threadsafe(entered.set)
-            if not release.wait(2):
-                raise TimeoutError("test park was not released")
+        async def post(*_args, **_kwargs):
+            entered.set()
+            await asyncio.wait_for(release.wait(), 2)
             return "parked-epoch"
 
-        with patch.object(cli, "_post_gateway_sandbox_lifecycle_once", side_effect=post):
+        with patch.object(cli, "_post_gateway_sandbox_lifecycle_once_async", side_effect=post):
             task = asyncio.create_task(dispatcher.notify(request, action="park"))
             try:
                 await asyncio.wait_for(entered.wait(), 1)
@@ -166,18 +170,14 @@ class RelayLifecycleDispatchTests(unittest.IsolatedAsyncioTestCase):
             nonlocal count
             self.assertEqual(trace.get(), 'request-trace')
             count += 1
-            if count == 256:
+            if count == 512:
                 entered.set()
             await release.wait()
             return 'epoch'
 
-        # Exhaust checkpoint dispatch. Every wake can still reach HTTP without
-        # waiting for the old 48-thread fleet-wide limit or default executor.
-        for _ in range(16):
-            await dispatcher._slots['park'].acquire()
         with patch.object(cli, '_post_gateway_sandbox_lifecycle_once_async', side_effect=post):
-            tasks = [asyncio.create_task(dispatcher.notify(SimpleNamespace(), action='wake'))
-                     for _ in range(256)]
+            tasks = [asyncio.create_task(dispatcher.notify(SimpleNamespace(), action=action))
+                     for action in ('park', 'wake') for _ in range(256)]
             try:
                 await asyncio.wait_for(entered.wait(), 3)
                 tasks[0].cancel()
@@ -186,13 +186,10 @@ class RelayLifecycleDispatchTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 release.set()
                 results = await asyncio.gather(*tasks, return_exceptions=True)
-                for _ in range(16):
-                    dispatcher._slots['park'].release()
                 await dispatcher.close()
         self.assertIsInstance(results[0], asyncio.CancelledError)
-        self.assertEqual(results[1:], ['epoch'] * 255)
+        self.assertEqual(results[1:], ['epoch'] * 511)
         self.assertTrue(dispatcher._wake_session.closed)
-        self.assertEqual(set(dispatcher._pools), {'park'})
         with self.assertRaisesRegex(RuntimeError, 'closed'):
             await dispatcher.notify(SimpleNamespace(), action='wake')
 

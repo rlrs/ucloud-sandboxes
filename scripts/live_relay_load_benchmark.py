@@ -160,6 +160,26 @@ async def retry_control(operation, *, deadline, on_retry, active_delete=False):
             await asyncio.sleep(min(2, .1 * attempt, max(0, deadline - time.monotonic())))
 
 
+async def with_lease_renewal(awaitable, relay, request, *, interval=40, lease_seconds=120):
+    """Keep the model worker's claim alive while the test deliberately waits."""
+    async def renew():
+        current = request
+        while True:
+            await asyncio.sleep(interval)
+            current = await relay.renew_request(current, lease_seconds=lease_seconds)
+    operation = asyncio.ensure_future(awaitable)
+    keeper = asyncio.create_task(renew())
+    try:
+        done, _ = await asyncio.wait((operation, keeper), return_when=asyncio.FIRST_COMPLETED)
+        if keeper in done:
+            keeper.result()  # A lost lease must fail the scenario before commit.
+        return await operation
+    finally:
+        operation.cancel()
+        keeper.cancel()
+        await asyncio.gather(operation, keeper, return_exceptions=True)
+
+
 async def response_window(*, claimed_at, model_seconds, mode, sandbox_id, inventory, inventory_task):
     # Synthetic readiness is scheduled independently of event-loop lag or
     # parking. Those waits must count in the product latency measurement.
@@ -311,10 +331,10 @@ async def run(args):
                         raise RuntimeError('cycle or process identity mismatch')
                     identity = payload['nonce']
                     delay = args.model_seconds + rng.uniform(0, args.model_jitter)
-                    model_ready, parked_after = await response_window(
+                    model_ready, parked_after = await with_lease_renewal(response_window(
                         claimed_at=claimed_at, model_seconds=delay, mode=args.parking_mode,
                         sandbox_id=sid, inventory=inventory, inventory_task=inventory_task,
-                    )
+                    ), relay, request)
                     # Start before SDK connection admission: SDK queuing, relay
                     # locks, scheduling, storage, restore and retries all count.
                     started = time.monotonic()

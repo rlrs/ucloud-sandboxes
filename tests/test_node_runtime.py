@@ -275,8 +275,7 @@ class WarmRelayParkTests(unittest.TestCase):
         from ucloud_sandboxes.background_io import Pressure
         from ucloud_sandboxes.warm_park import WarmParkPolicy
         from ucloud_sandboxes.sandbox import SandboxConflictError
-        from concurrent.futures import ThreadPoolExecutor
-        import time
+        from ucloud_sandboxes.warm_park import WarmParkDeferred
         seen = set()
         service = _WakeService()
         def fence(sandbox, generation, request, *, record=False):
@@ -288,18 +287,17 @@ class WarmRelayParkTests(unittest.TestCase):
         manager = DirectNodeRuntime(service)
         manager._warm_parks = WarmParkPolicy(lambda: Pressure(.8, 0), max_delay=2)
         key = ('agent', 1, 'request')
-        with ThreadPoolExecutor() as pool:
-            parked = pool.submit(manager.park_with_activity_revision, 'agent', generation=1,
-                                 operation_id='park:req', relay_request_id='request')
-            deadline = time.monotonic() + 2
-            while key not in manager._warm_parks._pending and time.monotonic() < deadline:
-                time.sleep(.001)
-            self.assertIn(key, manager._warm_parks._pending)
-            record, _ = manager.wake_with_activity_revision('agent', generation=1,
-                          operation_id='wake:req', relay_request_id='request')
-            self.assertEqual(record.state, 'running')
-            with self.assertRaisesRegex(SandboxConflictError, 'superseded'):
-                parked.result(2)
+        with self.assertRaises(WarmParkDeferred):
+            manager.park_with_activity_revision('agent', generation=1,
+                operation_id='park:req', relay_request_id='request')
+        self.assertFalse(manager._warm_parks._pending)
+        self.assertIn(key, manager._warm_parks._waiting_since)
+        record, _ = manager.wake_with_activity_revision('agent', generation=1,
+                      operation_id='wake:req', relay_request_id='request')
+        self.assertEqual(record.state, 'running')
+        with self.assertRaisesRegex(SandboxConflictError, 'superseded'):
+            manager.park_with_activity_revision('agent', generation=1,
+                operation_id='park:req', relay_request_id='request')
         self.assertFalse(service.park_calls)
         restarted = DirectNodeRuntime(service)
         with self.assertRaisesRegex(SandboxConflictError, 'durable wake'):

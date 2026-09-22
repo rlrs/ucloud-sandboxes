@@ -12,10 +12,26 @@ from threading import Thread
 import time
 import unittest
 
-from scripts.live_relay_load_benchmark import AGENT, parse_args, response_window, retry_control, safe_error, summary
+from scripts.live_relay_load_benchmark import AGENT, with_lease_renewal, parse_args, response_window, retry_control, safe_error, summary
 
 
 class ResponseWindowTests(unittest.IsolatedAsyncioTestCase):
+    async def test_deliberate_wait_renews_lease_and_stops_on_lease_loss(self):
+        from unittest.mock import AsyncMock
+        from types import SimpleNamespace
+        renewed = object()
+        relay = SimpleNamespace(renew_request=AsyncMock(return_value=renewed))
+        self.assertEqual(await with_lease_renewal(
+            asyncio.sleep(.04, result="ready"), relay, object(), interval=.01,
+        ), "ready")
+        self.assertGreaterEqual(relay.renew_request.await_count, 2)
+        calls = relay.renew_request.await_count
+        await asyncio.sleep(.02)
+        self.assertEqual(relay.renew_request.await_count, calls)
+        relay.renew_request.side_effect = RuntimeError("lease lost")
+        with self.assertRaisesRegex(RuntimeError, "lease lost"):
+            await with_lease_renewal(asyncio.sleep(60), relay, object(), interval=.01)
+
     async def test_poll_transport_retry_is_visible_and_ownership_errors_are_not_replayed(self):
         attempts, retries = [], []
 

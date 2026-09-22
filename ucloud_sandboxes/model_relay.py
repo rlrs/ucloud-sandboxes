@@ -109,6 +109,14 @@ class RelayWorkerResponse:
     headers: dict[str, str] = field(default_factory=dict)
 
 
+class RelayLifecycleDeferred(Exception):
+    """An identified retry releases its durable claim until the given delay."""
+
+    def __init__(self, seconds: float):
+        super().__init__("lifecycle deferred")
+        self.seconds = max(0.05, min(15.0, seconds))
+
+
 class RelayCallerUnavailable(Exception):
     """The gateway definitively rejected this sandbox incarnation's wake."""
 

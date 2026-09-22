@@ -209,6 +209,23 @@ class BackgroundSchedulingTests(unittest.TestCase):
         pacer.pace()
         self.assertEqual(waits, [0.02])
 
+    def test_nonblocking_park_retries_preserve_deadline_and_recheck_pressure(self):
+        from unittest.mock import patch
+        from ucloud_sandboxes.warm_park import WarmParkDeferred
+        pressure = [Pressure(.8, 0)]
+        policy = WarmParkPolicy(lambda: pressure[0], max_delay=15)
+        for now, remaining in ((10, 15), (15, 10)):
+            with patch("ucloud_sandboxes.warm_park.time.monotonic", return_value=now):
+                with self.assertRaises(WarmParkDeferred) as caught:
+                    with policy.defer("request", blocking=False):
+                        self.fail("warm request should defer")
+                self.assertEqual(caught.exception.seconds, remaining)
+                self.assertFalse(policy._pending)
+        pressure[0] = Pressure(.05, 0)
+        with patch("ucloud_sandboxes.warm_park.time.monotonic", return_value=16):
+            with policy.defer("request", blocking=False):
+                pass
+
     def test_wake_cancels_grace_and_generation_does_not_cross(self):
         policy = WarmParkPolicy(lambda: Pressure(0.8, 0), max_delay=1)
         key = ("sandbox", 1, "request")

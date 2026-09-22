@@ -1327,6 +1327,45 @@ class DirectProvisionerTests(unittest.TestCase):
                 self.assertNotIsInstance(caught.exception, SandboxRestoreBusyError)
             self.assertEqual(service.activity_snapshot().active_operations, 0)
 
+    def test_relay_park_deferral_returns_without_holding_http_or_lifecycle(self):
+        from ucloud_sandboxes.background_io import Pressure
+        from ucloud_sandboxes.warm_park import WarmParkPolicy
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, _ = self.make(root)
+            service = DirectSandboxService(provisioner, process_runner=FakeProcessRunner())
+            record = self.create(service, self.spec())
+            server = build_direct_node_agent_server(
+                "127.0.0.1", 0, service=service, image_file=root / "images.json",
+                job_id="job", node_id="node", total_resources=ResourceQuantity(vcpu=4, memory_mb=8192),
+            )
+            server.RequestHandlerClass.manager._warm_parks = WarmParkPolicy(lambda: Pressure(.8, 0))
+            thread = Thread(target=server.serve_forever, kwargs={"poll_interval": .01}, daemon=True)
+            thread.start()
+            try:
+                req = request.Request(
+                    f"http://127.0.0.1:{server.server_port}/v1/sandboxes/{record.spec.id}/park",
+                    data=json.dumps({"operation_id": "park:test", "relay_request_id": "test",
+                                     "generation": record.generation}).encode(),
+                    headers={"Content-Type": "application/json"},
+                )
+                started = monotonic()
+                with self.assertRaises(error.HTTPError) as rejected:
+                    request.urlopen(req, timeout=2)
+                with rejected.exception as response:
+                    self.assertEqual(response.code, 409)
+                    payload = json.load(response)
+                    self.assertEqual(payload["error_code"], "park_deferred")
+                    self.assertTrue(payload["retryable"])
+                    self.assertGreater(payload["retry_after_seconds"], 10)
+                self.assertLess(monotonic() - started, 2)
+                self.assertEqual(service.activity_snapshot().active_operations, 0)
+                self.assertEqual(service.get(record.spec.id).state, "running")
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=5)
+
     def test_file_http_pressure_deadline_is_safe_to_retry(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()

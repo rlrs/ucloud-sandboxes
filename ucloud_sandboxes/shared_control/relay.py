@@ -71,6 +71,7 @@ class PostgresRelayState:
         self._waiters: dict[str, set[asyncio.Event]] = {}
         self._tasks: list[asyncio.Task] = []
         self._active: set[asyncio.Task] = set()
+        self._active_by_action = {action: set() for action in self.notifiers}
         self._response_waiters: dict[str, set[asyncio.Future]] = {}
         self._delivery_waiters: dict[str, set[asyncio.Future]] = {}
         self._delivery_event = asyncio.Event()
@@ -1155,7 +1156,7 @@ class PostgresRelayState:
             "averages": {},
         }
 
-    async def _claim_lifecycle(self, limit):
+    async def _claim_lifecycle(self, limit, *, action=None):
         async with self.store.transaction("relay_claim_lifecycle") as conn:
             # Requests are always locked before operations by mutation paths.
             # Claim only operation rows here and COMMIT before touching requests.
@@ -1172,7 +1173,7 @@ class PostgresRelayState:
                 RETURNING l.*,to_jsonb(r) AS request_record""",
                     (
                         self.deployment,
-                        [k for k, v in self.notifiers.items() if v is not None],
+                        [k for k, v in self.notifiers.items() if v is not None and (action is None or k == action)],
                         limit,
                         self.claim_seconds,
                     ),
@@ -1185,16 +1186,22 @@ class PostgresRelayState:
             while True:
                 event.clear()
                 try:
-                    if len(self._active) < self.concurrency:
-                        rows = await self._claim_lifecycle(
-                            self.concurrency - len(self._active)
-                        )
+                    claimed = False
+                    # Waiting parks cannot consume wake dispatch admission.
+                    # Each class retains durable overflow rather than rejecting work.
+                    for action in ("wake", "park"):
+                        available = self.concurrency - len(self._active_by_action[action])
+                        if available <= 0 or self.notifiers[action] is None:
+                            continue
+                        rows = await self._claim_lifecycle(available, action=action)
                         for row in rows:
                             task = asyncio.create_task(self._dispatch(row))
                             self._active.add(task)
+                            self._active_by_action[action].add(task)
                             task.add_done_callback(self._dispatch_done)
-                        if rows:
-                            continue
+                        claimed |= bool(rows)
+                    if claimed:
+                        continue
                 except asyncio.CancelledError:
                     raise
                 except Exception:
@@ -1206,6 +1213,8 @@ class PostgresRelayState:
 
     def _dispatch_done(self, task):
         self._active.discard(task)
+        for active in self._active_by_action.values():
+            active.discard(task)
         self._signal("l")
         if not task.cancelled() and task.exception() is not None:
             LOGGER.warning(
@@ -1245,6 +1254,7 @@ class PostgresRelayState:
             self._active_parks[request_id] = request
             self._delivery_event.set()
         epoch, unavailable, failure = None, False, None
+        deferred = None
         try:
             # A committed result makes a queued park obsolete. Never replay it.
             if not (action == "park" and request.state == "completed"):
@@ -1252,6 +1262,8 @@ class PostgresRelayState:
                 if notifier is None:
                     raise RuntimeError("lifecycle notifier missing")
                 epoch = await notifier(request)
+        except api.RelayLifecycleDeferred as exc:
+            deferred = exc.seconds
         except api.RelayCallerUnavailable:
             unavailable = True
         except asyncio.CancelledError:
@@ -1277,12 +1289,12 @@ class PostgresRelayState:
                 or current["claim_token"] != work["claim_token"]
             ):
                 return
-            if failure:
+            if failure or deferred is not None:
                 await conn.execute(
                     "UPDATE relay_lifecycle SET claim_token=NULL,claim_until=NULL,last_error=%s,next_attempt_at=clock_timestamp()+%s*interval '1 second' WHERE deployment_id=%s AND request_id=%s AND action=%s",
                     (
                         failure,
-                        min(5, 0.05 * 2 ** min(work["attempts"], 7)),
+                        deferred if deferred is not None else min(5, 0.05 * 2 ** min(work["attempts"], 7)),
                         self.deployment,
                         request_id,
                         action,

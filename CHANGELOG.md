@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.77 - 2026-09-22
+
+- Return a warm-retention retry deadline without holding worker or gateway HTTP
+  execution. Preserve the original grace period and durable wake fences across
+  retries, and dispatch both parks and wakes using asynchronous HTTP.
+- Give durable wakes dispatch capacity independent of park backlog. Release
+  deferred lifecycle claims until their next attempt instead of sleeping while
+  holding dispatch admission. Keep accepted work queued durably during overload.
+- Renew load-test inference leases while deliberately waiting for parking; fail
+  promptly if renewal loses ownership. Use subsecond PostgreSQL latency buckets
+  to distinguish connection waits, transactions, and durable commit time.
+
 ## 0.5.76 - 2026-09-22
 
 - Keep node inventory and heartbeats available when an expired sandbox is still

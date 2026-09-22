@@ -387,6 +387,12 @@ class Telemetry:
                     aggregation=ExplicitBucketHistogramAggregation(
                         boundaries=OPERATION_DURATION_BUCKET_BOUNDARIES_SECONDS
                     ),
+                ),
+                View(
+                    instrument_name="ucloud.platform.postgres.duration",
+                    aggregation=ExplicitBucketHistogramAggregation(
+                        boundaries=OPERATION_DURATION_BUCKET_BOUNDARIES_SECONDS
+                    ),
                 )
             ],
         )

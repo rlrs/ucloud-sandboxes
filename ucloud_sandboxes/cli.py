@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
-from contextvars import copy_context
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta
 import json
@@ -1284,19 +1283,11 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
 
 
 class _RelayLifecycleDispatcher:
-    """Dispatch wakes asynchronously; workers own restore admission."""
+    """Dispatch lifecycle HTTP asynchronously; workers own resource admission."""
 
     def __init__(self, gateway_url: str, bearer_token: str) -> None:
         self.gateway_url = gateway_url
         self.bearer_token = bearer_token
-        # Checkpoint dispatch remains isolated from response delivery. Wake I/O
-        # must not queue behind a fleet-size assumption or a CPU-sized executor.
-        limits = {"park": 16}
-        self._pools = {
-            action: ThreadPoolExecutor(max_workers=limit, thread_name_prefix=f"relay-{action}")
-            for action, limit in limits.items()
-        }
-        self._slots = {action: asyncio.Semaphore(limit) for action, limit in limits.items()}
         self._closed = False
         self._active: set[asyncio.Task[str | None]] = set()
         self._wake_session = None
@@ -1307,7 +1298,7 @@ class _RelayLifecycleDispatcher:
         if self._closed:
             raise RuntimeError("relay lifecycle dispatcher is closed")
         # Keep an accepted operation alive across caller cancellation, including
-        # async backoff. Only an actual HTTP attempt occupies a thread/slot.
+        # async backoff. HTTP attempts do not reserve executor threads.
         task = asyncio.create_task(self._notify(request, action=action))
         self._active.add(task)
         try:
@@ -1324,57 +1315,25 @@ class _RelayLifecycleDispatcher:
             if action == "park" and getattr(request, "completed_at", None) is not None:
                 get_current_span().add_event("relay.park.skipped", {"reason": "response_committed"})
                 return None
-            queued_at = time.monotonic()
-            if action == "wake":
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    raise TimeoutError("relay wake deadline exceeded")
-            else:
-                if not await self._acquire_park_slot(request):
-                    get_current_span().add_event("relay.park.skipped", {
-                        "reason": "response_committed_while_queued",
-                        "relay.lifecycle.queue_seconds": time.monotonic() - queued_at,
-                    })
-                    return None
+            if deadline <= time.monotonic():
+                raise TimeoutError(f"relay {action} deadline exceeded")
+            from aiohttp import ClientSession, TCPConnector
+            if self._wake_session is None:
+                # HTTP waits own no executor slots. Workers defer warm retention
+                # and own checkpoint/restore admission against local pressure.
+                self._wake_session = ClientSession(connector=TCPConnector(limit=0), trust_env=False)
             try:
-                if self._closed:
-                    raise RuntimeError("relay lifecycle dispatcher is closed")
-                if action == "park" and getattr(request, "completed_at", None) is not None:
-                    get_current_span().add_event("relay.park.skipped", {"reason": "response_committed"})
-                    return None
-                get_current_span().add_event("relay.lifecycle.admitted", {
-                    "relay.lifecycle.action": action,
-                    "relay.lifecycle.queue_seconds": time.monotonic() - queued_at,
-                    "retry.attempt": attempt,
-                })
-                try:
-                    if action == 'wake':
-                        from aiohttp import ClientSession, TCPConnector
-                        if self._wake_session is None:
-                            # Accepted relay requests already bound outstanding
-                            # work. Awaiting HTTP owns no worker thread. Gateway
-                            # overload responses retain the explicit retry path.
-                            self._wake_session = ClientSession(
-                                connector=TCPConnector(limit=0), trust_env=False,
-                            )
-                        return await _post_gateway_sandbox_lifecycle_once_async(
-                            self._wake_session, self.gateway_url, self.bearer_token,
-                            request, action=action, attempt=attempt, deadline=deadline,
-                        )
-                    context = copy_context()
-                    return await asyncio.get_running_loop().run_in_executor(
-                        self._pools[action],
-                        lambda: context.run(
-                            _post_gateway_sandbox_lifecycle_once,
-                            self.gateway_url, self.bearer_token, request,
-                            action=action, attempt=attempt, deadline=deadline,
-                        ),
-                    )
-                except _RelayLifecycleRetry as retry:
-                    delay = retry.delay_seconds
-            finally:
-                if action == 'park':
-                    self._slots[action].release()
+                return await _post_gateway_sandbox_lifecycle_once_async(
+                    self._wake_session, self.gateway_url, self.bearer_token,
+                    request, action=action, attempt=attempt, deadline=deadline,
+                )
+            except _RelayLifecycleRetry as retry:
+                delay = retry.delay_seconds
+                if getattr(request, "durable_lifecycle", False):
+                    # Retain the intent in PostgreSQL, not a sleeping claimed
+                    # task. The durable dispatcher schedules the next attempt.
+                    from .model_relay import RelayLifecycleDeferred
+                    raise RelayLifecycleDeferred(delay) from retry
             # A capacity-blocked owner must not occupy fleet-wide dispatch
             # capacity while unrelated, ready workers could make progress.
             committed = getattr(request, "response_committed", None)
@@ -1391,31 +1350,6 @@ class _RelayLifecycleDispatcher:
                 await asyncio.sleep(delay)
             attempt += 1
 
-    async def _acquire_park_slot(self, request: RelayRequest) -> bool:
-        committed = getattr(request, "response_committed", None)
-        if committed is None:
-            await self._slots["park"].acquire()
-            return True
-        slot_wait = asyncio.create_task(self._slots["park"].acquire())
-        result_wait = asyncio.create_task(committed.wait())
-        keep_slot = False
-        try:
-            await asyncio.wait((slot_wait, result_wait), return_when=asyncio.FIRST_COMPLETED)
-            if committed.is_set():
-                return False
-            await slot_wait
-            keep_slot = True
-            return True
-        finally:
-            for task in (slot_wait, result_wait):
-                if not task.done():
-                    task.cancel()
-            await asyncio.gather(slot_wait, result_wait, return_exceptions=True)
-            # Completion and admission can win on the same event-loop turn.
-            # Return any acquired slot when skipping park or being canceled.
-            if not keep_slot and not slot_wait.cancelled() and slot_wait.exception() is None:
-                self._slots["park"].release()
-
     async def close(self) -> None:
         self._closed = True
         # Include operations in async backoff, which no longer own a pool
@@ -1423,9 +1357,7 @@ class _RelayLifecycleDispatcher:
         await asyncio.gather(*tuple(self._active), return_exceptions=True)
         if self._wake_session is not None:
             await self._wake_session.close()
-        await asyncio.gather(*(
-            asyncio.to_thread(pool.shutdown, wait=True) for pool in self._pools.values()
-        ))
+
 
 
 class _RejectControlRedirects(HTTPRedirectHandler):
@@ -1631,8 +1563,8 @@ async def _post_gateway_sandbox_lifecycle_once_async(
     """One bounded HTTP attempt, without reserving a blocking worker thread."""
     from aiohttp import ClientTimeout
 
-    if action != 'wake':
-        raise ValueError('asynchronous lifecycle transport requires wake')
+    if action not in {'wake', 'park'}:
+        raise ValueError('unsupported relay sandbox lifecycle action')
     if relay_request.sandbox_id is None:
         return None
     if relay_request.sandbox_generation is None:
@@ -1698,6 +1630,13 @@ def _raise_relay_lifecycle_http_error(
         failure = {}
     finally:
         exc.close()
+    if (action == "park" and exc.code == 409 and isinstance(failure, dict)
+            and failure.get("error_code") == "park_deferred" and failure.get("retryable") is True):
+        try:
+            delay = float(failure["retry_after_seconds"])
+        except (KeyError, TypeError, ValueError):
+            delay = 1.0
+        raise _RelayLifecycleRetry(max(0.05, min(15.0, delay))) from exc
     permanent = exc.code in {404, 410} or (
         exc.code == 409
         and isinstance(failure, dict)

@@ -8,6 +8,12 @@ import time
 from .background_io import PressureSampler
 
 
+class WarmParkDeferred(RuntimeError):
+    def __init__(self, seconds):
+        super().__init__("relay park deferred for warm retention")
+        self.seconds = seconds
+
+
 class WarmParkPolicy:
     def __init__(self, pressure=None, *, max_delay=15.0, demand_bytes=lambda: 0):
         self.pressure = pressure or PressureSampler().sample
@@ -43,7 +49,7 @@ class WarmParkPolicy:
         return headroom * min(self.max_delay, max(0.05, expected))
 
     @contextmanager
-    def defer(self, key, *, memory_bytes=0):
+    def defer(self, key, *, memory_bytes=0, blocking=True):
         with self._lock:
             entry = self._pending.get(key)
             if entry is None:
@@ -62,6 +68,8 @@ class WarmParkPolicy:
                 remaining = self._budget(memory_bytes) - (time.monotonic() - started)
                 if remaining <= 0:
                     break
+                if not blocking:
+                    raise WarmParkDeferred(remaining)
                 event.wait(min(0.05, remaining))
             yield event
         finally:

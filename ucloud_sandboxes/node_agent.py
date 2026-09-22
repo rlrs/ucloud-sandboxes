@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .warm_park import WarmParkDeferred
+
 import base64
 import hmac
 import shutil
@@ -738,6 +740,14 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 background=background,
                 **relay_args,
             )
+        except WarmParkDeferred as exc:
+            self._write_json(
+                {"error": str(exc), "error_code": "park_deferred", "retryable": True,
+                 "retry_after_seconds": exc.seconds},
+                status=HTTPStatus.CONFLICT,
+                headers={"Retry-After": str(exc.seconds)},
+            )
+            return
         except SandboxConflictError as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
             return

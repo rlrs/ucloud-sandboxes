@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.76 - 2026-09-22
+
+- Keep node inventory and heartbeats available when an expired sandbox is still
+  owned by a migration. Opportunistic expiry cleanup defers to the fenced
+  migration deletion path without discarding the sandbox or its ownership.
+
 ## 0.5.71 - 2026-09-21
 
 - Keep bounded local equivalents of successfully published layers using

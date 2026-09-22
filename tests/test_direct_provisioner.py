@@ -2363,6 +2363,33 @@ class DirectProvisionerTests(unittest.TestCase):
             self.assertEqual(durable.phase, "moving_out")
             self.assertEqual(durable.migration_id, "wake:owned-by-worker")
 
+    def test_expired_migration_preserves_ownership_and_inventory(self) -> None:
+        with TemporaryDirectory() as raw:
+            provisioner, registry, _, _, _ = self.make(Path(raw).resolve())
+            service = DirectSandboxService(provisioner, process_runner=FakeProcessRunner())
+            created = self.create(service, self.spec())
+            registration = registry.get(created.spec.id)
+            assert registration is not None
+            moving = registry.begin_move_out(
+                created.spec.id,
+                expected_revision=registration.revision,
+                migration_id="wake:expiry-race",
+                migration_sha256="e" * 64,
+            )
+            manager = DirectNodeRuntime(service)
+            with patch("ucloud_sandboxes.sandbox.SandboxRecord.is_expired", return_value=True):
+                records = manager.list()
+            self.assertEqual([r.spec.id for r in records], [created.spec.id])
+            self.assertEqual(registry.get(created.spec.id), moving)
+            self.assertEqual(service._locks, {})
+            # Once ownership returns to this node, normal expiry can delete it.
+            service.abort_move(
+                created.spec.id, migration_id=moving.migration_id,
+                migration_sha256=moving.migration_sha256,
+            )
+            self.assertTrue(service.try_delete(created.spec.id, generation=created.generation))
+            self.assertIsNone(registry.get(created.spec.id))
+
     def test_try_delete_retires_absent_mismatched_and_busy_lock_entries(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()

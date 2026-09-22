@@ -610,6 +610,11 @@ class DirectSandboxService:
                 deleted = True
             elif registration.sandbox_generation != generation:
                 return False
+            elif registration.migration_id and registration.phase not in ("owned", "deleting"):
+                # Migration ownership survives the in-process lifecycle lock.
+                # Expiry cleanup must leave it to the fenced migration path;
+                # raising here would break inventory and node heartbeats.
+                return False
             else:
                 self.provisioner.delete(sandbox_id, generation=generation)
                 deleted = True

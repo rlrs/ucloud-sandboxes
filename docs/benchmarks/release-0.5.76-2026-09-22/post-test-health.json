@@ -1,0 +1,60 @@
+{
+  "version": "0.5.76",
+  "routes": 0,
+  "reservations": 0,
+  "nodes": [
+    {
+      "job_id": "12397503",
+      "active_sandboxes": 0,
+      "version": "0.5.76",
+      "draining": false
+    },
+    {
+      "job_id": "12398499",
+      "active_sandboxes": 0,
+      "version": "0.5.76",
+      "draining": false
+    },
+    {
+      "job_id": "12398500",
+      "active_sandboxes": 0,
+      "version": "0.5.76",
+      "draining": false
+    },
+    {
+      "job_id": "12398539",
+      "active_sandboxes": 0,
+      "version": "0.5.76",
+      "draining": false
+    },
+    {
+      "job_id": "12398541",
+      "active_sandboxes": 0,
+      "version": "0.5.76",
+      "draining": true
+    }
+  ],
+  "relay": {
+    "backend": "postgres",
+    "inflight": 0,
+    "delivery_pending": 0,
+    "lifecycle": [],
+    "database_pool": {
+      "connections_num": 16,
+      "connections_ms": 547,
+      "requests_num": 12250,
+      "usage_ms": 92560,
+      "requests_queued": 993,
+      "requests_wait_ms": 116377,
+      "pool_min": 1,
+      "pool_max": 16,
+      "pool_size": 16,
+      "pool_available": 16,
+      "requests_waiting": 0
+    }
+  },
+  "public_gateway_health": true,
+  "public_relay_health": true,
+  "systemd_failed_units": 0,
+  "postgres_backup_result": "success"
+}

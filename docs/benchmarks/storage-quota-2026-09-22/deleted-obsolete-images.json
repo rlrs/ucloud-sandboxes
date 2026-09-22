@@ -1,0 +1,514 @@
+{
+  "completed_at": "2026-09-22T10:59:48.863006+00:00",
+  "project_id": "4827bd3a-4e74-4393-9b82-49f71636c141",
+  "permanently_deleted_count": 63,
+  "logical_bytes": 13164074762240,
+  "verification": "UCloud move-to-trash resets timestamps. Verified initially empty Trash, 63 successful move responses, exact count/names/size histogram, unchanged Trash paths, and absence of all 63 original files.",
+  "files": [
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12346204/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782736214818,
+      "job": "12346204",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-builder-builder-live-20260629-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12346292/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 32212254720,
+      "modified": 1782741101571,
+      "job": "12346292",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-5dcd1d0cfa-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12345813/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 32212254720,
+      "modified": 1782737274331,
+      "job": "12345813",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-live-20260629-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12346298/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782741735625,
+      "job": "12346298",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-e20f63f321-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12346302/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782741496659,
+      "job": "12346302",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-190e531509-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12346374/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782745974185,
+      "job": "12346374",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-580a1203b9-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12346384/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782746339829,
+      "job": "12346384",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-3a0e3626e9-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12346391/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782747753625,
+      "job": "12346391",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-a4d3788b25-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12346401/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782748504195,
+      "job": "12346401",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-b0724ff0be-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12346910/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782818888065,
+      "job": "12346910",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-a1c6660578-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12346871/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782818764150,
+      "job": "12346871",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-58c8424c71-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12346977/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782822305780,
+      "job": "12346977",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-fb5685fe76-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12346991/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782823747995,
+      "job": "12346991",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-79e0079a37-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12346983/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782823629497,
+      "job": "12346983",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-builder-5837cbbc1f-builder-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347057/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782832545927,
+      "job": "12347057",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-ed3681090b-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347064/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782833520430,
+      "job": "12347064",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-2678c66d73-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347065/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782834239123,
+      "job": "12347065",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-31235ab40e-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347200/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782854118272,
+      "job": "12347200",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-builder-9edd79f7ca-builder-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347213/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782854542002,
+      "job": "12347213",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-01531d96db-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347066/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782834990502,
+      "job": "12347066",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-f701620337-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347217/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782856629795,
+      "job": "12347217",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-builder-000a25ff1e-builder-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347216/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782855604513,
+      "job": "12347216",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-builder-05aa4764c7-builder-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347219/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782857712088,
+      "job": "12347219",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-builder-68b4654018-builder-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347220/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782858522800,
+      "job": "12347220",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-builder-d89a1f21da-builder-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347224/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782859367328,
+      "job": "12347224",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-builder-57e47ed030-builder-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347356/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782890963007,
+      "job": "12347356",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-3ea4bfca56-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347225/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782859740666,
+      "job": "12347225",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-7ddcdc9717-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347482/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782894275906,
+      "job": "12347482",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-8045e2bf19-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347387/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782893239441,
+      "job": "12347387",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-ef3eb4b8e0-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347552/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782897556000,
+      "job": "12347552",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-90f9d2b31c-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347483/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782894772594,
+      "job": "12347483",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-eb15660889-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347595/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782899173690,
+      "job": "12347595",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-builder-6bb0113f25-builder-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347578/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782898626497,
+      "job": "12347578",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-builder-81f8e60438-builder-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347613/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782901726702,
+      "job": "12347613",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-3f85df64a8-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347799/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782910467187,
+      "job": "12347799",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-a99902a87a-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347787/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782910398160,
+      "job": "12347787",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-builder-8396369a34-builder-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347804/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782911957534,
+      "job": "12347804",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-builder-9678690110-builder-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347810/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782911338727,
+      "job": "12347810",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-25e52be17f-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347821/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782912968517,
+      "job": "12347821",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-e295e29e35-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347822/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782914040539,
+      "job": "12347822",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-builder-7dea2cc114-builder-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347851/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782916747286,
+      "job": "12347851",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-ee89a43202-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347852/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782916750439,
+      "job": "12347852",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-2a80cc7e66-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347868/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782916744371,
+      "job": "12347868",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-8d65f30917-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347874/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782916738389,
+      "job": "12347874",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-49fcfa0aa8-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347858/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782914461110,
+      "job": "12347858",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-a31468af25-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347871/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782916765800,
+      "job": "12347871",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-baa7a22833-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12347876/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1782916743594,
+      "job": "12347876",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-db9a32e302-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12349440/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1783160630329,
+      "job": "12349440",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-7df8e7473f-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12349439/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1783157435846,
+      "job": "12349439",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-8f652cfd0c-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12349437/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1783160382558,
+      "job": "12349437",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-builder-d3b55146db-builder-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12349442/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1783160658605,
+      "job": "12349442",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-cfd617f038-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12349441/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1783160633399,
+      "job": "12349441",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-e8c7485f29-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12349443/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1783160662651,
+      "job": "12349443",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-4a237fb57d-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12349460/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1783167883732,
+      "job": "12349460",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-builder-a887ef49c9-builder-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12349463/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1783169555500,
+      "job": "12349463",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-381c112ccc-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12349464/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1783170620891,
+      "job": "12349464",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-builder-21980fdcf0-builder-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12349474/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1783177377661,
+      "job": "12349474",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-50a991d060-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12349498/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1783180827609,
+      "job": "12349498",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-builder-172352ef0b-builder-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12349497/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1783180635257,
+      "job": "12349497",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-3421b0eb54-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12349475/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1783174604897,
+      "job": "12349475",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-builder-864e86542e-builder-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12349499/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1783179111452,
+      "job": "12349499",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-a30e65968a-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12349530/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1783181959529,
+      "job": "12349530",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-builder-69c4b160a9-builder-1"
+    },
+    {
+      "path": "/1020791/Jobs/VirtualMachines/12349531/logs/ucloud-sandboxes/docker-xfs.img",
+      "bytes": 214748364800,
+      "modified": 1783181976996,
+      "job": "12349531",
+      "job_state": "SUCCESS",
+      "job_name": "ucloud-sandbox-node-85d8e28aee-1"
+    }
+  ],
+  "quota_recovery_confirmed": false
+}

@@ -3,7 +3,7 @@
   "commit": "746ad507d03e0f197fb4d47640f4e94112a94382",
   "wheel_sha256": "69bd3d2d73f11602c0f72ecd97ee932b7cec56b26bdc02a07f0204099d4566b8",
   "gateway_job_id": "12379311",
-  "state": "SUSPENDED",
+  "state": "RUNNING",
   "provider_updates": [
     {
       "timestamp": 1790068620222,
@@ -16,7 +16,21 @@
       "status": "The virtual machine is powered off."
     }
   ],
-  "storage": {
+  "deployed": true,
+  "realistic_load_test_run": true,
+  "linux_tests": {
+    "ran": 1195,
+    "skipped": 10,
+    "seconds": 101.818,
+    "passed": true
+  },
+  "wheel_install_verified": true,
+  "quota_recovered": {
+    "usage_gb": 159624,
+    "quota_gb": 173000,
+    "usable_gb": 13376
+  },
+  "storage_at_interruption": {
     "product": "storage",
     "provider": "ucloud",
     "type": "STORAGE",
@@ -28,13 +42,87 @@
     "unit": "GB",
     "updated": "2026-09-22 09:17:00Z"
   },
-  "deployed": false,
-  "realistic_load_test_run": false,
-  "linux_tests": {
-    "ran": 1195,
-    "skipped": 10,
-    "seconds": 101.818,
-    "passed": true
-  },
-  "wheel_install_verified": true
+  "superseded_by": "0.5.76",
+  "load_results": {
+    "release0575-forced64": {
+      "correct": true,
+      "completed_cycles": 192,
+      "slo_passed": false,
+      "commit_and_wake_seconds": {
+        "count": 128,
+        "p50": 0.5450403005816042,
+        "p95": 0.8117732650134712,
+        "p99": 0.8787329280748963,
+        "max": 0.9100062679499388
+      },
+      "response_ready_to_usable_exec_seconds": {
+        "count": 128,
+        "p50": 33.96153378544841,
+        "p95": 43.13241430232301,
+        "p99": 44.229650147026405,
+        "max": 44.69457704201341
+      },
+      "measured_park_observed_cycles": 128
+    },
+    "release0575-natural256": {
+      "correct": true,
+      "completed_cycles": 2048,
+      "slo_passed": false,
+      "commit_and_wake_seconds": {
+        "count": 1792,
+        "p50": 0.48689216596540064,
+        "p95": 1.5041811750270426,
+        "p99": 2.152489304775372,
+        "max": 3.1472188280895352
+      },
+      "response_ready_to_usable_exec_seconds": {
+        "count": 1792,
+        "p50": 0.9098058013478294,
+        "p95": 2.1774528513196856,
+        "p99": 2.78846621979028,
+        "max": 3.7997149324510247
+      },
+      "measured_park_observed_cycles": 9
+    },
+    "release0575-natural64": {
+      "correct": true,
+      "completed_cycles": 512,
+      "slo_passed": true,
+      "commit_and_wake_seconds": {
+        "count": 448,
+        "p50": 0.11451547045726329,
+        "p95": 0.2481881082057953,
+        "p99": 0.8479682200122625,
+        "max": 1.0691266190260649
+      },
+      "response_ready_to_usable_exec_seconds": {
+        "count": 448,
+        "p50": 0.5040575044695288,
+        "p95": 0.7100688712671399,
+        "p99": 1.480558253126219,
+        "max": 1.6358357465360314
+      },
+      "measured_park_observed_cycles": 8
+    },
+    "release0575-smoke4": {
+      "correct": true,
+      "completed_cycles": 12,
+      "slo_passed": false,
+      "commit_and_wake_seconds": {
+        "count": 8,
+        "p50": 0.09956239839084446,
+        "p95": 0.6968950729351491,
+        "p99": 0.6968950729351491,
+        "max": 0.6968950729351491
+      },
+      "response_ready_to_usable_exec_seconds": {
+        "count": 8,
+        "p50": 0.5341082458617166,
+        "p95": 1.2642175224609673,
+        "p99": 1.2642175224609673,
+        "max": 1.2642175224609673
+      },
+      "measured_park_observed_cycles": 2
+    }
+  }
 }

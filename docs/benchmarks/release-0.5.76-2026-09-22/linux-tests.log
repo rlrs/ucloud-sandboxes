@@ -1,0 +1,6 @@
+deferred rootfs cache collection for deleted image sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: injected image collection failure
+deferred 1 durable sandbox deletion(s); first=sandbox: injected mounted-volume cleanup failure
+----------------------------------------------------------------------
+Ran 68 tests in 7.086s
+
+OK

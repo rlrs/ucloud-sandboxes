@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.82 - 2026-09-22
 
 - Upgrade the pinned AgentEnv storage backend to v0.2.2, preserving streamed
   exports, ownership fences, cache identity and warm-device reuse. Include

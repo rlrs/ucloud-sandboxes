@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.83 - 2026-09-22
+
+- Interpret memory PSI as a percentage in warm retention, avoiding immediate
+  park/checkpoint churn from minor reclaim stalls when memory is available.
+- Make unchanged managed-process status polls read-only and let changed records
+  use the transactional generation fence without the fleet projection lock.
+- Read active image warmups without taking a write transaction or fleet lock,
+  so heartbeat responses do not queue behind unnecessary durable commits.
+
 ## 0.5.82 - 2026-09-22
 
 - Upgrade the pinned AgentEnv storage backend to v0.2.2, preserving streamed

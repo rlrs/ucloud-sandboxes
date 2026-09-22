@@ -238,6 +238,19 @@ class BackgroundSchedulingTests(unittest.TestCase):
             with policy.defer("request", blocking=False):
                 pass
 
+    def test_warm_retention_uses_psi_percent_without_parking_on_minor_stalls(self):
+        from ucloud_sandboxes.warm_park import WarmParkDeferred
+        for psi, seconds in ((0, 15), (1, 14.85), (10, 13.5), (50, 7.5), (100, 0)):
+            with self.subTest(psi=psi):
+                policy = WarmParkPolicy(lambda: Pressure(.8, psi), max_delay=15)
+                self.assertAlmostEqual(policy._budget(), seconds)
+                if seconds:
+                    with self.assertRaises(WarmParkDeferred):
+                        with policy.defer("minor-stall", blocking=False):
+                            self.fail("available memory should retain a short wait")
+        policy = WarmParkPolicy(lambda: Pressure(.05, 0), max_delay=15)
+        self.assertEqual(policy._budget(), 0)
+
     def test_wake_cancels_grace_and_generation_does_not_cross(self):
         policy = WarmParkPolicy(lambda: Pressure(0.8, 0), max_delay=1)
         key = ("sandbox", 1, "request")

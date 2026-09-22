@@ -599,6 +599,42 @@ class RoutingStoreTests(unittest.TestCase):
                     running,
                 )
 
+    def test_managed_status_poll_is_readonly_but_fences_deleted_generation(self):
+        with routing_store() as store:
+            route = store.upsert_sandbox(sandbox_route(
+                sandbox_id="poll", node_id="n", job_id="vm", node_url="http://n",
+            ))
+            record = ManagedProcessRecord(
+                sandbox_id="poll", sandbox_generation=route.generation,
+                job_id="agent", spec_sha256="a" * 64, state="running",
+                sequence=1, updated_at="2026-09-22T00:00:00+00:00",
+            )
+            store.upsert_managed_process(route, record)
+            refreshed = replace(record, updated_at="2026-09-22T00:01:00+00:00")
+            with patch.object(store, "_transaction", side_effect=AssertionError("poll wrote")):
+                self.assertEqual(store.upsert_managed_process(route, refreshed), record)
+            store.delete_sandbox(route.sandbox_id)
+            with self.assertRaises(SandboxRouteConflictError):
+                store.upsert_managed_process(route, refreshed)
+
+    def test_managed_changes_and_warmup_reads_progress_under_projection_lock(self):
+        with routing_store() as store, ThreadPoolExecutor(max_workers=1) as pool:
+            route = store.upsert_sandbox(sandbox_route(
+                sandbox_id="poll", node_id="n", job_id="vm", node_url="http://n",
+            ))
+            record = ManagedProcessRecord(
+                sandbox_id="poll", sandbox_generation=route.generation,
+                job_id="agent", spec_sha256="a" * 64, state="running", sequence=1,
+            )
+            with store._lock:
+                self.assertEqual(pool.submit(store.upsert_managed_process, route, record).result(2), record)
+                with patch.object(store, "_transaction", side_effect=AssertionError("warmup read wrote")):
+                    self.assertEqual(pool.submit(store.image_warmups).result(2), [])
+            terminal = replace(record, state="exited", sequence=2, exit_code=0)
+            self.assertEqual(store.upsert_managed_process(route, terminal), terminal)
+            self.assertEqual(store.upsert_managed_process(route, record), terminal)
+            self.assertEqual(store.get_managed_process("poll"), terminal)
+
     def test_lifecycle_mutations_progress_during_inventory_projection(self) -> None:
         with routing_store() as store, ThreadPoolExecutor(max_workers=1) as pool:
             route = store.upsert_sandbox(sandbox_route(

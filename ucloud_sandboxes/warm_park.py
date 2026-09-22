@@ -30,7 +30,9 @@ class WarmParkPolicy:
         if incoming and incoming >= p.memory_available_bytes:
             return 0.0
         headroom = max(0.0, min(1.0, (p.memory_fraction - 0.1) / 0.25))
-        headroom *= max(0.0, 1.0 - p.memory_stall)
+        # Linux PSI avg10 is a percentage, not a fraction. A 1% stall
+        # must not disable retention and trigger a checkpoint/restore storm.
+        headroom *= max(0.0, min(1.0, 1.0 - p.memory_stall / 100.0))
         if p.memory_available_bytes:
             spare = max(0, p.memory_available_bytes - incoming)
             headroom *= spare / p.memory_available_bytes

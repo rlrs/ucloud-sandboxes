@@ -1,0 +1,458 @@
+{
+  "run_id": "relay-load-4a70ce65a102",
+  "started_at": "2026-09-22T12:24:29.806079+00:00",
+  "configuration": {
+    "gateway_url": "https://app-sandboxes.cloud.sdu.dk",
+    "relay_url": "https://app-sandboxes-relay-v2.cloud.sdu.dk",
+    "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+    "sandboxes": 4,
+    "cycles": 3,
+    "resident_mb": 128,
+    "dirty_mb": 16,
+    "files": 64,
+    "file_kib": 64,
+    "payload_kib": 32,
+    "cpu_ms": 100,
+    "model_seconds": 10,
+    "model_jitter": 5,
+    "parking_mode": "natural",
+    "cpus": 1,
+    "memory_mb": 1024,
+    "disk_mb": 4096,
+    "create_concurrency": 32,
+    "warmup_cycles": 1,
+    "deadline_seconds": 1800.0,
+    "wake_p95_seconds": 0.8,
+    "seed": 1,
+    "start_signal_file": null
+  },
+  "cycles": [
+    {
+      "sandbox_id": "relay-load-4a70ce65a102-0002",
+      "cycle": 0,
+      "request_id": "4eb41541a16f4364b33d97cb75a4f52a",
+      "model_seconds": 11.189823135459458,
+      "response_ready_unix": 1790079883.781505,
+      "wake_completed_unix": 1790079883.89787,
+      "exec_completed_unix": 1790079884.1784458,
+      "commit_and_wake_seconds": 0.1148359440267086,
+      "usable_exec_seconds": 0.39541181013919413,
+      "response_ready_to_usable_exec_seconds": 0.39694071444682777,
+      "response_ready_to_submit_seconds": 0.0015289043076336384,
+      "response_ready_to_wake_seconds": 0.11636484833434224,
+      "post_wake_exec_seconds": 0.28057586611248553,
+      "guest_transport_retries": 0,
+      "guest_verification_seconds": 0.06546734099999973,
+      "guest_tool_seconds": 0.04102172400000015,
+      "pid": 18,
+      "delivery_count": 1,
+      "park_observed_after_seconds": null
+    },
+    {
+      "sandbox_id": "relay-load-4a70ce65a102-0003",
+      "cycle": 0,
+      "request_id": "9a94886d55714222b7440c7def528bac",
+      "model_seconds": 11.180240448687172,
+      "response_ready_unix": 1790079885.1956847,
+      "wake_completed_unix": 1790079885.2848206,
+      "exec_completed_unix": 1790079885.7208016,
+      "commit_and_wake_seconds": 0.08761023706756532,
+      "usable_exec_seconds": 0.5235912220086902,
+      "response_ready_to_usable_exec_seconds": 0.5251169472467154,
+      "response_ready_to_submit_seconds": 0.0015257252380251884,
+      "response_ready_to_wake_seconds": 0.08913596230559051,
+      "post_wake_exec_seconds": 0.4359809849411249,
+      "guest_transport_retries": 0,
+      "guest_verification_seconds": 0.09433478699999931,
+      "guest_tool_seconds": 0.12329898399999983,
+      "pid": 18,
+      "delivery_count": 1,
+      "park_observed_after_seconds": null
+    },
+    {
+      "sandbox_id": "relay-load-4a70ce65a102-0000",
+      "cycle": 0,
+      "request_id": "18ae44b614d246239436d8ac5a438263",
+      "model_seconds": 10.671821220562006,
+      "response_ready_unix": 1790079885.5242434,
+      "wake_completed_unix": 1790079885.6097612,
+      "exec_completed_unix": 1790079886.0488784,
+      "commit_and_wake_seconds": 0.08442537905648351,
+      "usable_exec_seconds": 0.5235427671577781,
+      "response_ready_to_usable_exec_seconds": 0.5246351785026491,
+      "response_ready_to_submit_seconds": 0.001092411344870925,
+      "response_ready_to_wake_seconds": 0.08551779040135443,
+      "post_wake_exec_seconds": 0.43911738810129464,
+      "guest_transport_retries": 0,
+      "guest_verification_seconds": 0.09016106900000054,
+      "guest_tool_seconds": 0.10832089899999886,
+      "pid": 18,
+      "delivery_count": 1,
+      "park_observed_after_seconds": null
+    },
+    {
+      "sandbox_id": "relay-load-4a70ce65a102-0001",
+      "cycle": 0,
+      "request_id": "0c0e30866f194ec0ab4c16641c6a1f02",
+      "model_seconds": 14.780171359446246,
+      "response_ready_unix": 1790079887.2786143,
+      "wake_completed_unix": 1790079887.3716571,
+      "exec_completed_unix": 1790079887.672793,
+      "commit_and_wake_seconds": 0.09194574295543134,
+      "usable_exec_seconds": 0.39308153302408755,
+      "response_ready_to_usable_exec_seconds": 0.3941785995848477,
+      "response_ready_to_submit_seconds": 0.0010970665607601404,
+      "response_ready_to_wake_seconds": 0.09304280951619148,
+      "post_wake_exec_seconds": 0.3011357900686562,
+      "guest_transport_retries": 0,
+      "guest_verification_seconds": 0.06565220899999957,
+      "guest_tool_seconds": 0.04048311500000068,
+      "pid": 18,
+      "delivery_count": 1,
+      "park_observed_after_seconds": null
+    },
+    {
+      "sandbox_id": "relay-load-4a70ce65a102-0003",
+      "cycle": 1,
+      "request_id": "9c56b94b7ae14339a792d6429b1faf5b",
+      "model_seconds": 10.51583017115358,
+      "response_ready_unix": 1790079896.7459767,
+      "wake_completed_unix": 1790079896.8609452,
+      "exec_completed_unix": 1790079897.2617428,
+      "commit_and_wake_seconds": 0.11441804585047066,
+      "usable_exec_seconds": 0.5152157379779965,
+      "response_ready_to_usable_exec_seconds": 0.5157661431003362,
+      "response_ready_to_submit_seconds": 0.0005504051223397255,
+      "response_ready_to_wake_seconds": 0.11496845097281039,
+      "post_wake_exec_seconds": 0.4007976921275258,
+      "guest_transport_retries": 0,
+      "guest_verification_seconds": 0.09990497499999762,
+      "guest_tool_seconds": 0.05560310300000282,
+      "pid": 18,
+      "delivery_count": 1,
+      "park_observed_after_seconds": null
+    },
+    {
+      "sandbox_id": "relay-load-4a70ce65a102-0002",
+      "cycle": 1,
+      "request_id": "ab60f5c6bfe942d7b964f5a54d2dd948",
+      "model_seconds": 12.72114612647976,
+      "response_ready_unix": 1790079897.3152924,
+      "wake_completed_unix": 1790079897.40191,
+      "exec_completed_unix": 1790079897.6841214,
+      "commit_and_wake_seconds": 0.08577345917001367,
+      "usable_exec_seconds": 0.36798476497642696,
+      "response_ready_to_usable_exec_seconds": 0.3688289513811469,
+      "response_ready_to_submit_seconds": 0.0008441864047199488,
+      "response_ready_to_wake_seconds": 0.08661764557473361,
+      "post_wake_exec_seconds": 0.2822113058064133,
+      "guest_transport_retries": 0,
+      "guest_verification_seconds": 0.06466561699999929,
+      "guest_tool_seconds": 0.03543803100000176,
+      "pid": 18,
+      "delivery_count": 1,
+      "park_observed_after_seconds": null
+    },
+    {
+      "sandbox_id": "relay-load-4a70ce65a102-0000",
+      "cycle": 1,
+      "request_id": "64aa382c3b2b45a8b041347ca82af87e",
+      "model_seconds": 14.237168684686164,
+      "response_ready_unix": 1790079900.8277543,
+      "wake_completed_unix": 1790079901.70364,
+      "exec_completed_unix": 1790079902.392097,
+      "commit_and_wake_seconds": 0.8735766517929733,
+      "usable_exec_seconds": 1.5620336139108986,
+      "response_ready_to_usable_exec_seconds": 1.5643426494207233,
+      "response_ready_to_submit_seconds": 0.002309035509824753,
+      "response_ready_to_wake_seconds": 0.875885687302798,
+      "post_wake_exec_seconds": 0.6884569621179253,
+      "guest_transport_retries": 0,
+      "guest_verification_seconds": 0.22736542400000204,
+      "guest_tool_seconds": 0.2586302429999989,
+      "pid": 18,
+      "delivery_count": 1,
+      "park_observed_after_seconds": 14.239411897957325
+    },
+    {
+      "sandbox_id": "relay-load-4a70ce65a102-0001",
+      "cycle": 1,
+      "request_id": "f297e625fc6e4a35a4881b2a3db9ed35",
+      "model_seconds": 14.739137435296747,
+      "response_ready_unix": 1790079902.7887495,
+      "wake_completed_unix": 1790079902.8748987,
+      "exec_completed_unix": 1790079903.1710973,
+      "commit_and_wake_seconds": 0.08547053905203938,
+      "usable_exec_seconds": 0.3816691499669105,
+      "response_ready_to_usable_exec_seconds": 0.38234779168851674,
+      "response_ready_to_submit_seconds": 0.0006786417216062546,
+      "response_ready_to_wake_seconds": 0.08614918077364564,
+      "post_wake_exec_seconds": 0.2961986109148711,
+      "guest_transport_retries": 0,
+      "guest_verification_seconds": 0.066216567000005,
+      "guest_tool_seconds": 0.029150348999998243,
+      "pid": 18,
+      "delivery_count": 1,
+      "park_observed_after_seconds": null
+    },
+    {
+      "sandbox_id": "relay-load-4a70ce65a102-0002",
+      "cycle": 2,
+      "request_id": "102b9588f3cd4ddaa2ee42d37f3b8bd7",
+      "model_seconds": 11.849775832740397,
+      "response_ready_unix": 1790079909.9212701,
+      "wake_completed_unix": 1790079910.0519083,
+      "exec_completed_unix": 1790079910.330715,
+      "commit_and_wake_seconds": 0.12956495909020305,
+      "usable_exec_seconds": 0.40837158309295774,
+      "response_ready_to_usable_exec_seconds": 0.4094448711257428,
+      "response_ready_to_submit_seconds": 0.001073288032785058,
+      "response_ready_to_wake_seconds": 0.1306382471229881,
+      "post_wake_exec_seconds": 0.2788066240027547,
+      "guest_transport_retries": 0,
+      "guest_verification_seconds": 0.06572710100000023,
+      "guest_tool_seconds": 0.02995617100000203,
+      "pid": 18,
+      "delivery_count": 1,
+      "park_observed_after_seconds": null
+    },
+    {
+      "sandbox_id": "relay-load-4a70ce65a102-0003",
+      "cycle": 2,
+      "request_id": "6454e856b48949f09c9f459fe841e4bf",
+      "model_seconds": 11.980291213053405,
+      "response_ready_unix": 1790079909.7789197,
+      "wake_completed_unix": 1790079910.418105,
+      "exec_completed_unix": 1790079910.89499,
+      "commit_and_wake_seconds": 0.6379267638549209,
+      "usable_exec_seconds": 1.1148118828423321,
+      "response_ready_to_usable_exec_seconds": 1.116070196731016,
+      "response_ready_to_submit_seconds": 0.0012583138886839151,
+      "response_ready_to_wake_seconds": 0.6391850777436048,
+      "post_wake_exec_seconds": 0.47688511898741126,
+      "guest_transport_retries": 0,
+      "guest_verification_seconds": 0.1785797819999999,
+      "guest_tool_seconds": 0.1210201940000033,
+      "pid": 18,
+      "delivery_count": 1,
+      "park_observed_after_seconds": null
+    },
+    {
+      "sandbox_id": "relay-load-4a70ce65a102-0001",
+      "cycle": 2,
+      "request_id": "2384bd7577224242a8e2da4809566f3d",
+      "model_seconds": 10.282756838634043,
+      "response_ready_unix": 1790079913.8471992,
+      "wake_completed_unix": 1790079913.9323072,
+      "exec_completed_unix": 1790079914.206696,
+      "commit_and_wake_seconds": 0.0832886470016092,
+      "usable_exec_seconds": 0.3576774951070547,
+      "response_ready_to_usable_exec_seconds": 0.35949672339484096,
+      "response_ready_to_submit_seconds": 0.0018192282877862453,
+      "response_ready_to_wake_seconds": 0.08510787528939545,
+      "post_wake_exec_seconds": 0.2743888481054455,
+      "guest_transport_retries": 0,
+      "guest_verification_seconds": 0.06539704500000454,
+      "guest_tool_seconds": 0.03853898199999861,
+      "pid": 18,
+      "delivery_count": 1,
+      "park_observed_after_seconds": null
+    },
+    {
+      "sandbox_id": "relay-load-4a70ce65a102-0000",
+      "cycle": 2,
+      "request_id": "7c1bc0c6305c48f9bd37962016cf8645",
+      "model_seconds": 13.81887309488307,
+      "response_ready_unix": 1790079916.8283317,
+      "wake_completed_unix": 1790079916.916656,
+      "exec_completed_unix": 1790079917.3338504,
+      "commit_and_wake_seconds": 0.08717107283882797,
+      "usable_exec_seconds": 0.5043654968030751,
+      "response_ready_to_usable_exec_seconds": 0.5055186711251736,
+      "response_ready_to_submit_seconds": 0.0011531743220984936,
+      "response_ready_to_wake_seconds": 0.08832424716092646,
+      "post_wake_exec_seconds": 0.4171944239642471,
+      "guest_transport_retries": 0,
+      "guest_verification_seconds": 0.08977360499999776,
+      "guest_tool_seconds": 0.07081768199999772,
+      "pid": 18,
+      "delivery_count": 1,
+      "park_observed_after_seconds": null
+    }
+  ],
+  "errors": [],
+  "cleanup_errors": [],
+  "health": [
+    {
+      "seconds": 0.06493183807469904,
+      "ok": true
+    },
+    {
+      "seconds": 0.02092482289299369,
+      "ok": true
+    },
+    {
+      "seconds": 0.02286681206896901,
+      "ok": true
+    },
+    {
+      "seconds": 0.024909625994041562,
+      "ok": true
+    },
+    {
+      "seconds": 0.025720235891640186,
+      "ok": true
+    },
+    {
+      "seconds": 0.022327736020088196,
+      "ok": true
+    },
+    {
+      "seconds": 0.022093802923336625,
+      "ok": true
+    },
+    {
+      "seconds": 0.02246985607780516,
+      "ok": true
+    },
+    {
+      "seconds": 0.02033713087439537,
+      "ok": true
+    },
+    {
+      "seconds": 0.023034129990264773,
+      "ok": true
+    },
+    {
+      "seconds": 0.022732731886208057,
+      "ok": true
+    },
+    {
+      "seconds": 0.021662774961441755,
+      "ok": true
+    },
+    {
+      "seconds": 0.022991534089669585,
+      "ok": true
+    },
+    {
+      "seconds": 0.021997492061927915,
+      "ok": true
+    },
+    {
+      "seconds": 0.022186547052115202,
+      "ok": true
+    },
+    {
+      "seconds": 0.023688485147431493,
+      "ok": true
+    },
+    {
+      "seconds": 0.020030145067721605,
+      "ok": true
+    },
+    {
+      "seconds": 0.029013606952503324,
+      "ok": true
+    },
+    {
+      "seconds": 0.046174335991963744,
+      "ok": true
+    },
+    {
+      "seconds": 0.021463786950334907,
+      "ok": true
+    },
+    {
+      "seconds": 0.02030141488648951,
+      "ok": true
+    },
+    {
+      "seconds": 0.021933514159172773,
+      "ok": true
+    },
+    {
+      "seconds": 0.02177384588867426,
+      "ok": true
+    },
+    {
+      "seconds": 0.02155910199508071,
+      "ok": true
+    }
+  ],
+  "placements": {
+    "relay-load-4a70ce65a102-0000": "12398499",
+    "relay-load-4a70ce65a102-0001": "12398539",
+    "relay-load-4a70ce65a102-0002": "12398539",
+    "relay-load-4a70ce65a102-0003": "12398500"
+  },
+  "control_retries": [],
+  "driver_python": "3.13.12",
+  "harness_sha256": "aed448e66712433696f724ced74afb3927d1a1a1df56e50344d0fb3e3047e9c4",
+  "deployed_health": {
+    "ok": true,
+    "service": "control-plane",
+    "version": "0.5.77"
+  },
+  "commit_and_wake_seconds": {
+    "count": 8,
+    "p50": 0.10079455934464931,
+    "p95": 0.8735766517929733,
+    "p99": 0.8735766517929733,
+    "max": 0.8735766517929733
+  },
+  "usable_exec_seconds": {
+    "count": 8,
+    "p50": 0.4563685399480164,
+    "p95": 1.5620336139108986,
+    "p99": 1.5620336139108986,
+    "max": 1.5620336139108986
+  },
+  "response_ready_to_usable_exec_seconds": {
+    "count": 8,
+    "p50": 0.4574817711254582,
+    "p95": 1.5643426494207233,
+    "p99": 1.5643426494207233,
+    "max": 1.5643426494207233
+  },
+  "response_ready_to_wake_seconds": {
+    "count": 8,
+    "p50": 0.10164634906686842,
+    "p95": 0.875885687302798,
+    "p99": 0.875885687302798,
+    "max": 0.875885687302798
+  },
+  "post_wake_exec_seconds": {
+    "count": 8,
+    "p50": 0.34849815152119845,
+    "p95": 0.6884569621179253,
+    "p99": 0.6884569621179253,
+    "max": 0.6884569621179253
+  },
+  "guest_verification_seconds": {
+    "count": 8,
+    "p50": 0.07799508600000138,
+    "p95": 0.22736542400000204,
+    "p99": 0.22736542400000204,
+    "max": 0.22736542400000204
+  },
+  "guest_tool_seconds": {
+    "count": 8,
+    "p50": 0.047071042500000715,
+    "p95": 0.2586302429999989,
+    "p99": 0.2586302429999989,
+    "max": 0.2586302429999989
+  },
+  "guest_transport_retries": {
+    "count": 8,
+    "p50": 0.0,
+    "p95": 0,
+    "p99": 0,
+    "max": 0
+  },
+  "measured_park_observed_cycles": 1,
+  "completed_cycles": 12,
+  "correct": true,
+  "slo_passed": false,
+  "finished_at": "2026-09-22T12:25:17.822174+00:00"
+}

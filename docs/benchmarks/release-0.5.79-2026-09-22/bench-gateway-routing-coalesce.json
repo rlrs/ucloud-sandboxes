@@ -1,0 +1,1 @@
+{"seconds": 1.2199535830004606, "cpu": 1.425209896, "p95": 0.4731086360006884, "metrics": {"journal_batch_queue_wait_ms": 112983.2884289948, "journal_batch_transaction_ms": 379.0222749903478, "journal_batch_commit_ms": 260.03171699358063, "journal_batch_failed_batches": 0.0, "journal_batch_commits": 223, "journal_batch_operations": 2176}}

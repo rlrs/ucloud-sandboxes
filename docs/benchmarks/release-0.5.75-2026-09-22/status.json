@@ -1,0 +1,40 @@
+{
+  "version": "0.5.75",
+  "commit": "746ad507d03e0f197fb4d47640f4e94112a94382",
+  "wheel_sha256": "69bd3d2d73f11602c0f72ecd97ee932b7cec56b26bdc02a07f0204099d4566b8",
+  "gateway_job_id": "12379311",
+  "state": "SUSPENDED",
+  "provider_updates": [
+    {
+      "timestamp": 1790068620222,
+      "state": "SUSPENDED",
+      "status": "This workspace has reached the storage quota."
+    },
+    {
+      "timestamp": 1790068620577,
+      "state": "SUSPENDED",
+      "status": "The virtual machine is powered off."
+    }
+  ],
+  "storage": {
+    "product": "storage",
+    "provider": "ucloud",
+    "type": "STORAGE",
+    "drives": "5",
+    "usage": "173000",
+    "quota": "173000",
+    "remaining": "0",
+    "utilization": "100.0%",
+    "unit": "GB",
+    "updated": "2026-09-22 09:17:00Z"
+  },
+  "deployed": false,
+  "realistic_load_test_run": false,
+  "linux_tests": {
+    "ran": 1195,
+    "skipped": 10,
+    "seconds": 101.818,
+    "passed": true
+  },
+  "wheel_install_verified": true
+}

@@ -1,0 +1,4 @@
+SERVER /work/ucloud-sandboxes/release/0.5.92/source/ucloud_sandboxes/http_server.py
+{"requests": 1280, "elapsed": 3.7678704140016634, "rps": 339.7144432683865, "p50": 0.09185863599850563, "p95": 0.10890414100140333, "max": 0.13870970599964494}
+SERVER /work/ucloud-sandboxes/release/0.5.93/bench/candidate/ucloud_sandboxes/http_server.py
+{"requests": 1280, "elapsed": 3.8110232270009874, "rps": 335.86780341070545, "p50": 0.09159954049937369, "p95": 0.12282303200117894, "max": 0.15934899899730226}

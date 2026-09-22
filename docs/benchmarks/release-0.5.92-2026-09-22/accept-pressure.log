@@ -1,0 +1,29 @@
+State  Recv-Q Send-Q Local Address:Port Peer Address:Port
+LISTEN 199    4096         0.0.0.0:8090      0.0.0.0:*   
+Linux 7.0.0-31-generic (gateway-live-ucloud-20260824a) 	09/22/26 	_x86_64_	(4 CPU)
+
+23:25:37      UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+23:25:38    11042    400694   83.17   33.66    0.00   11.88  116.83     3  ucloud-sandboxe
+
+23:25:37      UID       PID   cswch/s nvcswch/s  Command
+23:25:38    11042    400694    965.35    223.76  ucloud-sandboxe
+
+23:25:38      UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+23:25:39    11042    400694   88.00   38.00    0.00   11.00  126.00     1  ucloud-sandboxe
+
+23:25:38      UID       PID   cswch/s nvcswch/s  Command
+23:25:39    11042    400694   1147.00    190.00  ucloud-sandboxe
+
+23:25:39      UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+23:25:40    11042    400694   84.00   35.00    0.00   15.00  119.00     2  ucloud-sandboxe
+
+23:25:39      UID       PID   cswch/s nvcswch/s  Command
+23:25:40    11042    400694   1101.00    175.00  ucloud-sandboxe
+
+Average:      UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+Average:    11042    400694   85.05   35.55    0.00   12.62  120.60     -  ucloud-sandboxe
+
+Average:      UID       PID   cswch/s nvcswch/s  Command
+Average:    11042    400694   1070.76    196.35  ucloud-sandboxe
+some avg10=34.61 avg60=26.75 avg300=12.13 total=1796452130
+full avg10=0.00 avg60=0.00 avg300=0.00 total=0

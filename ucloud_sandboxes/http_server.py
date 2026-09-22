@@ -3,10 +3,11 @@ from __future__ import annotations
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from functools import wraps
+from collections import deque
 import json
 import selectors
 import socket
-from threading import BoundedSemaphore, RLock
+from threading import BoundedSemaphore, Condition, RLock, Thread
 from time import monotonic
 from typing import Any, Callable
 from urllib.parse import unquote, urlparse
@@ -66,6 +67,17 @@ class JsonHttpHandler(BaseHTTPRequestHandler):
     max_json_body_bytes = DEFAULT_MAX_JSON_BODY_BYTES
     telemetry: Telemetry | None = None
 
+    def handle_one_request(self) -> None:
+        self._request_body_consumed = False
+        super().handle_one_request()
+
+    def finish(self) -> None:
+        if getattr(self, "_request_body_consumed", False):
+            mark = getattr(self.server, "mark_request_body_consumed", None)
+            if mark is not None:
+                mark(self.request)
+        super().finish()
+
     def parse_request(self) -> bool:
         parsed = super().parse_request()
         if not parsed:
@@ -83,6 +95,8 @@ class JsonHttpHandler(BaseHTTPRequestHandler):
             # This must happen before dispatch: authorization, admission, and
             # overload paths can all answer without consuming the body.
             self.close_connection = True
+        else:
+            self._request_body_consumed = True
         return True
 
     def _read_json_body(self) -> object:
@@ -99,6 +113,7 @@ class JsonHttpHandler(BaseHTTPRequestHandler):
         body = self.rfile.read(length)
         if len(body) != length:
             raise ValueError("request body ended before Content-Length bytes were read")
+        self._request_body_consumed = True
         return body
 
     def _request_content_length(self, *, max_bytes: int) -> int:
@@ -276,9 +291,14 @@ class HighBacklogThreadingHTTPServer(ThreadingHTTPServer):
         self.client_socket_timeout_seconds = float(client_socket_timeout_seconds)
         self.max_request_threads = int(max_request_threads)
         self._request_slots = BoundedSemaphore(self.max_request_threads)
+        self._request_work = deque()
+        self._request_work_ready = Condition()
+        self._idle_request_workers = 0
+        self._request_workers_closing = False
         super().__init__(*args, **kwargs)
         self._overload_selector = selectors.DefaultSelector()
         self._overload_drains: dict[socket.socket, tuple[float, int]] = {}
+        self._consumed_requests: set[socket.socket] = set()
         self._overload_lock = RLock()
         self._closing = False
 
@@ -292,10 +312,59 @@ class HighBacklogThreadingHTTPServer(ThreadingHTTPServer):
             self._reject_overload(request)
             return
         try:
-            super().process_request(request, client_address)
+            with self._request_work_ready:
+                self._request_work.append((request, client_address))
+                if len(self._request_work) > self._idle_request_workers:
+                    try:
+                        self._start_request_worker()
+                    except BaseException:
+                        self._request_work.pop()
+                        raise
+                self._request_work_ready.notify()
         except BaseException:
             self._request_slots.release()
             raise
+
+    def _start_request_worker(self) -> None:
+        # Called with _request_work_ready held; count startup as an idle
+        # worker so a burst does not create several threads for one queued job.
+        self._idle_request_workers += 1
+        try:
+            Thread(target=self._request_worker, daemon=True,
+                   name="sandbox-http-request").start()
+        except BaseException:
+            self._idle_request_workers -= 1
+            raise
+
+    def _request_worker(self) -> None:
+        # Reuse daemon workers across connections. Public ingress may close
+        # every upstream connection; starting a Python thread for each short
+        # poll makes the accept loop itself a bottleneck. Admission remains
+        # bounded by the existing slots, including work awaiting a worker.
+        try:
+            while True:
+                with self._request_work_ready:
+                    while not self._request_work:
+                        if self._request_workers_closing:
+                            return
+                        self._request_work_ready.wait()
+                    request, address = self._request_work.popleft()
+                    self._idle_request_workers -= 1
+                try:
+                    self.process_request_thread(request, address)
+                except BaseException:
+                    self.handle_error(request, address)
+                finally:
+                    with self._request_work_ready:
+                        self._idle_request_workers += 1
+        finally:
+            with self._request_work_ready:
+                self._idle_request_workers -= 1
+                if len(self._request_work) > self._idle_request_workers:
+                    # Even an unexpected worker failure must not strand
+                    # already-admitted connections in the queue.
+                    self._start_request_worker()
+                    self._request_work_ready.notify()
 
     def _reject_overload(self, request: socket.socket) -> None:
         # Closing a socket with an unread POST body can reset the connection
@@ -314,6 +383,15 @@ class HighBacklogThreadingHTTPServer(ThreadingHTTPServer):
         # Handler-level admission can also reject an unread upload. Apply the
         # same close discipline after handlers finish, not only at thread cap.
         with self._overload_lock:
+            consumed = request in self._consumed_requests
+            if consumed:
+                self._consumed_requests.remove(request)
+        if consumed:
+            # No rejected upload remains to drain. Close on the worker without
+            # holding the accept loop's reactor lock across socket syscalls.
+            super().shutdown_request(request)
+            return
+        with self._overload_lock:
             if self._closing or len(self._overload_drains) >= self.request_queue_size:
                 super().shutdown_request(request)
                 return
@@ -327,6 +405,10 @@ class HighBacklogThreadingHTTPServer(ThreadingHTTPServer):
             except OSError:
                 super().shutdown_request(request)
 
+    def mark_request_body_consumed(self, request: socket.socket) -> None:
+        with self._overload_lock:
+            self._consumed_requests.add(request)
+
     def _close_overload_drain(self, request: socket.socket) -> None:
         self._overload_selector.unregister(request)
         self._overload_drains.pop(request, None)
@@ -338,6 +420,8 @@ class HighBacklogThreadingHTTPServer(ThreadingHTTPServer):
             self._drain_closed_requests()
 
     def _drain_closed_requests(self) -> None:
+        if not self._overload_drains:
+            return
         for key, _events in self._overload_selector.select(timeout=0):
             request = key.fileobj
             deadline, received = self._overload_drains[request]
@@ -358,6 +442,10 @@ class HighBacklogThreadingHTTPServer(ThreadingHTTPServer):
                 self._close_overload_drain(request)
 
     def server_close(self) -> None:
+        if hasattr(self, "_request_work_ready"):
+            with self._request_work_ready:
+                self._request_workers_closing = True
+                self._request_work_ready.notify_all()
         # HTTPServer.__init__ also calls server_close if bind/activate fails.
         if hasattr(self, "_overload_selector"):
             with self._overload_lock:

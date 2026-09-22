@@ -1,0 +1,50 @@
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 38520)
+Traceback (most recent call last):
+  File "/home/alex-admin/ucloud-live-fixes-20260922/ucloud_sandboxes/node_agent.py", line 1257, in _upload_file
+    with self.manager.service.upload_spool.receive(stream, size) as staged:
+  File "/usr/lib/python3.10/contextlib.py", line 135, in __enter__
+    return next(self.gen)
+  File "/home/alex-admin/ucloud-live-fixes-20260922/ucloud_sandboxes/upload_spool.py", line 44, in receive
+    chunk = source.read(min(remaining, TRANSFER_CHUNK_BYTES))
+  File "/home/alex-admin/ucloud-live-fixes-20260922/ucloud_sandboxes/http_server.py", line 55, in read
+    raise ValueError("request body ended before Content-Length bytes were read")
+ValueError: request body ended before Content-Length bytes were read
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/socketserver.py", line 683, in process_request_thread
+    self.finish_request(request, client_address)
+  File "/usr/lib/python3.10/socketserver.py", line 360, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "/usr/lib/python3.10/socketserver.py", line 747, in __init__
+    self.handle()
+  File "/usr/lib/python3.10/http/server.py", line 433, in handle
+    self.handle_one_request()
+  File "/home/alex-admin/ucloud-live-fixes-20260922/ucloud_sandboxes/http_server.py", line 72, in handle_one_request
+    super().handle_one_request()
+  File "/usr/lib/python3.10/http/server.py", line 421, in handle_one_request
+    method()
+  File "/home/alex-admin/ucloud-live-fixes-20260922/ucloud_sandboxes/http_server.py", line 199, in wrapped
+    return function(self, *args, **kwargs)
+  File "/home/alex-admin/ucloud-live-fixes-20260922/ucloud_sandboxes/node_agent.py", line 509, in do_PUT
+    self._upload_file(parsed)
+  File "/home/alex-admin/ucloud-live-fixes-20260922/ucloud_sandboxes/node_agent.py", line 1275, in _upload_file
+    self._write_exception(exc)
+  File "/home/alex-admin/ucloud-live-fixes-20260922/ucloud_sandboxes/node_agent.py", line 1654, in _write_exception
+    self._write_json({"error": str(exc)}, status=status)
+  File "/home/alex-admin/ucloud-live-fixes-20260922/ucloud_sandboxes/http_server.py", line 148, in _write_json
+    self._write_bytes(body, "application/json", status=status, headers=headers)
+  File "/home/alex-admin/ucloud-live-fixes-20260922/ucloud_sandboxes/http_server.py", line 165, in _write_bytes
+    self.wfile.write(body)
+  File "/usr/lib/python3.10/socketserver.py", line 826, in write
+    self._sock.sendall(b)
+BrokenPipeError: [Errno 32] Broken pipe
+----------------------------------------
+deferred rootfs cache collection for deleted image sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: injected image collection failure
+deferred 1 durable sandbox deletion(s); first=sandbox: injected mounted-volume cleanup failure
+----------------------------------------------------------------------
+Ran 160 tests in 17.262s
+
+OK

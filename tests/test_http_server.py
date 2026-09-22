@@ -3,7 +3,7 @@ from http.server import BaseHTTPRequestHandler
 import json
 import socket
 import time
-from threading import Event, Thread
+from threading import Event, Thread, current_thread
 import unittest
 from unittest.mock import patch
 
@@ -66,6 +66,76 @@ class _NoKeepAliveJsonHandler(JsonHttpHandler):
 
 
 class HttpServerTests(unittest.TestCase):
+    def test_request_workers_are_reused_survive_handler_errors_and_stop(self):
+        workers = set()
+        errors = []
+        class Handler(_NoKeepAliveJsonHandler):
+            def do_GET(self):
+                workers.add(current_thread())
+                if self.path == '/fail':
+                    raise RuntimeError('injected handler failure')
+                super().do_GET()
+        server = HighBacklogThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        server.handle_error = lambda *args: errors.append('handled')
+        thread = Thread(target=server.serve_forever, kwargs={'poll_interval': .01}, daemon=True)
+        thread.start()
+        try:
+            for i in range(20):
+                client = HTTPConnection(*server.server_address, timeout=2)
+                try:
+                    client.request('GET', '/fail' if i == 10 else '/healthz')
+                    if i == 10:
+                        with self.assertRaises(ConnectionError):
+                            client.getresponse()
+                    else:
+                        response = client.getresponse()
+                        self.assertEqual(response.status, 200)
+                        self.assertTrue(json.loads(response.read())['ok'])
+                finally:
+                    client.close()
+            self.assertEqual(errors, ['handled'])
+            self.assertLessEqual(len(workers), 2)
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+        for worker in workers:
+            worker.join(timeout=2)
+            self.assertFalse(worker.is_alive())
+
+    def test_worker_start_failure_releases_admission_and_removes_queued_socket(self):
+        server = HighBacklogThreadingHTTPServer(('127.0.0.1', 0), _NoopHandler, max_request_threads=1)
+        try:
+            with patch('ucloud_sandboxes.http_server.Thread.start', side_effect=RuntimeError('start failed')):
+                with self.assertRaisesRegex(RuntimeError, 'start failed'):
+                    server.process_request(object(), ('127.0.0.1', 1))
+            self.assertFalse(server._request_work)
+            self.assertEqual(server._idle_request_workers, 0)
+            self.assertTrue(server._request_slots.acquire(blocking=False))
+            server._request_slots.release()
+        finally:
+            server.server_close()
+
+    def test_fully_consumed_requests_do_not_enter_rejected_upload_drain(self):
+        for handler, method, body in [(_NoKeepAliveJsonHandler, 'GET', None), (_JsonHandler, 'POST', b'{}')]:
+            with self.subTest(method=method):
+                server = HighBacklogThreadingHTTPServer(('127.0.0.1', 0), handler)
+                with patch.object(server._overload_selector, 'register', wraps=server._overload_selector.register) as register:
+                    thread = Thread(target=server.serve_forever, kwargs={'poll_interval': .01}, daemon=True)
+                    thread.start()
+                    client = HTTPConnection(*server.server_address, timeout=2)
+                    try:
+                        client.request(method, '/', body=body, headers={'Connection': 'close'})
+                        response = client.getresponse()
+                        self.assertEqual(response.status, 200)
+                        response.read()
+                    finally:
+                        client.close()
+                        server.shutdown()
+                        thread.join(timeout=2)
+                        server.server_close()
+                    register.assert_not_called()
+
     def test_handler_rejection_keeps_delayed_upload_writable_until_response_is_read(self):
         server = HighBacklogThreadingHTTPServer(
             ("127.0.0.1", 0), _EarlyRejectingJsonHandler,

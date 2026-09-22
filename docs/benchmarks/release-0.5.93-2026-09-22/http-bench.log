@@ -1,0 +1,7 @@
+cp: warning: behavior of -n is non-portable and may change in future; use --update=none instead
+SERVER /work/ucloud-sandboxes/release/0.5.92/source/ucloud_sandboxes/http_server.py
+{"requests": 1280, "elapsed": 1.3428188329999102, "rps": 953.2186833725214, "p50": 0.032352834999983315, "p95": 0.04107349499827251, "max": 0.044476891998783685}
+SERVER /work/ucloud-sandboxes/release/0.5.93/bench/candidate/ucloud_sandboxes/http_server.py
+{"requests": 1280, "elapsed": 1.0233485960015969, "rps": 1250.7956770558785, "p50": 0.02398927850117616, "p95": 0.03383954500168329, "max": 0.04688036299921805}
+SERVER /work/ucloud-sandboxes/release/0.5.93/bench/candidate/ucloud_sandboxes/http_server.py
+{"requests": 1280, "elapsed": 0.6931959869980346, "rps": 1846.5196337087698, "p50": 0.0162013350000052, "p95": 0.02225955799804069, "max": 0.03056427000046824}

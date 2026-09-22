@@ -11,6 +11,25 @@ from ucloud_sandboxes.routing import ExecRoute, RoutingStore
 
 
 class RoutingPoolTests(unittest.TestCase):
+    def test_bulk_fleet_snapshot_preserves_values_order_and_fails_closed(self):
+        with TemporaryDirectory() as tmp:
+            store = RoutingStore(Path(tmp) / 'routing.sqlite')
+            self.assertEqual(store.sandbox_routes_readonly(), [])
+            routes = [store.upsert_sandbox(_sandbox_route(
+                sandbox_id=sid, state='running', node_id='node', job_id='job',
+                node_url='http://node', node_epoch='boot',
+                spec={'id': sid, 'labels': {'quoted': '"\\\n\u0000æ'}, 'nested': [True, None, 3.5]},
+                activity_epoch=2**54,
+            )) for sid in ['z', 'a']]
+            snapshot = store.sandbox_routes_readonly()
+            self.assertEqual(snapshot, sorted(routes, key=lambda r: r.sandbox_id))
+            snapshot[0].spec['nested'].append('caller mutation')
+            self.assertEqual(store.sandbox_routes_readonly()[0].spec['nested'], [True, None, 3.5])
+            with store._transaction() as conn:
+                conn.execute("UPDATE sandboxes SET spec_json='[]' WHERE sandbox_id='a'")
+            with self.assertRaises(sqlite3.DatabaseError):
+                store.sandbox_routes_readonly()
+
     def test_new_and_reopened_sqlite_sidecars_remain_owner_only_with_open_umask(self):
         with TemporaryDirectory() as tmp:
             previous_umask = os.umask(0)

@@ -1,0 +1,20 @@
+procs -----------memory---------- ---swap-- -----io---- -system-- -------cpu-------
+ r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st gu
+15  0      0 4636212  97228 5301216    0    0   274   940 8148   41 17  8 75  0  0  0
+ 4  0      0 4645996  97228 5301844    0    0     0  1864 17236 40091 48 23 29  1  0  0
+ 2  0      0 4637260  97228 5299916    0    0     0  4612 18755 46421 50 25 25  1  0  0
+ 2  0      0 4630080  97228 5300312    0    0     0  2196 14930 35749 56 21 22  1  0  0
+/usr/bin/pidstat
+/usr/bin/iostat
+some avg10=39.43 avg60=37.42 avg300=20.76 total=1705230942
+full avg10=0.00 avg60=0.00 avg300=0.00 total=0
+some avg10=1.17 avg60=1.36 avg300=0.84 total=117875385
+full avg10=0.00 avg60=0.01 avg300=0.04 total=58661977
+    PID COMMAND         %CPU   RSS
+ 360479 ucloud-sandboxe 73.6 123796
+ 360480 ucloud-sandboxe 64.3 175168
+ 360620 ucloud-sandboxe  4.7 90292
+   6162 docker-proxy     4.6  6136
+ 383780 systemd          4.5 13012
+ 362779 postgres         2.5 54240
+ 363060 postgres         2.4 54356

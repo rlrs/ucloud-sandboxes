@@ -7844,6 +7844,8 @@ def _heartbeat_proves_route_absent(
         return False
     if not heartbeat.is_fresh(utc_now(), heartbeat_ttl_seconds):
         return False
+    if heartbeat.active_sandboxes != 0:
+        return False
     if (
         sandbox_id is not None
         and heartbeat.inventory_complete
@@ -7852,8 +7854,6 @@ def _heartbeat_proves_route_absent(
         # Parked sandboxes consume no active CPU/RAM and therefore correctly
         # report active_sandboxes=0. A complete inventory entry is stronger
         # evidence than that aggregate counter.
-        return False
-    if heartbeat.active_sandboxes != 0:
         return False
     route_reference = parse_iso_datetime(route_updated_at) or parse_iso_datetime(
         route_created_at

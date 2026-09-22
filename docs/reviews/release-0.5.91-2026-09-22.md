@@ -31,3 +31,25 @@ sandboxes cannot qualify actual restore performance.
 
 Qualification is still open. No subsecond production claim follows from these
 component tests or the aborted load run.
+
+The subsequent cold-fleet mixed run completed all 2,048 cycles, with no route,
+health, polling, integrity or cleanup failures. It still failed latency:
+post-warmup wake p95 3.402 s, first usable tool p95 9.512 s. Most cycles stayed
+warm; this does not qualify actual parked restores. Stack sampling and brief
+component tests on the driver occurred after it was already above target, so the
+run is diagnostic rather than a clean performance comparison. Guest tool median
+was about 75 ms in a late 200-cycle sample; most observed latency was outside it.
+
+Release 0.5.92 changes fleet reads to one SQLite JSON aggregate rather than a
+Python sqlite3 cursor step per sandbox, reducing GIL handoffs during overlapping
+placement/list scans. Returned routes remain fresh independent objects; malformed
+JSON still fails closed. Listing also avoids checking each inventory entry when
+an active worker already disproves the empty-worker absence predicate.
+
+On the idle production gateway's Python 3.14.4, the contention benchmark elapsed
+time fell from 10.20 to 5.16 s and write p95 from 0.699 to 0.337 s. Worst write
+latency increased to 3.38 s, so these figures are not a qualification pass. An
+isolated Python 3.13.2 run was slower (11.60 / 5.70 s); no interpreter change was
+made. Linux routing/control tests passed (155 before the final assertion and
+predicate adjustment, 95 afterward). Next: full live qualification and explicit
+parked restore coverage.

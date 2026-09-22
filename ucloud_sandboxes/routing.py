@@ -873,27 +873,36 @@ class RoutingStore:
     def sandbox_routes_readonly(self, *, background: bool = False) -> list[SandboxRoute]:
         guard = self._fleet_read_lock if background else nullcontext()
         with guard, self._connect() as conn:
-            return [
-                route
-                for route in (
-                    _sandbox_route_from_row(row)
-                    for row in conn.execute(
-                        """
-                        SELECT sandbox_id, node_id, job_id, node_url,
-                               resources_json, spec_json, state, generation,
-                               create_operation_id, spec_hash, delete_operation_id,
-                               node_epoch, activity_epoch, worker_state,
-                               storage_schema,
-                               snapshot_manifest_digest, snapshot_repository,
-                               snapshot_tag, storage_snapshot_json,
-                               created_at, updated_at
-                        FROM sandboxes
-                        ORDER BY sandbox_id
-                        """
-                    )
-                )
-                if route is not None
-            ]
+            # sqlite3 releases/reacquires the GIL for every stepped result row.
+            # During concurrent HTTP work that makes a fleet scan wait behind
+            # unrelated Python work once per sandbox. Materialize one SQL JSON
+            # result, then decode after returning the reader to its pool.
+            payload = conn.execute(
+                """SELECT json_group_array(json_object(
+                        'sandbox_id', sandbox_id,
+                        'node_id', node_id,
+                        'job_id', job_id,
+                        'node_url', node_url,
+                        'resources_json', resources_json,
+                        'spec_json', spec_json,
+                        'state', state,
+                        'generation', generation,
+                        'create_operation_id', create_operation_id,
+                        'spec_hash', spec_hash,
+                        'delete_operation_id', delete_operation_id,
+                        'node_epoch', node_epoch,
+                        'activity_epoch', activity_epoch,
+                        'worker_state', worker_state,
+                        'storage_schema', storage_schema,
+                        'snapshot_manifest_digest', snapshot_manifest_digest,
+                        'snapshot_repository', snapshot_repository,
+                        'snapshot_tag', snapshot_tag,
+                        'storage_snapshot_json', storage_snapshot_json,
+                        'created_at', created_at,
+                        'updated_at', updated_at
+                    )) FROM (SELECT * FROM sandboxes ORDER BY sandbox_id)"""
+            ).fetchone()[0]
+        return [_sandbox_route_from_row(row) for row in json.loads(payload)]
 
     def sandbox_routes_matching_node_identity(
         self,

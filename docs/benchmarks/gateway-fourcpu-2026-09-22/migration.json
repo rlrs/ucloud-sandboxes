@@ -1,0 +1,22 @@
+{
+  "old_job_id": "12379311",
+  "new_job_id": "12399353",
+  "old_product": "cpu-amd-zen5-2-vcpu",
+  "new_product": "cpu-amd-zen5-4-vcpu",
+  "version": "0.5.80",
+  "runtime_commit": "442230caf5d8081b4ec417d9141b621737606e9c",
+  "old_state": "SUSPENDED",
+  "new_state": "RUNNING",
+  "postgres": "preserved authority on original disk; clean shutdown before migration",
+  "persistent_drive": "998037",
+  "private_network": "12345327",
+  "public_links": [
+    "12345368",
+    "12349454"
+  ],
+  "moved_paths": [
+    "disk.img",
+    "work/ucloud-sandboxes"
+  ],
+  "backup": "/work/data/ucloud-sandboxes/backups/live-ucloud-20260824a/gateway-fourcpu-20260922"
+}

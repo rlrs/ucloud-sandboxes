@@ -1,0 +1,14 @@
+{
+  "version": "0.5.80",
+  "commit": "442230caf5d8081b4ec417d9141b621737606e9c",
+  "installed_at": "2026-09-22T13:41:53.929567+00:00",
+  "matched_package_files": 110,
+  "health": {
+    "ok": true,
+    "service": "control-plane",
+    "version": "0.5.80"
+  },
+  "relay_backend": "postgres",
+  "node_package_root": "/work/ucloud-sandboxes/release/0.5.80",
+  "autoscaler": "held until worker upgrade"
+}

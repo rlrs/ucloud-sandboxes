@@ -33,4 +33,29 @@ Tests include competing claimers, registration replacement, distinct leases,
 batch ordering, heartbeat/claim atomicity, and rollback after hydration failure.
 The built wheel installed and verified successfully in a clean Linux venv.
 
-Production qualification results will be recorded after deployment.
+## Production on two vCPUs
+
+Deployed runtime commit `442230c` to the gateway and all five workers. Both
+public endpoints and PostgreSQL authority were verified after deployment.
+
+| 256-agent workload | Correct cycles | Wake p95 | Usable exec p95 |
+|---|---:|---:|---:|
+| Natural retention, eight cycles | 2,048 / 2,048 | 1.648 s | 2.737 s |
+| Forced parking, three cycles | 768 / 768 | 6.597 s | 8.684 s |
+
+Both runs had zero workload and cleanup errors. First cycles are excluded from
+latency statistics. Natural retention observed zero fully parked measured
+cycles, as did both preceding dispatch A/B runs; it measures coordination and
+warm wakes, not actual restoration. Forced parking validates actual restores.
+
+Natural wake p95 was 1.762 s immediately before this release, so the latest pair
+shows a modest improvement, with between-run variability still a confounder.
+Forced wake p95 was 4.225 s in the previous clean 0.5.79 run and became worse.
+The isolated poll savings do not establish an end-to-end performance win. Neither
+run met the 0.8 s target. Further capacity qualification is recorded in
+`../gateway-fourcpu-2026-09-22/`.
+
+Ten loaded CPU samples averaged 1.882 busy cores out of two: gateway 71.3%,
+relay 61.1%, PostgreSQL 31.4%, autoscaler 3.7% of one core. Other host work accounts
+for the remainder. This is evidence of CPU contention, not evidence that
+PostgreSQL alone is the bottleneck.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.81 - 2026-09-22
+
+- Queue SQLite writers in arrival order and wake only the next writer. Avoid
+  repeatedly waking every blocked request at each commit, while preserving
+  grouped durable commits, per-operation rollback and ownership fences.
+
 ## 0.5.80 - 2026-09-22
 
 - Commit relay worker poll heartbeats with inference claims, eliminating a

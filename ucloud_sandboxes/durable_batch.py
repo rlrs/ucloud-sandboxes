@@ -1,6 +1,7 @@
 """Group local SQLite writes without acknowledging uncommitted operations."""
 
 from contextlib import contextmanager
+from collections import deque
 from dataclasses import dataclass, field
 import threading
 import time
@@ -62,6 +63,8 @@ class DurableSqliteBatch:
         # writer when a closed batch needs flushing makes them wake each other
         # repeatedly, competing with the one thread that can commit it.
         self._flush_condition = threading.Condition(self._condition)
+        self._writers_lock = threading.Lock()
+        self._writers = deque()
         self._batch = None
         self._connection = None
         self._thread = None
@@ -106,11 +109,32 @@ class DurableSqliteBatch:
             self._flush_condition.notify()
 
     @contextmanager
+    def _writer_turn(self):
+        # Wake only the next queued writer. Letting every waiting request race
+        # for each new batch creates a convoy and lets newcomers starve older
+        # requests. Release the turn before waiting for durable commit, so
+        # multiple operations can still share the same transaction.
+        ready = threading.Event()
+        with self._writers_lock:
+            self._writers.append(ready)
+            if len(self._writers) == 1:
+                ready.set()
+        try:
+            ready.wait()
+            yield
+        finally:
+            with self._writers_lock:
+                first = self._writers[0] is ready
+                self._writers.remove(ready)
+                if first and self._writers:
+                    self._writers[0].set()
+
+    @contextmanager
     def transaction(self):
         self.validate()
         failure = None
         queued = time.monotonic()
-        with self._condition:
+        with self._writer_turn(), self._condition:
             while self._batch is not None and (
                 self._batch.operations >= self.max_operations
                 or time.monotonic() >= self._batch.deadline

@@ -1,0 +1,3 @@
+MOVE /1020791/Jobs/VirtualMachines/12399353/disk.img /1020791/Jobs/VirtualMachines/12399353/pre-resize-empty-disk.img {'responses': [{}]}
+MOVE /1020791/Jobs/VirtualMachines/12379311/disk.img /1020791/Jobs/VirtualMachines/12399353/disk.img {'responses': [{}]}
+MOVED_GATEWAY_DISK 268435456000 107

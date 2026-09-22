@@ -117,6 +117,8 @@ def parse_args(argv=None):
     parser.add_argument("--memory-mb", type=int, default=1024)
     parser.add_argument("--disk-mb", type=int, default=4096)
     parser.add_argument("--create-concurrency", type=int, default=32)
+    parser.add_argument("--fleet-pollers", type=int, default=1,
+                        help="Concurrent fleet inventory pollers; exercises listing/lifecycle contention")
     parser.add_argument("--warmup-cycles", type=int, default=1)
     parser.add_argument("--deadline-seconds", type=float, default=1800)
     parser.add_argument("--wake-p95-seconds", type=float, default=1)
@@ -124,7 +126,7 @@ def parse_args(argv=None):
     parser.add_argument("--start-signal-file", help="optional absent file to create after all_agents_ready; pauses before model traffic")
     args = parser.parse_args(argv)
     for name in ("sandboxes", "cycles", "resident_mb", "dirty_mb", "files", "file_kib",
-                 "payload_kib", "memory_mb", "disk_mb", "create_concurrency"):
+                 "payload_kib", "memory_mb", "disk_mb", "create_concurrency", "fleet_pollers"):
         if getattr(args, name) <= 0:
             parser.error(name + " must be positive")
     for name in ("cpu_ms", "model_seconds", "model_jitter", "cpus", "deadline_seconds", "wake_p95_seconds"):
@@ -207,7 +209,7 @@ async def run(args):
     config = {k: v for k, v in vars(args).items() if not k.endswith("token_file") and k != "output"}
     result = {"run_id": prefix, "started_at": datetime.now(timezone.utc).isoformat(),
               "configuration": config, "cycles": [], "errors": [], "cleanup_errors": [],
-              "health": [], "placements": {}, "control_retries": [],
+              "health": [], "fleet_polls": [], "placements": {}, "control_retries": [],
               "driver_python": sys.version.split()[0],
               "harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -254,7 +256,14 @@ async def run(args):
         monitor = asyncio.create_task(health_probe())
         async def inventory_probe():
             while True:
-                records = await operator.list_sandboxes()
+                started = time.monotonic()
+                try:
+                    records = await operator.list_sandboxes()
+                    result['fleet_polls'].append({'seconds': time.monotonic() - started, 'ok': True})
+                except Exception as exc:
+                    result['fleet_polls'].append({'seconds': time.monotonic() - started, 'ok': False, 'error': safe_error(exc)})
+                    await asyncio.sleep(1)
+                    continue
                 observed = time.monotonic()
                 for record in records:
                     sid = record.get('spec', {}).get('id')
@@ -263,7 +272,7 @@ async def run(args):
                     if sid and sid.startswith(prefix + '-'):
                         result['placements'][sid] = record.get('node', {}).get('job_id')
                 await asyncio.sleep(1)
-        inventory_task = asyncio.create_task(inventory_probe())
+        inventory_tasks = [asyncio.create_task(inventory_probe()) for _ in range(args.fleet_pollers)]
         async def scenario(index):
             sid = f"{prefix}-{index:04d}"
             rng = random.Random(args.seed + index)
@@ -333,7 +342,7 @@ async def run(args):
                     delay = args.model_seconds + rng.uniform(0, args.model_jitter)
                     model_ready, parked_after = await with_lease_renewal(response_window(
                         claimed_at=claimed_at, model_seconds=delay, mode=args.parking_mode,
-                        sandbox_id=sid, inventory=inventory, inventory_task=inventory_task,
+                        sandbox_id=sid, inventory=inventory, inventory_task=inventory_tasks[0],
                     ), relay, request)
                     # Start before SDK connection admission: SDK queuing, relay
                     # locks, scheduling, storage, restore and retries all count.
@@ -386,8 +395,9 @@ async def run(args):
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
             monitor.cancel()
-            inventory_task.cancel()
-            await asyncio.gather(monitor, inventory_task, return_exceptions=True)
+            for task in inventory_tasks:
+                task.cancel()
+            await asyncio.gather(monitor, *inventory_tasks, return_exceptions=True)
             cleanup_slots = asyncio.Semaphore(16)
             async def cleanup(sid):
                 async with cleanup_slots:
@@ -423,7 +433,8 @@ async def run(args):
         result['completed_cycles'] = len(result['cycles'])
         result['correct'] = (not result.get('failure') and not result['errors'] and not result['cleanup_errors']
                              and len(result['cycles']) == args.sandboxes * args.cycles
-                             and all(h['ok'] for h in result['health']))
+                             and all(h['ok'] for h in result['health'])
+                             and all(p['ok'] for p in result['fleet_polls']))
         result['slo_passed'] = bool(result['correct'] and measured
                                     and result['response_ready_to_usable_exec_seconds']['p95'] < args.wake_p95_seconds)
         result['finished_at'] = datetime.now(timezone.utc).isoformat()

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.84 - 2026-09-22
+
+- Queue full fleet routing scans separately so concurrent polling cannot
+  starve lifecycle writes with competing SQLite row iteration. Reads remain
+  fresh; single-sandbox reads and lifecycle writes bypass the scan queue.
+- Reconcile worker inventories and allocate creates under their atomic SQL
+  transaction without holding the additional fleet projection lock.
+- Exercise concurrent fleet polling in the realistic relay load harness,
+  including poll latency and failures in its qualification report.
+
 ## 0.5.83 - 2026-09-22
 
 - Interpret memory PSI as a percentage in warm retention, avoiding immediate

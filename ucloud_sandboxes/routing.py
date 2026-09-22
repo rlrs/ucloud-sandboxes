@@ -608,6 +608,10 @@ class RoutingStore:
         self.path = path
         self._connections: list[sqlite3.Connection] = []
         self._connections_guard = Lock()
+        # Fleet scans release/reacquire the GIL for every SQLite row. Concurrent
+        # scans otherwise starve the short writer and heartbeat transactions.
+        # Queue scans separately; lifecycle reads and writes never take this lock.
+        self._fleet_read_lock = Lock()
         self._connection_identity: tuple[int, int] | None = None
         self._connection_pid = os.getpid()
         self._connection_finalizer = weakref.finalize(
@@ -866,7 +870,7 @@ class RoutingStore:
         return [_object(json.loads(row[0])) for row in rows]
 
     def sandbox_routes_readonly(self) -> list[SandboxRoute]:
-        with self._connect() as conn:
+        with self._fleet_read_lock, self._connect() as conn:
             return [
                 route
                 for route in (
@@ -1445,51 +1449,52 @@ class RoutingStore:
         )
         if not operation_id or not spec_hash.strip():
             raise ValueError("create operation id and spec hash are required")
-        with self._lock:
-            now = utc_now().isoformat()
-            with self._transaction() as conn:
-                pending = self._get_pending_unlocked(conn, allocation.sandbox_id)
-                existing = self._get_sandbox_unlocked(conn, allocation.sandbox_id)
-                if existing is not None:
-                    if (existing.spec_hash and existing.spec_hash != spec_hash) or (
-                        existing.spec
-                        and allocation.spec
-                        and existing.spec != allocation.spec
-                    ):
-                        raise SandboxRouteConflictError(
-                            f"sandbox route already exists with a different spec: "
-                            f"{allocation.sandbox_id}"
-                        )
-                    return existing, pending
-                row = conn.execute(
-                    "SELECT generation FROM sandbox_generation_hwm WHERE sandbox_id = ?",
-                    (allocation.sandbox_id,),
-                ).fetchone()
-                high_water = int(row["generation"]) if row is not None else 0
-                generation = high_water + 1
-                stored = SandboxRoute(
-                    sandbox_id=allocation.sandbox_id,
-                    node_id=allocation.node_id,
-                    job_id=allocation.job_id,
-                    node_url=allocation.node_url,
-                    resources=allocation.resources,
-                    spec=dict(allocation.spec),
-                    state="creating",
-                    generation=generation,
-                    create_operation_id=operation_id,
-                    spec_hash=spec_hash.strip(),
-                    node_epoch=allocation.node_epoch,
-                    activity_epoch=max(0, allocation.activity_epoch),
-                    created_at=now,
-                    updated_at=now,
-                )
-                self._write_sandbox(conn, stored)
-                conn.execute(
-                    "DELETE FROM pending WHERE sandbox_id = ?",
-                    (allocation.sandbox_id,),
-                )
-                self._claim_prepared_capacity_unlocked(conn, stored)
-            return stored, pending
+        # The SQL transaction serializes all incarnation and ownership checks.
+        # Do not hold the fleet lock while queued for the shared durable writer.
+        now = utc_now().isoformat()
+        with self._transaction() as conn:
+            pending = self._get_pending_unlocked(conn, allocation.sandbox_id)
+            existing = self._get_sandbox_unlocked(conn, allocation.sandbox_id)
+            if existing is not None:
+                if (existing.spec_hash and existing.spec_hash != spec_hash) or (
+                    existing.spec
+                    and allocation.spec
+                    and existing.spec != allocation.spec
+                ):
+                    raise SandboxRouteConflictError(
+                        f"sandbox route already exists with a different spec: "
+                        f"{allocation.sandbox_id}"
+                    )
+                return existing, pending
+            row = conn.execute(
+                "SELECT generation FROM sandbox_generation_hwm WHERE sandbox_id = ?",
+                (allocation.sandbox_id,),
+            ).fetchone()
+            high_water = int(row["generation"]) if row is not None else 0
+            generation = high_water + 1
+            stored = SandboxRoute(
+                sandbox_id=allocation.sandbox_id,
+                node_id=allocation.node_id,
+                job_id=allocation.job_id,
+                node_url=allocation.node_url,
+                resources=allocation.resources,
+                spec=dict(allocation.spec),
+                state="creating",
+                generation=generation,
+                create_operation_id=operation_id,
+                spec_hash=spec_hash.strip(),
+                node_epoch=allocation.node_epoch,
+                activity_epoch=max(0, allocation.activity_epoch),
+                created_at=now,
+                updated_at=now,
+            )
+            self._write_sandbox(conn, stored)
+            conn.execute(
+                "DELETE FROM pending WHERE sandbox_id = ?",
+                (allocation.sandbox_id,),
+            )
+            self._claim_prepared_capacity_unlocked(conn, stored)
+        return stored, pending
 
     def prepare_sandbox_delete(self, sandbox_id: str) -> SandboxRoute | None:
         """Persist and reuse one delete operation for the current generation."""
@@ -1962,196 +1967,197 @@ class RoutingStore:
         }
         reported_ids.update(item.sandbox_id for item in observed)
         observed_at_dt = parse_iso_datetime(observed_at)
-        with self._lock:
-            removed_sandbox_ids: list[str] = []
-            removed_routes: list[SandboxRoute] = []
-            stale_snapshot_routes: list[SandboxRoute] = []
-            with self._transaction() as conn:
-                for item in observed:
-                    existing = self._get_sandbox_unlocked(conn, item.sandbox_id)
-                    if existing is None:
-                        continue
-                    observed_state = item.route_state
-                    # Heartbeats are sampled independently of synchronous
-                    # lifecycle requests. Registration, transition, recovery,
-                    # unavailable, and unrecognised samples still prove
-                    # presence through ``reported_ids``, but none may become
-                    # durable gateway routing state. The next stable
-                    # RUNNING/PARKED observation remains authoritative.
-                    if observed_state is None:
-                        continue
-                    parked = observed_state == "parked"
-                    published_snapshot = bool(parked and item.storage_snapshot)
-                    validated_snapshot: SandboxRoute | None = None
-                    if published_snapshot:
-                        try:
-                            validated_snapshot = route_with_inventory_snapshot(
-                                existing,
-                                item,
-                            )
-                        except ValueError:
-                            # Presence and stable lifecycle state remain useful,
-                            # but malformed publication metadata can never grant
-                            # portable authority.
-                            published_snapshot = False
-                    candidate = replace(
-                        existing,
-                        node_id=node_id,
-                        job_id=job_id,
-                        node_url=node_url,
-                        resources=(
-                            item.resources
-                            if item.resources != ResourceQuantity()
-                            else existing.resources
+        # The SQL transaction serializes all incarnation and ownership checks.
+        # Do not hold the fleet lock while queued for the shared durable writer.
+        removed_sandbox_ids: list[str] = []
+        removed_routes: list[SandboxRoute] = []
+        stale_snapshot_routes: list[SandboxRoute] = []
+        with self._transaction() as conn:
+            for item in observed:
+                existing = self._get_sandbox_unlocked(conn, item.sandbox_id)
+                if existing is None:
+                    continue
+                observed_state = item.route_state
+                # Heartbeats are sampled independently of synchronous
+                # lifecycle requests. Registration, transition, recovery,
+                # unavailable, and unrecognised samples still prove
+                # presence through ``reported_ids``, but none may become
+                # durable gateway routing state. The next stable
+                # RUNNING/PARKED observation remains authoritative.
+                if observed_state is None:
+                    continue
+                parked = observed_state == "parked"
+                published_snapshot = bool(parked and item.storage_snapshot)
+                validated_snapshot: SandboxRoute | None = None
+                if published_snapshot:
+                    try:
+                        validated_snapshot = route_with_inventory_snapshot(
+                            existing,
+                            item,
+                        )
+                    except ValueError:
+                        # Presence and stable lifecycle state remain useful,
+                        # but malformed publication metadata can never grant
+                        # portable authority.
+                        published_snapshot = False
+                candidate = replace(
+                    existing,
+                    node_id=node_id,
+                    job_id=job_id,
+                    node_url=node_url,
+                    resources=(
+                        item.resources
+                        if item.resources != ResourceQuantity()
+                        else existing.resources
+                    ),
+                    state=observed_state,
+                    generation=item.generation,
+                    create_operation_id=item.operation_id,
+                    spec_hash=item.spec_hash,
+                    node_epoch=node_epoch,
+                    # Activity counters are scoped to a node epoch.  Do not
+                    # carry the old epoch's high water into a proven restart.
+                    activity_epoch=max(0, activity_epoch),
+                    storage_schema=(
+                        validated_snapshot.storage_schema
+                        if published_snapshot
+                        else (existing.storage_schema if parked else "")
+                    ),
+                    snapshot_manifest_digest=(
+                        validated_snapshot.snapshot_manifest_digest
+                        if published_snapshot
+                        else (existing.snapshot_manifest_digest if parked else "")
+                    ),
+                    snapshot_repository=(
+                        validated_snapshot.snapshot_repository
+                        if published_snapshot
+                        else (existing.snapshot_repository if parked else "")
+                    ),
+                    snapshot_tag=(
+                        validated_snapshot.snapshot_tag
+                        if published_snapshot
+                        else (existing.snapshot_tag if parked else "")
+                    ),
+                    storage_snapshot=(
+                        dict(validated_snapshot.storage_snapshot)
+                        if published_snapshot
+                        else (dict(existing.storage_snapshot) if parked else {})
+                    ),
+                    updated_at=observed_at,
+                )
+                if candidate.generation != existing.generation:
+                    continue
+                if not _route_update_is_current(
+                    existing,
+                    candidate,
+                    allow_node_epoch_adoption=allow_node_epoch_adoption,
+                ):
+                    continue
+                if existing.snapshot_manifest_digest and (
+                    existing.snapshot_manifest_digest
+                    != candidate.snapshot_manifest_digest
+                    or existing.snapshot_repository != candidate.snapshot_repository
+                    or existing.snapshot_tag != candidate.snapshot_tag
+                ):
+                    stale_snapshot_routes.append(existing)
+                self._write_sandbox(conn, candidate)
+                if item.storage_dependency is not None:
+                    # This metadata conveys liveness only, never permission
+                    # to restore a running sandbox from an old checkpoint.
+                    dependency = item.storage_dependency
+                    if dependency:
+                        dependency = StorageSnapshotPublication.from_dict(
+                            dependency
+                        ).to_dict()
+                    conn.execute(
+                        """
+                        INSERT INTO sandbox_storage_dependencies VALUES (?, ?, ?)
+                        ON CONFLICT(sandbox_id) DO UPDATE SET
+                            generation = excluded.generation,
+                            storage_snapshot_json = excluded.storage_snapshot_json
+                        WHERE excluded.storage_snapshot_json != '{}'
+                        """,
+                        (
+                            candidate.sandbox_id,
+                            candidate.generation,
+                            _object_json({"publication": dependency})
+                            if dependency
+                            else "{}",
                         ),
-                        state=observed_state,
-                        generation=item.generation,
-                        create_operation_id=item.operation_id,
-                        spec_hash=item.spec_hash,
-                        node_epoch=node_epoch,
-                        # Activity counters are scoped to a node epoch.  Do not
-                        # carry the old epoch's high water into a proven restart.
-                        activity_epoch=max(0, activity_epoch),
-                        storage_schema=(
-                            validated_snapshot.storage_schema
-                            if published_snapshot
-                            else (existing.storage_schema if parked else "")
-                        ),
-                        snapshot_manifest_digest=(
-                            validated_snapshot.snapshot_manifest_digest
-                            if published_snapshot
-                            else (existing.snapshot_manifest_digest if parked else "")
-                        ),
-                        snapshot_repository=(
-                            validated_snapshot.snapshot_repository
-                            if published_snapshot
-                            else (existing.snapshot_repository if parked else "")
-                        ),
-                        snapshot_tag=(
-                            validated_snapshot.snapshot_tag
-                            if published_snapshot
-                            else (existing.snapshot_tag if parked else "")
-                        ),
-                        storage_snapshot=(
-                            dict(validated_snapshot.storage_snapshot)
-                            if published_snapshot
-                            else (dict(existing.storage_snapshot) if parked else {})
-                        ),
+                    )
+
+                conn.execute(
+                    "DELETE FROM pending WHERE sandbox_id = ?",
+                    (candidate.sandbox_id,),
+                )
+
+            current_routes = self._sandbox_routes_for_node_url_unlocked(
+                conn,
+                node_url,
+            )
+            for route in current_routes:
+                sandbox_id = route.sandbox_id
+                if sandbox_id in reported_ids:
+                    continue
+                if not inventory_complete:
+                    continue
+                replaced_boot = bool(
+                    route.node_epoch
+                    and node_epoch
+                    and route.node_epoch != node_epoch
+                )
+                if replaced_boot and not allow_node_epoch_adoption:
+                    # Refresh polling carries an already accepted heartbeat
+                    # fence. It may prove state only for that exact boot; a
+                    # delayed response from a retired boot cannot delete the
+                    # replacement boot's inventory.
+                    continue
+                if (route.state or "unknown").lower() in {
+                    "creating",
+                    "unknown",
+                } and not replaced_boot:
+                    # An empty inventory does not distinguish "create never
+                    # arrived" from "create is still in progress" with the
+                    # current node protocol. Preserve the reservation until a
+                    # later generation-aware reconciliation can prove absence.
+                    # A newly accepted boot epoch is that proof: the former
+                    # guest process namespace no longer exists.
+                    continue
+                if route.node_epoch and not node_epoch:
+                    # Do not let an unversioned/legacy observation erase a
+                    # route that is already fenced to a known guest boot.
+                    continue
+                if not replaced_boot and route.activity_epoch > max(
+                    0, activity_epoch
+                ):
+                    continue
+                route_updated_at = parse_iso_datetime(
+                    route.updated_at
+                ) or parse_iso_datetime(route.created_at)
+                if not (
+                    observed_at_dt is None
+                    or route_updated_at is None
+                    or route_updated_at <= observed_at_dt
+                ):
+                    continue
+                if (
+                    sandbox_owner_loss_disposition(route)
+                    is SandboxOwnerLossDisposition.RECOVER_DETACHED
+                ):
+                    self._detach_owner_lost_route_unlocked(
+                        conn,
+                        route,
                         updated_at=observed_at,
                     )
-                    if candidate.generation != existing.generation:
-                        continue
-                    if not _route_update_is_current(
-                        existing,
-                        candidate,
-                        allow_node_epoch_adoption=allow_node_epoch_adoption,
-                    ):
-                        continue
-                    if existing.snapshot_manifest_digest and (
-                        existing.snapshot_manifest_digest
-                        != candidate.snapshot_manifest_digest
-                        or existing.snapshot_repository != candidate.snapshot_repository
-                        or existing.snapshot_tag != candidate.snapshot_tag
-                    ):
-                        stale_snapshot_routes.append(existing)
-                    self._write_sandbox(conn, candidate)
-                    if item.storage_dependency is not None:
-                        # This metadata conveys liveness only, never permission
-                        # to restore a running sandbox from an old checkpoint.
-                        dependency = item.storage_dependency
-                        if dependency:
-                            dependency = StorageSnapshotPublication.from_dict(
-                                dependency
-                            ).to_dict()
-                        conn.execute(
-                            """
-                            INSERT INTO sandbox_storage_dependencies VALUES (?, ?, ?)
-                            ON CONFLICT(sandbox_id) DO UPDATE SET
-                                generation = excluded.generation,
-                                storage_snapshot_json = excluded.storage_snapshot_json
-                            WHERE excluded.storage_snapshot_json != '{}'
-                            """,
-                            (
-                                candidate.sandbox_id,
-                                candidate.generation,
-                                _object_json({"publication": dependency})
-                                if dependency
-                                else "{}",
-                            ),
-                        )
-
-                    conn.execute(
-                        "DELETE FROM pending WHERE sandbox_id = ?",
-                        (candidate.sandbox_id,),
-                    )
-
-                current_routes = self._sandbox_routes_for_node_url_unlocked(
-                    conn,
-                    node_url,
-                )
-                for route in current_routes:
-                    sandbox_id = route.sandbox_id
-                    if sandbox_id in reported_ids:
-                        continue
-                    if not inventory_complete:
-                        continue
-                    replaced_boot = bool(
-                        route.node_epoch
-                        and node_epoch
-                        and route.node_epoch != node_epoch
-                    )
-                    if replaced_boot and not allow_node_epoch_adoption:
-                        # Refresh polling carries an already accepted heartbeat
-                        # fence. It may prove state only for that exact boot; a
-                        # delayed response from a retired boot cannot delete the
-                        # replacement boot's inventory.
-                        continue
-                    if (route.state or "unknown").lower() in {
-                        "creating",
-                        "unknown",
-                    } and not replaced_boot:
-                        # An empty inventory does not distinguish "create never
-                        # arrived" from "create is still in progress" with the
-                        # current node protocol. Preserve the reservation until a
-                        # later generation-aware reconciliation can prove absence.
-                        # A newly accepted boot epoch is that proof: the former
-                        # guest process namespace no longer exists.
-                        continue
-                    if route.node_epoch and not node_epoch:
-                        # Do not let an unversioned/legacy observation erase a
-                        # route that is already fenced to a known guest boot.
-                        continue
-                    if not replaced_boot and route.activity_epoch > max(
-                        0, activity_epoch
-                    ):
-                        continue
-                    route_updated_at = parse_iso_datetime(
-                        route.updated_at
-                    ) or parse_iso_datetime(route.created_at)
-                    if not (
-                        observed_at_dt is None
-                        or route_updated_at is None
-                        or route_updated_at <= observed_at_dt
-                    ):
-                        continue
-                    if (
-                        sandbox_owner_loss_disposition(route)
-                        is SandboxOwnerLossDisposition.RECOVER_DETACHED
-                    ):
-                        self._detach_owner_lost_route_unlocked(
-                            conn,
-                            route,
-                            updated_at=observed_at,
-                        )
-                        removed_sandbox_ids.append(sandbox_id)
-                        continue
-                    if not self._delete_sandbox_unlocked(
-                        conn, route, terminal_error="node_lost" if replaced_boot else ""
-                    ):
-                        continue
-                    removed_routes.append(route)
                     removed_sandbox_ids.append(sandbox_id)
-            return removed_routes, stale_snapshot_routes
+                    continue
+                if not self._delete_sandbox_unlocked(
+                    conn, route, terminal_error="node_lost" if replaced_boot else ""
+                ):
+                    continue
+                removed_routes.append(route)
+                removed_sandbox_ids.append(sandbox_id)
+        return removed_routes, stale_snapshot_routes
 
     def delete_sandbox(self, sandbox_id: str) -> None:
         with self._lock:

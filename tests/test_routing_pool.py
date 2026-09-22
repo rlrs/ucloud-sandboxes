@@ -72,3 +72,53 @@ class RoutingPoolTests(unittest.TestCase):
             os.replace(other, store.path)
             with self.assertRaisesRegex(sqlite3.DatabaseError, 'replaced'):
                 store.get_sandbox('absent')
+
+    def test_inventory_and_create_do_not_wait_for_fleet_projection(self):
+        from ucloud_sandboxes.models import SandboxInventoryEntry, utc_now
+        from ucloud_sandboxes.routing import SandboxRouteAllocation
+        with TemporaryDirectory() as tmp:
+            store = RoutingStore(Path(tmp) / 'routing.sqlite')
+            route = store.upsert_sandbox(_sandbox_route(
+                sandbox_id='live', state='running', node_id='node',
+                job_id='job', node_url='http://node', node_epoch='boot',
+            ))
+            observation = SandboxInventoryEntry(
+                route.sandbox_id, route.generation, route.create_operation_id,
+                route.spec_hash, 'parked', route.resources,
+            )
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                with store._lock:
+                    reconcile = pool.submit(
+                        store.reconcile_sandboxes_for_node, route.node_url,
+                        [observation], node_id=route.node_id, job_id=route.job_id,
+                        reported_sandbox_ids=['live'], observed_at=utc_now().isoformat(),
+                        node_epoch='boot', activity_epoch=1,
+                    )
+                    create = pool.submit(
+                        store.allocate_sandbox_create_with_pending,
+                        SandboxRouteAllocation(
+                            sandbox_id='new', node_id='node', job_id='job',
+                            node_url='http://node', resources=route.resources,
+                            spec={'id': 'new'}, node_epoch='boot',
+                        ), spec_hash='b' * 64,
+                    )
+                    self.assertEqual(reconcile.result(timeout=2), ([], []))
+                    created, _ = create.result(timeout=2)
+            self.assertEqual(store.get_sandbox('live').state, 'parked')
+            self.assertEqual(store.get_sandbox('new'), created)
+
+    def test_fleet_scan_queue_does_not_block_lifecycle_or_cache_old_routes(self):
+        with TemporaryDirectory() as tmp:
+            store = RoutingStore(Path(tmp) / 'routing.sqlite')
+            route = store.upsert_sandbox(_sandbox_route(
+                sandbox_id='live', state='parked', node_id='node',
+                job_id='job', node_url='http://node',
+            ))
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                with store._fleet_read_lock:
+                    listing = pool.submit(store.sandbox_routes_readonly)
+                    pool.submit(store.reserve_sandbox_wake, route, pending_id='none').result(timeout=2)
+                    self.assertEqual(store.get_sandbox('live').state, 'waking')
+                self.assertEqual(listing.result(timeout=2)[0].state, 'waking')
+            RoutingStore(store.path).delete_sandbox('live')
+            self.assertEqual(store.sandbox_routes_readonly(), [])

@@ -4345,7 +4345,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 return
             route, transport_reset = placement
 
-        if lifecycle_action == "wake" and lifecycle_payload.get("request_id"):
+        if (lifecycle_action == "wake" and lifecycle_payload.get("request_id")
+                and not self._program_wake_started):
             self._record_program_request_transition(
                 route,
                 lifecycle_payload,
@@ -4499,14 +4500,21 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     ) -> None:
         self._deferred_program_wake_shadow = None
         self._program_wake_owner_view = None
+        self._program_wake_started = False
         request_id = str(payload.get("request_id") or "").strip()
         if not action or not request_id:
             return
+        warm_wake = action == "wake" and route.state.lower() in {"running", "waking"}
+        # Warm work has no placement wait between response-ready and dispatch.
+        # Persist both timestamps in one transition instead of queueing twice.
+        transition = {"response_ready": True} if warm_wake else {}
         program, became_ready = self._record_program_request_transition(
             route,
             payload,
-            state=("model_wait" if action == "park" else "ready_to_wake"),
+            state=("waking" if warm_wake else "model_wait" if action == "park" else "ready_to_wake"),
+            **transition,
         )
+        self._program_wake_started = warm_wake and program is not None
         if action != "wake" or program is None or not became_ready:
             return
         if route.state.lower() in {"running", "waking"}:
@@ -5059,6 +5067,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         *,
         state: str,
         parked_at: str | None = None,
+        response_ready: bool = False,
         last_error: str = "",
         clear_error: bool = False,
     ) -> tuple[ProgramRequestState | None, bool]:
@@ -5085,6 +5094,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     state=state,
                     accepted_at=accepted_at or None,
                     parked_at=parked_at,
+                    response_ready_at=utc_now().isoformat() if response_ready else None,
                     last_error=last_error,
                     clear_error=clear_error,
                 )

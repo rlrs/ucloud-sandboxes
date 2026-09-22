@@ -945,6 +945,7 @@ class RoutingStore:
         transition_at: str | None = None,
         accepted_at: str | None = None,
         parked_at: str | None = None,
+        response_ready_at: str | None = None,
         last_error: str = "",
         clear_error: bool = False,
     ) -> tuple[ProgramRequestState, bool]:
@@ -988,6 +989,8 @@ class RoutingStore:
                 timestamps["accepted_at"] = transition_at
             if parked_at and not timestamps["parked_at"]:
                 timestamps["parked_at"] = parked_at
+            if response_ready_at and not timestamps["response_ready_at"]:
+                timestamps["response_ready_at"] = response_ready_at
             transition_field = {
                 "ready_to_wake": "response_ready_at",
                 "waking": "wake_started_at",
@@ -1022,59 +1025,27 @@ class RoutingStore:
                 return effective_state, timestamps, error, True
             return effective_state, timestamps, error, False
 
-        # Retries of an already projected transition are observational reads.
-        # Join its generation fence into the same snapshot; a delete/recreate
-        # cannot make a stale projection satisfy the current incarnation.
-        with self._connect() as conn:
+        def read_current(conn):
             snapshot = conn.execute(
                 """SELECT s.generation AS current_generation, p.*
                 FROM sandboxes s LEFT JOIN program_requests p ON p.request_id = ?
                 WHERE s.sandbox_id = ?""",
                 (request_id, route.sandbox_id),
             ).fetchone()
-        if snapshot is None or snapshot["current_generation"] != route.generation:
-            raise SandboxRouteConflictError(
-                "program transition does not own the current sandbox generation"
-            )
-        if snapshot["request_id"] is not None:
-            previous = _program_request_from_row(snapshot)
-            if project(previous)[3]:
-                return previous, False
-
-        # SQLite and the shared writer serialize this database-only
-        # mutation. Inventory projection must not block lifecycle progress.
-        with self._transaction() as conn:
-            # Only the incarnation fences this transition. Loading the complete
-            # route here decoded the spec and storage snapshot on every model
-            # lifecycle event, while holding the shared writer.
-            current_route = conn.execute(
-                "SELECT generation FROM sandboxes WHERE sandbox_id = ?",
-                (route.sandbox_id,),
-            ).fetchone()
-            if (
-                current_route is None
-                or current_route["generation"] != route.generation
-            ):
+            if snapshot is None or snapshot["current_generation"] != route.generation:
                 raise SandboxRouteConflictError(
                     "program transition does not own the current sandbox generation"
                 )
-            existing_row = conn.execute(
-                """
-                SELECT request_id, rollout_id, sandbox_id,
-                       sandbox_generation, state, resources_json,
-                       accepted_at, parked_at, response_ready_at,
-                       wake_started_at, wake_completed_at, updated_at,
-                       last_error
-                FROM program_requests
-                WHERE request_id = ?
-                """,
-                (request_id,),
-            ).fetchone()
-            existing = (
-                _program_request_from_row(existing_row)
-                if existing_row is not None
-                else None
-            )
+            return _program_request_from_row(snapshot) if snapshot["request_id"] is not None else None
+
+        # Retries are observational. Changed projections recheck both request
+        # identity and generation in one joined read under the writer fence.
+        with self._connect() as conn:
+            previous = read_current(conn)
+        if previous is not None and project(previous)[3]:
+            return previous, False
+        with self._transaction() as conn:
+            existing = read_current(conn)
             effective_state, timestamps, error, unchanged = project(existing)
             if unchanged:
                 return existing, False
@@ -1114,20 +1085,16 @@ class RoutingStore:
                     error,
                 ),
             )
-            row = conn.execute(
-                """
-                SELECT request_id, rollout_id, sandbox_id,
-                       sandbox_generation, state, resources_json,
-                       accepted_at, parked_at, response_ready_at,
-                       wake_started_at, wake_completed_at, updated_at,
-                       last_error
-                FROM program_requests
-                WHERE request_id = ?
-                """,
-                (request_id,),
-            ).fetchone()
-            assert row is not None
-            return _program_request_from_row(row), True
+            # These are the exact values just committed; there are no SQL
+            # defaults/triggers to read back. The context still waits for FULL
+            # commit before returning them to the caller.
+            return ProgramRequestState(
+                request_id=request_id, rollout_id=rollout_id,
+                sandbox_id=route.sandbox_id, sandbox_generation=route.generation,
+                state=effective_state,
+                resources=ResourceQuantity.from_dict(route.resources.to_dict()),
+                **timestamps, updated_at=transition_at, last_error=error,
+            ), True
 
     def program_request_readonly(self, request_id: str) -> ProgramRequestState | None:
         with self._connect() as conn:
@@ -1268,7 +1235,7 @@ class RoutingStore:
                 ),
                 updated_at=utc_now().isoformat(),
             )
-            self._write_sandbox(conn, stored)
+            self._write_sandbox_lifecycle(conn, stored)
         return stored
 
     def reserve_sandbox_wake(self, route: SandboxRoute, *, pending_id: str) -> SandboxRoute | None:
@@ -3967,6 +3934,26 @@ class RoutingStore:
             (warmup_id,),
         ).fetchone()
         return _image_warmup_from_row(row) if row is not None else None
+
+    def _write_sandbox_lifecycle(self, conn, route: SandboxRoute) -> None:
+        # The caller already checked an existing incarnation under this writer
+        # transaction. State changes do not rewrite its spec or generation HWM.
+        conn.execute(
+            """UPDATE sandboxes SET state=?, node_epoch=?, activity_epoch=?,
+                   storage_schema=?, snapshot_manifest_digest=?, snapshot_repository=?,
+                   snapshot_tag=?, storage_snapshot_json=?, updated_at=?
+               WHERE sandbox_id=?""",
+            (route.state, route.node_epoch, route.activity_epoch, route.storage_schema,
+             route.snapshot_manifest_digest, route.snapshot_repository, route.snapshot_tag,
+             _object_json(route.storage_snapshot), route.updated_at, route.sandbox_id),
+        )
+        if route.storage_snapshot:
+            conn.execute(
+                """INSERT INTO sandbox_storage_dependencies VALUES (?, ?, ?)
+                ON CONFLICT(sandbox_id) DO UPDATE SET generation=excluded.generation,
+                    storage_snapshot_json=excluded.storage_snapshot_json""",
+                (route.sandbox_id, route.generation, _object_json(route.storage_snapshot)),
+            )
 
     def _write_sandbox(self, conn: sqlite3.Connection, route: SandboxRoute) -> None:
         conn.execute(

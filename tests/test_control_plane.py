@@ -374,7 +374,8 @@ class ControlPlaneTests(unittest.TestCase):
                 ):
                     payload = {"request_id": "request"}
                     handler._prepare_program_lifecycle(route, "wake", payload)
-                    transition.assert_called_once_with(route, payload, state="ready_to_wake")
+                    transition.assert_called_once_with(route, payload, state="waking", response_ready=True)
+                    self.assertTrue(handler._program_wake_started)
                     shadow.assert_not_called()
 
     def test_expected_park_deferral_does_not_write_program_error(self):

@@ -11,6 +11,50 @@ from ucloud_sandboxes.routing import ExecRoute, RoutingStore
 
 
 class RoutingPoolTests(unittest.TestCase):
+    def test_lifecycle_update_preserves_spec_generation_and_storage_dependency(self):
+        with TemporaryDirectory() as tmp:
+            store = RoutingStore(Path(tmp) / 'routing.sqlite')
+            route = store.upsert_sandbox(_sandbox_route(
+                sandbox_id='live', state='running', node_id='node', job_id='job',
+                node_url='http://node', node_epoch='boot',
+            ))
+            with store._transaction() as conn:
+                conn.execute('CREATE TABLE redundant_writes (kind TEXT)')
+                conn.execute("CREATE TRIGGER spec_rewrite AFTER UPDATE OF spec_json ON sandboxes BEGIN INSERT INTO redundant_writes VALUES ('spec'); END")
+                conn.execute("CREATE TRIGGER generation_rewrite AFTER UPDATE ON sandbox_generation_hwm BEGIN INSERT INTO redundant_writes VALUES ('generation'); END")
+                conn.execute('INSERT INTO sandbox_storage_dependencies VALUES (?, ?, ?)', ('live', route.generation, '{"marker":"keep"}'))
+            updated = store.set_sandbox_state_if_current(
+                route, expected_states={'running'}, state='running', node_epoch='boot',
+                activity_epoch=route.activity_epoch + 1,
+            )
+            self.assertEqual(updated.spec, route.spec)
+            self.assertEqual(store.get_sandbox('live'), updated)
+            with store._connect() as conn:
+                self.assertEqual(conn.execute('SELECT * FROM redundant_writes').fetchall(), [])
+                self.assertEqual(conn.execute('SELECT storage_snapshot_json FROM sandbox_storage_dependencies').fetchone()[0], '{"marker":"keep"}')
+
+    def test_combined_warm_readiness_and_dispatch_preserve_first_timestamps(self):
+        with TemporaryDirectory() as tmp:
+            store = RoutingStore(Path(tmp) / 'routing.sqlite')
+            route = store.upsert_sandbox(_sandbox_route(
+                sandbox_id='live', state='running', node_id='node', job_id='job', node_url='http://node',
+            ))
+            first, changed = store.upsert_program_request_transition_with_change(
+                route, request_id='request', rollout_id='rollout', state='waking',
+                response_ready_at='2026-09-22T00:00:00+00:00',
+                transition_at='2026-09-22T00:00:01+00:00',
+            )
+            self.assertTrue(changed)
+            self.assertEqual(first, store.program_request_readonly('request'))
+            self.assertEqual(first.response_ready_at, '2026-09-22T00:00:00+00:00')
+            self.assertEqual(first.wake_started_at, '2026-09-22T00:00:01+00:00')
+            retry, changed = store.upsert_program_request_transition_with_change(
+                route, request_id='request', rollout_id='rollout', state='waking',
+                response_ready_at='2026-09-22T01:00:00+00:00',
+            )
+            self.assertFalse(changed)
+            self.assertEqual(retry, first)
+
     def test_inventory_batches_unchanged_routes_but_keeps_fences_and_dependencies(self):
         from dataclasses import replace
         from ucloud_sandboxes.models import SandboxInventoryEntry, utc_now

@@ -45,8 +45,10 @@ public endpoints and PostgreSQL authority were verified after deployment.
 
 Both runs had zero workload and cleanup errors. First cycles are excluded from
 latency statistics. Natural retention observed zero fully parked measured
-cycles, as did both preceding dispatch A/B runs; it measures coordination and
-warm wakes, not actual restoration. Forced parking validates actual restores.
+cycles at response readiness, as did both preceding dispatch A/B runs. A park
+may still complete later while wake requests queue, so this observation does
+not prove that every wake avoided restoration. Forced parking explicitly waits
+until the sandbox is observed parked before responding.
 
 Natural wake p95 was 1.762 s immediately before this release, so the latest pair
 shows a modest improvement, with between-run variability still a confounder.

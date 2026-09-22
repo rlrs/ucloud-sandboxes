@@ -10,7 +10,8 @@ from typing import BinaryIO, Iterator
 from uuid import uuid4
 
 from .direct_service import DirectSandboxService
-from .warm_park import WarmParkPolicy
+from .direct_registry import DirectRegistryConflictError
+from .warm_park import WarmParkDeferred, WarmParkPolicy
 from .managed_process import (
     ManagedProcessLogChunk,
     ManagedProcessRecord,
@@ -284,8 +285,18 @@ class DirectNodeRuntime:
             self.service.open_admission()
         self._background_stop = Event()
         self._idle_parking_thread: Thread | None = None
+        self._relay_parking_thread: Thread | None = None
+        self._relay_parking_guard = Lock()
+        self._deferred_relay_parks: dict[tuple, dict] = {}
 
     def start(self) -> None:
+        self._background_stop.clear()
+        if self._relay_parking_thread is None or not self._relay_parking_thread.is_alive():
+            self._relay_parking_thread = Thread(
+                target=self._relay_parking_loop,
+                name="ucloud-direct-relay-parker", daemon=True,
+            )
+            self._relay_parking_thread.start()
         idle_seconds = self.service.idle_park_seconds
         if idle_seconds <= 0 or (
             self._idle_parking_thread is not None
@@ -306,6 +317,47 @@ class DirectNodeRuntime:
         if thread is not None:
             thread.join(timeout=max(2.0, self.service.idle_park_seconds * 2))
         self._idle_parking_thread = None
+        thread = self._relay_parking_thread
+        if thread is not None:
+            thread.join(timeout=2.0)
+        self._relay_parking_thread = None
+
+    def _relay_parking_loop(self) -> None:
+        while not self._background_stop.wait(0.25):
+            self._recheck_relay_parks()
+
+    def _recheck_relay_parks(self) -> None:
+        # The relay retains the durable intent and retries it after a restart.
+        # This local optimization only avoids round trips to re-read pressure.
+        # No registry read/write occurs for sandboxes still retained warm.
+        with self._relay_parking_guard:
+            pending = tuple(self._deferred_relay_parks.items())
+        for key, entry in pending:
+            if self._background_stop.is_set():
+                return
+            if time.monotonic() < entry['retry_at'] or not self._warm_parks.ready(
+                key, memory_bytes=entry['memory_bytes'],
+            ):
+                continue
+            try:
+                record, _ = self.park_with_activity_revision(
+                    key[0], generation=key[1], relay_request_id=key[2],
+                    operation_id=entry['operation_id'], background=entry['background'],
+                )
+            except WarmParkDeferred:
+                continue
+            except (SandboxConflictError, DirectRegistryConflictError):
+                record = None  # A durable wake/deletion/replacement wins.
+            except (RuntimeError, ValueError):
+                # Busy or temporarily failed checkpoints keep their intent.
+                entry['retry_at'] = time.monotonic() + 1.0
+                continue
+            if record is not None and record.state == 'running':
+                entry['retry_at'] = time.monotonic() + 1.0
+                continue
+            with self._relay_parking_guard:
+                if self._deferred_relay_parks.get(key) is entry:
+                    self._deferred_relay_parks.pop(key, None)
 
     def _idle_parking_loop(self) -> None:
         idle_seconds = self.service.idle_park_seconds
@@ -391,6 +443,11 @@ class DirectNodeRuntime:
                 sandbox_id,
                 generation=generation,
             )
+        with self._relay_parking_guard:
+            for key in tuple(self._deferred_relay_parks):
+                if key[:2] == (sandbox_id, generation):
+                    self._deferred_relay_parks.pop(key, None)
+                    self._warm_parks.wake(key)
         return record
 
     def get(self, sandbox_id: str) -> SandboxRecord | None:
@@ -439,9 +496,11 @@ class DirectNodeRuntime:
             registration = self.service.provisioner.registry.get(sandbox_id)
             if registration is not None:
                 memory_bytes = (registration.spec.memory_mb or 0) * 1024**2
+        snapshot = self.service.get_snapshot(sandbox_id) if hasattr(self.service, 'get_snapshot') else None
         delay = (
             self._warm_parks.defer(key, memory_bytes=memory_bytes, blocking=False)
-            if relay_request_id is not None else nullcontext(None)
+            if relay_request_id is not None and (snapshot is None or snapshot.state == 'running')
+            else nullcontext(None)
         )
         try:
             with delay as cancelled:
@@ -465,6 +524,19 @@ class DirectNodeRuntime:
                     )
                     activity_revision = self.service.advance_lifecycle_activity_revision()
                     return record, activity_revision
+        except WarmParkDeferred as exc:
+            thread = self._relay_parking_thread
+            if thread is not None and thread.is_alive() and not self._background_stop.is_set():
+                with self._relay_parking_guard:
+                    if self._warm_parks.waiting(key):
+                        self._deferred_relay_parks.setdefault(key, {
+                            'memory_bytes': memory_bytes, 'operation_id': operation_id,
+                            'background': background, 'retry_at': 0.0,
+                        })
+                # Pressure is checked locally every 250 ms. The durable retry
+                # is a recovery backstop, not the resource scheduling timer.
+                raise WarmParkDeferred(30.0) from exc
+            raise
         except SandboxBusyError as exc:
             raise SandboxBusyError(
                 "sandbox has active exec/file activity that cannot survive park: "
@@ -502,6 +574,8 @@ class DirectNodeRuntime:
             raise ValueError("wake operation id is invalid")
         if relay_request_id is not None:
             self._warm_parks.wake((sandbox_id, generation, relay_request_id))
+            with self._relay_parking_guard:
+                self._deferred_relay_parks.pop((sandbox_id, generation, relay_request_id), None)
         # Waking an already-running sandbox is a successful no-op. Attached
         # activity is proof that the current runtime is live, not a reason to
         # reject that idempotent result. We still take the exclusive transition

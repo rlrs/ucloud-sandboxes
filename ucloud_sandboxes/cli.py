@@ -1333,7 +1333,7 @@ class _RelayLifecycleDispatcher:
                     # Retain the intent in PostgreSQL, not a sleeping claimed
                     # task. The durable dispatcher schedules the next attempt.
                     from .model_relay import RelayLifecycleDeferred
-                    raise RelayLifecycleDeferred(delay) from retry
+                    raise RelayLifecycleDeferred(delay, transport_epoch=retry.transport_epoch) from retry
             # A capacity-blocked owner must not occupy fleet-wide dispatch
             # capacity while unrelated, ready workers could make progress.
             committed = getattr(request, "response_committed", None)
@@ -1471,9 +1471,10 @@ def _delete_bounded_json(
 class _RelayLifecycleRetry(Exception):
     """An identified, side-effect-safe retry; the response socket is closed."""
 
-    def __init__(self, delay_seconds: float) -> None:
+    def __init__(self, delay_seconds: float, *, transport_epoch: str | None = None) -> None:
         super().__init__("relay lifecycle retry pending")
         self.delay_seconds = delay_seconds
+        self.transport_epoch = transport_epoch
 
 
 def _relay_lifecycle_deadline(relay_request: RelayRequest) -> float:
@@ -1636,7 +1637,8 @@ def _raise_relay_lifecycle_http_error(
             delay = float(failure["retry_after_seconds"])
         except (KeyError, TypeError, ValueError):
             delay = 1.0
-        raise _RelayLifecycleRetry(max(0.05, min(15.0, delay))) from exc
+        epoch = exc.headers.get('X-UCloud-Sandbox-Transport-Epoch', '').strip() or None
+        raise _RelayLifecycleRetry(max(0.05, min(30.0, delay)), transport_epoch=epoch) from exc
     permanent = exc.code in {404, 410} or (
         exc.code == 409
         and isinstance(failure, dict)

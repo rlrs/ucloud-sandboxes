@@ -324,10 +324,14 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
 
         async def park(request):
             entered.set()
-            raise api.RelayLifecycleDeferred(10)
+            raise api.RelayLifecycleDeferred(30, transport_epoch="original")
 
-        state = await self.bound_state(accepted_notifier=park)
-        request = await self.enqueue(state)
+        async def wake(request):
+            return "migrated"
+
+        state = await self.bound_state(accepted_notifier=park, result_notifier=wake)
+        request = await self.enqueue(state, idempotency_key="local-park-migration",
+                                     defer_idempotency_until_disconnect=True)
         await asyncio.wait_for(entered.wait(), 2)
         for _ in range(100):
             async with state.store.transaction("test_deferred") as conn:
@@ -342,6 +346,22 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(row["done"])
         self.assertIsNone(row["last_error"])
         self.assertTrue(row["deferred"])
+        async with state.store.transaction("test_deferred_transport") as conn:
+            observed = await (await conn.execute(
+                "SELECT parked_transport_epoch FROM relay_requests WHERE request_id=%s",
+                (request.request_id,),
+            )).fetchone()
+        self.assertEqual(observed["parked_transport_epoch"], "original")
+
+        (leased,) = await self.poll(state)
+        await self.respond(leased, state, defer_delivery=True)
+        self.assertEqual((await state.wait_for_response(request, timeout_seconds=2)).body, b"answer")
+        async with state.store.transaction("test_migrated_deferred_park") as conn:
+            observed = await (await conn.execute(
+                "SELECT reattachable FROM relay_requests WHERE request_id=%s",
+                (request.request_id,),
+            )).fetchone()
+        self.assertTrue(observed["reattachable"])
 
     async def test_result_and_wake_commit_atomically_and_retry_without_client(self):
         attempts = 0

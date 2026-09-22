@@ -1,0 +1,9 @@
+Executing <Task pending name='Task-334' coro=<PostgresRelayTests.test_qualification_subapp_keeps_live_registrations_separate() running at /src/tests/test_postgres_relay.py:891> wait_for=<Future pending cb=[Task.task_wakeup()] created at /opt/python/cpython-3.13.12-linux-x86_64-gnu/lib/python3.13/asyncio/base_events.py:459> cb=[_run_until_complete_cb() at /opt/python/cpython-3.13.12-linux-x86_64-gnu/lib/python3.13/asyncio/base_events.py:181] created at /opt/python/cpython-3.13.12-linux-x86_64-gnu/lib/python3.13/asyncio/runners.py:100> took 0.292 seconds
+----------------------------------------------------------------------
+Ran 32 tests in 7.009s
+
+OK
+----------------------------------------------------------------------
+Ran 1 test in 0.157s
+
+OK

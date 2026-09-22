@@ -304,3 +304,112 @@ class WarmRelayParkTests(unittest.TestCase):
             restarted.park_with_activity_revision('agent', generation=1,
                 operation_id='park:replay', relay_request_id='request')
         self.assertFalse(service.park_calls)
+
+
+class LocalRelayParkTests(unittest.TestCase):
+    def make_runtime(self):
+        from ucloud_sandboxes.background_io import Pressure
+        from ucloud_sandboxes.warm_park import WarmParkPolicy
+        service = _WakeService()
+        seen = set()
+        def fence(sandbox, generation, request, *, record=False):
+            from ucloud_sandboxes.direct_registry import DirectRegistryConflictError
+            if generation != service.provisioner.registry._registrations[0].sandbox_generation:
+                raise DirectRegistryConflictError('generation changed')
+            key = (sandbox, generation, request)
+            if record:
+                seen.add(key)
+            return key in seen
+        service.provisioner.registry.relay_wake_fence = fence
+        manager = DirectNodeRuntime(service)
+        pressure = [Pressure(.8, 0)]
+        manager._warm_parks = WarmParkPolicy(lambda: pressure[0])
+        # Drive individual ticks deterministically; production start() runs
+        # this same check even when the independent idle parker is disabled.
+        manager._relay_parking_thread = SimpleNamespace(is_alive=lambda: True)
+        return manager, service, pressure
+
+    def defer(self, manager):
+        from ucloud_sandboxes.warm_park import WarmParkDeferred
+        with self.assertRaises(WarmParkDeferred) as raised:
+            manager.park_with_activity_revision('agent', generation=1,
+                operation_id='park:req', relay_request_id='request')
+        self.assertEqual(raised.exception.seconds, 30)
+        self.assertEqual(len(manager._deferred_relay_parks), 1)
+
+    def test_pressure_parks_without_another_http_request_or_polling_registry(self):
+        from ucloud_sandboxes.background_io import Pressure
+        manager, service, pressure = self.make_runtime()
+        self.defer(manager)
+        original = service.provisioner.registry.relay_wake_fence
+        service.provisioner.registry.relay_wake_fence = Mock(side_effect=original)
+        for _ in range(10):
+            manager._recheck_relay_parks()
+        service.provisioner.registry.relay_wake_fence.assert_not_called()
+        self.assertFalse(service.park_calls)
+        pressure[0] = Pressure(.01, 20)
+        manager._recheck_relay_parks()
+        self.assertEqual(service.park_calls, ['agent'])
+        self.assertFalse(manager._deferred_relay_parks)
+
+    def test_wake_cancels_local_park_and_replay(self):
+        from ucloud_sandboxes.background_io import Pressure
+        manager, service, pressure = self.make_runtime()
+        self.defer(manager)
+        manager.wake_with_activity_revision('agent', generation=1,
+            operation_id='wake:req', relay_request_id='request')
+        pressure[0] = Pressure(.01, 20)
+        manager._recheck_relay_parks()
+        self.assertFalse(manager._deferred_relay_parks)
+        self.assertFalse(service.park_calls)
+
+    def test_replaced_generation_cannot_be_parked(self):
+        from ucloud_sandboxes.background_io import Pressure
+        manager, service, pressure = self.make_runtime()
+        self.defer(manager)
+        service.provisioner.registry._registrations[0].sandbox_generation = 2
+        pressure[0] = Pressure(.01, 20)
+        manager._recheck_relay_parks()
+        self.assertFalse(manager._deferred_relay_parks)
+        self.assertFalse(service.park_calls)
+
+    def test_failed_checkpoint_keeps_intent(self):
+        from ucloud_sandboxes.background_io import Pressure
+        manager, service, pressure = self.make_runtime()
+        self.defer(manager)
+        pressure[0] = Pressure(.01, 20)
+        service.park = Mock(side_effect=RuntimeError('temporary I/O failure'))
+        manager._recheck_relay_parks()
+        self.assertEqual(len(manager._deferred_relay_parks), 1)
+        manager._recheck_relay_parks()
+        service.park.assert_called_once()
+        entry = next(iter(manager._deferred_relay_parks.values()))
+        entry['retry_at'] = 0
+        service.park.side_effect = None
+        service.park.return_value = SimpleNamespace(state='parked')
+        manager._recheck_relay_parks()
+        self.assertFalse(manager._deferred_relay_parks)
+
+    def test_restarted_worker_accepts_durable_retry(self):
+        from ucloud_sandboxes.background_io import Pressure
+        from ucloud_sandboxes.warm_park import WarmParkPolicy
+        manager, service, pressure = self.make_runtime()
+        self.defer(manager)
+        restarted = DirectNodeRuntime(service)
+        restarted._warm_parks = WarmParkPolicy(lambda: Pressure(.01, 20))
+        restarted.park_with_activity_revision('agent', generation=1,
+            operation_id='park:req', relay_request_id='request')
+        self.assertEqual(service.park_calls, ['agent'])
+
+    def test_parker_runs_when_idle_parking_is_disabled(self):
+        manager = DirectNodeRuntime(_WakeService())
+        tick = Event()
+        manager._recheck_relay_parks = tick.set
+        manager.start()
+        thread = manager._relay_parking_thread
+        try:
+            self.assertTrue(tick.wait(2))
+            self.assertIsNone(manager._idle_parking_thread)
+        finally:
+            manager.stop()
+        self.assertFalse(thread.is_alive())

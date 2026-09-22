@@ -112,9 +112,10 @@ class RelayWorkerResponse:
 class RelayLifecycleDeferred(Exception):
     """An identified retry releases its durable claim until the given delay."""
 
-    def __init__(self, seconds: float):
+    def __init__(self, seconds: float, *, transport_epoch: str | None = None):
         super().__init__("lifecycle deferred")
-        self.seconds = max(0.05, min(15.0, seconds))
+        self.seconds = max(0.05, min(30.0, seconds))
+        self.transport_epoch = transport_epoch
 
 
 class RelayCallerUnavailable(Exception):

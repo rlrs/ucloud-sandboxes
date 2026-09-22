@@ -96,6 +96,18 @@ class WarmParkPolicy:
                 if not entry[2]:
                     self._pending.pop(key, None)
 
+    def ready(self, key, *, memory_bytes=0):
+        """Cheap local pressure check; it grants no lifecycle authority."""
+        with self._lock:
+            started = self._waiting_since.get(key)
+        return started is not None and (
+            self._budget(memory_bytes) <= time.monotonic() - started
+        )
+
+    def waiting(self, key):
+        with self._lock:
+            return key in self._waiting_since
+
     def wake(self, key):
         with self._lock:
             started = self._waiting_since.pop(key, None)

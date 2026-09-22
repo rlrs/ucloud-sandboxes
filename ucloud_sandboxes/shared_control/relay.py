@@ -1263,6 +1263,7 @@ class PostgresRelayState:
                 epoch = await notifier(request)
         except api.RelayLifecycleDeferred as exc:
             deferred = exc.seconds
+            epoch = exc.transport_epoch
         except api.RelayCallerUnavailable:
             unavailable = True
         except asyncio.CancelledError:
@@ -1289,6 +1290,14 @@ class PostgresRelayState:
             ):
                 return
             if failure or deferred is not None:
+                if action == 'park' and epoch is not None:
+                    # A retained sandbox can park locally as pressure changes.
+                    # Remember its original transport before releasing the
+                    # claim, so a subsequent migration still forces reattach.
+                    await conn.execute(
+                        "UPDATE relay_requests SET parked_transport_epoch=COALESCE(parked_transport_epoch,%s) WHERE deployment_id=%s AND request_id=%s",
+                        (epoch, self.deployment, request_id),
+                    )
                 await conn.execute(
                     "UPDATE relay_lifecycle SET claim_token=NULL,claim_until=NULL,last_error=%s,next_attempt_at=clock_timestamp()+%s*interval '1 second' WHERE deployment_id=%s AND request_id=%s AND action=%s",
                     (

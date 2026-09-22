@@ -47,7 +47,8 @@ class RelayLifecycleDispatchTests(unittest.IsolatedAsyncioTestCase):
     async def test_async_park_honors_worker_deferral_without_treating_it_as_success(self):
         async def reply(request):
             return web.json_response({"error_code": "park_deferred", "retryable": True,
-                                      "retry_after_seconds": 12}, status=409)
+                                      "retry_after_seconds": 30}, status=409,
+                                     headers={"X-UCloud-Sandbox-Transport-Epoch": "original"})
         app = web.Application()
         app.router.add_post('/v1/sandboxes/s/park', reply)
         async with TestServer(app) as server, ClientSession() as session:
@@ -58,7 +59,8 @@ class RelayLifecycleDispatchTests(unittest.IsolatedAsyncioTestCase):
                                     rollout_id='rollout', created_at=0),
                     action='park', attempt=0, deadline=cli.time.monotonic()+30,
                 )
-            self.assertEqual(caught.exception.delay_seconds, 12)
+            self.assertEqual(caught.exception.delay_seconds, 30)
+            self.assertEqual(caught.exception.transport_epoch, "original")
 
     async def test_async_transport_bounds_streamed_bodies_and_actual_http_deadline(self):
         release = asyncio.Event()
@@ -104,12 +106,13 @@ class RelayLifecycleDispatchTests(unittest.IsolatedAsyncioTestCase):
         from ucloud_sandboxes.model_relay import RelayLifecycleDeferred
         dispatcher = cli._RelayLifecycleDispatcher("http://gateway", "token")
         with patch.object(cli, "_post_gateway_sandbox_lifecycle_once_async",
-                          side_effect=cli._RelayLifecycleRetry(12)):
+                          side_effect=cli._RelayLifecycleRetry(30, transport_epoch="original")):
             try:
                 with self.assertRaises(RelayLifecycleDeferred) as caught:
                     await asyncio.wait_for(dispatcher.notify(
                         SimpleNamespace(durable_lifecycle=True), action="park"), .5)
-                self.assertEqual(caught.exception.seconds, 12)
+                self.assertEqual(caught.exception.seconds, 30)
+                self.assertEqual(caught.exception.transport_epoch, "original")
                 self.assertFalse(dispatcher._active)
             finally:
                 await dispatcher.close()

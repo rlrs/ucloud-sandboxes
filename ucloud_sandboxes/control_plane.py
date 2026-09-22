@@ -2479,7 +2479,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 heartbeats_by_node_id.get(route.node_id),
                 heartbeat_ttl_seconds=self.heartbeat_ttl_seconds,
             )
-            for route in self.routing_store.sandbox_routes_readonly()
+            for route in self.routing_store.sandbox_routes_readonly(background=True)
         ]
         self._write_json(
             {

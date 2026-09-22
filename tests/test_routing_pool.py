@@ -116,9 +116,45 @@ class RoutingPoolTests(unittest.TestCase):
             ))
             with ThreadPoolExecutor(max_workers=2) as pool:
                 with store._fleet_read_lock:
-                    listing = pool.submit(store.sandbox_routes_readonly)
+                    listing = pool.submit(store.sandbox_routes_readonly, background=True)
                     pool.submit(store.reserve_sandbox_wake, route, pending_id='none').result(timeout=2)
                     self.assertEqual(store.get_sandbox('live').state, 'waking')
+                    self.assertEqual(pool.submit(store.sandbox_routes_readonly).result(timeout=2)[0].state, 'waking')
                 self.assertEqual(listing.result(timeout=2)[0].state, 'waking')
             RoutingStore(store.path).delete_sandbox('live')
             self.assertEqual(store.sandbox_routes_readonly(), [])
+
+    def test_repeated_program_projection_reads_committed_generation_without_writer(self):
+        from ucloud_sandboxes.routing import SandboxRouteConflictError
+        with TemporaryDirectory() as tmp:
+            store = RoutingStore(Path(tmp) / 'routing.sqlite')
+            route = store.upsert_sandbox(_sandbox_route(
+                sandbox_id='live', state='running', node_id='node',
+                job_id='job', node_url='http://node',
+            ))
+            expected, changed = store.upsert_program_request_transition_with_change(
+                route, request_id='request', rollout_id='rollout', state='model_wait',
+                last_error='retry',
+            )
+            self.assertTrue(changed)
+            before = store._write_batches.operations
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                with store._transaction():
+                    observed, changed = pool.submit(
+                        store.upsert_program_request_transition_with_change,
+                        route, request_id='request', rollout_id='rollout', state='model_wait',
+                    ).result(timeout=2)
+                    self.assertFalse(changed)
+                    self.assertEqual(observed, expected)
+            self.assertEqual(store._write_batches.operations, before + 1)
+            cleared, changed = store.upsert_program_request_transition_with_change(
+                route, request_id='request', rollout_id='rollout', state='model_wait',
+                clear_error=True,
+            )
+            self.assertTrue(changed)
+            self.assertEqual(cleared.last_error, '')
+            store.delete_sandbox(route.sandbox_id)
+            with self.assertRaises(SandboxRouteConflictError):
+                store.upsert_program_request_transition_with_change(
+                    route, request_id='request', rollout_id='rollout', state='model_wait',
+                )

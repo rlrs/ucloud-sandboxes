@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.86 - 2026-09-22
+
+- Let scheduling scans bypass the public fleet-poll queue, avoiding placement
+  lock inversion when creates overlap wakes and heavy inventory polling.
+- Make unchanged program lifecycle retries read-only using a joined route
+  generation snapshot. Changed projections still recheck their fences inside
+  the durable transaction.
+
 ## 0.5.85 - 2026-09-22
 
 - Retain relay model waits according to live memory headroom, reclaim and queued

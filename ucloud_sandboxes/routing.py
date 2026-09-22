@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from enum import Enum
@@ -610,7 +610,8 @@ class RoutingStore:
         self._connections_guard = Lock()
         # Fleet scans release/reacquire the GIL for every SQLite row. Concurrent
         # scans otherwise starve the short writer and heartbeat transactions.
-        # Queue scans separately; lifecycle reads and writes never take this lock.
+        # Queue public scans separately. Scheduling scans must bypass this
+        # queue so public pollers cannot hold up placement while it owns a lock.
         self._fleet_read_lock = Lock()
         self._connection_identity: tuple[int, int] | None = None
         self._connection_pid = os.getpid()
@@ -869,8 +870,9 @@ class RoutingStore:
             ).fetchall()
         return [_object(json.loads(row[0])) for row in rows]
 
-    def sandbox_routes_readonly(self) -> list[SandboxRoute]:
-        with self._fleet_read_lock, self._connect() as conn:
+    def sandbox_routes_readonly(self, *, background: bool = False) -> list[SandboxRoute]:
+        guard = self._fleet_read_lock if background else nullcontext()
+        with guard, self._connect() as conn:
             return [
                 route
                 for route in (
@@ -953,40 +955,8 @@ class RoutingStore:
         if state not in _PROGRAM_STATE_RANK:
             raise ValueError(f"unsupported program request state: {state}")
         transition_at = transition_at or utc_now().isoformat()
-        # SQLite and the shared writer serialize this database-only
-        # mutation. Inventory projection must not block lifecycle progress.
-        with self._transaction() as conn:
-            # Only the incarnation fences this transition. Loading the complete
-            # route here decoded the spec and storage snapshot on every model
-            # lifecycle event, while holding the shared writer.
-            current_route = conn.execute(
-                "SELECT generation FROM sandboxes WHERE sandbox_id = ?",
-                (route.sandbox_id,),
-            ).fetchone()
-            if (
-                current_route is None
-                or current_route["generation"] != route.generation
-            ):
-                raise SandboxRouteConflictError(
-                    "program transition does not own the current sandbox generation"
-                )
-            existing_row = conn.execute(
-                """
-                SELECT request_id, rollout_id, sandbox_id,
-                       sandbox_generation, state, resources_json,
-                       accepted_at, parked_at, response_ready_at,
-                       wake_started_at, wake_completed_at, updated_at,
-                       last_error
-                FROM program_requests
-                WHERE request_id = ?
-                """,
-                (request_id,),
-            ).fetchone()
-            existing = (
-                _program_request_from_row(existing_row)
-                if existing_row is not None
-                else None
-            )
+
+        def project(existing):
             if existing is not None and (
                 existing.rollout_id != rollout_id
                 or existing.sandbox_id != route.sandbox_id
@@ -1049,6 +1019,64 @@ class RoutingStore:
                 and existing.wake_completed_at == timestamps["wake_completed_at"]
                 and existing.last_error == error
             ):
+                return effective_state, timestamps, error, True
+            return effective_state, timestamps, error, False
+
+        # Retries of an already projected transition are observational reads.
+        # Join its generation fence into the same snapshot; a delete/recreate
+        # cannot make a stale projection satisfy the current incarnation.
+        with self._connect() as conn:
+            snapshot = conn.execute(
+                """SELECT s.generation AS current_generation, p.*
+                FROM sandboxes s LEFT JOIN program_requests p ON p.request_id = ?
+                WHERE s.sandbox_id = ?""",
+                (request_id, route.sandbox_id),
+            ).fetchone()
+        if snapshot is None or snapshot["current_generation"] != route.generation:
+            raise SandboxRouteConflictError(
+                "program transition does not own the current sandbox generation"
+            )
+        if snapshot["request_id"] is not None:
+            previous = _program_request_from_row(snapshot)
+            if project(previous)[3]:
+                return previous, False
+
+        # SQLite and the shared writer serialize this database-only
+        # mutation. Inventory projection must not block lifecycle progress.
+        with self._transaction() as conn:
+            # Only the incarnation fences this transition. Loading the complete
+            # route here decoded the spec and storage snapshot on every model
+            # lifecycle event, while holding the shared writer.
+            current_route = conn.execute(
+                "SELECT generation FROM sandboxes WHERE sandbox_id = ?",
+                (route.sandbox_id,),
+            ).fetchone()
+            if (
+                current_route is None
+                or current_route["generation"] != route.generation
+            ):
+                raise SandboxRouteConflictError(
+                    "program transition does not own the current sandbox generation"
+                )
+            existing_row = conn.execute(
+                """
+                SELECT request_id, rollout_id, sandbox_id,
+                       sandbox_generation, state, resources_json,
+                       accepted_at, parked_at, response_ready_at,
+                       wake_started_at, wake_completed_at, updated_at,
+                       last_error
+                FROM program_requests
+                WHERE request_id = ?
+                """,
+                (request_id,),
+            ).fetchone()
+            existing = (
+                _program_request_from_row(existing_row)
+                if existing_row is not None
+                else None
+            )
+            effective_state, timestamps, error, unchanged = project(existing)
+            if unchanged:
                 return existing, False
             conn.execute(
                 """

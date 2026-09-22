@@ -39,9 +39,9 @@ with tempfile.TemporaryDirectory() as tmp:
         original = s.sandbox_routes_readonly
         guard = threading.Lock()
 
-        def listing():
+        def listing(**kwargs):
             with guard:
-                return original()
+                return original(**kwargs)
 
         s.sandbox_routes_readonly = listing
     lat = {k: [] for k in ["list", "write", "heartbeat"]}
@@ -53,7 +53,7 @@ with tempfile.TemporaryDirectory() as tmp:
         for j in range(4 if kind != "heartbeat" else 2):
             t = time.monotonic()
             if kind == "list":
-                s.sandbox_routes_readonly()
+                s.sandbox_routes_readonly(background=True)
             elif kind == "write":
                 s.upsert_program_request_transition_with_change(
                     routes[n],

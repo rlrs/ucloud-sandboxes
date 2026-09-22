@@ -65,11 +65,14 @@ for cycle in range(config['cycles']):
    time.sleep(min(1,.05*(attempt+1)))
  received=time.monotonic()
  assert reply['cycle']==cycle and reply['nonce']==nonce and reply['digest']==memory_digest
+ tool=subprocess.check_output([sys.executable,'-c','print(6*7)'],text=True).strip();assert tool=='42'
+ tool_finished=time.monotonic()
+ usable={'cycle':cycle,'nonce':nonce,'tool':tool,'pid':os.getpid()}
+ tmp=root/'usable.tmp';tmp.write_text(json.dumps(usable));os.replace(tmp,root/('usable-'+str(cycle)+'.json'))
  assert hashlib.sha256(resident).hexdigest()==memory_digest,'resident memory changed during park'
  assert (root/'file-0').read_bytes()==data[:config['file_kib']*1024],'filesystem changed during park'
  verified=time.monotonic()
- tool=subprocess.check_output([sys.executable,'-c','print(6*7)'],text=True).strip();assert tool=='42'
- result={'cycle':cycle,'nonce':nonce,'digest':memory_digest,'tool':tool,'pid':os.getpid(),'transport_retries':attempt,'verification_seconds':verified-received,'tool_seconds':time.monotonic()-verified}
+ result={'cycle':cycle,'nonce':nonce,'digest':memory_digest,'tool':tool,'pid':os.getpid(),'transport_retries':attempt,'verification_seconds':verified-tool_finished,'tool_seconds':tool_finished-received}
  tmp=root/'result.tmp';tmp.write_text(json.dumps(result));os.replace(tmp,root/('result-'+str(cycle)+'.json'))
 while True:time.sleep(3600)
 '''
@@ -77,7 +80,8 @@ while True:time.sleep(3600)
 PROBE = r'''
 import json,sys,time
 from pathlib import Path
-path=Path('/workspace/relay-bench/result-'+sys.argv[1]+'.json');deadline=time.monotonic()+120
+stage=sys.argv[2] if len(sys.argv)>2 else 'result'
+path=Path('/workspace/relay-bench/'+stage+'-'+sys.argv[1]+'.json');deadline=time.monotonic()+120
 while not path.exists():
  if time.monotonic()>deadline:raise TimeoutError('managed agent did not acknowledge response')
  time.sleep(.01)
@@ -236,6 +240,7 @@ async def run(args):
               "configuration": config, "cycles": [], "errors": [], "cleanup_errors": [],
               "health": [], "fleet_polls": [], "placements": {}, "control_retries": [],
               "driver_python": sys.version.split()[0],
+              "latency_definition": "response ready through guest tool and external exec confirmation; full memory/file integrity is a separate mandatory gate",
               "harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     last_persist = 0.0
@@ -245,7 +250,7 @@ async def run(args):
         temp.replace(args.output)
     def event(name, **fields):
         nonlocal last_persist
-        print(json.dumps({"event": name, "run_id": prefix, **fields}), flush=True)
+        print(json.dumps({"event": name, "run_id": prefix, "at": datetime.now(timezone.utc).isoformat(), **fields}), flush=True)
         # Rewriting all earlier samples after every event makes the driver do
         # quadratic JSON work on its event loop and inflates loaded latency.
         # Keep the event log complete and checkpoint the report once a second.
@@ -404,10 +409,19 @@ async def run(args):
                                                          headers={'Content-Type': 'application/json'},
                                                          attempts=120, retry_delay_seconds=.1)
                     committed = time.monotonic()
-                    probe = await handle.exec(['python', '-c', PROBE, str(cycle)], timeout_seconds=150)
+                    probe = await handle.exec(['python', '-c', PROBE, str(cycle), 'usable'], timeout_seconds=150)
                     finished = time.monotonic()
                     if not probe.success:
                         raise RuntimeError('usable-exec probe failed: ' + probe.stderr[:500])
+                    usable = json.loads(probe.stdout)
+                    if usable['nonce'] != identity or usable['cycle'] != cycle or usable['tool'] != '42':
+                        raise RuntimeError('restored agent did not execute its first tool')
+                    # Integrity remains a mandatory gate, but scanning the entire
+                    # working set is application work after the first usable tool.
+                    probe = await handle.exec(['python', '-c', PROBE, str(cycle), 'result'], timeout_seconds=150)
+                    verified = time.monotonic()
+                    if not probe.success:
+                        raise RuntimeError('integrity probe failed: ' + probe.stderr[:500])
                     ack = json.loads(probe.stdout)
                     if ack['nonce'] != identity or ack['cycle'] != cycle or ack['digest'] != payload['digest'] or ack['tool'] != '42':
                         raise RuntimeError('restored agent failed integrity check')
@@ -418,6 +432,7 @@ async def run(args):
                                              'exec_completed_unix': started_unix + finished - started,
                                              'commit_and_wake_seconds': committed - started,
                                              'usable_exec_seconds': finished - started,
+                                             'full_integrity_seconds': verified - model_ready,
                                              'response_ready_to_usable_exec_seconds': finished - model_ready,
                                              'response_ready_to_submit_seconds': started - model_ready,
                                              'response_ready_to_wake_seconds': committed - model_ready,
@@ -480,7 +495,7 @@ async def run(args):
         result['commit_and_wake_seconds'] = summary([r['commit_and_wake_seconds'] for r in measured])
         result['usable_exec_seconds'] = summary([r['usable_exec_seconds'] for r in measured])
         result['response_ready_to_usable_exec_seconds'] = summary([r['response_ready_to_usable_exec_seconds'] for r in measured])
-        for field in ('response_ready_to_wake_seconds', 'post_wake_exec_seconds',
+        for field in ('response_ready_to_wake_seconds', 'post_wake_exec_seconds', 'full_integrity_seconds',
                       'guest_verification_seconds', 'guest_tool_seconds', 'guest_transport_retries'):
             result[field] = summary([r[field] for r in measured])
         result['measured_park_observed_cycles'] = sum(r['park_observed_after_seconds'] is not None for r in measured)

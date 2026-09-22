@@ -167,6 +167,9 @@ class RelayLoadBenchmarkTests(unittest.TestCase):
                         time.sleep(.01)
                     self.assertTrue((root / 'result-1.json').exists())
                     results = [json.loads((root / f'result-{i}.json').read_text()) for i in range(2)]
+                    usable = [json.loads((root / f'usable-{i}.json').read_text()) for i in range(2)]
+                    self.assertEqual([r['tool'] for r in usable], ['42', '42'])
+                    self.assertEqual([r['nonce'] for r in usable], [r['nonce'] for r in results])
                     self.assertEqual(results[0]['nonce'], results[1]['nonce'])
                     self.assertEqual(results[0]['pid'], results[1]['pid'])
                     self.assertNotEqual(results[0]['digest'], results[1]['digest'])

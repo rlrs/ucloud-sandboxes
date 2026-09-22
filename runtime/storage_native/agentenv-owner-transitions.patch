@@ -1,7 +1,8 @@
 diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.rs
+index cdbf4d0..25088a1 100644
 --- a/storage/ublk-daemon/src/server.rs
 +++ b/storage/ublk-daemon/src/server.rs
-@@ -324,8 +324,7 @@
+@@ -324,8 +324,7 @@ pub struct UblkDaemonServer {
      image_service_cache: Arc<ImageServiceCache>,
      default_image_service: ImageService,
      devices: Arc<DashMap<u32, ManagedDevice>>,
@@ -11,7 +12,7 @@ diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.
      pool_state: Option<Arc<PoolState>>,
      resize_tool: Option<ResizeToolSpec>,
      resize_global_config: PathBuf,
-@@ -377,8 +376,7 @@
+@@ -377,8 +376,7 @@ impl UblkDaemonServer {
              image_service_cache: Arc::new(cache),
              default_image_service,
              devices: Arc::new(DashMap::new()),
@@ -21,7 +22,7 @@ diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.
              pool_state: None,
              resize_tool: None,
              resize_global_config,
-@@ -467,7 +465,6 @@
+@@ -463,7 +461,6 @@ impl UblkDaemonServer {
                      let (stream, _) = accept.context("accept daemon connection")?;
                      let devices = Arc::clone(&self.devices);
                      let runtime_owners = Arc::clone(&self.runtime_owners);
@@ -29,7 +30,7 @@ diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.
                      let ctrl_ring = self.ctrl_ring.clone();
                      let image_service_cache = Arc::clone(&self.image_service_cache);
                      let pool_state = self.pool_state.as_ref().map(Arc::clone);
-@@ -480,7 +477,6 @@
+@@ -476,7 +473,6 @@ impl UblkDaemonServer {
                              stream,
                              devices,
                              runtime_owners,
@@ -37,7 +38,7 @@ diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.
                              ctrl_ring,
                              image_service_cache,
                              pool_state,
-@@ -559,7 +555,6 @@
+@@ -555,7 +551,6 @@ impl UblkDaemonServer {
              }
          }
          self.runtime_owners.clear();
@@ -45,7 +46,7 @@ diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.
      }
  }
  
-@@ -569,8 +564,7 @@
+@@ -565,8 +560,7 @@ impl UblkDaemonServer {
  async fn handle_connection(
      mut stream: tokio::net::UnixStream,
      devices: Arc<DashMap<u32, ManagedDevice>>,
@@ -55,7 +56,7 @@ diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.
      ctrl_ring: IoRingHandle<io_uring::squeue::Entry128>,
      image_service_cache: Arc<ImageServiceCache>,
      pool_state: Option<Arc<PoolState>>,
-@@ -614,62 +608,68 @@
+@@ -610,62 +604,68 @@ async fn handle_connection(
                  || owner_id.contains('\r')
              {
                  Err(anyhow::anyhow!("runtime device owner_id is invalid"))
@@ -174,7 +175,7 @@ diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.
              }
              response
          }
-@@ -721,22 +721,18 @@
+@@ -717,22 +717,18 @@ async fn handle_connection(
              .await
          }
          DaemonRequest::ReleaseOverlaybd { dev_id } => {
@@ -203,7 +204,7 @@ diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.
          }),
          DaemonRequest::UpdateSize {
              dev_id,
-@@ -776,13 +772,168 @@
+@@ -772,13 +768,168 @@ async fn handle_connection(
  
  // ── Request handlers ────────────────────────────────────────────────────────
  

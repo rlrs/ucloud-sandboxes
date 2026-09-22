@@ -1,5 +1,6 @@
 diff --git a/storage/ublk-daemon/src/idle_pool.rs b/storage/ublk-daemon/src/idle_pool.rs
 new file mode 100644
+index 0000000..0f37d50
 --- /dev/null
 +++ b/storage/ublk-daemon/src/idle_pool.rs
 @@ -0,0 +1,173 @@
@@ -177,6 +178,7 @@ new file mode 100644
 +    }
 +}
 diff --git a/storage/ublk-daemon/src/lib.rs b/storage/ublk-daemon/src/lib.rs
+index 4c3129b..2cce60e 100644
 --- a/storage/ublk-daemon/src/lib.rs
 +++ b/storage/ublk-daemon/src/lib.rs
 @@ -1,3 +1,4 @@
@@ -185,9 +187,10 @@ diff --git a/storage/ublk-daemon/src/lib.rs b/storage/ublk-daemon/src/lib.rs
  pub mod protocol;
  pub(crate) mod runtime;
 diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.rs
+index 25088a1..02b2aa4 100644
 --- a/storage/ublk-daemon/src/server.rs
 +++ b/storage/ublk-daemon/src/server.rs
-@@ -3,7 +3,7 @@
+@@ -3,7 +3,7 @@ use std::os::fd::AsRawFd;
  use std::path::{Path, PathBuf};
  use std::sync::atomic::{AtomicBool, Ordering};
  use std::sync::Arc;
@@ -196,7 +199,7 @@ diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.
  
  use anyhow::{bail, Context, Result};
  use async_trait::async_trait;
-@@ -20,7 +20,8 @@
+@@ -20,7 +20,8 @@ use storage_util::{CompactBuffer, CompactWriter};
  use tokio::io::AsyncWriteExt;
  use tokio::net::{UnixListener, UnixStream};
  use tokio::sync::{Mutex, Notify, RwLock};
@@ -206,7 +209,7 @@ diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.
  
  use storage_util::io_ring::IoRingHandle;
  use uvm_ublk::{
-@@ -188,7 +189,7 @@
+@@ -188,7 +189,7 @@ impl ImageServiceCache {
  
  struct PoolState {
      /// Idle warm devices ready for reuse.
@@ -215,7 +218,7 @@ diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.
      /// Active exclusive-mode devices (rootfs, snapshot resume).
      active_exclusive: DashMap<u32, ActiveExclusive>,
      /// Active shared-mode devices (memory snapshot, refcounted).
-@@ -225,7 +226,7 @@
+@@ -225,7 +226,7 @@ impl PoolState {
          placeholder_dir: PathBuf,
      ) -> Self {
          Self {
@@ -224,7 +227,7 @@ diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.
              active_exclusive: DashMap::new(),
              active_shared: DashMap::new(),
              shared_by_dev_id: DashMap::new(),
-@@ -453,6 +454,19 @@
+@@ -449,6 +450,19 @@ impl UblkDaemonServer {
              "ublk daemon listening"
          );
          signal_ready()?;
@@ -244,7 +247,7 @@ diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.
  
          // Note: spawned connection handlers may outlive the accept loop when
          // shutdown fires. This is acceptable — DashMap operations are individually
-@@ -1806,12 +1820,7 @@
+@@ -1813,12 +1827,7 @@ async fn handle_update_size(
  // ── Helper functions ────────────────────────────────────────────────────────
  
  fn take_idle_device(pool: &PoolState, dev_sectors: u64) -> Option<PooledDevice> {
@@ -258,7 +261,7 @@ diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.
  }
  
  async fn return_or_stop_idle_device(
-@@ -1826,7 +1835,7 @@
+@@ -1833,7 +1842,7 @@ async fn return_or_stop_idle_device(
          _placeholder_image: placeholder_image,
      };
  
@@ -267,7 +270,7 @@ diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.
          stop_excess_idle_device(pool, ctrl_ring, pooled).await;
          return false;
      }
-@@ -1847,13 +1856,22 @@
+@@ -1854,13 +1863,22 @@ fn schedule_idle_pool_refill(
      }
  
      tokio::spawn(async move {
@@ -296,7 +299,7 @@ diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.
              schedule_idle_pool_refill(pool, ctrl_ring, virtual_size);
          }
      });
-@@ -1864,11 +1882,8 @@
+@@ -1871,11 +1889,8 @@ async fn refill_idle_pool(
      ctrl_ring: IoRingHandle<io_uring::squeue::Entry128>,
      virtual_size: u64,
  ) -> Result<()> {
@@ -310,7 +313,7 @@ diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.
  
      let (placeholder_config, placeholder_image) = pool
          .placeholder_for(virtual_size)
-@@ -1876,6 +1891,7 @@
+@@ -1883,6 +1898,7 @@ async fn refill_idle_pool(
          .context("build pool placeholder for prewarm")?;
  
      for _ in 0..to_create {
@@ -318,7 +321,7 @@ diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.
          let dev = create_new_device(ctrl_ring.clone(), &placeholder_config, &placeholder_image)
              .await
              .context("prewarm overlaybd pool device")?;
-@@ -1884,27 +1900,13 @@
+@@ -1891,7 +1907,7 @@ async fn refill_idle_pool(
              dev_sectors: placeholder_image.num_lbas(),
              _placeholder_image: Arc::clone(&placeholder_image),
          };
@@ -327,11 +330,10 @@ diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.
              stop_excess_idle_device(pool, ctrl_ring.clone(), pooled).await;
              break;
          }
-     }
- 
+@@ -1900,23 +1916,6 @@ async fn refill_idle_pool(
      Ok(())
--}
--
+ }
+ 
 -async fn refill_idle_pool_best_effort(
 -    pool: &PoolState,
 -    ctrl_ring: IoRingHandle<io_uring::squeue::Entry128>,
@@ -343,11 +345,16 @@ diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.
 -            virtual_size,
 -            "failed to refill idle overlaybd pool"
 -        );
+-        // Keep refill_inflight set during backoff so concurrent requests cannot
+-        // bypass the delay when device creation keeps failing.
+-        tokio::time::sleep(Duration::from_secs(1)).await;
 -    }
- }
- 
+-}
+-
  async fn stop_excess_idle_device(
-@@ -1915,8 +1917,8 @@
+     pool: &PoolState,
+     ctrl_ring: IoRingHandle<io_uring::squeue::Entry128>,
+@@ -1925,8 +1924,8 @@ async fn stop_excess_idle_device(
      let dev_id = pooled.dev.dev_id();
      tracing::info!(
          dev_id,
@@ -358,3 +365,54 @@ diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.
      );
      stop_overlaybd_device(ctrl_ring, pooled.dev).await;
  }
+@@ -2086,33 +2085,28 @@ mod tests {
+         let image_service = test_image_service(dir.path()).await;
+         let placeholder_dir = dir.path().join("not-a-directory");
+         std::fs::write(&placeholder_dir, b"").unwrap();
+-        let pool = PoolState::new(
+-            PoolConfig {
+-                low_watermark: 1,
+-                ..test_pool_config()
+-            },
++        let pool = Arc::new(PoolState::new(
++            PoolConfig { low_watermark: 1, ..test_pool_config() },
+             0,
+             image_service,
+             placeholder_dir,
+-        );
++        ));
+         let (ctrl_ring, _handle) =
+             storage_util::io_ring::spawn_io_ring_worker::<io_uring::squeue::Entry128>(0);
+-
+-        // Fail before allocating any ublk device, and verify repeated failures
+-        // leave time between attempts without permanently stopping retries.
+-        assert!(refill_idle_pool(&pool, ctrl_ring.clone(), 4096)
+-            .await
+-            .is_err());
+-        for _ in 0..2 {
+-            let started = tokio::time::Instant::now();
+-            tokio::time::timeout(
+-                Duration::from_secs(5),
+-                refill_idle_pool_best_effort(&pool, ctrl_ring.clone(), 4096),
+-            )
+-            .await
+-            .expect("failed refill should eventually allow another attempt");
+-            assert!(started.elapsed() >= Duration::from_secs(1));
+-        }
++        assert!(refill_idle_pool(&pool, ctrl_ring.clone(), 4096).await.is_err());
++        let started = tokio::time::Instant::now();
++        schedule_idle_pool_refill(pool.clone(), ctrl_ring.clone(), 4096);
++        tokio::time::sleep(Duration::from_millis(100)).await;
++        assert!(pool.refill_inflight.load(Ordering::Acquire));
++        // A second caller cannot bypass the failed allocation's backoff.
++        schedule_idle_pool_refill(pool.clone(), ctrl_ring, 4096);
++        pool.idle.drain_all();
++        tokio::time::timeout(Duration::from_secs(5), async {
++            while pool.refill_inflight.load(Ordering::Acquire) {
++                tokio::time::sleep(Duration::from_millis(10)).await;
++            }
++        }).await.expect("shutdown must end the retry loop after backoff");
++        assert!(started.elapsed() >= Duration::from_secs(1));
+     }
+ 
+     #[tokio::test]

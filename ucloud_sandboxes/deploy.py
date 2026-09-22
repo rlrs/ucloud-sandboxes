@@ -18,6 +18,8 @@ from .gvisor_distribution import GVISOR_COMMIT, GVISOR_SIDECARS, distribution_fi
 from .vm_init import (
     BUILDER_RUNTIME_PACKAGES,
     PINNED_STORAGE_NATIVE_AGENTENV_COMMIT,
+    PINNED_STORAGE_NATIVE_HYBRID_UPPER_SUB_VERSION,
+    PINNED_STORAGE_NATIVE_PATCHES,
     RUNTIME_KERNEL_MODULES,
     SANDBOX_RUNTIME_PACKAGES,
     ssh_init_command,
@@ -116,11 +118,7 @@ def storage_native_build_artifacts(
         )
     expected_digest = str(payload.get("artifact_sha256") or "")
     patches = payload.get("patches")
-    expected_patches = (
-        "agentenv-streaming-dense-export.patch",
-        "agentenv-pooled-delete.patch",
-        "agentenv-owner-identity.patch",
-    )
+    expected_patches = PINNED_STORAGE_NATIVE_PATCHES
     patches_valid = (
         isinstance(patches, list)
         and len(patches) == len(expected_patches)
@@ -133,6 +131,7 @@ def storage_native_build_artifacts(
     )
     if (
         payload.get("agentenv_commit") != PINNED_STORAGE_NATIVE_AGENTENV_COMMIT
+        or payload.get("hybrid_upper_sub_version") != PINNED_STORAGE_NATIVE_HYBRID_UPPER_SUB_VERSION
         or payload.get("cargo_package") != "uvm-ublk-daemon"
         or payload.get("license") != "MIT"
         or payload.get("host_architecture") not in {"x86_64", "aarch64"}
@@ -685,7 +684,9 @@ def render_remote_deploy_script(
         "    if storage_build.get('schema') != 3 or storage_build.get('license') != 'MIT':",
         "        raise SystemExit('invalid storage-native build provenance')",
         "    storage_patches = storage_build.get('patches')",
-        "    expected_storage_patches = ['agentenv-streaming-dense-export.patch', 'agentenv-pooled-delete.patch', 'agentenv-owner-identity.patch']",
+        f"    expected_storage_patches = {list(PINNED_STORAGE_NATIVE_PATCHES)!r}",
+        f"    if storage_build.get('hybrid_upper_sub_version') != {PINNED_STORAGE_NATIVE_HYBRID_UPPER_SUB_VERSION!r}:",
+        "        raise SystemExit('storage-native hybrid upper format is not pinned')",
         "    if not isinstance(storage_patches, list) or [item.get('name') for item in storage_patches if isinstance(item, dict)] != expected_storage_patches:",
         "        raise SystemExit('invalid storage-native patch set')",
         "    if not all(re.fullmatch(r'[0-9a-f]{64}', str(item.get('sha256') or '')) for item in storage_patches):",

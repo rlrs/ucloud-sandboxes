@@ -1,8 +1,8 @@
 diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.rs
-index 12067d2..5bd845e 100644
+index 6b03773..da9ff43 100644
 --- a/storage/ublk-daemon/src/server.rs
 +++ b/storage/ublk-daemon/src/server.rs
-@@ -607,7 +607,9 @@ async fn handle_connection(
+@@ -604,7 +604,9 @@ async fn handle_connection(
              )
              .await
          }
@@ -13,7 +13,7 @@ index 12067d2..5bd845e 100644
          DaemonRequest::RestackSnapshot {
              dev_id,
              output_layer_path,
-@@ -882,18 +884,32 @@ async fn create_overlaybd_device(
+@@ -892,18 +894,32 @@ async fn create_overlaybd_device(
  
  async fn handle_delete(
      devices: &DashMap<u32, ManagedDevice>,

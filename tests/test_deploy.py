@@ -18,12 +18,35 @@ from ucloud_sandboxes.deploy import (
     render_remote_deploy_script,
     run_remote_script_over_ssh,
     stage_file_over_ssh,
+    storage_native_build_artifacts,
     wheel_package_version,
 )
-from ucloud_sandboxes.vm_init import RUNTIME_KERNEL_MODULES
+from ucloud_sandboxes.vm_init import (
+    PINNED_STORAGE_NATIVE_AGENTENV_COMMIT,
+    PINNED_STORAGE_NATIVE_PATCHES,
+    RUNTIME_KERNEL_MODULES,
+)
 
 
 class DeployTests(unittest.TestCase):
+    def test_native_build_rejects_incomplete_patches_and_wrong_upper_format(self) -> None:
+        for corruption in ("missing_patch", "old_format", "missing_format"):
+            with self.subTest(corruption=corruption), TemporaryDirectory() as raw:
+                plan = self._plan(Path(raw))
+                manifest = plan.local_storage_native_manifest
+                self.assertIsNotNone(manifest)
+                storage_native_build_artifacts(manifest)
+                build = json.loads(manifest.read_text())
+                if corruption == "missing_patch":
+                    build["patches"].pop()
+                elif corruption == "old_format":
+                    build["hybrid_upper_sub_version"] = 1
+                else:
+                    del build["hybrid_upper_sub_version"]
+                manifest.write_text(json.dumps(build))
+                with self.assertRaisesRegex(ValueError, "provenance is not pinned"):
+                    storage_native_build_artifacts(manifest)
+
     @staticmethod
     def _config(**overrides: object) -> DeploymentConfig:
         raw = DeploymentConfig.default(scope_id="project-1").to_dict()
@@ -69,25 +92,16 @@ class DeployTests(unittest.TestCase):
         manifest.write_text(
             json.dumps(
                 {
-                    "agentenv_commit": "db1492b7915a408b37f863c9e3a34b2ccb2fb1b0",
+                    "agentenv_commit": PINNED_STORAGE_NATIVE_AGENTENV_COMMIT,
+                    "hybrid_upper_sub_version": 2,
                     "artifact": backend.name,
                     "artifact_sha256": backend_digest,
                     "cargo_package": "uvm-ublk-daemon",
                     "host_architecture": "x86_64",
                     "license": "MIT",
                     "patches": [
-                        {
-                            "name": "agentenv-streaming-dense-export.patch",
-                            "sha256": "a" * 64,
-                        },
-                        {
-                            "name": "agentenv-pooled-delete.patch",
-                            "sha256": "b" * 64,
-                        },
-                        {
-                            "name": "agentenv-owner-identity.patch",
-                            "sha256": "c" * 64,
-                        },
+                        {"name": name, "sha256": "a" * 64}
+                        for name in PINNED_STORAGE_NATIVE_PATCHES
                     ],
                     "schema": 3,
                 }

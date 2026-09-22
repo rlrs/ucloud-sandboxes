@@ -1,0 +1,350 @@
+{
+  "acquire_seconds": 0.031010353999931795,
+  "churn_acquire": {
+    "count": 100,
+    "max_seconds": 0.04485237500000494,
+    "p50_seconds": 0.03142525900000237,
+    "p95_seconds": 0.03920838399994864
+  },
+  "churn_iterations": 100,
+  "churn_release": {
+    "count": 100,
+    "max_seconds": 0.06861920799997279,
+    "p50_seconds": 0.014122103999966384,
+    "p95_seconds": 0.017841988000100173
+  },
+  "compacted_resume_seconds": 0.0,
+  "create_seconds": 0.17915042300001005,
+  "daemon_memory_after_churn": {
+    "RssAnon_bytes": 50581504,
+    "RssFile_bytes": 11685888,
+    "VmHWM_bytes": 62267392,
+    "VmRSS_bytes": 62267392
+  },
+  "daemon_memory_after_cleanup": {
+    "RssAnon_bytes": 50581504,
+    "RssFile_bytes": 11816960,
+    "VmHWM_bytes": 62398464,
+    "VmRSS_bytes": 62398464
+  },
+  "daemon_memory_before_churn": {
+    "RssAnon_bytes": 15798272,
+    "RssFile_bytes": 11628544,
+    "VmHWM_bytes": 27426816,
+    "VmRSS_bytes": 27426816
+  },
+  "daemon_memory_before_workload": {
+    "RssAnon_bytes": 1007616,
+    "RssFile_bytes": 9670656,
+    "VmHWM_bytes": 10678272,
+    "VmRSS_bytes": 10678272
+  },
+  "daemon_memory_samples": [
+    {
+      "RssAnon_bytes": 1007616,
+      "RssFile_bytes": 9670656,
+      "VmHWM_bytes": 10678272,
+      "VmRSS_bytes": 10678272,
+      "seconds": 5.378999958338682e-06
+    },
+    {
+      "RssAnon_bytes": 16244736,
+      "RssFile_bytes": 11628544,
+      "VmHWM_bytes": 27873280,
+      "VmRSS_bytes": 27873280,
+      "seconds": 1.001219999
+    },
+    {
+      "RssAnon_bytes": 16265216,
+      "RssFile_bytes": 11628544,
+      "VmHWM_bytes": 27893760,
+      "VmRSS_bytes": 27893760,
+      "seconds": 2.0024141179999333
+    },
+    {
+      "RssAnon_bytes": 16265216,
+      "RssFile_bytes": 11628544,
+      "VmHWM_bytes": 27893760,
+      "VmRSS_bytes": 27893760,
+      "seconds": 3.0030342109999992
+    },
+    {
+      "RssAnon_bytes": 16265216,
+      "RssFile_bytes": 11628544,
+      "VmHWM_bytes": 27893760,
+      "VmRSS_bytes": 27893760,
+      "seconds": 4.003770230999976
+    },
+    {
+      "RssAnon_bytes": 16490496,
+      "RssFile_bytes": 11628544,
+      "VmHWM_bytes": 28119040,
+      "VmRSS_bytes": 28119040,
+      "seconds": 5.004529484999921
+    },
+    {
+      "RssAnon_bytes": 50507776,
+      "RssFile_bytes": 11685888,
+      "VmHWM_bytes": 62193664,
+      "VmRSS_bytes": 62193664,
+      "seconds": 6.0055999569999585
+    },
+    {
+      "RssAnon_bytes": 50180096,
+      "RssFile_bytes": 11685888,
+      "VmHWM_bytes": 61865984,
+      "VmRSS_bytes": 61865984,
+      "seconds": 7.008062415999916
+    },
+    {
+      "RssAnon_bytes": 50282496,
+      "RssFile_bytes": 11685888,
+      "VmHWM_bytes": 61968384,
+      "VmRSS_bytes": 61968384,
+      "seconds": 8.010667630999933
+    },
+    {
+      "RssAnon_bytes": 50581504,
+      "RssFile_bytes": 11685888,
+      "VmHWM_bytes": 62267392,
+      "VmRSS_bytes": 62267392,
+      "seconds": 9.011572753999985
+    },
+    {
+      "RssAnon_bytes": 50581504,
+      "RssFile_bytes": 11685888,
+      "VmHWM_bytes": 62267392,
+      "VmRSS_bytes": 62267392,
+      "seconds": 10.012199828000007
+    },
+    {
+      "RssAnon_bytes": 50581504,
+      "RssFile_bytes": 11685888,
+      "VmHWM_bytes": 62267392,
+      "VmRSS_bytes": 62267392,
+      "seconds": 11.012766722999913
+    },
+    {
+      "RssAnon_bytes": 50581504,
+      "RssFile_bytes": 11685888,
+      "VmHWM_bytes": 62267392,
+      "VmRSS_bytes": 62267392,
+      "seconds": 12.013353665999944
+    },
+    {
+      "RssAnon_bytes": 50581504,
+      "RssFile_bytes": 11685888,
+      "VmHWM_bytes": 62267392,
+      "VmRSS_bytes": 62267392,
+      "seconds": 13.014028782999958
+    },
+    {
+      "RssAnon_bytes": 50581504,
+      "RssFile_bytes": 11685888,
+      "VmHWM_bytes": 62267392,
+      "VmRSS_bytes": 62267392,
+      "seconds": 14.014763629999948
+    },
+    {
+      "RssAnon_bytes": 50581504,
+      "RssFile_bytes": 11685888,
+      "VmHWM_bytes": 62267392,
+      "VmRSS_bytes": 62267392,
+      "seconds": 15.015480509999975
+    },
+    {
+      "RssAnon_bytes": 50581504,
+      "RssFile_bytes": 11685888,
+      "VmHWM_bytes": 62267392,
+      "VmRSS_bytes": 62267392,
+      "seconds": 16.01622432099998
+    },
+    {
+      "RssAnon_bytes": 50581504,
+      "RssFile_bytes": 11685888,
+      "VmHWM_bytes": 62267392,
+      "VmRSS_bytes": 62267392,
+      "seconds": 17.016855991999932
+    },
+    {
+      "RssAnon_bytes": 50581504,
+      "RssFile_bytes": 11685888,
+      "VmHWM_bytes": 62267392,
+      "VmRSS_bytes": 62267392,
+      "seconds": 18.017502035000007
+    },
+    {
+      "RssAnon_bytes": 50581504,
+      "RssFile_bytes": 11816960,
+      "VmHWM_bytes": 62398464,
+      "VmRSS_bytes": 62398464,
+      "seconds": 19.01814672599994
+    },
+    {
+      "RssAnon_bytes": 50581504,
+      "RssFile_bytes": 11816960,
+      "VmHWM_bytes": 62398464,
+      "VmRSS_bytes": 62398464,
+      "seconds": 20.01872416699996
+    },
+    {
+      "RssAnon_bytes": 50581504,
+      "RssFile_bytes": 11816960,
+      "VmHWM_bytes": 62398464,
+      "VmRSS_bytes": 62398464,
+      "seconds": 21.019413375
+    },
+    {
+      "RssAnon_bytes": 50581504,
+      "RssFile_bytes": 11816960,
+      "VmHWM_bytes": 62398464,
+      "VmRSS_bytes": 62398464,
+      "seconds": 22.02000624699997
+    },
+    {
+      "RssAnon_bytes": 50581504,
+      "RssFile_bytes": 11816960,
+      "VmHWM_bytes": 62398464,
+      "VmRSS_bytes": 62398464,
+      "seconds": 23.02067286199997
+    },
+    {
+      "RssAnon_bytes": 50581504,
+      "RssFile_bytes": 11816960,
+      "VmHWM_bytes": 62398464,
+      "VmRSS_bytes": 62398464,
+      "seconds": 24.021253386000012
+    }
+  ],
+  "device_pool_enabled": true,
+  "device_pool_high_watermark": 16,
+  "device_pool_low_watermark": 2,
+  "final_metrics": {
+    "active_operations": 0,
+    "cache_bytes": 0,
+    "device_pool_acquires": 269,
+    "device_pool_discards": 0,
+    "device_pool_enabled": true,
+    "device_pool_high_watermark": 16,
+    "device_pool_idle_devices": 10,
+    "device_pool_low_watermark": 2,
+    "device_pool_new_acquires": 4,
+    "device_pool_releases": 270,
+    "device_pool_reused_acquires": 265,
+    "error_volumes": 0,
+    "hard_capacity_bytes": 10737418240,
+    "hard_reserved_bytes": 9663676416,
+    "journal_batch_commit_ms": 1293.675669001118,
+    "journal_batch_commits": 1380,
+    "journal_batch_failed_batches": 0.0,
+    "journal_batch_operations": 1628,
+    "journal_batch_queue_wait_ms": 8860.446029999022,
+    "journal_batch_transaction_ms": 1501.545652000118,
+    "local_compaction_active": 0,
+    "local_compaction_adopted": 0,
+    "local_compaction_cancelled": 0,
+    "local_compaction_completed": 0,
+    "local_compaction_deferred": 0,
+    "local_compaction_discarded_bytes": 0,
+    "local_compaction_failed": 0,
+    "local_compaction_input_bytes": 0,
+    "local_compaction_output_bytes": 0,
+    "local_compaction_paced_ms": 0,
+    "local_compaction_waiting": 0,
+    "max_concurrent_operations": 8,
+    "published_local_cache_bytes": 0,
+    "published_local_cache_entries": 0,
+    "published_local_cache_evictions": 0,
+    "published_local_cache_hits": 0,
+    "published_local_cache_misses": 0,
+    "published_volumes": 0,
+    "retired_devices": 0,
+    "retired_reserved_bytes": 0,
+    "ublk_active_devices": 0,
+    "ublk_live_devices": 10,
+    "ublk_max_devices": 0,
+    "volume_count": 9,
+    "waiting_operations": 0
+  },
+  "memory_idle_seconds": 15.0,
+  "parallel_acquire": {
+    "count": 160,
+    "max_seconds": 0.12108920799994394,
+    "p50_seconds": 0.08724085899996226,
+    "p95_seconds": 0.11206466400005866
+  },
+  "parallel_churn_seconds": 2.9072810979999986,
+  "parallel_release": {
+    "count": 160,
+    "max_seconds": 0.08478681399992638,
+    "p50_seconds": 0.04475111300007484,
+    "p95_seconds": 0.06100433699998575
+  },
+  "parallel_rounds": 20,
+  "parallel_seed_seconds": 0.45281839599999785,
+  "parallel_volumes": 8,
+  "post_cleanup_metrics": {
+    "active_operations": 0,
+    "cache_bytes": 0,
+    "device_pool_acquires": 269,
+    "device_pool_discards": 0,
+    "device_pool_enabled": true,
+    "device_pool_high_watermark": 16,
+    "device_pool_idle_devices": 10,
+    "device_pool_low_watermark": 2,
+    "device_pool_new_acquires": 4,
+    "device_pool_releases": 270,
+    "device_pool_reused_acquires": 265,
+    "error_volumes": 0,
+    "hard_capacity_bytes": 10737418240,
+    "hard_reserved_bytes": 0,
+    "journal_batch_commit_ms": 1313.2822790007594,
+    "journal_batch_commits": 1407,
+    "journal_batch_failed_batches": 0.0,
+    "journal_batch_operations": 1655,
+    "journal_batch_queue_wait_ms": 8861.151382999305,
+    "journal_batch_transaction_ms": 1509.518651999997,
+    "local_compaction_active": 0,
+    "local_compaction_adopted": 0,
+    "local_compaction_cancelled": 0,
+    "local_compaction_completed": 0,
+    "local_compaction_deferred": 0,
+    "local_compaction_discarded_bytes": 0,
+    "local_compaction_failed": 0,
+    "local_compaction_input_bytes": 0,
+    "local_compaction_output_bytes": 0,
+    "local_compaction_paced_ms": 0,
+    "local_compaction_waiting": 0,
+    "max_concurrent_operations": 8,
+    "published_local_cache_bytes": 0,
+    "published_local_cache_entries": 0,
+    "published_local_cache_evictions": 0,
+    "published_local_cache_hits": 0,
+    "published_local_cache_misses": 0,
+    "published_volumes": 0,
+    "retired_devices": 0,
+    "retired_reserved_bytes": 0,
+    "ublk_active_devices": 0,
+    "ublk_live_devices": 10,
+    "ublk_max_devices": 0,
+    "volume_count": 9,
+    "waiting_operations": 0
+  },
+  "publication_seconds": 0.0,
+  "reconciliation": {
+    "deleted_orphan_device_ids": [],
+    "terminal_records": [],
+    "volume_count": 1
+  },
+  "release_seconds": 0.010966150000058406,
+  "schema": 1,
+  "seal_seconds": 0.057923595000033856,
+  "sealed_allocated_bytes": 67584000,
+  "sealed_file_bytes": 67584000,
+  "second_publication_seconds": 0.0,
+  "source_deleted_before_destination_resume": false,
+  "status": "passed",
+  "test_root": "/var/lib/agentenv022-qualification/ucloud-storage-native-service-jyqtsgmq",
+  "upper_mode": "hybridLogStructured",
+  "virtual_size": 1073741824
+}

@@ -5,10 +5,12 @@ dependency used by the storage-native runtime. AgentEnv supplies the block
 device implementation; the direct Warden remains the sole sandbox lifecycle
 owner.
 
-The dependency is pinned to the AgentEnv v0.1.2 release commit
-`db1492b7915a408b37f863c9e3a34b2ccb2fb1b0` under its MIT license. This release
-contains the compact-index ordering, oversized-segment, shared remote-cache,
-and adaptive warm-pool fixes used by detached publication and wake. Build it
+The dependency is pinned to the AgentEnv v0.2.2 release commit
+`771ea55ca80abbfacc85e716ec91c40e82b3398b` under its MIT license. This release
+includes cache allocation/eviction safety, premerged-index memory fixes, and
+hybrid-upper discard/rewrite allocation reuse. **Old hybrid writable uppers
+cannot be reopened with this backend.** Use the migration procedure below.
+Build it on Linux with a current stable Rust toolchain from
 from an exact, clean checkout:
 
 ```bash
@@ -16,18 +18,79 @@ from an exact, clean checkout:
 ```
 
 The build applies the dense/compacted-stream export, pooled-exclusive-delete,
-owner-identity, owner-transition, premerged-identity, and device-reuse patches.
+owner-identity, owner-transition, premerged-identity, device-reuse, jemalloc,
+and storage-upgrade-compatibility patches. The tagged upstream daemon does
+not activate jemalloc; our patch restores upstream's allocator change.
 It runs targeted compaction, cache, ownership, device-pool, and protocol tests and emits a
 content-addressed binary, license, and schema-3 build manifest with every patch
-digest. A production package must use that manifest and must not fetch or build
+digest and `hybrid_upper_sub_version: 2`. Both packaging and VM initialization
+validate the full patch list and writable-format marker. A production package
+must use that manifest and must not fetch or build
 an unpinned branch during node startup.
 
-AgentEnv v0.1.2 requires both `--global-config` and
+The daemon requires both `--global-config` and
 `--resize-global-config`. Production init writes separate runtime and resize
 configs backed by sibling `remote-blocks` and `resize-blocks` directories.
 They must remain isolated: the offline C++ resize cache has destructive
 eviction semantics that are not compatible with the shared Rust runtime cache.
 Background download remains disabled in both configs.
+
+## Migrating from the v0.1.2 backend
+
+This is a storage migration, not a live executable replacement. Read-only
+sealed layers remain compatible; writable hybrid data/index pairs do not.
+The local format patch stamps fresh hybrid uppers with sub-version 2 and
+rejects old or unknown versions before index replay. Do not edit existing
+headers to bypass this check. The old daemon has no reciprocal rejection
+guard, so rollback must also use sealed layers and fresh uppers.
+VM initialization also refuses to overwrite an installed backend without
+current format provenance, before installing packages or restarting services.
+Use a fresh base image or a newly baked image carrying this backend; cloning
+an old prebuilt worker image does not make its storage format current. Do not
+remove the installed binary or provenance file to bypass the guard.
+
+1. Retain the old binary, package bundle and configuration. Quiesce each
+   sandbox on the old stack, seal its upper, and complete durable snapshot
+   publication before releasing its last local copy. A parked sandbox with
+   unpublished layers has **not** completed migration.
+2. Prepare fresh workers with the new pinned artifact and fresh cache/runtime
+   directories. Restore the published immutable rootfs and memory state into
+   fresh writable uppers, then verify execution and another park/resume cycle.
+   Keep old workers available until all assigned state is accounted for; an
+   unreachable worker or an old heartbeat does not authorize deleting it.
+3. Switch placement to qualified new workers and drain old workers through
+   normal ownership-fenced lifecycle operations. Never replace the daemon
+   underneath mounted devices or reuse an old worker's writable directories.
+4. To roll back, quiesce and publish using the new daemon, then restore those
+   sealed layers with the retained old stack into **new** writable uppers.
+   Do not start the old daemon against new writable state. Keep both artifacts
+   until the migrated workload has passed its acceptance checks.
+
+UCloud and Hetzner use this same storage format and require the same procedure.
+No SDK change is needed for the backend upgrade.
+
+`qualify_backend_upgrade.py` exercises upgrade and sealed-layer rollback over
+HTTP range reads, filesystem metadata, overlayfs, a 256 MiB memory image,
+streamed dense export, old-upper rejection, and a destination cache filesystem
+with only 64 KiB free. Run it only on a disposable Linux ublk VM:
+
+```bash
+sudo python3 qualify_backend_upgrade.py \
+  --old-daemon /path/to/retained-v0.1.2-backend \
+  --new-daemon /path/to/pinned-v0.2.2-backend \
+  --work-root /var/lib/storage-upgrade-qualification \
+  --output /tmp/storage-upgrade.json
+```
+
+The dedicated work directory must already exist. The test formats temporary
+devices and a bounded loop filesystem; it never fills the host root filesystem.
+Its range server runs in a separate process so mmap page faults cannot block
+the HTTP server on Python's GIL. Add `--runsc`, `--conformance-workload` and
+`--noop-workload` (the latter two built statically from the repository C
+sources) to verify real gVisor processes across all three migration cases.
+See the
+[qualification report](../../docs/reviews/agentenv022-upgrade-2026-09-22.md)
+for measured results and remaining production acceptance checks.
 
 The device-reuse patch treats the pool high watermark as a steady-state idle
 cache target, not a bound on active devices or recently returned devices.

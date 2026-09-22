@@ -1,8 +1,8 @@
 diff --git a/Cargo.lock b/Cargo.lock
-index 04075b6..0f0fdef 100644
+index 5e9435c..9fd2c56 100644
 --- a/Cargo.lock
 +++ b/Cargo.lock
-@@ -8297,6 +8297,7 @@ version = "0.1.0"
+@@ -8276,6 +8276,7 @@ version = "0.1.0"
  dependencies = [
   "agentenv-observability",
   "anyhow",
@@ -10,7 +10,7 @@ index 04075b6..0f0fdef 100644
   "clap",
   "dashmap",
   "io-uring",
-@@ -8307,6 +8308,7 @@ dependencies = [
+@@ -8286,6 +8287,7 @@ dependencies = [
   "reqwest 0.13.3",
   "serde",
   "serde_json",
@@ -19,10 +19,10 @@ index 04075b6..0f0fdef 100644
   "tempfile",
   "tokio",
 diff --git a/storage/overlaybd/src/image/image_file.rs b/storage/overlaybd/src/image/image_file.rs
-index 8cea1c9..a7ee207 100644
+index a849e79..b733d40 100644
 --- a/storage/overlaybd/src/image/image_file.rs
 +++ b/storage/overlaybd/src/image/image_file.rs
-@@ -163,10 +163,14 @@ impl ImageFile {
+@@ -190,10 +190,14 @@ impl ImageFile {
      }
  
      pub async fn compact(&self, as_file: Arc<dyn VirtualFile>) -> Result<()> {
@@ -39,7 +39,7 @@ index 8cea1c9..a7ee207 100644
          }
      }
  
-@@ -693,8 +697,18 @@ impl ImageFile {
+@@ -760,8 +764,18 @@ impl ImageFile {
                  None,
              )
          };
@@ -61,10 +61,10 @@ index 8cea1c9..a7ee207 100644
              file: switch_file,
              download,
 diff --git a/storage/overlaybd/src/lsmt/file/readonly.rs b/storage/overlaybd/src/lsmt/file/readonly.rs
-index b1c1060..1c0a6ab 100644
+index ff06dab..621c0b7 100644
 --- a/storage/overlaybd/src/lsmt/file/readonly.rs
 +++ b/storage/overlaybd/src/lsmt/file/readonly.rs
-@@ -170,12 +170,14 @@ impl LSMTReadOnlyFile {
+@@ -174,12 +174,14 @@ impl LSMTReadOnlyFile {
      }
  
      pub async fn flatten(&self, dest_file: Arc<dyn VirtualFile>) -> Result<()> {
@@ -83,10 +83,10 @@ index b1c1060..1c0a6ab 100644
  
      pub(super) fn from_merged_layers(
 diff --git a/storage/overlaybd/src/lsmt/file/tests.rs b/storage/overlaybd/src/lsmt/file/tests.rs
-index 907ccd0..a8f897e 100644
+index ea4e5ba..6ebbb3a 100644
 --- a/storage/overlaybd/src/lsmt/file/tests.rs
 +++ b/storage/overlaybd/src/lsmt/file/tests.rs
-@@ -2382,6 +2382,59 @@ async fn test_flatten_keeps_zero_written_blocks_as_data_segments() {
+@@ -2911,6 +2911,58 @@ async fn test_flatten_keeps_zero_written_blocks_as_data_segments() {
      );
  }
  
@@ -107,9 +107,8 @@ index 907ccd0..a8f897e 100644
 +    drop(lsmt);
 +
 +    let source = open_file_ro(data).await.unwrap();
-+    let ring = test_io_ring();
 +    let flat = Arc::new(
-+        LocalFile::new(temp_dir.path().join("flat-mixed.lsmt"), ring)
++        LocalFile::new(temp_dir.path().join("flat-mixed.lsmt"))
 +            .await
 +            .unwrap(),
 +    );
@@ -147,7 +146,7 @@ index 907ccd0..a8f897e 100644
  async fn test_compact_to_rejects_short_reads() {
      let temp_dir = TempDir::new().unwrap();
 diff --git a/storage/ublk-daemon/Cargo.toml b/storage/ublk-daemon/Cargo.toml
-index 6973626..681dc8b 100644
+index 72d1f91..19708a8 100644
 --- a/storage/ublk-daemon/Cargo.toml
 +++ b/storage/ublk-daemon/Cargo.toml
 @@ -12,6 +12,7 @@ agentenv-observability = { path = "../../crates/observability" }
@@ -167,10 +166,10 @@ index 6973626..681dc8b 100644
  tokio = { version = "1.44.2", features = ["full"] }
  tracing = "0.1.41"
 diff --git a/storage/ublk-daemon/src/protocol.rs b/storage/ublk-daemon/src/protocol.rs
-index 09daf5c..51eea0b 100644
+index 3e8da4a..59fb37a 100644
 --- a/storage/ublk-daemon/src/protocol.rs
 +++ b/storage/ublk-daemon/src/protocol.rs
-@@ -46,6 +46,19 @@ pub enum DaemonRequest {
+@@ -47,6 +47,19 @@ pub enum DaemonRequest {
          dev_id: u32,
          output_layer_path: PathBuf,
      },
@@ -190,9 +189,9 @@ index 09daf5c..51eea0b 100644
      /// Query daemon capabilities (e.g., dynamic resize support).
      GetFeatures,
      /// Report that the sandbox owning a memory-snapshot device finished
-@@ -125,6 +138,10 @@ pub enum DaemonResponse {
-     RestackSnapshotCreated {
-         descriptor: Option<LayerDescriptor>,
+@@ -134,6 +147,10 @@ pub enum DaemonResponse {
+         #[serde(default)]
+         ext4_used_bytes: Option<u64>,
      },
 +    DenseLayerExported {
 +        digest: String,
@@ -201,7 +200,7 @@ index 09daf5c..51eea0b 100644
      Ok,
      TerminalError {
          message: String,
-@@ -515,6 +532,52 @@ mod tests {
+@@ -532,6 +549,52 @@ mod tests {
          }
      }
  
@@ -254,8 +253,8 @@ index 09daf5c..51eea0b 100644
      #[test]
      fn request_shutdown_round_trip() {
          let req = DaemonRequest::Shutdown;
-@@ -574,6 +637,21 @@ mod tests {
-         ));
+@@ -634,6 +697,21 @@ mod tests {
+         }
      }
  
 +    #[test]
@@ -277,7 +276,7 @@ index 09daf5c..51eea0b 100644
  
      #[tokio::test]
 diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.rs
-index 1803e15..5cca8b5 100644
+index bc860c6..6b03773 100644
 --- a/storage/ublk-daemon/src/server.rs
 +++ b/storage/ublk-daemon/src/server.rs
 @@ -6,14 +6,19 @@ use std::sync::Arc;
@@ -362,7 +361,7 @@ index 1803e15..5cca8b5 100644
  // ── Pooled device wrapper ───────────────────────────────────────────────────
  
  /// A warm ublk device ready for reuse.
-@@ -554,6 +613,23 @@ async fn handle_connection(
+@@ -550,6 +609,23 @@ async fn handle_connection(
              dev_id,
              output_layer_path,
          } => handle_restack_snapshot(&devices, &pool_state, dev_id, &output_layer_path).await,
@@ -386,8 +385,8 @@ index 1803e15..5cca8b5 100644
          DaemonRequest::GetFeatures => handle_get_features(&pool_state),
          DaemonRequest::NotifySandboxReady { device_key } => {
              tracing::info!(
-@@ -1011,6 +1087,85 @@ async fn handle_restack_snapshot(
-     Ok(DaemonResponse::RestackSnapshotCreated { descriptor })
+@@ -1016,6 +1092,85 @@ async fn handle_restack_snapshot(
+     })
  }
  
 +async fn handle_export_dense_layer(

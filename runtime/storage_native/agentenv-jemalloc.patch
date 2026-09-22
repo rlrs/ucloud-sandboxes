@@ -1,0 +1,39 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 9fd2c56..b3323b6 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -8290,6 +8290,7 @@ dependencies = [
+  "sha2 0.10.9",
+  "storage-util",
+  "tempfile",
++ "tikv-jemallocator",
+  "tokio",
+  "toml",
+  "tracing",
+diff --git a/storage/ublk-daemon/Cargo.toml b/storage/ublk-daemon/Cargo.toml
+index 19708a8..7ad6bfd 100644
+--- a/storage/ublk-daemon/Cargo.toml
++++ b/storage/ublk-daemon/Cargo.toml
+@@ -26,6 +26,7 @@ tokio = { version = "1.44.2", features = ["full"] }
+ tracing = "0.1.41"
+ tracing-log = "0.2.0"
+ reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"] }
++tikv-jemallocator = { version = "0.6", features = ["background_threads"] }
+ 
+ [dev-dependencies]
+ tempfile = "3"
+diff --git a/storage/ublk-daemon/src/main.rs b/storage/ublk-daemon/src/main.rs
+index a1cf2bb..e25d750 100644
+--- a/storage/ublk-daemon/src/main.rs
++++ b/storage/ublk-daemon/src/main.rs
+@@ -16,6 +16,10 @@ use uvm_ublk_daemon::{server::UblkDaemonServer, ResizeToolSpec};
+ 
+ mod metrics_server;
+ 
++// Mirrors src/bin/server.rs.
++#[global_allocator]
++static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
++
+ #[derive(Debug, Parser)]
+ #[command(
+     name = "uvm-ublk-daemon",

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly EXPECTED_COMMIT="db1492b7915a408b37f863c9e3a34b2ccb2fb1b0"
+readonly EXPECTED_COMMIT="771ea55ca80abbfacc85e716ec91c40e82b3398b"
 readonly PACKAGE="uvm-ublk-daemon"
 readonly BINARY="uvm-ublk-daemon"
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -12,6 +12,8 @@ readonly PATCH_PATHS=(
   "${SCRIPT_DIR}/agentenv-owner-transitions.patch"
   "${SCRIPT_DIR}/agentenv-premerged-identity.patch"
   "${SCRIPT_DIR}/agentenv-device-reuse.patch"
+  "${SCRIPT_DIR}/agentenv-jemalloc.patch"
+  "${SCRIPT_DIR}/agentenv-storage-upgrade-compatibility.patch"
 )
 
 usage() {
@@ -51,75 +53,44 @@ done
 
 (
   cd "${SOURCE_DIR}"
-  cargo test --locked --release -p overlaybd --lib \
-    lsmt::file::tests::test_flatten_mixed_data_and_discard_keeps_index_sorted
-  cargo test --locked --release -p overlaybd --lib \
-    lsmt::file::tests::test_create_mappings_from_sparse_large_region_split
-  cargo test --locked --release -p overlaybd --lib premerged
-  cargo test --locked --release -p overlaybd --lib test_file_cache_startup_preserves_sibling_cache_directories
-  cargo test --locked --release -p "${PACKAGE}" --lib protocol::tests
-  cargo test --locked --release -p "${PACKAGE}" --lib runtime_owner_tests
-  cargo test --locked --release -p "${PACKAGE}" --lib idle_pool::tests
+  cargo test --locked --release -p overlaybd --features io-uring --lib lsmt::file::tests
+  cargo test --locked --release -p overlaybd --features io-uring --lib backend::cache::tests
+  cargo test --locked --release -p "${PACKAGE}" --lib
   cargo build --locked --release -p "${PACKAGE}" --bin "${BINARY}"
 )
 
 readonly BUILT_BINARY="${SOURCE_DIR}/target/release/${BINARY}"
 [[ -x "${BUILT_BINARY}" ]]
 readonly BINARY_SHA256="$(sha256sum "${BUILT_BINARY}" | awk '{print $1}')"
-readonly DENSE_PATCH_SHA256="$(sha256sum "${PATCH_PATHS[0]}" | awk '{print $1}')"
-readonly POOLED_DELETE_PATCH_SHA256="$(sha256sum "${PATCH_PATHS[1]}" | awk '{print $1}')"
-readonly OWNER_IDENTITY_PATCH_SHA256="$(sha256sum "${PATCH_PATHS[2]}" | awk '{print $1}')"
-readonly OWNER_TRANSITIONS_PATCH_SHA256="$(sha256sum "${PATCH_PATHS[3]}" | awk '{print $1}')"
-readonly PREMERGED_IDENTITY_PATCH_SHA256="$(sha256sum "${PATCH_PATHS[4]}" | awk '{print $1}')"
-readonly DEVICE_REUSE_PATCH_SHA256="$(sha256sum "${PATCH_PATHS[5]}" | awk '{print $1}')"
 readonly ARTIFACT_NAME="${BINARY}-${BINARY_SHA256}"
 install -m 0755 "${BUILT_BINARY}" "${OUTPUT_DIR}/${ARTIFACT_NAME}"
 install -m 0644 "${SOURCE_DIR}/LICENSE" "${OUTPUT_DIR}/${ARTIFACT_NAME}.LICENSE"
 
-python3 - "${OUTPUT_DIR}/${ARTIFACT_NAME}.manifest.json" <<PY
+python3 - "${OUTPUT_DIR}/${ARTIFACT_NAME}.manifest.json" "${EXPECTED_COMMIT}" "${ARTIFACT_NAME}" "${BINARY_SHA256}" "${PATCH_PATHS[@]}" <<'PYMANIFEST'
+import hashlib
 import json
 from pathlib import Path
 import platform
+import subprocess
+import sys
 
+manifest, commit, artifact, digest, *patches = sys.argv[1:]
 payload = {
-    "agentenv_commit": "${EXPECTED_COMMIT}",
-    "artifact": "${ARTIFACT_NAME}",
-    "artifact_sha256": "${BINARY_SHA256}",
-    "cargo_package": "${PACKAGE}",
+    "agentenv_commit": commit,
+    "artifact": artifact,
+    "artifact_sha256": digest,
+    "cargo_package": "uvm-ublk-daemon",
     "host_architecture": platform.machine(),
+    "hybrid_upper_sub_version": 2,
     "license": "MIT",
     "patches": [
-        {
-            "name": "$(basename "${PATCH_PATHS[0]}")",
-            "sha256": "${DENSE_PATCH_SHA256}",
-        },
-        {
-            "name": "$(basename "${PATCH_PATHS[1]}")",
-            "sha256": "${POOLED_DELETE_PATCH_SHA256}",
-        },
-        {
-            "name": "$(basename "${PATCH_PATHS[2]}")",
-            "sha256": "${OWNER_IDENTITY_PATCH_SHA256}",
-        },
-        {
-            "name": "$(basename "${PATCH_PATHS[3]}")",
-            "sha256": "${OWNER_TRANSITIONS_PATCH_SHA256}",
-        },
-        {
-            "name": "$(basename "${PATCH_PATHS[4]}")",
-            "sha256": "${PREMERGED_IDENTITY_PATCH_SHA256}",
-        },
-        {
-            "name": "$(basename "${PATCH_PATHS[5]}")",
-            "sha256": "${DEVICE_REUSE_PATCH_SHA256}",
-        },
+        {"name": Path(path).name, "sha256": hashlib.sha256(Path(path).read_bytes()).hexdigest()}
+        for path in patches
     ],
+    "rustc": subprocess.check_output(["rustc", "--version"], text=True).strip(),
     "schema": 3,
 }
-Path("${OUTPUT_DIR}/${ARTIFACT_NAME}.manifest.json").write_text(
-    json.dumps(payload, indent=2, sort_keys=True) + "\n",
-    encoding="utf-8",
-)
-PY
+Path(manifest).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PYMANIFEST
 
 echo "${OUTPUT_DIR}/${ARTIFACT_NAME}"

@@ -49,6 +49,8 @@ f runtime/storage-native/backend
 f runtime/storage-native/build-manifest.json
 f runtime/storage-native/LICENSE
 b patch
+b upper_format
+b missing_patch
 """.format(release=os.uname().release).splitlines()
 
 
@@ -79,6 +81,7 @@ def write_bundle(root: Path, role: str) -> dict:
         patch_names = PINNED_STORAGE_NATIVE_PATCHES
         build = {  # fmt: skip
             "schema": 3, "agentenv_commit": PINNED_STORAGE_NATIVE_AGENTENV_COMMIT,
+            "hybrid_upper_sub_version": 2,
             "artifact_sha256": backend["sha256"], "host_architecture": HOST_ARCHITECTURE, "license": "MIT",
             "patches": [{"name": name, "sha256": "a" * 64} for name in patch_names],
         }
@@ -99,6 +102,33 @@ def write_bundle(root: Path, role: str) -> dict:
 
 
 class VmInitTests(unittest.TestCase):
+    def test_storage_format_upgrade_guard_requires_a_fresh_or_current_worker(self) -> None:
+        script = render_vm_init_script(self._options())
+        guard = script.split("<<'STORAGE_UPGRADE_GUARD'\n", 1)[1].split(
+            "\nSTORAGE_UPGRADE_GUARD", 1
+        )[0]
+        self.assertLess(script.index("STORAGE_UPGRADE_GUARD"), script.index("install_bundled_runtime()"))
+        for state in ("fresh", "old", "missing", "malformed", "current"):
+            with self.subTest(state=state), TemporaryDirectory() as raw:
+                root = Path(raw)
+                backend, manifest = root / "backend", root / "manifest.json"
+                if state != "fresh":
+                    backend.write_bytes(b"installed-backend")
+                if state in {"old", "current"}:
+                    manifest.write_text(json.dumps({
+                        "agentenv_commit": PINNED_STORAGE_NATIVE_AGENTENV_COMMIT,
+                        "hybrid_upper_sub_version": 2 if state == "current" else 1,
+                    }))
+                elif state == "malformed":
+                    manifest.write_text("[]")
+                result = subprocess.run(
+                    [sys.executable, "-", str(backend), str(manifest)],
+                    input=guard, text=True, capture_output=True,
+                )
+                self.assertEqual(result.returncode == 0, state in {"fresh", "current"})
+                if result.returncode:
+                    self.assertIn("Refusing in-place storage format upgrade", result.stderr)
+
     @staticmethod
     def _options(**overrides: object) -> VmInitOptions:
         values: dict[str, object] = {
@@ -351,7 +381,7 @@ class VmInitTests(unittest.TestCase):
 
     def test_bundle_validator_fails_closed_on_provenance_corruption(self) -> None:
         _script, validator = self._bundle_validator()
-        self.assertEqual(len(CORRUPTIONS), 16)
+        self.assertEqual(len(CORRUPTIONS), 18)
         for corruption in CORRUPTIONS:
             with self.subTest(corruption=corruption), TemporaryDirectory() as raw_dir:
                 root = Path(raw_dir)
@@ -363,7 +393,12 @@ class VmInitTests(unittest.TestCase):
                 elif kind == "b":
                     build_path = root / "runtime/storage-native/build-manifest.json"
                     build = json.loads(build_path.read_text(encoding="utf-8"))
-                    build["patches"][0]["name"] = "wrong.patch"
+                    if target == "patch":
+                        build["patches"][0]["name"] = "wrong.patch"
+                    elif target == "upper_format":
+                        build["hybrid_upper_sub_version"] = 1
+                    elif target == "missing_patch":
+                        build["patches"].pop()
                     content = (json.dumps(build) + "\n").encode()
                     build_path.write_bytes(content)
                     manifest["runtime"]["storage_native"]["manifest_sha256"] = (

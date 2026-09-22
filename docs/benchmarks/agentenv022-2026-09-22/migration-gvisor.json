@@ -1,0 +1,425 @@
+{
+  "status": "passed",
+  "cases": {
+    "upgrade": {
+      "schema": 2,
+      "status": "passed",
+      "upper_mode": "hybridLogStructured",
+      "virtual_size": 1073741824,
+      "test_root": "/var/lib/agentenv022-qualification/ucloud-storage-native-0jbg7376",
+      "gvisor_network_namespace": "ucloud-storage-native-84825",
+      "gvisor": {
+        "initial_response": "ok 4295489536",
+        "park_seconds": 0.0532869189999019,
+        "checkpoint_artifacts": {
+          "application_memory.img": {
+            "allocated_bytes": 17174528,
+            "file_bytes": 1073741824
+          },
+          "checkpoint.img": {
+            "allocated_bytes": 212992,
+            "file_bytes": 212855
+          },
+          "pages.img": {
+            "allocated_bytes": 0,
+            "file_bytes": 0
+          },
+          "pages_meta.img": {
+            "allocated_bytes": 4096,
+            "file_bytes": 576
+          }
+        },
+        "restore": {
+          "conformance_read_bytes": 16732160,
+          "conformance_seconds": 0.12742635999984486,
+          "noop_read_bytes": 106496,
+          "noop_seconds": 0.027201054999977714,
+          "response": "ok 8590456832",
+          "restore_read_bytes": 499712,
+          "restore_seconds": 0.21794520499997816
+        }
+      },
+      "layer": null,
+      "destination_backend_sha256": "76d59a1c10cb495e90380e320de8fe30e6370f8b374aab410494c8e0b92a5748",
+      "legacy_upper_rejected_without_modification": true,
+      "enospc_errno": 28,
+      "snapshot": {
+        "allocated_bytes": 52191232,
+        "file_bytes": 52191232,
+        "logical_device_bytes": 1073741824,
+        "allocated_to_logical_ratio": 0.04860687255859375,
+        "file_to_logical_ratio": 0.04860687255859375
+      },
+      "phases": {
+        "daemon_start": {
+          "seconds": 0.05294514599995637,
+          "counters": null,
+          "counter_note": "daemon changed during phase"
+        },
+        "create_and_format": {
+          "seconds": 0.10882382700015114,
+          "counters": {
+            "daemon_read_bytes": 0,
+            "daemon_write_bytes": 34590720,
+            "daemon_user_ticks": 1,
+            "daemon_system_ticks": 7,
+            "device_read_sectors": 0,
+            "device_write_sectors": 0
+          }
+        },
+        "mount_and_populate": {
+          "seconds": 0.5101368020000336,
+          "counters": {
+            "daemon_read_bytes": 0,
+            "daemon_write_bytes": 18518016,
+            "daemon_user_ticks": 0,
+            "daemon_system_ticks": 3,
+            "device_read_sectors": 682,
+            "device_write_sectors": 36304
+          }
+        },
+        "freeze_and_seal": {
+          "seconds": 0.36442876199998864,
+          "counters": {
+            "daemon_read_bytes": 0,
+            "daemon_write_bytes": 765952,
+            "daemon_user_ticks": 5,
+            "daemon_system_ticks": 7,
+            "device_read_sectors": 0,
+            "device_write_sectors": 752
+          }
+        },
+        "release_initial": {
+          "seconds": 0.03377264299979288,
+          "counters": {
+            "daemon_read_bytes": 0,
+            "daemon_write_bytes": 4096,
+            "daemon_user_ticks": 1,
+            "daemon_system_ticks": 0,
+            "device_read_sectors": 0,
+            "device_write_sectors": 0
+          }
+        },
+        "reconstruct_and_mount": {
+          "seconds": 0.19887456700007533,
+          "counters": null,
+          "counter_note": "daemon changed during phase"
+        },
+        "verify_reconstructed": {
+          "seconds": 0.7725884290000522,
+          "counters": {
+            "daemon_read_bytes": 4096,
+            "daemon_write_bytes": 17473536,
+            "daemon_user_ticks": 2,
+            "daemon_system_ticks": 6,
+            "device_read_sectors": 34040,
+            "device_write_sectors": 320
+          }
+        },
+        "enospc": {
+          "seconds": 0.004218455000000176,
+          "counters": {
+            "daemon_read_bytes": 0,
+            "daemon_write_bytes": 90112,
+            "daemon_user_ticks": 0,
+            "daemon_system_ticks": 1,
+            "device_read_sectors": 40,
+            "device_write_sectors": 176
+          }
+        },
+        "release_resumed": {
+          "seconds": 0.03856824800004688,
+          "counters": {
+            "daemon_read_bytes": 4464640,
+            "daemon_write_bytes": 118784,
+            "daemon_user_ticks": 0,
+            "daemon_system_ticks": 0,
+            "device_read_sectors": 0,
+            "device_write_sectors": 0
+          }
+        }
+      },
+      "remote_bytes_served": 18829313
+    },
+    "rollback_via_sealed_layer": {
+      "schema": 2,
+      "status": "passed",
+      "upper_mode": "hybridLogStructured",
+      "virtual_size": 1073741824,
+      "test_root": "/var/lib/agentenv022-qualification/ucloud-storage-native-c44m0uff",
+      "gvisor_network_namespace": "ucloud-storage-native-84825",
+      "gvisor": {
+        "initial_response": "ok 4295489536",
+        "park_seconds": 0.06022909700004675,
+        "checkpoint_artifacts": {
+          "application_memory.img": {
+            "allocated_bytes": 17141760,
+            "file_bytes": 1073741824
+          },
+          "checkpoint.img": {
+            "allocated_bytes": 212992,
+            "file_bytes": 212873
+          },
+          "pages.img": {
+            "allocated_bytes": 0,
+            "file_bytes": 0
+          },
+          "pages_meta.img": {
+            "allocated_bytes": 4096,
+            "file_bytes": 576
+          }
+        },
+        "restore": {
+          "conformance_read_bytes": 16728064,
+          "conformance_seconds": 0.14233643099987603,
+          "noop_read_bytes": 106496,
+          "noop_seconds": 0.02752277900003719,
+          "response": "ok 8590456832",
+          "restore_read_bytes": 471040,
+          "restore_seconds": 0.2684963730000618
+        }
+      },
+      "layer": null,
+      "destination_backend_sha256": "75a20bd1ab96e2dff63ff877d0abe63383092e34c8fabdba927128eae062a7f7",
+      "enospc_errno": 28,
+      "snapshot": {
+        "allocated_bytes": 52154368,
+        "file_bytes": 52154368,
+        "logical_device_bytes": 1073741824,
+        "allocated_to_logical_ratio": 0.048572540283203125,
+        "file_to_logical_ratio": 0.048572540283203125
+      },
+      "phases": {
+        "daemon_start": {
+          "seconds": 0.052432031000080315,
+          "counters": null,
+          "counter_note": "daemon changed during phase"
+        },
+        "create_and_format": {
+          "seconds": 0.1146033540001099,
+          "counters": {
+            "daemon_read_bytes": 0,
+            "daemon_write_bytes": 34590720,
+            "daemon_user_ticks": 1,
+            "daemon_system_ticks": 7,
+            "device_read_sectors": 0,
+            "device_write_sectors": 0
+          }
+        },
+        "mount_and_populate": {
+          "seconds": 0.5007158700000218,
+          "counters": {
+            "daemon_read_bytes": 0,
+            "daemon_write_bytes": 18485248,
+            "daemon_user_ticks": 0,
+            "daemon_system_ticks": 2,
+            "device_read_sectors": 626,
+            "device_write_sectors": 36216
+          }
+        },
+        "freeze_and_seal": {
+          "seconds": 0.5607047249998232,
+          "counters": {
+            "daemon_read_bytes": 0,
+            "daemon_write_bytes": 765952,
+            "daemon_user_ticks": 4,
+            "daemon_system_ticks": 7,
+            "device_read_sectors": 0,
+            "device_write_sectors": 752
+          }
+        },
+        "release_initial": {
+          "seconds": 0.03388645500012899,
+          "counters": {
+            "daemon_read_bytes": 0,
+            "daemon_write_bytes": 4096,
+            "daemon_user_ticks": 0,
+            "daemon_system_ticks": 0,
+            "device_read_sectors": 0,
+            "device_write_sectors": 0
+          }
+        },
+        "reconstruct_and_mount": {
+          "seconds": 0.32170842000004995,
+          "counters": null,
+          "counter_note": "daemon changed during phase"
+        },
+        "verify_reconstructed": {
+          "seconds": 0.6966614549999122,
+          "counters": {
+            "daemon_read_bytes": 0,
+            "daemon_write_bytes": 17457152,
+            "daemon_user_ticks": 3,
+            "daemon_system_ticks": 7,
+            "device_read_sectors": 33976,
+            "device_write_sectors": 296
+          }
+        },
+        "enospc": {
+          "seconds": 0.005230188999803431,
+          "counters": {
+            "daemon_read_bytes": 4096,
+            "daemon_write_bytes": 98304,
+            "daemon_user_ticks": 0,
+            "daemon_system_ticks": 0,
+            "device_read_sectors": 40,
+            "device_write_sectors": 184
+          }
+        },
+        "release_resumed": {
+          "seconds": 0.03892349300008391,
+          "counters": {
+            "daemon_read_bytes": 4096,
+            "daemon_write_bytes": 122880,
+            "daemon_user_ticks": 0,
+            "daemon_system_ticks": 1,
+            "device_read_sectors": 0,
+            "device_write_sectors": 0
+          }
+        }
+      },
+      "remote_bytes_served": 18796544
+    },
+    "upgrade_with_full_cache": {
+      "schema": 2,
+      "status": "passed",
+      "upper_mode": "hybridLogStructured",
+      "virtual_size": 1073741824,
+      "test_root": "/var/lib/agentenv022-qualification/ucloud-storage-native-tllnxils",
+      "gvisor_network_namespace": "ucloud-storage-native-84825",
+      "gvisor": {
+        "initial_response": "ok 4295489536",
+        "park_seconds": 0.06084441499979221,
+        "checkpoint_artifacts": {
+          "application_memory.img": {
+            "allocated_bytes": 17158144,
+            "file_bytes": 1073741824
+          },
+          "checkpoint.img": {
+            "allocated_bytes": 212992,
+            "file_bytes": 212855
+          },
+          "pages.img": {
+            "allocated_bytes": 0,
+            "file_bytes": 0
+          },
+          "pages_meta.img": {
+            "allocated_bytes": 4096,
+            "file_bytes": 576
+          }
+        },
+        "restore": {
+          "conformance_read_bytes": 16711680,
+          "conformance_seconds": 0.19170482300000913,
+          "noop_read_bytes": 102400,
+          "noop_seconds": 0.03832694399989123,
+          "response": "ok 8590456832",
+          "restore_read_bytes": 499712,
+          "restore_seconds": 0.26876175300003524
+        }
+      },
+      "layer": null,
+      "cache_free_bytes_before_restore": 65536,
+      "destination_backend_sha256": "76d59a1c10cb495e90380e320de8fe30e6370f8b374aab410494c8e0b92a5748",
+      "legacy_upper_rejected_without_modification": true,
+      "enospc_errno": 28,
+      "snapshot": {
+        "allocated_bytes": 52174848,
+        "file_bytes": 52174848,
+        "logical_device_bytes": 1073741824,
+        "allocated_to_logical_ratio": 0.04859161376953125,
+        "file_to_logical_ratio": 0.04859161376953125
+      },
+      "phases": {
+        "daemon_start": {
+          "seconds": 0.052543240000204605,
+          "counters": null,
+          "counter_note": "daemon changed during phase"
+        },
+        "create_and_format": {
+          "seconds": 0.0979559170000357,
+          "counters": {
+            "daemon_read_bytes": 0,
+            "daemon_write_bytes": 34590720,
+            "daemon_user_ticks": 0,
+            "daemon_system_ticks": 7,
+            "device_read_sectors": 0,
+            "device_write_sectors": 0
+          }
+        },
+        "mount_and_populate": {
+          "seconds": 0.4835542069999974,
+          "counters": {
+            "daemon_read_bytes": 0,
+            "daemon_write_bytes": 18501632,
+            "daemon_user_ticks": 0,
+            "daemon_system_ticks": 3,
+            "device_read_sectors": 626,
+            "device_write_sectors": 36272
+          }
+        },
+        "freeze_and_seal": {
+          "seconds": 0.5545769249999921,
+          "counters": {
+            "daemon_read_bytes": 0,
+            "daemon_write_bytes": 765952,
+            "daemon_user_ticks": 5,
+            "daemon_system_ticks": 7,
+            "device_read_sectors": 0,
+            "device_write_sectors": 752
+          }
+        },
+        "release_initial": {
+          "seconds": 0.0348292759999822,
+          "counters": {
+            "daemon_read_bytes": 0,
+            "daemon_write_bytes": 4096,
+            "daemon_user_ticks": 0,
+            "daemon_system_ticks": 0,
+            "device_read_sectors": 0,
+            "device_write_sectors": 0
+          }
+        },
+        "reconstruct_and_mount": {
+          "seconds": 0.24164788899997802,
+          "counters": null,
+          "counter_note": "daemon changed during phase"
+        },
+        "verify_reconstructed": {
+          "seconds": 0.737095065000176,
+          "counters": {
+            "daemon_read_bytes": 4096,
+            "daemon_write_bytes": 172032,
+            "daemon_user_ticks": 3,
+            "daemon_system_ticks": 3,
+            "device_read_sectors": 33992,
+            "device_write_sectors": 320
+          }
+        },
+        "enospc": {
+          "seconds": 0.007153938000101334,
+          "counters": {
+            "daemon_read_bytes": 0,
+            "daemon_write_bytes": 94208,
+            "daemon_user_ticks": 0,
+            "daemon_system_ticks": 0,
+            "device_read_sectors": 40,
+            "device_write_sectors": 184
+          }
+        },
+        "release_resumed": {
+          "seconds": 0.055160563000072216,
+          "counters": {
+            "daemon_read_bytes": 4214784,
+            "daemon_write_bytes": 122880,
+            "daemon_user_ticks": 0,
+            "daemon_system_ticks": 1,
+            "device_read_sectors": 0,
+            "device_write_sectors": 0
+          }
+        }
+      },
+      "remote_bytes_served": 90533889
+    }
+  }
+}

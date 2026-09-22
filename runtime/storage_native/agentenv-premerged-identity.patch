@@ -1,6 +1,54 @@
+diff --git a/storage/overlaybd/src/backend/cache/full_file_cache/cache_pool.rs b/storage/overlaybd/src/backend/cache/full_file_cache/cache_pool.rs
+index 8621eed..73ea2cc 100644
+--- a/storage/overlaybd/src/backend/cache/full_file_cache/cache_pool.rs
++++ b/storage/overlaybd/src/backend/cache/full_file_cache/cache_pool.rs
+@@ -9,7 +9,6 @@ use super::cache_entry::CacheEntry;
+ use super::cache_store::CachedFile;
+ use crate::config::CacheConfig;
+ use crate::io::virtual_file::VirtualFile;
+-use crate::lsmt::file::PREMERGED_INDEX_DIR;
+ use crate::sys;
+ use anyhow::{anyhow, bail, Result};
+ use dashmap::DashMap;
+@@ -198,9 +197,9 @@ impl BackendState {
+                 continue;
+             }
+             let cache_id = item.file_name().to_string_lossy().to_string();
+-            // The LSMT premerged-index artifact cache shares this cache root
+-            // but is not a full-file cache entry; leave it untouched.
+-            if cache_id == PREMERGED_INDEX_DIR {
++            // Only hashed blob-entry directories belong to this cache. Other
++            // caches (notably premerged-index) share the configured root.
++            if cache_id.len() != 64 || !cache_id.bytes().all(|b| b.is_ascii_hexdigit()) {
+                 continue;
+             }
+             let paths = EntryPaths::new(&options.cache_dir, &cache_id);
+diff --git a/storage/overlaybd/src/backend/cache/tests.rs b/storage/overlaybd/src/backend/cache/tests.rs
+index bf0fd3b..7b2fa49 100644
+--- a/storage/overlaybd/src/backend/cache/tests.rs
++++ b/storage/overlaybd/src/backend/cache/tests.rs
+@@ -2757,3 +2757,16 @@ async fn test_failed_foreground_refill_leaves_no_reserved_blocks() {
+         "failed refill must leave the data file fully sparse"
+     );
+ }
++
++#[tokio::test]
++async fn test_file_cache_startup_preserves_sibling_cache_directories() {
++    let dir = tempdir().unwrap();
++    let sibling = dir.path().join("premerged-index");
++    std::fs::create_dir(&sibling).unwrap();
++    let artifact = sibling.join("existing.pmidx");
++    std::fs::write(&artifact, b"existing index").unwrap();
++    let mut options = FileCacheBackendOptions::default();
++    options.cache_dir = dir.path().to_path_buf();
++    let _backend = FileCacheBackend::with_options(options).await.unwrap();
++    assert_eq!(std::fs::read(artifact).unwrap(), b"existing index");
++}
+diff --git a/storage/overlaybd/src/lsmt/file/helper.rs b/storage/overlaybd/src/lsmt/file/helper.rs
+index 088f28d..a96485f 100644
 --- a/storage/overlaybd/src/lsmt/file/helper.rs
 +++ b/storage/overlaybd/src/lsmt/file/helper.rs
-@@ -250,7 +250,7 @@
+@@ -250,7 +250,7 @@ impl PremergedIndexCacheKey {
          }
  
          let mut key = Vec::new();
@@ -9,7 +57,7 @@
          append_u32(&mut key, PREMERGED_INDEX_FORMAT_VERSION);
          append_u32(&mut key, PREMERGED_INDEX_MERGE_VERSION);
          append_u32(&mut key, metadata.len() as u32);
-@@ -263,6 +263,7 @@
+@@ -263,6 +263,7 @@ impl PremergedIndexCacheKey {
              append_u64(&mut key, layer.virtual_size);
              append_u64(&mut key, layer.index_offset);
              append_u64(&mut key, layer.index_size);
@@ -17,7 +65,7 @@
              key.push(layer.header_version);
              key.push(layer.header_sub_version);
              key.push(layer.trailer_version);
-@@ -828,7 +829,36 @@
+@@ -1016,7 +1017,36 @@ async fn load_readonly_layer_metadata(file: Arc<dyn VirtualFile>) -> Result<Read
      let file_size = file.size().await?;
      let header = verify_ht(&file, false, file_size).await?;
      let trailer = verify_ht(&file, true, file_size).await?;
@@ -54,19 +102,11 @@
          uuid: parse_uuid_field(&trailer.uuid).unwrap_or_else(Uuid::nil),
          file_size,
          virtual_size: trailer.virtual_size.get(),
---- a/storage/overlaybd/src/lsmt/file/types.rs
-+++ b/storage/overlaybd/src/lsmt/file/types.rs
-@@ -80,6 +80,7 @@
-     pub(super) virtual_size: u64,
-     pub(super) index_offset: u64,
-     pub(super) index_size: u64,
-+    pub(super) index_digest: [u8; 32],
-     pub(super) header_version: u8,
-     pub(super) header_sub_version: u8,
-     pub(super) trailer_version: u8,
+diff --git a/storage/overlaybd/src/lsmt/file/tests.rs b/storage/overlaybd/src/lsmt/file/tests.rs
+index 6ebbb3a..b57a268 100644
 --- a/storage/overlaybd/src/lsmt/file/tests.rs
 +++ b/storage/overlaybd/src/lsmt/file/tests.rs
-@@ -515,18 +515,20 @@
+@@ -618,18 +618,20 @@ impl VirtualFile for ShortReadFile {
      }
  }
  
@@ -75,12 +115,10 @@
      inner: Arc<dyn VirtualFile>,
      index_offset: u64,
      index_len: u64,
--}
--
--impl FailingIndexReadFile {
 +    index_reads: AtomicUsize,
-+}
-+
+ }
+ 
+-impl FailingIndexReadFile {
 +impl SingleIndexReadFile {
      fn new(inner: Arc<dyn VirtualFile>, index_offset: u64, index_size: u64) -> Self {
          Self {
@@ -91,7 +129,7 @@
          }
      }
  
-@@ -538,10 +540,11 @@
+@@ -641,10 +643,11 @@ impl FailingIndexReadFile {
  }
  
  #[async_trait]
@@ -105,7 +143,7 @@
              "unexpected layer index read at offset {offset} len {len}"
          );
          self.inner.read_at(offset, len).await
-@@ -549,7 +552,8 @@
+@@ -652,7 +655,8 @@ impl VirtualFile for FailingIndexReadFile {
  
      async fn read_at_into(&self, offset: u64, dst: &mut [u8]) -> Result<usize> {
          ensure!(
@@ -115,7 +153,7 @@
              "unexpected layer index read_at_into at offset {} len {}",
              offset,
              dst.len()
-@@ -2487,6 +2491,7 @@
+@@ -3010,6 +3014,7 @@ fn test_layer_metadata(uuid: Uuid, index_size: u64) -> ReadOnlyLayerMetadata {
          virtual_size: 512 * 1024,
          index_offset: 4096,
          index_size,
@@ -123,11 +161,10 @@
          header_version: 1,
          header_sub_version: 1,
          trailer_version: 1,
-@@ -2516,6 +2521,15 @@
-     changed[0].index_size += 1;
+@@ -3040,6 +3045,15 @@ fn test_premerged_index_cache_key_metadata_identity() {
      let changed_key = PremergedIndexCacheKey::from_metadata(&changed).unwrap();
      assert_ne!(key0.digest, changed_key.digest);
-+
+ 
 +    let mut changed_layout = metadata.clone();
 +    changed_layout[0].index_digest[0] = 1;
 +    assert_ne!(
@@ -136,10 +173,11 @@
 +            .unwrap()
 +            .digest
 +    );
- 
++
      let mut nil_uuid = metadata;
      nil_uuid[0].uuid = Uuid::nil();
-@@ -2632,7 +2646,7 @@
+     assert!(PremergedIndexCacheKey::from_metadata(&nil_uuid).is_none());
+@@ -3245,7 +3259,7 @@ async fn wait_readable_premerged_artifact(
  }
  
  #[tokio::test]
@@ -148,7 +186,7 @@
      let temp_dir = TempDir::new().unwrap();
      let vsize = 4 * 1024 * 1024;
      let base = create_sealed_layer(&temp_dir, "pm-base", vsize, &[(4096, 0x11)]).await;
-@@ -2658,7 +2672,7 @@
+@@ -3271,7 +3285,7 @@ async fn test_premerged_index_artifact_hit_skips_layer_index_load() {
          .cloned()
          .zip(metadata.iter())
          .map(|(file, layer)| {
@@ -157,7 +195,7 @@
                  file,
                  layer.index_offset,
                  layer.index_size,
-@@ -2673,7 +2687,7 @@
+@@ -3286,7 +3300,7 @@ async fn test_premerged_index_artifact_hit_skips_layer_index_load() {
      };
      let lower = open_files_ro_with_premerged_cache(&wrapped, &cache_dir, hit_policy)
          .await
@@ -166,7 +204,7 @@
      assert_eq!(lower.read_at(4096, 4096).await.unwrap()[0], 0x11);
      assert_eq!(lower.read_at(8192, 4096).await.unwrap()[0], 0x22);
  }
-@@ -3569,3 +3583,51 @@
+@@ -4101,3 +4115,51 @@ async fn test_direct_io_create_sparse() {
      assert_eq!(lsmt.size().await.unwrap(), vsize);
      assert_eq!(lsmt.file_type(), LSMTFileType::SparseReadWrite);
  }
@@ -195,7 +233,7 @@
 +    assert_eq!(first.read_at(0, 4096).await.unwrap()[0], 0x11);
 +    wait_premerged_artifact_count(&cache, 1).await;
 +    let dense = Arc::new(
-+        LocalFile::new(dir.path().join("dense"), test_io_ring())
++        LocalFile::new(dir.path().join("dense"))
 +            .await
 +            .unwrap(),
 +    );
@@ -218,36 +256,15 @@
 +    assert_eq!(restored.read_at(0, 4096).await.unwrap()[0], 0x11);
 +    assert_eq!(restored.read_at(8192, 4096).await.unwrap()[0], 0x22);
 +}
---- a/storage/overlaybd/src/backend/cache/full_file_cache/cache_pool.rs
-+++ b/storage/overlaybd/src/backend/cache/full_file_cache/cache_pool.rs
-@@ -199,6 +199,11 @@
-                 continue;
-             }
-             let cache_id = item.file_name().to_string_lossy().to_string();
-+            // Only hashed blob-entry directories belong to this cache. Other
-+            // caches (notably premerged-index) share the configured root.
-+            if cache_id.len() != 64 || !cache_id.bytes().all(|b| b.is_ascii_hexdigit()) {
-+                continue;
-+            }
-             let paths = EntryPaths::new(&options.cache_dir, &cache_id);
-             match CacheEntry::load_from_disk(cache_id.clone(), paths, options).await {
-                 Ok(entry) => {
---- a/storage/overlaybd/src/backend/cache/tests.rs
-+++ b/storage/overlaybd/src/backend/cache/tests.rs
-@@ -2620,3 +2620,16 @@
-         }
-     }
- }
-+
-+#[tokio::test]
-+async fn test_file_cache_startup_preserves_sibling_cache_directories() {
-+    let dir = tempdir().unwrap();
-+    let sibling = dir.path().join("premerged-index");
-+    std::fs::create_dir(&sibling).unwrap();
-+    let artifact = sibling.join("existing.pmidx");
-+    std::fs::write(&artifact, b"existing index").unwrap();
-+    let mut options = FileCacheBackendOptions::default();
-+    options.cache_dir = dir.path().to_path_buf();
-+    let _backend = FileCacheBackend::with_options(options).await.unwrap();
-+    assert_eq!(std::fs::read(artifact).unwrap(), b"existing index");
-+}
+diff --git a/storage/overlaybd/src/lsmt/file/types.rs b/storage/overlaybd/src/lsmt/file/types.rs
+index 3dedde4..c95c6af 100644
+--- a/storage/overlaybd/src/lsmt/file/types.rs
++++ b/storage/overlaybd/src/lsmt/file/types.rs
+@@ -80,6 +80,7 @@ pub(super) struct ReadOnlyLayerMetadata {
+     pub(super) virtual_size: u64,
+     pub(super) index_offset: u64,
+     pub(super) index_size: u64,
++    pub(super) index_digest: [u8; 32],
+     pub(super) header_version: u8,
+     pub(super) header_sub_version: u8,
+     pub(super) trailer_version: u8,

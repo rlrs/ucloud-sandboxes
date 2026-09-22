@@ -1,0 +1,13 @@
+{
+  "platform": "Linux",
+  "python": "3.14",
+  "umask": "0077",
+  "storage_native": {
+    "passed": 79
+  },
+  "deployment_and_vm_init": {
+    "passed": 29
+  },
+  "ruff": "passed",
+  "build_script_syntax": "passed"
+}

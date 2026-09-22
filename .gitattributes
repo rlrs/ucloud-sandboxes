@@ -1,1 +1,1 @@
-runtime/storage_native/agentenv-pooled-delete.patch whitespace=-blank-at-eol
+runtime/storage_native/*.patch whitespace=-blank-at-eol

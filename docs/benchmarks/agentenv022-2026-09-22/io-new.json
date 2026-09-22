@@ -1,0 +1,241 @@
+{
+  "gates": {
+    "metadata_within_15_percent": true,
+    "random_mixed_within_15_percent": true,
+    "seal_did_not_materialize_virtual_device": true,
+    "sequential_write_within_15_percent": false
+  },
+  "host": {
+    "io_rings": 1,
+    "uname": "Linux storage-qualify-20260922 7.0.0-30-generic #30-Ubuntu SMP PREEMPT_DYNAMIC Fri Jul 31 18:22:54 UTC 2026 x86_64",
+    "upper_mode": "hybridLogStructured",
+    "virtual_size": 4294967296
+  },
+  "rounds": 3,
+  "runtime_seconds": 8,
+  "samples": [
+    {
+      "kind": "fio",
+      "read_bw_bytes": 0.0,
+      "read_iops": 0.0,
+      "round": 0,
+      "seconds": 1.4231696450001436,
+      "target": "native_xfs_loop",
+      "workload": "sequential_write",
+      "write_bw_bytes": 1108092697.0,
+      "write_iops": 1056.759546
+    },
+    {
+      "kind": "fio",
+      "read_bw_bytes": 292456242.0,
+      "read_iops": 71400.449944,
+      "round": 0,
+      "seconds": 11.692990624999993,
+      "target": "native_xfs_loop",
+      "workload": "random_mixed",
+      "write_bw_bytes": 125638823.0,
+      "write_iops": 30673.540807
+    },
+    {
+      "checksum": 32000,
+      "count": 4000,
+      "create_seconds": 0.23460316599994258,
+      "kind": "metadata",
+      "rename_delete_seconds": 0.3785586899998634,
+      "round": 0,
+      "stat_seconds": 0.0364209839999603,
+      "target": "native_xfs_loop",
+      "workload": "metadata"
+    },
+    {
+      "kind": "fio",
+      "read_bw_bytes": 0.0,
+      "read_iops": 0.0,
+      "round": 0,
+      "seconds": 1.4390012629999092,
+      "target": "overlaybd_ublk_xfs",
+      "workload": "sequential_write",
+      "write_bw_bytes": 1095654922.0,
+      "write_iops": 1044.897959
+    },
+    {
+      "kind": "fio",
+      "read_bw_bytes": 264711359.0,
+      "read_iops": 64626.79665,
+      "round": 0,
+      "seconds": 12.94796716399992,
+      "target": "overlaybd_ublk_xfs",
+      "workload": "random_mixed",
+      "write_bw_bytes": 113614470.0,
+      "write_iops": 27737.907762
+    },
+    {
+      "checksum": 32000,
+      "count": 4000,
+      "create_seconds": 0.23244100900001285,
+      "kind": "metadata",
+      "rename_delete_seconds": 0.3614127409998673,
+      "round": 0,
+      "stat_seconds": 0.036671351999984836,
+      "target": "overlaybd_ublk_xfs",
+      "workload": "metadata"
+    },
+    {
+      "kind": "fio",
+      "read_bw_bytes": 0.0,
+      "read_iops": 0.0,
+      "round": 1,
+      "seconds": 2.1737610210000184,
+      "target": "overlaybd_ublk_xfs",
+      "workload": "sequential_write",
+      "write_bw_bytes": 625359245.0,
+      "write_iops": 596.389051
+    },
+    {
+      "kind": "fio",
+      "read_bw_bytes": 253162594.0,
+      "read_iops": 61807.274091,
+      "round": 1,
+      "seconds": 12.709943634999945,
+      "target": "overlaybd_ublk_xfs",
+      "workload": "random_mixed",
+      "write_bw_bytes": 108622070.0,
+      "write_iops": 26519.060117
+    },
+    {
+      "checksum": 32000,
+      "count": 4000,
+      "create_seconds": 0.2332074629998715,
+      "kind": "metadata",
+      "rename_delete_seconds": 0.35209255000017947,
+      "round": 1,
+      "stat_seconds": 0.03651714000011452,
+      "target": "overlaybd_ublk_xfs",
+      "workload": "metadata"
+    },
+    {
+      "kind": "fio",
+      "read_bw_bytes": 0.0,
+      "read_iops": 0.0,
+      "round": 1,
+      "seconds": 1.2698849280000104,
+      "target": "native_xfs_loop",
+      "workload": "sequential_write",
+      "write_bw_bytes": 1381907109.0,
+      "write_iops": 1317.889318
+    },
+    {
+      "kind": "fio",
+      "read_bw_bytes": 195134136.0,
+      "read_iops": 47640.169979,
+      "round": 1,
+      "seconds": 11.445397692000142,
+      "target": "native_xfs_loop",
+      "workload": "random_mixed",
+      "write_bw_bytes": 83909895.0,
+      "write_iops": 20485.814273
+    },
+    {
+      "checksum": 32000,
+      "count": 4000,
+      "create_seconds": 0.23202616300000045,
+      "kind": "metadata",
+      "rename_delete_seconds": 0.3753411010000036,
+      "round": 1,
+      "stat_seconds": 0.03694788799998605,
+      "target": "native_xfs_loop",
+      "workload": "metadata"
+    },
+    {
+      "kind": "fio",
+      "read_bw_bytes": 0.0,
+      "read_iops": 0.0,
+      "round": 2,
+      "seconds": 1.7073100079999222,
+      "target": "native_xfs_loop",
+      "workload": "sequential_write",
+      "write_bw_bytes": 991451361.0,
+      "write_iops": 945.521699
+    },
+    {
+      "kind": "fio",
+      "read_bw_bytes": 284579595.0,
+      "read_iops": 69477.44032,
+      "round": 2,
+      "seconds": 11.715624931999855,
+      "target": "native_xfs_loop",
+      "workload": "random_mixed",
+      "write_bw_bytes": 122264652.0,
+      "write_iops": 29849.768779
+    },
+    {
+      "checksum": 32000,
+      "count": 4000,
+      "create_seconds": 0.25021231499999885,
+      "kind": "metadata",
+      "rename_delete_seconds": 0.38213467699983994,
+      "round": 2,
+      "stat_seconds": 0.04002201100001912,
+      "target": "native_xfs_loop",
+      "workload": "metadata"
+    },
+    {
+      "kind": "fio",
+      "read_bw_bytes": 0.0,
+      "read_iops": 0.0,
+      "round": 2,
+      "seconds": 2.1928930239998863,
+      "target": "overlaybd_ublk_xfs",
+      "workload": "sequential_write",
+      "write_bw_bytes": 614972407.0,
+      "write_iops": 586.483391
+    },
+    {
+      "kind": "fio",
+      "read_bw_bytes": 244738687.0,
+      "read_iops": 59750.656168,
+      "round": 2,
+      "seconds": 12.672291617000155,
+      "target": "overlaybd_ublk_xfs",
+      "workload": "random_mixed",
+      "write_bw_bytes": 105007802.0,
+      "write_iops": 25636.670416
+    },
+    {
+      "checksum": 32000,
+      "count": 4000,
+      "create_seconds": 0.2353793610000139,
+      "kind": "metadata",
+      "rename_delete_seconds": 0.3679165280000234,
+      "round": 2,
+      "stat_seconds": 0.039867025999910766,
+      "target": "overlaybd_ublk_xfs",
+      "workload": "metadata"
+    }
+  ],
+  "schema": 2,
+  "seal": {
+    "allocated_bytes": 1141583872,
+    "descriptor": null,
+    "logical_bytes": 1141579776,
+    "seconds": 0.02582391199985068
+  },
+  "status": "failed",
+  "summary": {
+    "native_xfs_loop": {
+      "metadata_seconds_median": 0.6495828399997663,
+      "random_mixed_iops_median": 99327.209099,
+      "sequential_write_bw_bytes_median": 1108092697.0
+    },
+    "overlaybd_ublk_xfs": {
+      "metadata_seconds_median": 0.630525101999865,
+      "random_mixed_iops_median": 88326.334208,
+      "sequential_write_bw_bytes_median": 625359245.0
+    },
+    "ratios": {
+      "metadata_time_ratio": 0.9706615741266993,
+      "random_mixed_iops_ratio": 0.889246108988773,
+      "sequential_write_bw_ratio": 0.5643564357865269
+    }
+  }
+}

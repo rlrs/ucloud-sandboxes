@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Upgrade the pinned AgentEnv storage backend to v0.2.2, preserving streamed
+  exports, ownership fences, cache identity and warm-device reuse. Include
+  cache exhaustion/eviction safety, bounded premerged-index maintenance,
+  hybrid discard/rewrite allocation reuse and an explicitly enabled jemalloc.
+- Require fresh hybrid writable uppers and validate the complete native patch
+  manifest at packaging and boot. Existing workers require sealed snapshot
+  migration; do not replace the native daemon in place. Add cross-version
+  migration, rollback, full-cache and lifecycle memory qualification.
+
 ## 0.5.81 - 2026-09-22
 
 - Queue SQLite writers in arrival order and wake only the next writer. Avoid

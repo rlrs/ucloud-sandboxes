@@ -1,0 +1,20 @@
+{
+  "platform": "Linux",
+  "rustc": "1.98.1",
+  "suites": {
+    "lsmt_file": {
+      "passed": 103,
+      "ignored": 2
+    },
+    "cache": {
+      "passed": 54,
+      "ignored": 1
+    },
+    "daemon": {
+      "passed": 60,
+      "ignored": 0
+    }
+  },
+  "clean_checkout_after_build": true,
+  "artifact_sha256": "76d59a1c10cb495e90380e320de8fe30e6370f8b374aab410494c8e0b92a5748"
+}

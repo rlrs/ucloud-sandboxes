@@ -40,6 +40,15 @@ from ucloud_sandboxes.storage_native_registry import (  # noqa: E402
 GIB = 1024 * 1024 * 1024
 
 
+def _process_memory(pid: int) -> dict[str, int]:
+    values = {}
+    for line in Path(f"/proc/{pid}/status").read_text().splitlines():
+        key, _, value = line.partition(":")
+        if key in {"VmRSS", "RssAnon", "RssFile", "VmHWM"}:
+            values[key + "_bytes"] = int(value.split()[0]) * 1024
+    return values
+
+
 def _latency_summary(values: list[float]) -> dict[str, float | int]:
     ordered = sorted(values)
     if not ordered:
@@ -106,6 +115,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     server: StorageNativeNodeServer | None = None
     thread: threading.Thread | None = None
     backend_client: AgentEnvUblkClient | None = None
+    memory_stop = threading.Event()
+    memory_thread = None
+    memory_samples: list[dict[str, Any]] = []
     result: dict[str, Any] = {
         "schema": 1,
         "status": "failed",
@@ -189,6 +201,22 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         backend_log.close()
         backend_client = AgentEnvUblkClient(backend_socket)
         backend_client.wait_ready()
+
+        def sample_memory() -> None:
+            started = time.monotonic()
+            while not memory_stop.is_set():
+                try:
+                    memory_samples.append({
+                        "seconds": time.monotonic() - started,
+                        **_process_memory(backend_process.pid),
+                    })
+                except (FileNotFoundError, ProcessLookupError):
+                    return
+                memory_stop.wait(1)
+
+        memory_thread = threading.Thread(target=sample_memory, daemon=True)
+        memory_thread.start()
+        result["daemon_memory_before_workload"] = _process_memory(backend_process.pid)
         config = StorageNativeNodeConfig(
             journal_path=root / "journal" / "storage.sqlite",
             runtime_root=root / "volumes",
@@ -399,6 +427,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             )
 
         churn_acquire_seconds: list[float] = []
+        result["daemon_memory_before_churn"] = _process_memory(backend_process.pid)
         churn_release_seconds: list[float] = []
         for index in range(args.churn_iterations):
             started = time.monotonic()
@@ -470,6 +499,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                     parallel_acquire_seconds.append(acquire_latency)
                     parallel_release_seconds.append(release_latency)
         parallel_churn_seconds = time.monotonic() - parallel_churn_started
+        result["daemon_memory_after_churn"] = _process_memory(backend_process.pid)
 
         final_metrics = client.get_metrics()
 
@@ -485,6 +515,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         post_cleanup_metrics = client.get_metrics()
         if post_cleanup_metrics["hard_reserved_bytes"] != 0:
             raise RuntimeError("benchmark leaked a hard storage reservation")
+        if args.memory_idle_seconds:
+            time.sleep(args.memory_idle_seconds)
+        result["daemon_memory_after_cleanup"] = _process_memory(backend_process.pid)
+        result["memory_idle_seconds"] = args.memory_idle_seconds
 
         result.update(
             {
@@ -522,6 +556,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         )
         return result
     finally:
+        memory_stop.set()
+        if memory_thread is not None:
+            memory_thread.join(timeout=5)
+        result["daemon_memory_samples"] = memory_samples
         if server is not None and thread is not None:
             with contextlib.suppress(Exception):
                 _stop_server(server, thread)
@@ -558,6 +596,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--churn-iterations", type=int, default=100)
     parser.add_argument("--parallel-volumes", type=int, default=8)
     parser.add_argument("--parallel-rounds", type=int, default=10)
+    parser.add_argument("--memory-idle-seconds", type=float, default=0)
     args = parser.parse_args()
     args.daemon = args.daemon.resolve()
     args.work_root = args.work_root.resolve()
@@ -578,6 +617,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("--parallel-volumes cannot be negative")
     if args.parallel_rounds < 0:
         parser.error("--parallel-rounds cannot be negative")
+    if args.memory_idle_seconds < 0:
+        parser.error("--memory-idle-seconds cannot be negative")
     return args
 
 

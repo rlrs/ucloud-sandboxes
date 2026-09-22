@@ -1,0 +1,45 @@
+{
+  "agentenv_commit": "771ea55ca80abbfacc85e716ec91c40e82b3398b",
+  "artifact": "uvm-ublk-daemon-76d59a1c10cb495e90380e320de8fe30e6370f8b374aab410494c8e0b92a5748",
+  "artifact_sha256": "76d59a1c10cb495e90380e320de8fe30e6370f8b374aab410494c8e0b92a5748",
+  "cargo_package": "uvm-ublk-daemon",
+  "host_architecture": "x86_64",
+  "hybrid_upper_sub_version": 2,
+  "license": "MIT",
+  "patches": [
+    {
+      "name": "agentenv-streaming-dense-export.patch",
+      "sha256": "111c6f74cceb65e4d37d84be989eee7b7bb818ddccb541824bae5242fbd112d9"
+    },
+    {
+      "name": "agentenv-pooled-delete.patch",
+      "sha256": "bd9a38331a5619e2545631c519738a3e53021dcf707cd4632dd33a204947eb96"
+    },
+    {
+      "name": "agentenv-owner-identity.patch",
+      "sha256": "906d30e73dcbf00828a6a012d035320267145a791421c502f360f0f2e966c0a2"
+    },
+    {
+      "name": "agentenv-owner-transitions.patch",
+      "sha256": "cdb024ea99eda081a35ff95c1d4eae0d49a20ddd2d7fe6c49a52c4fe23229ad0"
+    },
+    {
+      "name": "agentenv-premerged-identity.patch",
+      "sha256": "3507605c1393d25abc0c339d2adc89f03db22ca50e7c4607ec941afcb3e6bc39"
+    },
+    {
+      "name": "agentenv-device-reuse.patch",
+      "sha256": "05a367f8b2e8fa309ee54b4d5998a9e4f277044173c15b6157df5dd3844bebd7"
+    },
+    {
+      "name": "agentenv-jemalloc.patch",
+      "sha256": "22c19a09f9cc0d87db0615b08115e69c2a0a07742cae88188221b52e39f517ad"
+    },
+    {
+      "name": "agentenv-storage-upgrade-compatibility.patch",
+      "sha256": "482030da26eb5e6638ecf256978334c23a6ae7d020ea9c7263a68abdb7bca175"
+    }
+  ],
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+  "schema": 3
+}

@@ -67,7 +67,8 @@ DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK = 16
 DEFAULT_STORAGE_NATIVE_MAX_UBLK_DEVICES = 0
 DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_LAYERS = 8
 DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_BYTES = 4 * 1024 * 1024 * 1024
-PINNED_STORAGE_NATIVE_AGENTENV_COMMIT = "db1492b7915a408b37f863c9e3a34b2ccb2fb1b0"
+PINNED_STORAGE_NATIVE_AGENTENV_COMMIT = "771ea55ca80abbfacc85e716ec91c40e82b3398b"
+PINNED_STORAGE_NATIVE_HYBRID_UPPER_SUB_VERSION = 2
 PINNED_STORAGE_NATIVE_PATCHES = (
     "agentenv-streaming-dense-export.patch",
     "agentenv-pooled-delete.patch",
@@ -75,6 +76,8 @@ PINNED_STORAGE_NATIVE_PATCHES = (
     "agentenv-owner-transitions.patch",
     "agentenv-premerged-identity.patch",
     "agentenv-device-reuse.patch",
+    "agentenv-jemalloc.patch",
+    "agentenv-storage-upgrade-compatibility.patch",
 )
 DEFAULT_DIRECT_DISK_HEADROOM_MB = 16 * 1024
 DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES = 8
@@ -886,6 +889,7 @@ if runtime.get("role") == "sandbox":
     if (
         build.get("schema") != 3
         or build.get("agentenv_commit") != storage["agentenv_commit"]
+        or build.get("hybrid_upper_sub_version") != {PINNED_STORAGE_NATIVE_HYBRID_UPPER_SUB_VERSION!r}
         or build.get("artifact_sha256") != storage["sha256"]
         or build.get("host_architecture") != host_arch
         or build.get("license") != "MIT"
@@ -922,6 +926,32 @@ fi
 echo "Verified pinned Docker/gVisor bundle for $UCLOUD_OS_ID $UCLOUD_OS_VERSION_ID $UCLOUD_ARCHITECTURE"
 fi
 log_init_phase "package-bundle"
+
+# A new bundle must never hot-swap an older hybrid writable format. Require
+# a fresh worker image instead; sealed layers are the migration boundary.
+if [ "$UCLOUD_NODE_ROLE" = sandbox ]; then
+  $SUDO python3 - "$UCLOUD_STORAGE_NATIVE_BACKEND" \
+    /usr/share/doc/ucloud-sandboxes/storage-native/build-manifest.json <<'STORAGE_UPGRADE_GUARD'
+import json
+from pathlib import Path
+import sys
+
+backend, manifest = map(Path, sys.argv[1:])
+if backend.exists():
+    try:
+        installed = json.loads(manifest.read_text())
+    except (OSError, ValueError):
+        installed = {{}}
+    if not isinstance(installed, dict) or (
+        installed.get("hybrid_upper_sub_version") != {PINNED_STORAGE_NATIVE_HYBRID_UPPER_SUB_VERSION!r}
+        or installed.get("agentenv_commit") != {PINNED_STORAGE_NATIVE_AGENTENV_COMMIT!r}
+    ):
+        raise SystemExit(
+            "Refusing in-place storage format upgrade: seal/publish on the old "
+            "worker and restore into fresh uppers on a fresh worker image."
+        )
+STORAGE_UPGRADE_GUARD
+fi
 
 install_bundled_runtime() {{
   local package_dir="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/debs"

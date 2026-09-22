@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.79 - 2026-09-22
+
+- Coalesce gateway routing writes for 5 ms so concurrent lifecycle transitions
+  share durable commits. This reduces writer contention without rejecting work
+  or acknowledging uncommitted state; worker journal timing is unchanged.
+
 ## 0.5.78 - 2026-09-22
 
 - Stop waiting SQLite writers from repeatedly waking one another while a closed

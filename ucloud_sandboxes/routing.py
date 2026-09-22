@@ -4364,7 +4364,11 @@ def _route_write_batch(path: Path) -> DurableSqliteBatch:
     with _ROUTE_LOCKS_GUARD:
         batch = _ROUTE_WRITE_BATCHES.get(key)
         if batch is None:
-            batch = DurableSqliteBatch(connect, validate)
+            # Lifecycle bursts need enough time to join the same durable
+            # commit. A 1 ms window often closed while callers were still
+            # acquiring the writer, turning a burst into many small commits.
+            # This is a coalescing delay, not a request-admission limit.
+            batch = DurableSqliteBatch(connect, validate, delay_seconds=0.005)
             _ROUTE_WRITE_BATCHES[key] = batch
         return batch
 

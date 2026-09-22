@@ -1,0 +1,20 @@
+Original confirmation reproduced route deletion; regression fails as expected.
+F
+======================================================================
+FAIL: test_create_confirmation_survives_delayed_absent_inventory (tests.test_control_plane.ControlPlaneTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/alex-admin/ucloud-live-fixes-20260922/tests/test_control_plane.py", line 772, in test_create_confirmation_survives_delayed_absent_inventory
+    self.assertEqual(removed, [])
+AssertionError: Lists differ: [SandboxRoute(sandbox_id='confirmed-create[1588 chars]00')] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+SandboxRoute(sandbox_id='confirmed-create', node_id='node-1', job_id='job-1', node_url='http://node-1:8090', resources=ResourceQuantity(vcpu=1.0, memory_mb=512, disk_mb=0), spec={'command': [], 'cpus': 1.0, 'disk_mb': None, 'env': {}, 'filesystem': {'enforce_disk_quota': False, 'run_tmpfs_mb': 16, 'tmpfs_mb': 64, 'workspace_path': '/workspace'}, 'id': 'confirmed-create', 'image': 'busybox', 'labels': {}, 'linux_host': {'enable_cron': False, 'enable_sshd': False, 'keep_alive': True, 'writable_paths': ['/run', '/run/lock', '/run/sshd', '/tmp', '/var/tmp', '/var/run', '/var/lock', '/var/spool/cron', '/var/spool/cron/crontabs', '/etc/cron.d', '/logs', '/logs/agent', '/logs/verifier', '/tests', '/task', '/oracle', '/workspace']}, 'managed_process': False, 'memory_mb': 512, 'network': 'bridge', 'parkable': False, 'profile': 'container', 'security': {'cap_add': [], 'cap_drop': ['ALL'], 'init': True, 'no_new_privileges': True, 'pids_limit': 256, 'read_only_rootfs': False, 'user': '1000:1000'}, 'ssh': {'authorized_keys': [], 'container_port': 22, 'enabled': False, 'host': '127.0.0.1', 'host_port': None, 'user': 'root'}, 'ttl_seconds': None, 'working_dir': None}, state='running', generation=1, create_operation_id='00000000-0000-4000-8000-000000000001', spec_hash='799d1fa845c44f3c6f697347c657ccfd8cda889e8f88f1b75cd6a9de8e386783', delete_operation_id='', node_epoch='boot-1', activity_epoch=10, worker_state='attached', storage_schema='', snapshot_manifest_digest='', snapshot_repository='', snapshot_tag='', storage_snapshot={}, created_at='2026-09-22T23:01:54.908884+00:00', updated_at='2026-09-22T23:01:54.918659+00:00')
+
+Diff is 3815 characters long. Set self.maxDiff to None to see it.
+
+----------------------------------------------------------------------
+Ran 1 test in 0.061s
+
+FAILED (failures=1)

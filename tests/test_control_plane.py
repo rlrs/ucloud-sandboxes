@@ -748,6 +748,39 @@ class ControlPlaneTests(unittest.TestCase):
             self.assertFalse(proxied.is_set())
             self.assertEqual(RoutingStore(route_file).program_requests_readonly(), [])
 
+    def test_create_confirmation_survives_delayed_absent_inventory(self) -> None:
+        spec = SandboxSpec.from_dict(SandboxSpec(id="confirmed-create", image="busybox", cpus=1, memory_mb=512).to_dict())
+        with _temporary_root() as root:
+            routing = RoutingStore(root / "routes.sqlite")
+            route = routing.upsert_sandbox(_sandbox_route(
+                sandbox_id=spec.id, node_id="node-1", job_id="job-1",
+                node_url="http://node-1:8090", resources=spec.requested_resources(),
+                spec=spec.to_dict(), state="creating", node_epoch="boot-1",
+                activity_epoch=10, spec_hash=sandbox_spec_fingerprint(spec),
+            ))
+            record = dict(spec=spec.to_dict(), state="running", generation=route.generation,
+                          operation_id=route.create_operation_id, spec_hash=route.spec_hash,
+                          node_epoch="boot-1", activity_epoch=21)
+            routing.upsert_sandbox(control_plane._route_with_sandbox_record(route, record))
+            # Sampled while create was pending (revision 20), received after
+            # confirmation. Receipt timestamps alone cannot prove absence.
+            removed, _ = routing.reconcile_sandboxes_for_node(
+                route.node_url, [], node_id=route.node_id, job_id=route.job_id,
+                reported_sandbox_ids=[], observed_at=(utc_now() + timedelta(seconds=1)).isoformat(),
+                node_epoch="boot-1", activity_epoch=20,
+            )
+            self.assertEqual(removed, [])
+            self.assertEqual(routing.get_sandbox_readonly(spec.id).state, "running")
+            # A truly newer inventory still proves absence.
+            removed, _ = routing.reconcile_sandboxes_for_node(
+                route.node_url, [], node_id=route.node_id, job_id=route.job_id,
+                reported_sandbox_ids=[], observed_at=(utc_now() + timedelta(seconds=2)).isoformat(),
+                node_epoch="boot-1", activity_epoch=22,
+            )
+            self.assertEqual([r.sandbox_id for r in removed], [spec.id])
+            with self.assertRaisesRegex(ValueError, "another node boot"):
+                control_plane._route_with_sandbox_record(route, dict(record, node_epoch="retired-boot"))
+
     def test_non_routable_worker_record_cannot_replace_route_state(self) -> None:
         spec = SandboxSpec.from_dict(
             SandboxSpec(

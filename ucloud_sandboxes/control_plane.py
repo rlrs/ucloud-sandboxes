@@ -1033,6 +1033,14 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 for route in stale_snapshot_routes:
                     self._release_registry_snapshot_reference(route)
                 for route in removed_routes:
+                    self.metrics_store.append("sandbox_inventory_absent", {
+                        "sandbox_id": route.sandbox_id, "generation": route.generation,
+                        "job_id": route.job_id, "node_epoch": route.node_epoch,
+                        "route_activity_epoch": route.activity_epoch,
+                        "inventory_activity_epoch": stored_heartbeat.activity_epoch,
+                        "route_updated_at": route.updated_at,
+                        "inventory_received_at": stored_heartbeat.freshness_at.isoformat(),
+                    })
                     self._release_registry_route_reference(route)
             self._schedule_image_warmups()
         self._write_json({"ok": True, "node": heartbeat_to_dict(stored_heartbeat)})
@@ -7626,6 +7634,18 @@ def _route_with_sandbox_record(
     route_state = observation.route_state
     if route_state is None:
         raise ValueError(f"sandbox record state is not routable: {observation.state!r}")
+    node_epoch = route.node_epoch
+    activity_epoch = route.activity_epoch
+    if "node_epoch" in record or "activity_epoch" in record:
+        confirmed_epoch = record.get("node_epoch")
+        confirmed_activity = record.get("activity_epoch")
+        if not isinstance(confirmed_epoch, str) or not confirmed_epoch.strip():
+            raise ValueError("sandbox confirmation requires a node epoch")
+        if node_epoch and confirmed_epoch != node_epoch:
+            raise ValueError("sandbox confirmation belongs to another node boot")
+        if type(confirmed_activity) is not int or confirmed_activity < 0:
+            raise ValueError("sandbox confirmation requires a non-negative activity epoch")
+        node_epoch, activity_epoch = confirmed_epoch, confirmed_activity
     storage_schema = str(record.get("storage_schema") or "")
     storage_snapshot: dict[str, Any] = {}
     snapshot_manifest_digest = ""
@@ -7657,8 +7677,8 @@ def _route_with_sandbox_record(
         create_operation_id=observation.operation_id,
         spec_hash=observation.spec_hash,
         delete_operation_id=route.delete_operation_id,
-        node_epoch=route.node_epoch,
-        activity_epoch=route.activity_epoch,
+        node_epoch=node_epoch,
+        activity_epoch=activity_epoch,
         storage_schema=storage_schema,
         snapshot_manifest_digest=snapshot_manifest_digest,
         snapshot_repository=snapshot_repository,

@@ -98,7 +98,7 @@ class StreamingUploadTests(unittest.TestCase):
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
             node_root = root / 'node'
-            node_root.mkdir()
+            node_root.mkdir(mode=0o700)
             fixture = fixtures.DirectProvisionerTests()
             provisioner, *_ = fixture.make(node_root)
             runner = _DigestRunner()

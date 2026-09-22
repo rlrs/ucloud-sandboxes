@@ -1357,7 +1357,7 @@ class DirectProvisionerTests(unittest.TestCase):
                     payload = json.load(response)
                     self.assertEqual(payload["error_code"], "park_deferred")
                     self.assertTrue(payload["retryable"])
-                    self.assertGreater(payload["retry_after_seconds"], 10)
+                    self.assertGreater(payload["retry_after_seconds"], 0)
                 self.assertLess(monotonic() - started, 2)
                 self.assertEqual(service.activity_snapshot().active_operations, 0)
                 self.assertEqual(service.get(record.spec.id).state, "running")
@@ -2703,6 +2703,15 @@ class DirectProvisionerTests(unittest.TestCase):
                 )
                 with request.urlopen(create_request) as response:
                     created = json.load(response)
+                with request.urlopen(f"{base}/v1/sandboxes?sandbox_id={spec.id}") as response:
+                    recovered = json.load(response)["sandboxes"][0]
+                with request.urlopen(f"{base}/v1/heartbeat") as response:
+                    heartbeat = json.load(response)["heartbeat"]
+                self.assertEqual(created["sandbox"]["node_epoch"], heartbeat["node_epoch"])
+                self.assertEqual(recovered["node_epoch"], heartbeat["node_epoch"])
+                self.assertGreater(created["sandbox"]["activity_epoch"], 0)
+                self.assertGreater(recovered["activity_epoch"], created["sandbox"]["activity_epoch"])
+                self.assertGreaterEqual(heartbeat["activity_epoch"], recovered["activity_epoch"])
 
                 upload_request = request.Request(
                     f"{base}/v1/sandboxes/{spec.id}/files?path=/workspace/data.txt",

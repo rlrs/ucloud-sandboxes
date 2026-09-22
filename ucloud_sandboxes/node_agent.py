@@ -245,12 +245,17 @@ class NodeAgentHandler(BuildContextHttpHandler):
             if sandbox_ids:
                 record = self.manager.service.get_snapshot(sandbox_ids[0])
                 records = [] if record is None else [record]
+                # A recovery confirmation must supersede any inventory sampled
+                # before this record existed, even if that heartbeat arrives later.
+                activity_epoch = self.manager.service.advance_lifecycle_activity_revision()
             else:
                 records = sorted(self.manager.list(), key=lambda item: item.spec.id)
             self._write_json(
                 {
                     "sandboxes": [
-                        self._sandbox_inventory_payload(record) for record in records
+                        dict(self._sandbox_inventory_payload(record),
+                             **({"node_epoch": self.node_epoch, "activity_epoch": activity_epoch}
+                                if sandbox_ids else {})) for record in records
                     ]
                 }
             )
@@ -570,7 +575,10 @@ class NodeAgentHandler(BuildContextHttpHandler):
         )
         self._write_json(
             {
-                "sandbox": record.to_dict(),
+                "sandbox": dict(
+                    record.to_dict(), node_epoch=self.node_epoch,
+                    activity_epoch=self.manager.service.advance_lifecycle_activity_revision(),
+                ),
                 "timings": {
                     "total_ms": _elapsed_ms(started),
                     "phases": phases,

@@ -4485,6 +4485,10 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         )
         if action != "wake" or program is None or not became_ready:
             return
+        if route.state.lower() in {"running", "waking"}:
+            # A warm sandbox already owns its capacity. The worker still
+            # receives the fenced wake, but there is no placement to simulate.
+            return
         if (
             defer_local_shadow and route.state.lower() == "parked"
             and route.worker_state == "attached"
@@ -4824,6 +4828,19 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         response: ProxiedResponse,
     ) -> SandboxRoute | None:
         if response.status >= 300:
+            if action == "park" and response.status == HTTPStatus.CONFLICT:
+                try:
+                    deferred = response.json()
+                except (TypeError, ValueError):
+                    deferred = {}
+                if (
+                    isinstance(deferred, dict)
+                    and deferred.get("error_code") == "park_deferred"
+                    and deferred.get("retryable") is True
+                ):
+                    # Retention is expected scheduling, not a failed park.
+                    # Keep model_wait without another durable error write.
+                    return route
             if action == "wake":
                 try:
                     failed_state = str(

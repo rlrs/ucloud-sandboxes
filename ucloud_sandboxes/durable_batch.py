@@ -58,6 +58,10 @@ class DurableSqliteBatch:
         self.delay = delay_seconds
         self.max_operations = max_operations
         self._condition = threading.Condition()
+        # The flusher and writers wait for different events. Waking every
+        # writer when a closed batch needs flushing makes them wake each other
+        # repeatedly, competing with the one thread that can commit it.
+        self._flush_condition = threading.Condition(self._condition)
         self._batch = None
         self._connection = None
         self._thread = None
@@ -99,6 +103,7 @@ class DurableSqliteBatch:
             self._batch = None
             batch.done.set()
             self._condition.notify_all()
+            self._flush_condition.notify()
 
     @contextmanager
     def transaction(self):
@@ -112,7 +117,7 @@ class DurableSqliteBatch:
             ):
                 # Closed batches no longer accept writers. Yield the lock to
                 # the flusher instead of letting arrivals postpone it forever.
-                self._condition.notify_all()
+                self._flush_condition.notify()
                 self._condition.wait()
             self._observe("queue_wait_ms", (time.monotonic() - queued) * 1000)
             self.validate()
@@ -144,7 +149,7 @@ class DurableSqliteBatch:
                     )
                     thread.start()
                     self._thread = thread
-                self._condition.notify_all()
+                self._flush_condition.notify()
             except BaseException as exc:
                 self._abort(batch, exc)
             finally:
@@ -160,7 +165,7 @@ class DurableSqliteBatch:
         with self._condition:
             while True:
                 if self._batch is None:
-                    if not self._condition.wait_for(
+                    if not self._flush_condition.wait_for(
                         lambda: self._batch is not None, timeout=1
                     ):
                         if self._connection is not None:
@@ -171,7 +176,7 @@ class DurableSqliteBatch:
                 batch = self._batch
                 remaining = batch.deadline - time.monotonic()
                 if remaining > 0:
-                    self._condition.wait(remaining)
+                    self._flush_condition.wait(remaining)
                     continue
                 started = time.monotonic()
                 try:

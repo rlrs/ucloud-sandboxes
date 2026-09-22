@@ -359,6 +359,34 @@ def _store_build_context(server, archive: bytes) -> dict[str, object]:
 
 
 class ControlPlaneTests(unittest.TestCase):
+    def test_warm_wake_records_readiness_without_reading_placement_inventory(self):
+        handler = object.__new__(control_plane.ControlPlaneHandler)
+        for state in ("running", "waking"):
+            with self.subTest(state=state):
+                route = _sandbox_route(
+                    sandbox_id="warm", node_id="node", job_id="job",
+                    node_url="http://node.invalid", state=state,
+                )
+                with (
+                    patch.object(handler, "_record_program_request_transition", return_value=(object(), True)) as transition,
+                    patch.object(handler, "_heartbeat_for_route", side_effect=AssertionError("warm wake needs no inventory")),
+                    patch.object(handler, "_record_program_wake_shadow_plan") as shadow,
+                ):
+                    payload = {"request_id": "request"}
+                    handler._prepare_program_lifecycle(route, "wake", payload)
+                    transition.assert_called_once_with(route, payload, state="ready_to_wake")
+                    shadow.assert_not_called()
+
+    def test_expected_park_deferral_does_not_write_program_error(self):
+        handler = object.__new__(control_plane.ControlPlaneHandler)
+        route = _sandbox_route(sandbox_id="warm", node_id="node", job_id="job", node_url="http://node.invalid")
+        for code, retryable, expected in (("park_deferred", True, 0), ("park_deferred", False, 1), ("other_conflict", True, 1)):
+            with self.subTest(code=code, retryable=retryable):
+                response = control_plane.ProxiedResponse(409, {}, json.dumps({"error_code": code, "retryable": retryable}).encode())
+                with patch.object(handler, "_record_program_request_transition") as transition:
+                    self.assertIs(handler._handle_lifecycle_proxy_response(route, "park", {}, response), route)
+                    self.assertEqual(transition.call_count, expected)
+
     def test_exec_requests_wait_for_missing_worker_without_proxying(self) -> None:
         with _temporary_root() as root:
             routing = RoutingStore(root / "routes.sqlite")

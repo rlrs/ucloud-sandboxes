@@ -5,6 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import os
 import sqlite3
+import time
 import unittest
 from unittest.mock import patch
 
@@ -13,6 +14,15 @@ from tests.test_routing import sandbox_route
 
 
 class RoutingBatchTests(unittest.TestCase):
+    def wait_for_operations(self, batch, count):
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            with batch._condition:
+                if batch._batch and batch._batch.operations == count:
+                    return
+            time.sleep(0.005)
+        self.fail("batch did not accept operations")
+
     def test_shared_batch_keeps_reads_committed_and_conflicts_isolated(self):
         with TemporaryDirectory() as tmp, ThreadPoolExecutor(max_workers=8) as pool:
             store = RoutingStore(Path(tmp) / 'routing.sqlite')
@@ -22,20 +32,17 @@ class RoutingBatchTests(unittest.TestCase):
             batch.delay = 10
             route = ExecRoute('same', 'sandbox', 'node', 'job', 'http://node')
             first = pool.submit(store.upsert_exec, route)
-            with batch._condition:
-                self.assertTrue(batch._condition.wait_for(
-                    lambda: batch._batch and batch._batch.operations == 1, timeout=3))
+            self.wait_for_operations(batch, 1)
             conflict = pool.submit(peer.upsert_exec,
                 ExecRoute('same', 'other', 'node', 'job', 'http://node'))
             others = [pool.submit(peer.upsert_exec,
                 ExecRoute(str(i), 'sandbox', 'node', 'job', 'http://node')) for i in range(6)]
+            self.wait_for_operations(batch, 8)
             with batch._condition:
-                self.assertTrue(batch._condition.wait_for(
-                    lambda: batch._batch and batch._batch.operations == 8, timeout=3))
                 self.assertIsNone(peer.get_exec('same'))
                 self.assertFalse(any(f.done() for f in [first, conflict, *others]))
                 batch._batch.deadline = 0
-                batch._condition.notify_all()
+                batch._flush_condition.notify()
             first.result(timeout=3)
             with self.assertRaises(SandboxRouteConflictError):
                 conflict.result(timeout=3)

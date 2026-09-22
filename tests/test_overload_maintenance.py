@@ -35,19 +35,39 @@ class GroupCommitTests(unittest.TestCase):
                 row[0] for row in c.execute("SELECT id FROM values_test ORDER BY id")
             ]
 
+    def wait_for_operations(self, batch, count):
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            with batch._condition:
+                if batch._batch is not None and batch._batch.operations == count:
+                    return
+            time.sleep(0.005)
+        self.fail("batch did not accept operations")
+
     def batch_ready(self, batch, count):
+        self.wait_for_operations(batch, count)
         with batch._condition:
-            self.assertTrue(
-                batch._condition.wait_for(
-                    lambda: (
-                        batch._batch is not None and batch._batch.operations == count
-                    ),
-                    timeout=3,
-                )
-            )
             self.assertEqual(self.read(), [])
             batch._batch.deadline = 0
-            batch._condition.notify_all()
+            batch._flush_condition.notify()
+
+    def test_concurrent_closed_batches_make_durable_progress(self):
+        batch = DurableSqliteBatch(self.connect, lambda: None, max_operations=2)
+        barrier = threading.Barrier(64)
+
+        def write(i):
+            barrier.wait(10)
+            for j in range(4):
+                with batch.transaction() as conn:
+                    conn.execute("INSERT INTO values_test VALUES (?)", (i * 4 + j,))
+                with closing(self.connect()) as reader:
+                    self.assertIsNotNone(reader.execute("SELECT id FROM values_test WHERE id=?", (i * 4 + j,)).fetchone())
+
+        with ThreadPoolExecutor(max_workers=64) as pool:
+            futures = [pool.submit(write, i) for i in range(64)]
+            for future in futures:
+                future.result(20)
+        self.assertEqual(self.read(), list(range(256)))
 
     def test_batch_is_invisible_until_durable_and_bad_operation_is_isolated(self):
         batch = DurableSqliteBatch(self.connect, lambda: None, delay_seconds=10)
@@ -116,15 +136,7 @@ class GroupCommitTests(unittest.TestCase):
 
         with ThreadPoolExecutor() as pool:
             first = pool.submit(write)
-            with batch._condition:
-                self.assertTrue(
-                    batch._condition.wait_for(
-                        lambda: (
-                            batch._batch is not None and batch._batch.operations == 1
-                        ),
-                        timeout=2,
-                    )
-                )
+            self.wait_for_operations(batch, 1)
             with self.assertRaises(sqlite3.Error):
                 write(True)
             with self.assertRaises(sqlite3.Error):

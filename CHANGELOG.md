@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.78 - 2026-09-22
+
+- Stop waiting SQLite writers from repeatedly waking one another while a closed
+  batch awaits commit. Signal the flusher separately and release writers after
+  durability; retain per-operation rollback and generation fences.
+- Skip placement simulation for already-running or already-waking sandboxes,
+  while still sending the fenced wake to the owner. Keep expected warm-retention
+  deferrals out of durable program error writes.
+
 ## 0.5.77 - 2026-09-22
 
 - Return a warm-retention retry deadline without holding worker or gateway HTTP

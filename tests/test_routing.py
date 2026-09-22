@@ -2675,9 +2675,9 @@ class RoutingStoreTests(unittest.TestCase):
             )
             loaded_node_urls: list[str] = []
 
-            def pause_at_snapshot(conn, node_url):
+            def pause_at_snapshot(conn, node_url, **kwargs):
                 loaded_node_urls.append(node_url)
-                snapshot = original_scoped_load(conn, node_url)
+                snapshot = original_scoped_load(conn, node_url, **kwargs)
                 snapshot_reached.set()
                 self.assertTrue(allow_reconcile_to_continue.wait(timeout=5))
                 return snapshot

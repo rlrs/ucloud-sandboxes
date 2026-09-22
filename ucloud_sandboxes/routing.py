@@ -2001,8 +2001,38 @@ class RoutingStore:
         removed_routes: list[SandboxRoute] = []
         stale_snapshot_routes: list[SandboxRoute] = []
         with self._transaction() as conn:
+            # One snapshot under the writer transaction preserves the same
+            # incarnation fences without a SELECT for every inventory entry.
+            existing_by_id = {
+                route.sandbox_id: route
+                for row in conn.execute(
+                    "SELECT * FROM sandboxes WHERE sandbox_id IN (SELECT value FROM json_each(?))",
+                    (json.dumps([item.sandbox_id for item in observed]),),
+                )
+                if (route := _sandbox_route_from_row(row)) is not None
+            }
+            touched_ids: set[str] = set()
+            accepted_ids: set[str] = set()
+            dependencies = []
+            unique_observations = len({item.sandbox_id for item in observed}) == len(observed)
+
+            def write_dependencies():
+                if not dependencies:
+                    return
+                conn.execute(
+                    """INSERT INTO sandbox_storage_dependencies
+                    SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]'),
+                           json_extract(value, '$[2]') FROM json_each(?) WHERE true
+                    ON CONFLICT(sandbox_id) DO UPDATE SET
+                        generation = excluded.generation,
+                        storage_snapshot_json = excluded.storage_snapshot_json
+                    WHERE excluded.storage_snapshot_json != '{}'""",
+                    (json.dumps(dependencies),),
+                )
+                dependencies.clear()
+
             for item in observed:
-                existing = self._get_sandbox_unlocked(conn, item.sandbox_id)
+                existing = existing_by_id.get(item.sandbox_id)
                 if existing is None:
                     continue
                 observed_state = item.route_state
@@ -2088,7 +2118,18 @@ class RoutingStore:
                     or existing.snapshot_tag != candidate.snapshot_tag
                 ):
                     stale_snapshot_routes.append(existing)
-                self._write_sandbox(conn, candidate)
+                if replace(
+                    candidate, activity_epoch=existing.activity_epoch,
+                    updated_at=existing.updated_at,
+                ) == existing:
+                    # Only the observation watermark changed. Rewriting the
+                    # full spec, snapshot and generation HWM for every running
+                    # guest turns startup heartbeats into quadratic SQL work.
+                    touched_ids.add(candidate.sandbox_id)
+                else:
+                    self._write_sandbox(conn, candidate)
+                existing_by_id[candidate.sandbox_id] = candidate
+                accepted_ids.add(candidate.sandbox_id)
                 if item.storage_dependency is not None:
                     # This metadata conveys liveness only, never permission
                     # to restore a running sandbox from an old checkpoint.
@@ -2097,31 +2138,31 @@ class RoutingStore:
                         dependency = StorageSnapshotPublication.from_dict(
                             dependency
                         ).to_dict()
-                    conn.execute(
-                        """
-                        INSERT INTO sandbox_storage_dependencies VALUES (?, ?, ?)
-                        ON CONFLICT(sandbox_id) DO UPDATE SET
-                            generation = excluded.generation,
-                            storage_snapshot_json = excluded.storage_snapshot_json
-                        WHERE excluded.storage_snapshot_json != '{}'
-                        """,
-                        (
-                            candidate.sandbox_id,
-                            candidate.generation,
-                            _object_json({"publication": dependency})
-                            if dependency
-                            else "{}",
-                        ),
-                    )
-
+                    dependencies.append([
+                        candidate.sandbox_id, candidate.generation,
+                        _object_json({"publication": dependency}) if dependency else "{}",
+                    ])
+                    if not unique_observations:
+                        # Preserve per-entry ordering if a malformed inventory
+                        # repeats an identity with different snapshot metadata.
+                        write_dependencies()
+            if touched_ids:
                 conn.execute(
-                    "DELETE FROM pending WHERE sandbox_id = ?",
-                    (candidate.sandbox_id,),
+                    """UPDATE sandboxes SET activity_epoch = ?, updated_at = ?
+                    WHERE sandbox_id IN (SELECT value FROM json_each(?))""",
+                    (max(0, activity_epoch), observed_at, json.dumps(sorted(touched_ids))),
+                )
+            write_dependencies()
+            if accepted_ids:
+                conn.execute(
+                    "DELETE FROM pending WHERE sandbox_id IN (SELECT value FROM json_each(?))",
+                    (json.dumps(sorted(accepted_ids)),),
                 )
 
             current_routes = self._sandbox_routes_for_node_url_unlocked(
                 conn,
                 node_url,
+                excluded_ids=reported_ids,
             )
             for route in current_routes:
                 sandbox_id = route.sandbox_id
@@ -3727,6 +3768,8 @@ class RoutingStore:
         self,
         conn: sqlite3.Connection,
         node_url: str,
+        *,
+        excluded_ids: Iterable[str] = (),
     ) -> list[SandboxRoute]:
         return [
             route
@@ -3744,9 +3787,10 @@ class RoutingStore:
                            created_at, updated_at
                     FROM sandboxes
                     WHERE node_url = ?
+                      AND sandbox_id NOT IN (SELECT value FROM json_each(?))
                     ORDER BY sandbox_id
                     """,
-                    (node_url,),
+                    (node_url, json.dumps(sorted(excluded_ids))),
                 )
             )
             if route is not None

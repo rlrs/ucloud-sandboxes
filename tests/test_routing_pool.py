@@ -5,11 +5,51 @@ import os
 import sqlite3
 import threading
 import unittest
+from unittest.mock import patch
 from tests.test_control_plane import _sandbox_route
 from ucloud_sandboxes.routing import ExecRoute, RoutingStore
 
 
 class RoutingPoolTests(unittest.TestCase):
+    def test_inventory_batches_unchanged_routes_but_keeps_fences_and_dependencies(self):
+        from dataclasses import replace
+        from ucloud_sandboxes.models import SandboxInventoryEntry, utc_now
+        with TemporaryDirectory() as tmp:
+            store = RoutingStore(Path(tmp) / 'routing.sqlite')
+            routes = [store.upsert_sandbox(_sandbox_route(
+                sandbox_id=f'live-{i}', state='running', node_id='node',
+                job_id='job', node_url='http://node', node_epoch='boot',
+            )) for i in range(64)]
+            store.upsert_pending('live-0', routes[0].resources)
+            observations = [SandboxInventoryEntry(
+                r.sandbox_id, r.generation, r.create_operation_id, r.spec_hash,
+                'parked' if i == 0 else 'running', r.resources, storage_dependency={},
+            ) for i, r in enumerate(routes)]
+            observed_at = utc_now().isoformat()
+            kwargs = dict(node_id='node', job_id='job', node_epoch='boot',
+                          activity_epoch=12, observed_at=observed_at,
+                          reported_sandbox_ids=[r.sandbox_id for r in routes])
+            with patch.object(store, '_write_sandbox', wraps=store._write_sandbox) as write:
+                self.assertEqual(store.reconcile_sandboxes_for_node(
+                    'http://node', observations, **kwargs,
+                ), ([], []))
+                self.assertEqual(write.call_count, 1)
+            for i, route in enumerate(routes):
+                self.assertEqual(store.get_sandbox(route.sandbox_id), replace(
+                    route, state='parked' if i == 0 else 'running',
+                    activity_epoch=12, updated_at=observed_at,
+                ))
+            self.assertEqual(store.pending_demand().pending_count, 0)
+            with store._connect() as conn:
+                self.assertEqual(conn.execute('SELECT COUNT(*) FROM sandbox_storage_dependencies').fetchone()[0], 64)
+                self.assertEqual(conn.execute('SELECT COUNT(*) FROM sandbox_generation_hwm').fetchone()[0], 64)
+            # A stale report must not move either state or watermark backwards.
+            kwargs['activity_epoch'] = 11
+            stale = [replace(o, state='running') for o in observations]
+            store.reconcile_sandboxes_for_node('http://node', stale, **kwargs)
+            self.assertEqual(store.get_sandbox('live-0').state, 'parked')
+            self.assertEqual(store.get_sandbox('live-0').activity_epoch, 12)
+
     def test_repeated_image_warmup_observation_skips_writer_and_new_nodes_merge(self):
         from ucloud_sandboxes.models import ResourceQuantity
         with TemporaryDirectory() as tmp:

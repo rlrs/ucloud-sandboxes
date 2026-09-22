@@ -1,0 +1,3 @@
+Targeted routing/overload/managed-process/wake-owner/startup suite: 94 passed (13.619 s).
+Gateway/node/direct/lifecycle-batch/routing-pool/stateful/wake-batch suite: 106 passed (15.772 s).
+Linux rasmus-dev, Python 3.10.12. Ruff and git diff --check passed.

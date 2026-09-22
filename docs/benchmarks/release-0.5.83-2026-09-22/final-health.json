@@ -1,0 +1,76 @@
+{
+  "at": "2026-09-22T20:11:54.115011+00:00",
+  "release": "0.5.83",
+  "commit": "997159d",
+  "services": {
+    "gateway": "ActiveState=active\nSubState=running\nNRestarts=0\n",
+    "relay": "ActiveState=active\nSubState=running\nNRestarts=0\n",
+    "autoscaler": "ActiveState=active\nSubState=running\nNRestarts=0\n",
+    "registry": "ActiveState=active\nSubState=running\nNRestarts=0\n"
+  },
+  "nodes": [
+    {
+      "job_id": "12397503",
+      "version": "0.5.81",
+      "active_sandboxes": 0,
+      "active_builds": 0,
+      "inventory_count": 1,
+      "heartbeat_age_seconds": 5.1
+    },
+    {
+      "job_id": "12398541",
+      "version": "0.5.81",
+      "active_sandboxes": 0,
+      "active_builds": 0,
+      "inventory_count": 1,
+      "heartbeat_age_seconds": 19.7
+    },
+    {
+      "job_id": "12399418",
+      "version": "0.5.83",
+      "active_sandboxes": 0,
+      "active_builds": 0,
+      "inventory_count": 0,
+      "heartbeat_age_seconds": 23.8
+    },
+    {
+      "job_id": "12399419",
+      "version": "0.5.83",
+      "active_sandboxes": 0,
+      "active_builds": 0,
+      "inventory_count": 0,
+      "heartbeat_age_seconds": 12.7
+    },
+    {
+      "job_id": "12399420",
+      "version": "0.5.83",
+      "active_sandboxes": 0,
+      "active_builds": 0,
+      "inventory_count": 0,
+      "heartbeat_age_seconds": 18.3
+    },
+    {
+      "job_id": "12399423",
+      "version": "0.5.83",
+      "active_sandboxes": 0,
+      "active_builds": 0,
+      "inventory_count": 0,
+      "heartbeat_age_seconds": 6.0
+    }
+  ],
+  "health": {
+    "gateway": {
+      "ok": true,
+      "service": "control-plane",
+      "version": "0.5.83"
+    },
+    "relay": {
+      "ok": true,
+      "service": "model-relay",
+      "version": "0.5.83"
+    }
+  },
+  "route_count": 0,
+  "program_errors": 0,
+  "last_autoscaler_cycle": "2026-09-22T20:11:49.692013+00:00"
+}

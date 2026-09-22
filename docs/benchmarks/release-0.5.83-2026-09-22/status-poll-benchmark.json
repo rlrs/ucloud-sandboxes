@@ -1,0 +1,18 @@
+[
+  {
+    "version": "0.5.82",
+    "polls": 512,
+    "concurrency": 32,
+    "seconds": 4.343769196886569,
+    "p95_seconds": 0.5340829149354249,
+    "commits": 512
+  },
+  {
+    "version": "0.5.83",
+    "polls": 512,
+    "concurrency": 32,
+    "seconds": 0.12875362299382687,
+    "p95_seconds": 0.010311204008758068,
+    "commits": 0
+  }
+]

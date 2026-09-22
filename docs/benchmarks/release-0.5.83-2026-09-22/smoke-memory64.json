@@ -1,0 +1,311 @@
+{
+  "run_id": "relay-load-23d47e0b8e2e",
+  "started_at": "2026-09-22T20:09:05.769717+00:00",
+  "configuration": {
+    "gateway_url": "https://app-sandboxes.cloud.sdu.dk",
+    "relay_url": "https://app-sandboxes-relay-v2.cloud.sdu.dk",
+    "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+    "sandboxes": 64,
+    "cycles": 3,
+    "resident_mb": 512,
+    "dirty_mb": 128,
+    "files": 64,
+    "file_kib": 64,
+    "payload_kib": 32,
+    "cpu_ms": 100,
+    "model_seconds": 20.0,
+    "model_jitter": 5.0,
+    "parking_mode": "natural",
+    "cpus": 1,
+    "memory_mb": 1024,
+    "disk_mb": 4096,
+    "create_concurrency": 8,
+    "warmup_cycles": 1,
+    "deadline_seconds": 600.0,
+    "wake_p95_seconds": 0.8,
+    "seed": 1,
+    "start_signal_file": null
+  },
+  "errors": [],
+  "cleanup_errors": [],
+  "health": [
+    {
+      "seconds": 0.028733931998431217,
+      "ok": true
+    },
+    {
+      "seconds": 0.01578689999951166,
+      "ok": true
+    },
+    {
+      "seconds": 0.019118348998745205,
+      "ok": true
+    },
+    {
+      "seconds": 0.01439135799955693,
+      "ok": true
+    },
+    {
+      "seconds": 0.01839272399956826,
+      "ok": true
+    },
+    {
+      "seconds": 0.025762277000467293,
+      "ok": true
+    },
+    {
+      "seconds": 0.021549529999902006,
+      "ok": true
+    },
+    {
+      "seconds": 0.024441105999358115,
+      "ok": true
+    },
+    {
+      "seconds": 0.01833534800061898,
+      "ok": true
+    },
+    {
+      "seconds": 0.02531121599895414,
+      "ok": true
+    },
+    {
+      "seconds": 0.019129265001538442,
+      "ok": true
+    },
+    {
+      "seconds": 0.018813478998708888,
+      "ok": true
+    },
+    {
+      "seconds": 0.027030847000787617,
+      "ok": true
+    },
+    {
+      "seconds": 0.01822215900028823,
+      "ok": true
+    },
+    {
+      "seconds": 0.01624422900022182,
+      "ok": true
+    },
+    {
+      "seconds": 0.0200082890005433,
+      "ok": true
+    },
+    {
+      "seconds": 0.019373171000552247,
+      "ok": true
+    },
+    {
+      "seconds": 0.018143049999707728,
+      "ok": true
+    },
+    {
+      "seconds": 0.023412106000250787,
+      "ok": true
+    },
+    {
+      "seconds": 0.035111879000396584,
+      "ok": true
+    },
+    {
+      "seconds": 0.01755642500029353,
+      "ok": true
+    },
+    {
+      "seconds": 0.023140736999266664,
+      "ok": true
+    },
+    {
+      "seconds": 0.018590792999020778,
+      "ok": true
+    },
+    {
+      "seconds": 0.025809447999563417,
+      "ok": true
+    },
+    {
+      "seconds": 0.05174399199859181,
+      "ok": true
+    },
+    {
+      "seconds": 0.037989914999343455,
+      "ok": true
+    },
+    {
+      "seconds": 0.017976879998968798,
+      "ok": true
+    },
+    {
+      "seconds": 0.021784434000437614,
+      "ok": true
+    },
+    {
+      "seconds": 0.02448383999944781,
+      "ok": true
+    },
+    {
+      "seconds": 0.01804306899975927,
+      "ok": true
+    },
+    {
+      "seconds": 0.020458597000470036,
+      "ok": true
+    },
+    {
+      "seconds": 0.036738589999004034,
+      "ok": true
+    },
+    {
+      "seconds": 0.021509178999622236,
+      "ok": true
+    },
+    {
+      "seconds": 0.02447818200016627,
+      "ok": true
+    },
+    {
+      "seconds": 0.013391190999755054,
+      "ok": true
+    },
+    {
+      "seconds": 0.024907328001063433,
+      "ok": true
+    },
+    {
+      "seconds": 0.015854110999498516,
+      "ok": true
+    },
+    {
+      "seconds": 0.0213756180000928,
+      "ok": true
+    },
+    {
+      "seconds": 0.021936032000667183,
+      "ok": true
+    },
+    {
+      "seconds": 0.017715624999254942,
+      "ok": true
+    },
+    {
+      "seconds": 0.02881084800173994,
+      "ok": true
+    },
+    {
+      "seconds": 0.021587576999081648,
+      "ok": true
+    },
+    {
+      "seconds": 0.01742062999983318,
+      "ok": true
+    },
+    {
+      "seconds": 0.022266250000029686,
+      "ok": true
+    },
+    {
+      "seconds": 0.02723863900064316,
+      "ok": true
+    },
+    {
+      "seconds": 0.015531495000686846,
+      "ok": true
+    },
+    {
+      "seconds": 0.02677624300122261,
+      "ok": true
+    },
+    {
+      "seconds": 0.014992272999734269,
+      "ok": true
+    },
+    {
+      "seconds": 0.016667687001245213,
+      "ok": true
+    },
+    {
+      "seconds": 0.01759252000010747,
+      "ok": true
+    },
+    {
+      "seconds": 0.02063955999983591,
+      "ok": true
+    }
+  ],
+  "driver_python": "3.14.4",
+  "harness_sha256": "8580c2c328f452fc25bcbcd039e10d6822db171b1c7c63fc02179924ae100588",
+  "deployed_health": {
+    "ok": true,
+    "service": "control-plane",
+    "version": "0.5.83"
+  },
+  "commit_and_wake_seconds": {
+    "count": 128,
+    "p50": 0.5227160530002948,
+    "p95": 0.6728168919999007,
+    "p99": 0.7880817570003273,
+    "max": 0.8444651169993449
+  },
+  "usable_exec_seconds": {
+    "count": 128,
+    "p50": 1.2864092124991657,
+    "p95": 1.6939814249999472,
+    "p99": 1.8217533779989026,
+    "max": 2.007328431998758
+  },
+  "response_ready_to_usable_exec_seconds": {
+    "count": 128,
+    "p50": 1.288349612964339,
+    "p95": 1.6946168981630763,
+    "p99": 1.823666552945724,
+    "max": 2.0085918311833666
+  },
+  "response_ready_to_wake_seconds": {
+    "count": 128,
+    "p50": 0.5236272924621517,
+    "p95": 0.6732167536174529,
+    "p99": 0.7889821571243374,
+    "max": 0.8466166720936599
+  },
+  "post_wake_exec_seconds": {
+    "count": 128,
+    "p50": 0.7546025559995542,
+    "p95": 0.9873186300010275,
+    "p99": 1.3337087109994172,
+    "max": 1.3886275959994236
+  },
+  "guest_verification_seconds": {
+    "count": 128,
+    "p50": 0.5461733429999995,
+    "p95": 0.7361716550000068,
+    "p99": 1.1137752159999934,
+    "max": 1.1609677050000045
+  },
+  "guest_tool_seconds": {
+    "count": 128,
+    "p50": 0.04462204949999915,
+    "p95": 0.07514184299999727,
+    "p99": 0.0851852409999907,
+    "max": 0.10599591700000133
+  },
+  "guest_transport_retries": {
+    "count": 128,
+    "p50": 0.0,
+    "p95": 0,
+    "p99": 0,
+    "max": 0
+  },
+  "measured_park_observed_cycles": 128,
+  "completed_cycles": 192,
+  "correct": true,
+  "slo_passed": false,
+  "finished_at": "2026-09-22T20:10:51.513086+00:00",
+  "placement_counts": {
+    "12399418": 13,
+    "12399419": 20,
+    "12399420": 16,
+    "12399423": 15
+  }
+}

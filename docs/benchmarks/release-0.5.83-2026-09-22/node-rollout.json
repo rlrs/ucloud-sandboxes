@@ -1,0 +1,72 @@
+[
+  {
+    "job": "12399419",
+    "result": {
+      "native_pid_unchanged": "5489",
+      "version": "0.5.83",
+      "wheel_sha256": "ba39f5e182093417b68221a144a724ec8b7d58e11992b44fd3f201103150531a",
+      "health": {
+        "ok": true,
+        "service": "node-agent",
+        "version": "0.5.83"
+      }
+    },
+    "admission_open": true
+  },
+  {
+    "job": "12399418",
+    "result": {
+      "native_pid_unchanged": "5491",
+      "version": "0.5.83",
+      "wheel_sha256": "ba39f5e182093417b68221a144a724ec8b7d58e11992b44fd3f201103150531a",
+      "health": {
+        "ok": true,
+        "service": "node-agent",
+        "version": "0.5.83"
+      }
+    },
+    "admission_open": true
+  },
+  {
+    "job": "12399420",
+    "result": {
+      "native_pid_unchanged": "5497",
+      "version": "0.5.83",
+      "wheel_sha256": "ba39f5e182093417b68221a144a724ec8b7d58e11992b44fd3f201103150531a",
+      "health": {
+        "ok": true,
+        "service": "node-agent",
+        "version": "0.5.83"
+      }
+    },
+    "admission_open": true
+  },
+  {
+    "job": "12399423",
+    "result": {
+      "native_pid_unchanged": "5495",
+      "version": "0.5.83",
+      "wheel_sha256": "ba39f5e182093417b68221a144a724ec8b7d58e11992b44fd3f201103150531a",
+      "health": {
+        "ok": true,
+        "service": "node-agent",
+        "version": "0.5.83"
+      }
+    },
+    "admission_open": true
+  },
+  {
+    "job": "12399413",
+    "result": {
+      "native_pid_unchanged": "0",
+      "version": "0.5.83",
+      "wheel_sha256": "ba39f5e182093417b68221a144a724ec8b7d58e11992b44fd3f201103150531a",
+      "health": {
+        "ok": true,
+        "service": "node-agent",
+        "version": "0.5.83"
+      }
+    },
+    "admission_open": true
+  }
+]

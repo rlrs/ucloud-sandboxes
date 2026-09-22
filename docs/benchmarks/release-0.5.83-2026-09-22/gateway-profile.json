@@ -1,0 +1,115 @@
+{
+  "samples": 40,
+  "placement_lock_owner": [
+    [
+      "routing.py:1426:allocate_sandbox_create_with_pending <- control_plane.py:6057:_select_and_reserve_node <- control_plane.py:3134:_create_sandbox_on_node_locked <- control_plane.py:2982:_create_sandbox_admitted <- control_plane.py:2950:_create_sandbox_on_node <- control_plane.py:1136:_route_to_nodes_unchecked <- control_plane.py:1120:_route_to_nodes <- control_plane.py:888:do_POST <- http_server.py:204:wrapped",
+      36
+    ],
+    [
+      "threading.py:369:wait <- threading.py:670:wait <- durable_batch.py:123:_writer_turn <- contextlib.py:141:__enter__ <- durable_batch.py:137:transaction <- contextlib.py:141:__enter__ <- routing.py:3528:_transaction <- contextlib.py:141:__enter__ <- routing.py:1428:allocate_sandbox_create_with_pending",
+      4
+    ]
+  ],
+  "all_threads": [
+    [
+      "routing.py:750:upsert_managed_process <- control_plane.py:4801:_record_successful_sandbox_proxy_state <- control_plane.py:4398:_route_sandbox_request_admitted <- control_plane.py:4192:_route_sandbox_request <- control_plane.py:1187:_route_to_nodes_unchecked <- control_plane.py:1120:_route_to_nodes <- control_plane.py:875:do_GET <- http_server.py:204:wrapped <- server.py:484:handle_one_request",
+      4064
+    ],
+    [
+      "socket.py:725:readinto <- client.py:297:_read_status <- client.py:336:begin <- client.py:1459:getresponse <- connection.py:638:getresponse <- connectionpool.py:540:_make_request <- connectionpool.py:793:urlopen <- poolmanager.py:459:urlopen <- _request_methods.py:278:request_encode_body",
+      1362
+    ],
+    [
+      "routing.py:2659:image_warmups <- control_plane.py:6438:_schedule_image_warmups <- control_plane.py:1035:do_POST <- http_server.py:204:wrapped <- server.py:484:handle_one_request <- server.py:496:handle <- socketserver.py:766:__init__ <- socketserver.py:362:finish_request <- socketserver.py:697:process_request_thread",
+      1069
+    ],
+    [
+      "routing.py:1943:reconcile_sandboxes_for_node <- control_plane.py:1047:_reconcile_heartbeat_inventory <- control_plane.py:1025:do_POST <- http_server.py:204:wrapped <- server.py:484:handle_one_request <- server.py:496:handle <- socketserver.py:766:__init__ <- socketserver.py:362:finish_request <- socketserver.py:697:process_request_thread",
+      823
+    ],
+    [
+      "threading.py:369:wait <- _base.py:445:result <- control_plane.py:625:reserve <- control_plane.py:5371:_reserve_parked_sandbox_wake <- control_plane.py:5165:_ensure_parked_sandbox_wake_placement <- control_plane.py:4555:_prepare_wake_placement <- control_plane.py:4312:_route_sandbox_request_admitted <- control_plane.py:4192:_route_sandbox_request <- control_plane.py:1187:_route_to_nodes_unchecked",
+      819
+    ],
+    [
+      "threading.py:369:wait <- threading.py:670:wait <- durable_batch.py:123:_writer_turn <- contextlib.py:141:__enter__ <- durable_batch.py:137:transaction <- contextlib.py:141:__enter__ <- routing.py:3528:_transaction <- contextlib.py:141:__enter__ <- routing.py:932:upsert_program_request_transition_with_change",
+      657
+    ],
+    [
+      "control_plane.py:6040:_select_and_reserve_node <- control_plane.py:3134:_create_sandbox_on_node_locked <- control_plane.py:2982:_create_sandbox_admitted <- control_plane.py:2950:_create_sandbox_on_node <- control_plane.py:1136:_route_to_nodes_unchecked <- control_plane.py:1120:_route_to_nodes <- control_plane.py:888:do_POST <- http_server.py:204:wrapped <- server.py:484:handle_one_request",
+      458
+    ],
+    [
+      "threading.py:369:wait <- threading.py:670:wait <- durable_batch.py:123:_writer_turn <- contextlib.py:141:__enter__ <- durable_batch.py:137:transaction <- contextlib.py:141:__enter__ <- routing.py:3528:_transaction <- contextlib.py:141:__enter__ <- routing.py:1153:set_sandbox_state_if_current",
+      363
+    ],
+    [
+      "routing.py:852:<genexpr> <- routing.py:850:sandbox_routes_readonly <- control_plane.py:2482:_list_sandboxes_from_cache <- control_plane.py:1133:_route_to_nodes_unchecked <- control_plane.py:1120:_route_to_nodes <- control_plane.py:875:do_GET <- http_server.py:204:wrapped <- server.py:484:handle_one_request <- server.py:496:handle",
+      259
+    ],
+    [
+      "socket.py:725:readinto <- client.py:297:_read_status <- client.py:336:begin <- client.py:1459:getresponse <- connection.py:638:getresponse <- connectionpool.py:540:_make_request <- connectionpool.py:793:urlopen <- poolmanager.py:459:urlopen <- _request_methods.py:182:request_encode_url",
+      118
+    ],
+    [
+      "threading.py:369:wait <- threading.py:670:wait <- singleflight_cache.py:52:get_or_load <- image_inventory_cache.py:70:get_or_load <- control_plane.py:2644:_cached_raw_image_inventory_across_nodes <- control_plane.py:6146:_resolve_sandbox_image_reference <- control_plane.py:6101:_resolve_request_image_reference <- control_plane.py:3009:_create_sandbox_on_node_locked <- control_plane.py:2982:_create_sandbox_admitted",
+      117
+    ],
+    [
+      "routing.py:750:upsert_managed_process <- control_plane.py:4801:_record_successful_sandbox_proxy_state <- control_plane.py:4398:_route_sandbox_request_admitted <- control_plane.py:4192:_route_sandbox_request <- control_plane.py:1187:_route_to_nodes_unchecked <- control_plane.py:1120:_route_to_nodes <- control_plane.py:888:do_POST <- http_server.py:204:wrapped <- server.py:484:handle_one_request",
+      80
+    ],
+    [
+      "http_server.py:316:shutdown_request <- socketserver.py:701:process_request_thread <- http_server.py:376:process_request_thread <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+      67
+    ],
+    [
+      "routing.py:3514:_connect <- contextlib.py:148:__exit__ <- routing.py:646:get_sandbox_readonly <- control_plane.py:3026:_create_sandbox_on_node_locked <- control_plane.py:2982:_create_sandbox_admitted <- control_plane.py:2950:_create_sandbox_on_node <- control_plane.py:1136:_route_to_nodes_unchecked <- control_plane.py:1120:_route_to_nodes <- control_plane.py:888:do_POST",
+      48
+    ],
+    [
+      "routing.py:3489:_connect <- contextlib.py:141:__enter__ <- routing.py:646:get_sandbox_readonly <- control_plane.py:3026:_create_sandbox_on_node_locked <- control_plane.py:2982:_create_sandbox_admitted <- control_plane.py:2950:_create_sandbox_on_node <- control_plane.py:1136:_route_to_nodes_unchecked <- control_plane.py:1120:_route_to_nodes <- control_plane.py:888:do_POST",
+      47
+    ],
+    [
+      "<string>:12:sample <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+      40
+    ],
+    [
+      "routing.py:2135:delete_sandbox <- control_plane.py:4218:_route_sandbox_request_admitted <- control_plane.py:4192:_route_sandbox_request <- control_plane.py:1187:_route_to_nodes_unchecked <- control_plane.py:1120:_route_to_nodes <- control_plane.py:1114:do_DELETE <- http_server.py:204:wrapped <- server.py:484:handle_one_request <- server.py:496:handle",
+      40
+    ],
+    [
+      "control_plane.py:5297:_wake_placement_reservation <- contextlib.py:141:__enter__ <- control_plane.py:639:_drain <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+      40
+    ],
+    [
+      "routing.py:1475:prepare_sandbox_delete <- control_plane.py:4660:_prepare_delete_route <- control_plane.py:4332:_route_sandbox_request_admitted <- control_plane.py:4192:_route_sandbox_request <- control_plane.py:1187:_route_to_nodes_unchecked <- control_plane.py:1120:_route_to_nodes <- control_plane.py:1114:do_DELETE <- http_server.py:204:wrapped <- server.py:484:handle_one_request",
+      40
+    ],
+    [
+      "routing.py:1891:delete_sandbox_if_current <- control_plane.py:5022:_commit_successful_worker_delete <- control_plane.py:4418:_route_sandbox_request_admitted <- control_plane.py:4192:_route_sandbox_request <- control_plane.py:1187:_route_to_nodes_unchecked <- control_plane.py:1120:_route_to_nodes <- control_plane.py:1114:do_DELETE <- http_server.py:204:wrapped <- server.py:484:handle_one_request",
+      40
+    ],
+    [
+      "threading.py:373:wait <- threading.py:670:wait <- telemetry.py:271:_run <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+      40
+    ],
+    [
+      "threading.py:373:wait <- threading.py:670:wait <- __init__.py:553:_ticker <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+      39
+    ],
+    [
+      "routing.py:1426:allocate_sandbox_create_with_pending <- control_plane.py:6057:_select_and_reserve_node <- control_plane.py:3134:_create_sandbox_on_node_locked <- control_plane.py:2982:_create_sandbox_admitted <- control_plane.py:2950:_create_sandbox_on_node <- control_plane.py:1136:_route_to_nodes_unchecked <- control_plane.py:1120:_route_to_nodes <- control_plane.py:888:do_POST <- http_server.py:204:wrapped",
+      36
+    ],
+    [
+      "threading.py:373:wait <- threading.py:404:wait_for <- durable_batch.py:192:_flush <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+      30
+    ],
+    [
+      "threading.py:369:wait <- threading.py:404:wait_for <- metrics.py:527:_write_queued_events <- threading.py:1024:run <- threading.py:1082:_bootstrap_inner <- threading.py:1044:_bootstrap",
+      30
+    ]
+  ]
+}

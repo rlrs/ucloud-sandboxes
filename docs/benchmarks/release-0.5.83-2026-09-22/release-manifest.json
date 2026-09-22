@@ -1,0 +1,17 @@
+{
+  "version": "0.5.83",
+  "commit": "997159d",
+  "files": {
+    "verify_installed_wheel.py": "99e1a209444c1ae83defe20f821b1d3f093ad8d3ff1a3b2fb85751083e62c51f",
+    "validate-sandbox-bundle.py": "09e545b5ec8273e11d0e2e0510ab055aaae72392fcf2aef3633625ed39f126f5",
+    "node-upgrade.py": "5134b53af4978f3bc3bb7c04f8ed601ab494d02285627b69ab62ccf08d856930",
+    "builder-node-package.tar.gz.sha256": "1ddbf5a470c044b107ed693c89a56cf08d1c52e21d308e89c60c4a61d09f96fe",
+    "bundles.ready": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "validate-builder-bundle.py": "c8ddb143938726486703c147124198863fd5be74e90a8a391a2289731300ab24",
+    "ucloud_sandboxes-0.5.83-py3-none-any.whl": "ba39f5e182093417b68221a144a724ec8b7d58e11992b44fd3f201103150531a",
+    "sandbox-node-package.tar.gz": "7cdac108096cbaa69c0abd423d39891b5b3e7f7cb273b3546fd64dc24e49936e",
+    "repack_node_bundle.py": "7de4413c60599a2e30b10e565f7fe3f0942e42fc259089e86cc7faf9956a48f9",
+    "builder-node-package.tar.gz": "17cfa85ea06c307b540d0cd2d4700d71fe47b60efebf140b3798389b765da2ef",
+    "sandbox-node-package.tar.gz.sha256": "fdc38d0cd55cd30b84bf581de1f3f5a0cfe2dff9d38a7a8e50873b853337c3ab"
+  }
+}

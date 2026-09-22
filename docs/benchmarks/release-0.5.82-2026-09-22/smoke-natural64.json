@@ -1,0 +1,226 @@
+{
+  "run_id": "relay-load-96e5b123ade7",
+  "started_at": "2026-09-22T19:39:07.957409+00:00",
+  "configuration": {
+    "gateway_url": "https://app-sandboxes.cloud.sdu.dk",
+    "relay_url": "https://app-sandboxes-relay-v2.cloud.sdu.dk",
+    "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+    "sandboxes": 64,
+    "cycles": 3,
+    "resident_mb": 128,
+    "dirty_mb": 16,
+    "files": 64,
+    "file_kib": 64,
+    "payload_kib": 32,
+    "cpu_ms": 100,
+    "model_seconds": 10.0,
+    "model_jitter": 5.0,
+    "parking_mode": "natural",
+    "cpus": 1,
+    "memory_mb": 1024,
+    "disk_mb": 4096,
+    "create_concurrency": 8,
+    "warmup_cycles": 1,
+    "deadline_seconds": 600.0,
+    "wake_p95_seconds": 0.8,
+    "seed": 1,
+    "start_signal_file": null
+  },
+  "errors": [],
+  "cleanup_errors": [],
+  "health": [
+    {
+      "seconds": 0.035109490999275295,
+      "ok": true
+    },
+    {
+      "seconds": 0.015125515999898198,
+      "ok": true
+    },
+    {
+      "seconds": 0.015241721000165853,
+      "ok": true
+    },
+    {
+      "seconds": 0.023984601999472943,
+      "ok": true
+    },
+    {
+      "seconds": 0.0174106889999166,
+      "ok": true
+    },
+    {
+      "seconds": 0.01757659800023248,
+      "ok": true
+    },
+    {
+      "seconds": 0.018410384000162594,
+      "ok": true
+    },
+    {
+      "seconds": 0.023681153999859816,
+      "ok": true
+    },
+    {
+      "seconds": 0.017740635000336624,
+      "ok": true
+    },
+    {
+      "seconds": 0.016237832000115304,
+      "ok": true
+    },
+    {
+      "seconds": 0.01958439299960446,
+      "ok": true
+    },
+    {
+      "seconds": 0.01958691700019699,
+      "ok": true
+    },
+    {
+      "seconds": 0.01591207999990729,
+      "ok": true
+    },
+    {
+      "seconds": 0.036501927000244905,
+      "ok": true
+    },
+    {
+      "seconds": 0.049212134999834234,
+      "ok": true
+    },
+    {
+      "seconds": 0.0233816330000991,
+      "ok": true
+    },
+    {
+      "seconds": 0.01867170800051099,
+      "ok": true
+    },
+    {
+      "seconds": 0.018825991000085196,
+      "ok": true
+    },
+    {
+      "seconds": 0.02507250100006786,
+      "ok": true
+    },
+    {
+      "seconds": 0.017690310000034515,
+      "ok": true
+    },
+    {
+      "seconds": 0.10858667000047717,
+      "ok": true
+    },
+    {
+      "seconds": 0.045991383000000496,
+      "ok": true
+    },
+    {
+      "seconds": 0.016225803999986965,
+      "ok": true
+    },
+    {
+      "seconds": 0.01569818900043174,
+      "ok": true
+    },
+    {
+      "seconds": 0.016202107000026444,
+      "ok": true
+    },
+    {
+      "seconds": 0.01979688299979898,
+      "ok": true
+    },
+    {
+      "seconds": 0.0200603700004649,
+      "ok": true
+    },
+    {
+      "seconds": 0.03726017999997566,
+      "ok": true
+    },
+    {
+      "seconds": 0.023425919000146678,
+      "ok": true
+    },
+    {
+      "seconds": 0.015373418999843125,
+      "ok": true
+    }
+  ],
+  "driver_python": "3.14.4",
+  "harness_sha256": "8580c2c328f452fc25bcbcd039e10d6822db171b1c7c63fc02179924ae100588",
+  "deployed_health": {
+    "ok": true,
+    "service": "control-plane",
+    "version": "0.5.82"
+  },
+  "commit_and_wake_seconds": {
+    "count": 128,
+    "p50": 0.1377551005002715,
+    "p95": 0.6114845969996168,
+    "p99": 0.6998923890005244,
+    "max": 0.9288098389997685
+  },
+  "usable_exec_seconds": {
+    "count": 128,
+    "p50": 0.4601890295002704,
+    "p95": 0.9766639890003717,
+    "p99": 1.0888576719999037,
+    "max": 1.3750780069995017
+  },
+  "response_ready_to_usable_exec_seconds": {
+    "count": 128,
+    "p50": 0.4608630476413964,
+    "p95": 0.9773383513056615,
+    "p99": 1.0891797393142042,
+    "max": 1.375595665012952
+  },
+  "response_ready_to_wake_seconds": {
+    "count": 128,
+    "p50": 0.13863889241110883,
+    "p95": 0.6131836196245786,
+    "p99": 0.7001121365974541,
+    "max": 0.9293274970132188
+  },
+  "post_wake_exec_seconds": {
+    "count": 128,
+    "p50": 0.31022200749976037,
+    "p95": 0.4168904130001465,
+    "p99": 0.4811944430002768,
+    "max": 0.4886237050004638
+  },
+  "guest_verification_seconds": {
+    "count": 128,
+    "p50": 0.08015087249999908,
+    "p95": 0.14710552000000376,
+    "p99": 0.18947304200000303,
+    "max": 0.2098459460000015
+  },
+  "guest_tool_seconds": {
+    "count": 128,
+    "p50": 0.0497994705,
+    "p95": 0.11264721799999933,
+    "p99": 0.16460786900000102,
+    "max": 0.17201565599999924
+  },
+  "guest_transport_retries": {
+    "count": 128,
+    "p50": 0.0,
+    "p95": 0,
+    "p99": 0,
+    "max": 0
+  },
+  "measured_park_observed_cycles": 1,
+  "completed_cycles": 192,
+  "correct": true,
+  "slo_passed": false,
+  "finished_at": "2026-09-22T19:40:10.529619+00:00",
+  "placement_counts": {
+    "12399420": 23,
+    "12399419": 22,
+    "12399418": 19
+  }
+}

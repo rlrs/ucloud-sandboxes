@@ -1,0 +1,156 @@
+{
+  "checked_at": "2026-09-22T19:46:58.811506+00:00",
+  "release": "0.5.82",
+  "release_commit": "0bd6cb8",
+  "implementation_commit": "e8fa5fc419c4fe076cbf4648e4cb7082f785ce29",
+  "nodes": [
+    {
+      "job_id": "12399418",
+      "agent_version": "0.5.82",
+      "draining": false,
+      "admission_open": true,
+      "active_sandboxes": 11,
+      "active_image_builds": 0,
+      "provider_state": "RUNNING",
+      "kernel": "7.0.0-30-generic",
+      "native_executables": {
+        "/usr/local/libexec/ucloud-storage-native-backend": "76d59a1c10cb495e90380e320de8fe30e6370f8b374aab410494c8e0b92a5748"
+      },
+      "inventory_count": 19,
+      "inventory_states": {
+        "planned": 8,
+        "running": 11
+      }
+    },
+    {
+      "job_id": "12399419",
+      "agent_version": "0.5.82",
+      "draining": false,
+      "admission_open": true,
+      "active_sandboxes": 22,
+      "active_image_builds": 0,
+      "provider_state": "RUNNING",
+      "kernel": "7.0.0-30-generic",
+      "native_executables": {
+        "/usr/local/libexec/ucloud-storage-native-backend": "76d59a1c10cb495e90380e320de8fe30e6370f8b374aab410494c8e0b92a5748"
+      },
+      "inventory_count": 22,
+      "inventory_states": {
+        "running": 22
+      }
+    },
+    {
+      "job_id": "12399420",
+      "agent_version": "0.5.82",
+      "draining": false,
+      "admission_open": true,
+      "active_sandboxes": 21,
+      "active_image_builds": 0,
+      "provider_state": "RUNNING",
+      "kernel": "7.0.0-30-generic",
+      "native_executables": {
+        "/usr/local/libexec/ucloud-storage-native-backend": "76d59a1c10cb495e90380e320de8fe30e6370f8b374aab410494c8e0b92a5748"
+      },
+      "inventory_count": 21,
+      "inventory_states": {
+        "running": 21
+      }
+    },
+    {
+      "job_id": "12399412",
+      "agent_version": "0.5.82",
+      "draining": false,
+      "admission_open": true,
+      "active_sandboxes": 0,
+      "active_image_builds": 2,
+      "provider_state": "RUNNING",
+      "inventory_count": 0,
+      "inventory_states": {}
+    },
+    {
+      "job_id": "12399413",
+      "agent_version": "0.5.82",
+      "draining": false,
+      "admission_open": true,
+      "active_sandboxes": 0,
+      "active_image_builds": 0,
+      "provider_state": "RUNNING",
+      "inventory_count": 0,
+      "inventory_states": {}
+    },
+    {
+      "job_id": "12399414",
+      "agent_version": "0.5.82",
+      "draining": false,
+      "admission_open": true,
+      "active_sandboxes": 0,
+      "active_image_builds": 3,
+      "provider_state": "RUNNING",
+      "inventory_count": 0,
+      "inventory_states": {}
+    },
+    {
+      "job_id": "12397503",
+      "agent_version": "0.5.81",
+      "draining": true,
+      "admission_open": false,
+      "active_sandboxes": 0,
+      "active_image_builds": 0,
+      "provider_state": "RUNNING",
+      "inventory_count": 1,
+      "inventory_states": {
+        "rootfs_ready": 1
+      }
+    },
+    {
+      "job_id": "12398541",
+      "agent_version": "0.5.81",
+      "draining": true,
+      "admission_open": false,
+      "active_sandboxes": 0,
+      "active_image_builds": 0,
+      "provider_state": "RUNNING",
+      "inventory_count": 1,
+      "inventory_states": {
+        "parked": 1
+      }
+    }
+  ],
+  "retired": [
+    {
+      "job_id": "12398499",
+      "provider_state": "SUCCESS"
+    },
+    {
+      "job_id": "12398500",
+      "provider_state": "SUCCESS"
+    },
+    {
+      "job_id": "12398539",
+      "provider_state": "SUCCESS"
+    }
+  ],
+  "journal_reconciliation": [
+    {
+      "operation_id": "provider-ecf3a23d46be5dbfa1b1804f854c05fc",
+      "state": "recovered",
+      "jobs": [
+        "12398499"
+      ]
+    },
+    {
+      "operation_id": "provider-9cf53f86dc4b5212a8b9f6aef3cd9fac",
+      "state": "recovered",
+      "jobs": [
+        "12398500"
+      ]
+    },
+    {
+      "operation_id": "provider-a94aa28ded9f530486157b4e225eeac7",
+      "state": "recovered",
+      "jobs": [
+        "12398539"
+      ]
+    }
+  ]
+}

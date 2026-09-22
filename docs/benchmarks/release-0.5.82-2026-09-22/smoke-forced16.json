@@ -1,0 +1,233 @@
+{
+  "run_id": "relay-load-4acb67a224af",
+  "started_at": "2026-09-22T19:37:24.749704+00:00",
+  "configuration": {
+    "gateway_url": "https://app-sandboxes.cloud.sdu.dk",
+    "relay_url": "https://app-sandboxes-relay-v2.cloud.sdu.dk",
+    "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+    "sandboxes": 16,
+    "cycles": 3,
+    "resident_mb": 128,
+    "dirty_mb": 16,
+    "files": 64,
+    "file_kib": 64,
+    "payload_kib": 32,
+    "cpu_ms": 100,
+    "model_seconds": 10.0,
+    "model_jitter": 0.0,
+    "parking_mode": "forced",
+    "cpus": 1,
+    "memory_mb": 1024,
+    "disk_mb": 4096,
+    "create_concurrency": 8,
+    "warmup_cycles": 1,
+    "deadline_seconds": 600.0,
+    "wake_p95_seconds": 10.0,
+    "seed": 1,
+    "start_signal_file": null
+  },
+  "errors": [],
+  "cleanup_errors": [],
+  "health": [
+    {
+      "seconds": 0.025812634999965667,
+      "ok": true
+    },
+    {
+      "seconds": 0.017148633000033442,
+      "ok": true
+    },
+    {
+      "seconds": 0.018506649999835645,
+      "ok": true
+    },
+    {
+      "seconds": 0.015021780000097351,
+      "ok": true
+    },
+    {
+      "seconds": 0.01590375900013896,
+      "ok": true
+    },
+    {
+      "seconds": 0.016656732000228658,
+      "ok": true
+    },
+    {
+      "seconds": 0.0207454110004619,
+      "ok": true
+    },
+    {
+      "seconds": 0.026432368999849132,
+      "ok": true
+    },
+    {
+      "seconds": 0.018746050000117975,
+      "ok": true
+    },
+    {
+      "seconds": 0.017814305999309,
+      "ok": true
+    },
+    {
+      "seconds": 0.019635991000541253,
+      "ok": true
+    },
+    {
+      "seconds": 0.017700544000035734,
+      "ok": true
+    },
+    {
+      "seconds": 0.018885479999880772,
+      "ok": true
+    },
+    {
+      "seconds": 0.016440256000350928,
+      "ok": true
+    },
+    {
+      "seconds": 0.02148161999957665,
+      "ok": true
+    },
+    {
+      "seconds": 0.017625700999815308,
+      "ok": true
+    },
+    {
+      "seconds": 0.017462265000176558,
+      "ok": true
+    },
+    {
+      "seconds": 0.01643628900001204,
+      "ok": true
+    },
+    {
+      "seconds": 0.016222678999838536,
+      "ok": true
+    },
+    {
+      "seconds": 0.016824003999317938,
+      "ok": true
+    },
+    {
+      "seconds": 0.01564387700000225,
+      "ok": true
+    },
+    {
+      "seconds": 0.021961684000416426,
+      "ok": true
+    },
+    {
+      "seconds": 0.026079217000187782,
+      "ok": true
+    },
+    {
+      "seconds": 0.016308227000081388,
+      "ok": true
+    },
+    {
+      "seconds": 0.01874103099999047,
+      "ok": true
+    },
+    {
+      "seconds": 0.01750312700005452,
+      "ok": true
+    },
+    {
+      "seconds": 0.019571111999539426,
+      "ok": true
+    },
+    {
+      "seconds": 0.016186933999961184,
+      "ok": true
+    },
+    {
+      "seconds": 0.01825185599955148,
+      "ok": true
+    },
+    {
+      "seconds": 0.018712089000473497,
+      "ok": true
+    },
+    {
+      "seconds": 0.013218563000009453,
+      "ok": true
+    },
+    {
+      "seconds": 0.014762738999706926,
+      "ok": true
+    }
+  ],
+  "driver_python": "3.14.4",
+  "harness_sha256": "8580c2c328f452fc25bcbcd039e10d6822db171b1c7c63fc02179924ae100588",
+  "deployed_health": {
+    "ok": true,
+    "service": "control-plane",
+    "version": "0.5.82"
+  },
+  "commit_and_wake_seconds": {
+    "count": 32,
+    "p50": 0.6134369679994052,
+    "p95": 0.7809742839999672,
+    "p99": 0.812862612000572,
+    "max": 0.812862612000572
+  },
+  "usable_exec_seconds": {
+    "count": 32,
+    "p50": 1.0329203714995856,
+    "p95": 1.3249866279993512,
+    "p99": 1.4532848120006747,
+    "max": 1.4532848120006747
+  },
+  "response_ready_to_usable_exec_seconds": {
+    "count": 32,
+    "p50": 6.974759221000113,
+    "p95": 7.911617264000597,
+    "p99": 7.98370285799956,
+    "max": 7.98370285799956
+  },
+  "response_ready_to_wake_seconds": {
+    "count": 32,
+    "p50": 6.496150133500123,
+    "p95": 7.404917118999947,
+    "p99": 7.437655718999849,
+    "max": 7.437655718999849
+  },
+  "post_wake_exec_seconds": {
+    "count": 32,
+    "p50": 0.4462815329998193,
+    "p95": 0.546047138999711,
+    "p99": 0.6404222000001027,
+    "max": 0.6404222000001027
+  },
+  "guest_verification_seconds": {
+    "count": 32,
+    "p50": 0.1991266949999968,
+    "p95": 0.31158014599999717,
+    "p99": 0.398617969,
+    "max": 0.398617969
+  },
+  "guest_tool_seconds": {
+    "count": 32,
+    "p50": 0.07291443950000343,
+    "p95": 0.1529065499999973,
+    "p99": 0.19864606200000168,
+    "max": 0.19864606200000168
+  },
+  "guest_transport_retries": {
+    "count": 32,
+    "p50": 0.0,
+    "p95": 0,
+    "p99": 0,
+    "max": 0
+  },
+  "measured_park_observed_cycles": 32,
+  "completed_cycles": 48,
+  "correct": true,
+  "slo_passed": true,
+  "finished_at": "2026-09-22T19:38:29.714841+00:00",
+  "placement_counts": {
+    "12399418": 7,
+    "12399419": 9
+  }
+}

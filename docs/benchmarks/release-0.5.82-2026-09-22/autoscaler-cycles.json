@@ -1,0 +1,44 @@
+[
+  {
+    "timestamp": "2026-09-22T19:48:34.434113+00:00",
+    "cycle": 3,
+    "ready_nodes": 3,
+    "provisioning_nodes": 0,
+    "created_job_ids": [],
+    "stop_job_ids": [
+      "12398541"
+    ],
+    "active_image_builds": 4,
+    "pending_image_builds": 0,
+    "controller_lock_held": true,
+    "terminated_job_ids": []
+  },
+  {
+    "timestamp": "2026-09-22T19:48:40.130871+00:00",
+    "cycle": 4,
+    "ready_nodes": 3,
+    "provisioning_nodes": 0,
+    "created_job_ids": [],
+    "stop_job_ids": [
+      "12398541"
+    ],
+    "active_image_builds": 4,
+    "pending_image_builds": 0,
+    "controller_lock_held": true,
+    "terminated_job_ids": []
+  },
+  {
+    "timestamp": "2026-09-22T19:49:08.057432+00:00",
+    "cycle": 5,
+    "ready_nodes": 3,
+    "provisioning_nodes": 0,
+    "created_job_ids": [],
+    "stop_job_ids": [
+      "12398541"
+    ],
+    "active_image_builds": 4,
+    "pending_image_builds": 0,
+    "controller_lock_held": true,
+    "terminated_job_ids": []
+  }
+]

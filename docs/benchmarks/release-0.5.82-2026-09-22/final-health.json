@@ -1,0 +1,176 @@
+{
+  "checked_at": "2026-09-22T19:49:28.039562+00:00",
+  "autoscaler": "ActiveState=active\nSubState=running\nNRestarts=0\n",
+  "health": {
+    "gateway": {
+      "ok": true,
+      "service": "control-plane",
+      "version": "0.5.82"
+    },
+    "relay": {
+      "ok": true,
+      "service": "model-relay",
+      "version": "0.5.82"
+    }
+  },
+  "nodes": [
+    {
+      "job_id": "12397503",
+      "version": "0.5.81",
+      "capabilities": [
+        "environment-contract-v1",
+        "sandbox",
+        "image-cache",
+        "disk-quota",
+        "hibernate-local-v2",
+        "relay-wake-fence-v1",
+        "direct-runsc-v1",
+        "network-policy-relay-v1:default",
+        "managed-primary-v1",
+        "storage-native-v1",
+        "sandbox-detach-published-v1",
+        "sandbox-migrate-storage-native-v1"
+      ],
+      "draining": false,
+      "admission_open": true,
+      "active_sandboxes": 0,
+      "active_image_builds": 0
+    },
+    {
+      "job_id": "12398541",
+      "version": "0.5.81",
+      "capabilities": [
+        "environment-contract-v1",
+        "sandbox",
+        "image-cache",
+        "disk-quota",
+        "hibernate-local-v2",
+        "relay-wake-fence-v1",
+        "direct-runsc-v1",
+        "network-policy-relay-v1:default",
+        "managed-primary-v1",
+        "storage-native-v1",
+        "sandbox-detach-published-v1",
+        "sandbox-migrate-storage-native-v1"
+      ],
+      "draining": true,
+      "admission_open": false,
+      "active_sandboxes": 0,
+      "active_image_builds": 0
+    },
+    {
+      "job_id": "12399412",
+      "version": "0.5.82",
+      "capabilities": [
+        "image-cache",
+        "image-build"
+      ],
+      "draining": false,
+      "admission_open": true,
+      "active_sandboxes": 0,
+      "active_image_builds": 1
+    },
+    {
+      "job_id": "12399413",
+      "version": "0.5.82",
+      "capabilities": [
+        "image-cache",
+        "image-build"
+      ],
+      "draining": false,
+      "admission_open": true,
+      "active_sandboxes": 0,
+      "active_image_builds": 1
+    },
+    {
+      "job_id": "12399414",
+      "version": "0.5.82",
+      "capabilities": [
+        "image-cache",
+        "image-build"
+      ],
+      "draining": false,
+      "admission_open": true,
+      "active_sandboxes": 0,
+      "active_image_builds": 3
+    },
+    {
+      "job_id": "12399418",
+      "version": "0.5.82",
+      "capabilities": [
+        "environment-contract-v1",
+        "sandbox",
+        "image-cache",
+        "disk-quota",
+        "hibernate-local-v2",
+        "relay-wake-fence-v1",
+        "direct-runsc-v1",
+        "network-policy-relay-v1:default",
+        "managed-primary-v1",
+        "storage-native-v1",
+        "sandbox-detach-published-v1",
+        "sandbox-migrate-storage-native-v1"
+      ],
+      "draining": false,
+      "admission_open": true,
+      "active_sandboxes": 16,
+      "active_image_builds": 0
+    },
+    {
+      "job_id": "12399419",
+      "version": "0.5.82",
+      "capabilities": [
+        "environment-contract-v1",
+        "sandbox",
+        "image-cache",
+        "disk-quota",
+        "hibernate-local-v2",
+        "relay-wake-fence-v1",
+        "direct-runsc-v1",
+        "network-policy-relay-v1:default",
+        "managed-primary-v1",
+        "storage-native-v1",
+        "sandbox-detach-published-v1",
+        "sandbox-migrate-storage-native-v1"
+      ],
+      "draining": false,
+      "admission_open": true,
+      "active_sandboxes": 29,
+      "active_image_builds": 0
+    },
+    {
+      "job_id": "12399420",
+      "version": "0.5.82",
+      "capabilities": [
+        "environment-contract-v1",
+        "sandbox",
+        "image-cache",
+        "disk-quota",
+        "hibernate-local-v2",
+        "relay-wake-fence-v1",
+        "direct-runsc-v1",
+        "network-policy-relay-v1:default",
+        "managed-primary-v1",
+        "storage-native-v1",
+        "sandbox-detach-published-v1",
+        "sandbox-migrate-storage-native-v1"
+      ],
+      "draining": false,
+      "admission_open": true,
+      "active_sandboxes": 21,
+      "active_image_builds": 0
+    },
+    {
+      "job_id": "12399422",
+      "version": "0.5.82",
+      "capabilities": [
+        "image-cache",
+        "image-build"
+      ],
+      "draining": false,
+      "admission_open": true,
+      "active_sandboxes": 0,
+      "active_image_builds": 0
+    }
+  ]
+}

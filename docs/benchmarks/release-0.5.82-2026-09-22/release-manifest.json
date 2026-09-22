@@ -1,0 +1,19 @@
+{
+  "version": "0.5.82",
+  "commit": "e8fa5fc419c4fe076cbf4648e4cb7082f785ce29",
+  "files": {
+    "repack_node_bundle.py": "7de4413c60599a2e30b10e565f7fe3f0942e42fc259089e86cc7faf9956a48f9",
+    "verify_installed_wheel.py": "99e1a209444c1ae83defe20f821b1d3f093ad8d3ff1a3b2fb85751083e62c51f",
+    "validate-sandbox-bundle.py": "09e545b5ec8273e11d0e2e0510ab055aaae72392fcf2aef3633625ed39f126f5",
+    "storage-license": "f83edce557bb6a7f53de92e02ffe3166a0f025c457a98e4dddbb948570f0509c",
+    "storage-manifest.json": "071892b5a1970e009ac878bc682b9ef4f96c36e9fd65e8f02802060852d0dc5d",
+    ".gitignore": "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1",
+    "ucloud_sandboxes-0.5.82-py3-none-any.whl": "c7577af33a93572b7b3ec52645c83c630b7ba018c804a9e6601aed08a6bb5b41",
+    "storage-backend": "76d59a1c10cb495e90380e320de8fe30e6370f8b374aab410494c8e0b92a5748",
+    "validate-builder-bundle.py": "c8ddb143938726486703c147124198863fd5be74e90a8a391a2289731300ab24",
+    "sandbox-node-package.tar.gz": "ceb563eb15c58fb358bedbde96a55fdb05ff2932a072b1117dceb8bd6e5e44e1",
+    "builder-node-package.tar.gz": "346286820fc6ccc3c34cd6e17d447bdba3071ffe9e14cf6b9f3e5b35d2faa085"
+  },
+  "release_commit": "0bd6cb8",
+  "implementation_commit": "e8fa5fc419c4fe076cbf4648e4cb7082f785ce29"
+}

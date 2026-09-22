@@ -234,6 +234,23 @@ def allow_fixture_mutations(test):
 
 
 class CliTests(unittest.TestCase):
+    def test_gateway_submission_defaults_to_four_vcpus(self) -> None:
+        args = cli.build_parser().parse_args(
+            [
+                "submit-vm",
+                "--config",
+                "/tmp/gateway-test-deployment.json",
+                "--role",
+                "gateway",
+                "--no-private-network",
+                "--no-public-link",
+                "--hostname-seed",
+                "gateway-test",
+            ]
+        )
+        options, _ = cli.vm_submission_options_from_args(args, ucloud_config())
+        self.assertEqual(options.product.id, "cpu-amd-zen5-4-vcpu")
+
     def test_relay_lifecycle_closes_errors_and_classifies_terminal_wakes(self) -> None:
         request = SimpleNamespace(
             sandbox_id="sandbox",

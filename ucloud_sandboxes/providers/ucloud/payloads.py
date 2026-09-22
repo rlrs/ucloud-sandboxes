@@ -120,7 +120,7 @@ DEFAULT_VM_APPLICATION_VERSION = "26.04"
 # infrastructure and should not inherit the worker-node product.
 DEFAULT_VM_PRODUCT_ID = "cpu-amd-zen5-32-vcpu"
 DEFAULT_BUILDER_PRODUCT_ID = "cpu-amd-zen5-16-vcpu"
-DEFAULT_GATEWAY_VM_PRODUCT_ID = "cpu-amd-zen5-2-vcpu"
+DEFAULT_GATEWAY_VM_PRODUCT_ID = "cpu-amd-zen5-4-vcpu"
 DEFAULT_VM_PRODUCT_CATEGORY = "cpu-amd-zen5"
 DEFAULT_VM_PRODUCT_PROVIDER = "ucloud"
 DEFAULT_VM_DISK_GB = 250

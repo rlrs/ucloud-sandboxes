@@ -73,6 +73,8 @@ uv run ucloud-sandboxes submit-vm \
 
 Add `--execute` only after inspecting the payload. Attach the relay link to port
 `8092` through UCloud when it is a separate ingress resource.
+The default UCloud gateway product is `cpu-amd-zen5-4-vcpu`, matching the
+production control plane. Pass `--product-id` explicitly to choose another size.
 
 ## Converge the control plane
 

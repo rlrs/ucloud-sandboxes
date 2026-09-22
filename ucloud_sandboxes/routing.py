@@ -2726,25 +2726,38 @@ class RoutingStore:
         cleaned_node_id = node_id.strip()
         if not cleaned_warmup_id or not cleaned_node_id:
             return None
-        with self._lock:
-            with self._transaction() as conn:
-                existing = self._get_image_warmup_unlocked(conn, cleaned_warmup_id)
-                if existing is None:
-                    return None
-                if expected_image and existing.image != expected_image.strip():
-                    return None
-                if expected_image_id and existing.image_id != expected_image_id.strip():
-                    return None
-                now = utc_now().isoformat()
-                stored = replace(
-                    existing,
-                    updated_at=now,
-                    warmed_node_ids=tuple(
-                        dict.fromkeys((*existing.warmed_node_ids, cleaned_node_id))
-                    ),
-                )
-                self._write_image_warmup(conn, stored)
-            return stored
+        # Heartbeats often repeat the same observation. Do not queue a durable
+        # write (or retain the fleet mutex) just to refresh its timestamp.
+        with self._connect() as conn:
+            existing = self._get_image_warmup_unlocked(conn, cleaned_warmup_id)
+            if existing is None:
+                return None
+            if expected_image and existing.image != expected_image.strip():
+                return None
+            if expected_image_id and existing.image_id != expected_image_id.strip():
+                return None
+            if cleaned_node_id in existing.warmed_node_ids:
+                return existing
+        with self._transaction() as conn:
+            existing = self._get_image_warmup_unlocked(conn, cleaned_warmup_id)
+            if existing is None:
+                return None
+            if expected_image and existing.image != expected_image.strip():
+                return None
+            if expected_image_id and existing.image_id != expected_image_id.strip():
+                return None
+            if cleaned_node_id in existing.warmed_node_ids:
+                return existing
+            now = utc_now().isoformat()
+            stored = replace(
+                existing,
+                updated_at=now,
+                warmed_node_ids=tuple(
+                    dict.fromkeys((*existing.warmed_node_ids, cleaned_node_id))
+                ),
+            )
+            self._write_image_warmup(conn, stored)
+        return stored
 
     def delete_image_warmup(self, warmup_id: str) -> PendingImageWarmup | None:
         cleaned_warmup_id = warmup_id.strip()
@@ -3541,13 +3554,15 @@ class RoutingStore:
         reusable = False
         _chmod_sqlite_state_files(self.path)
         try:
+            # stat can block and releases the GIL. It must not hold the pool
+            # mutex while every returning reader waits to release a connection.
+            if os.getpid() != self._connection_pid:
+                raise sqlite3.DatabaseError("reopen routing store after fork")
+            if self._connection_identity is not None:
+                info = self.path.stat()
+                if (info.st_dev, info.st_ino) != self._connection_identity:
+                    raise sqlite3.DatabaseError("routing database file was replaced")
             with self._connections_guard:
-                if os.getpid() != self._connection_pid:
-                    raise sqlite3.DatabaseError("reopen routing store after fork")
-                if self._connection_identity is not None:
-                    info = self.path.stat()
-                    if (info.st_dev, info.st_ino) != self._connection_identity:
-                        raise sqlite3.DatabaseError("routing database file was replaced")
                 if self._connections:
                     conn = self._connections.pop()
             if conn is None:

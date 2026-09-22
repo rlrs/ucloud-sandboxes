@@ -774,6 +774,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     metrics_response_cache: bytes | None
     metrics_response_cache_at: float
     metrics_response_lock: RLock
+    fleet_response_lock: RLock
+    fleet_response_future: Future | None
     registry_layer_cache: RegistryLayerMetadataCache | None
     registry_usage_store: RegistryUsageStore | None
     sandbox_create_limiter: FairCapacity | None
@@ -2469,6 +2471,28 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         )
 
     def _list_sandboxes_from_cache(self) -> None:
+        # Concurrent public polls need the same observation. Share the scan
+        # and JSON encoding, not merely a lock that makes every waiter rescan.
+        # There is no TTL: a request after completion takes a new snapshot.
+        handler_cls = type(self)
+        with handler_cls.fleet_response_lock:
+            future = handler_cls.fleet_response_future
+            owner = future is None
+            if owner:
+                future = Future()
+                handler_cls.fleet_response_future = future
+        if owner:
+            try:
+                future.set_result(self._sandbox_list_response())
+            except BaseException as exc:
+                future.set_exception(exc)
+                raise
+            finally:
+                with handler_cls.fleet_response_lock:
+                    handler_cls.fleet_response_future = None
+        self._write_bytes(future.result(), "application/json")
+
+    def _sandbox_list_response(self) -> bytes:
         heartbeats = self.store.load_heartbeats()
         heartbeats_by_node_id = {
             heartbeat.node_id: heartbeat for heartbeat in heartbeats.values()
@@ -2481,13 +2505,13 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             )
             for route in self.routing_store.sandbox_routes_readonly(background=True)
         ]
-        self._write_json(
+        return json.dumps(
             {
                 "sandboxes": sandboxes,
                 "cached": True,
                 "refresh_supported": True,
-            }
-        )
+            }, separators=(",", ":"),
+        ).encode("utf-8")
 
     def _list_sandboxes_across_nodes(self) -> None:
         sandboxes: list[dict[str, Any]] = []
@@ -6526,11 +6550,14 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     warmup.image
                 ),
             ):
-                warmed_node_ids.add(heartbeat.node_id)
-                self.routing_store.mark_image_warmup_node(
-                    warmup.warmup_id,
-                    heartbeat.node_id,
-                )
+                if heartbeat.node_id not in warmed_node_ids:
+                    self.routing_store.mark_image_warmup_node(
+                        warmup.warmup_id,
+                        heartbeat.node_id,
+                        expected_image=warmup.image,
+                        expected_image_id=warmup.image_id,
+                    )
+                    warmed_node_ids.add(heartbeat.node_id)
         for heartbeat in candidate_heartbeats:
             if heartbeat.node_id in warmed_node_ids:
                 ready_units += _warmup_node_units(heartbeat, warmup.resources)
@@ -7234,6 +7261,8 @@ def build_server(
     BoundHandler.metrics_response_cache = None
     BoundHandler.metrics_response_cache_at = 0.0
     BoundHandler.metrics_response_lock = RLock()
+    BoundHandler.fleet_response_lock = RLock()
+    BoundHandler.fleet_response_future = None
     BoundHandler.registry_layer_cache = (
         RegistryLayerMetadataCache(
             registry_url,

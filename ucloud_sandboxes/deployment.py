@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from importlib import metadata
+from functools import lru_cache
 
 
 PACKAGE_NAME = "ucloud-sandboxes"
@@ -17,7 +18,10 @@ AGENT_VERSION_LABEL = "ucloud-sandboxes/agent-version"
 INIT_VERSION_LABEL = "ucloud-sandboxes/init-version"
 
 
+@lru_cache(maxsize=1)
 def package_version() -> str:
+    # A running service belongs to one immutable release. Do not read wheel
+    # metadata for each candidate while holding the placement lock.
     try:
         return metadata.version(PACKAGE_NAME)
     except metadata.PackageNotFoundError:

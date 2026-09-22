@@ -10,6 +10,30 @@ from ucloud_sandboxes.routing import ExecRoute, RoutingStore
 
 
 class RoutingPoolTests(unittest.TestCase):
+    def test_repeated_image_warmup_observation_skips_writer_and_new_nodes_merge(self):
+        from ucloud_sandboxes.models import ResourceQuantity
+        with TemporaryDirectory() as tmp:
+            store = RoutingStore(Path(tmp) / 'routing.sqlite')
+            store.upsert_image_warmup(
+                'warmup', 'image', ResourceQuantity(vcpu=1, memory_mb=512),
+                count=256, ttl_seconds=600,
+            )
+            first = store.mark_image_warmup_node('warmup', 'node-1', expected_image='image')
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                with store._transaction():
+                    self.assertEqual(pool.submit(
+                        store.mark_image_warmup_node, 'warmup', 'node-1', expected_image='image',
+                    ).result(timeout=2), first)
+                    self.assertIsNone(pool.submit(
+                        store.mark_image_warmup_node, 'warmup', 'node-1', expected_image='stale-image',
+                    ).result(timeout=2))
+                with store._lock:
+                    updates = [pool.submit(store.mark_image_warmup_node, 'warmup', node)
+                               for node in ('node-2', 'node-3')]
+                    for update in updates:
+                        update.result(timeout=2)
+            self.assertEqual(set(store.image_warmups()[0].warmed_node_ids), {'node-1', 'node-2', 'node-3'})
+
     def test_exec_commit_does_not_wait_for_fleet_projection_and_external_delete_wins(self):
         with TemporaryDirectory() as tmp:
             store = RoutingStore(Path(tmp) / 'routing.sqlite')

@@ -374,18 +374,8 @@ class PostgresRelayState:
         async with self.store.transaction("relay_worker") as conn:
             await self._registration(conn, rollout_id, registration_token)
             now = await self._now(conn)
-            await conn.execute(
-                """INSERT INTO relay_workers VALUES (%s,%s,%s,%s,%s,%s)
-                ON CONFLICT(deployment_id,rollout_id,worker_id) DO UPDATE SET
-                registration_token=excluded.registration_token,last_seen_at=excluded.last_seen_at,metadata=excluded.metadata""",
-                (
-                    self.deployment,
-                    rollout_id,
-                    registration_token,
-                    worker_id,
-                    now,
-                    Jsonb(metadata or {}),
-                ),
+            await self._write_worker_heartbeat(
+                conn, rollout_id, registration_token, worker_id, now, metadata,
             )
             return dict(
                 rollout_id=rollout_id,
@@ -393,6 +383,17 @@ class PostgresRelayState:
                 last_seen_at=now,
                 metadata=metadata or {},
             )
+
+    async def _write_worker_heartbeat(self, conn, rollout_id, token, worker_id, now, metadata=None):
+        # Caller owns the registration SHARE lock for this transaction.
+        await conn.execute(
+            """INSERT INTO relay_workers VALUES (%s,%s,%s,%s,
+            COALESCE(%s::double precision,extract(epoch FROM clock_timestamp())),%s)
+            ON CONFLICT(deployment_id,rollout_id,worker_id) DO UPDATE SET
+            registration_token=excluded.registration_token,last_seen_at=excluded.last_seen_at,
+            metadata=excluded.metadata""",
+            (self.deployment, rollout_id, token, worker_id, now, Jsonb(metadata or {})),
+        )
 
     async def enqueue(
         self,
@@ -539,6 +540,9 @@ class PostgresRelayState:
         ).fetchone()
         if row is None:
             raise web.HTTPNotFound(text="request not found")
+        return self._loaded_request(row, bodies=bodies)
+
+    def _loaded_request(self, row, *, bodies=True):
         values = dict(row)
         values.update(body=None, headers={}, completed_response=None)
         if bodies and row["state"] != "completed":
@@ -656,50 +660,45 @@ class PostgresRelayState:
         api.validate_rollout_id(rollout_id)
         api.validate_registration_token(registration_token)
         if worker_id is not None:
-            await self.record_worker_heartbeat(
-                rollout_id=rollout_id,
-                registration_token=registration_token,
-                worker_id=worker_id,
-            )
+            api.validate_worker_id(worker_id)
+        heartbeat_pending = worker_id is not None
         deadline = time.monotonic() + max(0, timeout_seconds)
         async with self._watch("q:" + rollout_id) as event:
             while True:
                 event.clear()
                 async with self.store.transaction("relay_claim_inference") as conn:
                     await self._registration(conn, rollout_id, registration_token)
+                    if heartbeat_pending:
+                        await self._write_worker_heartbeat(
+                            conn, rollout_id, registration_token, worker_id, None,
+                        )
+                        heartbeat_pending = False
+                    # A concurrent heartbeat may hold the worker row. Start the
+                    # inference lease only after acquiring that row's lock.
                     now = await self._now(conn)
-                    rows = await (
-                        await conn.execute(
-                            """SELECT request_id FROM relay_requests WHERE deployment_id=%s AND rollout_id=%s
-                        AND registration_token=%s AND expires_at>%s AND (state='pending' OR (state='leased' AND lease_expires_at<=%s))
-                        ORDER BY created_at,request_id LIMIT %s FOR UPDATE SKIP LOCKED""",
-                            (
-                                self.deployment,
-                                rollout_id,
-                                registration_token,
-                                now,
-                                now,
-                                max(1, min(256, limit)),
-                            ),
-                        )
-                    ).fetchall()
-                    result = []
-                    for row in rows:
-                        await conn.execute(
-                            """UPDATE relay_requests SET state='leased',lease_id=%s,lease_expires_at=%s,leased_by=%s,
-                            delivered_at=%s,first_delivered_at=coalesce(first_delivered_at,%s),delivery_count=delivery_count+1
-                            WHERE deployment_id=%s AND request_id=%s""",
-                            (
-                                uuid4().hex,
-                                now + max(0.001, lease_seconds),
-                                worker_id,
-                                now,
-                                now,
-                                self.deployment,
-                                row["request_id"],
-                            ),
-                        )
-                        result.append(await self._load(conn, row["request_id"]))
+                    # Lock candidates, assign distinct leases and hydrate their
+                    # immutable input bodies in one statement. The row locks
+                    # remain held through commit, including for peer claimers.
+                    rows = await (await conn.execute(
+                        """WITH candidates AS (
+                        SELECT deployment_id,request_id FROM relay_requests
+                        WHERE deployment_id=%s AND rollout_id=%s AND registration_token=%s
+                        AND expires_at>%s AND (state='pending' OR (state='leased' AND lease_expires_at<=%s))
+                        ORDER BY created_at,request_id LIMIT %s FOR UPDATE SKIP LOCKED
+                        ), claimed AS (
+                        UPDATE relay_requests r SET state='leased',
+                        lease_id=replace(gen_random_uuid()::text,'-',''),lease_expires_at=%s,leased_by=%s,
+                        delivered_at=%s,first_delivered_at=coalesce(r.first_delivered_at,%s),
+                        delivery_count=r.delivery_count+1 FROM candidates c
+                        WHERE (r.deployment_id,r.request_id)=(c.deployment_id,c.request_id) RETURNING r.*)
+                        SELECT claimed.*,p.body AS input_body,p.encoding AS input_encoding,p.headers AS input_headers
+                        FROM claimed LEFT JOIN relay_payloads p USING(deployment_id,request_id)
+                        ORDER BY claimed.created_at,claimed.request_id""",
+                        (self.deployment, rollout_id, registration_token, now, now,
+                         max(1, min(256, limit)), now + max(0.001, lease_seconds),
+                         worker_id, now, now),
+                    )).fetchall()
+                    result = [self._loaded_request(row) for row in rows]
                 if result or time.monotonic() >= deadline:
                     return result
                 with suppress(asyncio.TimeoutError):

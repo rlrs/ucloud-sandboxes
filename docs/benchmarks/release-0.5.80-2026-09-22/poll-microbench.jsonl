@@ -1,0 +1,4 @@
+{"version": "before", "requests": 1024, "seconds": 2.9161062098573893, "cpu": 1.9940405390000002, "poll_p50": 0.07572434446774423, "poll_p95": 0.09230084717273712, "heartbeat_transactions": 1024, "claim_transactions": 1024}
+{"version": "after", "requests": 1024, "seconds": 2.760249583981931, "cpu": 1.6972794250000005, "poll_p50": 0.04698867700062692, "poll_p95": 0.06529369996860623, "heartbeat_transactions": 0, "claim_transactions": 1024}
+{"version": "after", "requests": 1024, "seconds": 2.778484034119174, "cpu": 1.6957176269999996, "poll_p50": 0.04673193895723671, "poll_p95": 0.06395996501669288, "heartbeat_transactions": 0, "claim_transactions": 1024}
+{"version": "before", "requests": 1024, "seconds": 3.0874228889588267, "cpu": 2.007714217, "poll_p50": 0.07693312654737383, "poll_p95": 0.09861408406868577, "heartbeat_transactions": 1024, "claim_transactions": 1024}

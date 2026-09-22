@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.80 - 2026-09-22
+
+- Commit relay worker poll heartbeats with inference claims, eliminating a
+  separate durable transaction per poll. Claim and hydrate batches in one SQL
+  statement while preserving registration fencing, distinct leases, ordering,
+  and rollback if payload loading fails.
+
 ## 0.5.79 - 2026-09-22
 
 - Coalesce gateway routing writes for 5 ms so concurrent lifecycle transitions

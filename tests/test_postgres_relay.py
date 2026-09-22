@@ -3,6 +3,7 @@
 import asyncio
 import os
 import unittest
+from unittest.mock import patch
 from uuid import uuid4
 
 from aiohttp import web
@@ -118,6 +119,50 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotEqual(req.lease_id, again.lease_id)
         with self.assertRaises(web.HTTPConflict):
             await self.respond(req)
+
+    async def test_poll_commits_worker_heartbeat_and_batch_leases_together(self):
+        requests = [await self.enqueue(idempotency_key=str(i)) for i in range(8)]
+        samples = []
+        self.state.store.observe = samples.append
+        leased = await self.poll(limit=8, worker_id="worker")
+        self.assertEqual([r.request_id for r in leased], [r.request_id for r in requests])
+        self.assertEqual(len({r.lease_id for r in leased}), 8)
+        self.assertTrue(all(len(r.lease_id) == 32 and r.delivery_count == 1 for r in leased))
+        self.assertTrue(all(r.body == api._encoded_body({"hello": 1}) and r.leased_by == "worker" for r in leased))
+        operations = [s.operation for s in samples]
+        self.assertEqual(operations.count("relay_claim_inference"), 1)
+        self.assertNotIn("relay_worker", operations)
+        async with self.state.store.transaction("test_heartbeat") as conn:
+            row = await (await conn.execute(
+                "SELECT * FROM relay_workers WHERE rollout_id='agent' AND worker_id='worker'",
+            )).fetchone()
+        self.assertEqual(row["registration_token"], self.token)
+        self.assertLessEqual(row["last_seen_at"], leased[0].delivered_at)
+
+    async def test_poll_hydration_failure_rolls_back_heartbeat_and_claims(self):
+        request = await self.enqueue()
+        with patch.object(self.state, "_loaded_request", side_effect=ValueError("bad payload")):
+            with self.assertRaisesRegex(ValueError, "bad payload"):
+                await self.poll(worker_id="failed-worker")
+        async with self.state.store.transaction("test_rollback") as conn:
+            count = await (await conn.execute(
+                "SELECT count(*) AS n FROM relay_workers WHERE worker_id='failed-worker'",
+            )).fetchone()
+        self.assertEqual(count["n"], 0)
+        (leased,) = await self.poll()
+        self.assertEqual(leased.request_id, request.request_id)
+        self.assertEqual(leased.delivery_count, 1)
+
+    async def test_poll_with_stale_registration_does_not_write_worker_heartbeat(self):
+        await self.enqueue()
+        await self.state.register_rollout("agent")
+        with self.assertRaises(web.HTTPConflict):
+            await self.poll(worker_id="stale-worker")
+        async with self.state.store.transaction("test_no_stale_heartbeat") as conn:
+            count = await (await conn.execute(
+                "SELECT count(*) AS n FROM relay_workers WHERE worker_id='stale-worker'",
+            )).fetchone()
+        self.assertEqual(count["n"], 0)
 
     async def test_registration_replacement_fences_old_leases_and_cancels_waiter(self):
         req = await self.enqueue()

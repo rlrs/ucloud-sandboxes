@@ -208,6 +208,64 @@ class StartupAdmissionTests(unittest.TestCase):
 
 
 class WarmDemandTests(unittest.TestCase):
+    def test_queued_creates_account_actual_memory_without_evicting_warm_work(self):
+        from ucloud_sandboxes.background_io import Pressure
+        from ucloud_sandboxes.direct_service import SandboxStartupBusyError
+        from ucloud_sandboxes.warm_park import WarmParkDeferred, WarmParkPolicy
+
+        with TemporaryDirectory() as directory:
+            fixture = direct_fixtures.DirectProvisionerTests()
+            provisioner, *_ = fixture.make(Path(directory).resolve())
+            service = DirectSandboxService(provisioner, max_concurrent_startups=1)
+            service.admission_wait_seconds = 0.5
+            service._startup_slots.acquire()
+            spec = fixture.spec()
+            policy = WarmParkPolicy(
+                lambda: Pressure(.8, 0, 0, 80 * 1024**3),
+                demand_bytes=service.warm_park_demand_bytes,
+            )
+            try:
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    # Concurrent retries for one generation are one demand.
+                    futures = [pool.submit(fixture.create, service, spec) for _ in range(2)]
+                    wait_queued(service._startup_slots, 2)
+                    self.assertEqual(
+                        service.warm_park_demand_bytes(),
+                        spec.requested_resources().memory_mb * 1024**2,
+                    )
+                    with self.assertRaises(WarmParkDeferred):
+                        with policy.defer('warm', memory_bytes=1024**3, blocking=False):
+                            self.fail('a small queued create must not force a checkpoint')
+                    for future in futures:
+                        with self.assertRaises(SandboxStartupBusyError):
+                            future.result(3)
+                self.assertEqual(service.warm_park_demand_bytes(), 0)
+                self.assertEqual(service._startup_demands, {})
+            finally:
+                service._startup_slots.release()
+
+    def test_startup_demand_deduplicates_active_lease_and_cleans_failures(self):
+        from ucloud_sandboxes.models import ResourceQuantity
+
+        with TemporaryDirectory() as directory:
+            provisioner, *_ = direct_fixtures.DirectProvisionerTests().make(Path(directory).resolve())
+            service = DirectSandboxService(provisioner)
+            requested = ResourceQuantity(vcpu=1, memory_mb=256)
+            with self.assertRaisesRegex(ValueError, 'injected'):
+                with service._startup_demand('first', 1, requested):
+                    with service._startup_demand('first', 1, requested):
+                        service._active_reservations[('first', 1)] = requested
+                        self.assertEqual(service.warm_park_demand_bytes(), 256 * 1024**2)
+                    with service._startup_demand('second', 1, requested):
+                        self.assertEqual(service.warm_park_demand_bytes(), 512 * 1024**2)
+                    del service._active_reservations[('first', 1)]
+                    self.assertEqual(service.warm_park_demand_bytes(), 256 * 1024**2)
+                    raise ValueError('injected')
+            self.assertEqual(service.warm_park_demand_bytes(), 0)
+            self.assertEqual(service._startup_demands, {})
+            service.close_admission()
+            self.assertEqual(service.warm_park_demand_bytes(), 1 << 63)
+
     def test_queued_restore_exposes_demand_and_failure_cleans_it_up(self):
         from ucloud_sandboxes.models import ResourceQuantity
         from ucloud_sandboxes.direct_service import SandboxRestoreBusyError

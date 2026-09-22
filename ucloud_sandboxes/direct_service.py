@@ -285,6 +285,7 @@ class DirectSandboxService:
         self.telemetry = telemetry or Telemetry.disabled("direct-sandbox-service")
         self._restore_slots = FairCapacity(max_concurrent_restores)
         self._restore_demands: dict[tuple[str, int], tuple[ResourceQuantity, int]] = {}
+        self._startup_demands: dict[tuple[str, int], tuple[ResourceQuantity, int]] = {}
         self._startup_slots = FairCapacity(max_concurrent_startups)
         self._file_read_slots = FairCapacity(max_concurrent_startups)
         self.upload_spool = UploadSpool(provisioner.registry.path.parent / "upload-staging")
@@ -533,7 +534,11 @@ class DirectSandboxService:
         operation: SandboxOperation,
     ) -> SandboxRecord:
         operation.validate_spec(spec)
-        with self.startup_admission(), self._request_lock(spec.id, operation.generation):
+        with (
+            self._startup_demand(spec.id, operation.generation, spec.requested_resources()),
+            self.startup_admission(),
+            self._request_lock(spec.id, operation.generation),
+        ):
             with self._reserve_active_capacity(
                 spec.id,
                 operation.generation,
@@ -1602,6 +1607,24 @@ class DirectSandboxService:
         self.ensure_running_with_timings(sandbox)
 
     @contextmanager
+    def _startup_demand(self, sandbox_id: str, generation: int, requested: ResourceQuantity):
+        # Track actual memory before queueing for a startup slot. A single
+        # queued create must not evict every warm sandbox on the worker.
+        key = (sandbox_id, generation)
+        with self._capacity_guard:
+            previous, users = self._startup_demands.get(key, (requested, 0))
+            self._startup_demands[key] = (previous, users + 1)
+        try:
+            yield
+        finally:
+            with self._capacity_guard:
+                previous, users = self._startup_demands[key]
+                if users == 1:
+                    del self._startup_demands[key]
+                else:
+                    self._startup_demands[key] = (previous, users - 1)
+
+    @contextmanager
     def startup_admission(self):
         """Queue cold creates and buffered uploads before allocating resources.
 
@@ -1662,10 +1685,9 @@ class DirectSandboxService:
             if not self._admission_open:
                 return 1 << 63  # draining should reclaim, never retain warm work
             requests = dict(self._active_reservations)
+            requests.update({key: value[0] for key, value in self._startup_demands.items()})
             requests.update({key: value[0] for key, value in self._restore_demands.items()})
             incoming = sum(item.memory_mb for item in requests.values()) * 1024**2
-        if self._startup_slots.waiting:
-            return 1 << 63  # queued cold starts do not have a memory lease yet
         return incoming
 
     def _resume_with_network(self, registration, *, operation_id, timings):

@@ -12,7 +12,7 @@ from threading import Thread
 import time
 import unittest
 
-from scripts.live_relay_load_benchmark import AGENT, with_lease_renewal, parse_args, response_window, retry_control, safe_error, summary
+from scripts.live_relay_load_benchmark import AGENT, with_lease_renewal, parse_args, response_window, retry_control, safe_error, summary, meets_wake_slo
 
 
 class ResponseWindowTests(unittest.IsolatedAsyncioTestCase):
@@ -95,10 +95,28 @@ class RelayLoadBenchmarkTests(unittest.TestCase):
         base = ['--gateway-url', 'http://gateway', '--relay-url', 'http://relay',
                 '--sandbox-token-file', '/tmp/sandbox-token', '--relay-worker-token-file', '/tmp/worker-token',
                 '--image', 'python@sha256:' + 'a' * 64, '--output', '/tmp/report.json']
-        for extra in (['--dirty-mb', '256'], ['--warmup-cycles', '8'], ['--model-seconds', 'nan'], ['--cycles', '0']):
+        for extra in (['--dirty-mb', '256'], ['--warmup-cycles', '8'], ['--model-seconds', 'nan'], ['--cycles', '0'], ['--fleet-pollers', '0'],
+                      ['--startup-mode', 'rolling', '--start-signal-file', '/tmp/signal']):
             with self.subTest(extra=extra), redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
                 parse_args(base + extra)
         self.assertNotIn('secret', safe_error(OSError('http://relay/_relay/secret/chat/completions')))
+
+    def test_fast_steady_state_cannot_hide_failed_or_missing_overlap_coverage(self):
+        result = {
+            'correct': True, 'configuration': {'startup_mode': 'rolling'},
+            'response_ready_to_usable_exec_seconds': summary([.1] * 100),
+            'phase_latency_seconds': {
+                'during_provisioning': summary([5.] * 10),
+                'after_provisioning': summary([.1] * 100),
+            },
+        }
+        self.assertFalse(meets_wake_slo(result, .8))
+        result['phase_latency_seconds']['during_provisioning'] = summary([])
+        self.assertFalse(meets_wake_slo(result, .8))
+        result['phase_latency_seconds']['during_provisioning'] = summary([.2] * 10)
+        self.assertTrue(meets_wake_slo(result, .8))
+        result['correct'] = False
+        self.assertFalse(meets_wake_slo(result, .8))
 
     def test_guest_exercises_memory_files_relay_and_tool_with_stable_identity(self):
         requests = []

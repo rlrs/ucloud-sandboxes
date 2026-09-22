@@ -15,7 +15,7 @@ class WarmParkDeferred(RuntimeError):
 
 
 class WarmParkPolicy:
-    def __init__(self, pressure=None, *, max_delay=15.0, demand_bytes=lambda: 0):
+    def __init__(self, pressure=None, *, max_delay=None, demand_bytes=lambda: 0):
         self.pressure = pressure or PressureSampler().sample
         self.max_delay = max_delay
         self.demand_bytes = demand_bytes
@@ -43,6 +43,18 @@ class WarmParkPolicy:
                 headroom *= min(1.0, spare / (4 * memory_bytes))
         with self._lock:
             recent = sorted(self._responses)
+        if self.max_delay is None:
+            # A model wait has no useful fixed expiry while its resident pages
+            # fit. Checkpointing it merely duplicates memory into storage and
+            # creates the I/O/reclaim that then blocks its wake. As headroom
+            # shrinks, older waits yield first; queued demand/drain still wins.
+            expected = recent[-1] if recent else 30.0
+            # Strong reclaim must shorten retention even when MemAvailable
+            # includes reclaimable (but expensive-to-write) guest page cache.
+            headroom *= max(0.0, 1.0 - p.memory_stall / 10.0)
+            if headroom >= 1.0:
+                return float("inf")
+            return max(0.05, expected) * headroom / max(0.001, 1.0 - headroom)
         expected = (
             recent[min(len(recent) - 1, int(len(recent) * 0.90))]
             if recent
@@ -71,7 +83,11 @@ class WarmParkPolicy:
                 if remaining <= 0:
                     break
                 if not blocking:
-                    raise WarmParkDeferred(remaining)
+                    # Recheck pressure/demand even if the resource-based lease
+                    # has no expiry. Never put Infinity into the HTTP response.
+                    raise WarmParkDeferred(
+                        min(3.0, remaining) if self.max_delay is None else remaining
+                    )
                 event.wait(min(0.05, remaining))
             yield event
         finally:

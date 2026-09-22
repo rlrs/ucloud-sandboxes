@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.85 - 2026-09-22
+
+- Retain relay model waits according to live memory headroom, reclaim and queued
+  demand instead of forcing a checkpoint after 15 seconds. Deferred parks
+  recheck pressure with finite retries; drains and explicit parks still reclaim.
+- Add rolling startup to the realistic load harness and reject performance
+  qualification when provisioning overlap is absent or slow warmup is hidden.
+
 ## 0.5.84 - 2026-09-22
 
 - Queue full fleet routing scans separately so concurrent polling cannot

@@ -103,6 +103,8 @@ def parse_args(argv=None):
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--sandboxes", type=int, default=256)
     parser.add_argument("--cycles", type=int, default=8)
+    parser.add_argument("--startup-mode", choices=("barrier", "rolling"), default="barrier",
+                        help="rolling overlaps creation with active model/park/wake traffic")
     parser.add_argument("--resident-mb", type=int, default=128)
     parser.add_argument("--dirty-mb", type=int, default=16)
     parser.add_argument("--files", type=int, default=64)
@@ -133,6 +135,8 @@ def parse_args(argv=None):
         value = getattr(args, name)
         if not math.isfinite(value) or value < 0 or (name in ("cpus", "deadline_seconds", "wake_p95_seconds") and value == 0):
             parser.error(name + " has an invalid value")
+    if args.start_signal_file and args.startup_mode != "barrier":
+        parser.error("start_signal_file requires barrier startup")
     if args.dirty_mb > args.resident_mb or args.resident_mb >= args.memory_mb:
         parser.error("require dirty_mb <= resident_mb < memory_mb")
     if args.file_kib > 1024 or not 0 <= args.warmup_cycles < args.cycles:
@@ -198,6 +202,19 @@ async def response_window(*, claimed_at, model_seconds, mode, sandbox_id, invent
                 raise TimeoutError('sandbox did not reach parked state')
             await asyncio.sleep(.1)
     return ready_at, time.monotonic() - claimed_at if observed() else None
+
+
+def meets_wake_slo(result, target_seconds):
+    if not result['correct']:
+        return False
+    measured = result['response_ready_to_usable_exec_seconds']
+    if not measured['count'] or measured['p95'] >= target_seconds:
+        return False
+    phases = result['phase_latency_seconds']
+    if result['configuration']['startup_mode'] == 'rolling' and not phases['during_provisioning']['count']:
+        return False
+    # Do not hide cold/overlapping delays by excluding them as warmup cycles.
+    return all(not phase['count'] or phase['p95'] < target_seconds for phase in phases.values())
 
 
 async def run(args):
@@ -308,7 +325,8 @@ async def run(args):
                         while not Path(args.start_signal_file).exists():
                             await asyncio.sleep(.2)
                     ready.set()
-                await ready.wait()
+                if args.startup_mode == "barrier":
+                    await ready.wait()
                 identity = None
                 for cycle in range(args.cycles):
                     await handle.upload_file('/workspace/relay-bench/go-' + str(cycle), b'go')
@@ -340,6 +358,7 @@ async def run(args):
                         raise RuntimeError('cycle or process identity mismatch')
                     identity = payload['nonce']
                     delay = args.model_seconds + rng.uniform(0, args.model_jitter)
+                    during_provisioning = len(jobs) < args.sandboxes
                     model_ready, parked_after = await with_lease_renewal(response_window(
                         claimed_at=claimed_at, model_seconds=delay, mode=args.parking_mode,
                         sandbox_id=sid, inventory=inventory, inventory_task=inventory_tasks[0],
@@ -375,6 +394,8 @@ async def run(args):
                                              'guest_tool_seconds': ack['tool_seconds'],
                                              'pid': ack['pid'], 'delivery_count': request.delivery_count})
                     result['cycles'][-1]['park_observed_after_seconds'] = parked_after
+                    result['cycles'][-1]['during_provisioning'] = during_provisioning
+                    result['cycles'][-1]['agents_started'] = len(jobs)
                     event('cycle_completed', completed=len(result['cycles']), sandbox_id=sid, cycle=cycle,
                           wake_seconds=committed-started, usable_seconds=finished-started)
             except Exception as exc:
@@ -430,13 +451,17 @@ async def run(args):
                       'guest_verification_seconds', 'guest_tool_seconds', 'guest_transport_retries'):
             result[field] = summary([r[field] for r in measured])
         result['measured_park_observed_cycles'] = sum(r['park_observed_after_seconds'] is not None for r in measured)
+        result['phase_latency_seconds'] = {
+            name: summary([r['response_ready_to_usable_exec_seconds'] for r in result['cycles']
+                           if r['during_provisioning'] == provisioning])
+            for name, provisioning in [('during_provisioning', True), ('after_provisioning', False)]
+        }
         result['completed_cycles'] = len(result['cycles'])
         result['correct'] = (not result.get('failure') and not result['errors'] and not result['cleanup_errors']
                              and len(result['cycles']) == args.sandboxes * args.cycles
                              and all(h['ok'] for h in result['health'])
                              and all(p['ok'] for p in result['fleet_polls']))
-        result['slo_passed'] = bool(result['correct'] and measured
-                                    and result['response_ready_to_usable_exec_seconds']['p95'] < args.wake_p95_seconds)
+        result['slo_passed'] = meets_wake_slo(result, args.wake_p95_seconds)
         result['finished_at'] = datetime.now(timezone.utc).isoformat()
         event('benchmark_finished', correct=result['correct'], slo_passed=result['slo_passed'],
               commit_and_wake_seconds=result['commit_and_wake_seconds'], usable_exec_seconds=result['usable_exec_seconds'],

@@ -356,7 +356,7 @@ class WarmDemandTests(unittest.TestCase):
     def test_memory_demand_and_large_footprint_shorten_retention(self):
         gib = 1024**3
         incoming = [0]
-        policy = WarmParkPolicy(lambda: Pressure(.8, 0, 0, 8*gib),
+        policy = WarmParkPolicy(lambda: Pressure(.8, 0, 0, 8*gib), max_delay=15,
                                 demand_bytes=lambda: incoming[0])
         self.assertEqual(policy._budget(gib), 15)
         self.assertLess(policy._budget(4*gib), policy._budget(gib))
@@ -382,6 +382,43 @@ class WarmDemandTests(unittest.TestCase):
             self.assertFalse(waiting.result(timeout=1))
 
     def test_learning_can_retain_waits_longer_than_two_seconds(self):
-        policy = WarmParkPolicy(lambda: Pressure(.8, 0))
+        policy = WarmParkPolicy(lambda: Pressure(.8, 0), max_delay=15)
         policy._responses.extend([4, 7, 9, 12])
         self.assertEqual(policy._budget(), 12)
+
+
+class PressureDrivenWarmParkTests(unittest.TestCase):
+    def test_spare_memory_retains_long_model_wait_without_an_infinite_retry(self):
+        from unittest.mock import patch
+        from ucloud_sandboxes.warm_park import WarmParkDeferred
+        pressure = [Pressure(.8, 0, 0, 80 * 1024**3)]
+        incoming = [0]
+        policy = WarmParkPolicy(lambda: pressure[0], demand_bytes=lambda: incoming[0])
+        for now in (0, 20, 60, 600):
+            with patch('ucloud_sandboxes.warm_park.time.monotonic', return_value=now):
+                with self.assertRaises(WarmParkDeferred) as deferred:
+                    with policy.defer('request', memory_bytes=1024**3, blocking=False):
+                        self.fail('elapsed wall time alone must not force a checkpoint')
+                self.assertEqual(deferred.exception.seconds, 3)
+        incoming[0] = 80 * 1024**3
+        with policy.defer('request', memory_bytes=1024**3, blocking=False):
+            pass
+
+    def test_reclaim_or_low_headroom_releases_retention_and_wake_is_fenced(self):
+        from unittest.mock import patch
+        from ucloud_sandboxes.warm_park import WarmParkDeferred
+        pressure = [Pressure(.8, 0, 0, 80 * 1024**3)]
+        policy = WarmParkPolicy(lambda: pressure[0])
+        key = ('sandbox', 1, 'request')
+        with patch('ucloud_sandboxes.warm_park.time.monotonic', return_value=10):
+            with self.assertRaises(WarmParkDeferred):
+                with policy.defer(key, blocking=False):
+                    pass
+        policy.wake(('sandbox', 2, 'request'))
+        self.assertIn(key, policy._waiting_since)
+        for low in (Pressure(.05, 0, 0, 1024), Pressure(.8, 10, 0, 80 * 1024**3)):
+            pressure[0] = low
+            with policy.defer(key, blocking=False):
+                pass
+        policy.wake(key)
+        self.assertNotIn(key, policy._waiting_since)

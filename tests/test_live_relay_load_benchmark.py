@@ -16,6 +16,24 @@ from scripts.live_relay_load_benchmark import AGENT, with_lease_renewal, parse_a
 
 
 class ResponseWindowTests(unittest.IsolatedAsyncioTestCase):
+    async def test_forced_park_runs_during_model_wait_without_hiding_overrun(self):
+        before = time.monotonic()
+        inventory = {}
+        async def park():
+            await asyncio.sleep(.04)
+            inventory['s'] = ('parked', time.monotonic())
+        observer = asyncio.create_task(asyncio.sleep(60))
+        try:
+            ready, parked = await response_window(
+                claimed_at=before, model_seconds=.01, mode='forced', sandbox_id='s',
+                inventory=inventory, inventory_task=observer, park=park,
+            )
+            self.assertEqual(ready, before + .01)
+            self.assertGreaterEqual(parked, .04)
+        finally:
+            observer.cancel()
+            await asyncio.gather(observer, return_exceptions=True)
+
     async def test_deliberate_wait_renews_lease_and_stops_on_lease_loss(self):
         from unittest.mock import AsyncMock
         from types import SimpleNamespace

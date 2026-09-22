@@ -114,7 +114,7 @@ def parse_args(argv=None):
     parser.add_argument("--model-seconds", type=float, default=10)
     parser.add_argument("--model-jitter", type=float, default=5)
     parser.add_argument("--parking-mode", choices=("natural", "forced"), default="natural",
-                        help="natural submits when the model is ready; forced waits for observed parking")
+                        help="natural submits when the model is ready; forced explicitly parks during the model wait")
     parser.add_argument("--cpus", type=float, default=1)
     parser.add_argument("--memory-mb", type=int, default=1024)
     parser.add_argument("--disk-mb", type=int, default=4096)
@@ -186,22 +186,30 @@ async def with_lease_renewal(awaitable, relay, request, *, interval=40, lease_se
         await asyncio.gather(operation, keeper, return_exceptions=True)
 
 
-async def response_window(*, claimed_at, model_seconds, mode, sandbox_id, inventory, inventory_task):
+async def response_window(*, claimed_at, model_seconds, mode, sandbox_id, inventory, inventory_task, park=None):
     # Synthetic readiness is scheduled independently of event-loop lag or
     # parking. Those waits must count in the product latency measurement.
     ready_at = claimed_at + model_seconds
-    await asyncio.sleep(max(0, ready_at - time.monotonic()))
+    parking = asyncio.create_task(park()) if mode == 'forced' and park is not None else None
     def observed():
         return (inventory.get(sandbox_id, (None, 0))[0] == 'parked'
                 and inventory[sandbox_id][1] >= claimed_at)
-    if mode == 'forced':
-        while not observed():
-            if inventory_task.done():
-                inventory_task.result()
-            if time.monotonic() - claimed_at > 180:
-                raise TimeoutError('sandbox did not reach parked state')
-            await asyncio.sleep(.1)
-    return ready_at, time.monotonic() - claimed_at if observed() else None
+    try:
+        await asyncio.sleep(max(0, ready_at - time.monotonic()))
+        if parking is not None:
+            await parking
+        if mode == 'forced':
+            while not observed():
+                if inventory_task.done():
+                    inventory_task.result()
+                if time.monotonic() - claimed_at > 180:
+                    raise TimeoutError('sandbox did not reach parked state')
+                await asyncio.sleep(.1)
+        return ready_at, time.monotonic() - claimed_at if observed() else None
+    finally:
+        if parking is not None:
+            parking.cancel()
+            await asyncio.gather(parking, return_exceptions=True)
 
 
 def meets_wake_slo(result, target_seconds):
@@ -254,6 +262,10 @@ async def run(args):
     ready = asyncio.Event()
     inventory = {}
     async with (
+        aiohttp.ClientSession(
+            headers={'Authorization': 'Bearer ' + token},
+            timeout=aiohttp.ClientTimeout(total=180),
+        ) as lifecycle,
         AsyncSandboxClient(args.gateway_url, api_token=token, timeout_seconds=180) as operator,
         AsyncRelayWorkerClient(args.relay_url, worker_token=worker_token,
                                timeout_seconds=180, forward_timeout_seconds=180) as relay,
@@ -359,9 +371,30 @@ async def run(args):
                     identity = payload['nonce']
                     delay = args.model_seconds + rng.uniform(0, args.model_jitter)
                     during_provisioning = len(jobs) < args.sandboxes
+                    async def park_for_qualification():
+                        # An explicit user park bypasses adaptive warm retention.
+                        # It starts during the model wait; an overrun still counts
+                        # from the independently scheduled response-ready time.
+                        async def attempt():
+                            async with lifecycle.post(
+                                args.gateway_url.rstrip('/') + '/v1/sandboxes/' + sid + '/park',
+                                json={'operation_id': f'benchmark-park:{prefix}:{cycle}'},
+                            ) as response:
+                                body = await response.text()
+                                if response.status != 200:
+                                    error = RuntimeError(f'explicit park HTTP {response.status}: {body[:500]}')
+                                    error.status_code = response.status
+                                    raise error
+                        await retry_control(
+                            attempt, deadline=time.monotonic() + 180,
+                            on_retry=lambda a, s: result['control_retries'].append(dict(
+                                operation='park', sandbox_id=sid, cycle=cycle, attempt=a, status=s,
+                            )),
+                        )
                     model_ready, parked_after = await with_lease_renewal(response_window(
                         claimed_at=claimed_at, model_seconds=delay, mode=args.parking_mode,
                         sandbox_id=sid, inventory=inventory, inventory_task=inventory_tasks[0],
+                        park=park_for_qualification,
                     ), relay, request)
                     # Start before SDK connection admission: SDK queuing, relay
                     # locks, scheduling, storage, restore and retries all count.

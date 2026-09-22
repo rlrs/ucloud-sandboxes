@@ -3560,7 +3560,7 @@ class RoutingStore:
     def _connect(self) -> Iterator[sqlite3.Connection]:
         conn = None
         reusable = False
-        _chmod_sqlite_state_files(self.path)
+        opened = False
         try:
             # stat can block and releases the GIL. It must not hold the pool
             # mutex while every returning reader waits to release a connection.
@@ -3570,10 +3570,24 @@ class RoutingStore:
                 info = self.path.stat()
                 if (info.st_dev, info.st_ino) != self._connection_identity:
                     raise sqlite3.DatabaseError("routing database file was replaced")
+                if stat.S_IMODE(info.st_mode) != 0o600:
+                    os.chmod(self.path, 0o600)
             with self._connections_guard:
                 if self._connections:
                     conn = self._connections.pop()
             if conn is None:
+                opened = True
+                # Create the database securely before SQLite can create WAL/
+                # SHM files, which inherit its mode. Audit sidecars when opening
+                # a connection rather than stat-ing all three files twice for
+                # every pooled read and repeatedly inside each writer turn.
+                try:
+                    fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                except FileExistsError:
+                    pass
+                else:
+                    os.close(fd)
+                _chmod_sqlite_state_files(self.path)
                 conn = sqlite3.connect(self.path, timeout=30, check_same_thread=False)
                 conn.row_factory = sqlite3.Row
                 conn.execute("PRAGMA busy_timeout=30000")
@@ -3595,7 +3609,8 @@ class RoutingStore:
                         conn = None
                 if conn is not None:
                     conn.close()
-            _chmod_sqlite_state_files(self.path)
+            if opened:
+                _chmod_sqlite_state_files(self.path)
 
     @contextmanager
     def _transaction(self) -> Iterator[sqlite3.Connection]:
@@ -4448,10 +4463,12 @@ def _route_write_batch(path: Path) -> DurableSqliteBatch:
         current = path.stat()
         if (current.st_dev, current.st_ino) != identity:
             raise sqlite3.DatabaseError("routing database file was replaced")
-        _chmod_sqlite_state_files(path)
+        if stat.S_IMODE(current.st_mode) != 0o600:
+            os.chmod(path, 0o600)
 
     def connect():
         validate()
+        _chmod_sqlite_state_files(path)
         conn = sqlite3.connect(path, timeout=30, check_same_thread=False)
         try:
             conn.row_factory = sqlite3.Row

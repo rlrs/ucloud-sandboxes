@@ -11,6 +11,32 @@ from ucloud_sandboxes.routing import ExecRoute, RoutingStore
 
 
 class RoutingPoolTests(unittest.TestCase):
+    def test_new_and_reopened_sqlite_sidecars_remain_owner_only_with_open_umask(self):
+        with TemporaryDirectory() as tmp:
+            previous_umask = os.umask(0)
+            try:
+                path = Path(tmp) / 'routing.sqlite'
+                store = RoutingStore(path)
+                for _ in range(2):
+                    with store._transaction() as conn:
+                        conn.execute('CREATE TABLE IF NOT EXISTS permission_probe (value TEXT)')
+                        for suffix in ('', '-wal', '-shm'):
+                            self.assertEqual(Path(str(path) + suffix).stat().st_mode & 0o777, 0o600)
+                    flusher = store._write_batches._thread
+                    if flusher is not None:
+                        flusher.join(timeout=3)
+                        self.assertFalse(flusher.is_alive())
+                    store._connection_finalizer()
+                    self.assertFalse(Path(str(path) + '-wal').exists())
+                    # Closing every connection deletes the sidecars; creating
+                    # them again must retain the database's owner-only mode.
+                    store = RoutingStore(path)
+                path.chmod(0o644)
+                store.get_sandbox('absent')
+                self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            finally:
+                os.umask(previous_umask)
+
     def test_lifecycle_update_preserves_spec_generation_and_storage_dependency(self):
         with TemporaryDirectory() as tmp:
             store = RoutingStore(Path(tmp) / 'routing.sqlite')

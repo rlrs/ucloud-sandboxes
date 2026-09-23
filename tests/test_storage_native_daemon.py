@@ -10,6 +10,7 @@ from tempfile import TemporaryDirectory
 import threading
 import time
 import unittest
+from unittest.mock import patch
 from typing import Callable
 
 from ucloud_sandboxes.storage_native import (
@@ -17,6 +18,7 @@ from ucloud_sandboxes.storage_native import (
     StorageNativeDeviceOwner,
 )
 from ucloud_sandboxes.storage_native_daemon import (
+    LinuxStorageHostOperations,
     StorageNativeCapacityError,
     StorageNativeConflictError,
     StorageNativeNodeConfig,
@@ -34,6 +36,25 @@ from ucloud_sandboxes.storage_native_registry import (
     PublishedStorageLayer,
     StorageSnapshotPublication,
 )
+
+
+class LinuxVolumeReadaheadTests(unittest.TestCase):
+    def test_reused_and_restored_mounts_configure_readahead_before_opening_files(self):
+        host = LinuxStorageHostOperations()
+        calls = []
+        with patch("ucloud_sandboxes.storage_native_daemon.os.sysconf", return_value=4096), patch.object(host, "_run", side_effect=lambda *args: calls.append(args)):
+            host.mount(Path("/dev/ublkb17"), Path("/volumes/first"))
+            host.mount(Path("/dev/ublkb17"), Path("/volumes/restored"))
+        self.assertEqual([command[0] for command in calls], ["blockdev", "mount", "blockdev", "mount"])
+        self.assertEqual(calls[0], ("blockdev", "--setra", "8", "/dev/ublkb17"))
+        self.assertIn("noatime,nouuid", calls[1])
+
+    def test_failed_device_configuration_never_mounts(self):
+        host = LinuxStorageHostOperations()
+        with patch.object(host, "_run", side_effect=StorageNativeNodeError("device gone")) as run:
+            with self.assertRaisesRegex(StorageNativeNodeError, "device gone"):
+                host.mount(Path("/dev/ublkb17"), Path("/volumes/first"))
+        self.assertEqual(run.call_count, 1)
 
 
 class JournalWriterCoordinationTests(unittest.TestCase):

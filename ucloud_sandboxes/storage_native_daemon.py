@@ -501,6 +501,16 @@ class LinuxStorageHostOperations:
         )
 
     def mount(self, device: Path, target: Path) -> None:
+        # These writable volumes also back guest RAM. Speculative XFS read-ahead
+        # allocates large contiguous folios and can trigger direct compaction
+        # even when reclaimable file memory makes MemAvailable look plentiful.
+        # Set this before opening guest memory files, including on reused or
+        # restored devices: file_ra_state_init snapshots the device setting.
+        # Immutable image layers and the host backing disk keep their policy.
+        # Keep one page of read-ahead: mmap faults cannot grow a speculative
+        # high-order allocation, while bulk read() calls can request larger I/O.
+        sectors = max(1, os.sysconf("SC_PAGE_SIZE") // 512)
+        self._run("blockdev", "--setra", str(sectors), str(device))
         # Independently owned COW snapshots retain their parent filesystem UUID.
         # Ownership is fenced by the volume journal and block backend, not UUID.
         self._run(

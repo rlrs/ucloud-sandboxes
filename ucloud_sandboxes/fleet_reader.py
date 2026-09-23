@@ -5,18 +5,30 @@ from pathlib import Path
 from threading import Lock
 
 
-def _serve(connection, control_path, routing_path, ttl):
+def _identities(paths):
+    return tuple((info.st_dev, info.st_ino) for info in (Path(p).stat() for p in paths))
+
+
+def _serve(connection, control_path, routing_path, ttl, identities):
     # Spawn, never fork a multithreaded gateway or inherit SQLite connections.
     from .control_plane import _sandbox_list_bytes
     from .control_state import ControlStateStore
     from .routing import RoutingStore
 
     try:
+        paths = (control_path, routing_path)
+        if _identities(paths) != identities:
+            connection.send_bytes(b'error')
+            return
         control = ControlStateStore(Path(control_path))
         routing = RoutingStore(Path(routing_path))
         while connection.recv_bytes() == b'read':
             try:
+                if _identities(paths) != identities:
+                    raise ValueError('fleet state files changed')
                 payload = _sandbox_list_bytes(control, routing, ttl)
+                if _identities(paths) != identities:
+                    raise ValueError('fleet state files changed')
             except Exception:
                 # No partial/stale snapshot and no database contents in errors.
                 connection.send_bytes(b'error')
@@ -37,7 +49,8 @@ class FleetSnapshotReader:
     """
 
     def __init__(self, control_path, routing_path, ttl):
-        self._args = (str(control_path), str(routing_path), ttl)
+        paths = (str(control_path), str(routing_path))
+        self._args = (*paths, ttl, _identities(paths))
         self._guard = Lock()
         self._process = None
         self._connection = None

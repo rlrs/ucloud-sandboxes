@@ -5858,8 +5858,14 @@ class ControlPlaneHandler(BuildContextHttpHandler):
 
     def _exec_route_is_proven_stale(self, route: ExecRoute) -> bool:
         heartbeat = self._heartbeat_for_route(
-            job_id=route.job_id,
+            job_id=route.job_id, include_inventory=False,
         )
+        if heartbeat is None or heartbeat.active_sandboxes != 0:
+            return False
+        # Only an apparently empty worker can prove absence. Do not copy all
+        # of its inventory/snapshot descriptors on each active exec poll.
+        # The full inventory remains necessary when all sandboxes are parked.
+        heartbeat = self._heartbeat_for_route(job_id=route.job_id)
         return _heartbeat_proves_route_absent(
             heartbeat,
             sandbox_id=route.sandbox_id,

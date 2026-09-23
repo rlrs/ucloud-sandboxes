@@ -396,11 +396,13 @@ class ControlStateStore:
         connection = None
         reusable = False
         try:
+            # Filesystem calls release the GIL and can block. They must not
+            # hold up another reader returning its connection to the pool.
+            if os.getpid() != self._connection_pid:
+                raise sqlite3.DatabaseError("reopen control state after fork")
+            info = self.path.stat()
+            identity = (info.st_dev, info.st_ino)
             with self._connections_guard:
-                if os.getpid() != self._connection_pid:
-                    raise sqlite3.DatabaseError("reopen control state after fork")
-                info = self.path.stat()
-                identity = (info.st_dev, info.st_ino)
                 if self._connection_identity is not None and identity != self._connection_identity:
                     raise sqlite3.DatabaseError("control state database file was replaced")
                 self._connection_identity = identity

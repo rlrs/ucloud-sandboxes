@@ -1,0 +1,18 @@
+ 00:25:13 up  6:55,  1 user,  load average: 6.40, 4.12, 3.14
+State  Recv-Q Send-Q Local Address:Port Peer Address:Port
+LISTEN 0      4096         0.0.0.0:8090      0.0.0.0:*   
+procs -----------memory---------- ---swap-- -----io---- -system-- -------cpu-------
+ r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st gu
+ 5  0      0 4539028  98136 5364188    0    0   226  1038 8892   44 18  8 73  0  0  0
+ 6  0      0 4543984  98136 5359420    0    0     0  4692 19918 34856 48 17 34  1  0  0
+ 4  0      0 4536828  98136 5359560    0    0    52  4520 16950 25479 41 14 44  1  0  0
+    PID    PPID %CPU %MEM COMMAND
+ 447443       1 64.5  1.6 ucloud-sandboxe
+ 447442       1 58.0  1.2 ucloud-sandboxe
+ 447811  447442 18.6  0.6 python3.14
+ 447961  447937 11.8  0.4 registry
+ 448106       1  6.5  0.1 systemd
+ 447600       1  5.5  0.8 ucloud-sandboxe
+   6162    1458  5.2  0.0 docker-proxy
+ 447849    6135  2.6  0.5 postgres
+ 448001    6135  2.6  0.5 postgres

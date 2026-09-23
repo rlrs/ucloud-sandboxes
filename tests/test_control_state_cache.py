@@ -110,3 +110,63 @@ class ControlStateCacheTests(unittest.TestCase):
                 self.assertEqual(store.get_heartbeat("large").node_id, "node-large")
                 self.assertNotIn("large", store._heartbeat_cache)
             self.assertEqual(len(store.load_heartbeats()), 5)
+
+    def test_file_identity_check_does_not_block_returning_another_reader(self):
+        from threading import Event, Thread, current_thread
+        with TemporaryDirectory() as raw:
+            store = ControlStateStore(Path(raw) / 'control.sqlite')
+            entered, release, returned = Event(), Event(), Event()
+            original = Path.stat
+            errors = []
+            def slow_stat(path, *args, **kwargs):
+                if path == store.path and current_thread().name == 'slow-reader':
+                    entered.set()
+                    release.wait(2)
+                return original(path, *args, **kwargs)
+            held = store._connection()
+            held.__enter__()
+            def read():
+                try:
+                    store.load_heartbeats()
+                except BaseException as exc:
+                    errors.append(exc)
+            def give_back():
+                try:
+                    held.__exit__(None, None, None)
+                finally:
+                    returned.set()
+            with patch.object(Path, 'stat', slow_stat):
+                reader = Thread(target=read, name='slow-reader')
+                reader.start()
+                self.assertTrue(entered.wait(2))
+                returning = Thread(target=give_back)
+                returning.start()
+                try:
+                    self.assertTrue(returned.wait(.5), 'identity stat held the pool mutex')
+                finally:
+                    release.set()
+                    reader.join(3)
+                    returning.join(3)
+            self.assertFalse(errors)
+
+    def test_exec_absence_check_only_loads_inventory_for_an_empty_worker(self):
+        from ucloud_sandboxes.control_plane import ControlPlaneHandler
+        from ucloud_sandboxes.routing import ExecRoute
+        with TemporaryDirectory() as raw:
+            store = ControlStateStore(Path(raw) / 'control.sqlite')
+            heartbeat = replace(self.heartbeat(), received_at=utc_now(), active_sandboxes=1)
+            store.receive_heartbeat(heartbeat)
+            handler = object.__new__(ControlPlaneHandler)
+            handler.store = store
+            handler.heartbeat_ttl_seconds = 120
+            route = ExecRoute(session_id='exec', sandbox_id='sandbox', node_id=heartbeat.node_id,
+                              job_id=heartbeat.job_id, node_url=heartbeat.node_url,
+                              created_at='2026-01-01T00:00:00+00:00', updated_at='2026-01-01T00:00:00+00:00')
+            with patch.object(store, 'get_heartbeat', wraps=store.get_heartbeat) as get:
+                self.assertFalse(handler._exec_route_is_proven_stale(route))
+                get.assert_called_once_with('job', include_inventory=False)
+            # Zero active count does not mean the parked sandbox disappeared.
+            store.receive_heartbeat(replace(heartbeat, active_sandboxes=0, received_at=utc_now()))
+            self.assertFalse(handler._exec_route_is_proven_stale(route))
+            store.receive_heartbeat(replace(heartbeat, active_sandboxes=0, inventory=(), received_at=utc_now()))
+            self.assertTrue(handler._exec_route_is_proven_stale(route))

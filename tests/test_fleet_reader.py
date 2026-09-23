@@ -63,3 +63,26 @@ class FleetReaderTests(unittest.TestCase):
                 self.assertIsNotNone(reader._process)
             self.assertIsNone(reader._process)
             self.assertTrue(reader._closed)
+
+    def test_missing_or_replaced_database_cannot_be_recreated_on_child_restart(self):
+        for replaced in (False, True):
+            with self.subTest(replaced=replaced), TemporaryDirectory() as raw:
+                root = Path(raw)
+                control = ControlStateStore(root / 'control.sqlite')
+                routes = RoutingStore(root / 'routes.sqlite')
+                reader = FleetSnapshotReader(control.path, routes.path, 120)
+                try:
+                    reader.read()
+                    reader._process.terminate()
+                    reader._process.join(2)
+                    control.path.rename(root / 'original.sqlite')
+                    if replaced:
+                        # Retain the original inode so the replacement cannot
+                        # accidentally reuse it during this test.
+                        ControlStateStore(control.path)
+                    with self.assertRaises((RuntimeError, ValueError)):
+                        reader.read()
+                    if not replaced:
+                        self.assertFalse(control.path.exists())
+                finally:
+                    reader.close()

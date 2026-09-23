@@ -55,6 +55,7 @@ from .http_server import (
     DEFAULT_MAX_JSON_BODY_BYTES,
     HighBacklogThreadingHTTPServer,
     RequestBodyStream,
+    TRANSFER_CHUNK_BYTES,
     traced_http_request,
 )
 from .http_contract import SandboxHttpRoute, match_sandbox_http_route
@@ -698,6 +699,9 @@ _NODE_EXEC_EVENT_HTTP_POOL = urllib3.PoolManager(
 # control/exec connection pool. maxsize here limits retained connections only;
 # the existing HTTP request admission bounds active transfer threads.
 _NODE_FILE_UPLOAD_HTTP_POOL = urllib3.PoolManager(
+    # Match the framed reader: urllib3 otherwise asks for only 16 KiB per
+    # send, multiplying Python/socket handoffs during concurrent uploads.
+    blocksize=TRANSFER_CHUNK_BYTES,
     num_pools=NODE_HTTP_POOL_ORIGINS,
     maxsize=DEFAULT_MAX_HTTP_REQUEST_THREADS,
     block=False,

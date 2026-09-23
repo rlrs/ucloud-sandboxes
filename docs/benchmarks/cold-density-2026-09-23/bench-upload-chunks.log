@@ -1,0 +1,4 @@
+{"blocksize": 16384, "seconds": 0.7777228439226747, "cpu_seconds": 1.6542152419999998, "body_reads": 32896}
+{"blocksize": 65536, "seconds": 0.4597954279743135, "cpu_seconds": 1.120214922, "body_reads": 8320}
+{"blocksize": 65536, "seconds": 0.43765544006600976, "cpu_seconds": 1.0045028289999998, "body_reads": 8320}
+{"blocksize": 16384, "seconds": 0.7640186829958111, "cpu_seconds": 1.6065067210000001, "body_reads": 32896}

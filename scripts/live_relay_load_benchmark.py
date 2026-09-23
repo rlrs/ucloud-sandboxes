@@ -91,6 +91,14 @@ print(path.read_text())
 '''
 
 
+def uploaded_tool_probe(kib):
+    """A file-backed tool with a checksum gate, including its upload in wake time."""
+    source = ("import hashlib,sys\n"
+              "assert hashlib.sha256(open(__file__,'rb').read()).hexdigest()==sys.argv[3], 'tool upload corrupted'\n"
+              + PROBE + "\n#").encode()
+    return source + b'x' * max(0, kib * 1024 - len(source)) + b'\n'
+
+
 def summary(values):
     ordered = sorted(values)
     def percentile(q):
@@ -118,6 +126,8 @@ def parse_args(argv=None):
     parser.add_argument("--files", type=int, default=64)
     parser.add_argument("--file-kib", type=int, default=64)
     parser.add_argument("--payload-kib", type=int, default=32)
+    parser.add_argument("--tool-upload-kib", type=int, default=64,
+                        help="Upload and checksum a tool script after each wake; 0 selects the legacy inline probe")
     parser.add_argument("--cpu-ms", type=float, default=100)
     parser.add_argument("--model-seconds", type=float, default=10)
     parser.add_argument("--model-jitter", type=float, default=5)
@@ -145,6 +155,8 @@ def parse_args(argv=None):
         value = getattr(args, name)
         if not math.isfinite(value) or value < 0 or (name in ("cpus", "deadline_seconds", "wake_p95_seconds") and value == 0):
             parser.error(name + " has an invalid value")
+    if not 0 <= args.tool_upload_kib <= 16384:
+        parser.error("tool_upload_kib must be between 0 and 16384")
     if args.start_signal_file and args.startup_mode != "barrier":
         parser.error("start_signal_file requires barrier startup")
     if args.dirty_mb > args.resident_mb or args.resident_mb >= args.memory_mb:
@@ -427,8 +439,16 @@ async def run(args):
                     committed = time.monotonic()
                     # Same SDK start/wait path as handle.exec(), split only to
                     # distinguish dispatch delay from guest execution/event reads.
+                    probe_command = ['python', '-c', PROBE, str(cycle), 'usable']
+                    if args.tool_upload_kib:
+                        stage = 'usable_tool_upload'
+                        tool_body = uploaded_tool_probe(args.tool_upload_kib)
+                        await handle.upload_file('/workspace/relay-tool.py', tool_body)
+                        probe_command = ['python', '/workspace/relay-tool.py', str(cycle),
+                                         'usable', hashlib.sha256(tool_body).hexdigest()]
+                    uploaded = time.monotonic()
                     stage = 'usable_exec_start'
-                    probe_handle = await handle.start_exec(['python', '-c', PROBE, str(cycle), 'usable'])
+                    probe_handle = await handle.start_exec(probe_command)
                     probe_dispatched = time.monotonic()
                     stage = 'usable_exec_wait'
                     probe = await probe_handle.wait(timeout_seconds=150)
@@ -460,7 +480,8 @@ async def run(args):
                                              'response_ready_to_submit_seconds': started - model_ready,
                                              'response_ready_to_wake_seconds': committed - model_ready,
                                              'post_wake_exec_seconds': finished - committed,
-                                             'post_wake_exec_start_seconds': probe_dispatched - committed,
+                                             'post_wake_tool_upload_seconds': uploaded - committed,
+                                             'post_wake_exec_start_seconds': probe_dispatched - uploaded,
                                              'post_wake_exec_wait_seconds': finished - probe_dispatched,
                                              'guest_transport_retries': ack['transport_retries'],
                                              'guest_verification_seconds': ack['verification_seconds'],

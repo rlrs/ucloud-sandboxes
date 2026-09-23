@@ -8,6 +8,7 @@ from ucloud_sandboxes.providers.ucloud.api import (
     MAX_UCLOUD_JSON_RESPONSE_BYTES,
     UCloudClient,
     UCloudError,
+    UCloudHttpError,
     UCloudTransportError,
     SessionState,
     SessionStore,
@@ -247,6 +248,31 @@ class UCloudClientTests(unittest.TestCase):
             client.calls,
             [None, "IN_QUEUE", "RUNNING", "SUSPENDED"],
         )
+
+    def test_single_create_preflight_rejection_does_not_wedge_capacity(self):
+        from unittest.mock import Mock
+        profile = UCloudCreateProfile(None, require_private_network=False)
+        client = Mock()
+        provider = UCloudProvider("project", client=client, sandbox_profile=profile,
+                                  builder_profile=profile, deployment_id="deployment")
+        item = {"product": {"category": "cpu-amd-zen5", "provider": "ucloud"}}
+        payload = {"statusCode": 502, "why": "Could not validate that you have access to 'cpu-amd-zen5' - try again later"}
+        for request, method, path, status, body, expected in (
+            ({"items": [item]}, "POST", "/api/jobs", 502, payload, "rejected"),
+            ({"items": [item, item]}, "POST", "/api/jobs", 502, payload, "uncertain"),
+            ({"items": [item]}, "POST", "/api/jobs/terminate", 502, payload, "uncertain"),
+            ({"items": [item]}, "POST", "/api/jobs", 504, payload, "uncertain"),
+            ({"items": [item]}, "POST", "/api/jobs", 502, {**payload, "why": "provider unavailable"}, "uncertain"),
+            ({"items": [item]}, "POST", "/api/jobs", 502, {**payload, "statusCode": 500}, "uncertain"),
+            ({"items": []}, "POST", "/api/jobs", 502, payload, "uncertain"),
+        ):
+            with self.subTest(request=request, path=path, body=body):
+                client.submit_jobs.side_effect = UCloudHttpError(method, path, status, body)
+                self.assertEqual(provider.create(request).status, expected)
+        client.submit_jobs.side_effect = TimeoutError("lost response")
+        self.assertEqual(provider.create({"items": [item]}).status, "uncertain")
+        client.terminate_jobs.side_effect = UCloudHttpError("POST", "/api/jobs", 502, payload)
+        self.assertEqual(provider.terminate(("worker",)).status, "uncertain")
 
     def test_provider_avoids_idle_inventory_calls_until_next_census(self) -> None:
         class EmptyInventoryClient:

@@ -1,4 +1,5 @@
 import json
+import hashlib
 import io
 import asyncio
 from contextlib import redirect_stderr
@@ -12,7 +13,7 @@ from threading import Thread
 import time
 import unittest
 
-from scripts.live_relay_load_benchmark import AGENT, with_lease_renewal, parse_args, response_window, retry_control, safe_error, summary, meets_wake_slo
+from scripts.live_relay_load_benchmark import AGENT, uploaded_tool_probe, with_lease_renewal, parse_args, response_window, retry_control, safe_error, summary, meets_wake_slo
 
 
 class ResponseWindowTests(unittest.IsolatedAsyncioTestCase):
@@ -121,6 +122,25 @@ class RelayLoadBenchmarkTests(unittest.TestCase):
         forced = parse_args(base + ['--parking-mode', 'forced', '--gateway-token-file', '/tmp/control-token'])
         self.assertEqual(forced.gateway_token_file, Path('/tmp/control-token'))
         self.assertNotIn('secret', safe_error(OSError('http://relay/_relay/secret/chat/completions')))
+
+    def test_uploaded_tool_executes_and_rejects_corrupt_bytes(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'usable-0.json').write_text('{"tool":"42"}')
+            # Substitute only the guest path so this runs as a normal Linux test.
+            body = uploaded_tool_probe(64).replace(b'/workspace/relay-bench/',
+                                                   (directory + '/').encode())
+            tool = root / 'tool.py'
+            tool.write_bytes(body)
+            digest = hashlib.sha256(body).hexdigest()
+            command = [sys.executable, str(tool), '0', 'usable', digest]
+            result = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout), {'tool': '42'})
+            tool.write_bytes(body + b'# corrupted\n')
+            result = subprocess.run(command, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('tool upload corrupted', result.stderr)
 
     def test_fast_steady_state_cannot_hide_failed_or_missing_overlap_coverage(self):
         result = {

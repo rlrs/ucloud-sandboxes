@@ -268,6 +268,11 @@ class UCloudProvider:
         try:
             response = self.client.submit_jobs(self.scope_id, request)
         except UCloudHttpError as exc:
+            if single_create_allocation_rejection(request, exc):
+                return ProviderMutationResult(
+                    status="rejected", response={"status": exc.status, "payload": exc.payload},
+                    error=str(exc),
+                )
             return _http_error_result(exc)
         except Exception as exc:
             return ProviderMutationResult(status="uncertain", error=str(exc))
@@ -321,6 +326,29 @@ class UCloudProvider:
             response=response,
             error="UCloud response did not prove whether the terminate operation applied",
         )
+
+
+def single_create_allocation_rejection(request: dict[str, Any], exc: UCloudHttpError) -> bool:
+    """Recognize the allocation preflight failure before ResourceCreate.
+
+    UCloud checks allocations before creating a job, but reports a wallet
+    lookup failure as HTTP 502. Only a single-item create is safe: a bulk call
+    can already have created preceding items. Other 5xx/transport failures
+    remain ambiguous and must never be automatically replayed.
+    """
+    items = request.get("items")
+    if (exc.method != "POST" or exc.path != "/api/jobs" or exc.status != 502
+            or not isinstance(exc.payload, dict) or exc.payload.get("statusCode") != 502
+            or not isinstance(items, list) or len(items) != 1 or not isinstance(items[0], dict)):
+        return False
+    product = items[0].get("product")
+    if not isinstance(product, dict):
+        return False
+    category = product.get("category") or product.get("provider")
+    reason = exc.payload.get("why")
+    return bool(isinstance(category, str) and category and isinstance(reason, str)
+                and reason.casefold() ==
+                f"could not validate that you have access to '{category}' - try again later".casefold())
 
 
 def _http_error_result(exc: UCloudHttpError) -> ProviderMutationResult:

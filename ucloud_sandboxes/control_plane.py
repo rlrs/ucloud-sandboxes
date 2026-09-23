@@ -715,6 +715,7 @@ def _open_node_request(
     timeout: float,
     authenticated: bool = False,
     allow_body_keep_alive: bool = False,
+    buffer_response_bytes: int | None = None,
 ) -> Any:
     # Authenticated node calls must never carry the deployment credential to a
     # redirect target selected by a compromised node endpoint.
@@ -729,6 +730,15 @@ def _open_node_request(
                 # and only a completely consumed framed body permits reuse.
                 headers["Connection"] = "close"
             path = urlparse(req.full_url).path
+            if buffer_response_bytes is not None and not isinstance(req.data, RequestBodyStream):
+                from .node_http_async import node_http_pool
+                return node_http_pool.request(
+                    req.get_method(), req.full_url, headers=headers, body=req.data,
+                    timeout=timeout, connect_timeout=min(timeout, NODE_CONNECT_TIMEOUT_SECONDS),
+                    response_limit=buffer_response_bytes,
+                    event_poll=(req.get_method() == "GET" and path.startswith("/v1/exec/")
+                                and path.endswith("/events")),
+                )
             pool = (
                 _NODE_FILE_UPLOAD_HTTP_POOL
                 if isinstance(req.data, RequestBodyStream)
@@ -6922,6 +6932,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                         proxied,
                         timeout=timeout_seconds,
                         authenticated=True,
+                        buffer_response_bytes=DEFAULT_MAX_PROXY_RESPONSE_BYTES,
                         allow_body_keep_alive=(
                             getattr(self, "_pooled_node_body_origin", None)
                             == node_url.rstrip("/")

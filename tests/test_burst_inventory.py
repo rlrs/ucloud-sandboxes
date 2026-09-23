@@ -43,6 +43,7 @@ class BurstInventoryTests(unittest.TestCase):
             handler = SimpleNamespace(
                 path="/v1/sandboxes?sandbox_id=sandbox",
                 sandboxes_enabled=True,
+                node_epoch="inventory-test-epoch",
                 manager=SimpleNamespace(
                     service=service, list=Mock(side_effect=AssertionError)
                 ),

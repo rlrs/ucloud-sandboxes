@@ -11,7 +11,7 @@ from ucloud_sandboxes.routing import RoutingStore
 
 
 class SqlitePermissionTests(unittest.TestCase):
-    def test_reads_skip_metadata_writes_but_repair_changed_permissions(self):
+    def test_pooled_reads_check_database_and_new_connections_audit_sidecars(self):
         for store_type in (RoutingStore, ControlStateStore):
             with self.subTest(store=store_type.__name__), TemporaryDirectory() as directory:
                 path = Path(directory) / "state.sqlite"
@@ -33,17 +33,28 @@ class SqlitePermissionTests(unittest.TestCase):
                             read()
                         chmod.assert_not_called()
 
-                    # Do not cache the security decision: repair external mode
-                    # changes, including on sidecars, on the very next read.
-                    for candidate in files:
+                    # Main-file mode and identity remain checked on every read.
+                    path.chmod(0o644)
+                    read()
+                    self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+
+                    # The pooled-connection contract audits sidecars when a
+                    # connection opens, rather than on every reused read.
+                    for candidate in files[1:]:
                         candidate.chmod(0o644)
+                    with store._connections_guard:
+                        while store._connections:
+                            store._connections.pop().close()
                     read()
                     self.assertEqual([stat.S_IMODE(f.stat().st_mode) for f in files], [0o600] * 3)
                 finally:
                     connection.close()
 
-                # A later SQLite connection recreates the sidecars; those must
-                # also be checked, even after previous successful reads.
+                # Drop retained readers so the next read opens a connection
+                # and audits any existing or recreated sidecars again.
+                with store._connections_guard:
+                    while store._connections:
+                        store._connections.pop().close()
                 connection = sqlite3.connect(path)
                 try:
                     connection.execute("SELECT name FROM sqlite_schema").fetchall()

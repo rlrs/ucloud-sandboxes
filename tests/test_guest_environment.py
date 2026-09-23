@@ -222,7 +222,7 @@ class GuestEnvironmentTests(unittest.TestCase):
         DirectSandboxService.write_file(service, "test", "/eval.sh", b"echo ok")
         script = service._file_exec.call_args.args[1][2]
         # Execute the actual parent-selection prefix without writing to host /.
-        prefix = script.split('mkdir -p -- "$dir"')[0]
+        prefix = script.split('umask 077;')[0]
         completed = subprocess.run(
             [
                 "/bin/sh",

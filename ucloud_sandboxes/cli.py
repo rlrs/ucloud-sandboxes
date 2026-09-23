@@ -6080,6 +6080,7 @@ def dashboard_scale_policy_to_dict(policy: ScalePolicy) -> dict[str, Any]:
         "target_cpu_utilization": policy.target_cpu_utilization,
         "target_memory_utilization": policy.target_memory_utilization,
         "max_memory_psi_full_avg10": policy.max_memory_psi_full_avg10,
+        "max_io_psi_full_avg10": policy.max_io_psi_full_avg10,
         "target_storage_queue_utilization": (policy.target_storage_queue_utilization),
         "create_pressure_enabled": policy.create_pressure_enabled,
         "create_pressure_window_seconds": policy.create_pressure_window_seconds,

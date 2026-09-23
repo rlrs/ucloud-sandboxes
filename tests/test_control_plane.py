@@ -2214,6 +2214,32 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(len(client_ports), 2)
         self.assertEqual(len(set(client_ports)), 1)
 
+    def test_capable_node_reuses_only_completely_consumed_json_requests(self) -> None:
+        from ucloud_sandboxes.http_server import JsonHttpHandler, HighBacklogThreadingHTTPServer
+        ports = []
+        class Node(JsonHttpHandler):
+            def do_POST(self):
+                ports.append(self.client_address[1])
+                if self.path == '/reject':
+                    self._write_json({'rejected': True}, status=503)
+                else:
+                    self._write_json({'payload': self._read_json_body()})
+        node = HighBacklogThreadingHTTPServer(('127.0.0.1', 0), Node)
+        pool = control_plane.urllib3.PoolManager(num_pools=1, maxsize=1, block=True, retries=False)
+        with _running_server(node) as node_url:
+            try:
+                with patch.object(control_plane, '_NODE_HTTP_POOL', pool):
+                    for path in ('/ok', '/ok', '/reject', '/ok'):
+                        req = request.Request(node_url + path, data=b'{"value":1}', method='POST')
+                        with control_plane._open_node_request(req, timeout=5, authenticated=True, allow_body_keep_alive=True) as response:
+                            self.assertEqual(response.status, 503 if path == '/reject' else 200)
+                            response.read()
+            finally:
+                pool.clear()
+        self.assertEqual(ports[0], ports[1])
+        self.assertEqual(ports[1], ports[2])
+        self.assertNotEqual(ports[2], ports[3])
+
     def test_authenticated_node_requests_with_bodies_close_connections(self) -> None:
         client_ports: list[int] = []
         release_connections = Event()

@@ -88,6 +88,9 @@ class JsonHttpHandler(BaseHTTPRequestHandler):
             # retain enough idle upstream keep-alives to exhaust the bounded
             # request pool while the gateway is doing no work.
             self.close_connection = True
+        # Remember whether normal HTTP negotiation permits reuse, before
+        # fencing requests whose bodies may be rejected without being read.
+        self._keep_alive_after_body = not self.close_connection
         content_length = self.headers.get("Content-Length")
         if self.headers.get("Transfer-Encoding") or (
             content_length is not None and content_length.strip() != "0"
@@ -114,6 +117,8 @@ class JsonHttpHandler(BaseHTTPRequestHandler):
         if len(body) != length:
             raise ValueError("request body ended before Content-Length bytes were read")
         self._request_body_consumed = True
+        if getattr(self, "_keep_alive_after_body", False):
+            self.close_connection = False
         return body
 
     def _request_content_length(self, *, max_bytes: int) -> int:
@@ -305,6 +310,9 @@ class HighBacklogThreadingHTTPServer(ThreadingHTTPServer):
     def get_request(self) -> tuple[socket.socket, Any]:
         client, address = super().get_request()
         client.settimeout(self.client_socket_timeout_seconds)
+        # Headers and small JSON bodies are separate writes. Nagle plus the
+        # peer's delayed ACK otherwise adds ~40ms to reused RPC connections.
+        client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         return client, address
 
     def process_request(self, request: socket.socket, client_address: Any) -> None:

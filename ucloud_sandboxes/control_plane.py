@@ -28,6 +28,7 @@ from urllib3.exceptions import EmptyPoolError
 from .network_policy import SandboxNetworkPolicy
 from .admission import FairCapacity
 from .capabilities import (
+    REQUEST_BODY_KEEPALIVE_CAPABILITY,
     ENVIRONMENT_CONTRACT_CAPABILITY,
     STATIC_FILE_MANAGEMENT_CAPABILITY,
     DISK_QUOTA_CAPABILITY,
@@ -709,18 +710,19 @@ def _open_node_request(
     *,
     timeout: float,
     authenticated: bool = False,
+    allow_body_keep_alive: bool = False,
 ) -> Any:
     # Authenticated node calls must never carry the deployment credential to a
     # redirect target selected by a compromised node endpoint.
     if authenticated:
         try:
             headers = dict(req.header_items())
-            if req.data is not None:
-                # A node can reject a body-bearing request before consuming its
-                # body (for example during admission or authorization changes).
-                # Reusing that HTTP/1.1 connection would let unread bytes become
-                # the next request line. Keep hot bodyless polling pooled, but
-                # make every request with a body self-contained.
+            if req.data is not None and (
+                not allow_body_keep_alive or isinstance(req.data, RequestBodyStream)
+            ):
+                # Legacy nodes and streaming uploads remain self-contained.
+                # New nodes advertise that early rejection closes the socket,
+                # and only a completely consumed framed body permits reuse.
                 headers["Connection"] = "close"
             path = urlparse(req.full_url).path
             pool = (
@@ -5825,7 +5827,14 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 status=HTTPStatus.NOT_FOUND,
             )
             return
-        if self._exec_route_is_proven_stale(route):
+        heartbeat = self._exec_route_heartbeat(route)
+        if _heartbeat_proves_route_absent(
+            heartbeat,
+            sandbox_id=route.sandbox_id,
+            route_created_at=route.created_at,
+            route_updated_at=route.updated_at,
+            heartbeat_ttl_seconds=self.heartbeat_ttl_seconds,
+        ):
             self.routing_store.delete_exec(route.session_id)
             self._write_json(
                 {
@@ -5836,7 +5845,11 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 status=HTTPStatus.NOT_FOUND,
             )
             return
-        if not self._route_worker_is_fresh(route):
+        if not (
+            heartbeat is not None
+            and heartbeat.node_url
+            and heartbeat.is_fresh(utc_now(), self.heartbeat_ttl_seconds)
+        ):
             self._write_route_worker_unreachable(route)
             return
         try:
@@ -5856,23 +5869,18 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         )
         self._send_proxied_response(response)
 
-    def _exec_route_is_proven_stale(self, route: ExecRoute) -> bool:
+    def _exec_route_heartbeat(self, route: ExecRoute) -> NodeHeartbeat | None:
         heartbeat = self._heartbeat_for_route(
             job_id=route.job_id, include_inventory=False,
         )
-        if heartbeat is None or heartbeat.active_sandboxes != 0:
-            return False
-        # Only an apparently empty worker can prove absence. Do not copy all
-        # of its inventory/snapshot descriptors on each active exec poll.
-        # The full inventory remains necessary when all sandboxes are parked.
-        heartbeat = self._heartbeat_for_route(job_id=route.job_id)
-        return _heartbeat_proves_route_absent(
-            heartbeat,
-            sandbox_id=route.sandbox_id,
-            route_created_at=route.created_at,
-            route_updated_at=route.updated_at,
-            heartbeat_ttl_seconds=self.heartbeat_ttl_seconds,
-        )
+        if heartbeat is not None and heartbeat.active_sandboxes == 0:
+            # Only an apparently empty worker can prove absence. Its full
+            # inventory also distinguishes parked work from deleted work.
+            heartbeat = self._heartbeat_for_route(job_id=route.job_id)
+        # Use this same observation for freshness and absence checks. Every
+        # new HTTP request reads SQLite again; no request-local observation
+        # is retained across requests or worker lifecycle transitions.
+        return heartbeat
 
     def _heartbeat_for_route(
         self,
@@ -5883,9 +5891,18 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         # Every persisted sandbox and exec route has a non-empty immutable job
         # binding. An exact miss means that worker heartbeat is unavailable;
         # scanning unrelated node inventories cannot make the route current.
-        if include_inventory:
-            return self.store.get_heartbeat(job_id)
-        return self.store.get_heartbeat(job_id, include_inventory=False)
+        heartbeat = (
+            self.store.get_heartbeat(job_id) if include_inventory
+            else self.store.get_heartbeat(job_id, include_inventory=False)
+        )
+        self._pooled_node_body_origin = (
+            heartbeat.node_url.rstrip("/")
+            if heartbeat is not None and heartbeat.node_url
+            and heartbeat.is_fresh(utc_now(), self.heartbeat_ttl_seconds)
+            and REQUEST_BODY_KEEPALIVE_CAPABILITY in heartbeat.capabilities
+            else None
+        )
+        return heartbeat
 
     def _route_worker_is_fresh(self, route: SandboxRoute | ExecRoute) -> bool:
         heartbeat = self._heartbeat_for_route(
@@ -6894,6 +6911,10 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                         proxied,
                         timeout=timeout_seconds,
                         authenticated=True,
+                        allow_body_keep_alive=(
+                            getattr(self, "_pooled_node_body_origin", None)
+                            == node_url.rstrip("/")
+                        ),
                     )
                 finally:
                     if isinstance(body, RequestBodyStream):

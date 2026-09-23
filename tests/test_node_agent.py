@@ -103,7 +103,7 @@ class BuilderNodeAgentTests(unittest.TestCase):
         status, payload = self._json("/v1/heartbeat")
         heartbeat = payload["heartbeat"]
         self.assertEqual(status, 200)
-        self.assertEqual(heartbeat["capabilities"], ["image-cache", "image-build"])
+        self.assertEqual(heartbeat["capabilities"], ["image-cache", "image-build", "request-body-keepalive-v1"])
         self.assertEqual(heartbeat["inventory"], [])
         self.assertEqual(heartbeat["deployment_id"], "deployment-a")
         self.assertEqual(heartbeat["node_epoch"], "builder-boot-1")

@@ -288,7 +288,7 @@ class HttpServerTests(unittest.TestCase):
             response, payload = post({"Content-Length": "2"}, b"{}")
             self.assertEqual(response.status, 200)
             self.assertEqual(payload, {"payload": {}})
-            self.assertEqual(response.getheader("Connection"), "close")
+            self.assertIsNone(response.getheader("Connection"))
             self.assertEqual(response.getheader("Content-Type"), "application/json")
             self.assertEqual(response.getheader("X-Test"), "preserved")
             self.assertEqual(
@@ -325,12 +325,39 @@ class HttpServerTests(unittest.TestCase):
         try:
             accepted, _address = server.get_request()
             self.assertEqual(accepted.gettimeout(), 1.25)
+            self.assertEqual(accepted.getsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY), 1)
             self.assertEqual(server.max_request_threads, 1)
         finally:
             client.close()
             if accepted is not None:
                 accepted.close()
             server.server_close()
+
+    def test_consumed_json_reuses_socket_but_explicit_and_public_close_still_win(self):
+        for public, explicit in [(False, False), (False, True), (True, False)]:
+            with self.subTest(public=public, explicit=explicit):
+                ports = []
+                class Handler(_JsonHandler):
+                    allow_http_keep_alive = not public
+                    def do_POST(self):
+                        ports.append(self.client_address[1])
+                        super().do_POST()
+                server = HighBacklogThreadingHTTPServer(('127.0.0.1', 0), Handler)
+                thread = Thread(target=server.serve_forever, kwargs={'poll_interval': .01}, daemon=True)
+                thread.start()
+                connection = HTTPConnection(*server.server_address, timeout=3)
+                try:
+                    for _ in range(2):
+                        connection.request('POST', '/', body=b'{}', headers={'Connection': 'close'} if explicit else {})
+                        response = connection.getresponse()
+                        self.assertEqual(response.status, 200)
+                        self.assertEqual(json.loads(response.read()), {'payload': {}})
+                    self.assertEqual(len(set(ports)), 2 if public or explicit else 1)
+                finally:
+                    connection.close()
+                    server.shutdown()
+                    thread.join(2)
+                    server.server_close()
 
     def test_early_body_rejection_closes_connection_before_body_is_read(self) -> None:
         server = HighBacklogThreadingHTTPServer(

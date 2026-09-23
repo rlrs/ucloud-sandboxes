@@ -150,7 +150,7 @@ class ControlStateCacheTests(unittest.TestCase):
             self.assertFalse(errors)
 
     def test_exec_absence_check_only_loads_inventory_for_an_empty_worker(self):
-        from ucloud_sandboxes.control_plane import ControlPlaneHandler
+        from ucloud_sandboxes.control_plane import ControlPlaneHandler, _heartbeat_proves_route_absent
         from ucloud_sandboxes.routing import ExecRoute
         with TemporaryDirectory() as raw:
             store = ControlStateStore(Path(raw) / 'control.sqlite')
@@ -162,11 +162,50 @@ class ControlStateCacheTests(unittest.TestCase):
             route = ExecRoute(session_id='exec', sandbox_id='sandbox', node_id=heartbeat.node_id,
                               job_id=heartbeat.job_id, node_url=heartbeat.node_url,
                               created_at='2026-01-01T00:00:00+00:00', updated_at='2026-01-01T00:00:00+00:00')
+            def stale():
+                return _heartbeat_proves_route_absent(
+                    handler._exec_route_heartbeat(route), sandbox_id=route.sandbox_id,
+                    route_created_at=route.created_at, route_updated_at=route.updated_at,
+                    heartbeat_ttl_seconds=handler.heartbeat_ttl_seconds,
+                )
             with patch.object(store, 'get_heartbeat', wraps=store.get_heartbeat) as get:
-                self.assertFalse(handler._exec_route_is_proven_stale(route))
+                self.assertFalse(stale())
                 get.assert_called_once_with('job', include_inventory=False)
             # Zero active count does not mean the parked sandbox disappeared.
             store.receive_heartbeat(replace(heartbeat, active_sandboxes=0, received_at=utc_now()))
-            self.assertFalse(handler._exec_route_is_proven_stale(route))
+            self.assertFalse(stale())
             store.receive_heartbeat(replace(heartbeat, active_sandboxes=0, inventory=(), received_at=utc_now()))
-            self.assertTrue(handler._exec_route_is_proven_stale(route))
+            self.assertTrue(stale())
+
+    def test_single_heartbeat_read_has_no_explicit_transaction_and_keeps_permissions(self):
+        with TemporaryDirectory() as directory:
+            store = ControlStateStore(Path(directory) / 'control.sqlite')
+            store.upsert_heartbeat(self.heartbeat())
+            statements = []
+            with store._connection() as conn:
+                conn.set_trace_callback(statements.append)
+            store.path.chmod(0o644)
+            self.assertEqual(store.get_heartbeat('job').job_id, 'job')
+            self.assertFalse(any(s.startswith(('BEGIN', 'COMMIT')) for s in statements))
+            self.assertEqual(store.path.stat().st_mode & 0o777, 0o600)
+            for suffix in ('-wal', '-shm'):
+                path = Path(str(store.path) + suffix)
+                if path.exists():
+                    self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+
+    def test_body_pooling_requires_fresh_capability_on_the_observed_origin(self):
+        from datetime import timedelta
+        from ucloud_sandboxes.capabilities import REQUEST_BODY_KEEPALIVE_CAPABILITY
+        from ucloud_sandboxes.control_plane import ControlPlaneHandler
+        with TemporaryDirectory() as directory:
+            store = ControlStateStore(Path(directory) / 'control.sqlite')
+            handler = object.__new__(ControlPlaneHandler)
+            handler.store, handler.heartbeat_ttl_seconds = store, 30
+            for capable, age, expected in [(False, 0, None), (True, 0, 'http://node-job:8090'), (True, 60, None)]:
+                observed = utc_now() - timedelta(seconds=age)
+                store.upsert_heartbeat(replace(self.heartbeat(), received_at=observed,
+                    capabilities=(REQUEST_BODY_KEEPALIVE_CAPABILITY,) if capable else ()))
+                handler._heartbeat_for_route(job_id='job', include_inventory=False)
+                self.assertEqual(handler._pooled_node_body_origin, expected)
+            handler._heartbeat_for_route(job_id='missing')
+            self.assertIsNone(handler._pooled_node_body_origin)

@@ -1,3 +1,4 @@
+REQUEST_BODY_KEEPALIVE_CAPABILITY = "request-body-keepalive-v1"
 ENVIRONMENT_CONTRACT_CAPABILITY = "environment-contract-v1"
 STATIC_FILE_MANAGEMENT_CAPABILITY = "static-file-management-v1"
 DISK_QUOTA_CAPABILITY = "disk-quota"

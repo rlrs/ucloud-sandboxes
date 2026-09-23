@@ -132,7 +132,10 @@ class ControlStateStore:
 
         if not job_id:
             return None
-        with self._transaction(write=False) as connection:
+        # A single indexed SELECT is already a SQLite snapshot. Explicit
+        # BEGIN/COMMIT and repeated WAL permission stats add several GIL
+        # handoffs to every routed request without strengthening this read.
+        with self._connection() as connection:
             row = connection.execute(
                 "SELECT payload FROM control_records "
                 "WHERE namespace = 'heartbeat' AND record_id = ?",
@@ -387,6 +390,7 @@ class ControlStateStore:
             )
             connection.execute("PRAGMA busy_timeout = 30000")
             connection.execute("PRAGMA synchronous = FULL")
+            self._secure_files()
             return connection
         except sqlite3.Error as exc:
             raise ValueError(_ERROR) from exc
@@ -408,6 +412,8 @@ class ControlStateStore:
                 self._connection_identity = identity
                 if self._connections:
                     connection = self._connections.pop()
+            if stat.S_IMODE(info.st_mode) != 0o600:
+                os.chmod(self.path, 0o600)
             if connection is None:
                 connection = self._connect()
             yield connection

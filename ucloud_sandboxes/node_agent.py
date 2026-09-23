@@ -21,6 +21,7 @@ from .build_context_store import (
     build_context_digest_from_path,
 )
 from .capabilities import (
+    REQUEST_BODY_KEEPALIVE_CAPABILITY,
     ENVIRONMENT_CONTRACT_CAPABILITY,
     STATIC_FILE_MANAGEMENT_CAPABILITY,
     DISK_QUOTA_CAPABILITY,
@@ -1727,7 +1728,7 @@ def build_builder_node_agent_server(
     BuilderHandler.deployment_id = deployment_id
     BuilderHandler.init_version = init_version
     BuilderHandler.total_resources = resources
-    BuilderHandler.capabilities = ("image-cache", "image-build")
+    BuilderHandler.capabilities = ("image-cache", "image-build", REQUEST_BODY_KEEPALIVE_CAPABILITY)
     BuilderHandler.image_builds_enabled = True
     BuilderHandler.sandboxes_enabled = False
     BuilderHandler.node_epoch = _resolve_node_epoch(node_epoch)
@@ -1815,6 +1816,7 @@ def build_direct_node_agent_server(
     DirectBoundHandler.init_version = init_version
     DirectBoundHandler.total_resources = configured_resources
     direct_capabilities = [
+        REQUEST_BODY_KEEPALIVE_CAPABILITY,
         ENVIRONMENT_CONTRACT_CAPABILITY,
         "sandbox",
         "image-cache",

@@ -18,6 +18,70 @@ from ucloud_sandboxes.sandbox_exec import (
 
 
 class SandboxExecProtocolTests(unittest.TestCase):
+    def test_initial_snapshot_completes_short_process_and_keeps_all_output(self):
+        manager = ExecSessionManager(FakeSandboxManager())
+        session = manager.start(SandboxExecSpec(sandbox_id="one", command=("/bin/sh", "-c", "printf out; printf err >&2")))
+        payload = manager.initial_events(session.id, wait_seconds=0.05)
+        if payload["session"]["final_sequence"] is None:
+            # Scheduling can exceed 50 ms on a busy test host. A second snapshot
+            # must still return the complete retained stream from sequence one.
+            session.process.wait(timeout=2)
+            for _ in range(20):
+                payload = manager.initial_events(session.id, wait_seconds=0.05)
+                if payload["session"]["final_sequence"] is not None:
+                    break
+        self.assertEqual(payload["session"]["exit_code"], 0)
+        self.assertEqual(payload["session"]["final_sequence"], payload["events"][-1]["sequence"])
+        self.assertEqual("".join(e["data"] for e in payload["events"] if e["stream"] == "stdout"), "out")
+        self.assertEqual("".join(e["data"] for e in payload["events"] if e["stream"] == "stderr"), "err")
+
+    def test_initial_wait_is_bounded_and_does_not_block_other_sessions(self):
+        import time
+        from dataclasses import replace
+        manager = ExecSessionManager(FakeSandboxManager())
+        session = _install_session(manager, BlockingStdin())
+        session.spec = replace(session.spec, stdin=False)
+        started = time.monotonic()
+        payload = manager.initial_events(session.id, wait_seconds=5)
+        self.assertLess(time.monotonic() - started, 0.5)
+        self.assertIsNone(payload["session"]["final_sequence"])
+        entered = Event()
+        def snapshot():
+            entered.set()
+            manager.initial_events(session.id, wait_seconds=0.05)
+        thread = Thread(target=snapshot); thread.start(); entered.wait()
+        manager._append_stream_chunk(session.id, "stdout", "concurrent")
+        thread.join(timeout=1)
+        self.assertFalse(thread.is_alive())
+        # Interactive commands must not wait for client input before returning.
+        session.spec = replace(session.spec, stdin=True)
+        with patch.object(session.condition, "wait", side_effect=AssertionError("interactive wait")):
+            self.assertTrue(manager.initial_events(session.id, wait_seconds=.05)["events"])
+
+    def test_initial_snapshot_paginates_without_advertising_unread_output_as_drained(self):
+        manager = ExecSessionManager(FakeSandboxManager())
+        session = _install_session(manager, BlockingStdin())
+        session.events = deque(maxlen=512)
+        for _ in range(150):
+            manager._append_stream_chunk(session.id, "stdout", "x")
+        session.status = "exited"
+        session.final_sequence = session.next_sequence - 1
+        payload = manager.initial_events(session.id, wait_seconds=.05)
+        self.assertEqual(len(payload["events"]), 100)
+        self.assertEqual(payload["session"]["final_sequence"], 150)
+        self.assertEqual(len(manager.events_after(session.id, after=100)), 50)
+
+    def test_node_rejects_invalid_initial_wait_before_starting_command(self):
+        from ucloud_sandboxes.node_agent import NodeAgentHandler
+        for value in ("nan", "inf", "-1", "100", "oops"):
+            handler = object.__new__(NodeAgentHandler)
+            handler.exec_manager = Mock()
+            handler._read_json_body = Mock(return_value={"command": ["true"], "env": {}, "working_dir": None, "stdin": False, "tty": False})
+            handler._write_exception = Mock()
+            handler._start_exec("/v1/sandboxes/one/exec", "initial_wait_seconds=" + value)
+            handler.exec_manager.start.assert_not_called()
+            handler._write_exception.assert_called_once()
+
     def test_final_event_watermark_requires_both_output_pumps_to_finish(self) -> None:
         for held_pipe in (False, True):
             with self.subTest(held_pipe=held_pipe):

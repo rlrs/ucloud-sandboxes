@@ -255,6 +255,26 @@ class ExecSessionManager:
                     return []
                 session.condition.wait(timeout=remaining)
 
+    def initial_events(self, session_id: str, *, wait_seconds: float) -> dict[str, Any]:
+        """Snapshot a short command without a second HTTP round trip.
+
+        Completion requires the final output watermark, not merely process exit.
+        The condition releases the registry lock while waiting; long commands
+        and commands waiting for stdin never hold the start response indefinitely.
+        """
+        deadline = time.monotonic() + min(0.05, max(0.0, wait_seconds))
+        with self._lock:
+            session = self._require_session_locked(session_id)
+            while session.final_sequence is None and len(session.events) < 100:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or session.spec.stdin or session.spec.tty:
+                    break
+                session.condition.wait(timeout=remaining)
+            return {
+                "session": session.to_dict(),
+                "events": [event.to_dict() for event in list(session.events)[:100]],
+            }
+
     def write_stdin(self, session_id: str, data: str) -> ExecSession:
         with self._lock:
             session = self._require_session_locked(session_id)

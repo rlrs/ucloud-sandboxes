@@ -79,10 +79,12 @@ def sandbox_file_write_script() -> str:
         "set -eu; target=$1; dir=${target%/*}; "
         '[ -n "$dir" ] || dir=/; '
         '[ ! -d "$target" ] || { echo "file target is a directory" >&2; exit 1; }; '
-        'mkdir -p -- "$dir"; '
-        'tmp=$(mktemp "$dir/.ucloud-write.XXXXXX"); '
+        '[ -d "$dir" ] || mkdir -p -- "$dir"; '
+        # mktemp creates 0600; normalize the child shell's umask rather than
+        # starting chmod for every upload (including tiny generated tools).
+        'umask 077; tmp=$(mktemp "$dir/.ucloud-write.XXXXXX"); '
         "trap 'rm -f -- \"$tmp\"' EXIT HUP INT TERM; "
-        'cat >"$tmp"; chmod 0600 "$tmp"; mv -f -- "$tmp" "$target"; '
+        'cat >"$tmp"; mv -f -- "$tmp" "$target"; '
         "trap - EXIT HUP INT TERM"
     )
 

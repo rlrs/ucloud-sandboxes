@@ -4,6 +4,7 @@ from .warm_park import WarmParkDeferred
 
 import base64
 import hmac
+import math
 import shutil
 import sys
 import time
@@ -418,7 +419,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
             self._wake_sandbox(parsed.path)
             return
         if sandbox_route is not None and sandbox_route.action == "exec":
-            self._start_exec(parsed.path)
+            self._start_exec(parsed.path, parsed.query)
             return
         if sandbox_route is not None and sandbox_route.action == "job_create":
             self._start_managed_process(sandbox_route.sandbox_id)
@@ -589,7 +590,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
             status=status,
         )
 
-    def _start_exec(self, path: str) -> None:
+    def _start_exec(self, path: str, query: str = "") -> None:
         started = time.monotonic()
         prefix = "/v1/sandboxes/"
         suffix = "/exec"
@@ -599,6 +600,12 @@ class NodeAgentHandler(BuildContextHttpHandler):
             if not isinstance(raw, dict):
                 raise ValueError("exec payload must be a JSON object")
             spec = SandboxExecSpec.from_dict(raw, sandbox_id=sandbox_id)
+            initial_wait = parse_qs(query).get("initial_wait_seconds")
+            wait_seconds = float(initial_wait[0]) if initial_wait else None
+            if wait_seconds is not None and (
+                not math.isfinite(wait_seconds) or not 0 <= wait_seconds <= 0.05
+            ):
+                raise ValueError("initial_wait_seconds must be between 0 and 0.05")
             with self.telemetry.span(
                 "node.sandbox_exec_start",
                 attributes={"sandbox.id": sandbox_id},
@@ -642,16 +649,12 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 "manager": manager_timings,
             },
         )
-        self._write_json(
-            {
-                "session": session.to_dict(),
-                "timings": {
-                    "manager": manager_timings,
-                    "start_ms": start_ms,
-                },
-            },
-            status=HTTPStatus.CREATED,
+        payload = (
+            self.exec_manager.initial_events(session.id, wait_seconds=wait_seconds)
+            if wait_seconds is not None else {"session": session.to_dict()}
         )
+        payload["timings"] = {"manager": manager_timings, "start_ms": start_ms}
+        self._write_json(payload, status=HTTPStatus.CREATED)
 
     def _start_managed_process(self, sandbox_id: str) -> None:
         try:

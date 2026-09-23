@@ -1,0 +1,1690 @@
+{
+  "report_version": 3,
+  "run_id": "relay-load-8885f7a20e12",
+  "started_at": "2026-09-23T17:29:16.746677+00:00",
+  "configuration": {
+    "gateway_url": "https://app-sandboxes.cloud.sdu.dk",
+    "relay_url": "https://app-sandboxes-relay-v2.cloud.sdu.dk",
+    "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+    "sandboxes": 256,
+    "cycles": 8,
+    "startup_mode": "rolling",
+    "resident_mb": 1536,
+    "dirty_mb": 384,
+    "files": 64,
+    "file_kib": 64,
+    "payload_kib": 32,
+    "sqlite_transactions": 0,
+    "sqlite_payload_bytes": 4096,
+    "tool_upload_kib": 64,
+    "cpu_ms": 100,
+    "model_seconds": 20.0,
+    "model_jitter": 5.0,
+    "parking_mode": "natural",
+    "cpus": 1,
+    "memory_mb": 2048,
+    "disk_mb": 4096,
+    "create_concurrency": 16,
+    "fleet_pollers": 24,
+    "warmup_cycles": 1,
+    "deadline_seconds": 1800.0,
+    "sandbox_request_timeout_seconds": 180,
+    "continuation_timeout_seconds": 180,
+    "useful_action_p95_seconds": 1,
+    "continuation_p95_seconds": 0.8,
+    "seed": 1,
+    "start_signal_file": null
+  },
+  "completed_scenarios": [
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0084",
+      "job_id": "job-b2f51fdfc255447783c32516b83558e0",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0115",
+      "job_id": "job-29243f0466374a9199c8e6beecefbbd8",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0163",
+      "job_id": "job-3530a388a43b471a9a95227457982dfa",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0119",
+      "job_id": "job-bc84cc1834084a19b7231bd62ed2a27b",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0082",
+      "job_id": "job-fd2e65fbfcac497cbac86f6f5b486227",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0059",
+      "job_id": "job-20a834aee6dc409eb3a9ddd408b4ee6b",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0147",
+      "job_id": "job-34e797740b004c57b082e29c879495ac",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0135",
+      "job_id": "job-fd9492932f5441ec93086093445e7935",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0111",
+      "job_id": "job-e48bdce78465477b890a3ddf5d64b38b",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0131",
+      "job_id": "job-7a215eace037492089fd0f33e0d484de",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0139",
+      "job_id": "job-6991480f2429405b8300c66c40e472a6",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0078",
+      "job_id": "job-fc44ef101a8b4fbebd3f526780901141",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0127",
+      "job_id": "job-fbfce07a3af34853ad85b720c592c1cf",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0074",
+      "job_id": "job-b404adc486af4e3dbb7c76b0d3961f30",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0095",
+      "job_id": "job-d70b73ac008e4ca8b6a5b4a1408faa14",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0107",
+      "job_id": "job-b6da8006302b4927a4c4b16640f435c8",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0143",
+      "job_id": "job-afaa5a793ad2474a8c22d5b1cbe9ce62",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0099",
+      "job_id": "job-61cbf3033b074ffc90c2365fa71dcc9d",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0159",
+      "job_id": "job-3721251de5b0465fa5bca981f0db8079",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0192",
+      "job_id": "job-f216c1e89fad4a0ab54f17636f24c167",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0089",
+      "job_id": "job-526bf29129824599b809d45aaf0e0a0b",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0063",
+      "job_id": "job-c9dccb32907a40fda3c6285c55086156",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0178",
+      "job_id": "job-239f28e2469644ed89b3c1f24f103781",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0212",
+      "job_id": "job-d4e1fcf6c56f439595e819d248f95712",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0196",
+      "job_id": "job-44835b59ae5346b397f6d96741632455",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0216",
+      "job_id": "job-2a12ec30e31b4d72a1a85ba3e439ff0e",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0200",
+      "job_id": "job-6b858f8d9ff5456a9d75cbf3415db6f3",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0188",
+      "job_id": "job-64c3154da6074ca3af0cd8126405396a",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0125",
+      "job_id": "job-a4afa778968e489696b57e8347a2ec9f",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0086",
+      "job_id": "job-6f58fcf365104e9080c7ba6d20d8090e",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0076",
+      "job_id": "job-b2fa4dbbb0794f41b63cdd8601bae551",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0116",
+      "job_id": "job-c03b7f8c223149f9a5ef7cd1f9a7cb2c",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0148",
+      "job_id": "job-3a7e21f2c5184aa4a762b291291511f7",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0072",
+      "job_id": "job-b97616806b8046f19c1d35b082ffbefb",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0175",
+      "job_id": "job-5102782d23b34a749804fb597df0ab55",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0112",
+      "job_id": "job-1f04325b60834439b8b0e6fd28b9ed2c",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0223",
+      "job_id": "job-8e37e4cc7e9f458e81a5ecf7ebba38ef",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0109",
+      "job_id": "job-7be98afdb2d44694bd77dc1a9f93fad5",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0101",
+      "job_id": "job-7e3a2f6b8f884481a01de11b017328c0",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0137",
+      "job_id": "job-09f46e21432f41949079e239b1ece3b1",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0204",
+      "job_id": "job-eb553c82d6f04eda9403e00b22cfc3e2",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0236",
+      "job_id": "job-ce7313f5855c42228f477683c9ba82a7",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0161",
+      "job_id": "job-cc4665e68277472d88eee32d33f2f897",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0081",
+      "job_id": "job-e98f5a781b6e4ce496653e28ffbb9e6c",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0149",
+      "job_id": "job-488a72b46a6b4c028dde97430eed0ba4",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0129",
+      "job_id": "job-82d3d2e3d73b4f188ce937a0ad4e58b7",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0218",
+      "job_id": "job-c6f06f8fc6b34651b522a11ab191ff46",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0117",
+      "job_id": "job-d9980db3bd594026a920648a36fd7e57",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0228",
+      "job_id": "job-a4d13980c9de460483ac0c72209fc02b",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0145",
+      "job_id": "job-8fc073076e184fabbf77538eae8c3a19",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0141",
+      "job_id": "job-088da4be84494883bdb9943ddb507dca",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0157",
+      "job_id": "job-cc28c5465c9d4ba690f54b3a68313c77",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0172",
+      "job_id": "job-ae60f42b287a40b6bafddb870427d880",
+      "state": "exited",
+      "exit_code": 0
+    }
+  ],
+  "errors": [
+    {
+      "sandbox_id": "relay-load-8885f7a20e12-0155",
+      "stage": "guest_continuation",
+      "cycle": 3,
+      "error": "TimeoutError: guest did not continue after model response"
+    }
+  ],
+  "cleanup_errors": [],
+  "control_retries": [],
+  "resource_errors": [],
+  "fleet_health_checks": [
+    {
+      "at": "2026-09-23T17:29:16.962551+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:29:22.006722+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:29:27.044297+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:29:32.076167+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:29:37.121343+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:29:42.174017+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:29:47.233076+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:29:52.282102+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:29:57.360528+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:30:02.426087+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:30:07.492651+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:30:12.564075+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:30:17.631759+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:30:22.691598+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:30:27.760576+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:30:32.826543+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:30:37.884410+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:30:42.955468+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:30:48.026811+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400728"
+      ],
+      "failures": [
+        {
+          "at": "2026-09-23T17:30:48.026811+00:00",
+          "job_id": "12400727",
+          "kind": "stale_heartbeat"
+        }
+      ]
+    },
+    {
+      "at": "2026-09-23T17:30:53.143901+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400728"
+      ],
+      "failures": [
+        {
+          "at": "2026-09-23T17:30:53.143901+00:00",
+          "job_id": "12400727",
+          "kind": "stale_heartbeat"
+        }
+      ]
+    },
+    {
+      "at": "2026-09-23T17:30:58.210033+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400728"
+      ],
+      "failures": [
+        {
+          "at": "2026-09-23T17:30:58.210033+00:00",
+          "job_id": "12400727",
+          "kind": "stale_heartbeat"
+        }
+      ]
+    },
+    {
+      "at": "2026-09-23T17:31:03.277985+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400728"
+      ],
+      "failures": [
+        {
+          "at": "2026-09-23T17:31:03.277985+00:00",
+          "job_id": "12400727",
+          "kind": "stale_heartbeat"
+        }
+      ]
+    },
+    {
+      "at": "2026-09-23T17:31:08.341415+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:31:13.414795+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:31:18.480587+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:31:23.540569+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:31:28.605761+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:31:33.665727+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:31:38.725177+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:31:43.799141+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:31:48.865108+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:31:53.927185+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:31:58.997127+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:32:04.064082+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:32:09.131358+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:32:14.191086+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:32:19.257576+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:32:24.324657+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:32:29.387703+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:32:34.450702+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:32:39.518147+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:32:44.588422+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:32:49.662072+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:32:54.732356+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:32:59.802589+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:33:04.863689+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:33:09.925920+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:33:14.995325+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:33:20.061183+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:33:25.125941+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:33:30.196750+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:33:35.262372+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:33:40.324793+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:33:45.406749+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:33:50.474718+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:33:55.538769+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:34:00.617771+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:34:05.681338+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:34:10.742249+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:34:15.801875+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:34:20.864999+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:34:25.928481+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:34:30.989951+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:34:36.052894+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:34:41.131407+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:34:46.192740+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T17:34:46.368095+00:00",
+      "required_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400725",
+        "12400726",
+        "12400727",
+        "12400728"
+      ],
+      "failures": []
+    }
+  ],
+  "fleet_health_failures": [
+    {
+      "at": "2026-09-23T17:30:48.026811+00:00",
+      "job_id": "12400727",
+      "kind": "stale_heartbeat"
+    },
+    {
+      "at": "2026-09-23T17:30:53.143901+00:00",
+      "job_id": "12400727",
+      "kind": "stale_heartbeat"
+    },
+    {
+      "at": "2026-09-23T17:30:58.210033+00:00",
+      "job_id": "12400727",
+      "kind": "stale_heartbeat"
+    },
+    {
+      "at": "2026-09-23T17:31:03.277985+00:00",
+      "job_id": "12400727",
+      "kind": "stale_heartbeat"
+    }
+  ],
+  "driver_python": "3.13.2",
+  "sdk_version": "0.4.26",
+  "sdk_client_sha256": "010a8e2406592224a1b339e7fcc4ac983ed394a56a4a8786c5f188569a2d5bb0",
+  "latency_definition": "model ready through guest-originated continuation receipt, then uploaded tool confirmation; receipt includes observation tunnel overhead; full integrity is a separate mandatory gate",
+  "harness_sha256": "61e85f335ccf2bbc723d6f4605eb8ee18c1feec5d71a128f0a3f3f09a5e3156c",
+  "deployed_health": {
+    "ok": true,
+    "service": "control-plane",
+    "version": "0.5.114rc20"
+  },
+  "fleet_health": {
+    "enabled": true,
+    "passed": false,
+    "status": "failed",
+    "used_jobs": [
+      "12400725",
+      "12400726",
+      "12400727",
+      "12400728"
+    ],
+    "observed_healthy_jobs": [
+      "12400725",
+      "12400726",
+      "12400727",
+      "12400728"
+    ],
+    "failure_count": 4,
+    "placement_grace_seconds": 30,
+    "freshness_seconds": 30
+  },
+  "failure": "TimeoutError: guest did not continue after model response",
+  "response_commit_seconds": {
+    "count": 1247,
+    "p50": 0.046585723059251904,
+    "p95": 0.06208725390024483,
+    "p99": 0.18691059504635632,
+    "max": 0.3807766188401729
+  },
+  "usable_exec_seconds": {
+    "count": 1247,
+    "p50": 11.900088357040659,
+    "p95": 31.874274477129802,
+    "p99": 47.47240856895223,
+    "max": 120.51603506109677
+  },
+  "response_ready_to_usable_exec_seconds": {
+    "count": 1247,
+    "p50": 11.920843611937016,
+    "p95": 31.875336098717526,
+    "p99": 47.47263347054832,
+    "max": 120.5201868924778
+  },
+  "response_ready_to_commit_seconds": {
+    "count": 1247,
+    "p50": 0.04766421695239842,
+    "p95": 0.06986540905199945,
+    "p99": 0.18708201381377876,
+    "max": 0.3875589440576732
+  },
+  "response_ready_to_guest_continuation_seconds": {
+    "count": 1247,
+    "p50": 4.86335022514686,
+    "p95": 26.983256625942886,
+    "p99": 40.701495790388435,
+    "max": 112.29349218332209
+  },
+  "post_continuation_exec_seconds": {
+    "count": 1247,
+    "p50": 4.0519611639902,
+    "p95": 14.065160857979208,
+    "p99": 20.886601452948526,
+    "max": 25.410325925797224
+  },
+  "post_continuation_exec_start_seconds": {
+    "count": 1247,
+    "p50": 0.24456273391842842,
+    "p95": 1.5946509570349008,
+    "p99": 3.6944369000848383,
+    "max": 5.3960014139302075
+  },
+  "post_continuation_exec_wait_seconds": {
+    "count": 1247,
+    "p50": 1.0758121111430228,
+    "p95": 6.80799401900731,
+    "p99": 9.017615429824218,
+    "max": 12.57743585598655
+  },
+  "full_integrity_seconds": {
+    "count": 1247,
+    "p50": 13.76173079595901,
+    "p95": 36.02528462046757,
+    "p99": 56.46255196817219,
+    "max": 123.02756182244048
+  },
+  "guest_verification_seconds": {
+    "count": 1247,
+    "p50": 1.4812783609999656,
+    "p95": 15.06130785800002,
+    "p99": 19.56793560700001,
+    "max": 23.976000188
+  },
+  "guest_tool_seconds": {
+    "count": 1247,
+    "p50": 0.22424797499999727,
+    "p95": 4.314433608000002,
+    "p99": 6.446778655999992,
+    "max": 10.911596175
+  },
+  "guest_transport_retries": {
+    "count": 1247,
+    "p50": 0,
+    "p95": 0,
+    "p99": 1,
+    "max": 1
+  },
+  "measured_park_observed_cycles": 3,
+  "phase_latency_seconds": {
+    "during_provisioning": {
+      "count": 647,
+      "p50": 13.549113537184894,
+      "p95": 45.99262621370144,
+      "p99": 69.40442482498474,
+      "max": 120.5201868924778
+    },
+    "after_provisioning": {
+      "count": 856,
+      "p50": 11.537800427526236,
+      "p95": 32.43200147757307,
+      "p99": 43.34633939154446,
+      "max": 97.04773194738664
+    }
+  },
+  "phase_continuation_seconds": {
+    "during_provisioning": {
+      "count": 647,
+      "p50": 6.627928275382146,
+      "p95": 42.22773124999367,
+      "p99": 64.49340694001876,
+      "max": 112.29349218332209
+    },
+    "after_provisioning": {
+      "count": 856,
+      "p50": 4.296580525231548,
+      "p95": 24.007558308774605,
+      "p99": 33.13010759046301,
+      "max": 76.45736434333958
+    }
+  },
+  "completed_cycles": 1503,
+  "resource_summary": {
+    "sample_count": 67,
+    "observed_worker_seconds": 1302.3998157978058,
+    "sampled_cpu_seconds": 13304.070870480757,
+    "cpu_coverage_worker_seconds": 1110.3817822933197,
+    "host_cpu_usage_seconds": 14793.47,
+    "host_cpu_steal_seconds": 13.2,
+    "host_cpu_usage_coverage_worker_seconds": 1302.3998157978058,
+    "host_cpu_steal_coverage_worker_seconds": 1302.3998157978058,
+    "sampled_host_memory_mib_seconds": 102191862.82436109,
+    "memory_coverage_worker_seconds": 1302.3998157978058,
+    "device_read_bytes": 889567883264,
+    "device_write_bytes": 406952946176,
+    "device_read_bytes_coverage_worker_seconds": 1302.3998157978058,
+    "device_write_bytes_coverage_worker_seconds": 1302.3998157978058,
+    "scope": "sampled whole worker costs; excludes missing/stale intervals; not per-sandbox attribution"
+  },
+  "correct": false,
+  "slo_passed": false,
+  "finished_at": "2026-09-23T17:35:02.808627+00:00",
+  "source_report_sha256": "f2c02b013467586cffa41c3f4be2d6fc3077864112534655085e434a556adc0f",
+  "health_checks": {
+    "total": 163,
+    "failed": 0
+  },
+  "fleet_polls_checks": {
+    "total": 7222,
+    "failed": 0
+  }
+}

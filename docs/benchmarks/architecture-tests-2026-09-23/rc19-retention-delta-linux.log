@@ -1,0 +1,16 @@
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/_weakrefset.py:88: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6c6044e890>
+  self.data.add(ref(item, self._remove))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/_weakrefset.py:88: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6c6044ed40>
+  self.data.add(ref(item, self._remove))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/_weakrefset.py:88: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6c6044fe20>
+  self.data.add(ref(item, self._remove))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/_weakrefset.py:88: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6c6044f3d0>
+  self.data.add(ref(item, self._remove))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+----------------------------------------------------------------------
+Ran 90 tests in 14.450s
+
+OK

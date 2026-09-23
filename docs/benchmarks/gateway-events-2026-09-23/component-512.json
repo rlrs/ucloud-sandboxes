@@ -1,0 +1,203 @@
+{
+  "configuration": {
+    "concurrency": 512,
+    "rounds": 20,
+    "hold_seconds": 0.2,
+    "gateway_cpus": 4,
+    "output": "/tmp/ucloud-p2-events512-qualified.json"
+  },
+  "runs": [
+    {
+      "count": 10240,
+      "errors": [],
+      "wall_seconds": 8.819091404089704,
+      "gateway_cpu_seconds": 10.8,
+      "gateway_cpu_seconds_per_request": 0.0010546875,
+      "gateway_peak_threads": 520,
+      "gateway_peak_descriptors": 929,
+      "gateway_final_descriptors": 414,
+      "gateway_peak_fd_types": {
+        "pipe:[239379636]": 1,
+        "/tmp/ucloud-p2-events512-qualified.log": 2,
+        "/sys/kernel/mm/transparent_hugepage/enabled": 1,
+        "/dev/urandom": 1,
+        "pipe:[239378607]": 1,
+        "/dev/null": 1,
+        "database": 145,
+        "pipe:[239378599]": 1,
+        "socket": 764,
+        "pipe:[239378606]": 1,
+        "anon_inode:[eventpoll]": 2
+      },
+      "gateway_final_fd_types": {
+        "pipe:[239379636]": 1,
+        "/tmp/ucloud-p2-events512-qualified.log": 2,
+        "/sys/kernel/mm/transparent_hugepage/enabled": 1,
+        "/dev/urandom": 1,
+        "pipe:[239378607]": 1,
+        "/dev/null": 1,
+        "database": 143,
+        "pipe:[239378599]": 1,
+        "socket": 260,
+        "pipe:[239378606]": 1,
+        "anon_inode:[eventpoll]": 2
+      },
+      "gateway_limits": "Limit                     Soft Limit           Hard Limit           Units     \nMax cpu time              unlimited            unlimited            seconds   \nMax file size             unlimited            unlimited            bytes     \nMax data size             unlimited            unlimited            bytes     \nMax stack size            8388608              unlimited            bytes     \nMax core file size        0                    unlimited            bytes     \nMax resident set          unlimited            unlimited            bytes     \nMax processes             321127               321127               processes \nMax open files            65536                65536                files     \nMax locked memory         10541039616          10541039616          bytes     \nMax address space         unlimited            unlimited            bytes     \nMax file locks            unlimited            unlimited            locks     \nMax pending signals       321127               321127               signals   \nMax msgqueue size         819200               819200               bytes     \nMax nice priority         0                    0                    \nMax realtime priority     0                    0                    \nMax realtime timeout      unlimited            unlimited            us        \n",
+      "latency_seconds": {
+        "p50": 0.42815997800789773,
+        "p95": 0.5409524810966104,
+        "max": 0.837824349058792
+      },
+      "health_seconds": {
+        "p50": 0.0032265079207718372,
+        "p95": 0.027578613022342324,
+        "max": 0.46107544586993754
+      },
+      "asynchronous": false
+    },
+    {
+      "count": 10240,
+      "errors": [],
+      "wall_seconds": 9.148935172939673,
+      "gateway_cpu_seconds": 9.03,
+      "gateway_cpu_seconds_per_request": 0.0008818359374999999,
+      "gateway_peak_threads": 217,
+      "gateway_peak_descriptors": 1244,
+      "gateway_final_descriptors": 604,
+      "gateway_peak_fd_types": {
+        "pipe:[239379636]": 1,
+        "/tmp/ucloud-p2-events512-qualified.log": 2,
+        "/sys/kernel/mm/transparent_hugepage/enabled": 1,
+        "/dev/urandom": 1,
+        "pipe:[239406665]": 1,
+        "/dev/null": 1,
+        "database": 333,
+        "pipe:[239378599]": 1,
+        "socket": 900,
+        "pipe:[239406664]": 1,
+        "anon_inode:[eventpoll]": 2
+      },
+      "gateway_final_fd_types": {
+        "pipe:[239379636]": 1,
+        "/tmp/ucloud-p2-events512-qualified.log": 2,
+        "/sys/kernel/mm/transparent_hugepage/enabled": 1,
+        "/dev/urandom": 1,
+        "pipe:[239406665]": 1,
+        "/dev/null": 1,
+        "database": 333,
+        "pipe:[239378599]": 1,
+        "pipe:[239406664]": 1,
+        "socket": 260,
+        "anon_inode:[eventpoll]": 2
+      },
+      "gateway_limits": "Limit                     Soft Limit           Hard Limit           Units     \nMax cpu time              unlimited            unlimited            seconds   \nMax file size             unlimited            unlimited            bytes     \nMax data size             unlimited            unlimited            bytes     \nMax stack size            8388608              unlimited            bytes     \nMax core file size        0                    unlimited            bytes     \nMax resident set          unlimited            unlimited            bytes     \nMax processes             321127               321127               processes \nMax open files            65536                65536                files     \nMax locked memory         10541039616          10541039616          bytes     \nMax address space         unlimited            unlimited            bytes     \nMax file locks            unlimited            unlimited            locks     \nMax pending signals       321127               321127               signals   \nMax msgqueue size         819200               819200               bytes     \nMax nice priority         0                    0                    \nMax realtime priority     0                    0                    \nMax realtime timeout      unlimited            unlimited            us        \n",
+      "latency_seconds": {
+        "p50": 0.4540026329923421,
+        "p95": 0.6799953491427004,
+        "max": 1.146885191090405
+      },
+      "health_seconds": {
+        "p50": 0.0015670671127736568,
+        "p95": 0.005194393917918205,
+        "max": 0.25196724687702954
+      },
+      "asynchronous": true
+    },
+    {
+      "count": 10240,
+      "errors": [],
+      "wall_seconds": 8.971484123030677,
+      "gateway_cpu_seconds": 8.680000000000001,
+      "gateway_cpu_seconds_per_request": 0.0008476562500000001,
+      "gateway_peak_threads": 164,
+      "gateway_peak_descriptors": 1044,
+      "gateway_final_descriptors": 482,
+      "gateway_peak_fd_types": {
+        "pipe:[239379636]": 1,
+        "/tmp/ucloud-p2-events512-qualified.log": 2,
+        "/sys/kernel/mm/transparent_hugepage/enabled": 1,
+        "/dev/urandom": 1,
+        "pipe:[239298215]": 1,
+        "/dev/null": 1,
+        "database": 211,
+        "pipe:[239378599]": 1,
+        "socket": 823,
+        "pipe:[239298214]": 1,
+        "anon_inode:[eventpoll]": 2
+      },
+      "gateway_final_fd_types": {
+        "pipe:[239379636]": 1,
+        "/tmp/ucloud-p2-events512-qualified.log": 2,
+        "/sys/kernel/mm/transparent_hugepage/enabled": 1,
+        "/dev/urandom": 1,
+        "pipe:[239298215]": 1,
+        "/dev/null": 1,
+        "database": 211,
+        "pipe:[239378599]": 1,
+        "socket": 260,
+        "pipe:[239298214]": 1,
+        "anon_inode:[eventpoll]": 2
+      },
+      "gateway_limits": "Limit                     Soft Limit           Hard Limit           Units     \nMax cpu time              unlimited            unlimited            seconds   \nMax file size             unlimited            unlimited            bytes     \nMax data size             unlimited            unlimited            bytes     \nMax stack size            8388608              unlimited            bytes     \nMax core file size        0                    unlimited            bytes     \nMax resident set          unlimited            unlimited            bytes     \nMax processes             321127               321127               processes \nMax open files            65536                65536                files     \nMax locked memory         10541039616          10541039616          bytes     \nMax address space         unlimited            unlimited            bytes     \nMax file locks            unlimited            unlimited            locks     \nMax pending signals       321127               321127               signals   \nMax msgqueue size         819200               819200               bytes     \nMax nice priority         0                    0                    \nMax realtime priority     0                    0                    \nMax realtime timeout      unlimited            unlimited            us        \n",
+      "latency_seconds": {
+        "p50": 0.4347363170236349,
+        "p95": 0.6030229148454964,
+        "max": 0.9810157499741763
+      },
+      "health_seconds": {
+        "p50": 0.001515857526101172,
+        "p95": 0.005073928972706199,
+        "max": 0.27389914100058377
+      },
+      "asynchronous": true
+    },
+    {
+      "count": 10240,
+      "errors": [],
+      "wall_seconds": 9.282216481864452,
+      "gateway_cpu_seconds": 11.48,
+      "gateway_cpu_seconds_per_request": 0.0011210937500000001,
+      "gateway_peak_threads": 519,
+      "gateway_peak_descriptors": 957,
+      "gateway_final_descriptors": 445,
+      "gateway_peak_fd_types": {
+        "pipe:[239379636]": 1,
+        "/tmp/ucloud-p2-events512-qualified.log": 2,
+        "/sys/kernel/mm/transparent_hugepage/enabled": 1,
+        "/dev/urandom": 1,
+        "pipe:[239463845]": 1,
+        "/dev/null": 1,
+        "database": 174,
+        "pipe:[239378599]": 1,
+        "pipe:[239463844]": 1,
+        "socket": 764,
+        "anon_inode:[eventpoll]": 2
+      },
+      "gateway_final_fd_types": {
+        "pipe:[239379636]": 1,
+        "/tmp/ucloud-p2-events512-qualified.log": 2,
+        "/sys/kernel/mm/transparent_hugepage/enabled": 1,
+        "/dev/urandom": 1,
+        "pipe:[239463845]": 1,
+        "/dev/null": 1,
+        "database": 174,
+        "pipe:[239378599]": 1,
+        "pipe:[239463844]": 1,
+        "socket": 260,
+        "anon_inode:[eventpoll]": 2
+      },
+      "gateway_limits": "Limit                     Soft Limit           Hard Limit           Units     \nMax cpu time              unlimited            unlimited            seconds   \nMax file size             unlimited            unlimited            bytes     \nMax data size             unlimited            unlimited            bytes     \nMax stack size            8388608              unlimited            bytes     \nMax core file size        0                    unlimited            bytes     \nMax resident set          unlimited            unlimited            bytes     \nMax processes             321127               321127               processes \nMax open files            65536                65536                files     \nMax locked memory         10541039616          10541039616          bytes     \nMax address space         unlimited            unlimited            bytes     \nMax file locks            unlimited            unlimited            locks     \nMax pending signals       321127               321127               signals   \nMax msgqueue size         819200               819200               bytes     \nMax nice priority         0                    0                    \nMax realtime priority     0                    0                    \nMax realtime timeout      unlimited            unlimited            us        \n",
+      "latency_seconds": {
+        "p50": 0.42643330805003643,
+        "p95": 0.671404218999669,
+        "max": 0.8387000418733805
+      },
+      "health_seconds": {
+        "p50": 0.005130416015163064,
+        "p95": 0.07619311101734638,
+        "max": 0.3654559338465333
+      },
+      "asynchronous": false
+    }
+  ]
+}

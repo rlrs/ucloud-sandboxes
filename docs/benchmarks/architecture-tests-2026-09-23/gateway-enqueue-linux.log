@@ -1,0 +1,10 @@
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/socket.py:221: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f7b71c13a60>
+  def __init__(self, family=-1, type=-1, proto=-1, fileno=None):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:297: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f7b71b749a0>
+  self._waiters = _deque()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+----------------------------------------------------------------------
+Ran 119 tests in 48.328s
+
+OK

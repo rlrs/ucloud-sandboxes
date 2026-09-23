@@ -1,0 +1,262 @@
+[
+  {
+    "trace": "d3f110e798cc42c115197ce769f04a7f",
+    "name": "gateway.node_response_headers",
+    "start_ns": "1790168085316648054",
+    "duration_ms": 1447.428784,
+    "attributes": {
+      "ucloud.span.thread_cpu.duration": 0.00026825199999996885,
+      "http.route": "sandbox.exec"
+    }
+  },
+  {
+    "trace": "d3f110e798cc42c115197ce769f04a7f",
+    "name": "gateway.node_response_body",
+    "start_ns": "1790168086764256348",
+    "duration_ms": 0.083296,
+    "attributes": {
+      "http.route": "sandbox.exec"
+    }
+  },
+  {
+    "trace": "d3f110e798cc42c115197ce769f04a7f",
+    "name": "POST /v1/sandboxes/{sandbox_id}/exec",
+    "start_ns": "1790168085252779327",
+    "duration_ms": 1600.728237,
+    "attributes": {
+      "sandbox.id": "relay-load-f612461fc77c-0087",
+      "ucloud.span.thread_cpu.duration": 0.004147970000000001,
+      "http.route": "/v1/sandboxes/{sandbox_id}/exec"
+    }
+  },
+  {
+    "trace": "d3f110e798cc42c115197ce769f04a7f",
+    "name": "node.sandbox_exec_start",
+    "start_ns": "1790168085379625682",
+    "duration_ms": 1245.542584,
+    "attributes": {
+      "sandbox.id": "relay-load-f612461fc77c-0087",
+      "node.exec.start_ms": "1245",
+      "node.exec.manager.inspect": 27.719340000004422,
+      "node.exec.manager.total": 225.99073400002112,
+      "node.exec.manager.exec_lease": 48.69367699998861,
+      "ucloud.span.thread_cpu.duration": 0.04344857400000013
+    }
+  },
+  {
+    "trace": "d3f110e798cc42c115197ce769f04a7f",
+    "name": "POST /v1/sandboxes/{sandbox_id}/exec",
+    "start_ns": "1790168085379324047",
+    "duration_ms": 1356.651761,
+    "attributes": {
+      "sandbox.id": "relay-load-f612461fc77c-0087",
+      "ucloud.span.thread_cpu.duration": 0.0456233199999998,
+      "http.route": "/v1/sandboxes/{sandbox_id}/exec"
+    }
+  },
+  {
+    "trace": "d3f110e798cc42c115197ce769f04a7f",
+    "name": "sandbox.exec.session",
+    "start_ns": "1790168086617877688",
+    "duration_ms": 286.363987,
+    "attributes": {
+      "sandbox.id": "relay-load-f612461fc77c-0087",
+      "ucloud.span.thread_cpu.duration": 0.004817946
+    }
+  },
+  {
+    "trace": "d1d14e7531b645b9102e360d7652f7d6",
+    "name": "gateway.node_response_headers",
+    "start_ns": "1790168080402881386",
+    "duration_ms": 1540.006902,
+    "attributes": {
+      "ucloud.span.thread_cpu.duration": 0.0004289930000000025,
+      "http.route": "sandbox.exec"
+    }
+  },
+  {
+    "trace": "d1d14e7531b645b9102e360d7652f7d6",
+    "name": "gateway.node_response_body",
+    "start_ns": "1790168081943067067",
+    "duration_ms": 0.099199,
+    "attributes": {
+      "http.route": "sandbox.exec"
+    }
+  },
+  {
+    "trace": "d1d14e7531b645b9102e360d7652f7d6",
+    "name": "POST /v1/sandboxes/{sandbox_id}/exec",
+    "start_ns": "1790168080374001409",
+    "duration_ms": 1608.479925,
+    "attributes": {
+      "sandbox.id": "relay-load-f612461fc77c-0014",
+      "ucloud.span.thread_cpu.duration": 0.003438117000000001,
+      "http.route": "/v1/sandboxes/{sandbox_id}/exec"
+    }
+  },
+  {
+    "trace": "d1d14e7531b645b9102e360d7652f7d6",
+    "name": "node.sandbox_exec_start",
+    "start_ns": "1790168080431800833",
+    "duration_ms": 1248.103706,
+    "attributes": {
+      "sandbox.id": "relay-load-f612461fc77c-0014",
+      "node.exec.start_ms": "1248",
+      "node.exec.manager.inspect": 3.123936000008598,
+      "node.exec.manager.total": 116.84930100000201,
+      "node.exec.manager.exec_lease": 13.258184999983769,
+      "ucloud.span.thread_cpu.duration": 0.04887223299999999
+    }
+  },
+  {
+    "trace": "d1d14e7531b645b9102e360d7652f7d6",
+    "name": "POST /v1/sandboxes/{sandbox_id}/exec",
+    "start_ns": "1790168080431383452",
+    "duration_ms": 1307.900969,
+    "attributes": {
+      "sandbox.id": "relay-load-f612461fc77c-0014",
+      "ucloud.span.thread_cpu.duration": 0.05052466400000011,
+      "http.route": "/v1/sandboxes/{sandbox_id}/exec"
+    }
+  },
+  {
+    "trace": "d1d14e7531b645b9102e360d7652f7d6",
+    "name": "sandbox.exec.session",
+    "start_ns": "1790168081670882072",
+    "duration_ms": 203.02202,
+    "attributes": {
+      "sandbox.id": "relay-load-f612461fc77c-0014",
+      "ucloud.span.thread_cpu.duration": 0.004513301
+    }
+  },
+  {
+    "trace": "1d0a7dd65a1dd9140fa7eee9b9157722",
+    "name": "gateway.node_response_headers",
+    "start_ns": "1790168181109025934",
+    "duration_ms": 621.375886,
+    "attributes": {
+      "ucloud.span.thread_cpu.duration": 0.00028843299999997685,
+      "http.route": "sandbox.exec"
+    }
+  },
+  {
+    "trace": "1d0a7dd65a1dd9140fa7eee9b9157722",
+    "name": "gateway.node_response_body",
+    "start_ns": "1790168181730527270",
+    "duration_ms": 0.062403,
+    "attributes": {
+      "http.route": "sandbox.exec"
+    }
+  },
+  {
+    "trace": "1d0a7dd65a1dd9140fa7eee9b9157722",
+    "name": "POST /v1/sandboxes/{sandbox_id}/exec",
+    "start_ns": "1790168181101961682",
+    "duration_ms": 633.899402,
+    "attributes": {
+      "sandbox.id": "relay-load-f612461fc77c-0286",
+      "ucloud.span.thread_cpu.duration": 0.002647812999999999,
+      "http.route": "/v1/sandboxes/{sandbox_id}/exec"
+    }
+  },
+  {
+    "trace": "1d0a7dd65a1dd9140fa7eee9b9157722",
+    "name": "node.sandbox_exec_start",
+    "start_ns": "1790168181117170774",
+    "duration_ms": 557.712664,
+    "attributes": {
+      "sandbox.id": "relay-load-f612461fc77c-0286",
+      "node.exec.start_ms": "557",
+      "node.exec.manager.inspect": 12.330879000018058,
+      "node.exec.manager.total": 71.79615900000158,
+      "node.exec.manager.exec_lease": 18.507827000007637,
+      "ucloud.span.thread_cpu.duration": 0.03941681900000016
+    }
+  },
+  {
+    "trace": "1d0a7dd65a1dd9140fa7eee9b9157722",
+    "name": "POST /v1/sandboxes/{sandbox_id}/exec",
+    "start_ns": "1790168181116965475",
+    "duration_ms": 613.424959,
+    "attributes": {
+      "sandbox.id": "relay-load-f612461fc77c-0286",
+      "ucloud.span.thread_cpu.duration": 0.04093023099999993,
+      "http.route": "/v1/sandboxes/{sandbox_id}/exec"
+    }
+  },
+  {
+    "trace": "1d0a7dd65a1dd9140fa7eee9b9157722",
+    "name": "sandbox.exec.session",
+    "start_ns": "1790168181672491904",
+    "duration_ms": 125.328329,
+    "attributes": {
+      "sandbox.id": "relay-load-f612461fc77c-0286",
+      "ucloud.span.thread_cpu.duration": 0.002624936
+    }
+  },
+  {
+    "trace": "f4822b61021de3b2126151f760f29798",
+    "name": "gateway.node_response_headers",
+    "start_ns": "1790168079206392658",
+    "duration_ms": 771.059708,
+    "attributes": {
+      "ucloud.span.thread_cpu.duration": 0.00028620899999998173,
+      "http.route": "sandbox.exec"
+    }
+  },
+  {
+    "trace": "f4822b61021de3b2126151f760f29798",
+    "name": "gateway.node_response_body",
+    "start_ns": "1790168079977615652",
+    "duration_ms": 0.079679,
+    "attributes": {
+      "http.route": "sandbox.exec"
+    }
+  },
+  {
+    "trace": "f4822b61021de3b2126151f760f29798",
+    "name": "POST /v1/sandboxes/{sandbox_id}/exec",
+    "start_ns": "1790168079191050816",
+    "duration_ms": 821.771073,
+    "attributes": {
+      "sandbox.id": "relay-load-f612461fc77c-0296",
+      "ucloud.span.thread_cpu.duration": 0.00322618999999999,
+      "http.route": "/v1/sandboxes/{sandbox_id}/exec"
+    }
+  },
+  {
+    "trace": "f4822b61021de3b2126151f760f29798",
+    "name": "node.sandbox_exec_start",
+    "start_ns": "1790168079217575279",
+    "duration_ms": 701.091191,
+    "attributes": {
+      "sandbox.id": "relay-load-f612461fc77c-0296",
+      "node.exec.start_ms": "700",
+      "node.exec.manager.inspect": 13.608188000006294,
+      "node.exec.manager.total": 112.99507999999037,
+      "node.exec.manager.exec_lease": 19.522343999994973,
+      "ucloud.span.thread_cpu.duration": 0.044532296000000304
+    }
+  },
+  {
+    "trace": "f4822b61021de3b2126151f760f29798",
+    "name": "POST /v1/sandboxes/{sandbox_id}/exec",
+    "start_ns": "1790168079217278434",
+    "duration_ms": 755.78015,
+    "attributes": {
+      "sandbox.id": "relay-load-f612461fc77c-0296",
+      "ucloud.span.thread_cpu.duration": 0.04594592800000008,
+      "http.route": "/v1/sandboxes/{sandbox_id}/exec"
+    }
+  },
+  {
+    "trace": "f4822b61021de3b2126151f760f29798",
+    "name": "sandbox.exec.session",
+    "start_ns": "1790168079909712588",
+    "duration_ms": 187.996348,
+    "attributes": {
+      "sandbox.id": "relay-load-f612461fc77c-0296",
+      "ucloud.span.thread_cpu.duration": 0.0032573489999999997
+    }
+  }
+]

@@ -1,0 +1,494 @@
+<frozen importlib._bootstrap>:74: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b77c5c60>
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+<frozen importlib._bootstrap>:74: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b77c55d0>
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+<frozen importlib._bootstrap>:74: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b77c67a0>
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+<frozen _collections_abc>:808: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b7386110>
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+<frozen os>:716: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b73862f0>
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/argparse.py:1939: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b7386e30>
+  def _parse_known_args(self, arg_strings, namespace, intermixed):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/pathlib/_local.py:274: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b7387100>
+  parsed = [sys.intern(str(x)) for x in rel.split(sep) if x and x != '.']
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+<frozen os>:711: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b73862f0>
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+<frozen os>:711: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b7387010>
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+<frozen os>:711: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b7386e30>
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/unittest/mock.py:2245: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b77c58a0>
+  def __init__(self, name, parent):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+<frozen os>:716: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b7386020>
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/pathlib/_local.py:289: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b73873d0>
+  @property
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/pathlib/_local.py:289: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b73864d0>
+  @property
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/pathlib/_local.py:289: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b7387790>
+  @property
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/pathlib/_local.py:289: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b7387e20>
+  @property
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/pathlib/_local.py:289: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b77c58a0>
+  @property
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/pathlib/_local.py:289: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b7385030>
+  @property
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/pathlib/_local.py:289: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf70c6d0>
+  @property
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/pathlib/_local.py:289: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf70cd60>
+  @property
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:303: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf70ce50>
+  def __enter__(self):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/contextlib.py:136: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b7387790>
+  def __enter__(self):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/pathlib/_local.py:277: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b77c6f20>
+  @property
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf70e6b0>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf70f010>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf70db70>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b77c67a0>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b77c5a80>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b77c5d50>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b77c5c60>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf70d8a0>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf7fc040>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf7ffa60>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf70ff10>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf70dd50>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf7ff880>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf7fd3f0>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf7fcb80>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf7fe2f0>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf7fcf40>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf7ff1f0>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf7fca90>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf7fc310>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf7fe5c0>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf7fe110>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b73863e0>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b73857b0>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b73862f0>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b7387970>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b7387a60>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b7387100>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b7385e40>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf7ff6a0>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf7fde40>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b77c6020>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:869: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b77c5e40>
+  def __init__(self, group=None, target=None, name=None,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/ucloud-architecture-full-20260923/.venv/lib/python3.13/site-packages/aiohttp/client_reqrep.py:1099: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b7387f10>
+  self.headers.add(key, value)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+deferred rootfs cache collection for deleted image sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: injected image collection failure
+deferred 1 durable sandbox deletion(s); first=sandbox: injected mounted-volume cleanup failure
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/pathlib/_abc.py:432: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b77c66b0>
+  def lstat(self):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+could not remove consumed hibernation generation for sandbox-1
+Traceback (most recent call last):
+  File "/home/alex-admin/ucloud-architecture-full-20260923/ucloud_sandboxes/direct_warden.py", line 862, in resume
+    self._finalize_restore_artifacts(manifest)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/unittest/mock.py", line 1167, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/unittest/mock.py", line 1171, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/unittest/mock.py", line 1226, in _execute_mock_call
+    raise effect
+OSError: injected cleanup failure
+/home/alex-admin/ucloud-architecture-full-20260923/ucloud_sandboxes/images.py:475: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf7ff3d0>
+  conn.execute(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/unittest/mock.py:2245: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf53ed40>
+  def __init__(self, name, parent):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/unittest/mock.py:2245: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf53ea70>
+  def __init__(self, name, parent):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/unittest/mock.py:2245: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf508f40>
+  def __init__(self, name, parent):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/ucloud-architecture-full-20260923/runtime/gvisor/compatibility_workload.py:45: DeprecationWarning: This process (pid=2974514) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  child = os.fork()
+/home/alex-admin/ucloud-architecture-full-20260923/ucloud_sandboxes/program_scheduler.py:61: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bd9d2890>
+  values.extend(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/ucloud-architecture-full-20260923/ucloud_sandboxes/program_scheduler.py:61: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bd9d1210>
+  values.extend(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/ucloud-architecture-full-20260923/ucloud_sandboxes/program_scheduler.py:61: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bd9d1030>
+  values.extend(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/ucloud-architecture-full-20260923/ucloud_sandboxes/program_scheduler.py:61: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bd9d0f40>
+  values.extend(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/ucloud-architecture-full-20260923/ucloud_sandboxes/program_scheduler.py:61: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bd9d1a80>
+  values.extend(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/ucloud-architecture-full-20260923/ucloud_sandboxes/program_scheduler.py:61: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bd9d0e50>
+  values.extend(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/ucloud-architecture-full-20260923/ucloud_sandboxes/program_scheduler.py:61: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf520310>
+  values.extend(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:303: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bd9d1030>
+  def __enter__(self):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/unittest/case.py:606: ResourceWarning: unclosed file <_io.BufferedReader name=20>
+  if method() is not None:
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/ucloud-architecture-full-20260923/.venv/lib/python3.13/site-packages/hypothesis/internal/reflection.py:449: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf7fdc60>
+  free_names = [n for n in candidate_names if n not in used_names]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/ucloud-architecture-full-20260923/.venv/lib/python3.13/site-packages/hypothesis/internal/reflection.py:449: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf7ff790>
+  free_names = [n for n in candidate_names if n not in used_names]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/asyncio/base_events.py:2058: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bd893970>
+  def get_debug(self):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/asyncio/base_events.py:2058: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bd893a60>
+  def get_debug(self):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/asyncio/base_events.py:2058: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45be60e980>
+  def get_debug(self):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/linecache.py:161: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b677be20>
+  def lazycache(filename, module_globals):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/linecache.py:161: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf5087c0>
+  def lazycache(filename, module_globals):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/linecache.py:161: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf5084f0>
+  def lazycache(filename, module_globals):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/linecache.py:161: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf508b80>
+  def lazycache(filename, module_globals):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/linecache.py:161: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bd7988b0>
+  def lazycache(filename, module_globals):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/linecache.py:161: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bd798a90>
+  def lazycache(filename, module_globals):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/linecache.py:161: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf509e40>
+  def lazycache(filename, module_globals):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/linecache.py:161: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b67bd300>
+  def lazycache(filename, module_globals):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/linecache.py:161: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b67bd210>
+  def lazycache(filename, module_globals):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/linecache.py:161: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b67bce50>
+  def lazycache(filename, module_globals):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/ucloud-architecture-full-20260923/.venv/lib/python3.13/site-packages/psycopg_pool/pool_async.py:1066: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf4ce020>
+  def __init__(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+network relay default has no usable IPv4 address; blocking its egress
+network relay default has no usable IPv4 address; blocking its egress
+network relay default has no usable IPv4 address; blocking its egress
+network relay default has no usable IPv4 address; blocking its egress
+network relay default has no usable IPv4 address; blocking its egress
+network relay default has no usable IPv4 address; blocking its egress
+network relay default has no usable IPv4 address; blocking its egress
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/linecache.py:161: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf4cec50>
+  def lazycache(filename, module_globals):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/linecache.py:161: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf4cdd50>
+  def lazycache(filename, module_globals):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/linecache.py:161: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf4cf6a0>
+  def lazycache(filename, module_globals):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/linecache.py:161: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf4cc7c0>
+  def lazycache(filename, module_globals):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/linecache.py:161: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b50c9c60>
+  def lazycache(filename, module_globals):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/linecache.py:161: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b50c8b80>
+  def lazycache(filename, module_globals):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/linecache.py:161: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf4cf880>
+  def lazycache(filename, module_globals):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/linecache.py:161: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf4cf790>
+  def lazycache(filename, module_globals):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/contextlib.py:136: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b4ec09a0>
+  def __enter__(self):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:297: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b4ec2b60>
+  self._waiters = _deque()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:297: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b4ecfc40>
+  self._waiters = _deque()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:297: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b4ec36a0>
+  self._waiters = _deque()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:297: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b4ecd8a0>
+  self._waiters = _deque()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/ucloud-architecture-full-20260923/.venv/lib/python3.13/site-packages/opentelemetry/util/_decorator.py:44: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b53926b0>
+  def __enter__(self) -> R:
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/inspect.py:2457: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b5393e20>
+  annotation = annotations.get(name, _empty)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/inspect.py:2457: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b6b5f880>
+  annotation = annotations.get(name, _empty)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+usage: python -m unittest [-h] --node-url NODE_URL
+                          --node-token-file NODE_TOKEN_FILE --output OUTPUT
+                          [--image IMAGE] [--count COUNT]
+                          [--expected-cpus EXPECTED_CPUS]
+                          [--concurrency CONCURRENCY]
+                          [--create-concurrency CREATE_CONCURRENCY]
+                          [--cycles CYCLES] [--memory-mb MEMORY_MB]
+                          [--resident-mb RESIDENT_MB] [--disk-mb DISK_MB]
+                          [--cpu-ms CPU_MS] [--dirty-mb DIRTY_MB]
+                          [--cpus CPUS] [--park-p95-ms PARK_P95_MS]
+                          [--wake-p95-ms WAKE_P95_MS]
+                          [--act-p95-ms ACT_P95_MS]
+                          [--completion-p95-ms COMPLETION_P95_MS]
+                          [--burst-ms BURST_MS]
+                          [--cleanup-timeout-seconds CLEANUP_TIMEOUT_SECONDS]
+python -m unittest: error: dirty_mb must be finite and positive
+usage: python -m unittest [-h] --node-url NODE_URL
+                          --node-token-file NODE_TOKEN_FILE --output OUTPUT
+                          [--image IMAGE] [--count COUNT]
+                          [--expected-cpus EXPECTED_CPUS]
+                          [--concurrency CONCURRENCY]
+                          [--create-concurrency CREATE_CONCURRENCY]
+                          [--cycles CYCLES] [--memory-mb MEMORY_MB]
+                          [--resident-mb RESIDENT_MB] [--disk-mb DISK_MB]
+                          [--cpu-ms CPU_MS] [--dirty-mb DIRTY_MB]
+                          [--cpus CPUS] [--park-p95-ms PARK_P95_MS]
+                          [--wake-p95-ms WAKE_P95_MS]
+                          [--act-p95-ms ACT_P95_MS]
+                          [--completion-p95-ms COMPLETION_P95_MS]
+                          [--burst-ms BURST_MS]
+                          [--cleanup-timeout-seconds CLEANUP_TIMEOUT_SECONDS]
+python -m unittest: error: dirty_mb must be finite and positive
+usage: python -m unittest [-h] --node-url NODE_URL
+                          --node-token-file NODE_TOKEN_FILE --output OUTPUT
+                          [--image IMAGE] [--count COUNT]
+                          [--expected-cpus EXPECTED_CPUS]
+                          [--concurrency CONCURRENCY]
+                          [--create-concurrency CREATE_CONCURRENCY]
+                          [--cycles CYCLES] [--memory-mb MEMORY_MB]
+                          [--resident-mb RESIDENT_MB] [--disk-mb DISK_MB]
+                          [--cpu-ms CPU_MS] [--dirty-mb DIRTY_MB]
+                          [--cpus CPUS] [--park-p95-ms PARK_P95_MS]
+                          [--wake-p95-ms WAKE_P95_MS]
+                          [--act-p95-ms ACT_P95_MS]
+                          [--completion-p95-ms COMPLETION_P95_MS]
+                          [--burst-ms BURST_MS]
+                          [--cleanup-timeout-seconds CLEANUP_TIMEOUT_SECONDS]
+python -m unittest: error: dirty-mb cannot exceed resident-mb
+usage: python -m unittest [-h] --node-url NODE_URL
+                          --node-token-file NODE_TOKEN_FILE --output OUTPUT
+                          [--image IMAGE] [--count COUNT]
+                          [--expected-cpus EXPECTED_CPUS]
+                          [--concurrency CONCURRENCY]
+                          [--create-concurrency CREATE_CONCURRENCY]
+                          [--cycles CYCLES] [--memory-mb MEMORY_MB]
+                          [--resident-mb RESIDENT_MB] [--disk-mb DISK_MB]
+                          [--cpu-ms CPU_MS] [--dirty-mb DIRTY_MB]
+                          [--cpus CPUS] [--park-p95-ms PARK_P95_MS]
+                          [--wake-p95-ms WAKE_P95_MS]
+                          [--act-p95-ms ACT_P95_MS]
+                          [--completion-p95-ms COMPLETION_P95_MS]
+                          [--burst-ms BURST_MS]
+                          [--cleanup-timeout-seconds CLEANUP_TIMEOUT_SECONDS]
+python -m unittest: error: argument --dirty-mb: invalid int value: '1.5'
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:291: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b5333f10>
+  if hasattr(lock, '_release_save'):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/threading.py:291: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b53318a0>
+  if hasattr(lock, '_release_save'):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+usage: python -m unittest [-h] --node-url NODE_URL
+                          --node-token-file NODE_TOKEN_FILE --output OUTPUT
+                          [--image IMAGE] [--count COUNT]
+                          [--expected-cpus EXPECTED_CPUS]
+                          [--concurrency CONCURRENCY]
+                          [--create-concurrency CREATE_CONCURRENCY]
+                          [--cycles CYCLES] [--memory-mb MEMORY_MB]
+                          [--resident-mb RESIDENT_MB] [--disk-mb DISK_MB]
+                          [--cpu-ms CPU_MS] [--dirty-mb DIRTY_MB]
+                          [--cpus CPUS] [--park-p95-ms PARK_P95_MS]
+                          [--wake-p95-ms WAKE_P95_MS]
+                          [--act-p95-ms ACT_P95_MS]
+                          [--completion-p95-ms COMPLETION_P95_MS]
+                          [--burst-ms BURST_MS]
+                          [--cleanup-timeout-seconds CLEANUP_TIMEOUT_SECONDS]
+python -m unittest: error: memory limit needs at least 128 MiB above the resident fixture
+usage: python -m unittest [-h] --node-url NODE_URL
+                          --node-token-file NODE_TOKEN_FILE --output OUTPUT
+                          [--image IMAGE] [--count COUNT]
+                          [--expected-cpus EXPECTED_CPUS]
+                          [--concurrency CONCURRENCY]
+                          [--create-concurrency CREATE_CONCURRENCY]
+                          [--cycles CYCLES] [--memory-mb MEMORY_MB]
+                          [--resident-mb RESIDENT_MB] [--disk-mb DISK_MB]
+                          [--cpu-ms CPU_MS] [--dirty-mb DIRTY_MB]
+                          [--cpus CPUS] [--park-p95-ms PARK_P95_MS]
+                          [--wake-p95-ms WAKE_P95_MS]
+                          [--act-p95-ms ACT_P95_MS]
+                          [--completion-p95-ms COMPLETION_P95_MS]
+                          [--burst-ms BURST_MS]
+                          [--cleanup-timeout-seconds CLEANUP_TIMEOUT_SECONDS]
+python -m unittest: error: cpus must be finite and positive
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/pathlib/_local.py:277: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45b4ec1d50>
+  @property
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/json/encoder.py:252: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f45bf4fb2e0>
+  _iterencode = c_make_encoder(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 41226)
+Traceback (most recent call last):
+  File "/home/alex-admin/ucloud-architecture-full-20260923/ucloud_sandboxes/node_agent.py", line 1299, in _upload_file
+    with self.manager.service.upload_spool.receive(stream, size) as staged:
+         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/home/alex-admin/ucloud-architecture-full-20260923/ucloud_sandboxes/upload_spool.py", line 44, in receive
+    chunk = source.read(min(remaining, TRANSFER_CHUNK_BYTES))
+  File "/home/alex-admin/ucloud-architecture-full-20260923/ucloud_sandboxes/http_server.py", line 55, in read
+    raise ValueError("request body ended before Content-Length bytes were read")
+ValueError: request body ended before Content-Length bytes were read
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/http/server.py", line 436, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/alex-admin/ucloud-architecture-full-20260923/ucloud_sandboxes/http_server.py", line 72, in handle_one_request
+    super().handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/http/server.py", line 424, in handle_one_request
+    method()
+    ~~~~~~^^
+  File "/home/alex-admin/ucloud-architecture-full-20260923/ucloud_sandboxes/http_server.py", line 204, in wrapped
+    return function(self, *args, **kwargs)
+  File "/home/alex-admin/ucloud-architecture-full-20260923/ucloud_sandboxes/node_agent.py", line 528, in do_PUT
+    self._upload_file(parsed)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/home/alex-admin/ucloud-architecture-full-20260923/ucloud_sandboxes/node_agent.py", line 1317, in _upload_file
+    self._write_exception(exc)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/home/alex-admin/ucloud-architecture-full-20260923/ucloud_sandboxes/node_agent.py", line 1708, in _write_exception
+    self._write_json({"error": str(exc)}, status=status)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/alex-admin/ucloud-architecture-full-20260923/ucloud_sandboxes/http_server.py", line 153, in _write_json
+    self._write_bytes(body, "application/json", status=status, headers=headers)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/alex-admin/ucloud-architecture-full-20260923/ucloud_sandboxes/http_server.py", line 170, in _write_bytes
+    self.wfile.write(body)
+    ~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/socketserver.py", line 845, in write
+    self._sock.sendall(b)
+    ~~~~~~~~~~~~~~~~~~^^^
+BrokenPipeError: [Errno 32] Broken pipe
+----------------------------------------
+----------------------------------------------------------------------
+Ran 1621 tests in 205.759s
+
+OK (skipped=12)

@@ -1,0 +1,283 @@
+{
+  "kernel": "7.0.0-30-generic",
+  "packages": {
+    "erofs-utils": "1.9.1-1",
+    "gcc-16-base": "16-20260322-1ubuntu1",
+    "libbrotli1": "1.2.0-3build1",
+    "libc-gconv-modules-extra": "2.43-2ubuntu2.4",
+    "libc6": "2.43-2ubuntu2.4",
+    "libcom-err2": "1.47.2-3ubuntu4",
+    "libcurl4t64": "8.18.0-1ubuntu2.5",
+    "libdb5.3t64": "5.3.28+dfsg2-10ubuntu1",
+    "libdeflate0": "1.23-2ubuntu1",
+    "libffi8": "3.5.2-4",
+    "libgcc-s1": "16-20260322-1ubuntu1",
+    "libgmp10": "2:6.3.0+dfsg-5ubuntu2",
+    "libgnutls30t64": "3.8.12-2ubuntu1.1",
+    "libgssapi-krb5-2": "1.22.1-2ubuntu4.1",
+    "libhogweed6t64": "3.10.2-1",
+    "libidn2-0": "2.3.8-4build1",
+    "libjson-c5": "0.18+ds-3",
+    "libk5crypto3": "1.22.1-2ubuntu4.1",
+    "libkeyutils1": "1.6.3-6ubuntu3",
+    "libkrb5-3": "1.22.1-2ubuntu4.1",
+    "libkrb5support0": "1.22.1-2ubuntu4.1",
+    "libldap-common": "2.6.10+dfsg-1ubuntu5",
+    "libldap2": "2.6.10+dfsg-1ubuntu5",
+    "liblz4-1": "1.10.0-8",
+    "liblzma5": "5.8.3-1",
+    "libnettle8t64": "3.10.2-1",
+    "libnghttp2-14": "1.68.0-2ubuntu0.2",
+    "libp11-kit0": "0.26.2-2",
+    "libpcre2-8-0": "10.46-1build1",
+    "libpsl5t64": "0.21.2-1.1build2",
+    "librtmp1": "2.4+20151223.gitfa8646d.1-3",
+    "libsasl2-2": "2.1.28+dfsg1-9ubuntu3",
+    "libsasl2-modules-db": "2.1.28+dfsg1-9ubuntu3",
+    "libselinux1": "3.9-4build1",
+    "libssh2-1t64": "1.11.1-1ubuntu0.26.04.4",
+    "libssl3t64": "3.5.5-1ubuntu3.5",
+    "libtasn1-6": "4.21.0-2",
+    "libunistring5": "1.3-2build1",
+    "libuuid1": "2.41.3-3ubuntu2",
+    "libxml2-16": "2.15.2+dfsg-0.1ubuntu0.2",
+    "libxxhash0": "0.8.3-2build1",
+    "libzstd1": "1.5.7+dfsg-3",
+    "openssl-provider-legacy": "3.5.5-1ubuntu3.5",
+    "zlib1g": "1:1.3.dfsg+really1.3.1-1ubuntu3.1"
+  },
+  "files": [
+    {
+      "file": "debs/erofs-utils_1.9.1-1_amd64.deb",
+      "size": 172736,
+      "sha256": "e06b009c4e53e6cbb848ac98dd2d1862eaa3daa1a63e4e860e59f482acf616b5"
+    },
+    {
+      "file": "debs/gcc-16-base_16-20260322-1ubuntu1_amd64.deb",
+      "size": 38296,
+      "sha256": "281b3188840a7abdca85a02eb2609b0efad852e8994b3804a0e4227ec4ec3f90"
+    },
+    {
+      "file": "debs/libbrotli1_1.2.0-3build1_amd64.deb",
+      "size": 342830,
+      "sha256": "858242571fc2585c1f8eb83ae01d020f0f4a92679d0de8fe31146f6687bdd84a"
+    },
+    {
+      "file": "debs/libc-gconv-modules-extra_2.43-2ubuntu2.4_amd64.deb",
+      "size": 1362202,
+      "sha256": "c2194b87c7f628722036bbe9f9bbdf20c1ebdb05ecd68b7a3a52dd1a76f3c5d6"
+    },
+    {
+      "file": "debs/libc6_2.43-2ubuntu2.4_amd64.deb",
+      "size": 2104056,
+      "sha256": "a613b457f3ff9c84ebd28af8a05afdec22605ad9aed87c71e3a6ae5170aeb9ca"
+    },
+    {
+      "file": "debs/libcom-err2_1.47.2-3ubuntu4_amd64.deb",
+      "size": 27824,
+      "sha256": "180b6ea0b9c07d4fd2ede79e29ee8eca830cd9384f856507e28dc24d1d3ae514"
+    },
+    {
+      "file": "debs/libcurl4t64_8.18.0-1ubuntu2.5_amd64.deb",
+      "size": 426986,
+      "sha256": "ea42d65a232664d310f96da2303038cb4aa4bc8e69df0b33c505e798f644ea79"
+    },
+    {
+      "file": "debs/libdb5.3t64_5.3.28+dfsg2-10ubuntu1_amd64.deb",
+      "size": 762574,
+      "sha256": "823df284bbc343ae6e22d69dc14a39c31b6c81fc2bccdd9ed720b88af92fcfa4"
+    },
+    {
+      "file": "debs/libdeflate0_1.23-2ubuntu1_amd64.deb",
+      "size": 51702,
+      "sha256": "40ee517cffd3730405be6ae30826533bec0ddf8773bb7ac2cccd22a57acafc25"
+    },
+    {
+      "file": "debs/libffi8_3.5.2-4_amd64.deb",
+      "size": 26348,
+      "sha256": "4a7423124bbd459c0aa38b7389ec7802fa6899654767a95fc27de70967fedd48"
+    },
+    {
+      "file": "debs/libgcc-s1_16-20260322-1ubuntu1_amd64.deb",
+      "size": 80312,
+      "sha256": "2fb4d81c14fdf34251639ae82f5181f9f98480ea16125d535571ac1be9db3065"
+    },
+    {
+      "file": "debs/libgmp10_2%3a6.3.0+dfsg-5ubuntu2_amd64.deb",
+      "size": 256686,
+      "sha256": "a9bbe9d4a4bcd5875bbd0f53e67c379bc881d1c1a80522d51dfb4b107cc31819"
+    },
+    {
+      "file": "debs/libgnutls30t64_3.8.12-2ubuntu1.1_amd64.deb",
+      "size": 1028572,
+      "sha256": "b08d4e2842cd53dbe1565a46bd11d6f7ecb36bc08b236802ae4da744cae9f691"
+    },
+    {
+      "file": "debs/libgssapi-krb5-2_1.22.1-2ubuntu4.1_amd64.deb",
+      "size": 146908,
+      "sha256": "d156dd940bff6dec8b6880cd0da4d515398d03d7b2e8b3163a935e701f80aa27"
+    },
+    {
+      "file": "debs/libhogweed6t64_3.10.2-1_amd64.deb",
+      "size": 200902,
+      "sha256": "1c8c808ab24ff3018ac886e3f311edee0f2d4d97d12d3908be52343e89807046"
+    },
+    {
+      "file": "debs/libidn2-0_2.3.8-4build1_amd64.deb",
+      "size": 67564,
+      "sha256": "92bdac0f443a648859d06dee3defb9c96864fd76df6cfe617ca70bb261344767"
+    },
+    {
+      "file": "debs/libjson-c5_0.18+ds-3_amd64.deb",
+      "size": 35930,
+      "sha256": "a19fa7f6504920f13e5fd291cf3c626d7201a48a0d80fde7cdac34f95306d352"
+    },
+    {
+      "file": "debs/libk5crypto3_1.22.1-2ubuntu4.1_amd64.deb",
+      "size": 81998,
+      "sha256": "8e99ef104a6bf49bea708747fdf4c28eb4fcebd6dba9e55ecfa919211eb5ab75"
+    },
+    {
+      "file": "debs/libkeyutils1_1.6.3-6ubuntu3_amd64.deb",
+      "size": 10634,
+      "sha256": "ea7d3cc642ffe2459c35a85c894f80e92499b9eba13bdcb225e0aa751c0970be"
+    },
+    {
+      "file": "debs/libkrb5-3_1.22.1-2ubuntu4.1_amd64.deb",
+      "size": 360714,
+      "sha256": "54612a2019863c44d80218f40d40670c3684108f4b2a760aae644ab68457e239"
+    },
+    {
+      "file": "debs/libkrb5support0_1.22.1-2ubuntu4.1_amd64.deb",
+      "size": 33546,
+      "sha256": "127d735efece139dfb7109ac3709da7eb8923bef090c20a10dbaf4c4fa45001d"
+    },
+    {
+      "file": "debs/libldap-common_2.6.10+dfsg-1ubuntu5_all.deb",
+      "size": 36036,
+      "sha256": "919b209f5040c1dca1d9c3912521e4bc476028c2e16905ab09347004a599a722"
+    },
+    {
+      "file": "debs/libldap2_2.6.10+dfsg-1ubuntu5_amd64.deb",
+      "size": 204284,
+      "sha256": "8d3a361e8655a0ff4a390243059949fa6f22d42d0e266f58b57c124eb21d2993"
+    },
+    {
+      "file": "debs/liblz4-1_1.10.0-8_amd64.deb",
+      "size": 73784,
+      "sha256": "28fe729f69be0fa950618f0ee02e479218fd60b11e86c1aa6026c87632ed2aa4"
+    },
+    {
+      "file": "debs/liblzma5_5.8.3-1_amd64.deb",
+      "size": 145410,
+      "sha256": "38ad8500817a9159db210fecfb8c50fa82d7a8829730fcdf8ae60e3523676d41"
+    },
+    {
+      "file": "debs/libnettle8t64_3.10.2-1_amd64.deb",
+      "size": 185378,
+      "sha256": "83a2a924c11759a2ed6e6f98f456d28e1b026974ce9e6e7ef12c9ac43b2d543e"
+    },
+    {
+      "file": "debs/libnghttp2-14_1.68.0-2ubuntu0.2_amd64.deb",
+      "size": 71038,
+      "sha256": "9c92ca4435998b7981cf81f957177b71079563b022c282a4b8b7829113a5d08e"
+    },
+    {
+      "file": "debs/libp11-kit0_0.26.2-2_amd64.deb",
+      "size": 312508,
+      "sha256": "e70d3422e24b267293215134458f340944bf10e92b27147594c69a7dd2823089"
+    },
+    {
+      "file": "debs/libpcre2-8-0_10.46-1build1_amd64.deb",
+      "size": 256534,
+      "sha256": "3e116766f1a7b149994d4745556023d993d26401223d1595520a991d4ba737fb"
+    },
+    {
+      "file": "debs/libpsl5t64_0.21.2-1.1build2_amd64.deb",
+      "size": 59510,
+      "sha256": "1ae62705714f660ecdfd70273fce5b226b6cb7b9fe53776531799093edc99774"
+    },
+    {
+      "file": "debs/librtmp1_2.4+20151223.gitfa8646d.1-3_amd64.deb",
+      "size": 58970,
+      "sha256": "77cbd0ddf7e7487079ec300ff7751322de5e7d67f0f46749591b78ff1442cbe8"
+    },
+    {
+      "file": "debs/libsasl2-2_2.1.28+dfsg1-9ubuntu3_amd64.deb",
+      "size": 53984,
+      "sha256": "11b9b2ce6702d86dd3dea60e08bd15255d7fd9545431a9e555eec47770404de0"
+    },
+    {
+      "file": "debs/libsasl2-modules-db_2.1.28+dfsg1-9ubuntu3_amd64.deb",
+      "size": 21098,
+      "sha256": "1de7b83844537091315210afb466ff2cd022874db5a6a785ce06b41bd3507eb3"
+    },
+    {
+      "file": "debs/libselinux1_3.9-4build1_amd64.deb",
+      "size": 90316,
+      "sha256": "3ce3aea44b2ec00780c48b1b8e1f7e672166ec3ccac14b0eae8890e55983061e"
+    },
+    {
+      "file": "debs/libssh2-1t64_1.11.1-1ubuntu0.26.04.4_amd64.deb",
+      "size": 138284,
+      "sha256": "bb3e334dc885d124d38cd4350f1cb4606c03ce58e9f53dc51a84c2c8d11c84e1"
+    },
+    {
+      "file": "debs/libssl3t64_3.5.5-1ubuntu3.5_amd64.deb",
+      "size": 2362598,
+      "sha256": "f62cc56364e417e4d2478c5d6a1d07af0f40625e587dd8dceb96b23b1fa76e07"
+    },
+    {
+      "file": "debs/libtasn1-6_4.21.0-2_amd64.deb",
+      "size": 45272,
+      "sha256": "59c74951324ead0ff77ab945d561feb1b21bc189b793600b8e2b7cf4d39b1ee5"
+    },
+    {
+      "file": "debs/libunistring5_1.3-2build1_amd64.deb",
+      "size": 610496,
+      "sha256": "88c0163f1acb384abde07641b7e13fcaea36e0a3b88fc57a653779fc429fc46a"
+    },
+    {
+      "file": "debs/libuuid1_2.41.3-3ubuntu2_amd64.deb",
+      "size": 35992,
+      "sha256": "ea9d94da2fb6564391145f3a9630c140c8dd771a38ae753983e8dc55cc22e102"
+    },
+    {
+      "file": "debs/libxml2-16_2.15.2+dfsg-0.1ubuntu0.2_amd64.deb",
+      "size": 606160,
+      "sha256": "e5c135f2f2c96058d359922c548a141be0ea019b90c11e80e8b1e3686c4de4c4"
+    },
+    {
+      "file": "debs/libxxhash0_0.8.3-2build1_amd64.deb",
+      "size": 25802,
+      "sha256": "4fff119ba9018fbe2eddfa7759bb4c7b6132ed38dcfa7fc58750c586d1d155a1"
+    },
+    {
+      "file": "debs/libzstd1_1.5.7+dfsg-3_amd64.deb",
+      "size": 308174,
+      "sha256": "34365d611ccf1f717f90a92fbe52ed96ae1829ab9be363c68a83563322797f8f"
+    },
+    {
+      "file": "debs/openssl-provider-legacy_3.5.5-1ubuntu3.5_amd64.deb",
+      "size": 39682,
+      "sha256": "c4d7c1d46b82505dc636a1301c056d7098ac9663de012123f9371094bd137d88"
+    },
+    {
+      "file": "debs/zlib1g_1%3a1.3.dfsg+really1.3.1-1ubuntu3.1_amd64.deb",
+      "size": 61612,
+      "sha256": "450d9322ac4e9baea0f9a74548a20fde73b078235c1f5d1fb7084c2638e33cdd"
+    },
+    {
+      "file": "kernel/7.0.0-30-generic/erofs.ko.zst",
+      "size": 85079,
+      "sha256": "7bd9523727668214b31977b389fe7a3c10bf36ea66c83802499dfb1f8860539f"
+    },
+    {
+      "file": "kernel/7.0.0-30-generic/nbd.ko.zst",
+      "size": 31760,
+      "sha256": "45f628a57788c023de64f002cb380d90dbd13bb8df015193596baa522b08b241"
+    }
+  ],
+  "qualification": "qualification-kernel7-closure.json",
+  "closure_note": "Native installed versions except five superseded libraries; current curl/ssh/xml additions and baseline rc5 OpenSSL tested from private extracted closure without host upgrades."
+}

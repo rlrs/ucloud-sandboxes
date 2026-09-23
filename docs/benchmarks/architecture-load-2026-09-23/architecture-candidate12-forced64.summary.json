@@ -1,0 +1,605 @@
+{
+  "report_version": 3,
+  "run_id": "relay-load-f5c44e30feda",
+  "started_at": "2026-09-23T13:07:19.478160+00:00",
+  "configuration": {
+    "gateway_url": "https://app-sandboxes.cloud.sdu.dk",
+    "relay_url": "https://app-sandboxes-relay-v2.cloud.sdu.dk",
+    "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+    "sandboxes": 64,
+    "cycles": 4,
+    "startup_mode": "rolling",
+    "resident_mb": 512,
+    "dirty_mb": 128,
+    "files": 64,
+    "file_kib": 64,
+    "payload_kib": 32,
+    "sqlite_transactions": 0,
+    "sqlite_payload_bytes": 4096,
+    "tool_upload_kib": 64,
+    "cpu_ms": 100,
+    "model_seconds": 20.0,
+    "model_jitter": 5.0,
+    "parking_mode": "forced",
+    "cpus": 1,
+    "memory_mb": 1024,
+    "disk_mb": 4096,
+    "create_concurrency": 16,
+    "fleet_pollers": 24,
+    "warmup_cycles": 1,
+    "deadline_seconds": 1800.0,
+    "useful_action_p95_seconds": 1,
+    "continuation_p95_seconds": 0.8,
+    "seed": 1,
+    "start_signal_file": null
+  },
+  "errors": [],
+  "cleanup_errors": [],
+  "control_retries": [],
+  "resource_errors": [],
+  "fleet_health_checks": [
+    {
+      "at": "2026-09-23T13:07:19.677483+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:07:24.740237+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:07:29.801779+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:07:34.850402+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:07:39.896466+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:07:44.942157+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:07:50.007621+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:07:55.053442+00:00",
+      "required_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:08:00.099309+00:00",
+      "required_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:08:05.147691+00:00",
+      "required_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:08:10.192019+00:00",
+      "required_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:08:15.240632+00:00",
+      "required_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:08:20.284929+00:00",
+      "required_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:08:25.335661+00:00",
+      "required_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:08:30.385245+00:00",
+      "required_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:08:35.429900+00:00",
+      "required_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:08:40.478948+00:00",
+      "required_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:08:45.526248+00:00",
+      "required_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:08:50.572127+00:00",
+      "required_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:08:55.620421+00:00",
+      "required_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:09:00.665804+00:00",
+      "required_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:09:05.716379+00:00",
+      "required_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:09:10.762228+00:00",
+      "required_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:09:15.812562+00:00",
+      "required_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:09:16.831323+00:00",
+      "required_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400418",
+        "12400419",
+        "12400420",
+        "12400421"
+      ],
+      "failures": []
+    }
+  ],
+  "fleet_health_failures": [],
+  "driver_python": "3.13.2",
+  "sdk_version": "0.4.26",
+  "sdk_client_sha256": "010a8e2406592224a1b339e7fcc4ac983ed394a56a4a8786c5f188569a2d5bb0",
+  "latency_definition": "model ready through guest-originated continuation receipt, then uploaded tool confirmation; receipt includes observation tunnel overhead; full integrity is a separate mandatory gate",
+  "harness_sha256": "e79af3fa0920e3a70910e97edd9af086bea9ba25b0a636d94536888ee6b31810",
+  "deployed_health": {
+    "ok": true,
+    "service": "control-plane",
+    "version": "0.5.114rc12"
+  },
+  "fleet_health": {
+    "enabled": true,
+    "passed": true,
+    "status": "passed",
+    "used_jobs": [
+      "12400418",
+      "12400419",
+      "12400420",
+      "12400421"
+    ],
+    "observed_healthy_jobs": [
+      "12400418",
+      "12400419",
+      "12400420",
+      "12400421"
+    ],
+    "failure_count": 0,
+    "placement_grace_seconds": 30,
+    "freshness_seconds": 30
+  },
+  "response_commit_seconds": {
+    "count": 192,
+    "p50": 0.03706917853560299,
+    "p95": 0.05086270906031132,
+    "p99": 0.09060156508348882,
+    "max": 0.14519046596251428
+  },
+  "usable_exec_seconds": {
+    "count": 192,
+    "p50": 1.6763464444084093,
+    "p95": 2.4920857530087233,
+    "p99": 3.544492807937786,
+    "max": 3.596348084975034
+  },
+  "response_ready_to_usable_exec_seconds": {
+    "count": 192,
+    "p50": 1.6773381219245493,
+    "p95": 2.4922587126493454,
+    "p99": 3.5454618490766734,
+    "max": 3.59812338440679
+  },
+  "response_ready_to_commit_seconds": {
+    "count": 192,
+    "p50": 0.03821121854707599,
+    "p95": 0.05147494422271848,
+    "p99": 0.0907876631245017,
+    "max": 0.1454890996683389
+  },
+  "response_ready_to_guest_continuation_seconds": {
+    "count": 192,
+    "p50": 1.2115839894395322,
+    "p95": 2.013680661795661,
+    "p99": 3.066058879485354,
+    "max": 3.08145217015408
+  },
+  "post_continuation_exec_seconds": {
+    "count": 192,
+    "p50": 0.44062680343631655,
+    "p95": 0.5675217299722135,
+    "p99": 0.6479048109613359,
+    "max": 0.6650455549824983
+  },
+  "post_continuation_exec_start_seconds": {
+    "count": 192,
+    "p50": 0.09183383896015584,
+    "p95": 0.12514466792345047,
+    "p99": 0.17830018792301416,
+    "max": 0.2053844090551138
+  },
+  "post_continuation_exec_wait_seconds": {
+    "count": 192,
+    "p50": 0.2105127094546333,
+    "p95": 0.3025569780729711,
+    "p99": 0.3106958740390837,
+    "max": 0.311102851992473
+  },
+  "full_integrity_seconds": {
+    "count": 192,
+    "p50": 2.075766373309307,
+    "p95": 2.897061324911192,
+    "p99": 3.935437616193667,
+    "max": 3.937740761321038
+  },
+  "guest_verification_seconds": {
+    "count": 192,
+    "p50": 0.7805128830000037,
+    "p95": 0.8397338669999996,
+    "p99": 0.8576265940000027,
+    "max": 0.8767079969999969
+  },
+  "guest_tool_seconds": {
+    "count": 192,
+    "p50": 0.04344859350000263,
+    "p95": 0.053100568000004955,
+    "p99": 0.05644892200000129,
+    "max": 0.05926284000000237
+  },
+  "guest_transport_retries": {
+    "count": 192,
+    "p50": 0.0,
+    "p95": 0,
+    "p99": 0,
+    "max": 0
+  },
+  "measured_park_observed_cycles": 192,
+  "phase_latency_seconds": {
+    "during_provisioning": {
+      "count": 0,
+      "p50": null,
+      "p95": null,
+      "p99": null,
+      "max": null
+    },
+    "after_provisioning": {
+      "count": 256,
+      "p50": 1.7276538265869021,
+      "p95": 2.503006637794897,
+      "p99": 3.578236405737698,
+      "max": 4.305184156168252
+    }
+  },
+  "phase_continuation_seconds": {
+    "during_provisioning": {
+      "count": 0,
+      "p50": null,
+      "p95": null,
+      "p99": null,
+      "max": null
+    },
+    "after_provisioning": {
+      "count": 256,
+      "p50": 1.247275297762826,
+      "p95": 2.043587183812633,
+      "p99": 3.08145217015408,
+      "max": 3.7901440961286426
+    }
+  },
+  "completed_cycles": 256,
+  "resource_summary": {
+    "sample_count": 25,
+    "observed_worker_seconds": 455.2599709033966,
+    "sampled_cpu_seconds": 1095.0531962758039,
+    "cpu_coverage_worker_seconds": 455.2599709033966,
+    "host_cpu_usage_seconds": 1204.58,
+    "host_cpu_steal_seconds": 3.58,
+    "host_cpu_usage_coverage_worker_seconds": 455.2599709033966,
+    "host_cpu_steal_coverage_worker_seconds": 455.2599709033966,
+    "sampled_host_memory_mib_seconds": 3880590.3897161484,
+    "memory_coverage_worker_seconds": 455.2599709033966,
+    "device_read_bytes": 165654528,
+    "device_write_bytes": 164358978560,
+    "device_read_bytes_coverage_worker_seconds": 455.2599709033966,
+    "device_write_bytes_coverage_worker_seconds": 455.2599709033966,
+    "scope": "sampled whole worker costs; excludes missing/stale intervals; not per-sandbox attribution"
+  },
+  "correct": true,
+  "slo_passed": false,
+  "finished_at": "2026-09-23T13:09:19.368097+00:00",
+  "source_report_sha256": "9528e34f8599cd97dd46a69b701570f0385ebf3870c9b918d11bd38afc87b59a",
+  "health_checks": {
+    "total": 58,
+    "failed": 0
+  },
+  "fleet_polls_checks": {
+    "total": 2688,
+    "failed": 0
+  }
+}

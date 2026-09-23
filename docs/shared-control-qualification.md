@@ -7,6 +7,10 @@ The scheduling qualification slice of the
 The live relay backend is now integrated separately; see [PostgreSQL relay](postgres-relay.md)
 for configuration, fenced worker dispatch, idle cutover and Linux HTTP qualification.
 The fixture-based scheduling slice described below is still not a gateway replacement.
+It lives in `shared_control/qualification.py` as `QualificationControlStore`.
+Both stores share only `PostgresDatabase` connection/transaction facilities;
+production relay migration creates no fixture scheduling tables. The qualification
+commands below explicitly initialize and report the separate experiment schema.
 
 ## Implemented
 
@@ -27,16 +31,16 @@ The fixture-based scheduling slice described below is still not a gateway replac
 - Pool wait, transaction, commit and locking-query timing. Lock-query time
   includes execution/network time; it is not a pure PostgreSQL lock-wait metric.
 - Real PostgreSQL integration tests, a two-phase database crash test, CI coverage,
-  and a repeatable coordination benchmark against existing SQLite store methods.
+  and a repeatable PostgreSQL coordination benchmark.
 
 The optional `postgres` extra keeps database libraries off existing worker and
-server deployments until they need them. The SQL schema is shipped in the wheel.
+worker deployments; the live relay requires it. The SQL schema is shipped in the wheel.
 
 ## Run the contract
 
 Use an isolated PostgreSQL 17 test database. Tests create uniquely named schemas
 and remove only those schemas afterward. The benchmark also uses a fresh schema
-and temporary SQLite files. Neither operates on existing production routes.
+without touching existing production routes.
 
 ```sh
 uv sync --locked --extra postgres
@@ -54,9 +58,9 @@ Explicit schema commands take a private DSN file rather than a credential-bearin
 command argument. They do not modify `DeploymentConfig` or select a live backend:
 
 ```sh
-uv run --extra postgres python -m ucloud_sandboxes.shared_control migrate \
+uv run --extra postgres python -m ucloud_sandboxes.shared_control qualification-migrate \
   --dsn-file /private/path/database-dsn --deployment-id qualification
-uv run --extra postgres python -m ucloud_sandboxes.shared_control status \
+uv run --extra postgres python -m ucloud_sandboxes.shared_control qualification-status \
   --dsn-file /private/path/database-dsn --deployment-id qualification
 ```
 
@@ -74,19 +78,17 @@ uv run --extra postgres python scripts/benchmark_shared_control.py \
   --output /private/path/steady-512.json
 ```
 
-The benchmark alternates execution order, preserves durable commits, records
+The benchmark repeats PostgreSQL trials, preserves durable commits, records
 source hashes and excludes fixture setup. Burst mode offers all results together.
 Steady mode schedules arrivals independently of processing; driver lateness counts
 against latency. The worker callback is simulated. `--restore-ms` is a timer,
 not a measurement of runsc, memory restoration or disk throughput.
 
-The SQLite reference calls the existing `RelaySqliteStore` and `RoutingStore`
-methods for response, program-state, wake reservation and completion. It omits
-HTTP, full placement/inventory work, and the relay's outer async lock. PostgreSQL
-uses the new atomic result/operation protocol. This compares two coordination
-implementations, not the same SQL algorithm on two engines. The PostgreSQL trial
-uses independent pools/dispatchers in one Python process; it does not qualify
-multi-host gateway operation. Read the raw limitations before attributing speed.
+The historical SQLite comparison is archived in earlier benchmark reports.
+The current benchmark exercises only PostgreSQL coordination and simulated
+worker callbacks. Independent pools/dispatchers share one Python process; this
+does not qualify multi-host gateway operation. Read its limitations before
+attributing changes to storage or runtime performance.
 
 The live SDK harness now defaults to natural model readiness and reports
 `response_ready_to_usable_exec_seconds` as its acceptance metric. Forced-park mode

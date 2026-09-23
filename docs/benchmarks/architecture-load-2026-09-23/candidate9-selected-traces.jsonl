@@ -1,0 +1,16 @@
+{"case": "slow-launch", "sid": "relay-load-83f8057c723a-0142", "trace_count": 0}
+{"case": "slow-launch-tool", "sid": "relay-load-83f8057c723a-0047", "trace_count": 1}
+{"case": "slow-launch-tool", "trace": "123da658a23c56a30a2a7eb61a9fc4a4", "name": "POST /v1/sandboxes/{sandbox_id}/exec", "offset": 0.7369, "seconds": 0.101, "attrs": {"sandbox.id": {"stringValue": "relay-load-83f8057c723a-0047"}}}
+{"case": "slow-launch-tool", "trace": "123da658a23c56a30a2a7eb61a9fc4a4", "name": "gateway.node_response_headers", "offset": 0.7516, "seconds": 0.078, "attrs": {}}
+{"case": "slow-launch-tool", "trace": "123da658a23c56a30a2a7eb61a9fc4a4", "name": "gateway.node_response_body", "offset": 0.8298, "seconds": 0.0001, "attrs": {}}
+{"case": "slow-launch-tool", "trace": "123da658a23c56a30a2a7eb61a9fc4a4", "name": "POST /v1/sandboxes/{sandbox_id}/exec", "offset": 0.7571, "seconds": 0.0634, "attrs": {"sandbox.id": {"stringValue": "relay-load-83f8057c723a-0047"}}}
+{"case": "slow-launch-tool", "trace": "123da658a23c56a30a2a7eb61a9fc4a4", "name": "node.sandbox_exec_start", "offset": 0.7573, "seconds": 0.0122, "attrs": {"sandbox.id": {"stringValue": "relay-load-83f8057c723a-0047"}, "node.exec.start_ms": {"intValue": "12"}, "node.exec.manager.inspect": {"doubleValue": 0.3301070000247819}, "node.exec.manager.total": {"doubleValue": 1.2903850000043349}, "node.exec.manager.exec_lease": {"doubleValue": 0.2757549999614639}}}
+{"case": "slow-launch-tool", "trace": "123da658a23c56a30a2a7eb61a9fc4a4", "name": "sandbox.exec.session", "offset": 0.7692, "seconds": 0.4371, "attrs": {"sandbox.id": {"stringValue": "relay-load-83f8057c723a-0047"}}}
+{"case": "fast-launch", "sid": "relay-load-83f8057c723a-0060", "trace_count": 1}
+{"case": "fast-launch", "trace": "860ce543bec86e4d00b93cf5ccfb8bdb", "name": "PUT /v1/sandboxes/{sandbox_id}/files", "offset": 0.2415, "seconds": 0.0525, "attrs": {"sandbox.id": {"stringValue": "relay-load-83f8057c723a-0060"}}}
+{"case": "fast-launch", "trace": "860ce543bec86e4d00b93cf5ccfb8bdb", "name": "gateway.node_response_headers", "offset": 0.2564, "seconds": 0.027, "attrs": {}}
+{"case": "fast-launch", "trace": "860ce543bec86e4d00b93cf5ccfb8bdb", "name": "gateway.node_response_body", "offset": 0.2837, "seconds": 0.004, "attrs": {}}
+{"case": "fast-launch", "trace": "860ce543bec86e4d00b93cf5ccfb8bdb", "name": "PUT /v1/sandboxes/{sandbox_id}/files", "offset": 0.2596, "seconds": 0.0209, "attrs": {"sandbox.id": {"stringValue": "relay-load-83f8057c723a-0060"}}}
+{"case": "fast-launch", "trace": "860ce543bec86e4d00b93cf5ccfb8bdb", "name": "node.file_upload", "offset": 0.2603, "seconds": 0.0199, "attrs": {"sandbox.id": {"stringValue": "relay-load-83f8057c723a-0060"}}}
+{"case": "fast-launch", "trace": "860ce543bec86e4d00b93cf5ccfb8bdb", "name": "node.file_upload.write", "offset": 0.2641, "seconds": 0.016, "attrs": {}}
+{"case": "tail-steady", "sid": "relay-load-83f8057c723a-0165", "trace_count": 0}

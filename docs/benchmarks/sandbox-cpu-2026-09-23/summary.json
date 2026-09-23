@@ -1,0 +1,94 @@
+{
+  "natural512": [
+    {
+      "job": "12400367",
+      "intervals": 38,
+      "steady_intervals": 23,
+      "median_cpu_equivalents": 3.833393316672468,
+      "throttled_period_percent": 1.5100525786180288,
+      "sample_median_ms": 11.464136999961738,
+      "read_errors": 2,
+      "counter_resets": 0,
+      "max_one_runtime_interval_throttle_ms": 350.716
+    },
+    {
+      "job": "12400368",
+      "intervals": 38,
+      "steady_intervals": 23,
+      "median_cpu_equivalents": 5.50540451241224,
+      "throttled_period_percent": 2.112834908143061,
+      "sample_median_ms": 15.677314000015485,
+      "read_errors": 2,
+      "counter_resets": 0,
+      "max_one_runtime_interval_throttle_ms": 739.311
+    },
+    {
+      "job": "12400369",
+      "intervals": 38,
+      "steady_intervals": 22,
+      "median_cpu_equivalents": 4.032534809279211,
+      "throttled_period_percent": 1.5440363335396685,
+      "sample_median_ms": 11.711381000026222,
+      "read_errors": 2,
+      "counter_resets": 0,
+      "max_one_runtime_interval_throttle_ms": 349.788
+    },
+    {
+      "job": "12400370",
+      "intervals": 38,
+      "steady_intervals": 22,
+      "median_cpu_equivalents": 6.738184539974283,
+      "throttled_period_percent": 2.8655557722587184,
+      "sample_median_ms": 26.048708000018905,
+      "read_errors": 2,
+      "counter_resets": 0,
+      "max_one_runtime_interval_throttle_ms": 918.862
+    }
+  ],
+  "diagnostic512": [
+    {
+      "job": "12400367",
+      "intervals": 48,
+      "steady_intervals": 20,
+      "median_cpu_equivalents": 2.533453533129766,
+      "throttled_period_percent": 2.08007101047572,
+      "sample_median_ms": 11.563617499973589,
+      "read_errors": 0,
+      "counter_resets": 0,
+      "max_one_runtime_interval_throttle_ms": 374.525
+    },
+    {
+      "job": "12400368",
+      "intervals": 48,
+      "steady_intervals": 20,
+      "median_cpu_equivalents": 4.576530589914579,
+      "throttled_period_percent": 2.419138390700393,
+      "sample_median_ms": 15.720087999966381,
+      "read_errors": 0,
+      "counter_resets": 0,
+      "max_one_runtime_interval_throttle_ms": 730.414
+    },
+    {
+      "job": "12400369",
+      "intervals": 48,
+      "steady_intervals": 20,
+      "median_cpu_equivalents": 2.7384498579435865,
+      "throttled_period_percent": 2.0827469743878413,
+      "sample_median_ms": 10.937043000012636,
+      "read_errors": 0,
+      "counter_resets": 0,
+      "max_one_runtime_interval_throttle_ms": 375.252
+    },
+    {
+      "job": "12400370",
+      "intervals": 48,
+      "steady_intervals": 20,
+      "median_cpu_equivalents": 5.715742668079473,
+      "throttled_period_percent": 3.0816540528205936,
+      "sample_median_ms": 23.9704229999802,
+      "read_errors": 0,
+      "counter_resets": 0,
+      "max_one_runtime_interval_throttle_ms": 989.167
+    }
+  ]
+}

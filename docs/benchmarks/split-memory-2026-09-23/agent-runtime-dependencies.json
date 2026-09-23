@@ -1,0 +1,15 @@
+{
+  "status": "passed",
+  "python": "3.14.4 (main, Aug 20 2026, 10:41:58) [GCC 15.2.0]",
+  "original_files_preserved": 3164,
+  "versions": {
+    "cryptography": "50.0.0",
+    "cffi": "2.1.1",
+    "pycparser": "3.0"
+  },
+  "ed25519_sign_verify": true,
+  "modified_message_rejected": true,
+  "installed_record_hashes_verified": true,
+  "runtime_root": "/work/ucloud-sandboxes/release/0.5.114rc5/agent-runtime-qualified",
+  "aiohttp_abi_smoke": "3.14.3"
+}

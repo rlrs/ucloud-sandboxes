@@ -1,0 +1,150 @@
+{
+  "abort_same_original": true,
+  "cleanup_quota": {
+    "memory_backing_allocations": 0,
+    "memory_backing_hard_reserved_bytes": 0
+  },
+  "cycles": [
+    {
+      "capture_id": "41407182c1c2888a383de2ceb8f7a9aaa419d24169965d15c1c4a99bd2f8af13",
+      "live_reclaim": {
+        "after": {
+          "active_mode": "file",
+          "cgroup": "/sys/fs/cgroup/ucloud-sandboxes/469dec017465959b8ed619379d0afb93aa5c33ffc9a934f1e6de901e183084c7",
+          "current": 25870336,
+          "limit": 2147483648,
+          "shmem": 184320
+        },
+        "before": {
+          "active_mode": "file",
+          "cgroup": "/sys/fs/cgroup/ucloud-sandboxes/469dec017465959b8ed619379d0afb93aa5c33ffc9a934f1e6de901e183084c7",
+          "current": 1646501888,
+          "limit": 2147483648,
+          "shmem": 184320
+        },
+        "full_integrity_seconds": 0.5388854709999578,
+        "reclaim_seconds": 0.08858953100025246,
+        "same_live_owner": true,
+        "writeback_seconds": 0.0075392819999251515
+      },
+      "memory_charge": {
+        "active_mode": "file",
+        "cgroup": "/sys/fs/cgroup/ucloud-sandboxes/469dec017465959b8ed619379d0afb93aa5c33ffc9a934f1e6de901e183084c7",
+        "current": 1645703168,
+        "limit": 2147483648,
+        "shmem": 184320
+      },
+      "timings_ms": {
+        "artifact_cleanup": 104.52441899997211,
+        "begin_restore_journal": 2.9632699997819145,
+        "candidate_fence": 0.6403359998330416,
+        "candidate_journal": 2.9951280002933345,
+        "candidate_resume": 26.843921999898157,
+        "commit_running_journal": 17.844436999894242,
+        "readiness_exec": 31.870855999841297,
+        "runsc_restore": 97.58667400001286,
+        "runsc_state": 13.2031560001451,
+        "validate_artifact": 83.02868300006594,
+        "warden_total": 381.6815199998018
+      },
+      "wake_seconds": 0.3817412289999993
+    },
+    {
+      "capture_id": "9918976c06af1ffd20bdf1f0721448ec1a39fdf6c1cc06fe7f89c2bd419437ee",
+      "live_reclaim": {
+        "after": {
+          "active_mode": "file",
+          "cgroup": "/sys/fs/cgroup/ucloud-sandboxes/469dec017465959b8ed619379d0afb93aa5c33ffc9a934f1e6de901e183084c7",
+          "current": 25378816,
+          "limit": 2147483648,
+          "shmem": 196608
+        },
+        "before": {
+          "active_mode": "file",
+          "cgroup": "/sys/fs/cgroup/ucloud-sandboxes/469dec017465959b8ed619379d0afb93aa5c33ffc9a934f1e6de901e183084c7",
+          "current": 1646133248,
+          "limit": 2147483648,
+          "shmem": 196608
+        },
+        "full_integrity_seconds": 0.5264036329999726,
+        "reclaim_seconds": 0.08645548300000883,
+        "same_live_owner": true,
+        "writeback_seconds": 0.007890803000009328
+      },
+      "memory_charge": {
+        "active_mode": "file",
+        "cgroup": "/sys/fs/cgroup/ucloud-sandboxes/469dec017465959b8ed619379d0afb93aa5c33ffc9a934f1e6de901e183084c7",
+        "current": 1645555712,
+        "limit": 2147483648,
+        "shmem": 196608
+      },
+      "timings_ms": {
+        "artifact_cleanup": 59.63796000014554,
+        "begin_restore_journal": 4.875534999882802,
+        "candidate_fence": 0.8482489997732046,
+        "candidate_journal": 3.790608000144857,
+        "candidate_resume": 28.641133999826707,
+        "commit_running_journal": 4.5677200000682205,
+        "readiness_exec": 23.163410000051954,
+        "runsc_restore": 113.04440999992948,
+        "runsc_state": 17.16321000003518,
+        "validate_artifact": 94.05112900003587,
+        "warden_total": 350.0614429999587
+      },
+      "wake_seconds": 0.35012082200000805
+    },
+    {
+      "capture_id": "b9cfcbc52ce40a5f3a5752321dfc660cedc0bd5a5133544ae55b1fe4ada47cc4",
+      "live_reclaim": {
+        "after": {
+          "active_mode": "file",
+          "cgroup": "/sys/fs/cgroup/ucloud-sandboxes/469dec017465959b8ed619379d0afb93aa5c33ffc9a934f1e6de901e183084c7",
+          "current": 25653248,
+          "limit": 2147483648,
+          "shmem": 196608
+        },
+        "before": {
+          "active_mode": "file",
+          "cgroup": "/sys/fs/cgroup/ucloud-sandboxes/469dec017465959b8ed619379d0afb93aa5c33ffc9a934f1e6de901e183084c7",
+          "current": 1646682112,
+          "limit": 2147483648,
+          "shmem": 196608
+        },
+        "full_integrity_seconds": 0.5531925210002555,
+        "reclaim_seconds": 0.09160398800031544,
+        "same_live_owner": true,
+        "writeback_seconds": 0.0074103479996665556
+      },
+      "memory_charge": {
+        "active_mode": "file",
+        "cgroup": "/sys/fs/cgroup/ucloud-sandboxes/469dec017465959b8ed619379d0afb93aa5c33ffc9a934f1e6de901e183084c7",
+        "current": 1646477312,
+        "limit": 2147483648,
+        "shmem": 196608
+      },
+      "timings_ms": {
+        "artifact_cleanup": 61.136019000059605,
+        "begin_restore_journal": 3.9973100001589046,
+        "candidate_fence": 0.8742690001781739,
+        "candidate_journal": 5.836063000060676,
+        "candidate_resume": 25.900488999923255,
+        "commit_running_journal": 31.738213999688014,
+        "readiness_exec": 23.32383300017682,
+        "runsc_restore": 110.6659019997096,
+        "runsc_state": 13.377980000313983,
+        "validate_artifact": 97.19872699997723,
+        "warden_total": 374.19575700005225
+      },
+      "wake_seconds": 0.3742832190000627
+    }
+  ],
+  "project_quota_errno": 28,
+  "quota": {
+    "memory_backing_allocations": 1,
+    "memory_backing_hard_reserved_bytes": 5435817984
+  },
+  "schema": 1,
+  "status": "passed",
+  "test_root": "/home/ucloud/memory-tier/xfs/ucloud-storage-native-cqtyzdbu",
+  "workload_ready_seconds": 2.181078684000113
+}

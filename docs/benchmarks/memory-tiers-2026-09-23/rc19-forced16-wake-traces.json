@@ -1,0 +1,1491 @@
+{
+  "run_id": "relay-load-16cc1e9ecac8",
+  "window": [
+    "2026-09-23T16:55:45Z",
+    "2026-09-23T16:58:00Z"
+  ],
+  "sampling": "Tempo retained traces selected duration>=200ms;6wake traces from61results, notfleetpercentiles",
+  "traces": [
+    {
+      "trace_id": "90814ea2bfe383d20728addbde5efbb8",
+      "spans": [
+        {
+          "name": "gateway.wake.await_admission",
+          "start": 1790182669197038643,
+          "ms": 5.863022,
+          "attributes": {
+            "ucloud.span.thread_cpu.duration": 6.126299999997808e-05
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.node_response_headers",
+          "start": 1790182669207070145,
+          "ms": 502.484213,
+          "attributes": {
+            "http.response.status_code": "200",
+            "ucloud.span.thread_cpu.duration": 0.00027430100000000457,
+            "http.request.method": "POST",
+            "server.address": "sandbox-node-8f271b9b41-1",
+            "http.route": "sandbox.wake"
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.node_response_body",
+          "start": 1790182669709714800,
+          "ms": 0.075483,
+          "attributes": {
+            "http.response.status_code": "200",
+            "http.response.body.size": "1563",
+            "http.request.method": "POST",
+            "server.address": "sandbox-node-8f271b9b41-1",
+            "http.route": "sandbox.wake"
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "start": 1790182669191281739,
+          "ms": 525.366936,
+          "attributes": {
+            "sandbox.id": "relay-load-16cc1e9ecac8-0007",
+            "http.request.body.size": "244",
+            "http.response.status_code": "200",
+            "ucloud.span.thread_cpu.duration": 0.0055892339999999985,
+            "http.request.method": "POST",
+            "url.path": "/v1/sandboxes/relay-load-16cc1e9ecac8-0007/wake",
+            "http.route": "/v1/sandboxes/{sandbox_id}/wake"
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "storage.server.EnsureMounted",
+          "start": 1790182669220394534,
+          "ms": 42.155971,
+          "attributes": {
+            "rpc.system": "ucloud-storage-native",
+            "rpc.method": "EnsureMounted",
+            "sandbox.id": "relay-load-16cc1e9ecac8-0007",
+            "storage.volume.id": "workspace-relay-load-16cc1e9ecac8-0007.sandbox-1",
+            "storage.admission.class": "lifecycle",
+            "ucloud.span.thread_cpu.duration": 0.003430117
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182669220454584",
+              "name": "storage.queue.acquired",
+              "attributes": [
+                {
+                  "key": "storage.queue.wait_seconds",
+                  "value": {
+                    "doubleValue": 5.8990000013636745e-06
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "storage.server.GetVolume",
+          "start": 1790182669268227798,
+          "ms": 0.30437,
+          "attributes": {
+            "rpc.system": "ucloud-storage-native",
+            "rpc.method": "GetVolume",
+            "storage.volume.id": "workspace-relay-load-16cc1e9ecac8-0007.sandbox-1",
+            "storage.admission.class": "metadata"
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "sandbox.wake",
+          "start": 1790182669218071842,
+          "ms": 489.066441,
+          "attributes": {
+            "sandbox.id": "relay-load-16cc1e9ecac8-0007",
+            "sandbox.generation": "1",
+            "ucloud.span.thread_cpu.duration": 0.029111979999999982
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182669707011872",
+              "name": "sandbox.wake.timings",
+              "attributes": [
+                {
+                  "key": "restore_queue",
+                  "value": {
+                    "doubleValue": 2.3203789999968194
+                  }
+                },
+                {
+                  "key": "network_prepare",
+                  "value": {
+                    "doubleValue": 14.267359999990958
+                  }
+                },
+                {
+                  "key": "validate_artifact",
+                  "value": {
+                    "doubleValue": 67.37001999999848
+                  }
+                },
+                {
+                  "key": "begin_restore_journal",
+                  "value": {
+                    "doubleValue": 1.49988699999426
+                  }
+                },
+                {
+                  "key": "runsc_restore",
+                  "value": {
+                    "doubleValue": 198.8582440000073
+                  }
+                },
+                {
+                  "key": "runsc_state",
+                  "value": {
+                    "doubleValue": 9.06365299999834
+                  }
+                },
+                {
+                  "key": "candidate_fence",
+                  "value": {
+                    "doubleValue": 0.43460800000616473
+                  }
+                },
+                {
+                  "key": "candidate_journal",
+                  "value": {
+                    "doubleValue": 2.001116000002412
+                  }
+                },
+                {
+                  "key": "candidate_resume",
+                  "value": {
+                    "doubleValue": 18.524906000010333
+                  }
+                },
+                {
+                  "key": "readiness_exec",
+                  "value": {
+                    "doubleValue": 20.17929699999854
+                  }
+                },
+                {
+                  "key": "commit_running_journal",
+                  "value": {
+                    "doubleValue": 51.128726000001734
+                  }
+                },
+                {
+                  "key": "artifact_cleanup",
+                  "value": {
+                    "doubleValue": 118.09271300001001
+                  }
+                },
+                {
+                  "key": "warden_total",
+                  "value": {
+                    "doubleValue": 487.2259880000058
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "start": 1790182669211103968,
+          "ms": 497.493651,
+          "attributes": {
+            "sandbox.id": "relay-load-16cc1e9ecac8-0007",
+            "http.request.body.size": "131",
+            "http.response.status_code": "200",
+            "ucloud.span.thread_cpu.duration": 0.036828154,
+            "http.request.method": "POST",
+            "url.path": "/v1/sandboxes/relay-load-16cc1e9ecac8-0007/wake",
+            "http.route": "/v1/sandboxes/{sandbox_id}/wake"
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "sandbox.wake.ensure_network",
+          "start": 1790182669218603676,
+          "ms": 14.102591,
+          "attributes": {
+            "ucloud.span.thread_cpu.duration": 0.002740766
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "storage.client.EnsureMounted",
+          "start": 1790182669219634534,
+          "ms": 43.362897,
+          "attributes": {
+            "rpc.system": "ucloud-storage-native",
+            "rpc.method": "EnsureMounted",
+            "ucloud.span.thread_cpu.duration": 0.0003233060000000232
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "storage.client.GetVolume",
+          "start": 1790182669267731888,
+          "ms": 0.982585,
+          "attributes": {
+            "rpc.system": "ucloud-storage-native",
+            "rpc.method": "GetVolume",
+            "ucloud.span.thread_cpu.duration": 0.0001595500000000083
+          },
+          "status": {},
+          "events": null
+        }
+      ]
+    },
+    {
+      "trace_id": "9d1556854643259415df03e9c7d70b86",
+      "spans": [
+        {
+          "name": "gateway.wake.await_admission",
+          "start": 1790182665593536017,
+          "ms": 6.4852,
+          "attributes": {
+            "ucloud.span.thread_cpu.duration": 7.350999999999885e-05
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.node_response_headers",
+          "start": 1790182665608032756,
+          "ms": 342.649363,
+          "attributes": {
+            "http.response.status_code": "200",
+            "ucloud.span.thread_cpu.duration": 0.00023978899999999026,
+            "http.request.method": "POST",
+            "server.address": "sandbox-node-059f2ca6a5-1",
+            "http.route": "sandbox.wake"
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.node_response_body",
+          "start": 1790182665950865515,
+          "ms": 0.0994,
+          "attributes": {
+            "http.response.status_code": "200",
+            "http.response.body.size": "1563",
+            "http.request.method": "POST",
+            "server.address": "sandbox-node-059f2ca6a5-1",
+            "http.route": "sandbox.wake"
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "start": 1790182665587586554,
+          "ms": 373.842876,
+          "attributes": {
+            "sandbox.id": "relay-load-16cc1e9ecac8-0010",
+            "http.request.body.size": "244",
+            "http.response.status_code": "200",
+            "ucloud.span.thread_cpu.duration": 0.008399898000000017,
+            "http.request.method": "POST",
+            "url.path": "/v1/sandboxes/relay-load-16cc1e9ecac8-0010/wake",
+            "http.route": "/v1/sandboxes/{sandbox_id}/wake"
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "sandbox.wake.ensure_network",
+          "start": 1790182665616782529,
+          "ms": 13.564052,
+          "attributes": {
+            "ucloud.span.thread_cpu.duration": 0.002475633
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "storage.client.EnsureMounted",
+          "start": 1790182665617327085,
+          "ms": 41.435552,
+          "attributes": {
+            "rpc.system": "ucloud-storage-native",
+            "rpc.method": "EnsureMounted",
+            "ucloud.span.thread_cpu.duration": 0.00016950500000001423
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "storage.client.GetVolume",
+          "start": 1790182665663684681,
+          "ms": 0.839158,
+          "attributes": {
+            "rpc.system": "ucloud-storage-native",
+            "rpc.method": "GetVolume"
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "sandbox.wake",
+          "start": 1790182665616302719,
+          "ms": 332.221304,
+          "attributes": {
+            "sandbox.id": "relay-load-16cc1e9ecac8-0010",
+            "sandbox.generation": "1",
+            "ucloud.span.thread_cpu.duration": 0.025695853999999962
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182665948470443",
+              "name": "sandbox.wake.timings",
+              "attributes": [
+                {
+                  "key": "restore_queue",
+                  "value": {
+                    "doubleValue": 2.1714939999810667
+                  }
+                },
+                {
+                  "key": "network_prepare",
+                  "value": {
+                    "doubleValue": 13.698404000024311
+                  }
+                },
+                {
+                  "key": "validate_artifact",
+                  "value": {
+                    "doubleValue": 64.41879799996286
+                  }
+                },
+                {
+                  "key": "begin_restore_journal",
+                  "value": {
+                    "doubleValue": 1.602230999992571
+                  }
+                },
+                {
+                  "key": "runsc_restore",
+                  "value": {
+                    "doubleValue": 154.46876799995835
+                  }
+                },
+                {
+                  "key": "runsc_state",
+                  "value": {
+                    "doubleValue": 10.547923999979503
+                  }
+                },
+                {
+                  "key": "candidate_fence",
+                  "value": {
+                    "doubleValue": 1.8487699999809593
+                  }
+                },
+                {
+                  "key": "candidate_journal",
+                  "value": {
+                    "doubleValue": 1.2859369999773662
+                  }
+                },
+                {
+                  "key": "candidate_resume",
+                  "value": {
+                    "doubleValue": 12.354480999988482
+                  }
+                },
+                {
+                  "key": "readiness_exec",
+                  "value": {
+                    "doubleValue": 17.002583000021332
+                  }
+                },
+                {
+                  "key": "commit_running_journal",
+                  "value": {
+                    "doubleValue": 8.106646999976874
+                  }
+                },
+                {
+                  "key": "artifact_cleanup",
+                  "value": {
+                    "doubleValue": 57.85661500004835
+                  }
+                },
+                {
+                  "key": "warden_total",
+                  "value": {
+                    "doubleValue": 329.57247399997414
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "start": 1790182665609868248,
+          "ms": 339.771326,
+          "attributes": {
+            "sandbox.id": "relay-load-16cc1e9ecac8-0010",
+            "http.request.body.size": "131",
+            "http.response.status_code": "200",
+            "ucloud.span.thread_cpu.duration": 0.032087843000000005,
+            "http.request.method": "POST",
+            "url.path": "/v1/sandboxes/relay-load-16cc1e9ecac8-0010/wake",
+            "http.route": "/v1/sandboxes/{sandbox_id}/wake"
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "storage.server.EnsureMounted",
+          "start": 1790182665618009658,
+          "ms": 40.56054,
+          "attributes": {
+            "rpc.system": "ucloud-storage-native",
+            "rpc.method": "EnsureMounted",
+            "sandbox.id": "relay-load-16cc1e9ecac8-0010",
+            "storage.volume.id": "workspace-relay-load-16cc1e9ecac8-0010.sandbox-1",
+            "storage.admission.class": "lifecycle",
+            "ucloud.span.thread_cpu.duration": 0.0037829250000000003
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182665618073492",
+              "name": "storage.queue.acquired",
+              "attributes": [
+                {
+                  "key": "storage.queue.wait_seconds",
+                  "value": {
+                    "doubleValue": 4.926999963572598e-06
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "storage.server.GetVolume",
+          "start": 1790182665664113164,
+          "ms": 0.2541,
+          "attributes": {
+            "rpc.system": "ucloud-storage-native",
+            "rpc.method": "GetVolume",
+            "storage.volume.id": "workspace-relay-load-16cc1e9ecac8-0010.sandbox-1",
+            "storage.admission.class": "metadata"
+          },
+          "status": {},
+          "events": null
+        }
+      ]
+    },
+    {
+      "trace_id": "1a6075c991bdb57195b5fecf118cf09",
+      "spans": [
+        {
+          "name": "storage.server.EnsureMounted",
+          "start": 1790182643158543966,
+          "ms": 64.614503,
+          "attributes": {
+            "rpc.system": "ucloud-storage-native",
+            "rpc.method": "EnsureMounted",
+            "sandbox.id": "relay-load-16cc1e9ecac8-0000",
+            "storage.volume.id": "workspace-relay-load-16cc1e9ecac8-0000.sandbox-1",
+            "storage.admission.class": "lifecycle",
+            "ucloud.span.thread_cpu.duration": 0.007358291
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182643158644558",
+              "name": "storage.queue.acquired",
+              "attributes": [
+                {
+                  "key": "storage.queue.wait_seconds",
+                  "value": {
+                    "doubleValue": 1.1016999962976115e-05
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "storage.server.GetVolume",
+          "start": 1790182643236712934,
+          "ms": 0.689872,
+          "attributes": {
+            "rpc.system": "ucloud-storage-native",
+            "rpc.method": "GetVolume",
+            "storage.volume.id": "workspace-relay-load-16cc1e9ecac8-0000.sandbox-1",
+            "storage.admission.class": "metadata"
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.wake.await_admission",
+          "start": 1790182643110617204,
+          "ms": 4.224494,
+          "attributes": {
+            "ucloud.span.thread_cpu.duration": 3.667399999998655e-05
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.node_response_headers",
+          "start": 1790182643118385507,
+          "ms": 887.891621,
+          "attributes": {
+            "http.response.status_code": "200",
+            "ucloud.span.thread_cpu.duration": 0.0003140189999999987,
+            "http.request.method": "POST",
+            "server.address": "sandbox-node-8f77d0bcae-1",
+            "http.route": "sandbox.wake"
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.node_response_body",
+          "start": 1790182644006447484,
+          "ms": 0.076495,
+          "attributes": {
+            "http.response.status_code": "200",
+            "http.response.body.size": "1563",
+            "http.request.method": "POST",
+            "server.address": "sandbox-node-8f77d0bcae-1",
+            "http.route": "sandbox.wake"
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "start": 1790182643103356426,
+          "ms": 908.782152,
+          "attributes": {
+            "sandbox.id": "relay-load-16cc1e9ecac8-0000",
+            "http.request.body.size": "244",
+            "http.response.status_code": "200",
+            "ucloud.span.thread_cpu.duration": 0.005381650999999987,
+            "http.request.method": "POST",
+            "url.path": "/v1/sandboxes/relay-load-16cc1e9ecac8-0000/wake",
+            "http.route": "/v1/sandboxes/{sandbox_id}/wake"
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "sandbox.wake.ensure_network",
+          "start": 1790182643155741573,
+          "ms": 30.890211,
+          "attributes": {
+            "ucloud.span.thread_cpu.duration": 0.0057922780000000005
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "storage.client.EnsureMounted",
+          "start": 1790182643157055428,
+          "ms": 67.079736,
+          "attributes": {
+            "rpc.system": "ucloud-storage-native",
+            "rpc.method": "EnsureMounted",
+            "ucloud.span.thread_cpu.duration": 0.0005721890000000007
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "storage.client.GetVolume",
+          "start": 1790182643235411388,
+          "ms": 2.409109,
+          "attributes": {
+            "rpc.system": "ucloud-storage-native",
+            "rpc.method": "GetVolume",
+            "ucloud.span.thread_cpu.duration": 0.0003206119999999979
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "sandbox.wake",
+          "start": 1790182643153859139,
+          "ms": 844.310603,
+          "attributes": {
+            "sandbox.id": "relay-load-16cc1e9ecac8-0000",
+            "sandbox.generation": "1",
+            "ucloud.span.thread_cpu.duration": 0.06442880699999998
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182643997981307",
+              "name": "sandbox.wake.timings",
+              "attributes": [
+                {
+                  "key": "restore_queue",
+                  "value": {
+                    "doubleValue": 13.224887000035324
+                  }
+                },
+                {
+                  "key": "network_prepare",
+                  "value": {
+                    "doubleValue": 31.137053999998443
+                  }
+                },
+                {
+                  "key": "validate_artifact",
+                  "value": {
+                    "doubleValue": 114.7766760000195
+                  }
+                },
+                {
+                  "key": "begin_restore_journal",
+                  "value": {
+                    "doubleValue": 3.5388759999932518
+                  }
+                },
+                {
+                  "key": "runsc_restore",
+                  "value": {
+                    "doubleValue": 322.3599510000099
+                  }
+                },
+                {
+                  "key": "runsc_state",
+                  "value": {
+                    "doubleValue": 19.675171000017144
+                  }
+                },
+                {
+                  "key": "candidate_fence",
+                  "value": {
+                    "doubleValue": 1.5047029999664119
+                  }
+                },
+                {
+                  "key": "candidate_journal",
+                  "value": {
+                    "doubleValue": 3.425465000020722
+                  }
+                },
+                {
+                  "key": "candidate_resume",
+                  "value": {
+                    "doubleValue": 36.271620000036364
+                  }
+                },
+                {
+                  "key": "readiness_exec",
+                  "value": {
+                    "doubleValue": 25.952841999981047
+                  }
+                },
+                {
+                  "key": "commit_running_journal",
+                  "value": {
+                    "doubleValue": 3.2869949999962955
+                  }
+                },
+                {
+                  "key": "artifact_cleanup",
+                  "value": {
+                    "doubleValue": 308.7774530000047
+                  }
+                },
+                {
+                  "key": "warden_total",
+                  "value": {
+                    "doubleValue": 839.7491119999927
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "start": 1790182643122847224,
+          "ms": 882.307589,
+          "attributes": {
+            "sandbox.id": "relay-load-16cc1e9ecac8-0000",
+            "http.request.body.size": "131",
+            "http.response.status_code": "200",
+            "ucloud.span.thread_cpu.duration": 0.08577937100000005,
+            "http.request.method": "POST",
+            "url.path": "/v1/sandboxes/relay-load-16cc1e9ecac8-0000/wake",
+            "http.route": "/v1/sandboxes/{sandbox_id}/wake"
+          },
+          "status": {},
+          "events": null
+        }
+      ]
+    },
+    {
+      "trace_id": "76b147589135932f008e6335a9231e5d",
+      "spans": [
+        {
+          "name": "gateway.wake.await_admission",
+          "start": 1790182641083756004,
+          "ms": 15.727373,
+          "attributes": {
+            "ucloud.span.thread_cpu.duration": 9.405100000001165e-05
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.node_response_headers",
+          "start": 1790182641107326873,
+          "ms": 625.844427,
+          "attributes": {
+            "http.response.status_code": "200",
+            "ucloud.span.thread_cpu.duration": 0.00031267900000001014,
+            "http.request.method": "POST",
+            "server.address": "sandbox-node-8f271b9b41-1",
+            "http.route": "sandbox.wake"
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.node_response_body",
+          "start": 1790182641733334475,
+          "ms": 0.084317,
+          "attributes": {
+            "http.response.status_code": "200",
+            "http.response.body.size": "1563",
+            "http.request.method": "POST",
+            "server.address": "sandbox-node-8f271b9b41-1",
+            "http.route": "sandbox.wake"
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "start": 1790182641073868518,
+          "ms": 666.007662,
+          "attributes": {
+            "sandbox.id": "relay-load-16cc1e9ecac8-0002",
+            "http.request.body.size": "243",
+            "http.response.status_code": "200",
+            "ucloud.span.thread_cpu.duration": 0.007376716000000005,
+            "http.request.method": "POST",
+            "url.path": "/v1/sandboxes/relay-load-16cc1e9ecac8-0002/wake",
+            "http.route": "/v1/sandboxes/{sandbox_id}/wake"
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "storage.server.EnsureMounted",
+          "start": 1790182641130290849,
+          "ms": 50.530019,
+          "attributes": {
+            "rpc.system": "ucloud-storage-native",
+            "rpc.method": "EnsureMounted",
+            "sandbox.id": "relay-load-16cc1e9ecac8-0002",
+            "storage.volume.id": "workspace-relay-load-16cc1e9ecac8-0002.sandbox-1",
+            "storage.admission.class": "lifecycle",
+            "ucloud.span.thread_cpu.duration": 0.007930785000000001
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182641130388075",
+              "name": "storage.queue.acquired",
+              "attributes": [
+                {
+                  "key": "storage.queue.wait_seconds",
+                  "value": {
+                    "doubleValue": 1.0465000002568559e-05
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "storage.server.GetVolume",
+          "start": 1790182641190008852,
+          "ms": 0.523721,
+          "attributes": {
+            "rpc.system": "ucloud-storage-native",
+            "rpc.method": "GetVolume",
+            "storage.volume.id": "workspace-relay-load-16cc1e9ecac8-0002.sandbox-1",
+            "storage.admission.class": "metadata"
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "sandbox.wake.ensure_network",
+          "start": 1790182641127699166,
+          "ms": 31.552754,
+          "attributes": {
+            "ucloud.span.thread_cpu.duration": 0.006469761
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "storage.client.EnsureMounted",
+          "start": 1790182641128651353,
+          "ms": 52.624111,
+          "attributes": {
+            "rpc.system": "ucloud-storage-native",
+            "rpc.method": "EnsureMounted",
+            "ucloud.span.thread_cpu.duration": 0.00041560400000001385
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "storage.client.GetVolume",
+          "start": 1790182641188777433,
+          "ms": 2.142575,
+          "attributes": {
+            "rpc.system": "ucloud-storage-native",
+            "rpc.method": "GetVolume",
+            "ucloud.span.thread_cpu.duration": 0.0002874119999999869
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "sandbox.wake",
+          "start": 1790182641126700467,
+          "ms": 603.342987,
+          "attributes": {
+            "sandbox.id": "relay-load-16cc1e9ecac8-0002",
+            "sandbox.generation": "1",
+            "ucloud.span.thread_cpu.duration": 0.055813733000000004
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182641729909292",
+              "name": "sandbox.wake.timings",
+              "attributes": [
+                {
+                  "key": "restore_queue",
+                  "value": {
+                    "doubleValue": 4.413894999999002
+                  }
+                },
+                {
+                  "key": "network_prepare",
+                  "value": {
+                    "doubleValue": 31.876402000023063
+                  }
+                },
+                {
+                  "key": "validate_artifact",
+                  "value": {
+                    "doubleValue": 99.06464499999856
+                  }
+                },
+                {
+                  "key": "begin_restore_journal",
+                  "value": {
+                    "doubleValue": 2.731625000023996
+                  }
+                },
+                {
+                  "key": "runsc_restore",
+                  "value": {
+                    "doubleValue": 284.5434249999812
+                  }
+                },
+                {
+                  "key": "runsc_state",
+                  "value": {
+                    "doubleValue": 17.824444000012818
+                  }
+                },
+                {
+                  "key": "candidate_fence",
+                  "value": {
+                    "doubleValue": 0.9157929999901171
+                  }
+                },
+                {
+                  "key": "candidate_journal",
+                  "value": {
+                    "doubleValue": 2.47681999999827
+                  }
+                },
+                {
+                  "key": "candidate_resume",
+                  "value": {
+                    "doubleValue": 35.36163600000464
+                  }
+                },
+                {
+                  "key": "readiness_exec",
+                  "value": {
+                    "doubleValue": 28.961691999995764
+                  }
+                },
+                {
+                  "key": "commit_running_journal",
+                  "value": {
+                    "doubleValue": 8.546874999979082
+                  }
+                },
+                {
+                  "key": "artifact_cleanup",
+                  "value": {
+                    "doubleValue": 119.54887699999972
+                  }
+                },
+                {
+                  "key": "warden_total",
+                  "value": {
+                    "doubleValue": 600.1066299999991
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "start": 1790182641112805988,
+          "ms": 619.459361,
+          "attributes": {
+            "sandbox.id": "relay-load-16cc1e9ecac8-0002",
+            "http.request.body.size": "131",
+            "http.response.status_code": "200",
+            "ucloud.span.thread_cpu.duration": 0.070055173,
+            "http.request.method": "POST",
+            "url.path": "/v1/sandboxes/relay-load-16cc1e9ecac8-0002/wake",
+            "http.route": "/v1/sandboxes/{sandbox_id}/wake"
+          },
+          "status": {},
+          "events": null
+        }
+      ]
+    },
+    {
+      "trace_id": "811351521f38b4201166ed2946ccd464",
+      "spans": [
+        {
+          "name": "gateway.wake.await_admission",
+          "start": 1790182617376109420,
+          "ms": 6.215474,
+          "attributes": {
+            "ucloud.span.thread_cpu.duration": 6.469800000000192e-05
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.node_response_headers",
+          "start": 1790182617389956010,
+          "ms": 764.617387,
+          "attributes": {
+            "http.response.status_code": "200",
+            "ucloud.span.thread_cpu.duration": 0.00020285500000000178,
+            "http.request.method": "POST",
+            "server.address": "sandbox-node-8f271b9b41-1",
+            "http.route": "sandbox.wake"
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.node_response_body",
+          "start": 1790182618154695732,
+          "ms": 0.048823,
+          "attributes": {
+            "http.response.status_code": "200",
+            "http.response.body.size": "1563",
+            "http.request.method": "POST",
+            "server.address": "sandbox-node-8f271b9b41-1",
+            "http.route": "sandbox.wake"
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "start": 1790182617370187729,
+          "ms": 790.313769,
+          "attributes": {
+            "sandbox.id": "relay-load-16cc1e9ecac8-0012",
+            "http.request.body.size": "244",
+            "http.response.status_code": "200",
+            "ucloud.span.thread_cpu.duration": 0.006493973999999986,
+            "http.request.method": "POST",
+            "url.path": "/v1/sandboxes/relay-load-16cc1e9ecac8-0012/wake",
+            "http.route": "/v1/sandboxes/{sandbox_id}/wake"
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "storage.server.EnsureMounted",
+          "start": 1790182617411353020,
+          "ms": 49.535751,
+          "attributes": {
+            "rpc.system": "ucloud-storage-native",
+            "rpc.method": "EnsureMounted",
+            "sandbox.id": "relay-load-16cc1e9ecac8-0012",
+            "storage.volume.id": "workspace-relay-load-16cc1e9ecac8-0012.sandbox-1",
+            "storage.admission.class": "lifecycle",
+            "ucloud.span.thread_cpu.duration": 0.008718919
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182617411480418",
+              "name": "storage.queue.acquired",
+              "attributes": [
+                {
+                  "key": "storage.queue.wait_seconds",
+                  "value": {
+                    "doubleValue": 1.3820000020814405e-05
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "storage.server.GetVolume",
+          "start": 1790182617475219820,
+          "ms": 0.730575,
+          "attributes": {
+            "rpc.system": "ucloud-storage-native",
+            "rpc.method": "GetVolume",
+            "storage.volume.id": "workspace-relay-load-16cc1e9ecac8-0012.sandbox-1",
+            "storage.admission.class": "metadata"
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "sandbox.wake.ensure_network",
+          "start": 1790182617408525116,
+          "ms": 29.809289,
+          "attributes": {
+            "ucloud.span.thread_cpu.duration": 0.0075052470000000005
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "storage.client.EnsureMounted",
+          "start": 1790182617409640179,
+          "ms": 51.735559,
+          "attributes": {
+            "rpc.system": "ucloud-storage-native",
+            "rpc.method": "EnsureMounted",
+            "ucloud.span.thread_cpu.duration": 0.00040346700000000457
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "storage.client.GetVolume",
+          "start": 1790182617473211038,
+          "ms": 3.328783,
+          "attributes": {
+            "rpc.system": "ucloud-storage-native",
+            "rpc.method": "GetVolume",
+            "ucloud.span.thread_cpu.duration": 0.0005032749999999975
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "sandbox.wake",
+          "start": 1790182617407333384,
+          "ms": 744.154524,
+          "attributes": {
+            "sandbox.id": "relay-load-16cc1e9ecac8-0012",
+            "sandbox.generation": "1",
+            "ucloud.span.thread_cpu.duration": 0.060965063999999985
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182618151280946",
+              "name": "sandbox.wake.timings",
+              "attributes": [
+                {
+                  "key": "restore_queue",
+                  "value": {
+                    "doubleValue": 5.289619999985007
+                  }
+                },
+                {
+                  "key": "network_prepare",
+                  "value": {
+                    "doubleValue": 30.183880999999246
+                  }
+                },
+                {
+                  "key": "validate_artifact",
+                  "value": {
+                    "doubleValue": 110.42485600000873
+                  }
+                },
+                {
+                  "key": "begin_restore_journal",
+                  "value": {
+                    "doubleValue": 4.31340199997976
+                  }
+                },
+                {
+                  "key": "runsc_restore",
+                  "value": {
+                    "doubleValue": 341.449836999999
+                  }
+                },
+                {
+                  "key": "runsc_state",
+                  "value": {
+                    "doubleValue": 18.89058399999044
+                  }
+                },
+                {
+                  "key": "candidate_fence",
+                  "value": {
+                    "doubleValue": 1.095402000004242
+                  }
+                },
+                {
+                  "key": "candidate_journal",
+                  "value": {
+                    "doubleValue": 3.0661640000175794
+                  }
+                },
+                {
+                  "key": "candidate_resume",
+                  "value": {
+                    "doubleValue": 32.33406199998967
+                  }
+                },
+                {
+                  "key": "readiness_exec",
+                  "value": {
+                    "doubleValue": 30.093211000007614
+                  }
+                },
+                {
+                  "key": "commit_running_journal",
+                  "value": {
+                    "doubleValue": 12.951194000009991
+                  }
+                },
+                {
+                  "key": "artifact_cleanup",
+                  "value": {
+                    "doubleValue": 185.9860169999763
+                  }
+                },
+                {
+                  "key": "warden_total",
+                  "value": {
+                    "doubleValue": 740.7404189999909
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "start": 1790182617391777022,
+          "ms": 761.999381,
+          "attributes": {
+            "sandbox.id": "relay-load-16cc1e9ecac8-0012",
+            "http.request.body.size": "131",
+            "http.response.status_code": "200",
+            "ucloud.span.thread_cpu.duration": 0.077007447,
+            "http.request.method": "POST",
+            "url.path": "/v1/sandboxes/relay-load-16cc1e9ecac8-0012/wake",
+            "http.route": "/v1/sandboxes/{sandbox_id}/wake"
+          },
+          "status": {},
+          "events": null
+        }
+      ]
+    },
+    {
+      "trace_id": "100b8e569f153dff12d3200a862f605f",
+      "spans": [
+        {
+          "name": "storage.server.EnsureMounted",
+          "start": 1790182613584707209,
+          "ms": 38.808544,
+          "attributes": {
+            "rpc.system": "ucloud-storage-native",
+            "rpc.method": "EnsureMounted",
+            "sandbox.id": "relay-load-16cc1e9ecac8-0014",
+            "storage.volume.id": "workspace-relay-load-16cc1e9ecac8-0014.sandbox-1",
+            "storage.admission.class": "lifecycle",
+            "ucloud.span.thread_cpu.duration": 0.003202626
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182613584759577",
+              "name": "storage.queue.acquired",
+              "attributes": [
+                {
+                  "key": "storage.queue.wait_seconds",
+                  "value": {
+                    "doubleValue": 6.931000001486609e-06
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "storage.server.GetVolume",
+          "start": 1790182613628044713,
+          "ms": 0.34001,
+          "attributes": {
+            "rpc.system": "ucloud-storage-native",
+            "rpc.method": "GetVolume",
+            "storage.volume.id": "workspace-relay-load-16cc1e9ecac8-0014.sandbox-1",
+            "storage.admission.class": "metadata"
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.wake.await_admission",
+          "start": 1790182613565333749,
+          "ms": 4.434301,
+          "attributes": {
+            "ucloud.span.thread_cpu.duration": 4.349599999997622e-05
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.node_response_headers",
+          "start": 1790182613573662707,
+          "ms": 447.699449,
+          "attributes": {
+            "http.response.status_code": "200",
+            "ucloud.span.thread_cpu.duration": 0.00025353999999999655,
+            "http.request.method": "POST",
+            "server.address": "sandbox-node-f2b7c8c55d-1",
+            "http.route": "sandbox.wake"
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.node_response_body",
+          "start": 1790182614021501947,
+          "ms": 0.069135,
+          "attributes": {
+            "http.response.status_code": "200",
+            "http.response.body.size": "1563",
+            "http.request.method": "POST",
+            "server.address": "sandbox-node-f2b7c8c55d-1",
+            "http.route": "sandbox.wake"
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "start": 1790182613558883592,
+          "ms": 469.558541,
+          "attributes": {
+            "sandbox.id": "relay-load-16cc1e9ecac8-0014",
+            "http.request.body.size": "244",
+            "http.response.status_code": "200",
+            "ucloud.span.thread_cpu.duration": 0.005806503000000018,
+            "http.request.method": "POST",
+            "url.path": "/v1/sandboxes/relay-load-16cc1e9ecac8-0014/wake",
+            "http.route": "/v1/sandboxes/{sandbox_id}/wake"
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "sandbox.wake.ensure_network",
+          "start": 1790182613583242720,
+          "ms": 15.123225,
+          "attributes": {
+            "ucloud.span.thread_cpu.duration": 0.00301601
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "storage.client.EnsureMounted",
+          "start": 1790182613583842810,
+          "ms": 39.863499,
+          "attributes": {
+            "rpc.system": "ucloud-storage-native",
+            "rpc.method": "EnsureMounted",
+            "ucloud.span.thread_cpu.duration": 0.00020251400000000086
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "storage.client.GetVolume",
+          "start": 1790182613627456730,
+          "ms": 1.083827,
+          "attributes": {
+            "rpc.system": "ucloud-storage-native",
+            "rpc.method": "GetVolume",
+            "ucloud.span.thread_cpu.duration": 0.00011001600000000444
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "sandbox.wake",
+          "start": 1790182613582635679,
+          "ms": 435.96522,
+          "attributes": {
+            "sandbox.id": "relay-load-16cc1e9ecac8-0014",
+            "sandbox.generation": "1",
+            "ucloud.span.thread_cpu.duration": 0.0251307
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182614018491806",
+              "name": "sandbox.wake.timings",
+              "attributes": [
+                {
+                  "key": "restore_queue",
+                  "value": {
+                    "doubleValue": 2.398941999985027
+                  }
+                },
+                {
+                  "key": "network_prepare",
+                  "value": {
+                    "doubleValue": 15.298908999994865
+                  }
+                },
+                {
+                  "key": "validate_artifact",
+                  "value": {
+                    "doubleValue": 59.16479600000457
+                  }
+                },
+                {
+                  "key": "begin_restore_journal",
+                  "value": {
+                    "doubleValue": 1.265600000010636
+                  }
+                },
+                {
+                  "key": "runsc_restore",
+                  "value": {
+                    "doubleValue": 143.75819899998987
+                  }
+                },
+                {
+                  "key": "runsc_state",
+                  "value": {
+                    "doubleValue": 13.598215999991226
+                  }
+                },
+                {
+                  "key": "candidate_fence",
+                  "value": {
+                    "doubleValue": 0.40711200000487224
+                  }
+                },
+                {
+                  "key": "candidate_journal",
+                  "value": {
+                    "doubleValue": 4.05400599998984
+                  }
+                },
+                {
+                  "key": "candidate_resume",
+                  "value": {
+                    "doubleValue": 16.48407799999063
+                  }
+                },
+                {
+                  "key": "readiness_exec",
+                  "value": {
+                    "doubleValue": 28.045545999987098
+                  }
+                },
+                {
+                  "key": "commit_running_journal",
+                  "value": {
+                    "doubleValue": 1.900713999987147
+                  }
+                },
+                {
+                  "key": "artifact_cleanup",
+                  "value": {
+                    "doubleValue": 165.46346699999503
+                  }
+                },
+                {
+                  "key": "warden_total",
+                  "value": {
+                    "doubleValue": 434.20310600001244
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+          "start": 1790182613575191422,
+          "ms": 444.613315,
+          "attributes": {
+            "sandbox.id": "relay-load-16cc1e9ecac8-0014",
+            "http.request.body.size": "131",
+            "http.response.status_code": "200",
+            "ucloud.span.thread_cpu.duration": 0.031791897,
+            "http.request.method": "POST",
+            "url.path": "/v1/sandboxes/relay-load-16cc1e9ecac8-0014/wake",
+            "http.route": "/v1/sandboxes/{sandbox_id}/wake"
+          },
+          "status": {},
+          "events": null
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+{
+  "run_id": "relay-load-d0bf2463839e",
+  "started_at": "2026-09-23T14:14:42.404119+00:00",
+  "finished_at": "2026-09-23T14:18:27.051975+00:00",
+  "result": "RelayApiError: relay request failed (500): {'error': '500 Internal Server Error\\n\\nServer got itself in trouble'}",
+  "completed_cycles": 0,
+  "fleet_health": {
+    "enabled": true,
+    "passed": false,
+    "status": "failed",
+    "used_jobs": [
+      "12400603",
+      "12400605",
+      "12400606",
+      "12400608"
+    ],
+    "observed_healthy_jobs": [
+      "12400603",
+      "12400605",
+      "12400606",
+      "12400608"
+    ],
+    "failure_count": 4,
+    "placement_grace_seconds": 30,
+    "freshness_seconds": 30
+  },
+  "managed_observed_at": "2026-09-23T14:17:40.990163+00:00",
+  "managed_states": {
+    "running": 140
+  },
+  "terminal_failures": [],
+  "workers": [
+    {
+      "job_id": "12400603",
+      "samples": 106,
+      "sample_errors": 0,
+      "sample_start": "2026-09-23T14:14:30.715919+00:00",
+      "sample_end": "2026-09-23T14:18:02.005525+00:00",
+      "minimum_backing_available_bytes": 37386833920,
+      "minimum_backing_at": "2026-09-23T14:16:01.627320+00:00",
+      "minimum_physical_available_bytes": 35373318144,
+      "minimum_physical_at": "2026-09-23T14:15:43.611178+00:00"
+    },
+    {
+      "job_id": "12400605",
+      "samples": 106,
+      "sample_errors": 0,
+      "sample_start": "2026-09-23T14:14:32.292358+00:00",
+      "sample_end": "2026-09-23T14:18:03.089908+00:00",
+      "minimum_backing_available_bytes": 37381603328,
+      "minimum_backing_at": "2026-09-23T14:16:14.509757+00:00",
+      "minimum_physical_available_bytes": 35677859840,
+      "minimum_physical_at": "2026-09-23T14:16:20.513773+00:00"
+    },
+    {
+      "job_id": "12400606",
+      "samples": 105,
+      "sample_errors": 0,
+      "sample_start": "2026-09-23T14:14:32.992233+00:00",
+      "sample_end": "2026-09-23T14:18:02.120608+00:00",
+      "minimum_backing_available_bytes": 24354365440,
+      "minimum_backing_at": "2026-09-23T14:17:24.071126+00:00",
+      "minimum_physical_available_bytes": 22389846016,
+      "minimum_physical_at": "2026-09-23T14:16:53.592223+00:00"
+    },
+    {
+      "job_id": "12400608",
+      "samples": 102,
+      "sample_errors": 0,
+      "sample_start": "2026-09-23T14:14:37.251780+00:00",
+      "sample_end": "2026-09-23T14:18:03.160926+00:00",
+      "minimum_backing_available_bytes": 30866341888,
+      "minimum_backing_at": "2026-09-23T14:15:29.276818+00:00",
+      "minimum_physical_available_bytes": 28551327744,
+      "minimum_physical_at": "2026-09-23T14:15:21.271427+00:00"
+    }
+  ]
+}

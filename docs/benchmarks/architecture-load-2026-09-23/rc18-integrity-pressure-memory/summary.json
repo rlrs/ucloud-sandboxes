@@ -1,0 +1,140 @@
+{
+  "run_id": "relay-load-e46611368211",
+  "started_at": "2026-09-23T15:44:31.750921+00:00",
+  "finished_at": "2026-09-23T15:52:59.798686+00:00",
+  "failure": null,
+  "completed_cycles": 2048,
+  "correct": true,
+  "slo_passed": false,
+  "fleet_health": {
+    "enabled": true,
+    "passed": false,
+    "status": "failed",
+    "used_jobs": [
+      "12400622",
+      "12400623",
+      "12400625",
+      "12400626"
+    ],
+    "observed_healthy_jobs": [
+      "12400622",
+      "12400623",
+      "12400625",
+      "12400626"
+    ],
+    "failure_count": 11,
+    "placement_grace_seconds": 30,
+    "freshness_seconds": 30
+  },
+  "errors": [],
+  "cleanup_errors": [],
+  "measured_park_observed_cycles": 155,
+  "completed_scenarios_count": 256,
+  "normal_exit_count": 256,
+  "configuration": {
+    "sandboxes": 256,
+    "cycles": 8,
+    "resident_mb": 1536,
+    "dirty_mb": 384,
+    "memory_mb": 2048,
+    "sandbox_request_timeout_seconds": 1800.0,
+    "continuation_timeout_seconds": 1800.0,
+    "deadline_seconds": 1800.0
+  },
+  "workers": [
+    {
+      "job_id": "12400622",
+      "samples": 265,
+      "sample_errors": 0,
+      "sample_start": "2026-09-23T15:44:25.420183+00:00",
+      "sample_end": "2026-09-23T15:53:14.852384+00:00",
+      "minimum_backing_available_bytes": 13838147584,
+      "minimum_backing_at": "2026-09-23T15:45:27.465288+00:00",
+      "minimum_physical_available_bytes": 11718254592,
+      "minimum_physical_at": "2026-09-23T15:45:27.465288+00:00",
+      "checkpoint_command_timeouts": 0
+    },
+    {
+      "job_id": "12400623",
+      "samples": 264,
+      "sample_errors": 0,
+      "sample_start": "2026-09-23T15:44:26.749517+00:00",
+      "sample_end": "2026-09-23T15:53:14.375517+00:00",
+      "minimum_backing_available_bytes": 11241402368,
+      "minimum_backing_at": "2026-09-23T15:46:04.913396+00:00",
+      "minimum_physical_available_bytes": 8815394816,
+      "minimum_physical_at": "2026-09-23T15:48:05.680018+00:00",
+      "checkpoint_command_timeouts": 0
+    },
+    {
+      "job_id": "12400625",
+      "samples": 264,
+      "sample_errors": 0,
+      "sample_start": "2026-09-23T15:44:27.996564+00:00",
+      "sample_end": "2026-09-23T15:53:15.103243+00:00",
+      "minimum_backing_available_bytes": 9756614656,
+      "minimum_backing_at": "2026-09-23T15:48:12.665159+00:00",
+      "minimum_physical_available_bytes": 8402919424,
+      "minimum_physical_at": "2026-09-23T15:48:12.665159+00:00",
+      "checkpoint_command_timeouts": 0
+    },
+    {
+      "job_id": "12400626",
+      "samples": 263,
+      "sample_errors": 0,
+      "sample_start": "2026-09-23T15:44:28.746950+00:00",
+      "sample_end": "2026-09-23T15:53:13.940889+00:00",
+      "minimum_backing_available_bytes": 12884951040,
+      "minimum_backing_at": "2026-09-23T15:48:19.042735+00:00",
+      "minimum_physical_available_bytes": 10900209664,
+      "minimum_physical_at": "2026-09-23T15:48:19.042735+00:00",
+      "checkpoint_command_timeouts": 0
+    }
+  ],
+  "observed_completed_park_deltas": {
+    "12400622": {
+      "first": [
+        "2026-09-23T15:44:20.298850+00:00",
+        304
+      ],
+      "last": [
+        "2026-09-23T15:52:30.627111+00:00",
+        491
+      ],
+      "delta": 187
+    },
+    "12400623": {
+      "first": [
+        "2026-09-23T15:44:21.838990+00:00",
+        288
+      ],
+      "last": [
+        "2026-09-23T15:52:43.551559+00:00",
+        412
+      ],
+      "delta": 124
+    },
+    "12400625": {
+      "first": [
+        "2026-09-23T15:44:30.759702+00:00",
+        247
+      ],
+      "last": [
+        "2026-09-23T15:52:35.815640+00:00",
+        391
+      ],
+      "delta": 144
+    },
+    "12400626": {
+      "first": [
+        "2026-09-23T15:44:17.636757+00:00",
+        300
+      ],
+      "last": [
+        "2026-09-23T15:52:38.065085+00:00",
+        439
+      ],
+      "delta": 139
+    }
+  }
+}

@@ -1,0 +1,6 @@
+............................................................Executing <Task pending name='Task-3465' coro=<BaseSelectorEventLoop._accept_connection2() running at /home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/asyncio/selector_events.py:235> wait_for=<Future pending cb=[Task.task_wakeup()] created at /home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/asyncio/base_events.py:459> created at /home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/asyncio/selector_events.py:211> took 0.106 seconds
+.........................................................................
+----------------------------------------------------------------------
+Ran 133 tests in 9.725s
+
+OK

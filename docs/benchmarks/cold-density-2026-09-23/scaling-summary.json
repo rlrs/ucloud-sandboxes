@@ -1,0 +1,550 @@
+{
+  "source": "Read-only gateway metric_events export, 2026-09-23; selected fields only, no credentials or full execution payloads",
+  "run_id": "relay-load-079fbea702d8",
+  "window_utc": {
+    "start": "2026-09-23T05:58:00Z",
+    "end_exclusive": "2026-09-23T06:02:00Z"
+  },
+  "limitations": [
+    "Heartbeat samples are not simultaneous fleet samples.",
+    "PSI is stalled time, not device utilization or bandwidth.",
+    "These rolling-load cycles did not perform actual parking.",
+    "No physical disk throughput, latency or queue-depth samples were retained in these heartbeat records."
+  ],
+  "autoscaler": {
+    "cycles": 43,
+    "pressure_scale_up_cycles": 43,
+    "cycles_with_actions": 0
+  },
+  "cycle_evidence": [
+    {
+      "at": "2026-09-23T05:58:00.703717+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T05:58:06.356922+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T05:58:12.037966+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T05:58:17.646926+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T05:58:23.265235+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T05:58:28.792369+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T05:58:34.353409+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T05:58:39.993242+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T05:58:45.602728+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T05:58:51.260889+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T05:58:56.960775+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T05:59:02.815628+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T05:59:08.516315+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T05:59:14.128311+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T05:59:19.765468+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T05:59:25.431671+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T05:59:31.002595+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T05:59:36.737715+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T05:59:42.486117+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T05:59:48.068570+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T05:59:53.745487+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T05:59:59.345987+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T06:00:04.978624+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T06:00:10.632231+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T06:00:16.253454+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T06:00:21.911476+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T06:00:27.600460+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T06:00:33.884463+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T06:00:39.457690+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T06:00:45.071900+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T06:00:50.850859+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T06:00:56.614194+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T06:01:02.497778+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T06:01:08.232707+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T06:01:13.945376+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T06:01:19.562560+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T06:01:25.220006+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T06:01:30.877476+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T06:01:36.563331+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T06:01:42.123462+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T06:01:47.663532+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T06:01:53.287064+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    },
+    {
+      "at": "2026-09-23T06:01:58.908662+00:00",
+      "ready_nodes": 6,
+      "provisioning_nodes": 0,
+      "pressure_scale_up": true,
+      "actions": [],
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ],
+      "max_nodes": 6
+    }
+  ],
+  "workers": [
+    {
+      "job_id": "12399594",
+      "heartbeat_samples": 10,
+      "cpu_count": 32,
+      "cpu_percent_median": 10.622,
+      "io_psi_full_avg10_percent_median": 12.725,
+      "memory_working_set_mb_median": 54139.5,
+      "active_sandboxes_max": 86
+    },
+    {
+      "job_id": "12399595",
+      "heartbeat_samples": 10,
+      "cpu_count": 32,
+      "cpu_percent_median": 10.337,
+      "io_psi_full_avg10_percent_median": 13.365,
+      "memory_working_set_mb_median": 54091.5,
+      "active_sandboxes_max": 86
+    },
+    {
+      "job_id": "12399596",
+      "heartbeat_samples": 10,
+      "cpu_count": 32,
+      "cpu_percent_median": 18.921,
+      "io_psi_full_avg10_percent_median": 15.15,
+      "memory_working_set_mb_median": 53528.5,
+      "active_sandboxes_max": 85
+    },
+    {
+      "job_id": "12399597",
+      "heartbeat_samples": 10,
+      "cpu_count": 32,
+      "cpu_percent_median": 20.116,
+      "io_psi_full_avg10_percent_median": 12.11,
+      "memory_working_set_mb_median": 53533.5,
+      "active_sandboxes_max": 85
+    },
+    {
+      "job_id": "12399599",
+      "heartbeat_samples": 10,
+      "cpu_count": 32,
+      "cpu_percent_median": 22.798,
+      "io_psi_full_avg10_percent_median": 14.47,
+      "memory_working_set_mb_median": 53514.5,
+      "active_sandboxes_max": 85
+    },
+    {
+      "job_id": "12399601",
+      "heartbeat_samples": 10,
+      "cpu_count": 32,
+      "cpu_percent_median": 11.607,
+      "io_psi_full_avg10_percent_median": 12.66,
+      "memory_working_set_mb_median": 53527.5,
+      "active_sandboxes_max": 85
+    }
+  ]
+}

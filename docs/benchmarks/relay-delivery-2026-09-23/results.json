@@ -1,0 +1,38 @@
+{
+  "trials": [
+    {
+      "mode": "baseline",
+      "status_queries": 32,
+      "returned_rows": 16384,
+      "python_cpu_ms": 47.52819899999994,
+      "wall_ms": 145.56495589204133,
+      "status_transaction_ms": 65.23784925229847
+    },
+    {
+      "mode": "dirty",
+      "status_queries": 32,
+      "returned_rows": 32,
+      "python_cpu_ms": 11.033157000000182,
+      "wall_ms": 83.7755671236664,
+      "status_transaction_ms": 9.298671502619982
+    },
+    {
+      "mode": "dirty",
+      "status_queries": 32,
+      "returned_rows": 32,
+      "python_cpu_ms": 12.10141500000006,
+      "wall_ms": 84.9426609929651,
+      "status_transaction_ms": 9.976174216717482
+    },
+    {
+      "mode": "baseline",
+      "status_queries": 32,
+      "returned_rows": 16384,
+      "python_cpu_ms": 42.63140800000009,
+      "wall_ms": 143.24655197560787,
+      "status_transaction_ms": 63.91165545210242
+    }
+  ],
+  "source_sha256": "9d5623705d7a133d6c0303cb7dab813bd83c426403c0d5bc5d3b576b98007499",
+  "baseline_sha256": "b240d53cdd34d62a466e62f1f6a499f5a6e894e2c37920e6a21a4c35b8b494bb"
+}

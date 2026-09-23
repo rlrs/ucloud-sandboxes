@@ -1,0 +1,20 @@
+{
+  "passed": true,
+  "scope": "local fixture OCI HTTP, real Linux NBD/EROFS and live gVisor",
+  "runsc_sha256": "0fc94760976301c2137c2c39933ed623c0830069d0b12ffa2c1fd4626cc769f9",
+  "cold_materialize_seconds": 0.38633544999174774,
+  "frontend_replacement_seconds": 0.20141684194095433,
+  "frontend_replacement_blob_bytes": 0,
+  "image_bytes": 69312512,
+  "http_blob_bytes": 2391363,
+  "frontend_process_replacement": true,
+  "live_guest": true,
+  "whiteout": true,
+  "opaque_directory": true,
+  "hardlinks": true,
+  "xattrs": true,
+  "writable_copyup": true,
+  "retained_lower_gc_fence": true,
+  "backend_loss_fenced": true,
+  "cleanup_errors": []
+}

@@ -1,0 +1,136 @@
+test_acquired_transaction_timeout_is_never_admission_failure (tests.test_postgres_relay.PostgresRelayTests) ... relay notification failed; durable readers will reconcile
+ok
+test_batched_poll_fallback_observes_registration_revocation (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_batched_poll_fallback_recovers_enqueue_and_expired_lease_without_hints (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_commit_failure_rolls_back_both_result_and_intent (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_committed_result_releases_queued_park_even_without_notifications (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_conflicting_result_is_not_silently_accepted (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_cross_instance_enqueue_lease_result_and_reattach (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_deferred_park_releases_durable_claim_without_losing_intent (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_delivery_hints_read_only_changed_rows_at_512_waiters (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_delivery_reconciles_lost_hint_during_unrelated_hint_stream (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_does_not_park_after_result_committed_before_dispatch (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_expired_inference_lease_requeues_without_losing_request (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_gc_reclaims_reserved_space_without_losing_retained_response (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_http_acceptance_completes_while_wake_is_blocked (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_http_lost_ack_and_relay_restart_preserve_delivery (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_http_sibling_responses_keep_independent_delivery_obligations (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_http_terminal_worker_error_uses_same_acceptance_contract (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_idle_cutover_preserves_tokens_and_replay_and_fences_legacy_writer (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_idle_pollers_share_readiness_queries_and_cancel_cleanly (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_implicit_calls_remain_distinct_until_disconnect (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_import_recovers_after_source_fence_before_target_activation (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_import_refuses_active_requests_without_changing_source (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_late_delivery_waiter_recovers_failed_hint_read_and_cancelled_peer (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_later_model_transaction_admission_does_not_claim_safe_http_retry (tests.test_postgres_relay.PostgresRelayTests) ... Error handling request from 127.0.0.1
+Traceback (most recent call last):
+  File "/home/alex-admin/ucloud-architecture-full-20260923/ucloud_sandboxes/model_relay.py", line 786, in _wait_for_worker_response
+    response = await _state(request).wait_for_response(
+  File "/home/alex-admin/.local/share/uv/python/cpython-3.10.13-linux-x86_64-gnu/lib/python3.10/unittest/mock.py", line 2234, in _execute_mock_call
+    raise effect
+asyncio.exceptions.TimeoutError
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/alex-admin/ucloud-architecture-full-20260923/.venv-pg310/lib/python3.10/site-packages/aiohttp/web_protocol.py", line 575, in _handle_request
+    resp = await request_handler(request)
+  File "/home/alex-admin/ucloud-architecture-full-20260923/.venv-pg310/lib/python3.10/site-packages/aiohttp/web_app.py", line 559, in _handle
+    return await handler(request)
+  File "/home/alex-admin/ucloud-architecture-full-20260923/.venv-pg310/lib/python3.10/site-packages/aiohttp/web_middlewares.py", line 117, in impl
+    return await handler(request)
+  File "/home/alex-admin/ucloud-architecture-full-20260923/ucloud_sandboxes/model_relay.py", line 344, in _database_admission_middleware
+    return await handler(request)
+  File "/home/alex-admin/ucloud-architecture-full-20260923/ucloud_sandboxes/model_relay.py", line 666, in openai_responses
+    return await _openai_proxy(request, endpoint="/v1/responses")
+  File "/home/alex-admin/ucloud-architecture-full-20260923/ucloud_sandboxes/model_relay.py", line 749, in _openai_proxy
+    response = await _wait_for_worker_response(
+  File "/home/alex-admin/ucloud-architecture-full-20260923/ucloud_sandboxes/model_relay.py", line 800, in _wait_for_worker_response
+    persisted = await _state(request).cancel_request(
+  File "/home/alex-admin/.local/share/uv/python/cpython-3.10.13-linux-x86_64-gnu/lib/python3.10/unittest/mock.py", line 2234, in _execute_mock_call
+    raise effect
+ucloud_sandboxes.shared_control.model.DatabaseAdmissionUnavailable
+ok
+test_live_migration_creates_only_relay_tables_and_status_is_read_only (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_live_migration_preserves_unrelated_qualification_tables (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_lost_notifications_still_deliver_committed_response (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_mismatched_peer_lifecycle_configuration_is_rejected (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_no_pool_connection_held_during_wake (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_parallel_claimers_and_retries (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_pending_delivery_cannot_expire_from_retention_gc (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_poll_commits_worker_heartbeat_and_batch_leases_together (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_poll_hydration_failure_rolls_back_heartbeat_and_claims (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_poll_with_stale_registration_does_not_write_worker_heartbeat (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_pool_exhaustion_is_predispatch_503_and_retry_commits_once (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_postgres_http_startup_never_constructs_legacy_authority (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_process_replacement_recovers_uncertain_wake_same_identity (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_qualification_subapp_keeps_live_registrations_separate (tests.test_postgres_relay.PostgresRelayTests) ... Executing <Task pending name='Task-15297' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /home/alex-admin/.local/share/uv/python/cpython-3.10.13-linux-x86_64-gnu/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[Task.task_wakeup()] created at /home/alex-admin/.local/share/uv/python/cpython-3.10.13-linux-x86_64-gnu/lib/python3.10/asyncio/base_events.py:429> created at /home/alex-admin/.local/share/uv/python/cpython-3.10.13-linux-x86_64-gnu/lib/python3.10/unittest/async_case.py:117> took 0.164 seconds
+ok
+test_ready_wait_does_not_swallow_concurrent_cancellation (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_reattach_reads_one_snapshot_while_peer_commits_result (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_registration_cannot_seed_forged_resource_phase (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_registration_metadata_rejects_aliases_and_generation_coercion (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_registration_replacement_fences_old_leases_and_cancels_waiter (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_resource_phase_cancelled_transaction_leaves_no_partial_hint (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_resource_phase_http_auth_validation_and_revocation (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_resource_phase_is_advice_on_existing_park_not_new_lifecycle_work (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_resource_phase_real_sync_and_async_sdk_round_trip (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_resource_phase_sequence_expiry_and_registration_fences (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_result_and_wake_commit_atomically_and_retry_without_client (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_sdk_renewal_preserves_original_transport_through_deferred_park (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_shutdown_does_not_restart_after_dependency_consumes_cancellation (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_source_fence_cannot_activate_an_empty_other_database (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_storage_budget_is_admission_only_and_completed_result_survives (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_terminal_history_does_not_amplify_database_work (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_terminal_node_loss_retires_pending_and_leased_callers (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_timeout_wakes_parked_caller_to_deliver_terminal_error (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_two_http_servers_share_authority (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_wake_does_not_wait_for_park_ack_and_late_transport_proof_reattaches (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_wake_progresses_while_park_dispatch_is_full (tests.test_postgres_relay.PostgresRelayTests) ... ok
+test_cgroup_replacement_cannot_receive_reclaim (tests.test_resident_memory.ResidentMemoryTests) ... ok
+test_fresh_pre_wait_sample_cannot_price_a_later_heap (tests.test_resident_memory.ResidentMemoryTests) ... ok
+test_missing_or_stale_footprint_allows_only_one_capture_probe (tests.test_resident_memory.ResidentMemoryTests) ... ok
+test_pid_reuse_invalidates_observation_and_no_configured_limit_fallback (tests.test_resident_memory.ResidentMemoryTests) ... ok
+test_reclaim_windows_report_actual_progress_and_cancel_on_wake (tests.test_resident_memory.ResidentMemoryTests) ... ok
+test_samples_actual_charge_and_cost_counters_without_process_rss (tests.test_resident_memory.ResidentMemoryTests) ... ok
+test_shared_parent_cgroup_cannot_be_misattributed_to_incarnation (tests.test_resident_memory.ResidentMemoryTests) ... ok
+test_tmpfs_pages_are_not_counted_as_reclaimable_without_swap (tests.test_resident_memory.ResidentMemoryTests) ... ok
+test_unknown_probe_waits_for_measured_capture_to_settle (tests.test_resident_memory.ResidentMemoryTests) ... ok
+test_unsupported_reclaim_does_not_fall_back_to_anonymous_swap (tests.test_resident_memory.ResidentMemoryTests) ... ok
+test_wrong_cgroup_and_incomplete_counters_stay_unknown (tests.test_resident_memory.ResidentMemoryTests) ... ok
+test_activity_release_unwinds_coordinator_when_storage_cleanup_fails (tests.test_node_runtime.DirectNodeRuntimeTests) ... ok
+test_idle_parker_reuses_inventory_until_external_registry_revision_changes (tests.test_node_runtime.DirectNodeRuntimeTests) ... ok
+test_idle_parking_uses_lifecycle_and_skips_managed_agents (tests.test_node_runtime.DirectNodeRuntimeTests) ... ok
+test_local_wake_reaches_storage_while_publication_is_pending (tests.test_node_runtime.DirectNodeRuntimeTests) ... ok
+test_park_still_rejects_attached_activity (tests.test_node_runtime.DirectNodeRuntimeTests) ... ok
+test_tool_joins_transition_before_reading_registration_or_restoring (tests.test_node_runtime.DirectNodeRuntimeTests) ... ok
+test_tool_transition_timeout_is_retryable_before_exec_acceptance (tests.test_node_runtime.DirectNodeRuntimeTests) ... ok
+test_wake_is_idempotent_while_running_activity_is_attached (tests.test_node_runtime.DirectNodeRuntimeTests) ... ok
+test_wake_joins_an_existing_transition_then_rechecks_state (tests.test_node_runtime.DirectNodeRuntimeTests) ... ok
+test_failed_checkpoint_keeps_intent (tests.test_node_runtime.LocalRelayParkTests) ... ok
+test_missing_footprints_do_not_fan_out_foreground_or_background_captures (tests.test_node_runtime.LocalRelayParkTests) ... ok
+test_parker_runs_when_idle_parking_is_disabled (tests.test_node_runtime.LocalRelayParkTests) ... ok
+test_pressure_parks_without_another_http_request_or_polling_registry (tests.test_node_runtime.LocalRelayParkTests) ... ok
+test_replaced_generation_cannot_be_parked (tests.test_node_runtime.LocalRelayParkTests) ... ok
+test_restarted_worker_accepts_durable_retry (tests.test_node_runtime.LocalRelayParkTests) ... ok
+test_slow_checkpoint_does_not_block_another_selected_safe_wait (tests.test_node_runtime.LocalRelayParkTests) ... ok
+test_stopped_local_recheck_keeps_durable_intent_without_parking (tests.test_node_runtime.LocalRelayParkTests) ... ok
+test_wake_cancels_local_park_and_replay (tests.test_node_runtime.LocalRelayParkTests) ... ok
+test_wake_intent_prevents_late_park_even_when_restore_failed (tests.test_node_runtime.RelayLifecycleFenceTests) ... ok
+test_reply_during_grace_avoids_checkpoint_and_durable_fence_survives_new_manager (tests.test_node_runtime.WarmRelayParkTests) ... ok
+test_warm_park (unittest.loader._FailedTest) ... ERROR
+
+======================================================================
+ERROR: test_warm_park (unittest.loader._FailedTest)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_warm_park
+Traceback (most recent call last):
+  File "/home/alex-admin/.local/share/uv/python/cpython-3.10.13-linux-x86_64-gnu/lib/python3.10/unittest/loader.py", line 154, in loadTestsFromName
+    module = __import__(module_name)
+ModuleNotFoundError: No module named 'tests.test_warm_park'
+
+
+----------------------------------------------------------------------
+Ran 91 tests in 16.984s
+
+FAILED (errors=1)

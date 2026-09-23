@@ -1,0 +1,14 @@
+{
+  "version": "0.5.114rc20",
+  "commit": "working-tree-candidate",
+  "installed_at": "2026-09-23T17:23:01.375978+00:00",
+  "matched_package_files": 142,
+  "health": {
+    "ok": true,
+    "service": "control-plane",
+    "version": "0.5.114rc20"
+  },
+  "relay_backend": "postgres",
+  "node_package_root": "/work/ucloud-sandboxes/release/0.5.114rc20",
+  "autoscaler": "held until worker upgrade"
+}

@@ -1,0 +1,58 @@
+{
+  "run_id": "relay-load-908d18341181",
+  "result": "failed: managed-start admission deadline escaped as an internal HTTP 503",
+  "managed_records": {
+    "running": 252,
+    "signaled": 0,
+    "failed": 0,
+    "nonzero_exited": 0
+  },
+  "managed_observed_at": "2026-09-23T13:48:08.930540+00:00",
+  "samples_are_instantaneous_not_fault_time_proof": true,
+  "workers": [
+    {
+      "job_id": "12400566",
+      "samples": 128,
+      "sample_errors": 0,
+      "backing_total_bytes": 89551843328,
+      "minimum_backing_available_bytes": 13965197312,
+      "minimum_backing_at": "2026-09-23T13:46:58.312020+00:00",
+      "minimum_physical_available_bytes": 11502280704,
+      "minimum_physical_at": "2026-09-23T13:46:58.312020+00:00",
+      "maximum_shmem_bytes": 75608059904
+    },
+    {
+      "job_id": "12400568",
+      "samples": 128,
+      "sample_errors": 0,
+      "backing_total_bytes": 89551835136,
+      "minimum_backing_available_bytes": 16202960896,
+      "minimum_backing_at": "2026-09-23T13:46:55.015306+00:00",
+      "minimum_physical_available_bytes": 14824157184,
+      "minimum_physical_at": "2026-09-23T13:46:55.015306+00:00",
+      "maximum_shmem_bytes": 73368141824
+    },
+    {
+      "job_id": "12400569",
+      "samples": 128,
+      "sample_errors": 0,
+      "backing_total_bytes": 89551843328,
+      "minimum_backing_available_bytes": 14235729920,
+      "minimum_backing_at": "2026-09-23T13:46:37.685311+00:00",
+      "minimum_physical_available_bytes": 13420777472,
+      "minimum_physical_at": "2026-09-23T13:46:57.702205+00:00",
+      "maximum_shmem_bytes": 74433138688
+    },
+    {
+      "job_id": "12400572",
+      "samples": 127,
+      "sample_errors": 0,
+      "backing_total_bytes": 89551843328,
+      "minimum_backing_available_bytes": 12944785408,
+      "minimum_backing_at": "2026-09-23T13:46:48.380206+00:00",
+      "minimum_physical_available_bytes": 11526651904,
+      "minimum_physical_at": "2026-09-23T13:46:50.382500+00:00",
+      "maximum_shmem_bytes": 76628140032
+    }
+  ]
+}

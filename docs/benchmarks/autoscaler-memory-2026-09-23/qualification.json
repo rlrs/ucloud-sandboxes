@@ -1,0 +1,51 @@
+{
+  "version": "0.5.114rc22",
+  "wheel_sha256": "2b3376aba2d5abe56b4145233dc38a287903c60713585b5a41bdd20b564489d0",
+  "production_files_changed_from_rc20": [
+    "policy.py",
+    "cli.py",
+    "consolidation.py"
+  ],
+  "focused_linux_policy_tests": 82,
+  "focused_linux_consolidation_tests": 8,
+  "full_linux": {
+    "tests": 1748,
+    "seconds": 221.484,
+    "skipped": 12,
+    "failures": 0,
+    "errors": 0,
+    "source_manifest_verified_before_and_after": true,
+    "postgres": "real isolated database"
+  },
+  "deployed": true,
+  "initial_full_linux": {
+    "tests": 1748,
+    "seconds": 222.125,
+    "skipped": 12,
+    "failures": 10,
+    "details": "Legacy expectations for max-single pending memory and one-worker pressure scale-out. Fixed tests isolate RAM-fitting startup queues and assert bounded waves/provisioning credits; no product changes."
+  },
+  "test_manifest_sha256": "4bc14e8e37a7c50401001a7dca4041d263e1072fcdc8df2dbd301e5e988965ef",
+  "review": "Independent frozen-source review passed; only policy, CLI planning projection and consolidation changed.",
+  "production_policy": {
+    "min_nodes": 0,
+    "max_nodes": 8,
+    "target_memory_utilization": 0.8,
+    "max_create_per_cycle": 2,
+    "parked_wake_consolidation_enabled": true
+  },
+  "production_smoke": {
+    "run_id": "relay-load-97cd6ecf0238",
+    "worker_job": "12400751",
+    "version": "0.5.114rc22",
+    "sandboxes": 8,
+    "completed_cycles": 16,
+    "correct": true,
+    "slo_passed": false,
+    "continuation_p95_seconds": 0.9675078527070582,
+    "useful_exec_p95_seconds": 1.71035787765868,
+    "errors": [],
+    "cleanup_errors": [],
+    "scope": "Functional cold provisioning and park/wake smoke; no saturation/density qualification."
+  }
+}

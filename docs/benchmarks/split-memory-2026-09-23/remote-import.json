@@ -1,0 +1,83 @@
+{
+  "abort_same_original": true,
+  "cycles": [
+    {
+      "capture_id": "cebeb888d952ed7f6bd797698d768299ab448f14ed5d292c386682583d5755ee",
+      "timings_ms": {
+        "artifact_cleanup": 4.606477999914205,
+        "begin_restore_journal": 3.899790999639663,
+        "candidate_fence": 0.8938300006775535,
+        "candidate_journal": 3.4566109998195316,
+        "candidate_resume": 26.91096199941967,
+        "commit_running_journal": 3.7493540003197268,
+        "readiness_exec": 15.777042999616242,
+        "runsc_restore": 92.64737100056664,
+        "runsc_state": 16.56928899956256,
+        "validate_artifact": 57.07325399998808,
+        "warden_total": 225.68482399947243
+      },
+      "wake_seconds": 0.22571564000008948
+    },
+    {
+      "capture_id": "66e66acbde0a589a61bdc705a6922602cfcdade54bded41c82bc23ca46c767e8",
+      "timings_ms": {
+        "artifact_cleanup": 4.017668999949819,
+        "begin_restore_journal": 3.727670999978727,
+        "candidate_fence": 0.6681490003757062,
+        "candidate_journal": 3.0188800001269556,
+        "candidate_resume": 22.16014500027086,
+        "commit_running_journal": 3.5923169998568483,
+        "readiness_exec": 16.400985000473156,
+        "runsc_restore": 100.7128740002372,
+        "runsc_state": 13.968750999993063,
+        "validate_artifact": 53.9547019998281,
+        "warden_total": 222.40416800013918
+      },
+      "wake_seconds": 0.22243317199990997
+    },
+    {
+      "capture_id": "c6285402f1a66385e3678669cf9789f6b7c21b55258ab6da41c06d754baff713",
+      "timings_ms": {
+        "artifact_cleanup": 3.950036999412987,
+        "begin_restore_journal": 4.1319209994981065,
+        "candidate_fence": 0.864414999341534,
+        "candidate_journal": 3.7651880002158578,
+        "candidate_resume": 23.525026000243088,
+        "commit_running_journal": 4.4383449994711555,
+        "readiness_exec": 20.089616999939608,
+        "runsc_restore": 92.91822900013358,
+        "runsc_state": 15.23617499969987,
+        "validate_artifact": 61.785933000464865,
+        "warden_total": 230.86332700040657
+      },
+      "wake_seconds": 0.23089981199973408
+    }
+  ],
+  "project_quota_errno": 28,
+  "quota": {
+    "memory_backing_allocations": 1,
+    "memory_backing_hard_reserved_bytes": 1677721600
+  },
+  "remote_import": {
+    "memory_manifest": "sha256:d1c1ff9b8f52379d9bbdf6ddeea7bfa8c40e0d0ce945eb2ee6e44bd58ae7d633",
+    "root_manifest": "sha256:0904a348f89e2d11cb4375f79b5b4e6dba69c51023975f77701031d3a6637e99",
+    "status": "passed",
+    "wake_timings_ms": {
+      "artifact_cleanup": 3.6647960005211644,
+      "begin_restore_journal": 3.238543000406935,
+      "candidate_fence": 0.732806999621971,
+      "candidate_journal": 3.4506229994804016,
+      "candidate_resume": 19.129106999571377,
+      "commit_running_journal": 3.9528819997940445,
+      "readiness_exec": 15.632593999725941,
+      "runsc_restore": 89.83966999949189,
+      "runsc_state": 12.451657999918098,
+      "validate_artifact": 55.412164000699704,
+      "warden_total": 207.58115700027702
+    },
+    "workspace_manifest": "sha256:532f536f0ad036a4f948c829bbd3cff044c7ce5bd2156d40130eae1335fef514"
+  },
+  "schema": 1,
+  "status": "passed",
+  "test_root": "/home/ucloud/native-capture-qualification/memory-xfs/ucloud-storage-native-36do4kvs"
+}

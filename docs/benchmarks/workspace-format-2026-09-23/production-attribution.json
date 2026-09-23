@@ -1,0 +1,428 @@
+{
+  "run_id": "relay-load-83f8057c723a",
+  "started_at": "2026-09-23T12:00:25.076173+00:00",
+  "finished_at": "2026-09-23T12:04:27.132630+00:00",
+  "last_resource_sample_at": "2026-09-23T12:04:18.060542+00:00",
+  "completed_cycles": 2048,
+  "park_observed": 0,
+  "file_payload_bytes": 8589934592,
+  "resource_summary": {
+    "sample_count": 47,
+    "observed_worker_seconds": 939.886528968811,
+    "sampled_cpu_seconds": 5485.052383834426,
+    "cpu_coverage_worker_seconds": 939.886528968811,
+    "sampled_host_memory_mib_seconds": 35941532.08367205,
+    "memory_coverage_worker_seconds": 939.886528968811,
+    "device_read_bytes": 11018240,
+    "device_write_bytes": 87873823744,
+    "device_read_bytes_coverage_worker_seconds": 939.886528968811,
+    "device_write_bytes_coverage_worker_seconds": 939.886528968811,
+    "scope": "sampled whole worker costs; excludes missing/stale intervals; not per-sandbox attribution"
+  },
+  "workers": {
+    "12400309": [
+      {
+        "at": "2026-09-23T12:00:03.145825+00:00",
+        "write_bytes": 108512012800,
+        "active": 0,
+        "dirty_bytes": 290816,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:00:25.188046+00:00",
+        "write_bytes": 108576688640,
+        "active": 0,
+        "dirty_bytes": 73728,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:00:45.406629+00:00",
+        "write_bytes": 117457967104,
+        "active": 58,
+        "dirty_bytes": 4433940480,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:01:08.628837+00:00",
+        "write_bytes": 123483695104,
+        "active": 69,
+        "dirty_bytes": 1517219840,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:01:33.797416+00:00",
+        "write_bytes": 124951960576,
+        "active": 69,
+        "dirty_bytes": 429125632,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:01:58.111045+00:00",
+        "write_bytes": 125258216448,
+        "active": 69,
+        "dirty_bytes": 496144384,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:02:23.347863+00:00",
+        "write_bytes": 125673059840,
+        "active": 69,
+        "dirty_bytes": 466702336,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:02:48.577824+00:00",
+        "write_bytes": 126109144576,
+        "active": 69,
+        "dirty_bytes": 402006016,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:03:13.779802+00:00",
+        "write_bytes": 126385609216,
+        "active": 69,
+        "dirty_bytes": 490377216,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:03:36.951173+00:00",
+        "write_bytes": 126687174144,
+        "active": 69,
+        "dirty_bytes": 526327808,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:03:58.144309+00:00",
+        "write_bytes": 127063896576,
+        "active": 69,
+        "dirty_bytes": 288964608,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      }
+    ],
+    "12400310": [
+      {
+        "at": "2026-09-23T12:00:07.408223+00:00",
+        "write_bytes": 112992107008,
+        "active": 0,
+        "dirty_bytes": 204800,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:00:27.502790+00:00",
+        "write_bytes": 113764831232,
+        "active": 10,
+        "dirty_bytes": 2048131072,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:00:47.893106+00:00",
+        "write_bytes": 123806807552,
+        "active": 61,
+        "dirty_bytes": 5208915968,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:01:10.289375+00:00",
+        "write_bytes": 130938478592,
+        "active": 67,
+        "dirty_bytes": 260542464,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:01:35.445703+00:00",
+        "write_bytes": 132111173120,
+        "active": 67,
+        "dirty_bytes": 357826560,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:02:00.625275+00:00",
+        "write_bytes": 133388687872,
+        "active": 67,
+        "dirty_bytes": 333320192,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:02:25.993381+00:00",
+        "write_bytes": 134491556352,
+        "active": 67,
+        "dirty_bytes": 492654592,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:02:50.618212+00:00",
+        "write_bytes": 135819062272,
+        "active": 67,
+        "dirty_bytes": 367628288,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:03:11.858964+00:00",
+        "write_bytes": 136801758208,
+        "active": 67,
+        "dirty_bytes": 436494336,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:03:36.026531+00:00",
+        "write_bytes": 137884781568,
+        "active": 67,
+        "dirty_bytes": 555655168,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:03:58.299305+00:00",
+        "write_bytes": 139123014656,
+        "active": 67,
+        "dirty_bytes": 301023232,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      }
+    ],
+    "12400311": [
+      {
+        "at": "2026-09-23T12:00:16.887091+00:00",
+        "write_bytes": 113939277312,
+        "active": 0,
+        "dirty_bytes": 442368,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:00:37.107025+00:00",
+        "write_bytes": 117768337408,
+        "active": 41,
+        "dirty_bytes": 6943268864,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:01:01.396213+00:00",
+        "write_bytes": 124826421760,
+        "active": 57,
+        "dirty_bytes": 4648665088,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:01:26.721646+00:00",
+        "write_bytes": 130617952256,
+        "active": 57,
+        "dirty_bytes": 343408640,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:01:51.038455+00:00",
+        "write_bytes": 131983554560,
+        "active": 57,
+        "dirty_bytes": 401174528,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:02:16.288901+00:00",
+        "write_bytes": 133516154880,
+        "active": 57,
+        "dirty_bytes": 337330176,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:02:38.494730+00:00",
+        "write_bytes": 134849468416,
+        "active": 57,
+        "dirty_bytes": 284803072,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:03:03.829410+00:00",
+        "write_bytes": 136318894592,
+        "active": 57,
+        "dirty_bytes": 306044928,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:03:24.069744+00:00",
+        "write_bytes": 137366065664,
+        "active": 57,
+        "dirty_bytes": 451010560,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:03:46.254008+00:00",
+        "write_bytes": 138801200128,
+        "active": 57,
+        "dirty_bytes": 293134336,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:04:10.470977+00:00",
+        "write_bytes": 140089287680,
+        "active": 57,
+        "dirty_bytes": 206221312,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      }
+    ],
+    "12400312": [
+      {
+        "at": "2026-09-23T12:00:10.206345+00:00",
+        "write_bytes": 107629745664,
+        "active": 0,
+        "dirty_bytes": 69632,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:00:30.263669+00:00",
+        "write_bytes": 107712061952,
+        "active": 25,
+        "dirty_bytes": 5613387776,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:00:50.389513+00:00",
+        "write_bytes": 117514697216,
+        "active": 63,
+        "dirty_bytes": 4919881728,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:01:15.513507+00:00",
+        "write_bytes": 122550245888,
+        "active": 63,
+        "dirty_bytes": 255389696,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:01:40.667226+00:00",
+        "write_bytes": 122874107904,
+        "active": 63,
+        "dirty_bytes": 298897408,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:02:04.903536+00:00",
+        "write_bytes": 123238680064,
+        "active": 63,
+        "dirty_bytes": 257994752,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:02:30.030943+00:00",
+        "write_bytes": 123354659840,
+        "active": 63,
+        "dirty_bytes": 500137984,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:02:55.183782+00:00",
+        "write_bytes": 123902564864,
+        "active": 63,
+        "dirty_bytes": 303431680,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:03:20.341089+00:00",
+        "write_bytes": 123972150784,
+        "active": 63,
+        "dirty_bytes": 537731072,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:03:45.468543+00:00",
+        "write_bytes": 124486718976,
+        "active": 63,
+        "dirty_bytes": 314404864,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      },
+      {
+        "at": "2026-09-23T12:04:10.610737+00:00",
+        "write_bytes": 124670767616,
+        "active": 63,
+        "dirty_bytes": 205664256,
+        "publications": 0,
+        "compactions": 0,
+        "uploaded_bytes": 0
+      }
+    ]
+  }
+}

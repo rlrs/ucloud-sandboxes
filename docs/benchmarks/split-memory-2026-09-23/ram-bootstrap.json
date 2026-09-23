@@ -1,0 +1,16 @@
+{
+  "status": "passed",
+  "initial": {
+    "schema": 1,
+    "mount_root": "/home/ucloud/native-capture-qualification/ram-bootstrap/application-memory",
+    "capacity_bytes": 1020051456,
+    "noswap": true
+  },
+  "repeat": {
+    "schema": 1,
+    "mount_root": "/home/ucloud/native-capture-qualification/ram-bootstrap/application-memory",
+    "capacity_bytes": 1020051456,
+    "noswap": true
+  },
+  "mount": "tmpfs ucloud-application-memory rw,nosuid,nodev,relatime,size=996144k,mode=700,inode64,noswap"
+}

@@ -1,0 +1,2 @@
+2026-09-23T15:12:41+00:00 sandbox-node-fd55aff74a-1 kernel: clocksource: Long readout interval, skipping watchdog check: cs_nsec: 2585223191 wd_nsec: 2585223059
+2026-09-23T15:13:04+00:00 sandbox-node-8e55eab653-1 kernel: clocksource: Long readout interval, skipping watchdog check: cs_nsec: 3399559762 wd_nsec: 3399559733

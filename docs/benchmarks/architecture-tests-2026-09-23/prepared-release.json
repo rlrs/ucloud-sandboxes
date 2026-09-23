@@ -1,0 +1,11 @@
+{
+  "version": "0.5.114",
+  "status": "superseded-held-do-not-deploy",
+  "server_source_qualification": "byte-identical to rc18, 130 Python files; 1635 Linux tests and117 Python3.10 path tests",
+  "wheel_sha256": "c199e0acd25ffd9567df28fa2faf449f64a11d0f066f265dcf741be751dda180",
+  "sandbox_bundle_sha256": "b2a0f669a5542317e205c9853f7ef59d07f07195307d58628c7cd66d1275994f",
+  "builder_bundle_sha256": "cde8cdec668fe601ce2d47a5f95260e97b1a03c6562c5fb64acd66ab827226a6",
+  "default_rootfs": "Docker",
+  "immutable_environments": "opt-in; disabled in production",
+  "superseded_by": "0.5.114rc19 hybrid-memory qualification"
+}

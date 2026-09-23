@@ -1,0 +1,55 @@
+{
+  "scope": "Isolated Linux VM ABBA; 512 MiB heap, 50% high entropy, 128 MiB repeatedly dirtied, SQLite WAL FULL, workspace sync every 2 seconds, 30 seconds each; no checkpoints or density claim",
+  "runs": [
+    {
+      "file": "interference-ram50-0-coupled.json",
+      "layout": "coupled",
+      "passed": true,
+      "commits": 3809,
+      "commit_p95_seconds": 0.001538594,
+      "commit_p99_seconds": 0.012302745,
+      "physical_write_bytes_per_second": 19582494.894889228,
+      "elapsed_seconds": 31.189874185000008,
+      "runtime_sha256": "cec4f82bd876dff07450ef600b97f1b4b4622cb202e5da0fc96f1e56492eb6ba",
+      "workload_sha256": "79b89e8d459b3bdef65f7723a1185392b5be98f8343003347c2cf3c5fc3f3c1b"
+    },
+    {
+      "file": "interference-ram50-1-ram.json",
+      "layout": "ram",
+      "passed": true,
+      "commits": 4531,
+      "commit_p95_seconds": 0.001267935,
+      "commit_p99_seconds": 0.001772758,
+      "physical_write_bytes_per_second": 2676492.738014598,
+      "elapsed_seconds": 31.10535172300024,
+      "runtime_sha256": "cec4f82bd876dff07450ef600b97f1b4b4622cb202e5da0fc96f1e56492eb6ba",
+      "workload_sha256": "79b89e8d459b3bdef65f7723a1185392b5be98f8343003347c2cf3c5fc3f3c1b"
+    },
+    {
+      "file": "interference-ram50-2-ram.json",
+      "layout": "ram",
+      "passed": true,
+      "commits": 4481,
+      "commit_p95_seconds": 0.001470121,
+      "commit_p99_seconds": 0.002189537,
+      "physical_write_bytes_per_second": 2626174.049787872,
+      "elapsed_seconds": 31.05700020399945,
+      "runtime_sha256": "cec4f82bd876dff07450ef600b97f1b4b4622cb202e5da0fc96f1e56492eb6ba",
+      "workload_sha256": "79b89e8d459b3bdef65f7723a1185392b5be98f8343003347c2cf3c5fc3f3c1b"
+    },
+    {
+      "file": "interference-ram50-3-coupled.json",
+      "layout": "coupled",
+      "passed": true,
+      "commits": 4076,
+      "commit_p95_seconds": 0.001559816,
+      "commit_p99_seconds": 0.014207532,
+      "physical_write_bytes_per_second": 23968844.447683323,
+      "elapsed_seconds": 31.051744427000813,
+      "runtime_sha256": "cec4f82bd876dff07450ef600b97f1b4b4622cb202e5da0fc96f1e56492eb6ba",
+      "workload_sha256": "79b89e8d459b3bdef65f7723a1185392b5be98f8343003347c2cf3c5fc3f3c1b"
+    }
+  ],
+  "mean_write_reduction_fraction": 0.8782433131139327,
+  "mean_commit_throughput_improvement_fraction": 0.1429296131896005
+}

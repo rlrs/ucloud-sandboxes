@@ -1,0 +1,151 @@
+pinned hibernation patch series is already applied
+Computing main repo mapping: 
+Loading: 
+Loading: 0 packages loaded
+Analyzing: target //pkg/sentry/pgalloc:pgalloc_test (0 packages loaded, 0 targets configured)
+Analyzing: target //pkg/sentry/pgalloc:pgalloc_test (0 packages loaded, 0 targets configured)
+
+INFO: Analyzed target //pkg/sentry/pgalloc:pgalloc_test (0 packages loaded, 1 target configured).
+INFO: Found 1 test target...
+Target //pkg/sentry/pgalloc:pgalloc_test up-to-date:
+  bazel-bin/pkg/sentry/pgalloc/pgalloc_test_/pgalloc_test
+INFO: Elapsed time: 1.359s, Critical Path: 0.03s
+INFO: 1 process: 10 action cache hit, 1 internal.
+INFO: Build completed successfully, 1 total action
+//pkg/sentry/pgalloc:pgalloc_test                               (cached) PASSED in 0.1s
+
+Executed 0 out of 1 test: 1 test passes.
+Computing main repo mapping: 
+Loading: 
+Loading: 0 packages loaded
+Analyzing: target //runsc/boot:boot_test (0 packages loaded, 0 targets configured)
+Analyzing: target //runsc/boot:boot_test (0 packages loaded, 0 targets configured)
+
+Analyzing: target //runsc/boot:boot_test (0 packages loaded, 14727 targets configured)
+
+INFO: Analyzed target //runsc/boot:boot_test (0 packages loaded, 14742 targets configured).
+[1,739 / 2,301] checking cached actions
+[4,461 / 4,462] 1 / 1 tests; checking cached actions
+INFO: Found 1 test target...
+Target //runsc/boot:boot_test up-to-date:
+  bazel-bin/runsc/boot/boot_test_/boot_test
+INFO: Elapsed time: 6.195s, Critical Path: 0.08s
+INFO: 1 process: 3533 action cache hit, 1 internal.
+INFO: Build completed successfully, 1 total action
+//runsc/boot:boot_test                                          (cached) PASSED in 0.1s
+
+Executed 0 out of 1 test: 1 test passes.
+Computing main repo mapping: 
+Loading: 
+Loading: 0 packages loaded
+Analyzing: target //runsc/cmd:cmd_test (0 packages loaded, 0 targets configured)
+Analyzing: target //runsc/cmd:cmd_test (0 packages loaded, 0 targets configured)
+
+INFO: Analyzed target //runsc/cmd:cmd_test (0 packages loaded, 883 targets configured).
+[5,245 / 5,246] 1 / 1 tests; checking cached actions
+INFO: Found 1 test target...
+Target //runsc/cmd:cmd_test up-to-date:
+  bazel-bin/runsc/cmd/cmd_test_/cmd_test
+INFO: Elapsed time: 2.129s, Critical Path: 0.05s
+INFO: 1 process: 794 action cache hit, 1 internal.
+INFO: Build completed successfully, 1 total action
+//runsc/cmd:cmd_test                                            (cached) PASSED in 0.1s
+
+Executed 0 out of 1 test: 1 test passes.
+There were tests whose specified size is too big. Use the --test_verbose_timeout_warnings command line option to see which ones these are.
+Computing main repo mapping: 
+Loading: 
+Loading: 0 packages loaded
+Analyzing: target //runsc/container:container_test (0 packages loaded, 0 targets configured)
+Analyzing: target //runsc/container:container_test (0 packages loaded, 0 targets configured)
+
+INFO: Analyzed target //runsc/container:container_test (0 packages loaded, 45 targets configured).
+[5,283 / 5,284] Testing //runsc/container:container_test (shard 7 of 8); 0s processwrapper-sandbox
+INFO: Found 1 test target...
+Target //runsc/container:container_test up-to-date:
+  bazel-bin/runsc/container/container_test_/container_test
+INFO: Elapsed time: 2.718s, Critical Path: 1.18s
+INFO: 2 processes: 56 action cache hit, 2 processwrapper-sandbox.
+INFO: Build completed successfully, 2 total actions
+//runsc/container:container_test                            (7/8 cached) PASSED in 1.1s
+  Stats over 8 runs: max = 1.1s, min = 0.1s, avg = 0.2s, dev = 0.3s
+
+Executed 1 out of 1 test: 1 test passes.
+There were tests whose specified size is too big. Use the --test_verbose_timeout_warnings command line option to see which ones these are.
+Computing main repo mapping: 
+Loading: 
+Loading: 0 packages loaded
+Analyzing: target //pkg/sentry/fsimpl/tmpfs:tmpfs_test (0 packages loaded, 0 targets configured)
+Analyzing: target //pkg/sentry/fsimpl/tmpfs:tmpfs_test (0 packages loaded, 0 targets configured)
+
+INFO: Analyzed target //pkg/sentry/fsimpl/tmpfs:tmpfs_test (1 packages loaded, 12 targets configured).
+[1,393 / 1,396] [Prepa] GoCompilePkgExternal pkg/sentry/fsimpl/tmpfs/tmpfs_test_test.external.a
+[1,395 / 1,396] GoLink pkg/sentry/fsimpl/tmpfs/tmpfs_test_/tmpfs_test; 0s processwrapper-sandbox
+INFO: Found 1 test target...
+Target //pkg/sentry/fsimpl/tmpfs:tmpfs_test up-to-date:
+  bazel-bin/pkg/sentry/fsimpl/tmpfs/tmpfs_test_/tmpfs_test
+INFO: Elapsed time: 3.816s, Critical Path: 2.42s
+INFO: 15 processes: 5 internal, 10 processwrapper-sandbox.
+INFO: Build completed successfully, 15 total actions
+//pkg/sentry/fsimpl/tmpfs:tmpfs_test                                     PASSED in 0.2s
+
+Executed 1 out of 1 test: 1 test passes.
+Computing main repo mapping: 
+Loading: 
+Loading: 0 packages loaded
+Analyzing: target //runsc/sandbox:sandbox_test (0 packages loaded, 0 targets configured)
+Analyzing: target //runsc/sandbox:sandbox_test (0 packages loaded, 0 targets configured)
+
+INFO: Analyzed target //runsc/sandbox:sandbox_test (0 packages loaded, 14319 targets configured).
+[1 / 1] no actions running
+[2,677 / 2,747] checking cached actions
+[4,255 / 4,398] [Prepa] GoTestGenTest runsc/sandbox/sandbox_test_/testmain.go
+[4,524 / 4,528] GoCompilePkg runsc/sandbox/sandbox_test.internal.a; 0s processwrapper-sandbox
+[4,527 / 4,528] GoLink runsc/sandbox/sandbox_test_/sandbox_test; 1s processwrapper-sandbox
+INFO: Found 1 test target...
+Target //runsc/sandbox:sandbox_test up-to-date:
+  bazel-bin/runsc/sandbox/sandbox_test_/sandbox_test
+INFO: Elapsed time: 10.209s, Critical Path: 3.80s
+INFO: 10 processes: 3138 action cache hit, 3 internal, 7 processwrapper-sandbox.
+INFO: Build completed successfully, 10 total actions
+//runsc/sandbox:sandbox_test                                             PASSED in 0.2s
+
+Executed 1 out of 1 test: 1 test passes.
+Computing main repo mapping: 
+Loading: 
+Loading: 0 packages loaded
+Analyzing: target //runsc/specutils:specutils_test (0 packages loaded, 0 targets configured)
+Analyzing: target //runsc/specutils:specutils_test (0 packages loaded, 0 targets configured)
+
+INFO: Analyzed target //runsc/specutils:specutils_test (0 packages loaded, 4 targets configured).
+[1,973 / 1,974] [Prepa] GoLink runsc/specutils/specutils_test_/specutils_test
+[1,974 / 1,975] [Prepa] Testing //runsc/specutils:specutils_test
+INFO: Found 1 test target...
+Target //runsc/specutils:specutils_test up-to-date:
+  bazel-bin/runsc/specutils/specutils_test_/specutils_test
+INFO: Elapsed time: 3.610s, Critical Path: 1.96s
+INFO: 10 processes: 3 internal, 7 processwrapper-sandbox.
+INFO: Build completed successfully, 10 total actions
+//runsc/specutils:specutils_test                                         PASSED in 0.1s
+
+Executed 1 out of 1 test: 1 test passes.
+Computing main repo mapping: 
+Loading: 
+Loading: 0 packages loaded
+Analyzing: target //:release (0 packages loaded, 0 targets configured)
+Analyzing: target //:release (0 packages loaded, 0 targets configured)
+
+INFO: Analyzed target //:release (0 packages loaded, 14335 targets configured).
+[1 / 1] no actions running
+INFO: Found 1 target...
+Target //:release up-to-date:
+  bazel-bin/release/runsc
+  bazel-bin/release/containerd-shim-runsc-v1
+  bazel-bin/release/gvisor-bin/checkpointgofer
+  bazel-bin/release/gvisor-bin/runsc-metric-server
+  bazel-bin/release/gvisor-bin/gvisor_sentry
+  bazel-bin/release/gvisor-bin/gvisor-sentry-prewarmer
+INFO: Elapsed time: 4.819s, Critical Path: 0.07s
+INFO: 1 process: 3261 action cache hit, 1 internal.
+INFO: Build completed successfully, 1 total action
+/home/ucloud/memory-tier/attested-runtime/gvisor-hibernate-1b77d75e7cc0de2d7da901aab609535933d874ab9030365ab85b33016d113585/runsc

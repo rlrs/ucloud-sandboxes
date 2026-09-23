@@ -1,0 +1,158 @@
+{
+  "layout": "coupled",
+  "passed": true,
+  "seconds": 30,
+  "resident_mb": 512,
+  "dirty_mb": 128,
+  "entropy_percent": 0,
+  "workspace_sync_interval": 2,
+  "runtime_sha256": "a005058b5a097a9ec6c28d0d3e14ea7d2992fc0cf2c11a0eb62d7553e7068613",
+  "workload_sha256": "79b89e8d459b3bdef65f7723a1185392b5be98f8343003347c2cf3c5fc3f3c1b",
+  "scope": "isolated whole-VM physical I/O; guest SQLite and dirty memory; no checkpoint",
+  "guest": {
+    "commits": 4133,
+    "seconds": 30.000625,
+    "commit_p50": 0.00097274,
+    "commit_p95": 0.001578645,
+    "commit_p99": 0.00387785,
+    "dirty_generations": 1009,
+    "resident_bytes": 536870912,
+    "dirty_bytes": 134217728,
+    "entropy_percent": 0,
+    "verified": true
+  },
+  "elapsed_seconds": 30.805453323999245,
+  "workspace_sync_seconds": [
+    0.1756748379993951,
+    0.1711703020000641,
+    0.2941038010003467,
+    0.27450484600012715,
+    0.22616306299914868,
+    0.2991932380000435,
+    0.4424204200004169,
+    0.4398131399993872,
+    0.2159257350003827,
+    0.3014978209994297,
+    0.2340886000001774,
+    0.33457886500036693,
+    0.4245389019997674
+  ],
+  "cgroup_memory_samples": [
+    {
+      "memory.current": "569462784",
+      "memory.peak": "569462784",
+      "memory.max": "1073741824",
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0"
+    },
+    {
+      "memory.current": "569196544",
+      "memory.peak": "569462784",
+      "memory.max": "1073741824",
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0"
+    },
+    {
+      "memory.current": "575225856",
+      "memory.peak": "575225856",
+      "memory.max": "1073741824",
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0"
+    },
+    {
+      "memory.current": "582041600",
+      "memory.peak": "582041600",
+      "memory.max": "1073741824",
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0"
+    },
+    {
+      "memory.current": "588595200",
+      "memory.peak": "588595200",
+      "memory.max": "1073741824",
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0"
+    },
+    {
+      "memory.current": "595148800",
+      "memory.peak": "595148800",
+      "memory.max": "1073741824",
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0"
+    },
+    {
+      "memory.current": "600915968",
+      "memory.peak": "600915968",
+      "memory.max": "1073741824",
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0"
+    },
+    {
+      "memory.current": "606683136",
+      "memory.peak": "606683136",
+      "memory.max": "1073741824",
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0"
+    },
+    {
+      "memory.current": "615071744",
+      "memory.peak": "615071744",
+      "memory.max": "1073741824",
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0"
+    },
+    {
+      "memory.current": "621101056",
+      "memory.peak": "621101056",
+      "memory.max": "1073741824",
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0"
+    },
+    {
+      "memory.current": "627126272",
+      "memory.peak": "627130368",
+      "memory.max": "1073741824",
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0"
+    },
+    {
+      "memory.current": "633155584",
+      "memory.peak": "633155584",
+      "memory.max": "1073741824",
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0"
+    },
+    {
+      "memory.current": "638656512",
+      "memory.peak": "638656512",
+      "memory.max": "1073741824",
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0"
+    }
+  ],
+  "native_counters": {
+    "daemon_read_bytes": 0,
+    "daemon_write_bytes": 614629376,
+    "daemon_user_ticks": 18,
+    "daemon_system_ticks": 219,
+    "device_read_sectors": 32,
+    "device_write_sectors": 12066328
+  },
+  "physical_devices": [
+    {
+      "identity": "fea3d8b5-68f5-42a5-9f24-f3cf338e1880:253:0:9:/sys/devices/pci0000:00/0000:00:03.1/0000:0a:00.0/virtio6/block/vda",
+      "name": "vda",
+      "read_bytes_per_second": 0.0,
+      "write_bytes_per_second": 19969467.92277028,
+      "read_iops": 0.0,
+      "write_iops": 19.736765228068645,
+      "read_await_ms": null,
+      "write_await_ms": 6.587171052631579,
+      "average_queue_depth": 0.13007437215274847,
+      "busy_percent": 0.8310216938134167,
+      "read_bytes": 11131057152,
+      "write_bytes": 84868396544
+    },
+    {
+      "identity": "fea3d8b5-68f5-42a5-9f24-f3cf338e1880:253:16:10:/sys/devices/pci0000:00/0000:00:03.2/0000:0b:00.0/virtio7/block/vdb",
+      "name": "vdb",
+      "read_bytes_per_second": 0.0,
+      "write_bytes_per_second": 0.0,
+      "read_iops": 0.0,
+      "write_iops": 0.0,
+      "read_await_ms": null,
+      "write_await_ms": null,
+      "average_queue_depth": 0.0,
+      "busy_percent": 0.0,
+      "read_bytes": 311296,
+      "write_bytes": 0
+    }
+  ]
+}

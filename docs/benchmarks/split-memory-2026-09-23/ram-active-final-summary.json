@@ -1,0 +1,102 @@
+{
+  "0": {
+    "runs": [
+      {
+        "file": "interference-final-ram0-0-coupled.json",
+        "layout": "coupled",
+        "passed": true,
+        "commits": 4171,
+        "commit_p95_seconds": 0.001550032,
+        "commit_p99_seconds": 0.004107446,
+        "physical_write_bytes_per_second": 19923670.177252118,
+        "runtime_sha256": "a005058b5a097a9ec6c28d0d3e14ea7d2992fc0cf2c11a0eb62d7553e7068613",
+        "workload_sha256": "79b89e8d459b3bdef65f7723a1185392b5be98f8343003347c2cf3c5fc3f3c1b"
+      },
+      {
+        "file": "interference-final-ram0-1-ram.json",
+        "layout": "ram",
+        "passed": true,
+        "commits": 4559,
+        "commit_p95_seconds": 0.001219703,
+        "commit_p99_seconds": 0.00174051,
+        "physical_write_bytes_per_second": 2659770.3779656454,
+        "runtime_sha256": "a005058b5a097a9ec6c28d0d3e14ea7d2992fc0cf2c11a0eb62d7553e7068613",
+        "workload_sha256": "79b89e8d459b3bdef65f7723a1185392b5be98f8343003347c2cf3c5fc3f3c1b"
+      },
+      {
+        "file": "interference-final-ram0-2-ram.json",
+        "layout": "ram",
+        "passed": true,
+        "commits": 4507,
+        "commit_p95_seconds": 0.001422239,
+        "commit_p99_seconds": 0.002015265,
+        "physical_write_bytes_per_second": 2628680.7751874374,
+        "runtime_sha256": "a005058b5a097a9ec6c28d0d3e14ea7d2992fc0cf2c11a0eb62d7553e7068613",
+        "workload_sha256": "79b89e8d459b3bdef65f7723a1185392b5be98f8343003347c2cf3c5fc3f3c1b"
+      },
+      {
+        "file": "interference-final-ram0-3-coupled.json",
+        "layout": "coupled",
+        "passed": true,
+        "commits": 4133,
+        "commit_p95_seconds": 0.001578645,
+        "commit_p99_seconds": 0.00387785,
+        "physical_write_bytes_per_second": 19969467.92277028,
+        "runtime_sha256": "a005058b5a097a9ec6c28d0d3e14ea7d2992fc0cf2c11a0eb62d7553e7068613",
+        "workload_sha256": "79b89e8d459b3bdef65f7723a1185392b5be98f8343003347c2cf3c5fc3f3c1b"
+      }
+    ],
+    "mean_write_reduction_fraction": 0.8674345663183084,
+    "mean_commit_throughput_improvement_fraction": 0.0917630057803469
+  },
+  "100": {
+    "runs": [
+      {
+        "file": "interference-final-ram100-0-coupled.json",
+        "layout": "coupled",
+        "passed": true,
+        "commits": 4099,
+        "commit_p95_seconds": 0.001713889,
+        "commit_p99_seconds": 0.004198994,
+        "physical_write_bytes_per_second": 19755881.063515104,
+        "runtime_sha256": "a005058b5a097a9ec6c28d0d3e14ea7d2992fc0cf2c11a0eb62d7553e7068613",
+        "workload_sha256": "79b89e8d459b3bdef65f7723a1185392b5be98f8343003347c2cf3c5fc3f3c1b"
+      },
+      {
+        "file": "interference-final-ram100-1-ram.json",
+        "layout": "ram",
+        "passed": true,
+        "commits": 4510,
+        "commit_p95_seconds": 0.001385824,
+        "commit_p99_seconds": 0.002185983,
+        "physical_write_bytes_per_second": 2626403.214546287,
+        "runtime_sha256": "a005058b5a097a9ec6c28d0d3e14ea7d2992fc0cf2c11a0eb62d7553e7068613",
+        "workload_sha256": "79b89e8d459b3bdef65f7723a1185392b5be98f8343003347c2cf3c5fc3f3c1b"
+      },
+      {
+        "file": "interference-final-ram100-2-ram.json",
+        "layout": "ram",
+        "passed": true,
+        "commits": 4490,
+        "commit_p95_seconds": 0.001467367,
+        "commit_p99_seconds": 0.002211631,
+        "physical_write_bytes_per_second": 2610392.3991668425,
+        "runtime_sha256": "a005058b5a097a9ec6c28d0d3e14ea7d2992fc0cf2c11a0eb62d7553e7068613",
+        "workload_sha256": "79b89e8d459b3bdef65f7723a1185392b5be98f8343003347c2cf3c5fc3f3c1b"
+      },
+      {
+        "file": "interference-final-ram100-3-coupled.json",
+        "layout": "coupled",
+        "passed": true,
+        "commits": 4095,
+        "commit_p95_seconds": 0.001821713,
+        "commit_p99_seconds": 0.004079094,
+        "physical_write_bytes_per_second": 19871271.350461803,
+        "runtime_sha256": "a005058b5a097a9ec6c28d0d3e14ea7d2992fc0cf2c11a0eb62d7553e7068613",
+        "workload_sha256": "79b89e8d459b3bdef65f7723a1185392b5be98f8343003347c2cf3c5fc3f3c1b"
+      }
+    ],
+    "mean_write_reduction_fraction": 0.867848298585642,
+    "mean_commit_throughput_improvement_fraction": 0.09836465706614606
+  }
+}

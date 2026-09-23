@@ -1,0 +1,64 @@
+{
+  "abort_same_original": true,
+  "cycles": [
+    {
+      "capture_id": "cebeb888d952ed7f6bd797698d768299ab448f14ed5d292c386682583d5755ee",
+      "timings_ms": {
+        "artifact_cleanup": 4.194494999865128,
+        "begin_restore_journal": 5.479266999827814,
+        "candidate_fence": 0.8152209998115723,
+        "candidate_journal": 3.4235810003337974,
+        "candidate_resume": 35.311826999986806,
+        "commit_running_journal": 3.8429040000664827,
+        "readiness_exec": 23.92065999993065,
+        "runsc_restore": 116.0272009997243,
+        "runsc_state": 23.23490499975378,
+        "validate_artifact": 58.09869400036405,
+        "warden_total": 274.52520099996036
+      },
+      "wake_seconds": 0.2745530729998791
+    },
+    {
+      "capture_id": "66e66acbde0a589a61bdc705a6922602cfcdade54bded41c82bc23ca46c767e8",
+      "timings_ms": {
+        "artifact_cleanup": 4.310100000111561,
+        "begin_restore_journal": 3.587417999824538,
+        "candidate_fence": 0.9588480002094002,
+        "candidate_journal": 4.09816100000171,
+        "candidate_resume": 31.30899000007048,
+        "commit_running_journal": 3.8957550000304764,
+        "readiness_exec": 24.286874000154057,
+        "runsc_restore": 122.22695499986003,
+        "runsc_state": 22.941931999866938,
+        "validate_artifact": 56.9937159998517,
+        "warden_total": 274.80865799998355
+      },
+      "wake_seconds": 0.27484865799988256
+    },
+    {
+      "capture_id": "c6285402f1a66385e3678669cf9789f6b7c21b55258ab6da41c06d754baff713",
+      "timings_ms": {
+        "artifact_cleanup": 4.523220999999467,
+        "begin_restore_journal": 3.9745029998812242,
+        "candidate_fence": 1.0663310004019877,
+        "candidate_journal": 4.577424000217434,
+        "candidate_resume": 33.75185100003364,
+        "commit_running_journal": 5.122358000335225,
+        "readiness_exec": 20.569457999954466,
+        "runsc_restore": 114.30325700030153,
+        "runsc_state": 19.06547699991279,
+        "validate_artifact": 63.24996400007876,
+        "warden_total": 270.3305239997462
+      },
+      "wake_seconds": 0.2703726779996032
+    }
+  ],
+  "project_quota_errno": 28,
+  "quota": {
+    "memory_backing_allocations": 1,
+    "memory_backing_hard_reserved_bytes": 3221225472
+  },
+  "schema": 1,
+  "status": "passed",
+  "test_root": "/home/ucloud/native-capture-qualification/memory-xfs/ucloud-storage-native-q9_9w5xx"
+}

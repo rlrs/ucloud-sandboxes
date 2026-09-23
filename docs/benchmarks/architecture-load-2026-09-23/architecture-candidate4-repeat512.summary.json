@@ -1,0 +1,124 @@
+{
+  "report_version": 2,
+  "run_id": "relay-load-9cb2b3afbb67",
+  "started_at": "2026-09-23T10:27:45.975447+00:00",
+  "finished_at": "2026-09-23T10:33:59.563720+00:00",
+  "configuration": {
+    "gateway_url": "https://app-sandboxes.cloud.sdu.dk",
+    "relay_url": "https://app-sandboxes-relay-v2.cloud.sdu.dk",
+    "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+    "sandboxes": 512,
+    "cycles": 8,
+    "startup_mode": "rolling",
+    "resident_mb": 512,
+    "dirty_mb": 128,
+    "files": 64,
+    "file_kib": 64,
+    "payload_kib": 32,
+    "tool_upload_kib": 64,
+    "cpu_ms": 100,
+    "model_seconds": 20.0,
+    "model_jitter": 5.0,
+    "parking_mode": "natural",
+    "cpus": 1,
+    "memory_mb": 1024,
+    "disk_mb": 4096,
+    "create_concurrency": 16,
+    "fleet_pollers": 24,
+    "warmup_cycles": 1,
+    "deadline_seconds": 1200.0,
+    "useful_action_p95_seconds": 1,
+    "continuation_p95_seconds": 0.8,
+    "seed": 1,
+    "start_signal_file": null
+  },
+  "errors": [],
+  "cleanup_errors": [],
+  "driver_python": "3.13.2",
+  "sdk_version": "0.4.25",
+  "sdk_client_sha256": "010a8e2406592224a1b339e7fcc4ac983ed394a56a4a8786c5f188569a2d5bb0",
+  "latency_definition": "model ready through guest-originated continuation receipt, then uploaded tool confirmation; receipt includes observation tunnel overhead; full integrity is a separate mandatory gate",
+  "harness_sha256": "986d897ab1bb24d29214cb0262aedf49db8e77d49f85350554586951a163ff44",
+  "deployed_health": {
+    "ok": true,
+    "service": "control-plane",
+    "version": "0.5.114rc4"
+  },
+  "response_ready_to_usable_exec_seconds": {
+    "count": 3584,
+    "p50": 2.920606433181092,
+    "p95": 7.105484205530956,
+    "p99": 8.954365195240825,
+    "max": 10.961860326584429
+  },
+  "response_ready_to_guest_continuation_seconds": {
+    "count": 3584,
+    "p50": 1.3277761748759076,
+    "p95": 3.0217310215812176,
+    "p99": 4.3877391633577645,
+    "max": 5.80657497397624
+  },
+  "phase_latency_seconds": {
+    "during_provisioning": {
+      "count": 1421,
+      "p50": 4.070097950519994,
+      "p95": 8.65570494811982,
+      "p99": 9.70685593993403,
+      "max": 10.961860326584429
+    },
+    "after_provisioning": {
+      "count": 2675,
+      "p50": 2.5510612409561872,
+      "p95": 4.281436234945431,
+      "p99": 4.919195000315085,
+      "max": 5.788173201028258
+    }
+  },
+  "phase_continuation_seconds": {
+    "during_provisioning": {
+      "count": 1421,
+      "p50": 1.7154597123153508,
+      "p95": 4.073250258108601,
+      "p99": 5.164221507264301,
+      "max": 5.80657497397624
+    },
+    "after_provisioning": {
+      "count": 2675,
+      "p50": 1.1959149679169059,
+      "p95": 2.2393544130027294,
+      "p99": 2.6813737496268004,
+      "max": 3.944723666179925
+    }
+  },
+  "completed_cycles": 4096,
+  "correct": true,
+  "slo_passed": false,
+  "measured_park_observed_cycles": 0,
+  "control_retries": [
+    {
+      "operation": "poll",
+      "sandbox_id": "relay-load-9cb2b3afbb67-0370",
+      "cycle": 0,
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "poll",
+      "sandbox_id": "relay-load-9cb2b3afbb67-0482",
+      "cycle": 1,
+      "attempt": 1,
+      "status": 503
+    }
+  ],
+  "resource_summary": {
+    "sample_count": 69,
+    "observed_worker_seconds": 2087.332248210907,
+    "sampled_cpu_seconds": 14683.333450749737,
+    "cpu_coverage_worker_seconds": 2087.332248210907,
+    "sampled_host_memory_mib_seconds": 96255388.89352727,
+    "memory_coverage_worker_seconds": 2087.332248210907,
+    "scope": "sampled whole worker costs; excludes missing/stale intervals; not per-sandbox attribution"
+  },
+  "raw_sha256": "b8f5d8b0f81fbdd20698a6b48518275aa458fcbc1199a16da90d7d90e391765c",
+  "profiling": "Two20-second nonblocking5Hz profiles(gateway then relay), sparse samples with errors; unlike rc2 no stopping profiler used."
+}

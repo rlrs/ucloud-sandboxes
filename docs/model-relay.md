@@ -260,9 +260,20 @@ curl -sS -X POST https://relay.example.org/worker/respond \
   -d "{\"registration_token\":\"$REGISTRATION_TOKEN\",\"request_id\":\"7fd...\",\"lease_id\":\"c4b...\",\"body\":{\"encoding\":\"json\",\"value\":{\"choices\":[]}}}"
 ```
 
-Duplicate responses for already-completed requests are accepted and reported as
-`{"duplicate": true}` while the completed request id is retained. This makes
-worker retry-after-timeout behavior idempotent.
+Success acknowledges durable acceptance independently of sandbox
+wake: `{"ok": true, "request_id": "7fd...", "duplicate": false, "committed": true,
+"delivery_status": "pending"}`. `pending` means delivery work remains;
+`released` means eligible for delivery, not proof of socket receipt or runtime
+readiness. Release the inference slot at acceptance. Observe the sandbox's own
+continuation when delivery itself matters. See the
+[receipt and SQLite migration contract](postgres-relay.md).
+
+Identical responses under the same lease are accepted with `duplicate: true`
+while the completed request is retained; changed bytes or a changed lease are
+rejected. Retry the same response after a lost acknowledgment rather than
+running inference again. Wake continues independently after acceptance and relay
+restart. Version 0.5.114 requires PostgreSQL; migrate any older SQLite relay
+with the fenced offline importer before upgrading.
 
 Post worker failures with:
 
@@ -317,28 +328,27 @@ The relay uses explicit request leases:
   id
 - responses are rejected when the matching lease has already expired, even if
   no intervening worker poll has requeued the request
-- completed request IDs and worker heartbeat diagnostics are bounded by both
-  retention time and hard record-count limits
+- completed responses and worker diagnostics expire by retention; unfinished
+  delivery obligations remain durable until resolved
 - workers can long-poll batches with `limit=N`
-- global, per-rollout, and queued-byte admission limits bound relay work;
-  exhausted admission returns `429` with `Retry-After`
+- durable storage admission reserves response space before accepting work;
+  exhausted storage admission returns `429` with `Retry-After`
 - a disconnected caller does not cancel accepted work; its byte-identical retry
   reattaches and receives the committed response without resampling
 - `X-UCloud-Relay-Request-Id` supplies an explicit stable attempt identity;
   otherwise an implicit fingerprint becomes reattachable after disconnect or
   relay restart, so normal identical calls remain distinct
-- SQLite/WAL durably stores registrations, pending/leased requests, exact
-  completed response bytes, and lifecycle notification state
+- PostgreSQL durably stores registrations, inference leases, exact completed
+  response bytes, and lifecycle obligations in one transactional authority
 - trusted per-sandbox registration metadata enables generation-fenced park and
   wake notifications through the gateway
 - a wake may move the same parked generation through storage-native migration;
   the relay request, rollout registration, and idempotency identity do not change
 
-Run one relay process per SQLite journal. All admission, claim, response, and
-notification transitions are serialized by that process. A restart drops live
-TCP connections but restores registrations and requests from the journal;
-callers retry and reattach. SQLite provides single-host crash durability, not
-multi-process or multi-host HA.
+Relay processes may share the same PostgreSQL authority. Database claims and
+registration/lease tokens fence competing dispatchers. A process restart drops
+its TCP connections; callers retry and reattach to durable requests. Gateway
+placement and worker runtime journals retain their own ownership boundaries.
 
 Worker execution remains at-least-once: after a lease expires, a replacement
 worker may start the request while the original computation is still running.

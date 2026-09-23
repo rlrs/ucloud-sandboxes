@@ -1,0 +1,37 @@
+{
+  "snapshot": "/private/tmp/ucloud-architecture-rc20-test-snapshot",
+  "manifest_sha256": "6d9315df61f17a985ccb7c7bb8e69442651469e731e0d5cf9b2d8c47a68cbd4d",
+  "snapshot_file_count": 1547,
+  "python": "3.13.2 Linux",
+  "postgres": "real isolated qualification database",
+  "sdk_source": "/home/alex-admin/ucloud-sdk-release-20260923/src",
+  "correction": {
+    "path": "tests/test_correctness_regressions.py",
+    "sha256": "e61518ff39db22bfbd7a2c7af8320a62d7edc46a50fc43c7e393a1a8417975a0",
+    "tests": 15,
+    "linux_seconds": 35.885,
+    "failures": 0,
+    "source_changed": false,
+    "retained_checks": "drain and insufficient memory keep PARKED; high CPU succeeds"
+  },
+  "ruff": "passed product/tests/scripts",
+  "native_runtime_sha256": "203d43a11e05fc836863aa40afee89b70b93403fcb73647c60c4df29e84b2f35",
+  "notes": [
+    "Full suite rerun after the test-only CPU policy correction: all1730tests passed (12skips).",
+    "Loaded pressure performance remains a separate gate."
+  ],
+  "initial_full_gate": {
+    "tests": 1730,
+    "seconds": 222.433,
+    "skipped": 12,
+    "failures": 1,
+    "failure": "test_explicit_wake_checks_drain_and_live_pressure still expected CPU-only rejection; intentional policy change"
+  },
+  "full_gate": {
+    "tests": 1730,
+    "seconds": 220.076,
+    "skipped": 12,
+    "failures": 0,
+    "errors": 0
+  }
+}

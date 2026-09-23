@@ -1,5 +1,11 @@
 # Simplification roadmap and progress ledger
 
+The next proposed implementation sequence is the
+[performance architecture and simplification plan](performance-architecture-plan.md)
+(2026-09-23). It retains this ledger's authority and deletion principles while
+defining explicit, time-bounded migrations for retained production state; the
+historical greenfield clean-state rule below is not its rollout strategy.
+
 Status: active implementation, started 2026-08-11.
 
 This document is the durable execution ledger for reducing the UCloud

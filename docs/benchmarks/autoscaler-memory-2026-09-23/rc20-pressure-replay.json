@@ -1,0 +1,934 @@
+{
+  "source_run_id": "relay-load-8885f7a20e12",
+  "scope": "Counterfactual decisions on retained four-worker observations with cap8; no inferred pending or transitioning demand and no simulated feedback from new workers. Not a new load or latency result.",
+  "samples": [
+    {
+      "at": "2026-09-23T17:29:16.962551+00:00",
+      "active": 0,
+      "working_memory_mb": 19503,
+      "old_creates": 0,
+      "new_creates": 0,
+      "new_forecast_mb": 0,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 0,
+      "reasons": [
+        "current pool matches demand and policy"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:29:22.006722+00:00",
+      "active": 17,
+      "working_memory_mb": 25202,
+      "old_creates": 0,
+      "new_creates": 0,
+      "new_forecast_mb": 19307,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 0,
+      "reasons": [
+        "current pool matches demand and policy"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:29:27.044297+00:00",
+      "active": 37,
+      "working_memory_mb": 40164,
+      "old_creates": 0,
+      "new_creates": 0,
+      "new_forecast_mb": 44139,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 0,
+      "reasons": [
+        "current pool matches demand and policy"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:29:32.076167+00:00",
+      "active": 37,
+      "working_memory_mb": 40164,
+      "old_creates": 0,
+      "new_creates": 0,
+      "new_forecast_mb": 44139,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 0,
+      "reasons": [
+        "current pool matches demand and policy"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:29:37.121343+00:00",
+      "active": 79,
+      "working_memory_mb": 87641,
+      "old_creates": 0,
+      "new_creates": 0,
+      "new_forecast_mb": 109553,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 1,
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:29:42.174017+00:00",
+      "active": 119,
+      "working_memory_mb": 144865,
+      "old_creates": 0,
+      "new_creates": 0,
+      "new_forecast_mb": 181083,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 2,
+      "reasons": [
+        "recent live pressure retains ready capacity during cooldown"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:29:47.233076+00:00",
+      "active": 172,
+      "working_memory_mb": 254757,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 318447,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 4,
+      "reasons": [
+        "sustained live pressure across 4 sample(s) (cpu=95%)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:29:52.282102+00:00",
+      "active": 172,
+      "working_memory_mb": 254757,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 318447,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 4,
+      "reasons": [
+        "sustained live pressure across 4 sample(s) (cpu=95%)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:29:57.360528+00:00",
+      "active": 174,
+      "working_memory_mb": 278858,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 348573,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 5,
+      "reasons": [
+        "sustained live pressure across 5 sample(s) (memory=85%)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:30:02.426087+00:00",
+      "active": 178,
+      "working_memory_mb": 282829,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 353537,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 5,
+      "reasons": [
+        "sustained live pressure across 5 sample(s)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:30:07.492651+00:00",
+      "active": 178,
+      "working_memory_mb": 302276,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 377846,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 8,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/377846MB/0MB",
+        "sustained live pressure across 8 sample(s) (memory=84%)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:30:12.564075+00:00",
+      "active": 178,
+      "working_memory_mb": 302276,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 377846,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 8,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/377846MB/0MB",
+        "sustained live pressure across 8 sample(s) (memory=84%)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:30:17.631759+00:00",
+      "active": 178,
+      "working_memory_mb": 302276,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 377846,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 8,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/377846MB/0MB",
+        "sustained live pressure across 8 sample(s) (memory=84%)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:30:22.691598+00:00",
+      "active": 186,
+      "working_memory_mb": 306199,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 382750,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 9,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/382750MB/0MB",
+        "sustained live pressure across 9 sample(s) (memory=89%, memory-psi=6.72, io-psi=26.89)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:30:27.760576+00:00",
+      "active": 196,
+      "working_memory_mb": 308477,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 385598,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 10,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/385598MB/0MB",
+        "sustained live pressure across 10 sample(s) (memory=88%, memory-psi=8.56, io-psi=40.47)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:30:32.826543+00:00",
+      "active": 221,
+      "working_memory_mb": 327269,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 409088,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 12,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/409088MB/0MB",
+        "sustained live pressure across 12 sample(s) (memory=95%, memory-psi=6.04, io-psi=51.22)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:30:37.884410+00:00",
+      "active": 221,
+      "working_memory_mb": 327269,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 409088,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 11,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/409088MB/0MB",
+        "sustained live pressure across 11 sample(s) (memory=95%, memory-psi=6.04, io-psi=51.22)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:30:42.955468+00:00",
+      "active": 221,
+      "working_memory_mb": 327269,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 409088,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 9,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/409088MB/0MB",
+        "sustained live pressure across 9 sample(s) (memory=95%, memory-psi=6.04, io-psi=51.22)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:30:48.026811+00:00",
+      "active": 173,
+      "working_memory_mb": 244918,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 306149,
+      "physical_supply_mb": 269694,
+      "pressure_samples": 9,
+      "reasons": [
+        "projected free resources 96vcpu/269694MB/4349952MB below desired 0vcpu/306149MB/0MB",
+        "sustained live pressure across 9 sample(s) (memory=86%, memory-psi=14.83, io-psi=57.19)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:30:53.143901+00:00",
+      "active": 174,
+      "working_memory_mb": 246614,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 308269,
+      "physical_supply_mb": 269694,
+      "pressure_samples": 10,
+      "reasons": [
+        "projected free resources 96vcpu/269694MB/4349952MB below desired 0vcpu/308269MB/0MB",
+        "sustained live pressure across 10 sample(s) (memory=93%, memory-psi=12.39, io-psi=47.85)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:30:58.210033+00:00",
+      "active": 172,
+      "working_memory_mb": 246323,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 307905,
+      "physical_supply_mb": 269694,
+      "pressure_samples": 10,
+      "reasons": [
+        "projected free resources 96vcpu/269694MB/4349952MB below desired 0vcpu/307905MB/0MB",
+        "sustained live pressure across 10 sample(s) (memory=95%, memory-psi=5.85, io-psi=54.67)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:31:03.277985+00:00",
+      "active": 172,
+      "working_memory_mb": 247544,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 309431,
+      "physical_supply_mb": 269694,
+      "pressure_samples": 10,
+      "reasons": [
+        "projected free resources 96vcpu/269694MB/4349952MB below desired 0vcpu/309431MB/0MB",
+        "sustained live pressure across 10 sample(s) (memory=95%, memory-psi=11.1, io-psi=56.36)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:31:08.341415+00:00",
+      "active": 229,
+      "working_memory_mb": 328616,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 410771,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 11,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/410771MB/0MB",
+        "sustained live pressure across 11 sample(s) (memory=95%, memory-psi=6.82, io-psi=38.59)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:31:13.414795+00:00",
+      "active": 236,
+      "working_memory_mb": 325494,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 406869,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 13,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/406869MB/0MB",
+        "sustained live pressure across 13 sample(s) (memory=98%, memory-psi=5.07, io-psi=55.71)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:31:18.480587+00:00",
+      "active": 236,
+      "working_memory_mb": 325494,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 406869,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 12,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/406869MB/0MB",
+        "sustained live pressure across 12 sample(s) (memory=98%, memory-psi=5.07, io-psi=55.71)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:31:23.540569+00:00",
+      "active": 236,
+      "working_memory_mb": 325494,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 406869,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 12,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/406869MB/0MB",
+        "sustained live pressure across 12 sample(s) (memory=98%, memory-psi=5.07, io-psi=55.71)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:31:28.605761+00:00",
+      "active": 239,
+      "working_memory_mb": 329139,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 411426,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 12,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/411426MB/0MB",
+        "sustained live pressure across 12 sample(s) (memory=89%, memory-psi=9.21, io-psi=41.43)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:31:33.665727+00:00",
+      "active": 239,
+      "working_memory_mb": 327716,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 409648,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 11,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/409648MB/0MB",
+        "sustained live pressure across 11 sample(s) (memory=94%, memory-psi=6.41, io-psi=30.21)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:31:38.725177+00:00",
+      "active": 243,
+      "working_memory_mb": 332477,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 415599,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 13,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/415599MB/0MB",
+        "sustained live pressure across 13 sample(s) (memory=95%, memory-psi=7.61, io-psi=61.28)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:31:43.799141+00:00",
+      "active": 243,
+      "working_memory_mb": 332477,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 415599,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 13,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/415599MB/0MB",
+        "sustained live pressure across 13 sample(s) (memory=95%, memory-psi=7.61, io-psi=61.28)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:31:48.865108+00:00",
+      "active": 246,
+      "working_memory_mb": 335421,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 419279,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 12,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/419279MB/0MB",
+        "sustained live pressure across 12 sample(s) (memory=92%, memory-psi=13.85, io-psi=44.08)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:31:53.927185+00:00",
+      "active": 247,
+      "working_memory_mb": 338292,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 422867,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 11,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/422867MB/0MB",
+        "sustained live pressure across 11 sample(s) (memory=97%, memory-psi=14.98, io-psi=52.74)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:31:58.997127+00:00",
+      "active": 245,
+      "working_memory_mb": 343984,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 429982,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 13,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/429982MB/0MB",
+        "sustained live pressure across 13 sample(s) (memory=100%, memory-psi=7.12, io-psi=58.53)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:32:04.064082+00:00",
+      "active": 245,
+      "working_memory_mb": 343984,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 429982,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 12,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/429982MB/0MB",
+        "sustained live pressure across 12 sample(s) (memory=100%, memory-psi=7.12, io-psi=58.53)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:32:09.131358+00:00",
+      "active": 245,
+      "working_memory_mb": 343984,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 429982,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 9,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/429982MB/0MB",
+        "sustained live pressure across 9 sample(s) (memory=100%, memory-psi=7.12, io-psi=58.53)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:32:14.191086+00:00",
+      "active": 245,
+      "working_memory_mb": 343984,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 429982,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 8,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/429982MB/0MB",
+        "sustained live pressure across 8 sample(s) (memory=100%, memory-psi=7.12, io-psi=58.53)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:32:19.257576+00:00",
+      "active": 244,
+      "working_memory_mb": 348691,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 435866,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 10,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/435866MB/0MB",
+        "sustained live pressure across 10 sample(s) (memory=97%, memory-psi=11.38, io-psi=35.69)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:32:24.324657+00:00",
+      "active": 245,
+      "working_memory_mb": 350617,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 438273,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 11,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/438273MB/0MB",
+        "sustained live pressure across 11 sample(s) (memory=96%, memory-psi=14.22, io-psi=41.04)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:32:29.387703+00:00",
+      "active": 247,
+      "working_memory_mb": 348708,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 435887,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 10,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/435887MB/0MB",
+        "sustained live pressure across 10 sample(s) (memory=98%, memory-psi=8.95, io-psi=65.51)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:32:34.450702+00:00",
+      "active": 247,
+      "working_memory_mb": 347703,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 434631,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 10,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/434631MB/0MB",
+        "sustained live pressure across 10 sample(s) (memory=96%, memory-psi=7.96, io-psi=40.37)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:32:39.518147+00:00",
+      "active": 250,
+      "working_memory_mb": 349483,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 436856,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 11,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/436856MB/0MB",
+        "sustained live pressure across 11 sample(s) (memory=99%, memory-psi=7.78, io-psi=64.34)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:32:44.588422+00:00",
+      "active": 250,
+      "working_memory_mb": 349483,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 436856,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 11,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/436856MB/0MB",
+        "sustained live pressure across 11 sample(s) (memory=99%, memory-psi=7.78, io-psi=64.34)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:32:49.662072+00:00",
+      "active": 250,
+      "working_memory_mb": 349483,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 436856,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 10,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/436856MB/0MB",
+        "sustained live pressure across 10 sample(s) (memory=99%, memory-psi=7.78, io-psi=64.34)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:32:54.732356+00:00",
+      "active": 249,
+      "working_memory_mb": 348933,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 436168,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 11,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/436168MB/0MB",
+        "sustained live pressure across 11 sample(s) (memory=96%, memory-psi=18.01, io-psi=45.61)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:32:59.802589+00:00",
+      "active": 246,
+      "working_memory_mb": 349210,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 436514,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 11,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/436514MB/0MB",
+        "sustained live pressure across 11 sample(s) (memory=99%, memory-psi=12.86, io-psi=38.36)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:33:04.863689+00:00",
+      "active": 246,
+      "working_memory_mb": 349210,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 436514,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 11,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/436514MB/0MB",
+        "sustained live pressure across 11 sample(s) (memory=99%, memory-psi=12.86, io-psi=38.36)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:33:09.925920+00:00",
+      "active": 248,
+      "working_memory_mb": 348826,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 436034,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 12,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/436034MB/0MB",
+        "sustained live pressure across 12 sample(s) (memory=97%, memory-psi=8.46, io-psi=63.83)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:33:14.995325+00:00",
+      "active": 248,
+      "working_memory_mb": 348826,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 436034,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 11,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/436034MB/0MB",
+        "sustained live pressure across 11 sample(s) (memory=97%, memory-psi=8.46, io-psi=63.83)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:33:20.061183+00:00",
+      "active": 251,
+      "working_memory_mb": 347033,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 433793,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 11,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/433793MB/0MB",
+        "sustained live pressure across 11 sample(s) (memory=98%, memory-psi=8.07, io-psi=34.96)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:33:25.125941+00:00",
+      "active": 249,
+      "working_memory_mb": 350628,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 438287,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 11,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/438287MB/0MB",
+        "sustained live pressure across 11 sample(s) (memory=100%, memory-psi=16.63, io-psi=50.28)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:33:30.196750+00:00",
+      "active": 249,
+      "working_memory_mb": 350628,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 438287,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 11,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/438287MB/0MB",
+        "sustained live pressure across 11 sample(s) (memory=100%, memory-psi=16.63, io-psi=50.28)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:33:35.262372+00:00",
+      "active": 249,
+      "working_memory_mb": 350921,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 438653,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 10,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/438653MB/0MB",
+        "sustained live pressure across 10 sample(s) (memory=97%, memory-psi=8.47, io-psi=65.15)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:33:40.324793+00:00",
+      "active": 249,
+      "working_memory_mb": 350912,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 438642,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 10,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/438642MB/0MB",
+        "sustained live pressure across 10 sample(s) (memory=96%, memory-psi=12.45, io-psi=61.62)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:33:45.406749+00:00",
+      "active": 249,
+      "working_memory_mb": 348862,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 436079,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 12,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/436079MB/0MB",
+        "sustained live pressure across 12 sample(s) (memory=99%, memory-psi=6.67, io-psi=46.58)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:33:50.474718+00:00",
+      "active": 249,
+      "working_memory_mb": 348862,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 436079,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 11,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/436079MB/0MB",
+        "sustained live pressure across 11 sample(s) (memory=99%, memory-psi=6.67, io-psi=46.58)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:33:55.538769+00:00",
+      "active": 250,
+      "working_memory_mb": 334375,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 417970,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 11,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/417970MB/0MB",
+        "sustained live pressure across 11 sample(s) (memory=81%, memory-psi=8.57, io-psi=64.93)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:34:00.617771+00:00",
+      "active": 251,
+      "working_memory_mb": 334250,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 417813,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 11,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/417813MB/0MB",
+        "sustained live pressure across 11 sample(s) (memory=98%, memory-psi=15.81, io-psi=48.98)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:34:05.681338+00:00",
+      "active": 251,
+      "working_memory_mb": 332600,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 415751,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 12,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/415751MB/0MB",
+        "sustained live pressure across 12 sample(s) (memory=97%, memory-psi=7.06, io-psi=51.48)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:34:10.742249+00:00",
+      "active": 251,
+      "working_memory_mb": 332600,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 415751,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 11,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/415751MB/0MB",
+        "sustained live pressure across 11 sample(s) (memory=97%, memory-psi=7.06, io-psi=51.48)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:34:15.801875+00:00",
+      "active": 253,
+      "working_memory_mb": 318722,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 398404,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 12,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/398404MB/0MB",
+        "sustained live pressure across 12 sample(s) (io-psi=73.47)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:34:20.864999+00:00",
+      "active": 253,
+      "working_memory_mb": 319989,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 399988,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 11,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/399988MB/0MB",
+        "sustained live pressure across 11 sample(s) (memory=98%, memory-psi=16.78, io-psi=44.05)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:34:25.928481+00:00",
+      "active": 253,
+      "working_memory_mb": 316901,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 396128,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 12,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/396128MB/0MB",
+        "sustained live pressure across 12 sample(s) (memory=94%, memory-psi=13.24, io-psi=61.34)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:34:30.989951+00:00",
+      "active": 253,
+      "working_memory_mb": 316901,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 396128,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 11,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/396128MB/0MB",
+        "sustained live pressure across 11 sample(s) (memory=94%, memory-psi=13.24, io-psi=61.34)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:34:36.052894+00:00",
+      "active": 253,
+      "working_memory_mb": 321065,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 401333,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 12,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/401333MB/0MB",
+        "sustained live pressure across 12 sample(s) (io-psi=39.3)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:34:41.131407+00:00",
+      "active": 253,
+      "working_memory_mb": 321065,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 401333,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 10,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/401333MB/0MB",
+        "sustained live pressure across 10 sample(s) (io-psi=39.3)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:34:46.192740+00:00",
+      "active": 254,
+      "working_memory_mb": 321362,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 401704,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 10,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/401704MB/0MB",
+        "sustained live pressure across 10 sample(s) (memory=96%, memory-psi=17.24, io-psi=44.12)"
+      ]
+    },
+    {
+      "at": "2026-09-23T17:34:46.368095+00:00",
+      "active": 254,
+      "working_memory_mb": 321362,
+      "old_creates": 1,
+      "new_creates": 2,
+      "new_forecast_mb": 401704,
+      "physical_supply_mb": 359592,
+      "pressure_samples": 10,
+      "reasons": [
+        "projected free resources 128vcpu/359592MB/5799936MB below desired 0vcpu/401704MB/0MB",
+        "sustained live pressure across 10 sample(s) (memory=96%, memory-psi=17.24, io-psi=44.12)"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,121 @@
+{
+  "run": "relay-load-70fe49fe7db7",
+  "interval_utc": [
+    "2026-09-23T16:59:15",
+    "2026-09-23T17:03:19"
+  ],
+  "sample_period_seconds": 1,
+  "postgres_samples": 245,
+  "active_backend_wait_samples": {
+    "('IO', 'WalSync')": 20,
+    "('LWLock', 'WALWrite')": 110,
+    "(None, None)": 28,
+    "('Client', 'ClientRead')": 2,
+    "('Lock', 'transactionid')": 4,
+    "('IO', 'WalWrite')": 1
+  },
+  "transactions_over_half_second": [
+    {
+      "at": "2026-09-23T16:59:23.824968+00:00",
+      "state": "active",
+      "type": "IO",
+      "event": "WalSync",
+      "backends": 1,
+      "oldest_transaction_seconds": 0.681423
+    },
+    {
+      "at": "2026-09-23T16:59:23.824968+00:00",
+      "state": "active",
+      "type": "LWLock",
+      "event": "WALWrite",
+      "backends": 15,
+      "oldest_transaction_seconds": 0.67037
+    },
+    {
+      "at": "2026-09-23T16:59:24.824985+00:00",
+      "state": "active",
+      "type": "IO",
+      "event": "WalSync",
+      "backends": 1,
+      "oldest_transaction_seconds": 1.681349
+    },
+    {
+      "at": "2026-09-23T16:59:24.824985+00:00",
+      "state": "active",
+      "type": "LWLock",
+      "event": "WALWrite",
+      "backends": 15,
+      "oldest_transaction_seconds": 1.670294
+    },
+    {
+      "at": "2026-09-23T16:59:25.825021+00:00",
+      "state": "active",
+      "type": "IO",
+      "event": "WalSync",
+      "backends": 1,
+      "oldest_transaction_seconds": 2.681477
+    },
+    {
+      "at": "2026-09-23T16:59:25.825021+00:00",
+      "state": "active",
+      "type": "LWLock",
+      "event": "WALWrite",
+      "backends": 15,
+      "oldest_transaction_seconds": 2.670421
+    },
+    {
+      "at": "2026-09-23T16:59:26.825105+00:00",
+      "state": "active",
+      "type": "IO",
+      "event": "WalSync",
+      "backends": 1,
+      "oldest_transaction_seconds": 3.681703
+    },
+    {
+      "at": "2026-09-23T16:59:26.825105+00:00",
+      "state": "active",
+      "type": "LWLock",
+      "event": "WALWrite",
+      "backends": 15,
+      "oldest_transaction_seconds": 3.67065
+    }
+  ],
+  "pool_first": {
+    "kind": "relay_pool",
+    "at": "2026-09-23T16:59:18.964956+00:00",
+    "pool": {
+      "connections_num": 6,
+      "connections_ms": 81,
+      "requests_num": 8632,
+      "usage_ms": 20711,
+      "requests_queued": 7,
+      "requests_wait_ms": 27,
+      "pool_min": 1,
+      "pool_max": 16,
+      "pool_size": 6,
+      "pool_available": 6,
+      "requests_waiting": 0
+    },
+    "elapsed": 0.019372524999198504
+  },
+  "pool_last": {
+    "kind": "relay_pool",
+    "at": "2026-09-23T17:03:15.720324+00:00",
+    "pool": {
+      "connections_num": 16,
+      "connections_ms": 204,
+      "requests_num": 74339,
+      "usage_ms": 354771,
+      "requests_queued": 490,
+      "requests_wait_ms": 289876,
+      "pool_min": 1,
+      "pool_max": 16,
+      "pool_size": 16,
+      "pool_available": 16,
+      "requests_waiting": 0
+    },
+    "elapsed": 0.018458118007401936
+  },
+  "pool_observer_errors": 1,
+  "postgres_observer_errors": 0
+}

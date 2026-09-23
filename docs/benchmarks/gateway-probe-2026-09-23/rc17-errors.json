@@ -1,0 +1,24 @@
+{
+  "run_id": "relay-load-d0bf2463839e",
+  "probes": [
+    {
+      "at": "2026-09-23T14:15:14.878951+00:00",
+      "status": 503,
+      "headers": {
+        "Content-Type": "text/html; charset=UTF-8",
+        "Server": "nginx"
+      },
+      "origin_title": "Job is unavailable | UCloud"
+    },
+    {
+      "at": "2026-09-23T14:15:20.183066+00:00",
+      "status": 503,
+      "headers": {
+        "Content-Type": "text/html; charset=UTF-8",
+        "Server": "nginx"
+      },
+      "origin_title": "Job is unavailable | UCloud"
+    }
+  ],
+  "observer_cleanup": "original cleanup failed with ingress503; exact observer deregistered through authenticated local relay API after run"
+}

@@ -1,0 +1,27 @@
+{
+  "snapshot": "/private/tmp/ucloud-architecture-rc19-test-snapshot",
+  "manifest_sha256": "faf933c3b41d07ffe5a8dce2f75639fefd29e5175422754331f055630a6a9edc",
+  "snapshot_file_count": 1506,
+  "remote_manifest_mismatches": 0,
+  "remote_unexpected_python_files": 0,
+  "python": "3.13.2 Linux",
+  "postgres": "real isolated qualification database",
+  "sdk_source": "/home/alex-admin/ucloud-sdk-release-20260923/src",
+  "command": "python3 /tmp/run-relay-retirement.py discover -s tests -q",
+  "tests": 1709,
+  "seconds": 220.912,
+  "skips": 12,
+  "failures": 0,
+  "errors": 0,
+  "ruff_product_tests_scripts": "passed",
+  "ruff_unrestricted": {
+    "findings": 225,
+    "scope": "docs/benchmarks only",
+    "changed": false
+  },
+  "notes": [
+    "No source exclusions. Metadata remains 0.5.114 in test snapshot; prerelease packaging override is separate.",
+    "ResourceWarning and injected HTTP disconnect logs retained. Final unittest result is OK.",
+    "Native and loaded pressure/performance qualification remain separate gates."
+  ]
+}

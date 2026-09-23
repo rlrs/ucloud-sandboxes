@@ -1,0 +1,8 @@
+{
+  "status": "passed",
+  "image_allocated_bytes_before": 67461120,
+  "image_allocated_bytes_written": 134569984,
+  "image_allocated_bytes_after_delete": 67293184,
+  "released_bytes": 67276800,
+  "remaining_hard_claim": 0
+}

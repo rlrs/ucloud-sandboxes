@@ -1,18 +1,47 @@
 # PostgreSQL relay backend
 
-The model relay can use PostgreSQL as its sole authority for registrations,
-inference leases, retry identity, responses and park/wake work. Select it with
-`relay_postgres` in deployment configuration. Existing configurations continue
-using SQLite. Gateway ownership, placement and provider journals have **not**
-moved to PostgreSQL in this step; keep one gateway/controller authority.
+As of **0.5.114**, PostgreSQL is the only live model-relay authority for
+registrations, inference leases, retry identity, responses and park/wake work.
+Configure `relay_postgres` before starting the relay. Old live SQLite
+configuration fails with migration instructions; it never silently starts a
+fresh authority. Gateway ownership, placement, provider and worker-local
+journals remain separate authorities; keep one gateway/controller authority.
 
-The HTTP and SDK contracts are unchanged. A worker response commits once, with
-its wake intent, and the HTTP acknowledgment still waits for delivery readiness.
-If that HTTP connection disappears, background dispatch keeps retrying the wake.
-Another relay process can serve an authenticated retry without sampling again.
-If the acknowledgment deadline expires first, HTTP 504 explicitly reports
-`committed: true`; the same lease/result can be retried while delivery continues.
-No SDK or Verifiers update is needed for this backend.
+A worker response commits once with its wake intent, then immediately returns
+HTTP 200 with a durable-acceptance receipt:
+
+```json
+{"ok": true, "request_id": "...", "duplicate": false, "committed": true, "delivery_status": "pending"}
+```
+
+`pending` means the committed delivery obligation is still outstanding.
+`released` means the response is eligible for sandbox-facing delivery (or its
+caller was definitively lost), **not** that the sandbox received it or is awake.
+The value is a snapshot at commit/retry time, not a delivery subscription. A
+successful submission releases inference capacity; callers that require useful
+continuation must observe the sandbox's own response receipt and continuation.
+
+If the HTTP connection disappears after commit, background dispatch keeps
+retrying wake. Another relay process accepts an identical authenticated retry
+without sampling again; it returns `duplicate: true` and the current delivery
+status. Changed content or a different inference lease is rejected. Wake delay
+no longer turns an accepted response into HTTP 504. Terminal `/worker/error`
+responses use this receipt too; retryable inference errors still return
+`retried: true` because they requeue inference rather than commit a result.
+
+The SDK accepts both this receipt and older servers' legacy acknowledgments.
+Existing integrations must stop treating completion success as proof of wake.
+
+### SQLite migration boundary
+
+0.5.114 removes the live SQLite backend and its synchronous wake-before-ack
+notifier. The fenced, offline, one-way importer below retains version-3 row
+compatibility. Stop the old relay and complete that cutover before upgrading an
+unmigrated deployment. Do not delete its journal or remove its authority fence.
+The importer bounds input to 100,000 rows and 512 MiB of encoded row payloads;
+larger journals require an explicit operator migration rather than unbounded
+startup decoding. There is no dual write or automatic backend selection.
+Gateway and worker-local SQLite journals are not deprecated by this boundary.
 
 Production `live-ucloud-20260824a` enabled this backend on 2026-09-22. See the
 [cutover and recovery record](benchmarks/postgres-production-2026-09-22/README.md).
@@ -30,9 +59,9 @@ Production `live-ucloud-20260824a` enabled this backend on 2026-09-22. See the
   must advertise `relay-wake-fence-v1`; the gateway refuses an unsafe fallback.
 - Model bodies live separately from mutable state. Lease renewals do not rewrite
   payloads. HTTP waiters share batched delivery reads rather than each polling a
-  database connection. Worker acknowledgments read readiness metadata without
-  fetching another copy of the response body. Socket futures and notification
-  hints are disposable.
+  database connection. Worker acknowledgments are constructed from the commit
+  result without readiness polling or another response-body read. Socket futures
+  and notification hints are disposable.
 - Notifications are batched **after** the durable commit. PostgreSQL serializes
   notifying writers until commit; putting every notification in the result
   transaction defeated concurrent WAL flushing in the Linux load test. Dropped
@@ -78,6 +107,19 @@ from a database-process crash with intact storage. It does not itself provision
 replication, backups or failover: use a PostgreSQL deployment with the durability
 and recovery policy required for production. Never disable fsync or synchronous
 commit to reproduce a latency figure.
+
+## Database boundary
+
+`PostgresDatabase` owns connections, transaction metrics, commit hints and relay
+schema migration. `PostgresRelayState` owns the live domain. New `migrate` calls
+create only `relay_*` tables, and `status` reports the relay without starting a
+dispatcher or writing runtime configuration. These commands no longer initialize
+or report the unshipped central-scheduling experiment.
+
+Existing qualification tables are left intact; their users must be checked
+before any manual cleanup. The explicitly named `QualificationControlStore`
+and `qualification-migrate` / `qualification-status` commands remain available
+for isolated scheduling experiments. They never replace gateway authority.
 
 ## Idle cutover
 

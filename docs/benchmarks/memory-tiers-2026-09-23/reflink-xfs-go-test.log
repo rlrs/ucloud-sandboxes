@@ -1,0 +1,3 @@
+=== RUN   TestCloneApplicationMemory
+--- PASS: TestCloneApplicationMemory (0.73s)
+PASS

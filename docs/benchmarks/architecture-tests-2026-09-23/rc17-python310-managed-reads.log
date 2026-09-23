@@ -1,0 +1,15 @@
+test_async_sdk_retries_status_and_logs_from_actual_handlers (tests.test_managed_read_http.ManagedReadHttpTests) ... ok
+test_semantic_status_and_log_conflicts_remain409_without_retry (tests.test_managed_read_http.ManagedReadHttpTests) ... ok
+test_sync_sdk_retries_status_and_logs_from_actual_handlers (tests.test_managed_read_http.ManagedReadHttpTests) ... ok
+test_authoritative_persistence_error_is_never_hidden_as_overload (tests.test_managed_control_admission.ManagedControlAdmissionTests) ... ok
+test_node_returns_explicit_retryable_read_response (tests.test_managed_control_admission.ManagedControlAdmissionTests) ... ok
+test_queue_does_not_hold_owner_and_expires_before_dispatch (tests.test_managed_control_admission.ManagedControlAdmissionTests) ... ok
+test_queue_revalidates_generation_before_dispatch (tests.test_managed_control_admission.ManagedControlAdmissionTests) ... ok
+test_read_exec_timeout_is_typed_retryable_without_replaying_mutation (tests.test_managed_control_admission.ManagedControlAdmissionTests) ... ok
+test_start_retries_only_explicit_before_dispatch_failure_without_locks (tests.test_managed_control_admission.ManagedControlAdmissionTests) ... ok
+test_unstructured_start_error_remains_ambiguous_and_is_not_retried (tests.test_managed_control_admission.ManagedControlAdmissionTests) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 6.460s
+
+OK

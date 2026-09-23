@@ -1,0 +1,17 @@
+{"record_bytes": 1449, "python": "3.14.4 (main, Jun 18 2026, 14:25:02) [GCC 15.2.0]", "fixture": "isolated planned registration, default 17 writable guest paths"}
+{"round": 0, "variant": "baseline", "phase": "get", "iterations": 4096, "seconds": 1.4648500470000272, "cpu_seconds": 1.4646252579999999}
+{"round": 0, "variant": "baseline", "phase": "decode", "iterations": 4096, "seconds": 0.9496559579999939, "cpu_seconds": 0.9495406810000002}
+{"round": 0, "variant": "lexical", "phase": "get", "iterations": 4096, "seconds": 0.885462895000046, "cpu_seconds": 0.8852796080000003}
+{"round": 0, "variant": "lexical", "phase": "decode", "iterations": 4096, "seconds": 0.4906608100000085, "cpu_seconds": 0.49051142900000055}
+{"round": 0, "variant": "lexical", "phase": "get", "iterations": 4096, "seconds": 0.7206296970000494, "cpu_seconds": 0.720512609}
+{"round": 0, "variant": "lexical", "phase": "decode", "iterations": 4096, "seconds": 0.5734769099999539, "cpu_seconds": 0.5734326779999996}
+{"round": 0, "variant": "baseline", "phase": "get", "iterations": 4096, "seconds": 1.0567338179999979, "cpu_seconds": 1.0564841249999999}
+{"round": 0, "variant": "baseline", "phase": "decode", "iterations": 4096, "seconds": 0.7490413409999519, "cpu_seconds": 0.74889385}
+{"round": 1, "variant": "baseline", "phase": "get", "iterations": 4096, "seconds": 1.0882268650000242, "cpu_seconds": 1.0880784279999993}
+{"round": 1, "variant": "baseline", "phase": "decode", "iterations": 4096, "seconds": 0.7239775760000384, "cpu_seconds": 0.723864518000001}
+{"round": 1, "variant": "lexical", "phase": "get", "iterations": 4096, "seconds": 0.49435257699997237, "cpu_seconds": 0.4942828539999997}
+{"round": 1, "variant": "lexical", "phase": "decode", "iterations": 4096, "seconds": 0.3540257180000026, "cpu_seconds": 0.35402611900000025}
+{"round": 1, "variant": "lexical", "phase": "get", "iterations": 4096, "seconds": 0.4901757739999084, "cpu_seconds": 0.49005806699999965}
+{"round": 1, "variant": "lexical", "phase": "decode", "iterations": 4096, "seconds": 0.28783394799995676, "cpu_seconds": 0.28778880299999976}
+{"round": 1, "variant": "baseline", "phase": "get", "iterations": 4096, "seconds": 0.933614632000058, "cpu_seconds": 0.9334224019999997}
+{"round": 1, "variant": "baseline", "phase": "decode", "iterations": 4096, "seconds": 0.5332442689999652, "cpu_seconds": 0.5331842770000002}

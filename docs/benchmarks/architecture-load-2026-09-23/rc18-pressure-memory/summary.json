@@ -1,0 +1,83 @@
+{
+  "run_id": "relay-load-ca1cbcf81ed1",
+  "started_at": "2026-09-23T15:11:06.216996+00:00",
+  "finished_at": "2026-09-23T15:16:27.106676+00:00",
+  "failure": "TimeoutError: ",
+  "completed_cycles": 502,
+  "fleet_health": {
+    "enabled": true,
+    "passed": false,
+    "status": "failed",
+    "used_jobs": [
+      "12400622",
+      "12400623",
+      "12400625",
+      "12400626"
+    ],
+    "observed_healthy_jobs": [
+      "12400622",
+      "12400623",
+      "12400625",
+      "12400626"
+    ],
+    "failure_count": 28,
+    "placement_grace_seconds": 30,
+    "freshness_seconds": 30
+  },
+  "cleanup_errors": [],
+  "managed_observed_at": "2026-09-23T15:15:50.460598+00:00",
+  "managed_states": {
+    "running": 223
+  },
+  "terminal_failures": [],
+  "workers": [
+    {
+      "job_id": "12400622",
+      "samples": 158,
+      "sample_errors": 0,
+      "sample_start": "2026-09-23T15:10:59.552041+00:00",
+      "sample_end": "2026-09-23T15:16:14.368685+00:00",
+      "minimum_backing_available_bytes": 14291402752,
+      "minimum_backing_at": "2026-09-23T15:13:56.235295+00:00",
+      "minimum_physical_available_bytes": 12144836608,
+      "minimum_physical_at": "2026-09-23T15:13:56.235295+00:00",
+      "checkpoint_command_timeouts": 0
+    },
+    {
+      "job_id": "12400623",
+      "samples": 158,
+      "sample_errors": 0,
+      "sample_start": "2026-09-23T15:11:01.111372+00:00",
+      "sample_end": "2026-09-23T15:16:17.285743+00:00",
+      "minimum_backing_available_bytes": 11252019200,
+      "minimum_backing_at": "2026-09-23T15:14:12.335452+00:00",
+      "minimum_physical_available_bytes": 9145315328,
+      "minimum_physical_at": "2026-09-23T15:14:54.635144+00:00",
+      "checkpoint_command_timeouts": 0
+    },
+    {
+      "job_id": "12400625",
+      "samples": 157,
+      "sample_errors": 0,
+      "sample_start": "2026-09-23T15:11:02.441563+00:00",
+      "sample_end": "2026-09-23T15:16:15.656672+00:00",
+      "minimum_backing_available_bytes": 11292033024,
+      "minimum_backing_at": "2026-09-23T15:13:24.624006+00:00",
+      "minimum_physical_available_bytes": 9267933184,
+      "minimum_physical_at": "2026-09-23T15:13:24.624006+00:00",
+      "checkpoint_command_timeouts": 0
+    },
+    {
+      "job_id": "12400626",
+      "samples": 156,
+      "sample_errors": 0,
+      "sample_start": "2026-09-23T15:11:03.693913+00:00",
+      "sample_end": "2026-09-23T15:16:14.734898+00:00",
+      "minimum_backing_available_bytes": 11268050944,
+      "minimum_backing_at": "2026-09-23T15:13:24.322788+00:00",
+      "minimum_physical_available_bytes": 8978305024,
+      "minimum_physical_at": "2026-09-23T15:13:22.320960+00:00",
+      "checkpoint_command_timeouts": 0
+    }
+  ]
+}

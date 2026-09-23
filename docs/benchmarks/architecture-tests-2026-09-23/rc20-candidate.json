@@ -1,0 +1,11 @@
+{
+  "version": "0.5.114rc20",
+  "wheel_sha256": "087b740f58c143f8abcc822eecc7caca1c59c4b12fe11e083a029492194cc699",
+  "sandbox_bundle_sha256": "0c75399a6fcc00a981703816011e624948b34dc88696b2abde082048e198701b",
+  "builder_bundle_sha256": "0faeae1dceb95abe1c4284e8830c02d77ceeec9e9cb91093f0d54e87e237153d",
+  "native_runsc_sha256": "203d43a11e05fc836863aa40afee89b70b93403fcb73647c60c4df29e84b2f35",
+  "installed_at": "2026-09-23T17:23:01.375978+00:00",
+  "status": "pressure-qualification-candidate; not performance acceptance",
+  "immutable_rootfs": "off",
+  "control_backend": "postgres"
+}

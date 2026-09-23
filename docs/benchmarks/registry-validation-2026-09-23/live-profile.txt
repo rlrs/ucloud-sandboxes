@@ -1,0 +1,91 @@
+{"pid": 103706, "rows": 128, "record_bytes": [2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030, 2030], "installed_module": "/var/cache/ucloud-sandboxes/init-packages/60c6ae4060fed52d7ce0631a95e101dbe0caf76bcd729a81c2de8d678ba7d9cb/agent-runtime/site-packages/ucloud_sandboxes/direct_registry.py"}
+{"phase": "get", "iterations": 512, "seconds": 0.7332640439999523, "cpu_seconds": 0.733228533}
+         1082369 function calls (1037825 primitive calls) in 0.718 seconds
+
+   Ordered by: cumulative time
+   List reduced from 160 to 35 due to restriction <35>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      512    0.001    0.000    0.732    0.001 profile-direct-registry.py:20(<lambda>)
+      512    0.002    0.000    0.730    0.001 direct_registry.py:762(get)
+      512    0.001    0.000    0.625    0.001 direct_registry.py:1027(_get)
+      512    0.005    0.000    0.616    0.001 direct_registry.py:1005(_decode)
+      512    0.013    0.000    0.497    0.001 direct_registry.py:230(from_dict)
+      512    0.010    0.000    0.406    0.001 direct_registry.py:82(__post_init__)
+      512    0.011    0.000    0.387    0.001 sandbox.py:590(validate)
+     9216    0.018    0.000    0.219    0.000 guest_paths.py:15(validate_setup_path)
+      512    0.003    0.000    0.207    0.000 sandbox.py:368(validate)
+     9216    0.041    0.000    0.192    0.000 guest_paths.py:6(validate_guest_path)
+      512    0.001    0.000    0.148    0.000 sandbox.py:301(validate)
+      512    0.003    0.000    0.147    0.000 guest_paths.py:25(validate_workspace_path)
+     3072    0.010    0.000    0.127    0.000 guest_paths.py:46(<genexpr>)
+     1024    0.001    0.000    0.100    0.000 {built-in method builtins.next}
+      512    0.001    0.000    0.099    0.000 direct_registry.py:1001(_encode)
+     1024    0.006    0.000    0.098    0.000 direct_registry.py:1134(_transaction)
+      512    0.001    0.000    0.091    0.000 contextlib.py:136(__enter__)
+      512    0.001    0.000    0.075    0.000 direct_registry.py:222(to_dict)
+      512    0.004    0.000    0.073    0.000 sandbox.py:692(to_dict)
+      512    0.014    0.000    0.071    0.000 sandbox.py:485(from_dict)
+     2560    0.004    0.000    0.067    0.000 <frozen _collections_abc>:1021(__contains__)
+     1024    0.001    0.000    0.067    0.000 dataclasses.py:1475(asdict)
+    95744    0.045    0.000    0.066    0.000 guest_paths.py:9(<genexpr>)
+37888/1024    0.038    0.000    0.064    0.000 dataclasses.py:1499(_asdict_inner)
+    27648    0.026    0.000    0.061    0.000 __init__.py:340(drive)
+     5120    0.005    0.000    0.058    0.000 __init__.py:216(__eq__)
+     9216    0.015    0.000    0.058    0.000 __init__.py:371(parts)
+    10240    0.012    0.000    0.052    0.000 __init__.py:197(_str_normcase)
+      512    0.005    0.000    0.042    0.000 direct_registry.py:1212(_prepare_file)
+    11264    0.013    0.000    0.041    0.000 __init__.py:250(__str__)
+    19456    0.026    0.000    0.041    0.000 __init__.py:134(__init__)
+     5120    0.004    0.000    0.036    0.000 <frozen _collections_abc>:1011(__iter__)
+     5120    0.007    0.000    0.031    0.000 __init__.py:62(__getitem__)
+     1024    0.001    0.000    0.029    0.000 direct_registry.py:1345(_canonical_json)
+     1024    0.003    0.000    0.028    0.000 __init__.py:185(dumps)
+
+
+
+{"phase": "decode", "iterations": 512, "seconds": 0.49990612299995973, "cpu_seconds": 0.4998145319999998}
+         1020417 function calls (975873 primitive calls) in 0.490 seconds
+
+   Ordered by: cumulative time
+   List reduced from 126 to 35 due to restriction <35>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      512    0.001    0.000    0.499    0.001 profile-direct-registry.py:20(<lambda>)
+      512    0.004    0.000    0.498    0.001 direct_registry.py:1005(_decode)
+      512    0.009    0.000    0.405    0.001 direct_registry.py:230(from_dict)
+      512    0.007    0.000    0.336    0.001 direct_registry.py:82(__post_init__)
+      512    0.007    0.000    0.322    0.001 sandbox.py:590(validate)
+     9216    0.015    0.000    0.187    0.000 guest_paths.py:15(validate_setup_path)
+      512    0.003    0.000    0.177    0.000 sandbox.py:368(validate)
+     9216    0.035    0.000    0.164    0.000 guest_paths.py:6(validate_guest_path)
+      512    0.001    0.000    0.121    0.000 sandbox.py:301(validate)
+      512    0.002    0.000    0.121    0.000 guest_paths.py:25(validate_workspace_path)
+     3072    0.008    0.000    0.105    0.000 guest_paths.py:46(<genexpr>)
+      512    0.001    0.000    0.076    0.000 direct_registry.py:1001(_encode)
+      512    0.001    0.000    0.059    0.000 direct_registry.py:222(to_dict)
+      512    0.003    0.000    0.058    0.000 sandbox.py:692(to_dict)
+     2560    0.003    0.000    0.056    0.000 <frozen _collections_abc>:1021(__contains__)
+    95744    0.038    0.000    0.056    0.000 guest_paths.py:9(<genexpr>)
+      512    0.010    0.000    0.054    0.000 sandbox.py:485(from_dict)
+     1024    0.001    0.000    0.053    0.000 dataclasses.py:1475(asdict)
+    26624    0.022    0.000    0.052    0.000 __init__.py:340(drive)
+37888/1024    0.031    0.000    0.051    0.000 dataclasses.py:1499(_asdict_inner)
+     9216    0.013    0.000    0.049    0.000 __init__.py:371(parts)
+     5120    0.004    0.000    0.048    0.000 __init__.py:216(__eq__)
+    10240    0.010    0.000    0.043    0.000 __init__.py:197(_str_normcase)
+     8192    0.010    0.000    0.033    0.000 __init__.py:250(__str__)
+    18432    0.020    0.000    0.032    0.000 __init__.py:134(__init__)
+     5120    0.003    0.000    0.029    0.000 <frozen _collections_abc>:1011(__iter__)
+     5120    0.006    0.000    0.026    0.000 __init__.py:62(__getitem__)
+    14848    0.013    0.000    0.022    0.000 __init__.py:280(_parse_path)
+   173056    0.018    0.000    0.018    0.000 {built-in method builtins.ord}
+      512    0.001    0.000    0.016    0.000 direct_registry.py:1345(_canonical_json)
+      512    0.001    0.000    0.015    0.000 __init__.py:185(dumps)
+     3584    0.009    0.000    0.015    0.000 dataclasses.py:1445(fields)
+      512    0.001    0.000    0.014    0.000 encoder.py:185(encode)
+     2560    0.002    0.000    0.014    0.000 __init__.py:268(_from_parsed_parts)
+    94720    0.013    0.000    0.013    0.000 {built-in method builtins.isinstance}
+
+
+

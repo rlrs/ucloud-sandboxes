@@ -1,0 +1,6 @@
+.............................Executing <Task pending name='Task-788' coro=<PostgresRelayTests.test_qualification_subapp_keeps_live_registrations_separate() running at /home/alex-admin/ucloud-relay-phase-20260923/tests/test_postgres_relay.py:1310> wait_for=<Future pending cb=[Task.task_wakeup()] created at /home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/asyncio/base_events.py:459> cb=[_run_until_complete_cb() at /home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/asyncio/base_events.py:181] created at /home/alex-admin/.local/share/uv/python/cpython-3.13.2-linux-x86_64-gnu/lib/python3.13/asyncio/runners.py:100> took 0.139 seconds
+...................
+----------------------------------------------------------------------
+Ran 48 tests in 9.474s
+
+OK

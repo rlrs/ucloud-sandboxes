@@ -1,0 +1,137 @@
+{
+  "report_version": 3,
+  "run_id": "relay-load-1b7912a9871f",
+  "started_at": "2026-09-23T11:44:43.027007+00:00",
+  "configuration": {
+    "gateway_url": "https://app-sandboxes.cloud.sdu.dk",
+    "relay_url": "https://app-sandboxes-relay-v2.cloud.sdu.dk",
+    "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+    "sandboxes": 16,
+    "cycles": 4,
+    "startup_mode": "rolling",
+    "resident_mb": 512,
+    "dirty_mb": 128,
+    "files": 64,
+    "file_kib": 64,
+    "payload_kib": 32,
+    "tool_upload_kib": 64,
+    "cpu_ms": 100,
+    "model_seconds": 20.0,
+    "model_jitter": 5.0,
+    "parking_mode": "forced",
+    "cpus": 1,
+    "memory_mb": 1024,
+    "disk_mb": 4096,
+    "create_concurrency": 16,
+    "fleet_pollers": 24,
+    "warmup_cycles": 1,
+    "deadline_seconds": 1800.0,
+    "useful_action_p95_seconds": 1,
+    "continuation_p95_seconds": 0.8,
+    "seed": 1,
+    "start_signal_file": null
+  },
+  "errors": [],
+  "cleanup_errors": [],
+  "control_retries": [
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-1b7912a9871f-0005",
+      "cycle": 0,
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-1b7912a9871f-0010",
+      "cycle": 0,
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-1b7912a9871f-0009",
+      "cycle": 0,
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-1b7912a9871f-0005",
+      "cycle": 0,
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-1b7912a9871f-0009",
+      "cycle": 0,
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-1b7912a9871f-0010",
+      "cycle": 0,
+      "attempt": 2,
+      "status": 503
+    }
+  ],
+  "resource_errors": [],
+  "fleet_health_checks": [
+    {
+      "at": "2026-09-23T11:44:43.253335+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T11:44:48.322565+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400270",
+        "12400272",
+        "12400274",
+        "12400276"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    }
+  ],
+  "fleet_health_failures": [],
+  "driver_python": "3.13.2",
+  "sdk_version": "0.4.26",
+  "sdk_client_sha256": "010a8e2406592224a1b339e7fcc4ac983ed394a56a4a8786c5f188569a2d5bb0",
+  "latency_definition": "model ready through guest-originated continuation receipt, then uploaded tool confirmation; receipt includes observation tunnel overhead; full integrity is a separate mandatory gate",
+  "harness_sha256": "71011a04c2e4e19708ef6b612cd605248f606a093c836cbcb6b41155d645b9d1",
+  "deployed_health": {
+    "ok": true,
+    "service": "control-plane",
+    "version": "0.5.114rc8"
+  },
+  "fleet_health": {
+    "enabled": true,
+    "passed": false,
+    "status": "insufficient_observation",
+    "used_jobs": [
+      "12400270",
+      "12400272",
+      "12400274",
+      "12400276"
+    ],
+    "observed_healthy_jobs": [],
+    "failure_count": 0,
+    "placement_grace_seconds": 30,
+    "freshness_seconds": 30
+  },
+  "source_report_sha256": "38d911b90e0e97daae4ae09a65a6cb654b7e5139075b23bb6f8b87d8423f062e",
+  "health_checks": {
+    "total": 4,
+    "failed": 0
+  },
+  "fleet_polls_checks": {
+    "total": 168,
+    "failed": 0
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "run_id": "relay-load-4ccf32378228",
+  "started_at": "2026-09-23T15:37:59.098935+00:00",
+  "finished_at": "2026-09-23T15:42:26.188555+00:00",
+  "failure": "TimeoutError: guest did not continue after model response",
+  "completed_cycles": 713,
+  "fleet_health": {
+    "enabled": true,
+    "passed": false,
+    "status": "failed",
+    "used_jobs": [
+      "12400622",
+      "12400623",
+      "12400625",
+      "12400626"
+    ],
+    "observed_healthy_jobs": [
+      "12400622",
+      "12400623",
+      "12400625",
+      "12400626"
+    ],
+    "failure_count": 2,
+    "placement_grace_seconds": 30,
+    "freshness_seconds": 30
+  },
+  "cleanup_errors": [],
+  "completed_scenarios": [],
+  "managed_observed_at": "2026-09-23T15:41:57.167053+00:00",
+  "managed_states": {
+    "running": 256
+  },
+  "terminal_failures": [],
+  "workers": [
+    {
+      "job_id": "12400622",
+      "samples": 127,
+      "sample_errors": 0,
+      "sample_start": "2026-09-23T15:37:52.583112+00:00",
+      "sample_end": "2026-09-23T15:42:04.814287+00:00",
+      "minimum_backing_available_bytes": 14556004352,
+      "minimum_physical_available_bytes": 12574535680,
+      "checkpoint_command_timeouts": 0
+    },
+    {
+      "job_id": "12400623",
+      "samples": 126,
+      "sample_errors": 0,
+      "sample_start": "2026-09-23T15:37:53.968901+00:00",
+      "sample_end": "2026-09-23T15:42:04.339124+00:00",
+      "minimum_backing_available_bytes": 10974887936,
+      "minimum_physical_available_bytes": 8959389696,
+      "checkpoint_command_timeouts": 0
+    },
+    {
+      "job_id": "12400625",
+      "samples": 125,
+      "sample_errors": 0,
+      "sample_start": "2026-09-23T15:37:55.653869+00:00",
+      "sample_end": "2026-09-23T15:42:04.496504+00:00",
+      "minimum_backing_available_bytes": 11259809792,
+      "minimum_physical_available_bytes": 9433739264,
+      "checkpoint_command_timeouts": 0
+    },
+    {
+      "job_id": "12400626",
+      "samples": 124,
+      "sample_errors": 0,
+      "sample_start": "2026-09-23T15:37:56.840792+00:00",
+      "sample_end": "2026-09-23T15:42:03.482688+00:00",
+      "minimum_backing_available_bytes": 10655260672,
+      "minimum_physical_available_bytes": 8955359232,
+      "checkpoint_command_timeouts": 0
+    }
+  ]
+}

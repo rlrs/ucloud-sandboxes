@@ -1,0 +1,86 @@
+{
+  "abort_same_original": true,
+  "cycles": [
+    {
+      "capture_id": "41407182c1c2888a383de2ceb8f7a9aaa419d24169965d15c1c4a99bd2f8af13",
+      "memory_charge": {
+        "active_mode": "file",
+        "cgroup": "/sys/fs/cgroup/ucloud-sandboxes/469dec017465959b8ed619379d0afb93aa5c33ffc9a934f1e6de901e183084c7",
+        "current": 1647173632,
+        "limit": 2147483648,
+        "shmem": 184320
+      },
+      "timings_ms": {
+        "artifact_cleanup": 100.27144200012117,
+        "begin_restore_journal": 4.757106000397471,
+        "candidate_fence": 1.0500239995963057,
+        "candidate_journal": 4.2554490000839,
+        "candidate_resume": 27.08132099996874,
+        "commit_running_journal": 5.549150999740959,
+        "readiness_exec": 24.522690000139846,
+        "runsc_restore": 106.75773699995261,
+        "runsc_state": 20.083853999949497,
+        "validate_artifact": 170.73671399975865,
+        "warden_total": 465.2283950003948
+      },
+      "wake_seconds": 0.4652665629996591
+    },
+    {
+      "capture_id": "9918976c06af1ffd20bdf1f0721448ec1a39fdf6c1cc06fe7f89c2bd419437ee",
+      "memory_charge": {
+        "active_mode": "file",
+        "cgroup": "/sys/fs/cgroup/ucloud-sandboxes/469dec017465959b8ed619379d0afb93aa5c33ffc9a934f1e6de901e183084c7",
+        "current": 1645453312,
+        "limit": 2147483648,
+        "shmem": 184320
+      },
+      "timings_ms": {
+        "artifact_cleanup": 58.45386399960262,
+        "begin_restore_journal": 3.24677700018583,
+        "candidate_fence": 0.9299130001636513,
+        "candidate_journal": 4.123541000353725,
+        "candidate_resume": 31.09555499986527,
+        "commit_running_journal": 5.210289999922679,
+        "readiness_exec": 27.227431000028446,
+        "runsc_restore": 116.57005799997933,
+        "runsc_state": 17.528349999793136,
+        "validate_artifact": 99.23700199988161,
+        "warden_total": 363.84755799963386
+      },
+      "wake_seconds": 0.3639069569999265
+    },
+    {
+      "capture_id": "b9cfcbc52ce40a5f3a5752321dfc660cedc0bd5a5133544ae55b1fe4ada47cc4",
+      "memory_charge": {
+        "active_mode": "file",
+        "cgroup": "/sys/fs/cgroup/ucloud-sandboxes/469dec017465959b8ed619379d0afb93aa5c33ffc9a934f1e6de901e183084c7",
+        "current": 1646084096,
+        "limit": 2147483648,
+        "shmem": 196608
+      },
+      "timings_ms": {
+        "artifact_cleanup": 56.532785999934276,
+        "begin_restore_journal": 3.9932529998623068,
+        "candidate_fence": 1.1340910000399163,
+        "candidate_journal": 4.028805999951146,
+        "candidate_resume": 26.53996399976677,
+        "commit_running_journal": 5.457202000343386,
+        "readiness_exec": 22.060096999666712,
+        "runsc_restore": 103.26303500005451,
+        "runsc_state": 17.97671700023784,
+        "validate_artifact": 99.05567800024073,
+        "warden_total": 340.19530000023224
+      },
+      "wake_seconds": 0.3402882709997357
+    }
+  ],
+  "project_quota_errno": 28,
+  "quota": {
+    "memory_backing_allocations": 1,
+    "memory_backing_hard_reserved_bytes": 5435817984
+  },
+  "schema": 1,
+  "status": "passed",
+  "test_root": "/home/ucloud/memory-tier/xfs/ucloud-storage-native-3nlduyfo",
+  "workload_ready_seconds": 3.5105938830001833
+}

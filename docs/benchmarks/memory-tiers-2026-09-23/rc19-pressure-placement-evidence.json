@@ -1,0 +1,3676 @@
+{
+  "run_id": "relay-load-70fe49fe7db7",
+  "placements": {
+    "relay-load-70fe49fe7db7-0000": "12400713",
+    "relay-load-70fe49fe7db7-0001": "12400715",
+    "relay-load-70fe49fe7db7-0002": "12400714",
+    "relay-load-70fe49fe7db7-0003": "12400715",
+    "relay-load-70fe49fe7db7-0004": "12400713",
+    "relay-load-70fe49fe7db7-0005": "12400714",
+    "relay-load-70fe49fe7db7-0006": "12400716",
+    "relay-load-70fe49fe7db7-0007": "12400713",
+    "relay-load-70fe49fe7db7-0008": "12400715",
+    "relay-load-70fe49fe7db7-0009": "12400716",
+    "relay-load-70fe49fe7db7-0010": "12400715",
+    "relay-load-70fe49fe7db7-0011": "12400713",
+    "relay-load-70fe49fe7db7-0012": "12400716",
+    "relay-load-70fe49fe7db7-0013": "12400714",
+    "relay-load-70fe49fe7db7-0014": "12400714",
+    "relay-load-70fe49fe7db7-0015": "12400716",
+    "relay-load-70fe49fe7db7-0016": "12400715",
+    "relay-load-70fe49fe7db7-0017": "12400715",
+    "relay-load-70fe49fe7db7-0018": "12400714",
+    "relay-load-70fe49fe7db7-0019": "12400715",
+    "relay-load-70fe49fe7db7-0020": "12400714",
+    "relay-load-70fe49fe7db7-0021": "12400714",
+    "relay-load-70fe49fe7db7-0022": "12400715",
+    "relay-load-70fe49fe7db7-0023": "12400714",
+    "relay-load-70fe49fe7db7-0024": "12400713",
+    "relay-load-70fe49fe7db7-0025": "12400716",
+    "relay-load-70fe49fe7db7-0026": "12400716",
+    "relay-load-70fe49fe7db7-0027": "12400716",
+    "relay-load-70fe49fe7db7-0028": "12400715",
+    "relay-load-70fe49fe7db7-0029": "12400715",
+    "relay-load-70fe49fe7db7-0030": "12400713",
+    "relay-load-70fe49fe7db7-0031": "12400715",
+    "relay-load-70fe49fe7db7-0032": "12400713",
+    "relay-load-70fe49fe7db7-0033": "12400714",
+    "relay-load-70fe49fe7db7-0034": "12400714",
+    "relay-load-70fe49fe7db7-0035": "12400713",
+    "relay-load-70fe49fe7db7-0036": "12400714",
+    "relay-load-70fe49fe7db7-0037": "12400716",
+    "relay-load-70fe49fe7db7-0038": "12400713",
+    "relay-load-70fe49fe7db7-0039": "12400714",
+    "relay-load-70fe49fe7db7-0040": "12400715",
+    "relay-load-70fe49fe7db7-0041": "12400716",
+    "relay-load-70fe49fe7db7-0042": "12400716",
+    "relay-load-70fe49fe7db7-0043": "12400715",
+    "relay-load-70fe49fe7db7-0044": "12400713",
+    "relay-load-70fe49fe7db7-0045": "12400715",
+    "relay-load-70fe49fe7db7-0046": "12400714",
+    "relay-load-70fe49fe7db7-0047": "12400713",
+    "relay-load-70fe49fe7db7-0048": "12400714",
+    "relay-load-70fe49fe7db7-0049": "12400716",
+    "relay-load-70fe49fe7db7-0050": "12400715",
+    "relay-load-70fe49fe7db7-0051": "12400713",
+    "relay-load-70fe49fe7db7-0052": "12400715",
+    "relay-load-70fe49fe7db7-0053": "12400714",
+    "relay-load-70fe49fe7db7-0054": "12400713",
+    "relay-load-70fe49fe7db7-0055": "12400715",
+    "relay-load-70fe49fe7db7-0056": "12400716",
+    "relay-load-70fe49fe7db7-0057": "12400714",
+    "relay-load-70fe49fe7db7-0058": "12400713",
+    "relay-load-70fe49fe7db7-0059": "12400716",
+    "relay-load-70fe49fe7db7-0060": "12400716",
+    "relay-load-70fe49fe7db7-0061": "12400713",
+    "relay-load-70fe49fe7db7-0062": "12400714",
+    "relay-load-70fe49fe7db7-0063": "12400715",
+    "relay-load-70fe49fe7db7-0064": "12400715",
+    "relay-load-70fe49fe7db7-0065": "12400715",
+    "relay-load-70fe49fe7db7-0066": "12400714",
+    "relay-load-70fe49fe7db7-0067": "12400713",
+    "relay-load-70fe49fe7db7-0068": "12400713",
+    "relay-load-70fe49fe7db7-0069": "12400716",
+    "relay-load-70fe49fe7db7-0070": "12400714",
+    "relay-load-70fe49fe7db7-0071": "12400716",
+    "relay-load-70fe49fe7db7-0072": "12400713",
+    "relay-load-70fe49fe7db7-0073": "12400714",
+    "relay-load-70fe49fe7db7-0074": "12400716",
+    "relay-load-70fe49fe7db7-0075": "12400715",
+    "relay-load-70fe49fe7db7-0076": "12400716",
+    "relay-load-70fe49fe7db7-0077": "12400713",
+    "relay-load-70fe49fe7db7-0078": "12400715",
+    "relay-load-70fe49fe7db7-0079": "12400715",
+    "relay-load-70fe49fe7db7-0080": "12400714",
+    "relay-load-70fe49fe7db7-0081": "12400713",
+    "relay-load-70fe49fe7db7-0082": "12400716",
+    "relay-load-70fe49fe7db7-0083": "12400714",
+    "relay-load-70fe49fe7db7-0084": "12400713",
+    "relay-load-70fe49fe7db7-0085": "12400716",
+    "relay-load-70fe49fe7db7-0086": "12400715",
+    "relay-load-70fe49fe7db7-0087": "12400713",
+    "relay-load-70fe49fe7db7-0088": "12400714",
+    "relay-load-70fe49fe7db7-0089": "12400714",
+    "relay-load-70fe49fe7db7-0090": "12400715",
+    "relay-load-70fe49fe7db7-0091": "12400715",
+    "relay-load-70fe49fe7db7-0092": "12400716",
+    "relay-load-70fe49fe7db7-0093": "12400713",
+    "relay-load-70fe49fe7db7-0094": "12400716",
+    "relay-load-70fe49fe7db7-0095": "12400716",
+    "relay-load-70fe49fe7db7-0096": "12400714",
+    "relay-load-70fe49fe7db7-0097": "12400713",
+    "relay-load-70fe49fe7db7-0098": "12400715",
+    "relay-load-70fe49fe7db7-0099": "12400714",
+    "relay-load-70fe49fe7db7-0100": "12400713",
+    "relay-load-70fe49fe7db7-0101": "12400715",
+    "relay-load-70fe49fe7db7-0102": "12400715",
+    "relay-load-70fe49fe7db7-0103": "12400713",
+    "relay-load-70fe49fe7db7-0104": "12400714",
+    "relay-load-70fe49fe7db7-0105": "12400716",
+    "relay-load-70fe49fe7db7-0106": "12400714",
+    "relay-load-70fe49fe7db7-0107": "12400716",
+    "relay-load-70fe49fe7db7-0108": "12400713",
+    "relay-load-70fe49fe7db7-0109": "12400716",
+    "relay-load-70fe49fe7db7-0110": "12400715",
+    "relay-load-70fe49fe7db7-0111": "12400715",
+    "relay-load-70fe49fe7db7-0112": "12400713",
+    "relay-load-70fe49fe7db7-0113": "12400713",
+    "relay-load-70fe49fe7db7-0114": "12400713",
+    "relay-load-70fe49fe7db7-0115": "12400715",
+    "relay-load-70fe49fe7db7-0116": "12400714",
+    "relay-load-70fe49fe7db7-0117": "12400714",
+    "relay-load-70fe49fe7db7-0118": "12400714",
+    "relay-load-70fe49fe7db7-0119": "12400716",
+    "relay-load-70fe49fe7db7-0120": "12400716",
+    "relay-load-70fe49fe7db7-0121": "12400714",
+    "relay-load-70fe49fe7db7-0122": "12400716",
+    "relay-load-70fe49fe7db7-0123": "12400713",
+    "relay-load-70fe49fe7db7-0124": "12400715",
+    "relay-load-70fe49fe7db7-0125": "12400716",
+    "relay-load-70fe49fe7db7-0126": "12400715",
+    "relay-load-70fe49fe7db7-0127": "12400716",
+    "relay-load-70fe49fe7db7-0128": "12400713",
+    "relay-load-70fe49fe7db7-0129": "12400715",
+    "relay-load-70fe49fe7db7-0130": "12400715",
+    "relay-load-70fe49fe7db7-0131": "12400713",
+    "relay-load-70fe49fe7db7-0132": "12400713",
+    "relay-load-70fe49fe7db7-0133": "12400714",
+    "relay-load-70fe49fe7db7-0134": "12400715",
+    "relay-load-70fe49fe7db7-0135": "12400714",
+    "relay-load-70fe49fe7db7-0136": "12400714",
+    "relay-load-70fe49fe7db7-0137": "12400716",
+    "relay-load-70fe49fe7db7-0138": "12400714",
+    "relay-load-70fe49fe7db7-0139": "12400716",
+    "relay-load-70fe49fe7db7-0140": "12400713",
+    "relay-load-70fe49fe7db7-0141": "12400716",
+    "relay-load-70fe49fe7db7-0142": "12400716",
+    "relay-load-70fe49fe7db7-0143": "12400715",
+    "relay-load-70fe49fe7db7-0144": "12400715",
+    "relay-load-70fe49fe7db7-0145": "12400715",
+    "relay-load-70fe49fe7db7-0146": "12400716",
+    "relay-load-70fe49fe7db7-0147": "12400716",
+    "relay-load-70fe49fe7db7-0148": "12400715",
+    "relay-load-70fe49fe7db7-0149": "12400715",
+    "relay-load-70fe49fe7db7-0150": "12400715",
+    "relay-load-70fe49fe7db7-0151": "12400715",
+    "relay-load-70fe49fe7db7-0152": "12400715",
+    "relay-load-70fe49fe7db7-0153": "12400715",
+    "relay-load-70fe49fe7db7-0154": "12400716",
+    "relay-load-70fe49fe7db7-0155": "12400715",
+    "relay-load-70fe49fe7db7-0156": "12400715",
+    "relay-load-70fe49fe7db7-0157": "12400715",
+    "relay-load-70fe49fe7db7-0158": "12400715",
+    "relay-load-70fe49fe7db7-0159": "12400715",
+    "relay-load-70fe49fe7db7-0160": "12400715",
+    "relay-load-70fe49fe7db7-0161": "12400715",
+    "relay-load-70fe49fe7db7-0162": "12400715",
+    "relay-load-70fe49fe7db7-0163": "12400715",
+    "relay-load-70fe49fe7db7-0164": "12400715",
+    "relay-load-70fe49fe7db7-0165": "12400715",
+    "relay-load-70fe49fe7db7-0166": "12400715",
+    "relay-load-70fe49fe7db7-0167": "12400715",
+    "relay-load-70fe49fe7db7-0168": "12400715",
+    "relay-load-70fe49fe7db7-0169": "12400715",
+    "relay-load-70fe49fe7db7-0170": "12400715",
+    "relay-load-70fe49fe7db7-0171": "12400715",
+    "relay-load-70fe49fe7db7-0172": "12400715",
+    "relay-load-70fe49fe7db7-0173": "12400715",
+    "relay-load-70fe49fe7db7-0174": "12400715",
+    "relay-load-70fe49fe7db7-0175": "12400715",
+    "relay-load-70fe49fe7db7-0176": "12400715",
+    "relay-load-70fe49fe7db7-0177": "12400715",
+    "relay-load-70fe49fe7db7-0178": "12400715",
+    "relay-load-70fe49fe7db7-0179": "12400715",
+    "relay-load-70fe49fe7db7-0180": "12400715",
+    "relay-load-70fe49fe7db7-0181": "12400715",
+    "relay-load-70fe49fe7db7-0182": "12400713",
+    "relay-load-70fe49fe7db7-0183": "12400714",
+    "relay-load-70fe49fe7db7-0184": "12400713",
+    "relay-load-70fe49fe7db7-0185": "12400716",
+    "relay-load-70fe49fe7db7-0186": "12400713",
+    "relay-load-70fe49fe7db7-0187": "12400714",
+    "relay-load-70fe49fe7db7-0188": "12400713",
+    "relay-load-70fe49fe7db7-0189": "12400716",
+    "relay-load-70fe49fe7db7-0190": "12400714",
+    "relay-load-70fe49fe7db7-0191": "12400713",
+    "relay-load-70fe49fe7db7-0192": "12400716",
+    "relay-load-70fe49fe7db7-0193": "12400714",
+    "relay-load-70fe49fe7db7-0194": "12400713",
+    "relay-load-70fe49fe7db7-0195": "12400714",
+    "relay-load-70fe49fe7db7-0196": "12400713",
+    "relay-load-70fe49fe7db7-0197": "12400716",
+    "relay-load-70fe49fe7db7-0198": "12400714",
+    "relay-load-70fe49fe7db7-0199": "12400713",
+    "relay-load-70fe49fe7db7-0200": "12400714",
+    "relay-load-70fe49fe7db7-0201": "12400716",
+    "relay-load-70fe49fe7db7-0202": "12400713",
+    "relay-load-70fe49fe7db7-0203": "12400714",
+    "relay-load-70fe49fe7db7-0204": "12400713",
+    "relay-load-70fe49fe7db7-0205": "12400714",
+    "relay-load-70fe49fe7db7-0206": "12400716",
+    "relay-load-70fe49fe7db7-0207": "12400713",
+    "relay-load-70fe49fe7db7-0208": "12400714",
+    "relay-load-70fe49fe7db7-0209": "12400716",
+    "relay-load-70fe49fe7db7-0210": "12400713",
+    "relay-load-70fe49fe7db7-0211": "12400714",
+    "relay-load-70fe49fe7db7-0212": "12400716",
+    "relay-load-70fe49fe7db7-0213": "12400713",
+    "relay-load-70fe49fe7db7-0214": "12400714",
+    "relay-load-70fe49fe7db7-0215": "12400716",
+    "relay-load-70fe49fe7db7-0216": "12400713",
+    "relay-load-70fe49fe7db7-0217": "12400714",
+    "relay-load-70fe49fe7db7-0218": "12400716",
+    "relay-load-70fe49fe7db7-0219": "12400716",
+    "relay-load-70fe49fe7db7-0220": "12400713",
+    "relay-load-70fe49fe7db7-0221": "12400716",
+    "relay-load-70fe49fe7db7-0222": "12400714",
+    "relay-load-70fe49fe7db7-0223": "12400714",
+    "relay-load-70fe49fe7db7-0224": "12400713",
+    "relay-load-70fe49fe7db7-0225": "12400716",
+    "relay-load-70fe49fe7db7-0226": "12400714",
+    "relay-load-70fe49fe7db7-0227": "12400713",
+    "relay-load-70fe49fe7db7-0228": "12400714",
+    "relay-load-70fe49fe7db7-0229": "12400713",
+    "relay-load-70fe49fe7db7-0230": "12400714",
+    "relay-load-70fe49fe7db7-0231": "12400713",
+    "relay-load-70fe49fe7db7-0232": "12400714",
+    "relay-load-70fe49fe7db7-0233": "12400713",
+    "relay-load-70fe49fe7db7-0234": "12400716",
+    "relay-load-70fe49fe7db7-0235": "12400716",
+    "relay-load-70fe49fe7db7-0236": "12400716",
+    "relay-load-70fe49fe7db7-0237": "12400716",
+    "relay-load-70fe49fe7db7-0238": "12400716",
+    "relay-load-70fe49fe7db7-0239": "12400716",
+    "relay-load-70fe49fe7db7-0240": "12400716",
+    "relay-load-70fe49fe7db7-0241": "12400716",
+    "relay-load-70fe49fe7db7-0242": "12400716",
+    "relay-load-70fe49fe7db7-0243": "12400714",
+    "relay-load-70fe49fe7db7-0244": "12400716",
+    "relay-load-70fe49fe7db7-0245": "12400716",
+    "relay-load-70fe49fe7db7-0246": "12400714",
+    "relay-load-70fe49fe7db7-0247": "12400714",
+    "relay-load-70fe49fe7db7-0248": "12400714",
+    "relay-load-70fe49fe7db7-0249": "12400714",
+    "relay-load-70fe49fe7db7-0250": "12400714",
+    "relay-load-70fe49fe7db7-0251": "12400714",
+    "relay-load-70fe49fe7db7-0252": "12400716",
+    "relay-load-70fe49fe7db7-0253": "12400714",
+    "relay-load-70fe49fe7db7-0254": "12400716",
+    "relay-load-70fe49fe7db7-0255": "12400714"
+  },
+  "resource_samples": [
+    {
+      "at": "2026-09-23T16:59:15.910517+00:00",
+      "nodes": [
+        {
+          "job_id": "12400713",
+          "active_sandboxes": 0,
+          "metrics": {
+            "collected_at": "2026-09-23T16:58:56.056129+00:00",
+            "cpu_percent": 0.8398133748055987,
+            "memory_percent": 5.183652584039689,
+            "memory_available_mb": 85238,
+            "io_psi_full_avg10": 0.0,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400714",
+          "active_sandboxes": 0,
+          "metrics": {
+            "collected_at": "2026-09-23T16:58:53.391925+00:00",
+            "cpu_percent": 0.5616224648985959,
+            "memory_percent": 5.173641237847338,
+            "memory_available_mb": 85247,
+            "io_psi_full_avg10": 6.45,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400715",
+          "active_sandboxes": 0,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:13.139881+00:00",
+            "cpu_percent": 0.031191515907673113,
+            "memory_percent": 5.254844379185299,
+            "memory_available_mb": 85174,
+            "io_psi_full_avg10": 6.77,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400716",
+          "active_sandboxes": 0,
+          "metrics": {
+            "collected_at": "2026-09-23T16:58:54.773016+00:00",
+            "cpu_percent": 0.06230529595015576,
+            "memory_percent": 5.153618545462636,
+            "memory_available_mb": 85265,
+            "io_psi_full_avg10": 6.69,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        }
+      ]
+    },
+    {
+      "at": "2026-09-23T16:59:20.942587+00:00",
+      "nodes": [
+        {
+          "job_id": "12400713",
+          "active_sandboxes": 3,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:17.002241+00:00",
+            "cpu_percent": 8.168394596292805,
+            "memory_percent": 5.18698969943714,
+            "memory_available_mb": 85235,
+            "io_psi_full_avg10": 0.18,
+            "storage_active_operations": 1,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400714",
+          "active_sandboxes": 1,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:16.471232+00:00",
+            "cpu_percent": 0.06236357966947303,
+            "memory_percent": 5.195888673830341,
+            "memory_available_mb": 85227,
+            "io_psi_full_avg10": 4.82,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400715",
+          "active_sandboxes": 0,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:13.139881+00:00",
+            "cpu_percent": 0.031191515907673113,
+            "memory_percent": 5.254844379185299,
+            "memory_available_mb": 85174,
+            "io_psi_full_avg10": 6.77,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400716",
+          "active_sandboxes": 0,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:16.415280+00:00",
+            "cpu_percent": 3.916040100250626,
+            "memory_percent": 5.181427840441389,
+            "memory_available_mb": 85240,
+            "io_psi_full_avg10": 5.18,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        }
+      ]
+    },
+    {
+      "at": "2026-09-23T16:59:25.976414+00:00",
+      "nodes": [
+        {
+          "job_id": "12400713",
+          "active_sandboxes": 3,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:17.002241+00:00",
+            "cpu_percent": 8.168394596292805,
+            "memory_percent": 5.18698969943714,
+            "memory_available_mb": 85235,
+            "io_psi_full_avg10": 0.18,
+            "storage_active_operations": 1,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400714",
+          "active_sandboxes": 1,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:16.471232+00:00",
+            "cpu_percent": 0.06236357966947303,
+            "memory_percent": 5.195888673830341,
+            "memory_available_mb": 85227,
+            "io_psi_full_avg10": 4.82,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400715",
+          "active_sandboxes": 0,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:13.139881+00:00",
+            "cpu_percent": 0.031191515907673113,
+            "memory_percent": 5.254844379185299,
+            "memory_available_mb": 85174,
+            "io_psi_full_avg10": 6.77,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400716",
+          "active_sandboxes": 0,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:16.415280+00:00",
+            "cpu_percent": 3.916040100250626,
+            "memory_percent": 5.181427840441389,
+            "memory_available_mb": 85240,
+            "io_psi_full_avg10": 5.18,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        }
+      ]
+    },
+    {
+      "at": "2026-09-23T16:59:31.008626+00:00",
+      "nodes": [
+        {
+          "job_id": "12400713",
+          "active_sandboxes": 3,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:17.002241+00:00",
+            "cpu_percent": 8.168394596292805,
+            "memory_percent": 5.18698969943714,
+            "memory_available_mb": 85235,
+            "io_psi_full_avg10": 0.18,
+            "storage_active_operations": 1,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400714",
+          "active_sandboxes": 1,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:16.471232+00:00",
+            "cpu_percent": 0.06236357966947303,
+            "memory_percent": 5.195888673830341,
+            "memory_available_mb": 85227,
+            "io_psi_full_avg10": 4.82,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400715",
+          "active_sandboxes": 0,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:13.139881+00:00",
+            "cpu_percent": 0.031191515907673113,
+            "memory_percent": 5.254844379185299,
+            "memory_available_mb": 85174,
+            "io_psi_full_avg10": 6.77,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400716",
+          "active_sandboxes": 0,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:16.415280+00:00",
+            "cpu_percent": 3.916040100250626,
+            "memory_percent": 5.181427840441389,
+            "memory_available_mb": 85240,
+            "io_psi_full_avg10": 5.18,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        }
+      ]
+    },
+    {
+      "at": "2026-09-23T16:59:36.051564+00:00",
+      "nodes": [
+        {
+          "job_id": "12400713",
+          "active_sandboxes": 3,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:17.002241+00:00",
+            "cpu_percent": 8.168394596292805,
+            "memory_percent": 5.18698969943714,
+            "memory_available_mb": 85235,
+            "io_psi_full_avg10": 0.18,
+            "storage_active_operations": 1,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400714",
+          "active_sandboxes": 1,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:16.471232+00:00",
+            "cpu_percent": 0.06236357966947303,
+            "memory_percent": 5.195888673830341,
+            "memory_available_mb": 85227,
+            "io_psi_full_avg10": 4.82,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400715",
+          "active_sandboxes": 0,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:13.139881+00:00",
+            "cpu_percent": 0.031191515907673113,
+            "memory_percent": 5.254844379185299,
+            "memory_available_mb": 85174,
+            "io_psi_full_avg10": 6.77,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400716",
+          "active_sandboxes": 0,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:16.415280+00:00",
+            "cpu_percent": 3.916040100250626,
+            "memory_percent": 5.181427840441389,
+            "memory_available_mb": 85240,
+            "io_psi_full_avg10": 5.18,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        }
+      ]
+    },
+    {
+      "at": "2026-09-23T16:59:41.097617+00:00",
+      "nodes": [
+        {
+          "job_id": "12400713",
+          "active_sandboxes": 35,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:40.714870+00:00",
+            "cpu_percent": 97.5632043862321,
+            "memory_percent": 66.70337493603861,
+            "memory_available_mb": 29933,
+            "io_psi_full_avg10": 0.11,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400714",
+          "active_sandboxes": 36,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:38.541277+00:00",
+            "cpu_percent": 97.07673568818514,
+            "memory_percent": 68.05935615920265,
+            "memory_available_mb": 28714,
+            "io_psi_full_avg10": 0.8,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400715",
+          "active_sandboxes": 37,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:36.842839+00:00",
+            "cpu_percent": 83.6857052698012,
+            "memory_percent": 70.62226078444459,
+            "memory_available_mb": 26410,
+            "io_psi_full_avg10": 0.97,
+            "storage_active_operations": 1,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400716",
+          "active_sandboxes": 38,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:40.076686+00:00",
+            "cpu_percent": 97.50701153007168,
+            "memory_percent": 71.18623328661371,
+            "memory_available_mb": 25903,
+            "io_psi_full_avg10": 0.76,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        }
+      ]
+    },
+    {
+      "at": "2026-09-23T16:59:46.165358+00:00",
+      "nodes": [
+        {
+          "job_id": "12400713",
+          "active_sandboxes": 35,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:40.714870+00:00",
+            "cpu_percent": 97.5632043862321,
+            "memory_percent": 66.70337493603861,
+            "memory_available_mb": 29933,
+            "io_psi_full_avg10": 0.11,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400714",
+          "active_sandboxes": 36,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:38.541277+00:00",
+            "cpu_percent": 97.07673568818514,
+            "memory_percent": 68.05935615920265,
+            "memory_available_mb": 28714,
+            "io_psi_full_avg10": 0.8,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400715",
+          "active_sandboxes": 37,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:36.842839+00:00",
+            "cpu_percent": 83.6857052698012,
+            "memory_percent": 70.62226078444459,
+            "memory_available_mb": 26410,
+            "io_psi_full_avg10": 0.97,
+            "storage_active_operations": 1,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400716",
+          "active_sandboxes": 38,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:40.076686+00:00",
+            "cpu_percent": 97.50701153007168,
+            "memory_percent": 71.18623328661371,
+            "memory_available_mb": 25903,
+            "io_psi_full_avg10": 0.76,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        }
+      ]
+    },
+    {
+      "at": "2026-09-23T16:59:51.218515+00:00",
+      "nodes": [
+        {
+          "job_id": "12400713",
+          "active_sandboxes": 35,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:40.714870+00:00",
+            "cpu_percent": 97.5632043862321,
+            "memory_percent": 66.70337493603861,
+            "memory_available_mb": 29933,
+            "io_psi_full_avg10": 0.11,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400714",
+          "active_sandboxes": 36,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:38.541277+00:00",
+            "cpu_percent": 97.07673568818514,
+            "memory_percent": 68.05935615920265,
+            "memory_available_mb": 28714,
+            "io_psi_full_avg10": 0.8,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400715",
+          "active_sandboxes": 37,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:36.842839+00:00",
+            "cpu_percent": 83.6857052698012,
+            "memory_percent": 70.62226078444459,
+            "memory_available_mb": 26410,
+            "io_psi_full_avg10": 0.97,
+            "storage_active_operations": 1,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400716",
+          "active_sandboxes": 38,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:40.076686+00:00",
+            "cpu_percent": 97.50701153007168,
+            "memory_percent": 71.18623328661371,
+            "memory_available_mb": 25903,
+            "io_psi_full_avg10": 0.76,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        }
+      ]
+    },
+    {
+      "at": "2026-09-23T16:59:56.265994+00:00",
+      "nodes": [
+        {
+          "job_id": "12400713",
+          "active_sandboxes": 35,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:40.714870+00:00",
+            "cpu_percent": 97.5632043862321,
+            "memory_percent": 66.70337493603861,
+            "memory_available_mb": 29933,
+            "io_psi_full_avg10": 0.11,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400714",
+          "active_sandboxes": 36,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:38.541277+00:00",
+            "cpu_percent": 97.07673568818514,
+            "memory_percent": 68.05935615920265,
+            "memory_available_mb": 28714,
+            "io_psi_full_avg10": 0.8,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400715",
+          "active_sandboxes": 37,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:36.842839+00:00",
+            "cpu_percent": 83.6857052698012,
+            "memory_percent": 70.62226078444459,
+            "memory_available_mb": 26410,
+            "io_psi_full_avg10": 0.97,
+            "storage_active_operations": 1,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400716",
+          "active_sandboxes": 38,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:40.076686+00:00",
+            "cpu_percent": 97.50701153007168,
+            "memory_percent": 71.18623328661371,
+            "memory_available_mb": 25903,
+            "io_psi_full_avg10": 0.76,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        }
+      ]
+    },
+    {
+      "at": "2026-09-23T17:00:01.317315+00:00",
+      "nodes": [
+        {
+          "job_id": "12400713",
+          "active_sandboxes": 35,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:40.714870+00:00",
+            "cpu_percent": 97.5632043862321,
+            "memory_percent": 66.70337493603861,
+            "memory_available_mb": 29933,
+            "io_psi_full_avg10": 0.11,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400714",
+          "active_sandboxes": 36,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:38.541277+00:00",
+            "cpu_percent": 97.07673568818514,
+            "memory_percent": 68.05935615920265,
+            "memory_available_mb": 28714,
+            "io_psi_full_avg10": 0.8,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400715",
+          "active_sandboxes": 54,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:58.288964+00:00",
+            "cpu_percent": 48.37476099426386,
+            "memory_percent": 81.48568377494495,
+            "memory_available_mb": 16644,
+            "io_psi_full_avg10": 7.28,
+            "storage_active_operations": 1,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400716",
+          "active_sandboxes": 38,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:40.076686+00:00",
+            "cpu_percent": 97.50701153007168,
+            "memory_percent": 71.18623328661371,
+            "memory_available_mb": 25903,
+            "io_psi_full_avg10": 0.76,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        }
+      ]
+    },
+    {
+      "at": "2026-09-23T17:00:06.371460+00:00",
+      "nodes": [
+        {
+          "job_id": "12400713",
+          "active_sandboxes": 35,
+          "metrics": {
+            "collected_at": "2026-09-23T17:00:05.790781+00:00",
+            "cpu_percent": 17.410433689503456,
+            "memory_percent": 67.02596275779217,
+            "memory_available_mb": 29643,
+            "io_psi_full_avg10": 1.27,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400714",
+          "active_sandboxes": 36,
+          "metrics": {
+            "collected_at": "2026-09-23T17:00:03.338537+00:00",
+            "cpu_percent": 7.3631214600377595,
+            "memory_percent": 68.88473603417206,
+            "memory_available_mb": 27972,
+            "io_psi_full_avg10": 1.96,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400715",
+          "active_sandboxes": 54,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:58.288964+00:00",
+            "cpu_percent": 48.37476099426386,
+            "memory_percent": 81.48568377494495,
+            "memory_available_mb": 16644,
+            "io_psi_full_avg10": 7.28,
+            "storage_active_operations": 1,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400716",
+          "active_sandboxes": 38,
+          "metrics": {
+            "collected_at": "2026-09-23T17:00:04.697296+00:00",
+            "cpu_percent": 14.528301886792452,
+            "memory_percent": 72.34754944492647,
+            "memory_available_mb": 24859,
+            "io_psi_full_avg10": 0.98,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        }
+      ]
+    },
+    {
+      "at": "2026-09-23T17:00:11.422349+00:00",
+      "nodes": [
+        {
+          "job_id": "12400713",
+          "active_sandboxes": 35,
+          "metrics": {
+            "collected_at": "2026-09-23T17:00:05.790781+00:00",
+            "cpu_percent": 17.410433689503456,
+            "memory_percent": 67.02596275779217,
+            "memory_available_mb": 29643,
+            "io_psi_full_avg10": 1.27,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400714",
+          "active_sandboxes": 36,
+          "metrics": {
+            "collected_at": "2026-09-23T17:00:03.338537+00:00",
+            "cpu_percent": 7.3631214600377595,
+            "memory_percent": 68.88473603417206,
+            "memory_available_mb": 27972,
+            "io_psi_full_avg10": 1.96,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400715",
+          "active_sandboxes": 54,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:58.288964+00:00",
+            "cpu_percent": 48.37476099426386,
+            "memory_percent": 81.48568377494495,
+            "memory_available_mb": 16644,
+            "io_psi_full_avg10": 7.28,
+            "storage_active_operations": 1,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400716",
+          "active_sandboxes": 38,
+          "metrics": {
+            "collected_at": "2026-09-23T17:00:04.697296+00:00",
+            "cpu_percent": 14.528301886792452,
+            "memory_percent": 72.34754944492647,
+            "memory_available_mb": 24859,
+            "io_psi_full_avg10": 0.98,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        }
+      ]
+    },
+    {
+      "at": "2026-09-23T17:00:16.473559+00:00",
+      "nodes": [
+        {
+          "job_id": "12400713",
+          "active_sandboxes": 35,
+          "metrics": {
+            "collected_at": "2026-09-23T17:00:05.790781+00:00",
+            "cpu_percent": 17.410433689503456,
+            "memory_percent": 67.02596275779217,
+            "memory_available_mb": 29643,
+            "io_psi_full_avg10": 1.27,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400714",
+          "active_sandboxes": 36,
+          "metrics": {
+            "collected_at": "2026-09-23T17:00:03.338537+00:00",
+            "cpu_percent": 7.3631214600377595,
+            "memory_percent": 68.88473603417206,
+            "memory_available_mb": 27972,
+            "io_psi_full_avg10": 1.96,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400715",
+          "active_sandboxes": 54,
+          "metrics": {
+            "collected_at": "2026-09-23T16:59:58.288964+00:00",
+            "cpu_percent": 48.37476099426386,
+            "memory_percent": 81.48568377494495,
+            "memory_available_mb": 16644,
+            "io_psi_full_avg10": 7.28,
+            "storage_active_operations": 1,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400716",
+          "active_sandboxes": 38,
+          "metrics": {
+            "collected_at": "2026-09-23T17:00:04.697296+00:00",
+            "cpu_percent": 14.528301886792452,
+            "memory_percent": 72.34754944492647,
+            "memory_available_mb": 24859,
+            "io_psi_full_avg10": 0.98,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        }
+      ]
+    },
+    {
+      "at": "2026-09-23T17:00:21.527362+00:00",
+      "nodes": [
+        {
+          "job_id": "12400713",
+          "active_sandboxes": 35,
+          "metrics": {
+            "collected_at": "2026-09-23T17:00:05.790781+00:00",
+            "cpu_percent": 17.410433689503456,
+            "memory_percent": 67.02596275779217,
+            "memory_available_mb": 29643,
+            "io_psi_full_avg10": 1.27,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400714",
+          "active_sandboxes": 36,
+          "metrics": {
+            "collected_at": "2026-09-23T17:00:03.338537+00:00",
+            "cpu_percent": 7.3631214600377595,
+            "memory_percent": 68.88473603417206,
+            "memory_available_mb": 27972,
+            "io_psi_full_avg10": 1.96,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400715",
+          "active_sandboxes": 72,
+          "metrics": {
+            "collected_at": "2026-09-23T17:00:19.669884+00:00",
+            "cpu_percent": 52.07522697795072,
+            "memory_percent": 78.1619168390843,
+            "memory_available_mb": 19632,
+            "io_psi_full_avg10": 37.88,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400716",
+          "active_sandboxes": 38,
+          "metrics": {
+            "collected_at": "2026-09-23T17:00:04.697296+00:00",
+            "cpu_percent": 14.528301886792452,
+            "memory_percent": 72.34754944492647,
+            "memory_available_mb": 24859,
+            "io_psi_full_avg10": 0.98,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        }
+      ]
+    },
+    {
+      "at": "2026-09-23T17:00:26.587514+00:00",
+      "nodes": [
+        {
+          "job_id": "12400713",
+          "active_sandboxes": 44,
+          "metrics": {
+            "collected_at": "2026-09-23T17:00:25.999886+00:00",
+            "cpu_percent": 63.00708306503542,
+            "memory_percent": 84.18207301608489,
+            "memory_available_mb": 14220,
+            "io_psi_full_avg10": 1.47,
+            "storage_active_operations": 1,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400714",
+          "active_sandboxes": 43,
+          "metrics": {
+            "collected_at": "2026-09-23T17:00:23.551286+00:00",
+            "cpu_percent": 49.36265137029955,
+            "memory_percent": 81.1875681327727,
+            "memory_available_mb": 16912,
+            "io_psi_full_avg10": 0.71,
+            "storage_active_operations": 1,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400715",
+          "active_sandboxes": 72,
+          "metrics": {
+            "collected_at": "2026-09-23T17:00:19.669884+00:00",
+            "cpu_percent": 52.07522697795072,
+            "memory_percent": 78.1619168390843,
+            "memory_available_mb": 19632,
+            "io_psi_full_avg10": 37.88,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        },
+        {
+          "job_id": "12400716",
+          "active_sandboxes": 38,
+          "metrics": {
+            "collected_at": "2026-09-23T17:00:04.697296+00:00",
+            "cpu_percent": 14.528301886792452,
+            "memory_percent": 72.34754944492647,
+            "memory_available_mb": 24859,
+            "io_psi_full_avg10": 0.98,
+            "storage_active_operations": 0,
+            "storage_waiting_operations": 0
+          }
+        }
+      ]
+    }
+  ],
+  "sampled_create_traces": [
+    {
+      "trace_id": "6511fa379be09026028ae45933a6e63e",
+      "spans": [
+        {
+          "name": "gateway.sandbox_select_node",
+          "start": 1790182845030371022,
+          "ms": 21.905,
+          "attributes": {
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "selected_node_id": "sandbox-node-8f271b9b41-1",
+            "selected_job_id": "12400716",
+            "ucloud.span.thread_cpu.duration": 0.017920360999999996
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_ensure_image",
+          "start": 1790182845052381761,
+          "ms": 0.0661,
+          "attributes": {
+            "node.id": "sandbox-node-8f271b9b41-1",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "cache_hit": true,
+            "initial_cache_hit": true,
+            "waited_for_peer_pull": false,
+            "pulled": false
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_proxy_create",
+          "start": 1790182845055475652,
+          "ms": 950.224165,
+          "attributes": {
+            "node.id": "sandbox-node-8f271b9b41-1",
+            "status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.001220138999999995
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182846005659667",
+              "name": "node.timings",
+              "attributes": [
+                {
+                  "key": "total_ms",
+                  "value": {
+                    "intValue": "946"
+                  }
+                },
+                {
+                  "key": "phases.read_request_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.parse_spec_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.manager_create_ms",
+                  "value": {
+                    "intValue": "945"
+                  }
+                },
+                {
+                  "key": "manager.idempotent",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "manager.total_ms",
+                  "value": {
+                    "intValue": "945"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "gateway.sandbox_create",
+          "start": 1790182845029840693,
+          "ms": 1018.895067,
+          "attributes": {
+            "sandbox.id": "relay-load-70fe49fe7db7-0234",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "sandbox.request.vcpu": 1,
+            "sandbox.request.memory_mb": "2048",
+            "sandbox.request.disk_mb": "9280",
+            "sandbox.placement.excluded_jobs": "0",
+            "reserved_route": true,
+            "outcome": "scheduled",
+            "node_id": "sandbox-node-8f271b9b41-1",
+            "http.response.status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.024617106
+          },
+          "status": {},
+          "events": null
+        }
+      ]
+    },
+    {
+      "trace_id": "8168fc0dcb58264c12f732f724812d14",
+      "spans": [
+        {
+          "name": "gateway.sandbox_select_node",
+          "start": 1790182818290429124,
+          "ms": 42.251763,
+          "attributes": {
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "selected_node_id": "sandbox-node-059f2ca6a5-1",
+            "selected_job_id": "12400713",
+            "ucloud.span.thread_cpu.duration": 0.03276074600000001
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_ensure_image",
+          "start": 1790182818332815700,
+          "ms": 0.063917,
+          "attributes": {
+            "node.id": "sandbox-node-059f2ca6a5-1",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "cache_hit": true,
+            "initial_cache_hit": true,
+            "waited_for_peer_pull": false,
+            "pulled": false
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_proxy_create",
+          "start": 1790182818335593154,
+          "ms": 1103.518974,
+          "attributes": {
+            "node.id": "sandbox-node-059f2ca6a5-1",
+            "status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.0008105469999999948
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182819439071306",
+              "name": "node.timings",
+              "attributes": [
+                {
+                  "key": "total_ms",
+                  "value": {
+                    "intValue": "1099"
+                  }
+                },
+                {
+                  "key": "phases.read_request_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.parse_spec_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.manager_create_ms",
+                  "value": {
+                    "intValue": "1097"
+                  }
+                },
+                {
+                  "key": "manager.idempotent",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "manager.total_ms",
+                  "value": {
+                    "intValue": "1097"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "gateway.sandbox_create",
+          "start": 1790182818289548248,
+          "ms": 1155.444359,
+          "attributes": {
+            "sandbox.id": "relay-load-70fe49fe7db7-0199",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "sandbox.request.vcpu": 1,
+            "sandbox.request.memory_mb": "2048",
+            "sandbox.request.disk_mb": "9280",
+            "sandbox.placement.excluded_jobs": "0",
+            "reserved_route": true,
+            "outcome": "scheduled",
+            "node_id": "sandbox-node-059f2ca6a5-1",
+            "http.response.status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.03849733299999997
+          },
+          "status": {},
+          "events": null
+        }
+      ]
+    },
+    {
+      "trace_id": "98d9f7cf5a749e2802a6523b9e9a6876",
+      "spans": [
+        {
+          "name": "gateway.sandbox_select_node",
+          "start": 1790182818264942489,
+          "ms": 19.788141,
+          "attributes": {
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "selected_node_id": "sandbox-node-8f77d0bcae-1",
+            "selected_job_id": "12400714",
+            "ucloud.span.thread_cpu.duration": 0.014611765999999915
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_ensure_image",
+          "start": 1790182818284878412,
+          "ms": 0.087122,
+          "attributes": {
+            "node.id": "sandbox-node-8f77d0bcae-1",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "cache_hit": true,
+            "initial_cache_hit": true,
+            "waited_for_peer_pull": false,
+            "pulled": false
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_proxy_create",
+          "start": 1790182818292228405,
+          "ms": 845.077421,
+          "attributes": {
+            "node.id": "sandbox-node-8f77d0bcae-1",
+            "status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.0010378580000000026
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182819137272286",
+              "name": "node.timings",
+              "attributes": [
+                {
+                  "key": "total_ms",
+                  "value": {
+                    "intValue": "841"
+                  }
+                },
+                {
+                  "key": "phases.read_request_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.parse_spec_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.manager_create_ms",
+                  "value": {
+                    "intValue": "840"
+                  }
+                },
+                {
+                  "key": "manager.idempotent",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "manager.total_ms",
+                  "value": {
+                    "intValue": "839"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "gateway.sandbox_create",
+          "start": 1790182818264399141,
+          "ms": 886.194312,
+          "attributes": {
+            "sandbox.id": "relay-load-70fe49fe7db7-0198",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "sandbox.request.vcpu": 1,
+            "sandbox.request.memory_mb": "2048",
+            "sandbox.request.disk_mb": "9280",
+            "sandbox.placement.excluded_jobs": "0",
+            "reserved_route": true,
+            "outcome": "scheduled",
+            "node_id": "sandbox-node-8f77d0bcae-1",
+            "http.response.status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.021509973000000016
+          },
+          "status": {},
+          "events": null
+        }
+      ]
+    },
+    {
+      "trace_id": "f01ebfe3c297005716c91d70fa2731af",
+      "spans": [
+        {
+          "name": "gateway.sandbox_select_node",
+          "start": 1790182817007360549,
+          "ms": 56.294508,
+          "attributes": {
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "selected_node_id": "sandbox-node-8f77d0bcae-1",
+            "selected_job_id": "12400714",
+            "ucloud.span.thread_cpu.duration": 0.016337298
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_ensure_image",
+          "start": 1790182817063796620,
+          "ms": 0.081002,
+          "attributes": {
+            "node.id": "sandbox-node-8f77d0bcae-1",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "cache_hit": true,
+            "initial_cache_hit": true,
+            "waited_for_peer_pull": false,
+            "pulled": false
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_proxy_create",
+          "start": 1790182817068410731,
+          "ms": 822.896105,
+          "attributes": {
+            "node.id": "sandbox-node-8f77d0bcae-1",
+            "status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.0015410120000000083
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182817891260597",
+              "name": "node.timings",
+              "attributes": [
+                {
+                  "key": "total_ms",
+                  "value": {
+                    "intValue": "818"
+                  }
+                },
+                {
+                  "key": "phases.read_request_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.parse_spec_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.manager_create_ms",
+                  "value": {
+                    "intValue": "817"
+                  }
+                },
+                {
+                  "key": "manager.idempotent",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "manager.total_ms",
+                  "value": {
+                    "intValue": "817"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "gateway.sandbox_create",
+          "start": 1790182817005656372,
+          "ms": 1013.215481,
+          "attributes": {
+            "sandbox.id": "relay-load-70fe49fe7db7-0195",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "sandbox.request.vcpu": 1,
+            "sandbox.request.memory_mb": "2048",
+            "sandbox.request.disk_mb": "9280",
+            "sandbox.placement.excluded_jobs": "0",
+            "reserved_route": true,
+            "outcome": "scheduled",
+            "node_id": "sandbox-node-8f77d0bcae-1",
+            "http.response.status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.024215979
+          },
+          "status": {},
+          "events": null
+        }
+      ]
+    },
+    {
+      "trace_id": "67d8dfc21c35b33605b4bbcd5e184380",
+      "spans": [
+        {
+          "name": "gateway.sandbox_create",
+          "start": 1790182792358499132,
+          "ms": 24231.493992,
+          "attributes": {
+            "sandbox.id": "relay-load-70fe49fe7db7-0180",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "sandbox.request.vcpu": 1,
+            "sandbox.request.memory_mb": "2048",
+            "sandbox.request.disk_mb": "9280",
+            "sandbox.placement.excluded_jobs": "0",
+            "reserved_route": true,
+            "outcome": "scheduled",
+            "node_id": "sandbox-node-f2b7c8c55d-1",
+            "http.response.status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.017050524999999983
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_proxy_create",
+          "start": 1790182792376460952,
+          "ms": 24206.86566,
+          "attributes": {
+            "node.id": "sandbox-node-f2b7c8c55d-1",
+            "status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.0009205210000000075
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182816583287161",
+              "name": "node.timings",
+              "attributes": [
+                {
+                  "key": "total_ms",
+                  "value": {
+                    "intValue": "24199"
+                  }
+                },
+                {
+                  "key": "phases.read_request_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.parse_spec_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.manager_create_ms",
+                  "value": {
+                    "intValue": "24192"
+                  }
+                },
+                {
+                  "key": "manager.idempotent",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "manager.total_ms",
+                  "value": {
+                    "intValue": "24192"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "gateway.sandbox_select_node",
+          "start": 1790182792358897473,
+          "ms": 14.632694,
+          "attributes": {
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "selected_node_id": "sandbox-node-f2b7c8c55d-1",
+            "selected_job_id": "12400715",
+            "ucloud.span.thread_cpu.duration": 0.011088121000000006
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_ensure_image",
+          "start": 1790182792373607573,
+          "ms": 0.067752,
+          "attributes": {
+            "node.id": "sandbox-node-f2b7c8c55d-1",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "cache_hit": true,
+            "initial_cache_hit": true,
+            "waited_for_peer_pull": false,
+            "pulled": false
+          },
+          "status": {},
+          "events": null
+        }
+      ]
+    },
+    {
+      "trace_id": "ddd12d4d5f8cdddd17c0ab92d3137f4e",
+      "spans": [
+        {
+          "name": "gateway.sandbox_select_node",
+          "start": 1790182791129553563,
+          "ms": 19.703714,
+          "attributes": {
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "selected_node_id": "sandbox-node-f2b7c8c55d-1",
+            "selected_job_id": "12400715",
+            "ucloud.span.thread_cpu.duration": 0.013000911999999976
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_ensure_image",
+          "start": 1790182791149390988,
+          "ms": 0.082935,
+          "attributes": {
+            "node.id": "sandbox-node-f2b7c8c55d-1",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "cache_hit": true,
+            "initial_cache_hit": true,
+            "waited_for_peer_pull": false,
+            "pulled": false
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_proxy_create",
+          "start": 1790182791160104408,
+          "ms": 1237.766938,
+          "attributes": {
+            "node.id": "sandbox-node-f2b7c8c55d-1",
+            "status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.0010188690000000056
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182792397837445",
+              "name": "node.timings",
+              "attributes": [
+                {
+                  "key": "total_ms",
+                  "value": {
+                    "intValue": "1234"
+                  }
+                },
+                {
+                  "key": "phases.read_request_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.parse_spec_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.manager_create_ms",
+                  "value": {
+                    "intValue": "1232"
+                  }
+                },
+                {
+                  "key": "manager.idempotent",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "manager.total_ms",
+                  "value": {
+                    "intValue": "1232"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "gateway.sandbox_create",
+          "start": 1790182791128977335,
+          "ms": 1273.605189,
+          "attributes": {
+            "sandbox.id": "relay-load-70fe49fe7db7-0175",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "sandbox.request.vcpu": 1,
+            "sandbox.request.memory_mb": "2048",
+            "sandbox.request.disk_mb": "9280",
+            "sandbox.placement.excluded_jobs": "0",
+            "reserved_route": true,
+            "outcome": "scheduled",
+            "node_id": "sandbox-node-f2b7c8c55d-1",
+            "http.response.status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.022100672999999987
+          },
+          "status": {},
+          "events": null
+        }
+      ]
+    },
+    {
+      "trace_id": "511953847e5e51606f35f05a8e95c7c",
+      "spans": [
+        {
+          "name": "gateway.sandbox_create",
+          "start": 1790182786329592233,
+          "ms": 4825.400104,
+          "attributes": {
+            "sandbox.id": "relay-load-70fe49fe7db7-0170",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "sandbox.request.vcpu": 1,
+            "sandbox.request.memory_mb": "2048",
+            "sandbox.request.disk_mb": "9280",
+            "sandbox.placement.excluded_jobs": "0",
+            "reserved_route": true,
+            "outcome": "scheduled",
+            "node_id": "sandbox-node-f2b7c8c55d-1",
+            "http.response.status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.022776253999999996
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_proxy_create",
+          "start": 1790182786377788881,
+          "ms": 4769.106808,
+          "attributes": {
+            "node.id": "sandbox-node-f2b7c8c55d-1",
+            "status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.0010760739999999824
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182791146855819",
+              "name": "node.timings",
+              "attributes": [
+                {
+                  "key": "total_ms",
+                  "value": {
+                    "intValue": "4764"
+                  }
+                },
+                {
+                  "key": "phases.read_request_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.parse_spec_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.manager_create_ms",
+                  "value": {
+                    "intValue": "4756"
+                  }
+                },
+                {
+                  "key": "manager.idempotent",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "manager.total_ms",
+                  "value": {
+                    "intValue": "4755"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "gateway.sandbox_select_node",
+          "start": 1790182786330893633,
+          "ms": 19.589011,
+          "attributes": {
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "selected_node_id": "sandbox-node-f2b7c8c55d-1",
+            "selected_job_id": "12400715",
+            "ucloud.span.thread_cpu.duration": 0.012562715000000002
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_ensure_image",
+          "start": 1790182786350686851,
+          "ms": 0.108344,
+          "attributes": {
+            "node.id": "sandbox-node-f2b7c8c55d-1",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "cache_hit": true,
+            "initial_cache_hit": true,
+            "waited_for_peer_pull": false,
+            "pulled": false
+          },
+          "status": {},
+          "events": null
+        }
+      ]
+    },
+    {
+      "trace_id": "b93fba4f5405433c04f9170950d05e49",
+      "spans": [
+        {
+          "name": "gateway.sandbox_select_node",
+          "start": 1790182786181258307,
+          "ms": 21.386789,
+          "attributes": {
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "selected_node_id": "sandbox-node-f2b7c8c55d-1",
+            "selected_job_id": "12400715",
+            "ucloud.span.thread_cpu.duration": 0.015495274000000003
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_ensure_image",
+          "start": 1790182786202833000,
+          "ms": 0.122584,
+          "attributes": {
+            "node.id": "sandbox-node-f2b7c8c55d-1",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "cache_hit": true,
+            "initial_cache_hit": true,
+            "waited_for_peer_pull": false,
+            "pulled": false
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_proxy_create",
+          "start": 1790182786211342119,
+          "ms": 2294.321139,
+          "attributes": {
+            "node.id": "sandbox-node-f2b7c8c55d-1",
+            "status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.0009800000000000086
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182788505609817",
+              "name": "node.timings",
+              "attributes": [
+                {
+                  "key": "total_ms",
+                  "value": {
+                    "intValue": "2290"
+                  }
+                },
+                {
+                  "key": "phases.read_request_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.parse_spec_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.manager_create_ms",
+                  "value": {
+                    "intValue": "2280"
+                  }
+                },
+                {
+                  "key": "manager.idempotent",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "manager.total_ms",
+                  "value": {
+                    "intValue": "2274"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "gateway.sandbox_create",
+          "start": 1790182786180217719,
+          "ms": 2330.712743,
+          "attributes": {
+            "sandbox.id": "relay-load-70fe49fe7db7-0169",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "sandbox.request.vcpu": 1,
+            "sandbox.request.memory_mb": "2048",
+            "sandbox.request.disk_mb": "9280",
+            "sandbox.placement.excluded_jobs": "0",
+            "reserved_route": true,
+            "outcome": "scheduled",
+            "node_id": "sandbox-node-f2b7c8c55d-1",
+            "http.response.status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.025191224000000012
+          },
+          "status": {},
+          "events": null
+        }
+      ]
+    },
+    {
+      "trace_id": "b712b0fc6e570e90dd5a43e3d9df0cd",
+      "spans": [
+        {
+          "name": "gateway.sandbox_select_node",
+          "start": 1790182777436648015,
+          "ms": 70.156481,
+          "attributes": {
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "selected_node_id": "sandbox-node-059f2ca6a5-1",
+            "selected_job_id": "12400713",
+            "ucloud.span.thread_cpu.duration": 0.012286977000000032
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_ensure_image",
+          "start": 1790182777506896744,
+          "ms": 0.050447,
+          "attributes": {
+            "node.id": "sandbox-node-059f2ca6a5-1",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "cache_hit": true,
+            "initial_cache_hit": true,
+            "waited_for_peer_pull": false,
+            "pulled": false
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_proxy_create",
+          "start": 1790182777528411476,
+          "ms": 851.022467,
+          "attributes": {
+            "node.id": "sandbox-node-059f2ca6a5-1",
+            "status_code": "503",
+            "ucloud.span.thread_cpu.duration": 0.000874109999999928
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_select_node",
+          "start": 1790182778412087707,
+          "ms": 17.910362,
+          "attributes": {
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "selected_node_id": "sandbox-node-8f271b9b41-1",
+            "selected_job_id": "12400716",
+            "ucloud.span.thread_cpu.duration": 0.010296833999999921
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_ensure_image",
+          "start": 1790182778430107754,
+          "ms": 0.086841,
+          "attributes": {
+            "node.id": "sandbox-node-8f271b9b41-1",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "cache_hit": true,
+            "initial_cache_hit": true,
+            "waited_for_peer_pull": false,
+            "pulled": false
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_proxy_create",
+          "start": 1790182778432427259,
+          "ms": 849.010585,
+          "attributes": {
+            "node.id": "sandbox-node-8f271b9b41-1",
+            "status_code": "503",
+            "ucloud.span.thread_cpu.duration": 0.0007964839999999862
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_select_node",
+          "start": 1790182779305735630,
+          "ms": 19.078051,
+          "attributes": {
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "selected_node_id": "sandbox-node-f2b7c8c55d-1",
+            "selected_job_id": "12400715",
+            "ucloud.span.thread_cpu.duration": 0.012146631000000019
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_ensure_image",
+          "start": 1790182779324951578,
+          "ms": 0.075233,
+          "attributes": {
+            "node.id": "sandbox-node-f2b7c8c55d-1",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "cache_hit": true,
+            "initial_cache_hit": true,
+            "waited_for_peer_pull": false,
+            "pulled": false
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_proxy_create",
+          "start": 1790182779327605546,
+          "ms": 792.71688,
+          "attributes": {
+            "node.id": "sandbox-node-f2b7c8c55d-1",
+            "status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.0009331979999999129
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182780120290137",
+              "name": "node.timings",
+              "attributes": [
+                {
+                  "key": "total_ms",
+                  "value": {
+                    "intValue": "783"
+                  }
+                },
+                {
+                  "key": "phases.read_request_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.parse_spec_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.manager_create_ms",
+                  "value": {
+                    "intValue": "782"
+                  }
+                },
+                {
+                  "key": "manager.idempotent",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "manager.total_ms",
+                  "value": {
+                    "intValue": "780"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "gateway.sandbox_create",
+          "start": 1790182779304428720,
+          "ms": 824.545239,
+          "attributes": {
+            "sandbox.id": "relay-load-70fe49fe7db7-0164",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "sandbox.request.vcpu": 1,
+            "sandbox.request.memory_mb": "2048",
+            "sandbox.request.disk_mb": "9280",
+            "sandbox.placement.excluded_jobs": "2",
+            "reserved_route": true,
+            "outcome": "scheduled",
+            "node_id": "sandbox-node-f2b7c8c55d-1",
+            "http.response.status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.01795415900000008
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_create",
+          "start": 1790182778411087300,
+          "ms": 1718.01999,
+          "attributes": {
+            "sandbox.id": "relay-load-70fe49fe7db7-0164",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "sandbox.request.vcpu": 1,
+            "sandbox.request.memory_mb": "2048",
+            "sandbox.request.disk_mb": "9280",
+            "sandbox.placement.excluded_jobs": "1",
+            "reserved_route": true,
+            "outcome": "reselect_after_node_rejection",
+            "rejection_reason": "node_active_admission_deferred",
+            "rejected_job_id": "12400716",
+            "ucloud.span.thread_cpu.duration": 0.04316334899999996
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_create",
+          "start": 1790182777435901710,
+          "ms": 2693.292902,
+          "attributes": {
+            "sandbox.id": "relay-load-70fe49fe7db7-0164",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "sandbox.request.vcpu": 1,
+            "sandbox.request.memory_mb": "2048",
+            "sandbox.request.disk_mb": "9280",
+            "sandbox.placement.excluded_jobs": "0",
+            "reserved_route": true,
+            "outcome": "reselect_after_node_rejection",
+            "rejection_reason": "node_active_admission_deferred",
+            "rejected_job_id": "12400713",
+            "ucloud.span.thread_cpu.duration": 0.07523200600000002
+          },
+          "status": {},
+          "events": null
+        }
+      ]
+    },
+    {
+      "trace_id": "98694ca1ab5e5d2d0186f3781b934e6e",
+      "spans": [
+        {
+          "name": "gateway.sandbox_select_node",
+          "start": 1790182775429356527,
+          "ms": 22.626857,
+          "attributes": {
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "selected_node_id": "sandbox-node-059f2ca6a5-1",
+            "selected_job_id": "12400713",
+            "ucloud.span.thread_cpu.duration": 0.01197386
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_ensure_image",
+          "start": 1790182775452227492,
+          "ms": 0.129395,
+          "attributes": {
+            "node.id": "sandbox-node-059f2ca6a5-1",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "cache_hit": true,
+            "initial_cache_hit": true,
+            "waited_for_peer_pull": false,
+            "pulled": false
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_proxy_create",
+          "start": 1790182775456363813,
+          "ms": 852.897782,
+          "attributes": {
+            "node.id": "sandbox-node-059f2ca6a5-1",
+            "status_code": "503",
+            "ucloud.span.thread_cpu.duration": 0.0012413719999999975
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_select_node",
+          "start": 1790182776343399654,
+          "ms": 51.391752,
+          "attributes": {
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "selected_node_id": "sandbox-node-f2b7c8c55d-1",
+            "selected_job_id": "12400715",
+            "ucloud.span.thread_cpu.duration": 0.012073049000000002
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_ensure_image",
+          "start": 1790182776394942223,
+          "ms": 0.085759,
+          "attributes": {
+            "node.id": "sandbox-node-f2b7c8c55d-1",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "cache_hit": true,
+            "initial_cache_hit": true,
+            "waited_for_peer_pull": false,
+            "pulled": false
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_proxy_create",
+          "start": 1790182776397681529,
+          "ms": 784.989899,
+          "attributes": {
+            "node.id": "sandbox-node-f2b7c8c55d-1",
+            "status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.0016146120000000014
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182777182581103",
+              "name": "node.timings",
+              "attributes": [
+                {
+                  "key": "total_ms",
+                  "value": {
+                    "intValue": "780"
+                  }
+                },
+                {
+                  "key": "phases.read_request_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.parse_spec_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.manager_create_ms",
+                  "value": {
+                    "intValue": "780"
+                  }
+                },
+                {
+                  "key": "manager.idempotent",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "manager.total_ms",
+                  "value": {
+                    "intValue": "779"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "gateway.sandbox_create",
+          "start": 1790182776342376502,
+          "ms": 856.303473,
+          "attributes": {
+            "sandbox.id": "relay-load-70fe49fe7db7-0145",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "sandbox.request.vcpu": 1,
+            "sandbox.request.memory_mb": "2048",
+            "sandbox.request.disk_mb": "9280",
+            "sandbox.placement.excluded_jobs": "1",
+            "reserved_route": true,
+            "outcome": "scheduled",
+            "node_id": "sandbox-node-f2b7c8c55d-1",
+            "http.response.status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.019962474
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_create",
+          "start": 1790182775427793853,
+          "ms": 1771.034125,
+          "attributes": {
+            "sandbox.id": "relay-load-70fe49fe7db7-0145",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "sandbox.request.vcpu": 1,
+            "sandbox.request.memory_mb": "2048",
+            "sandbox.request.disk_mb": "9280",
+            "sandbox.placement.excluded_jobs": "0",
+            "reserved_route": true,
+            "outcome": "reselect_after_node_rejection",
+            "rejection_reason": "node_active_admission_deferred",
+            "rejected_job_id": "12400713",
+            "ucloud.span.thread_cpu.duration": 0.047973678000000006
+          },
+          "status": {},
+          "events": null
+        }
+      ]
+    },
+    {
+      "trace_id": "57c65eafc9e319e3090e9919212156e4",
+      "spans": [
+        {
+          "name": "gateway.sandbox_select_node",
+          "start": 1790182769274568407,
+          "ms": 31.585263,
+          "attributes": {
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "selected_node_id": "sandbox-node-f2b7c8c55d-1",
+            "selected_job_id": "12400715",
+            "ucloud.span.thread_cpu.duration": 0.009896616999999996
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_ensure_image",
+          "start": 1790182769306290966,
+          "ms": 0.060882,
+          "attributes": {
+            "node.id": "sandbox-node-f2b7c8c55d-1",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "cache_hit": true,
+            "initial_cache_hit": true,
+            "waited_for_peer_pull": false,
+            "pulled": false
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_proxy_create",
+          "start": 1790182769309995598,
+          "ms": 569.997823,
+          "attributes": {
+            "node.id": "sandbox-node-f2b7c8c55d-1",
+            "status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.0014416529999999872
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182769879957286",
+              "name": "node.timings",
+              "attributes": [
+                {
+                  "key": "total_ms",
+                  "value": {
+                    "intValue": "566"
+                  }
+                },
+                {
+                  "key": "phases.read_request_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.parse_spec_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.manager_create_ms",
+                  "value": {
+                    "intValue": "565"
+                  }
+                },
+                {
+                  "key": "manager.idempotent",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "manager.total_ms",
+                  "value": {
+                    "intValue": "565"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "gateway.sandbox_create",
+          "start": 1790182769273527208,
+          "ms": 612.37897,
+          "attributes": {
+            "sandbox.id": "relay-load-70fe49fe7db7-0134",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "sandbox.request.vcpu": 1,
+            "sandbox.request.memory_mb": "2048",
+            "sandbox.request.disk_mb": "9280",
+            "sandbox.placement.excluded_jobs": "0",
+            "reserved_route": true,
+            "outcome": "scheduled",
+            "node_id": "sandbox-node-f2b7c8c55d-1",
+            "http.response.status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.016597097999999977
+          },
+          "status": {},
+          "events": null
+        }
+      ]
+    },
+    {
+      "trace_id": "748fc153cc58a219157166e46dc6a425",
+      "spans": [
+        {
+          "name": "gateway.sandbox_select_node",
+          "start": 1790182769134199561,
+          "ms": 19.671314,
+          "attributes": {
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "selected_node_id": "sandbox-node-f2b7c8c55d-1",
+            "selected_job_id": "12400715",
+            "ucloud.span.thread_cpu.duration": 0.009269534
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_ensure_image",
+          "start": 1790182769153971748,
+          "ms": 0.060891,
+          "attributes": {
+            "node.id": "sandbox-node-f2b7c8c55d-1",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "cache_hit": true,
+            "initial_cache_hit": true,
+            "waited_for_peer_pull": false,
+            "pulled": false
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_proxy_create",
+          "start": 1790182769155709385,
+          "ms": 821.398889,
+          "attributes": {
+            "node.id": "sandbox-node-f2b7c8c55d-1",
+            "status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.0009220830000000006
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182769977072411",
+              "name": "node.timings",
+              "attributes": [
+                {
+                  "key": "total_ms",
+                  "value": {
+                    "intValue": "817"
+                  }
+                },
+                {
+                  "key": "phases.read_request_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.parse_spec_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.manager_create_ms",
+                  "value": {
+                    "intValue": "817"
+                  }
+                },
+                {
+                  "key": "manager.idempotent",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "manager.total_ms",
+                  "value": {
+                    "intValue": "816"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "gateway.sandbox_create",
+          "start": 1790182769132668644,
+          "ms": 859.352917,
+          "attributes": {
+            "sandbox.id": "relay-load-70fe49fe7db7-0130",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "sandbox.request.vcpu": 1,
+            "sandbox.request.memory_mb": "2048",
+            "sandbox.request.disk_mb": "9280",
+            "sandbox.placement.excluded_jobs": "0",
+            "reserved_route": true,
+            "outcome": "scheduled",
+            "node_id": "sandbox-node-f2b7c8c55d-1",
+            "http.response.status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.014536747
+          },
+          "status": {},
+          "events": null
+        }
+      ]
+    },
+    {
+      "trace_id": "6e073a86f99cdd3008e24fe11f587d7a",
+      "spans": [
+        {
+          "name": "gateway.sandbox_select_node",
+          "start": 1790182767702589857,
+          "ms": 152.218659,
+          "attributes": {
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "selected_node_id": "sandbox-node-8f271b9b41-1",
+            "selected_job_id": "12400716",
+            "ucloud.span.thread_cpu.duration": 0.010139908
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_ensure_image",
+          "start": 1790182767855036949,
+          "ms": 0.205189,
+          "attributes": {
+            "node.id": "sandbox-node-8f271b9b41-1",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "cache_hit": true,
+            "initial_cache_hit": true,
+            "waited_for_peer_pull": false,
+            "pulled": false
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_proxy_create",
+          "start": 1790182767868772222,
+          "ms": 1419.111875,
+          "attributes": {
+            "node.id": "sandbox-node-8f271b9b41-1",
+            "status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.0011113449999999997
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182769287850045",
+              "name": "node.timings",
+              "attributes": [
+                {
+                  "key": "total_ms",
+                  "value": {
+                    "intValue": "1411"
+                  }
+                },
+                {
+                  "key": "phases.read_request_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.parse_spec_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.manager_create_ms",
+                  "value": {
+                    "intValue": "1410"
+                  }
+                },
+                {
+                  "key": "manager.idempotent",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "manager.total_ms",
+                  "value": {
+                    "intValue": "1409"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "gateway.sandbox_create",
+          "start": 1790182767701790684,
+          "ms": 1604.983381,
+          "attributes": {
+            "sandbox.id": "relay-load-70fe49fe7db7-0122",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "sandbox.request.vcpu": 1,
+            "sandbox.request.memory_mb": "2048",
+            "sandbox.request.disk_mb": "9280",
+            "sandbox.placement.excluded_jobs": "0",
+            "reserved_route": true,
+            "outcome": "scheduled",
+            "node_id": "sandbox-node-8f271b9b41-1",
+            "http.response.status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.017182663
+          },
+          "status": {},
+          "events": null
+        }
+      ]
+    },
+    {
+      "trace_id": "dbe8aa84805cb64d04bf6686ff17dd25",
+      "spans": [
+        {
+          "name": "gateway.sandbox_select_node",
+          "start": 1790182767673848749,
+          "ms": 115.828976,
+          "attributes": {
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "selected_node_id": "sandbox-node-8f271b9b41-1",
+            "selected_job_id": "12400716",
+            "ucloud.span.thread_cpu.duration": 0.007119547000000004
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_ensure_image",
+          "start": 1790182767789782473,
+          "ms": 0.064178,
+          "attributes": {
+            "node.id": "sandbox-node-8f271b9b41-1",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "cache_hit": true,
+            "initial_cache_hit": true,
+            "waited_for_peer_pull": false,
+            "pulled": false
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_proxy_create",
+          "start": 1790182767798738947,
+          "ms": 1330.981736,
+          "attributes": {
+            "node.id": "sandbox-node-8f271b9b41-1",
+            "status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.0010197299999999965
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182769129689506",
+              "name": "node.timings",
+              "attributes": [
+                {
+                  "key": "total_ms",
+                  "value": {
+                    "intValue": "1326"
+                  }
+                },
+                {
+                  "key": "phases.read_request_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.parse_spec_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.manager_create_ms",
+                  "value": {
+                    "intValue": "1325"
+                  }
+                },
+                {
+                  "key": "manager.idempotent",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "manager.total_ms",
+                  "value": {
+                    "intValue": "1325"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "gateway.sandbox_create",
+          "start": 1790182767668873995,
+          "ms": 1481.65112,
+          "attributes": {
+            "sandbox.id": "relay-load-70fe49fe7db7-0119",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "sandbox.request.vcpu": 1,
+            "sandbox.request.memory_mb": "2048",
+            "sandbox.request.disk_mb": "9280",
+            "sandbox.placement.excluded_jobs": "0",
+            "reserved_route": true,
+            "outcome": "scheduled",
+            "node_id": "sandbox-node-8f271b9b41-1",
+            "http.response.status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.012955915999999998
+          },
+          "status": {},
+          "events": null
+        }
+      ]
+    },
+    {
+      "trace_id": "14271242be105c0c168b205c0f2ce4b7",
+      "spans": [
+        {
+          "name": "gateway.sandbox_select_node",
+          "start": 1790182767221417230,
+          "ms": 54.135957,
+          "attributes": {
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "selected_node_id": "sandbox-node-f2b7c8c55d-1",
+            "selected_job_id": "12400715",
+            "ucloud.span.thread_cpu.duration": 0.008202503
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_ensure_image",
+          "start": 1790182767275678104,
+          "ms": 0.070647,
+          "attributes": {
+            "node.id": "sandbox-node-f2b7c8c55d-1",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "cache_hit": true,
+            "initial_cache_hit": true,
+            "waited_for_peer_pull": false,
+            "pulled": false
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_proxy_create",
+          "start": 1790182767300364765,
+          "ms": 1369.80926,
+          "attributes": {
+            "node.id": "sandbox-node-f2b7c8c55d-1",
+            "status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.0007688329999999965
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182768670140795",
+              "name": "node.timings",
+              "attributes": [
+                {
+                  "key": "total_ms",
+                  "value": {
+                    "intValue": "1340"
+                  }
+                },
+                {
+                  "key": "phases.read_request_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.parse_spec_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.manager_create_ms",
+                  "value": {
+                    "intValue": "1340"
+                  }
+                },
+                {
+                  "key": "manager.idempotent",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "manager.total_ms",
+                  "value": {
+                    "intValue": "1338"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "gateway.sandbox_create",
+          "start": 1790182767215720819,
+          "ms": 1460.891415,
+          "attributes": {
+            "sandbox.id": "relay-load-70fe49fe7db7-0111",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "sandbox.request.vcpu": 1,
+            "sandbox.request.memory_mb": "2048",
+            "sandbox.request.disk_mb": "9280",
+            "sandbox.placement.excluded_jobs": "0",
+            "reserved_route": true,
+            "outcome": "scheduled",
+            "node_id": "sandbox-node-f2b7c8c55d-1",
+            "http.response.status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.014669402000000012
+          },
+          "status": {},
+          "events": null
+        }
+      ]
+    },
+    {
+      "trace_id": "eb2eccb6124d478413f29f0d684dcb4e",
+      "spans": [
+        {
+          "name": "gateway.sandbox_select_node",
+          "start": 1790182762879484781,
+          "ms": 11.802419,
+          "attributes": {
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "selected_node_id": "sandbox-node-8f271b9b41-1",
+            "selected_job_id": "12400716",
+            "ucloud.span.thread_cpu.duration": 0.006729203999999989
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_ensure_image",
+          "start": 1790182762891437086,
+          "ms": 0.085469,
+          "attributes": {
+            "node.id": "sandbox-node-8f271b9b41-1",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "cache_hit": true,
+            "initial_cache_hit": true,
+            "waited_for_peer_pull": false,
+            "pulled": false
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_proxy_create",
+          "start": 1790182762893495908,
+          "ms": 1384.278899,
+          "attributes": {
+            "node.id": "sandbox-node-8f271b9b41-1",
+            "status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.0012487230000000071
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182764277733915",
+              "name": "node.timings",
+              "attributes": [
+                {
+                  "key": "total_ms",
+                  "value": {
+                    "intValue": "1378"
+                  }
+                },
+                {
+                  "key": "phases.read_request_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.parse_spec_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.manager_create_ms",
+                  "value": {
+                    "intValue": "1377"
+                  }
+                },
+                {
+                  "key": "manager.idempotent",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "manager.total_ms",
+                  "value": {
+                    "intValue": "1377"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "gateway.sandbox_create",
+          "start": 1790182762879023005,
+          "ms": 4290.730754,
+          "attributes": {
+            "sandbox.id": "relay-load-70fe49fe7db7-0107",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "sandbox.request.vcpu": 1,
+            "sandbox.request.memory_mb": "2048",
+            "sandbox.request.disk_mb": "9280",
+            "sandbox.placement.excluded_jobs": "0",
+            "reserved_route": true,
+            "outcome": "scheduled",
+            "node_id": "sandbox-node-8f271b9b41-1",
+            "http.response.status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.011755110999999985
+          },
+          "status": {},
+          "events": null
+        }
+      ]
+    },
+    {
+      "trace_id": "86ec8af353c01eeb0b0ed18e5b58251b",
+      "spans": [
+        {
+          "name": "gateway.sandbox_select_node",
+          "start": 1790182760003438651,
+          "ms": 12.114951,
+          "attributes": {
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "selected_node_id": "sandbox-node-059f2ca6a5-1",
+            "selected_job_id": "12400713",
+            "ucloud.span.thread_cpu.duration": 0.005932449999999978
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_ensure_image",
+          "start": 1790182760015696658,
+          "ms": 0.081143,
+          "attributes": {
+            "node.id": "sandbox-node-059f2ca6a5-1",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "cache_hit": true,
+            "initial_cache_hit": true,
+            "waited_for_peer_pull": false,
+            "pulled": false
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_proxy_create",
+          "start": 1790182760021035631,
+          "ms": 1057.830273,
+          "attributes": {
+            "node.id": "sandbox-node-059f2ca6a5-1",
+            "status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.001197634000000003
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182761078829600",
+              "name": "node.timings",
+              "attributes": [
+                {
+                  "key": "total_ms",
+                  "value": {
+                    "intValue": "1050"
+                  }
+                },
+                {
+                  "key": "phases.read_request_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.parse_spec_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.manager_create_ms",
+                  "value": {
+                    "intValue": "1049"
+                  }
+                },
+                {
+                  "key": "manager.idempotent",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "manager.total_ms",
+                  "value": {
+                    "intValue": "1049"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "gateway.sandbox_create",
+          "start": 1790182760002744255,
+          "ms": 1082.742954,
+          "attributes": {
+            "sandbox.id": "relay-load-70fe49fe7db7-0077",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "sandbox.request.vcpu": 1,
+            "sandbox.request.memory_mb": "2048",
+            "sandbox.request.disk_mb": "9280",
+            "sandbox.placement.excluded_jobs": "0",
+            "reserved_route": true,
+            "outcome": "scheduled",
+            "node_id": "sandbox-node-059f2ca6a5-1",
+            "http.response.status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.01170312699999998
+          },
+          "status": {},
+          "events": null
+        }
+      ]
+    },
+    {
+      "trace_id": "f42ee154e3b6a20f0d9f6dbc94d41c4f",
+      "spans": [
+        {
+          "name": "gateway.sandbox_select_node",
+          "start": 1790182759571318983,
+          "ms": 15.85797,
+          "attributes": {
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "selected_node_id": "sandbox-node-8f271b9b41-1",
+            "selected_job_id": "12400716",
+            "ucloud.span.thread_cpu.duration": 0.006723946000000036
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_ensure_image",
+          "start": 1790182759587366999,
+          "ms": 0.108033,
+          "attributes": {
+            "node.id": "sandbox-node-8f271b9b41-1",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "cache_hit": true,
+            "initial_cache_hit": true,
+            "waited_for_peer_pull": false,
+            "pulled": false
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_proxy_create",
+          "start": 1790182759589979074,
+          "ms": 1005.263651,
+          "attributes": {
+            "node.id": "sandbox-node-8f271b9b41-1",
+            "status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.0013950130000000005
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182760595202505",
+              "name": "node.timings",
+              "attributes": [
+                {
+                  "key": "total_ms",
+                  "value": {
+                    "intValue": "999"
+                  }
+                },
+                {
+                  "key": "phases.read_request_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.parse_spec_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.manager_create_ms",
+                  "value": {
+                    "intValue": "999"
+                  }
+                },
+                {
+                  "key": "manager.idempotent",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "manager.total_ms",
+                  "value": {
+                    "intValue": "998"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "gateway.sandbox_create",
+          "start": 1790182759569154833,
+          "ms": 1033.01,
+          "attributes": {
+            "sandbox.id": "relay-load-70fe49fe7db7-0069",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "sandbox.request.vcpu": 1,
+            "sandbox.request.memory_mb": "2048",
+            "sandbox.request.disk_mb": "9280",
+            "sandbox.placement.excluded_jobs": "0",
+            "reserved_route": true,
+            "outcome": "scheduled",
+            "node_id": "sandbox-node-8f271b9b41-1",
+            "http.response.status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.013707990999999975
+          },
+          "status": {},
+          "events": null
+        }
+      ]
+    },
+    {
+      "trace_id": "253965767123e31a0197050c43320aad",
+      "spans": [
+        {
+          "name": "gateway.sandbox_select_node",
+          "start": 1790182759367678909,
+          "ms": 15.436394,
+          "attributes": {
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "selected_node_id": "sandbox-node-8f77d0bcae-1",
+            "selected_job_id": "12400714",
+            "ucloud.span.thread_cpu.duration": 0.0060818899999999995
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_ensure_image",
+          "start": 1790182759383258048,
+          "ms": 0.071999,
+          "attributes": {
+            "node.id": "sandbox-node-8f77d0bcae-1",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "cache_hit": true,
+            "initial_cache_hit": true,
+            "waited_for_peer_pull": false,
+            "pulled": false
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_proxy_create",
+          "start": 1790182759384834713,
+          "ms": 1075.741146,
+          "attributes": {
+            "node.id": "sandbox-node-8f77d0bcae-1",
+            "status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.0009732409999999997
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182760460534037",
+              "name": "node.timings",
+              "attributes": [
+                {
+                  "key": "total_ms",
+                  "value": {
+                    "intValue": "1072"
+                  }
+                },
+                {
+                  "key": "phases.read_request_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.parse_spec_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.manager_create_ms",
+                  "value": {
+                    "intValue": "1067"
+                  }
+                },
+                {
+                  "key": "manager.idempotent",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "manager.total_ms",
+                  "value": {
+                    "intValue": "1066"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "gateway.sandbox_create",
+          "start": 1790182759366771772,
+          "ms": 1099.89251,
+          "attributes": {
+            "sandbox.id": "relay-load-70fe49fe7db7-0066",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "sandbox.request.vcpu": 1,
+            "sandbox.request.memory_mb": "2048",
+            "sandbox.request.disk_mb": "9280",
+            "sandbox.placement.excluded_jobs": "0",
+            "reserved_route": true,
+            "outcome": "scheduled",
+            "node_id": "sandbox-node-8f77d0bcae-1",
+            "http.response.status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.011180147000000001
+          },
+          "status": {},
+          "events": null
+        }
+      ]
+    },
+    {
+      "trace_id": "1b7f8f689da26e6009724fbb511bb2e6",
+      "spans": [
+        {
+          "name": "gateway.sandbox_select_node",
+          "start": 1790182756643142710,
+          "ms": 11.137438,
+          "attributes": {
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "selected_node_id": "sandbox-node-f2b7c8c55d-1",
+            "selected_job_id": "12400715",
+            "ucloud.span.thread_cpu.duration": 0.002317217000000038
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_ensure_image",
+          "start": 1790182756654407630,
+          "ms": 0.078258,
+          "attributes": {
+            "node.id": "sandbox-node-f2b7c8c55d-1",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "cache_hit": true,
+            "initial_cache_hit": true,
+            "waited_for_peer_pull": false,
+            "pulled": false
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_proxy_create",
+          "start": 1790182756674404976,
+          "ms": 357.599104,
+          "attributes": {
+            "node.id": "sandbox-node-f2b7c8c55d-1",
+            "status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.000986240000000027
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182757031971841",
+              "name": "node.timings",
+              "attributes": [
+                {
+                  "key": "total_ms",
+                  "value": {
+                    "intValue": "354"
+                  }
+                },
+                {
+                  "key": "phases.read_request_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.parse_spec_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.manager_create_ms",
+                  "value": {
+                    "intValue": "353"
+                  }
+                },
+                {
+                  "key": "manager.idempotent",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "manager.total_ms",
+                  "value": {
+                    "intValue": "353"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "gateway.sandbox_create",
+          "start": 1790182756642269013,
+          "ms": 399.48812,
+          "attributes": {
+            "sandbox.id": "relay-load-70fe49fe7db7-0017",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "sandbox.request.vcpu": 1,
+            "sandbox.request.memory_mb": "2048",
+            "sandbox.request.disk_mb": "9280",
+            "sandbox.placement.excluded_jobs": "0",
+            "reserved_route": true,
+            "outcome": "scheduled",
+            "node_id": "sandbox-node-f2b7c8c55d-1",
+            "http.response.status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.009141094000000016
+          },
+          "status": {},
+          "events": null
+        }
+      ]
+    },
+    {
+      "trace_id": "388c297a815947d417996c1daa4a5881",
+      "spans": [
+        {
+          "name": "gateway.sandbox_select_node",
+          "start": 1790182755980023619,
+          "ms": 72.829087,
+          "attributes": {
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "selected_node_id": "sandbox-node-8f271b9b41-1",
+            "selected_job_id": "12400716",
+            "ucloud.span.thread_cpu.duration": 0.002965027000000009
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_ensure_image",
+          "start": 1790182756053099739,
+          "ms": 0.184387,
+          "attributes": {
+            "node.id": "sandbox-node-8f271b9b41-1",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "cache_hit": true,
+            "initial_cache_hit": true,
+            "waited_for_peer_pull": false,
+            "pulled": false
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_proxy_create",
+          "start": 1790182756056659872,
+          "ms": 413.280508,
+          "attributes": {
+            "node.id": "sandbox-node-8f271b9b41-1",
+            "status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.0011485830000000363
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182756469902713",
+              "name": "node.timings",
+              "attributes": [
+                {
+                  "key": "total_ms",
+                  "value": {
+                    "intValue": "407"
+                  }
+                },
+                {
+                  "key": "phases.read_request_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.parse_spec_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.manager_create_ms",
+                  "value": {
+                    "intValue": "406"
+                  }
+                },
+                {
+                  "key": "manager.idempotent",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "manager.total_ms",
+                  "value": {
+                    "intValue": "406"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "gateway.sandbox_create",
+          "start": 1790182755971878259,
+          "ms": 501.688224,
+          "attributes": {
+            "sandbox.id": "relay-load-70fe49fe7db7-0009",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "sandbox.request.vcpu": 1,
+            "sandbox.request.memory_mb": "2048",
+            "sandbox.request.disk_mb": "9280",
+            "sandbox.placement.excluded_jobs": "0",
+            "reserved_route": true,
+            "outcome": "scheduled",
+            "node_id": "sandbox-node-8f271b9b41-1",
+            "http.response.status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.008041005999999962
+          },
+          "status": {},
+          "events": null
+        }
+      ]
+    },
+    {
+      "trace_id": "34d82a4e40a63eb7165f1f1fda04ee94",
+      "spans": [
+        {
+          "name": "gateway.sandbox_select_node",
+          "start": 1790182755966842913,
+          "ms": 29.689227,
+          "attributes": {
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "selected_node_id": "sandbox-node-059f2ca6a5-1",
+            "selected_job_id": "12400713",
+            "ucloud.span.thread_cpu.duration": 0.002776037000000009
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_ensure_image",
+          "start": 1790182755996673323,
+          "ms": 0.067751,
+          "attributes": {
+            "node.id": "sandbox-node-059f2ca6a5-1",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "cache_hit": true,
+            "initial_cache_hit": true,
+            "waited_for_peer_pull": false,
+            "pulled": false
+          },
+          "status": {},
+          "events": null
+        },
+        {
+          "name": "gateway.sandbox_proxy_create",
+          "start": 1790182755998102696,
+          "ms": 885.351953,
+          "attributes": {
+            "node.id": "sandbox-node-059f2ca6a5-1",
+            "status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.0009203099999999798
+          },
+          "status": {},
+          "events": [
+            {
+              "timeUnixNano": "1790182756883422781",
+              "name": "node.timings",
+              "attributes": [
+                {
+                  "key": "total_ms",
+                  "value": {
+                    "intValue": "875"
+                  }
+                },
+                {
+                  "key": "phases.read_request_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.parse_spec_ms",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "phases.manager_create_ms",
+                  "value": {
+                    "intValue": "874"
+                  }
+                },
+                {
+                  "key": "manager.idempotent",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "manager.total_ms",
+                  "value": {
+                    "intValue": "873"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "gateway.sandbox_create",
+          "start": 1790182755965722355,
+          "ms": 922.941573,
+          "attributes": {
+            "sandbox.id": "relay-load-70fe49fe7db7-0000",
+            "container.image.name": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+            "sandbox.request.vcpu": 1,
+            "sandbox.request.memory_mb": "2048",
+            "sandbox.request.disk_mb": "9280",
+            "sandbox.placement.excluded_jobs": "0",
+            "reserved_route": true,
+            "outcome": "scheduled",
+            "node_id": "sandbox-node-059f2ca6a5-1",
+            "http.response.status_code": "201",
+            "ucloud.span.thread_cpu.duration": 0.006887228000000023
+          },
+          "status": {},
+          "events": null
+        }
+      ]
+    }
+  ]
+}

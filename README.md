@@ -10,11 +10,12 @@ Cloud**. Clients use one gateway URL and API token; the backend handles placemen
 routing, image builds, and worker scaling. Despite the name, the sandbox API and
 runtime are shared across both providers.
 
-A central feature is **parking agents while they wait for model responses**.
-With the managed-agent integration, the service checkpoints an agent's processes
-and filesystem, releases its active compute resources, and restores it when the
-response is ready. This lets a worker serve more agents whose tool execution is
-interspersed with long model waits.
+A central feature is **sharing worker capacity across agents waiting for models**.
+Managed agents stay resident when memory is available, so they can continue
+quickly without checkpoint I/O. Under memory pressure, the service checkpoints
+eligible agents' processes and filesystems, releases their active memory, and
+restores them when needed. This combines fast ordinary turns with higher density
+for workloads containing long model waits.
 
 ## What you can do
 
@@ -65,10 +66,11 @@ For a managed agent, the model-wait cycle is:
 
 1. The agent runs tools inside its sandbox and sends a model request through the
    relay.
-2. Once the relay has durably accepted the request, the sandbox can park while
-   inference continues.
-3. When the response is ready, the service wakes the sandbox so the agent can
-   consume it and continue with its existing process and workspace state.
+2. Once the relay has durably accepted the request, the sandbox waits in memory
+   or parks to make room for other work. Inference continues independently.
+3. The model worker commits its response to the relay. Durable acceptance releases
+   the inference slot; delivery and any necessary wake continue independently.
+   The agent receives the response with its existing process and workspace state.
 
 This lifecycle requires a parkable, managed-process sandbox started with
 `start_agent()` and registered with `register_agent_rollout()`. Setting

@@ -1,0 +1,89 @@
+{
+  "run_id": "relay-load-cdf004f3586a",
+  "started_at": "2026-09-23T14:01:46.575408+00:00",
+  "finished_at": "2026-09-23T14:05:52.630686+00:00",
+  "result": "failed: transient managed-process read timeout incorrectly returned HTTP 409",
+  "completed_cycles": 3,
+  "managed_records_observed_at": "2026-09-23T14:04:21+00:00",
+  "managed_records": {
+    "running": 124,
+    "signaled": 0,
+    "failed": 0,
+    "nonzero_exited": 0
+  },
+  "samples_are_instantaneous_not_fault_time_proof": true,
+  "fleet_health": {
+    "enabled": true,
+    "passed": false,
+    "status": "failed",
+    "used_jobs": [
+      "12400586",
+      "12400587",
+      "12400588",
+      "12400589"
+    ],
+    "observed_healthy_jobs": [
+      "12400586",
+      "12400587",
+      "12400588",
+      "12400589"
+    ],
+    "failure_count": 5,
+    "placement_grace_seconds": 30,
+    "freshness_seconds": 30
+  },
+  "workers": [
+    {
+      "job_id": "12400586",
+      "samples": 85,
+      "sample_errors": 0,
+      "sample_start": "2026-09-23T14:01:35.600337+00:00",
+      "sample_end": "2026-09-23T14:04:23.749312+00:00",
+      "backing_total_bytes": 89551843328,
+      "minimum_backing_available_bytes": 34128158720,
+      "minimum_backing_at": "2026-09-23T14:03:27.686399+00:00",
+      "minimum_physical_available_bytes": 32209223680,
+      "minimum_physical_at": "2026-09-23T14:03:27.686399+00:00",
+      "maximum_shmem_bytes": 55440224256
+    },
+    {
+      "job_id": "12400587",
+      "samples": 83,
+      "sample_errors": 0,
+      "sample_start": "2026-09-23T14:01:36.846281+00:00",
+      "sample_end": "2026-09-23T14:04:22.600278+00:00",
+      "backing_total_bytes": 89551835136,
+      "minimum_backing_available_bytes": 40647909376,
+      "minimum_backing_at": "2026-09-23T14:03:14.559974+00:00",
+      "minimum_physical_available_bytes": 38408314880,
+      "minimum_physical_at": "2026-09-23T14:03:08.556256+00:00",
+      "maximum_shmem_bytes": 48919277568
+    },
+    {
+      "job_id": "12400588",
+      "samples": 80,
+      "sample_errors": 0,
+      "sample_start": "2026-09-23T14:01:38.859069+00:00",
+      "sample_end": "2026-09-23T14:04:21.740673+00:00",
+      "backing_total_bytes": 89551843328,
+      "minimum_backing_available_bytes": 47165657088,
+      "minimum_backing_at": "2026-09-23T14:03:11.696254+00:00",
+      "minimum_physical_available_bytes": 44894277632,
+      "minimum_physical_at": "2026-09-23T14:03:09.695013+00:00",
+      "maximum_shmem_bytes": 42400948224
+    },
+    {
+      "job_id": "12400589",
+      "samples": 82,
+      "sample_errors": 0,
+      "sample_start": "2026-09-23T14:01:40.953691+00:00",
+      "sample_end": "2026-09-23T14:04:23.053478+00:00",
+      "backing_total_bytes": 89551826944,
+      "minimum_backing_available_bytes": 34124525568,
+      "minimum_backing_at": "2026-09-23T14:04:11.043436+00:00",
+      "minimum_physical_available_bytes": 31605510144,
+      "minimum_physical_at": "2026-09-23T14:03:08.997356+00:00",
+      "maximum_shmem_bytes": 55447162880
+    }
+  ]
+}

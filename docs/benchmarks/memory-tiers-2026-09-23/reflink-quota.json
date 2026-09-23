@@ -1,0 +1,33 @@
+{
+  "status": "passed",
+  "cases": [
+    {
+      "quota_bytes": 67108864,
+      "source_sha256": "9e937a938bb4f9278e06d5ce1991a0fdcea41f685e76294ef9beb8f5cd5cd4ba",
+      "source_allocated_bytes": 41943040,
+      "clone_allocated_bytes": 0,
+      "clone_errno": 28,
+      "immutable_source_preserved": true
+    },
+    {
+      "quota_bytes": 134217728,
+      "source_sha256": "bc58395ad801fe0e71b42bb1a330f9589d4ac4ef36287a5c8affe7cc4b268729",
+      "source_allocated_bytes": 41943040,
+      "clone_allocated_bytes": 42070016,
+      "clone_errno": null,
+      "immutable_source_preserved": true
+    }
+  ],
+  "cross_project": {
+    "source_project": 600002,
+    "target_project": 600003,
+    "quota_each_bytes": 67108864,
+    "source_allocated_bytes": 41943040,
+    "clone_allocated_bytes": 42070016,
+    "immutable_source_preserved": true
+  },
+  "final_metrics": {
+    "memory_backing_allocations": 0,
+    "memory_backing_hard_reserved_bytes": 0
+  }
+}

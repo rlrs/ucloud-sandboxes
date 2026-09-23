@@ -1,0 +1,151 @@
+[
+  {
+    "schema": "ucloud_shared_rehearsal_20260922",
+    "requests": []
+  },
+  {
+    "schema": "ucloud_shared",
+    "requests": [
+      {
+        "request_id": "184c524b2fc04552810909b81059cf0e",
+        "rollout_id": "relay-load-8885f7a20e12-0155",
+        "sandbox_id": "relay-load-8885f7a20e12-0155",
+        "created_at": 1790184586.427718,
+        "state": "completed",
+        "delivered_at": 1790184586.436349,
+        "first_delivered_at": 1790184586.436349,
+        "delivery_count": 1,
+        "completed_at": 1790184608.940328,
+        "delivery_pending": false,
+        "accepted_notified_at": 1790184586.460917,
+        "wake_notified_at": 1790184609.135644,
+        "delivery_released_at": 1790184609.135644,
+        "same_transport_epoch": true
+      },
+      {
+        "request_id": "0e7e852440814439837d49ee8323f580",
+        "rollout_id": "relay-load-8885f7a20e12-0155",
+        "sandbox_id": "relay-load-8885f7a20e12-0155",
+        "created_at": 1790184612.28148,
+        "state": "completed",
+        "delivered_at": 1790184612.290114,
+        "first_delivered_at": 1790184612.290114,
+        "delivery_count": 1,
+        "completed_at": 1790184636.808085,
+        "delivery_pending": false,
+        "accepted_notified_at": 1790184612.350036,
+        "wake_notified_at": 1790184644.319162,
+        "delivery_released_at": 1790184644.319162,
+        "same_transport_epoch": true
+      },
+      {
+        "request_id": "ac9b2c45d2b6444f917f9aa2c11503b2",
+        "rollout_id": "relay-load-8885f7a20e12-0155",
+        "sandbox_id": "relay-load-8885f7a20e12-0155",
+        "created_at": 1790184654.0235,
+        "state": "completed",
+        "delivered_at": 1790184654.029441,
+        "first_delivered_at": 1790184654.029441,
+        "delivery_count": 1,
+        "completed_at": 1790184675.343092,
+        "delivery_pending": false,
+        "accepted_notified_at": 1790184654.070302,
+        "wake_notified_at": 1790184675.555954,
+        "delivery_released_at": 1790184675.555954,
+        "same_transport_epoch": true
+      },
+      {
+        "request_id": "de158ea1287f4e57b31d1aaf110bafe3",
+        "rollout_id": "relay-load-8885f7a20e12-0155",
+        "sandbox_id": "relay-load-8885f7a20e12-0155",
+        "created_at": 1790184684.435536,
+        "state": "completed",
+        "delivered_at": 1790184684.451717,
+        "first_delivered_at": 1790184684.451717,
+        "delivery_count": 1,
+        "completed_at": 1790184706.313757,
+        "delivery_pending": false,
+        "accepted_notified_at": 1790184684.558331,
+        "wake_notified_at": 1790184768.596351,
+        "delivery_released_at": 1790184768.596351,
+        "same_transport_epoch": true
+      }
+    ]
+  },
+  {
+    "lifecycle": [
+      {
+        "request_id": "0e7e852440814439837d49ee8323f580",
+        "action": "park",
+        "done": true,
+        "claim_until": null,
+        "next_attempt_at": "2026-09-23 17:30:42.351407+00:00",
+        "attempts": 2,
+        "last_error": null
+      },
+      {
+        "request_id": "0e7e852440814439837d49ee8323f580",
+        "action": "wake",
+        "done": true,
+        "claim_until": null,
+        "next_attempt_at": "2026-09-23 17:30:36.808967+00:00",
+        "attempts": 1,
+        "last_error": null
+      },
+      {
+        "request_id": "184c524b2fc04552810909b81059cf0e",
+        "action": "park",
+        "done": true,
+        "claim_until": null,
+        "next_attempt_at": "2026-09-23 17:30:16.462198+00:00",
+        "attempts": 2,
+        "last_error": null
+      },
+      {
+        "request_id": "184c524b2fc04552810909b81059cf0e",
+        "action": "wake",
+        "done": true,
+        "claim_until": null,
+        "next_attempt_at": "2026-09-23 17:30:08.942564+00:00",
+        "attempts": 1,
+        "last_error": null
+      },
+      {
+        "request_id": "ac9b2c45d2b6444f917f9aa2c11503b2",
+        "action": "park",
+        "done": true,
+        "claim_until": null,
+        "next_attempt_at": "2026-09-23 17:31:24.070914+00:00",
+        "attempts": 2,
+        "last_error": null
+      },
+      {
+        "request_id": "ac9b2c45d2b6444f917f9aa2c11503b2",
+        "action": "wake",
+        "done": true,
+        "claim_until": null,
+        "next_attempt_at": "2026-09-23 17:31:15.344416+00:00",
+        "attempts": 1,
+        "last_error": null
+      },
+      {
+        "request_id": "de158ea1287f4e57b31d1aaf110bafe3",
+        "action": "park",
+        "done": true,
+        "claim_until": null,
+        "next_attempt_at": "2026-09-23 17:31:54.559951+00:00",
+        "attempts": 2,
+        "last_error": null
+      },
+      {
+        "request_id": "de158ea1287f4e57b31d1aaf110bafe3",
+        "action": "wake",
+        "done": true,
+        "claim_until": null,
+        "next_attempt_at": "2026-09-23 17:32:46.435543+00:00",
+        "attempts": 2,
+        "last_error": null
+      }
+    ]
+  }
+]

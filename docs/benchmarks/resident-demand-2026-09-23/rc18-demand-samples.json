@@ -1,0 +1,8 @@
+{
+  "run_id": "relay-load-e46611368211",
+  "queued_demand_node_samples": 233,
+  "median_physical_available_mib": 15546,
+  "samples_above_10gib_available": 225,
+  "samples_with_active_checkpoint": 201,
+  "limitation": "Heartbeat samples do not separate admitted growth from queued forecasts; these values cannot attribute unnecessary captures to either cost."
+}

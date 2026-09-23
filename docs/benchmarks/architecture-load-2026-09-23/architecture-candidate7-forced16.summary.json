@@ -1,0 +1,1726 @@
+{
+  "report_version": 2,
+  "run_id": "relay-load-4f932b7c3f82",
+  "started_at": "2026-09-23T11:26:48.172535+00:00",
+  "configuration": {
+    "gateway_url": "https://app-sandboxes.cloud.sdu.dk",
+    "relay_url": "https://app-sandboxes-relay-v2.cloud.sdu.dk",
+    "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+    "sandboxes": 16,
+    "cycles": 4,
+    "startup_mode": "rolling",
+    "resident_mb": 512,
+    "dirty_mb": 128,
+    "files": 64,
+    "file_kib": 64,
+    "payload_kib": 32,
+    "tool_upload_kib": 64,
+    "cpu_ms": 100,
+    "model_seconds": 20.0,
+    "model_jitter": 5.0,
+    "parking_mode": "forced",
+    "cpus": 1,
+    "memory_mb": 1024,
+    "disk_mb": 4096,
+    "create_concurrency": 16,
+    "fleet_pollers": 24,
+    "warmup_cycles": 1,
+    "deadline_seconds": 1800.0,
+    "useful_action_p95_seconds": 1,
+    "continuation_p95_seconds": 0.8,
+    "seed": 1,
+    "start_signal_file": null
+  },
+  "errors": [
+    {
+      "sandbox_id": "relay-load-4f932b7c3f82-0005",
+      "stage": "model_wait_and_park",
+      "cycle": 0,
+      "error": "RelayApiError: relay returned an inconsistent renewed request"
+    }
+  ],
+  "cleanup_errors": [],
+  "control_retries": [
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0005",
+      "cycle": 0,
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0014",
+      "cycle": 0,
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0011",
+      "cycle": 0,
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0001",
+      "cycle": 0,
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0008",
+      "cycle": 0,
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0012",
+      "cycle": 0,
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0002",
+      "cycle": 0,
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0009",
+      "cycle": 0,
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0007",
+      "cycle": 0,
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0005",
+      "cycle": 0,
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0011",
+      "cycle": 0,
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0014",
+      "cycle": 0,
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0001",
+      "cycle": 0,
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0012",
+      "cycle": 0,
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0008",
+      "cycle": 0,
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0002",
+      "cycle": 0,
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0007",
+      "cycle": 0,
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0009",
+      "cycle": 0,
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0005",
+      "cycle": 0,
+      "attempt": 3,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0011",
+      "cycle": 0,
+      "attempt": 3,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0014",
+      "cycle": 0,
+      "attempt": 3,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0001",
+      "cycle": 0,
+      "attempt": 3,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0012",
+      "cycle": 0,
+      "attempt": 3,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0008",
+      "cycle": 0,
+      "attempt": 3,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0007",
+      "cycle": 0,
+      "attempt": 3,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0009",
+      "cycle": 0,
+      "attempt": 3,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0002",
+      "cycle": 0,
+      "attempt": 3,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0011",
+      "cycle": 0,
+      "attempt": 4,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0005",
+      "cycle": 0,
+      "attempt": 4,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0014",
+      "cycle": 0,
+      "attempt": 4,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0001",
+      "cycle": 0,
+      "attempt": 4,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0008",
+      "cycle": 0,
+      "attempt": 4,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0012",
+      "cycle": 0,
+      "attempt": 4,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0002",
+      "cycle": 0,
+      "attempt": 4,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0007",
+      "cycle": 0,
+      "attempt": 4,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0009",
+      "cycle": 0,
+      "attempt": 4,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0003",
+      "cycle": 0,
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0003",
+      "cycle": 0,
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0014",
+      "cycle": 0,
+      "attempt": 5,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0005",
+      "cycle": 0,
+      "attempt": 5,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0011",
+      "cycle": 0,
+      "attempt": 5,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0001",
+      "cycle": 0,
+      "attempt": 5,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0012",
+      "cycle": 0,
+      "attempt": 5,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0008",
+      "cycle": 0,
+      "attempt": 5,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0002",
+      "cycle": 0,
+      "attempt": 5,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0007",
+      "cycle": 0,
+      "attempt": 5,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0009",
+      "cycle": 0,
+      "attempt": 5,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0001",
+      "cycle": 0,
+      "attempt": 6,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0012",
+      "cycle": 0,
+      "attempt": 6,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0008",
+      "cycle": 0,
+      "attempt": 6,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0014",
+      "cycle": 0,
+      "attempt": 6,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0011",
+      "cycle": 0,
+      "attempt": 6,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0005",
+      "cycle": 0,
+      "attempt": 6,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0009",
+      "cycle": 0,
+      "attempt": 6,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0007",
+      "cycle": 0,
+      "attempt": 6,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0002",
+      "cycle": 0,
+      "attempt": 6,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0001",
+      "cycle": 0,
+      "attempt": 7,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0012",
+      "cycle": 0,
+      "attempt": 7,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0008",
+      "cycle": 0,
+      "attempt": 7,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0011",
+      "cycle": 0,
+      "attempt": 7,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0005",
+      "cycle": 0,
+      "attempt": 7,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0014",
+      "cycle": 0,
+      "attempt": 7,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0009",
+      "cycle": 0,
+      "attempt": 7,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0007",
+      "cycle": 0,
+      "attempt": 7,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0002",
+      "cycle": 0,
+      "attempt": 7,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0001",
+      "cycle": 0,
+      "attempt": 8,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0008",
+      "cycle": 0,
+      "attempt": 8,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0012",
+      "cycle": 0,
+      "attempt": 8,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0005",
+      "cycle": 0,
+      "attempt": 8,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0014",
+      "cycle": 0,
+      "attempt": 8,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0011",
+      "cycle": 0,
+      "attempt": 8,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0002",
+      "cycle": 0,
+      "attempt": 8,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0009",
+      "cycle": 0,
+      "attempt": 8,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0007",
+      "cycle": 0,
+      "attempt": 8,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0015",
+      "cycle": 0,
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0006",
+      "cycle": 0,
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0000",
+      "cycle": 0,
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0001",
+      "cycle": 0,
+      "attempt": 9,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0008",
+      "cycle": 0,
+      "attempt": 9,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0012",
+      "cycle": 0,
+      "attempt": 9,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0011",
+      "cycle": 0,
+      "attempt": 9,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0014",
+      "cycle": 0,
+      "attempt": 9,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0005",
+      "cycle": 0,
+      "attempt": 9,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0000",
+      "cycle": 0,
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0015",
+      "cycle": 0,
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0006",
+      "cycle": 0,
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0009",
+      "cycle": 0,
+      "attempt": 9,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0007",
+      "cycle": 0,
+      "attempt": 9,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0002",
+      "cycle": 0,
+      "attempt": 9,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0008",
+      "cycle": 0,
+      "attempt": 10,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0001",
+      "cycle": 0,
+      "attempt": 10,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0012",
+      "cycle": 0,
+      "attempt": 10,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0006",
+      "cycle": 0,
+      "attempt": 3,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0000",
+      "cycle": 0,
+      "attempt": 3,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0015",
+      "cycle": 0,
+      "attempt": 3,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0011",
+      "cycle": 0,
+      "attempt": 10,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0005",
+      "cycle": 0,
+      "attempt": 10,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0014",
+      "cycle": 0,
+      "attempt": 10,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0007",
+      "cycle": 0,
+      "attempt": 10,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0002",
+      "cycle": 0,
+      "attempt": 10,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0009",
+      "cycle": 0,
+      "attempt": 10,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0012",
+      "cycle": 0,
+      "attempt": 11,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0008",
+      "cycle": 0,
+      "attempt": 11,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0001",
+      "cycle": 0,
+      "attempt": 11,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0006",
+      "cycle": 0,
+      "attempt": 4,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0015",
+      "cycle": 0,
+      "attempt": 4,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0000",
+      "cycle": 0,
+      "attempt": 4,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0014",
+      "cycle": 0,
+      "attempt": 11,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0011",
+      "cycle": 0,
+      "attempt": 11,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0005",
+      "cycle": 0,
+      "attempt": 11,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0007",
+      "cycle": 0,
+      "attempt": 11,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0009",
+      "cycle": 0,
+      "attempt": 11,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0002",
+      "cycle": 0,
+      "attempt": 11,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0006",
+      "cycle": 0,
+      "attempt": 5,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0015",
+      "cycle": 0,
+      "attempt": 5,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0000",
+      "cycle": 0,
+      "attempt": 5,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0001",
+      "cycle": 0,
+      "attempt": 12,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0012",
+      "cycle": 0,
+      "attempt": 12,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0008",
+      "cycle": 0,
+      "attempt": 12,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0011",
+      "cycle": 0,
+      "attempt": 12,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0014",
+      "cycle": 0,
+      "attempt": 12,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0005",
+      "cycle": 0,
+      "attempt": 12,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0009",
+      "cycle": 0,
+      "attempt": 12,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0002",
+      "cycle": 0,
+      "attempt": 12,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0007",
+      "cycle": 0,
+      "attempt": 12,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0015",
+      "cycle": 0,
+      "attempt": 6,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0000",
+      "cycle": 0,
+      "attempt": 6,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0006",
+      "cycle": 0,
+      "attempt": 6,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0008",
+      "cycle": 0,
+      "attempt": 13,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0001",
+      "cycle": 0,
+      "attempt": 13,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0012",
+      "cycle": 0,
+      "attempt": 13,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0005",
+      "cycle": 0,
+      "attempt": 13,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0014",
+      "cycle": 0,
+      "attempt": 13,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0011",
+      "cycle": 0,
+      "attempt": 13,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0015",
+      "cycle": 0,
+      "attempt": 7,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0006",
+      "cycle": 0,
+      "attempt": 7,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0000",
+      "cycle": 0,
+      "attempt": 7,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0009",
+      "cycle": 0,
+      "attempt": 13,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0002",
+      "cycle": 0,
+      "attempt": 13,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0007",
+      "cycle": 0,
+      "attempt": 13,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0008",
+      "cycle": 0,
+      "attempt": 14,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0001",
+      "cycle": 0,
+      "attempt": 14,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0012",
+      "cycle": 0,
+      "attempt": 14,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0014",
+      "cycle": 0,
+      "attempt": 14,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0005",
+      "cycle": 0,
+      "attempt": 14,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0011",
+      "cycle": 0,
+      "attempt": 14,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0015",
+      "cycle": 0,
+      "attempt": 8,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0000",
+      "cycle": 0,
+      "attempt": 8,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0006",
+      "cycle": 0,
+      "attempt": 8,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0007",
+      "cycle": 0,
+      "attempt": 14,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0002",
+      "cycle": 0,
+      "attempt": 14,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0009",
+      "cycle": 0,
+      "attempt": 14,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0012",
+      "cycle": 0,
+      "attempt": 15,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0001",
+      "cycle": 0,
+      "attempt": 15,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0008",
+      "cycle": 0,
+      "attempt": 15,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0000",
+      "cycle": 0,
+      "attempt": 9,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0006",
+      "cycle": 0,
+      "attempt": 9,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0015",
+      "cycle": 0,
+      "attempt": 9,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0014",
+      "cycle": 0,
+      "attempt": 15,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0011",
+      "cycle": 0,
+      "attempt": 15,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0005",
+      "cycle": 0,
+      "attempt": 15,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0007",
+      "cycle": 0,
+      "attempt": 15,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0009",
+      "cycle": 0,
+      "attempt": 15,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0002",
+      "cycle": 0,
+      "attempt": 15,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0008",
+      "cycle": 0,
+      "attempt": 16,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0012",
+      "cycle": 0,
+      "attempt": 16,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0001",
+      "cycle": 0,
+      "attempt": 16,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0000",
+      "cycle": 0,
+      "attempt": 10,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0015",
+      "cycle": 0,
+      "attempt": 10,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0006",
+      "cycle": 0,
+      "attempt": 10,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0011",
+      "cycle": 0,
+      "attempt": 16,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0014",
+      "cycle": 0,
+      "attempt": 16,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0005",
+      "cycle": 0,
+      "attempt": 16,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0002",
+      "cycle": 0,
+      "attempt": 16,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0007",
+      "cycle": 0,
+      "attempt": 16,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0009",
+      "cycle": 0,
+      "attempt": 16,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0000",
+      "cycle": 0,
+      "attempt": 11,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0006",
+      "cycle": 0,
+      "attempt": 11,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0015",
+      "cycle": 0,
+      "attempt": 11,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0008",
+      "cycle": 0,
+      "attempt": 17,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0012",
+      "cycle": 0,
+      "attempt": 17,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0001",
+      "cycle": 0,
+      "attempt": 17,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0011",
+      "cycle": 0,
+      "attempt": 17,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0014",
+      "cycle": 0,
+      "attempt": 17,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0005",
+      "cycle": 0,
+      "attempt": 17,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0002",
+      "cycle": 0,
+      "attempt": 17,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0009",
+      "cycle": 0,
+      "attempt": 17,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0007",
+      "cycle": 0,
+      "attempt": 17,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0006",
+      "cycle": 0,
+      "attempt": 12,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0000",
+      "cycle": 0,
+      "attempt": 12,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0015",
+      "cycle": 0,
+      "attempt": 12,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0001",
+      "cycle": 0,
+      "attempt": 18,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0008",
+      "cycle": 0,
+      "attempt": 18,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0012",
+      "cycle": 0,
+      "attempt": 18,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0005",
+      "cycle": 0,
+      "attempt": 18,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0011",
+      "cycle": 0,
+      "attempt": 18,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0014",
+      "cycle": 0,
+      "attempt": 18,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0007",
+      "cycle": 0,
+      "attempt": 18,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0009",
+      "cycle": 0,
+      "attempt": 18,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0002",
+      "cycle": 0,
+      "attempt": 18,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0006",
+      "cycle": 0,
+      "attempt": 13,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0000",
+      "cycle": 0,
+      "attempt": 13,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0015",
+      "cycle": 0,
+      "attempt": 13,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0012",
+      "cycle": 0,
+      "attempt": 19,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0001",
+      "cycle": 0,
+      "attempt": 19,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0008",
+      "cycle": 0,
+      "attempt": 19,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0011",
+      "cycle": 0,
+      "attempt": 19,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0005",
+      "cycle": 0,
+      "attempt": 19,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0014",
+      "cycle": 0,
+      "attempt": 19,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0007",
+      "cycle": 0,
+      "attempt": 19,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0002",
+      "cycle": 0,
+      "attempt": 19,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0009",
+      "cycle": 0,
+      "attempt": 19,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0006",
+      "cycle": 0,
+      "attempt": 14,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0000",
+      "cycle": 0,
+      "attempt": 14,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0015",
+      "cycle": 0,
+      "attempt": 14,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0008",
+      "cycle": 0,
+      "attempt": 20,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0012",
+      "cycle": 0,
+      "attempt": 20,
+      "status": 503
+    },
+    {
+      "operation": "park",
+      "sandbox_id": "relay-load-4f932b7c3f82-0001",
+      "cycle": 0,
+      "attempt": 20,
+      "status": 503
+    }
+  ],
+  "resource_errors": [],
+  "driver_python": "3.13.2",
+  "sdk_version": "0.4.25",
+  "sdk_client_sha256": "010a8e2406592224a1b339e7fcc4ac983ed394a56a4a8786c5f188569a2d5bb0",
+  "latency_definition": "model ready through guest-originated continuation receipt, then uploaded tool confirmation; receipt includes observation tunnel overhead; full integrity is a separate mandatory gate",
+  "harness_sha256": "f8fda7c112de5409ad41ea12c187f0b9d166f3409a73925b9e80a39c41fec32e",
+  "deployed_health": {
+    "ok": true,
+    "service": "control-plane",
+    "version": "0.5.114rc7"
+  },
+  "failure": "RelayApiError: relay returned an inconsistent renewed request",
+  "response_commit_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "usable_exec_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "response_ready_to_usable_exec_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "response_ready_to_commit_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "response_ready_to_guest_continuation_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "post_continuation_exec_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "post_continuation_exec_start_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "post_continuation_exec_wait_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "full_integrity_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "guest_verification_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "guest_tool_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "guest_transport_retries": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "measured_park_observed_cycles": 0,
+  "phase_latency_seconds": {
+    "during_provisioning": {
+      "count": 3,
+      "p50": 1.3938837472815067,
+      "p95": 1.6912399621214718,
+      "p99": 1.6912399621214718,
+      "max": 1.6912399621214718
+    },
+    "after_provisioning": {
+      "count": 1,
+      "p50": 2.2573721152730286,
+      "p95": 2.2573721152730286,
+      "p99": 2.2573721152730286,
+      "max": 2.2573721152730286
+    }
+  },
+  "phase_continuation_seconds": {
+    "during_provisioning": {
+      "count": 3,
+      "p50": 1.129532971419394,
+      "p95": 1.4379195312503725,
+      "p99": 1.4379195312503725,
+      "max": 1.4379195312503725
+    },
+    "after_provisioning": {
+      "count": 1,
+      "p50": 1.7307023003231734,
+      "p95": 1.7307023003231734,
+      "p99": 1.7307023003231734,
+      "max": 1.7307023003231734
+    }
+  },
+  "completed_cycles": 4,
+  "resource_summary": {
+    "sample_count": 9,
+    "observed_worker_seconds": 25.02433705329895,
+    "sampled_cpu_seconds": 135.13142008781435,
+    "cpu_coverage_worker_seconds": 25.02433705329895,
+    "sampled_host_memory_mib_seconds": 124896.46623301506,
+    "memory_coverage_worker_seconds": 25.02433705329895,
+    "device_read_bytes": 0,
+    "device_write_bytes": 68593152,
+    "device_read_bytes_coverage_worker_seconds": 25.02433705329895,
+    "device_write_bytes_coverage_worker_seconds": 25.02433705329895,
+    "scope": "sampled whole worker costs; excludes missing/stale intervals; not per-sandbox attribution"
+  },
+  "correct": false,
+  "slo_passed": false,
+  "finished_at": "2026-09-23T11:27:34.101190+00:00",
+  "source_report_sha256": "6fed3ae862036e7c308ae2b0c29563e0fdf9a41a87694f75e41786d89189ad13",
+  "health_checks": {
+    "total": 23,
+    "failed": 0
+  },
+  "fleet_polls_checks": {
+    "total": 1056,
+    "failed": 0
+  }
+}

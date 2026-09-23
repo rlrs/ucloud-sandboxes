@@ -1,0 +1,77 @@
+{
+  "512": {
+    "host": {
+      "format_write_bytes": 210591744,
+      "transactions_per_second": 746.919780140162,
+      "p95_ms": 4.6220815000026505,
+      "p99_ms": 7.7092694999976175,
+      "samples": 2
+    },
+    "filesystem": {
+      "format_write_bytes": 67575808,
+      "transactions_per_second": 742.0569077499365,
+      "p95_ms": 4.759478500005798,
+      "p99_ms": 7.79425899997932,
+      "samples": 2
+    },
+    "log128m": {
+      "format_write_bytes": 134684672,
+      "transactions_per_second": 733.5912799444076,
+      "p95_ms": 4.396766000013486,
+      "p99_ms": 7.791794500008109,
+      "samples": 2
+    }
+  },
+  "4096": {
+    "host": {
+      "format_write_bytes": 223088640,
+      "transactions_per_second": 763.1882144328983,
+      "p95_ms": 4.24797599998783,
+      "p99_ms": 7.38456250002173,
+      "samples": 2
+    },
+    "filesystem": {
+      "format_write_bytes": 67686400,
+      "transactions_per_second": 703.7104048955102,
+      "p95_ms": 4.694423500041012,
+      "p99_ms": 7.904074000009587,
+      "samples": 2
+    },
+    "log128m": {
+      "format_write_bytes": 134795264,
+      "transactions_per_second": 704.1358427188884,
+      "p95_ms": 4.810899000005975,
+      "p99_ms": 7.876016500006244,
+      "samples": 2
+    }
+  },
+  "4096-onecpu": {
+    "host": {
+      "format_write_bytes": 223088640,
+      "transactions_per_second": 772.8702438426087,
+      "p95_ms": 4.3461685000920625,
+      "p99_ms": 7.115828499991039,
+      "samples": 2,
+      "cpu_max": "100000 100000",
+      "cpu_cores": 0.30871525250387555
+    },
+    "filesystem": {
+      "format_write_bytes": 67686400,
+      "transactions_per_second": 758.5225305632837,
+      "p95_ms": 4.332993000161878,
+      "p99_ms": 7.414409500029251,
+      "samples": 2,
+      "cpu_max": "100000 100000",
+      "cpu_cores": 0.30427243012869765
+    },
+    "log128m": {
+      "format_write_bytes": 134795264,
+      "transactions_per_second": 769.6400813087837,
+      "p95_ms": 4.343574000017725,
+      "p99_ms": 7.224528000051578,
+      "samples": 2,
+      "cpu_max": "100000 100000",
+      "cpu_cores": 0.30338357349301104
+    }
+  }
+}

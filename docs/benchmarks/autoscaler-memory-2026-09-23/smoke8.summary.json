@@ -1,0 +1,477 @@
+{
+  "report_version": 3,
+  "run_id": "relay-load-97cd6ecf0238",
+  "started_at": "2026-09-23T18:17:18.823403+00:00",
+  "configuration": {
+    "gateway_url": "https://app-sandboxes.cloud.sdu.dk",
+    "relay_url": "https://app-sandboxes-relay-v2.cloud.sdu.dk",
+    "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+    "sandboxes": 8,
+    "cycles": 2,
+    "startup_mode": "rolling",
+    "resident_mb": 64,
+    "dirty_mb": 16,
+    "files": 64,
+    "file_kib": 64,
+    "payload_kib": 32,
+    "sqlite_transactions": 0,
+    "sqlite_payload_bytes": 4096,
+    "tool_upload_kib": 64,
+    "cpu_ms": 100,
+    "model_seconds": 20.0,
+    "model_jitter": 5.0,
+    "parking_mode": "forced",
+    "cpus": 1,
+    "memory_mb": 512,
+    "disk_mb": 4096,
+    "create_concurrency": 16,
+    "fleet_pollers": 24,
+    "warmup_cycles": 1,
+    "deadline_seconds": 1800.0,
+    "sandbox_request_timeout_seconds": 180,
+    "continuation_timeout_seconds": 180,
+    "useful_action_p95_seconds": 1,
+    "continuation_p95_seconds": 0.8,
+    "seed": 1,
+    "start_signal_file": null
+  },
+  "completed_scenarios": [
+    {
+      "sandbox_id": "relay-load-97cd6ecf0238-0006",
+      "job_id": "job-3c895ab723b04c3195f9eb9deb5b7d8f",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-97cd6ecf0238-0003",
+      "job_id": "job-4b6e34c360034bdfbe629ce1d56ef94e",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-97cd6ecf0238-0002",
+      "job_id": "job-f5333efcf2254e86bace039061236bee",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-97cd6ecf0238-0000",
+      "job_id": "job-da2f98df1ba0405e9b88eecef3e68449",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-97cd6ecf0238-0007",
+      "job_id": "job-47f734deb5bf4cf495f9f869506f3ab6",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-97cd6ecf0238-0004",
+      "job_id": "job-75524d8724ba4f0cb1a2041687fa3171",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-97cd6ecf0238-0005",
+      "job_id": "job-5a843aef2b4045d4ace5a6a22b04131c",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-97cd6ecf0238-0001",
+      "job_id": "job-b91a3306f830472db2f061d063609ebd",
+      "state": "exited",
+      "exit_code": 0
+    }
+  ],
+  "errors": [],
+  "cleanup_errors": [],
+  "control_retries": [],
+  "resource_errors": [],
+  "fleet_health_checks": [
+    {
+      "at": "2026-09-23T18:17:21.397605+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T18:17:26.418061+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T18:17:31.438090+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T18:17:36.459563+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T18:17:41.479015+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T18:17:46.498723+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T18:17:51.518571+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T18:17:56.539279+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T18:18:01.559395+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T18:18:06.579172+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T18:18:11.598442+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T18:18:16.618426+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T18:18:21.636243+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T18:18:26.657009+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400751"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T18:18:31.678778+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400751"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T18:18:36.699275+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400751"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T18:18:41.719360+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400751"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T18:18:46.739878+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400751"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T18:18:51.760059+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400751"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T18:18:56.780704+00:00",
+      "required_jobs": [
+        "12400751"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400751"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T18:19:01.800821+00:00",
+      "required_jobs": [
+        "12400751"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400751"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T18:19:06.821066+00:00",
+      "required_jobs": [
+        "12400751"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400751"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T18:19:11.840418+00:00",
+      "required_jobs": [
+        "12400751"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400751"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T18:19:16.857742+00:00",
+      "required_jobs": [
+        "12400751"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400751"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T18:19:19.542492+00:00",
+      "required_jobs": [
+        "12400751"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400751"
+      ],
+      "failures": []
+    }
+  ],
+  "fleet_health_failures": [],
+  "driver_python": "3.13.2",
+  "sdk_version": "0.4.26",
+  "sdk_client_sha256": "010a8e2406592224a1b339e7fcc4ac983ed394a56a4a8786c5f188569a2d5bb0",
+  "latency_definition": "model ready through guest-originated continuation receipt, then uploaded tool confirmation; receipt includes observation tunnel overhead; full integrity is a separate mandatory gate",
+  "harness_sha256": "61e85f335ccf2bbc723d6f4605eb8ee18c1feec5d71a128f0a3f3f09a5e3156c",
+  "deployed_health": {
+    "ok": true,
+    "service": "control-plane",
+    "version": "0.5.114rc22"
+  },
+  "fleet_health": {
+    "enabled": true,
+    "passed": true,
+    "status": "passed",
+    "used_jobs": [
+      "12400751"
+    ],
+    "observed_healthy_jobs": [
+      "12400751"
+    ],
+    "failure_count": 0,
+    "placement_grace_seconds": 30,
+    "freshness_seconds": 30
+  },
+  "response_commit_seconds": {
+    "count": 8,
+    "p50": 0.04544754989910871,
+    "p95": 0.07352045318111777,
+    "p99": 0.07352045318111777,
+    "max": 0.07352045318111777
+  },
+  "usable_exec_seconds": {
+    "count": 8,
+    "p50": 0.8623434675391763,
+    "p95": 1.7092933550011367,
+    "p99": 1.7092933550011367,
+    "max": 1.7092933550011367
+  },
+  "response_ready_to_usable_exec_seconds": {
+    "count": 8,
+    "p50": 0.8631197704235092,
+    "p95": 1.71035787765868,
+    "p99": 1.71035787765868,
+    "max": 1.71035787765868
+  },
+  "response_ready_to_commit_seconds": {
+    "count": 8,
+    "p50": 0.046259147697128356,
+    "p95": 0.07431048643775284,
+    "p99": 0.07431048643775284,
+    "max": 0.07431048643775284
+  },
+  "response_ready_to_guest_continuation_seconds": {
+    "count": 8,
+    "p50": 0.5834916428430006,
+    "p95": 0.9675078527070582,
+    "p99": 0.9675078527070582,
+    "max": 0.9675078527070582
+  },
+  "post_continuation_exec_seconds": {
+    "count": 8,
+    "p50": 0.28247507009655237,
+    "p95": 0.7428500249516219,
+    "p99": 0.7428500249516219,
+    "max": 0.7428500249516219
+  },
+  "post_continuation_exec_start_seconds": {
+    "count": 8,
+    "p50": 0.08173654647544026,
+    "p95": 0.08962831716053188,
+    "p99": 0.08962831716053188,
+    "max": 0.08962831716053188
+  },
+  "post_continuation_exec_wait_seconds": {
+    "count": 8,
+    "p50": 0.07724802102893591,
+    "p95": 0.43442809395492077,
+    "p99": 0.43442809395492077,
+    "max": 0.43442809395492077
+  },
+  "full_integrity_seconds": {
+    "count": 8,
+    "p50": 0.9464512123959139,
+    "p95": 1.9738377816975117,
+    "p99": 1.9738377816975117,
+    "max": 1.9738377816975117
+  },
+  "guest_verification_seconds": {
+    "count": 8,
+    "p50": 0.04471664150000265,
+    "p95": 0.1688187530000036,
+    "p99": 0.1688187530000036,
+    "max": 0.1688187530000036
+  },
+  "guest_tool_seconds": {
+    "count": 8,
+    "p50": 0.0390644050000013,
+    "p95": 0.1609114990000009,
+    "p99": 0.1609114990000009,
+    "max": 0.1609114990000009
+  },
+  "guest_transport_retries": {
+    "count": 8,
+    "p50": 0.0,
+    "p95": 0,
+    "p99": 0,
+    "max": 0
+  },
+  "measured_park_observed_cycles": 8,
+  "phase_latency_seconds": {
+    "during_provisioning": {
+      "count": 0,
+      "p50": null,
+      "p95": null,
+      "p99": null,
+      "max": null
+    },
+    "after_provisioning": {
+      "count": 16,
+      "p50": 0.8853723284555599,
+      "p95": 1.71035787765868,
+      "p99": 1.71035787765868,
+      "max": 1.71035787765868
+    }
+  },
+  "phase_continuation_seconds": {
+    "during_provisioning": {
+      "count": 0,
+      "p50": null,
+      "p95": null,
+      "p99": null,
+      "max": null
+    },
+    "after_provisioning": {
+      "count": 16,
+      "p50": 0.6307363827945665,
+      "p95": 0.9675078527070582,
+      "p99": 0.9675078527070582,
+      "max": 0.9675078527070582
+    }
+  },
+  "completed_cycles": 16,
+  "resource_summary": {
+    "sample_count": 25,
+    "observed_worker_seconds": 45.906604051589966,
+    "sampled_cpu_seconds": 1.5806911163661082,
+    "cpu_coverage_worker_seconds": 45.906604051589966,
+    "host_cpu_usage_seconds": 12.94,
+    "host_cpu_steal_seconds": 0.1,
+    "host_cpu_usage_coverage_worker_seconds": 20.94754695892334,
+    "host_cpu_steal_coverage_worker_seconds": 20.94754695892334,
+    "sampled_host_memory_mib_seconds": 223069.55362820625,
+    "memory_coverage_worker_seconds": 45.906604051589966,
+    "device_read_bytes": 691322880,
+    "device_write_bytes": 1261567488,
+    "device_read_bytes_coverage_worker_seconds": 20.94754695892334,
+    "device_write_bytes_coverage_worker_seconds": 20.94754695892334,
+    "scope": "sampled whole worker costs; excludes missing/stale intervals; not per-sandbox attribution"
+  },
+  "correct": true,
+  "slo_passed": false,
+  "finished_at": "2026-09-23T18:19:20.703503+00:00",
+  "source_report_sha256": "d81480b51490fdc2108d323b34d9363cb4312149ab9c84cb649559bcb176d279",
+  "health_checks": {
+    "total": 59,
+    "failed": 0
+  },
+  "fleet_polls_checks": {
+    "total": 2784,
+    "failed": 0
+  }
+}

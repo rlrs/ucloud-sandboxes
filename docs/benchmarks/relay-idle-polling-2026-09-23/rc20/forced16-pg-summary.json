@@ -1,0 +1,44 @@
+{
+  "interval": [
+    "2026-09-23T17:26:39.418056+00:00",
+    "2026-09-23T17:28:42.427862+00:00"
+  ],
+  "seconds": 123.009806,
+  "postgres_samples": 124,
+  "active_backend_wait_samples": {
+    "None/None": 3,
+    "IO/WalSync": 1,
+    "LWLock/WALWrite": 1
+  },
+  "long_transactions": [],
+  "max_transaction_seconds": 0.006076,
+  "wal_sync_per_second": 8.690364083656876,
+  "wal_bytes_per_second": 33434.85477897592,
+  "wal_records_per_second": 76.48170748273516,
+  "gateway_cpu_busy_percent": 8.00172743537541,
+  "gateway_iowait_percent": 0.2056470685010385,
+  "physical_disk_read_mib_per_second": 0.0016830467158041042,
+  "physical_disk_write_mib_per_second": 0.5914480204122914,
+  "physical_disk_busy_percent": 1.0592651450893273,
+  "observer_errors": [],
+  "pool_last": {
+    "kind": "relay_pool",
+    "at": "2026-09-23T17:28:40.018494+00:00",
+    "pool": {
+      "connections_num": 5,
+      "connections_ms": 55,
+      "requests_num": 7529,
+      "usage_ms": 14417,
+      "requests_queued": 6,
+      "requests_wait_ms": 21,
+      "pool_min": 1,
+      "pool_max": 16,
+      "pool_size": 5,
+      "pool_available": 5,
+      "requests_waiting": 0
+    },
+    "elapsed": 0.015654426999390125
+  },
+  "pool_max_waiting": 0,
+  "pool_wait_milliseconds_delta": 4
+}

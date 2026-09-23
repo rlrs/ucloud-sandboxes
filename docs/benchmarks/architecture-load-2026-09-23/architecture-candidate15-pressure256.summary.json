@@ -1,0 +1,758 @@
+{
+  "report_version": 3,
+  "run_id": "relay-load-908d18341181",
+  "started_at": "2026-09-23T13:46:02.871990+00:00",
+  "configuration": {
+    "gateway_url": "https://app-sandboxes.cloud.sdu.dk",
+    "relay_url": "https://app-sandboxes-relay-v2.cloud.sdu.dk",
+    "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+    "sandboxes": 256,
+    "cycles": 8,
+    "startup_mode": "rolling",
+    "resident_mb": 1536,
+    "dirty_mb": 384,
+    "files": 64,
+    "file_kib": 64,
+    "payload_kib": 32,
+    "sqlite_transactions": 0,
+    "sqlite_payload_bytes": 4096,
+    "tool_upload_kib": 64,
+    "cpu_ms": 100,
+    "model_seconds": 20.0,
+    "model_jitter": 5.0,
+    "parking_mode": "natural",
+    "cpus": 1,
+    "memory_mb": 2048,
+    "disk_mb": 4096,
+    "create_concurrency": 16,
+    "fleet_pollers": 24,
+    "warmup_cycles": 1,
+    "deadline_seconds": 1800.0,
+    "useful_action_p95_seconds": 1,
+    "continuation_p95_seconds": 0.8,
+    "seed": 1,
+    "start_signal_file": null
+  },
+  "errors": [
+    {
+      "sandbox_id": "relay-load-908d18341181-0211",
+      "stage": "create",
+      "cycle": null,
+      "error": "SandboxApiError: node-agent request failed (503): {'error': 'node memory headroom is reserved by in-flight transitions'}"
+    }
+  ],
+  "cleanup_errors": [],
+  "control_retries": [
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0014",
+      "attempt": 1,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0014",
+      "attempt": 2,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0010",
+      "attempt": 1,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0014",
+      "attempt": 3,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0019",
+      "attempt": 1,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0002",
+      "attempt": 1,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0027",
+      "attempt": 1,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0028",
+      "attempt": 1,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0023",
+      "attempt": 1,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0028",
+      "attempt": 2,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0028",
+      "attempt": 3,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0028",
+      "attempt": 4,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0028",
+      "attempt": 5,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0028",
+      "attempt": 6,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0028",
+      "attempt": 7,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0032",
+      "attempt": 1,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0032",
+      "attempt": 2,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0032",
+      "attempt": 3,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0029",
+      "attempt": 1,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0032",
+      "attempt": 4,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0032",
+      "attempt": 5,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0022",
+      "attempt": 1,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0032",
+      "attempt": 6,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0014",
+      "attempt": 4,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0027",
+      "attempt": 2,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0032",
+      "attempt": 7,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0032",
+      "attempt": 8,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0028",
+      "attempt": 8,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0032",
+      "attempt": 9,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0044",
+      "attempt": 1,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0040",
+      "attempt": 1,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0050",
+      "attempt": 1,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0050",
+      "attempt": 2,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0046",
+      "attempt": 1,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0062",
+      "attempt": 1,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0075",
+      "attempt": 1,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0075",
+      "attempt": 2,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0074",
+      "attempt": 1,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0075",
+      "attempt": 3,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0075",
+      "attempt": 4,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0080",
+      "attempt": 1,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0080",
+      "attempt": 2,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0075",
+      "attempt": 5,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0080",
+      "attempt": 3,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0080",
+      "attempt": 4,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0075",
+      "attempt": 6,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0050",
+      "attempt": 3,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0097",
+      "attempt": 1,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0080",
+      "attempt": 5,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0121",
+      "attempt": 1,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0135",
+      "attempt": 1,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0128",
+      "attempt": 1,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0075",
+      "attempt": 7,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-908d18341181-0080",
+      "attempt": 6,
+      "status": 409
+    }
+  ],
+  "resource_errors": [],
+  "fleet_health_checks": [
+    {
+      "at": "2026-09-23T13:46:05.515183+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:46:10.552492+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:46:15.582994+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400566",
+        "12400568",
+        "12400569",
+        "12400572"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:46:20.616784+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400566",
+        "12400568",
+        "12400569",
+        "12400572"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:46:25.648328+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400566",
+        "12400568",
+        "12400569",
+        "12400572"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:46:30.695811+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400566",
+        "12400568",
+        "12400569",
+        "12400572"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:46:35.741278+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400566",
+        "12400568",
+        "12400569",
+        "12400572"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:46:40.795072+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400566",
+        "12400568",
+        "12400569",
+        "12400572"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:46:45.850050+00:00",
+      "required_jobs": [
+        "12400566",
+        "12400568",
+        "12400569",
+        "12400572"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400566",
+        "12400568",
+        "12400569",
+        "12400572"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:46:50.910089+00:00",
+      "required_jobs": [
+        "12400566",
+        "12400568",
+        "12400569",
+        "12400572"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400566",
+        "12400568",
+        "12400569",
+        "12400572"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:46:55.967167+00:00",
+      "required_jobs": [
+        "12400566",
+        "12400568",
+        "12400569",
+        "12400572"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400566",
+        "12400568",
+        "12400569",
+        "12400572"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:47:01.027273+00:00",
+      "required_jobs": [
+        "12400566",
+        "12400568",
+        "12400569",
+        "12400572"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400566",
+        "12400568",
+        "12400569",
+        "12400572"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:47:06.100484+00:00",
+      "required_jobs": [
+        "12400566",
+        "12400568",
+        "12400569",
+        "12400572"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400566",
+        "12400568",
+        "12400569",
+        "12400572"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:47:11.161247+00:00",
+      "required_jobs": [
+        "12400566",
+        "12400568",
+        "12400569",
+        "12400572"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400566",
+        "12400568",
+        "12400569",
+        "12400572"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T13:47:15.775632+00:00",
+      "required_jobs": [
+        "12400566",
+        "12400568",
+        "12400569",
+        "12400572"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400566",
+        "12400568",
+        "12400569",
+        "12400572"
+      ],
+      "failures": []
+    }
+  ],
+  "fleet_health_failures": [],
+  "driver_python": "3.13.2",
+  "sdk_version": "0.4.26",
+  "sdk_client_sha256": "010a8e2406592224a1b339e7fcc4ac983ed394a56a4a8786c5f188569a2d5bb0",
+  "latency_definition": "model ready through guest-originated continuation receipt, then uploaded tool confirmation; receipt includes observation tunnel overhead; full integrity is a separate mandatory gate",
+  "harness_sha256": "e688f11d849aad2afb5e3096add20d81b3d1445bfa7ca23152fa1fe630881d88",
+  "deployed_health": {
+    "ok": true,
+    "service": "control-plane",
+    "version": "0.5.114rc15"
+  },
+  "fleet_health": {
+    "enabled": true,
+    "passed": true,
+    "status": "passed",
+    "used_jobs": [
+      "12400566",
+      "12400568",
+      "12400569",
+      "12400572"
+    ],
+    "observed_healthy_jobs": [
+      "12400566",
+      "12400568",
+      "12400569",
+      "12400572"
+    ],
+    "failure_count": 0,
+    "placement_grace_seconds": 30,
+    "freshness_seconds": 30
+  },
+  "failure": "SandboxApiError: node-agent request failed (503): {'error': 'node memory headroom is reserved by in-flight transitions'}",
+  "response_commit_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "usable_exec_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "response_ready_to_usable_exec_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "response_ready_to_commit_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "response_ready_to_guest_continuation_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "post_continuation_exec_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "post_continuation_exec_start_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "post_continuation_exec_wait_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "full_integrity_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "guest_verification_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "guest_tool_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "guest_transport_retries": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "measured_park_observed_cycles": 0,
+  "phase_latency_seconds": {
+    "during_provisioning": {
+      "count": 61,
+      "p50": 7.432180949253961,
+      "p95": 19.530783814378083,
+      "p99": 23.507096695248038,
+      "max": 23.507096695248038
+    },
+    "after_provisioning": {
+      "count": 0,
+      "p50": null,
+      "p95": null,
+      "p99": null,
+      "max": null
+    }
+  },
+  "phase_continuation_seconds": {
+    "during_provisioning": {
+      "count": 61,
+      "p50": 5.216135592432693,
+      "p95": 18.12502931128256,
+      "p99": 21.636882742168382,
+      "max": 21.636882742168382
+    },
+    "after_provisioning": {
+      "count": 0,
+      "p50": null,
+      "p95": null,
+      "p99": null,
+      "max": null
+    }
+  },
+  "completed_cycles": 61,
+  "resource_summary": {
+    "sample_count": 15,
+    "observed_worker_seconds": 276.463401556015,
+    "sampled_cpu_seconds": 4148.947984296249,
+    "cpu_coverage_worker_seconds": 276.463401556015,
+    "host_cpu_usage_seconds": 3964.5099999999998,
+    "host_cpu_steal_seconds": 1.54,
+    "host_cpu_usage_coverage_worker_seconds": 276.463401556015,
+    "host_cpu_steal_coverage_worker_seconds": 276.463401556015,
+    "sampled_host_memory_mib_seconds": 15134844.432235003,
+    "memory_coverage_worker_seconds": 276.463401556015,
+    "device_read_bytes": 33139945472,
+    "device_write_bytes": 193069185536,
+    "device_read_bytes_coverage_worker_seconds": 276.463401556015,
+    "device_write_bytes_coverage_worker_seconds": 276.463401556015,
+    "scope": "sampled whole worker costs; excludes missing/stale intervals; not per-sandbox attribution"
+  },
+  "correct": false,
+  "slo_passed": false,
+  "finished_at": "2026-09-23T13:47:44.555969+00:00",
+  "source_report_sha256": "838cd99f3e72faf7e25a4aaef8b358a2f134b4b0fc860bac4baa4303e47f07b8",
+  "health_checks": {
+    "total": 35,
+    "failed": 0
+  },
+  "fleet_polls_checks": {
+    "total": 1560,
+    "failed": 0
+  }
+}

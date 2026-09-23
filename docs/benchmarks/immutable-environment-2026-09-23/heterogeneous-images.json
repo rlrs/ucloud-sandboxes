@@ -1,0 +1,714 @@
+{
+  "scope": "local OCI registry, empty adapter caches; host page caches retained",
+  "runsc_sha256": "a005058b5a097a9ec6c28d0d3e14ea7d2992fc0cf2c11a0eb62d7553e7068613",
+  "kernel": "7.0.0-30-generic",
+  "images": [
+    {
+      "name": "python-slim",
+      "base": "python:3.13-slim-bookworm",
+      "base_image_id": "sha256:915835de46a63f9598442159437904042f1c69a9b41c4965fba1db9ceab66578",
+      "base_repo_digests": [
+        "python@sha256:2325bb286ec344af3e5898cc224b5844e2707ac6e26b1632516fd3edc84a5e26"
+      ],
+      "kind": "python",
+      "digest": "sha256:e61531e3f0f61f844eb498d03e4eaf944659b062150a0da4f318edb9a948c9fb",
+      "artifact_bytes": 122990592,
+      "oci_compressed_layer_bytes": 46516587,
+      "publication_seconds": 7.163371923,
+      "components": [
+        "sha256:4c3b97e0356a0dee20650753c0fbfed6616477fe8f5e8df27c69cb378fc204a3"
+      ]
+    },
+    {
+      "name": "node-slim",
+      "base": "node:22-bookworm-slim",
+      "base_image_id": "sha256:c72861c6705868ed7f08e1cf22ef4f7ba07a82c19a54ba65d931c442d3575889",
+      "base_repo_digests": [
+        "node@sha256:48e4b67d85f87bd551df43704e24d252f56cc5f8e9718841aace50f19948f0f9"
+      ],
+      "kind": "node",
+      "digest": "sha256:94019301b5f1a314e97e0cd0671d26ceb0d45cb9c27bd28cc15206e1ce85eb33",
+      "artifact_bytes": 229392384,
+      "oci_compressed_layer_bytes": 82044769,
+      "publication_seconds": 13.10859644499999,
+      "components": [
+        "sha256:d1782c56394213b80eb89472fe5a6bc1d38041551e60bd0ab3018bc57adf06b3"
+      ]
+    },
+    {
+      "name": "python-tools",
+      "base": "python:3.13-bookworm",
+      "base_image_id": "sha256:8ace98ca0196a5715aa69f35ae15528176ba6c9a034c6df9fcb1b98e0f4e8571",
+      "base_repo_digests": [
+        "python@sha256:227b6570d6ee07061ae6ca2eb04dedfb6d2b34045835f343065b9869e4d427ea"
+      ],
+      "kind": "python",
+      "digest": "sha256:59e0cf35d0c9af65cd0b86a0716f810fdbc16e3681ba14051dc7f619d84a34a1",
+      "artifact_bytes": 1020239872,
+      "oci_compressed_layer_bytes": 384995760,
+      "publication_seconds": 53.29364151199991,
+      "components": [
+        "sha256:58ee0eeafc59200792130d666c0f1c9f5dbc93b8d51fcabe5b8fdb0e68032566"
+      ]
+    },
+    {
+      "name": "node-tools",
+      "base": "node:22-bookworm",
+      "base_image_id": "sha256:3112e746c4490eaeae5940bc123e8b57422fe7df0de6d5752d9c3e0ed5e5948b",
+      "base_repo_digests": [
+        "node@sha256:dd5847a04b0deee391fa145f1f4c6d214196668b6bcc7988ebed67249f226844"
+      ],
+      "kind": "node",
+      "digest": "sha256:705aa86ca0fa26ef42eac62fc10c031c2f48db587620966c6d4930db7ef2ccc9",
+      "artifact_bytes": 1134161920,
+      "oci_compressed_layer_bytes": 410819998,
+      "publication_seconds": 57.71503081000003,
+      "components": [
+        "sha256:0ba988ba5c82afc20542471de512d77c406aa90f16e3b159f3af4f028ce06b4c"
+      ]
+    }
+  ],
+  "measurements": [
+    {
+      "materialize_seconds": 0.06544118500005425,
+      "first_useful_seconds": 1.7196589040001982,
+      "runsc_command_peak_rss_bytes": 49680384,
+      "proof": {
+        "bytes": 891869,
+        "copyup": true,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "files": 128
+      },
+      "adapter": "docker",
+      "cache": "cold",
+      "repeat": 0,
+      "image": "python-slim",
+      "pull_seconds": 1.3626410970000506,
+      "http_blob_bytes": 46523332,
+      "http_requests": 8,
+      "adapter_process_rss_bytes": 94130176
+    },
+    {
+      "materialize_seconds": 0.02201672299997881,
+      "first_useful_seconds": 0.3137052130000484,
+      "runsc_command_peak_rss_bytes": 49963008,
+      "proof": {
+        "bytes": 891869,
+        "copyup": true,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "files": 128
+      },
+      "adapter": "docker",
+      "cache": "warm",
+      "repeat": 0,
+      "image": "python-slim",
+      "pull_seconds": 0,
+      "http_blob_bytes": 0,
+      "http_requests": 0,
+      "adapter_process_rss_bytes": 94130176
+    },
+    {
+      "materialize_seconds": 0.06725084499998957,
+      "first_useful_seconds": 1.1089883110000756,
+      "runsc_command_peak_rss_bytes": 49905664,
+      "proof": {
+        "bytes": 891869,
+        "copyup": true,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "files": 128
+      },
+      "adapter": "erofs",
+      "cache": "cold",
+      "repeat": 0,
+      "image": "python-slim",
+      "pull_seconds": 0,
+      "http_blob_bytes": 39631609,
+      "http_requests": 156,
+      "adapter_process_rss_bytes": 45854720
+    },
+    {
+      "materialize_seconds": 0.00671697600000698,
+      "first_useful_seconds": 0.29963138799985245,
+      "runsc_command_peak_rss_bytes": 49618944,
+      "proof": {
+        "bytes": 891869,
+        "copyup": true,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "files": 128
+      },
+      "adapter": "erofs",
+      "cache": "warm",
+      "repeat": 0,
+      "image": "python-slim",
+      "pull_seconds": 0,
+      "http_blob_bytes": 0,
+      "http_requests": 0,
+      "adapter_process_rss_bytes": 45854720
+    },
+    {
+      "materialize_seconds": 0.07056312500003514,
+      "first_useful_seconds": 2.157705587999999,
+      "runsc_command_peak_rss_bytes": 49311744,
+      "proof": {
+        "files": 128,
+        "bytes": 891869,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "copyup": true
+      },
+      "adapter": "docker",
+      "cache": "cold",
+      "repeat": 0,
+      "image": "node-slim",
+      "pull_seconds": 1.9369123409999247,
+      "http_blob_bytes": 82052728,
+      "http_requests": 9,
+      "adapter_process_rss_bytes": 92938240
+    },
+    {
+      "materialize_seconds": 0.020381435999979658,
+      "first_useful_seconds": 0.157150073999901,
+      "runsc_command_peak_rss_bytes": 49451008,
+      "proof": {
+        "files": 128,
+        "bytes": 891869,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "copyup": true
+      },
+      "adapter": "docker",
+      "cache": "warm",
+      "repeat": 0,
+      "image": "node-slim",
+      "pull_seconds": 0,
+      "http_blob_bytes": 0,
+      "http_requests": 0,
+      "adapter_process_rss_bytes": 92938240
+    },
+    {
+      "materialize_seconds": 0.06610253899998497,
+      "first_useful_seconds": 1.2399217330000738,
+      "runsc_command_peak_rss_bytes": 47312896,
+      "proof": {
+        "files": 128,
+        "bytes": 891869,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "copyup": true
+      },
+      "adapter": "erofs",
+      "cache": "cold",
+      "repeat": 0,
+      "image": "node-slim",
+      "pull_seconds": 0,
+      "http_blob_bytes": 70080400,
+      "http_requests": 272,
+      "adapter_process_rss_bytes": 46522368
+    },
+    {
+      "materialize_seconds": 0.005577252999955817,
+      "first_useful_seconds": 0.14987483899994913,
+      "runsc_command_peak_rss_bytes": 47841280,
+      "proof": {
+        "files": 128,
+        "bytes": 891869,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "copyup": true
+      },
+      "adapter": "erofs",
+      "cache": "warm",
+      "repeat": 0,
+      "image": "node-slim",
+      "pull_seconds": 0,
+      "http_blob_bytes": 0,
+      "http_requests": 0,
+      "adapter_process_rss_bytes": 46522368
+    },
+    {
+      "materialize_seconds": 0.07059872700006053,
+      "first_useful_seconds": 9.078668782000022,
+      "runsc_command_peak_rss_bytes": 49909760,
+      "proof": {
+        "bytes": 891869,
+        "copyup": true,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "files": 128
+      },
+      "adapter": "docker",
+      "cache": "cold",
+      "repeat": 0,
+      "image": "python-tools",
+      "pull_seconds": 8.702053897000042,
+      "http_blob_bytes": 385003387,
+      "http_requests": 11,
+      "adapter_process_rss_bytes": 95428608
+    },
+    {
+      "materialize_seconds": 0.025539789000049495,
+      "first_useful_seconds": 0.3123583090000466,
+      "runsc_command_peak_rss_bytes": 50765824,
+      "proof": {
+        "bytes": 891869,
+        "copyup": true,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "files": 128
+      },
+      "adapter": "docker",
+      "cache": "warm",
+      "repeat": 0,
+      "image": "python-tools",
+      "pull_seconds": 0,
+      "http_blob_bytes": 0,
+      "http_requests": 0,
+      "adapter_process_rss_bytes": 95428608
+    },
+    {
+      "materialize_seconds": 0.08719692700015003,
+      "first_useful_seconds": 1.3028227620000052,
+      "runsc_command_peak_rss_bytes": 50253824,
+      "proof": {
+        "bytes": 891869,
+        "copyup": true,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "files": 128
+      },
+      "adapter": "erofs",
+      "cache": "cold",
+      "repeat": 0,
+      "image": "python-tools",
+      "pull_seconds": 0,
+      "http_blob_bytes": 52815445,
+      "http_requests": 205,
+      "adapter_process_rss_bytes": 51871744
+    },
+    {
+      "materialize_seconds": 0.005942973000173879,
+      "first_useful_seconds": 0.28953158900003473,
+      "runsc_command_peak_rss_bytes": 50401280,
+      "proof": {
+        "bytes": 891869,
+        "copyup": true,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "files": 128
+      },
+      "adapter": "erofs",
+      "cache": "warm",
+      "repeat": 0,
+      "image": "python-tools",
+      "pull_seconds": 0,
+      "http_blob_bytes": 0,
+      "http_requests": 0,
+      "adapter_process_rss_bytes": 51871744
+    },
+    {
+      "materialize_seconds": 0.1059871520001252,
+      "first_useful_seconds": 8.535491876000151,
+      "runsc_command_peak_rss_bytes": 49582080,
+      "proof": {
+        "files": 128,
+        "bytes": 891869,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "copyup": true
+      },
+      "adapter": "docker",
+      "cache": "cold",
+      "repeat": 0,
+      "image": "node-tools",
+      "pull_seconds": 8.276318078000031,
+      "http_blob_bytes": 410827852,
+      "http_requests": 12,
+      "adapter_process_rss_bytes": 92684288
+    },
+    {
+      "materialize_seconds": 0.023097176999954172,
+      "first_useful_seconds": 0.17239644100004625,
+      "runsc_command_peak_rss_bytes": 49733632,
+      "proof": {
+        "files": 128,
+        "bytes": 891869,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "copyup": true
+      },
+      "adapter": "docker",
+      "cache": "warm",
+      "repeat": 0,
+      "image": "node-tools",
+      "pull_seconds": 0,
+      "http_blob_bytes": 0,
+      "http_requests": 0,
+      "adapter_process_rss_bytes": 92688384
+    },
+    {
+      "materialize_seconds": 0.09373587700019925,
+      "first_useful_seconds": 1.3258831940001983,
+      "runsc_command_peak_rss_bytes": 47403008,
+      "proof": {
+        "files": 128,
+        "bytes": 891869,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "copyup": true
+      },
+      "adapter": "erofs",
+      "cache": "cold",
+      "repeat": 0,
+      "image": "node-tools",
+      "pull_seconds": 0,
+      "http_blob_bytes": 72781347,
+      "http_requests": 281,
+      "adapter_process_rss_bytes": 53399552
+    },
+    {
+      "materialize_seconds": 0.005787009000187027,
+      "first_useful_seconds": 0.15194821500017497,
+      "runsc_command_peak_rss_bytes": 48082944,
+      "proof": {
+        "files": 128,
+        "bytes": 891869,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "copyup": true
+      },
+      "adapter": "erofs",
+      "cache": "warm",
+      "repeat": 0,
+      "image": "node-tools",
+      "pull_seconds": 0,
+      "http_blob_bytes": 0,
+      "http_requests": 0,
+      "adapter_process_rss_bytes": 53399552
+    },
+    {
+      "materialize_seconds": 0.06806391700001768,
+      "first_useful_seconds": 1.207148800999903,
+      "runsc_command_peak_rss_bytes": 50139136,
+      "proof": {
+        "bytes": 891869,
+        "copyup": true,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "files": 128
+      },
+      "adapter": "erofs",
+      "cache": "cold",
+      "repeat": 1,
+      "image": "python-slim",
+      "pull_seconds": 0,
+      "http_blob_bytes": 39631609,
+      "http_requests": 156,
+      "adapter_process_rss_bytes": 46153728
+    },
+    {
+      "materialize_seconds": 0.006304616999841528,
+      "first_useful_seconds": 0.2957636469998306,
+      "runsc_command_peak_rss_bytes": 49774592,
+      "proof": {
+        "bytes": 891869,
+        "copyup": true,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "files": 128
+      },
+      "adapter": "erofs",
+      "cache": "warm",
+      "repeat": 1,
+      "image": "python-slim",
+      "pull_seconds": 0,
+      "http_blob_bytes": 0,
+      "http_requests": 0,
+      "adapter_process_rss_bytes": 46153728
+    },
+    {
+      "materialize_seconds": 0.0805573469999672,
+      "first_useful_seconds": 1.8987094870001329,
+      "runsc_command_peak_rss_bytes": 50429952,
+      "proof": {
+        "bytes": 891869,
+        "copyup": true,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "files": 128
+      },
+      "adapter": "docker",
+      "cache": "cold",
+      "repeat": 1,
+      "image": "python-slim",
+      "pull_seconds": 1.494606574000045,
+      "http_blob_bytes": 46523332,
+      "http_requests": 8,
+      "adapter_process_rss_bytes": 91762688
+    },
+    {
+      "materialize_seconds": 0.023022315000162052,
+      "first_useful_seconds": 0.3368840950001868,
+      "runsc_command_peak_rss_bytes": 49741824,
+      "proof": {
+        "bytes": 891869,
+        "copyup": true,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "files": 128
+      },
+      "adapter": "docker",
+      "cache": "warm",
+      "repeat": 1,
+      "image": "python-slim",
+      "pull_seconds": 0,
+      "http_blob_bytes": 0,
+      "http_requests": 0,
+      "adapter_process_rss_bytes": 91762688
+    },
+    {
+      "materialize_seconds": 0.0660228609999649,
+      "first_useful_seconds": 1.3381187049999426,
+      "runsc_command_peak_rss_bytes": 46919680,
+      "proof": {
+        "files": 128,
+        "bytes": 891869,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "copyup": true
+      },
+      "adapter": "erofs",
+      "cache": "cold",
+      "repeat": 1,
+      "image": "node-slim",
+      "pull_seconds": 0,
+      "http_blob_bytes": 70080400,
+      "http_requests": 272,
+      "adapter_process_rss_bytes": 46587904
+    },
+    {
+      "materialize_seconds": 0.00656503900017924,
+      "first_useful_seconds": 0.14748426500000278,
+      "runsc_command_peak_rss_bytes": 48009216,
+      "proof": {
+        "files": 128,
+        "bytes": 891869,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "copyup": true
+      },
+      "adapter": "erofs",
+      "cache": "warm",
+      "repeat": 1,
+      "image": "node-slim",
+      "pull_seconds": 0,
+      "http_blob_bytes": 0,
+      "http_requests": 0,
+      "adapter_process_rss_bytes": 46587904
+    },
+    {
+      "materialize_seconds": 0.06842785500020909,
+      "first_useful_seconds": 2.107535326000061,
+      "runsc_command_peak_rss_bytes": 49410048,
+      "proof": {
+        "files": 128,
+        "bytes": 891869,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "copyup": true
+      },
+      "adapter": "docker",
+      "cache": "cold",
+      "repeat": 1,
+      "image": "node-slim",
+      "pull_seconds": 1.8862299679999524,
+      "http_blob_bytes": 82052728,
+      "http_requests": 9,
+      "adapter_process_rss_bytes": 94109696
+    },
+    {
+      "materialize_seconds": 0.02197082399993633,
+      "first_useful_seconds": 0.17113318199994865,
+      "runsc_command_peak_rss_bytes": 49532928,
+      "proof": {
+        "files": 128,
+        "bytes": 891869,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "copyup": true
+      },
+      "adapter": "docker",
+      "cache": "warm",
+      "repeat": 1,
+      "image": "node-slim",
+      "pull_seconds": 0,
+      "http_blob_bytes": 0,
+      "http_requests": 0,
+      "adapter_process_rss_bytes": 94113792
+    },
+    {
+      "materialize_seconds": 0.09020098299993151,
+      "first_useful_seconds": 1.2804714349999813,
+      "runsc_command_peak_rss_bytes": 50503680,
+      "proof": {
+        "bytes": 891869,
+        "copyup": true,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "files": 128
+      },
+      "adapter": "erofs",
+      "cache": "cold",
+      "repeat": 1,
+      "image": "python-tools",
+      "pull_seconds": 0,
+      "http_blob_bytes": 52815445,
+      "http_requests": 205,
+      "adapter_process_rss_bytes": 52137984
+    },
+    {
+      "materialize_seconds": 0.006952080000019123,
+      "first_useful_seconds": 0.2981521869999142,
+      "runsc_command_peak_rss_bytes": 49782784,
+      "proof": {
+        "bytes": 891869,
+        "copyup": true,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "files": 128
+      },
+      "adapter": "erofs",
+      "cache": "warm",
+      "repeat": 1,
+      "image": "python-tools",
+      "pull_seconds": 0,
+      "http_blob_bytes": 0,
+      "http_requests": 0,
+      "adapter_process_rss_bytes": 52137984
+    },
+    {
+      "materialize_seconds": 0.06576461099984954,
+      "first_useful_seconds": 7.773448688000144,
+      "runsc_command_peak_rss_bytes": 50446336,
+      "proof": {
+        "bytes": 891869,
+        "copyup": true,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "files": 128
+      },
+      "adapter": "docker",
+      "cache": "cold",
+      "repeat": 1,
+      "image": "python-tools",
+      "pull_seconds": 7.412448934000167,
+      "http_blob_bytes": 385003387,
+      "http_requests": 11,
+      "adapter_process_rss_bytes": 92098560
+    },
+    {
+      "materialize_seconds": 0.020628597000040827,
+      "first_useful_seconds": 0.3130640909998874,
+      "runsc_command_peak_rss_bytes": 50794496,
+      "proof": {
+        "bytes": 891869,
+        "copyup": true,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "files": 128
+      },
+      "adapter": "docker",
+      "cache": "warm",
+      "repeat": 1,
+      "image": "python-tools",
+      "pull_seconds": 0,
+      "http_blob_bytes": 0,
+      "http_requests": 0,
+      "adapter_process_rss_bytes": 92098560
+    },
+    {
+      "materialize_seconds": 0.09056769399990117,
+      "first_useful_seconds": 1.222358523999901,
+      "runsc_command_peak_rss_bytes": 47255552,
+      "proof": {
+        "files": 128,
+        "bytes": 891869,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "copyup": true
+      },
+      "adapter": "erofs",
+      "cache": "cold",
+      "repeat": 1,
+      "image": "node-tools",
+      "pull_seconds": 0,
+      "http_blob_bytes": 72781347,
+      "http_requests": 281,
+      "adapter_process_rss_bytes": 53080064
+    },
+    {
+      "materialize_seconds": 0.005564384000081191,
+      "first_useful_seconds": 0.1427832300000773,
+      "runsc_command_peak_rss_bytes": 47448064,
+      "proof": {
+        "files": 128,
+        "bytes": 891869,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "copyup": true
+      },
+      "adapter": "erofs",
+      "cache": "warm",
+      "repeat": 1,
+      "image": "node-tools",
+      "pull_seconds": 0,
+      "http_blob_bytes": 0,
+      "http_requests": 0,
+      "adapter_process_rss_bytes": 53080064
+    },
+    {
+      "materialize_seconds": 0.06372399399992901,
+      "first_useful_seconds": 8.29196399400007,
+      "runsc_command_peak_rss_bytes": 49659904,
+      "proof": {
+        "files": 128,
+        "bytes": 891869,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "copyup": true
+      },
+      "adapter": "docker",
+      "cache": "cold",
+      "repeat": 1,
+      "image": "node-tools",
+      "pull_seconds": 8.081567244000098,
+      "http_blob_bytes": 410827852,
+      "http_requests": 12,
+      "adapter_process_rss_bytes": 92680192
+    },
+    {
+      "materialize_seconds": 0.020470638999995572,
+      "first_useful_seconds": 0.16417545299987069,
+      "runsc_command_peak_rss_bytes": 49807360,
+      "proof": {
+        "files": 128,
+        "bytes": 891869,
+        "digest": "da5602fb2a1f904aef1538dd9a34561d43ff114b64bd0ff2b5a6c507f89674aa",
+        "copyup": true
+      },
+      "adapter": "docker",
+      "cache": "warm",
+      "repeat": 1,
+      "image": "node-tools",
+      "pull_seconds": 0,
+      "http_blob_bytes": 0,
+      "http_requests": 0,
+      "adapter_process_rss_bytes": 92680192
+    }
+  ],
+  "cleanup_errors": [],
+  "passed": true,
+  "preparation_reused": true,
+  "qualification_job_id": "12400302",
+  "machine": {
+    "cpu_count": 4,
+    "memory_gib": 12,
+    "product": "cpu-amd-zen5-4-vcpu"
+  },
+  "fixture_repository": "https://github.com/rlrs/verifiers",
+  "fixture_commit": "555a17a62ee36a2ffe96772b8191402e44f30c43",
+  "packages": [
+    "docker.io=29.1.3-0ubuntu4.1",
+    "erofs-utils=1.9.1-1",
+    "python3=3.14.3-0ubuntu2"
+  ],
+  "measurement_source_sha256": {
+    "ucloud_sandboxes/environment_artifact.py": "759fba0bef7e9f61b679d2242d988c5c9f0f553ebf5d91cecf8ac1a1712b50f0",
+    "ucloud_sandboxes/environment_backend.py": "0d6b0b64d98dc5abb63e675e1e8a6fc9f7f703b911d0ea63d7fca190d28e287a",
+    "ucloud_sandboxes/environment_builder.py": "88c1e62c3c1455a0b41f0f637319b52fd7a94de55abd0f9f11e3d66ed1708038",
+    "ucloud_sandboxes/environment_cache.py": "9a0c95eac909181a7cd8077310002930a7799428f84e34f85badfd4754b41534",
+    "ucloud_sandboxes/environment_nbd.py": "bd376f3290fd900b31bccea6ce10ee379eb25f50ac3c83891cdeb1637e77899d",
+    "ucloud_sandboxes/environment_rootfs.py": "35df3c1dbab89f7aaea7d49c4ef64c200eb34c355de11e387c737ea3697df1bf",
+    "ucloud_sandboxes/image_rootfs.py": "a5360721a18472265839f66ff0bacb09f577d1b8dcc68a826b3dbadea9986aed",
+    "runtime/storage_native/benchmark_environment_images.py": "4f03ef51b731b4cc107615572baba1c7f99a4756dab307035c5962fe1377e0d8"
+  },
+  "build_manifest_sha256": "2aa231f28b5f4692c8a439727cf5581f9e942f1033ddf858e61c6ab3f8d3c73c",
+  "environment_contract_tests": {
+    "tests": 60,
+    "passed": true,
+    "python": "3.14",
+    "umask": "002 (explicit private fixture directories)"
+  }
+}

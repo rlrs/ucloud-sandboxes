@@ -1,0 +1,2378 @@
+{
+  "report_version": 3,
+  "run_id": "relay-load-d0bf2463839e",
+  "started_at": "2026-09-23T14:14:42.404119+00:00",
+  "configuration": {
+    "gateway_url": "https://app-sandboxes.cloud.sdu.dk",
+    "relay_url": "https://app-sandboxes-relay-v2.cloud.sdu.dk",
+    "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+    "sandboxes": 256,
+    "cycles": 8,
+    "startup_mode": "rolling",
+    "resident_mb": 1536,
+    "dirty_mb": 384,
+    "files": 64,
+    "file_kib": 64,
+    "payload_kib": 32,
+    "sqlite_transactions": 0,
+    "sqlite_payload_bytes": 4096,
+    "tool_upload_kib": 64,
+    "cpu_ms": 100,
+    "model_seconds": 20.0,
+    "model_jitter": 5.0,
+    "parking_mode": "natural",
+    "cpus": 1,
+    "memory_mb": 2048,
+    "disk_mb": 4096,
+    "create_concurrency": 16,
+    "fleet_pollers": 24,
+    "warmup_cycles": 1,
+    "deadline_seconds": 1800.0,
+    "useful_action_p95_seconds": 1,
+    "continuation_p95_seconds": 0.8,
+    "seed": 1,
+    "start_signal_file": null
+  },
+  "errors": [
+    {
+      "sandbox_id": "relay-load-d0bf2463839e-0107",
+      "stage": "relay_claim",
+      "cycle": 0,
+      "error": "RelayApiError: relay request failed (500): {'error': '500 Internal Server Error\\n\\nServer got itself in trouble'}"
+    }
+  ],
+  "cleanup_errors": [
+    {
+      "rollout_id": "relay-load-d0bf2463839e-observer",
+      "error": "RelayApiError: relay request failed (503): {'error': '<!doctype html>\\n<html lang=\"en\">\\n<head>\\n    <meta charset=\"UTF-8\">\\n    <meta name=\"viewport\"\\n          content=\"width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0\">\\n    <meta http-equiv=\"X-UA-Compatible\" content=\"ie=edge\">\\n    <title>Job is unavailable | UCloud</title>\\n    <style>\\n        body {\\n            font-family: \\'IBM Plex Sans\\', sans-serif;\\n            background: #282c35;\\n            color: white;\\n            display: flex;\\n            align-items: center;\\n            justify-content: center;\\n            flex-direction: column;\\n            height: 100vh;\\n            width: 100vw;\\n            margin: 0;\\n            padding: 0;\\n        }\\n\\n        section {\\n            width: 800px;\\n            height: auto;\\n            display: flex;\\n            flex-direction: column;\\n        }\\n\\n        img {\\n            height: 128px;\\n            align-self: center;\\n        }\\n\\n        h1 {\\n            align-self: center;\\n            margin: 24px 0;\\n        }\\n\\n        p {\\n            margin: 0;\\n        }\\n\\n        ul {\\n            margin: 24px 0;\\n  "
+    }
+  ],
+  "control_retries": [
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0014",
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0008",
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0003",
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0015",
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0001",
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0007",
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0010",
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0011",
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0013",
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0005",
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0009",
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0012",
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0004",
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0006",
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0000",
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0002",
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0008",
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0003",
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0001",
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0007",
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0010",
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0014",
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0011",
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0005",
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0004",
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0015",
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0013",
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0009",
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0006",
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0012",
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0000",
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0002",
+      "attempt": 2,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0003",
+      "attempt": 3,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0007",
+      "attempt": 3,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0010",
+      "attempt": 3,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0014",
+      "attempt": 3,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0008",
+      "attempt": 3,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0015",
+      "attempt": 3,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0001",
+      "attempt": 3,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0011",
+      "attempt": 3,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0005",
+      "attempt": 3,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0013",
+      "attempt": 3,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0004",
+      "attempt": 3,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0009",
+      "attempt": 3,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0006",
+      "attempt": 3,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0012",
+      "attempt": 3,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0002",
+      "attempt": 3,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0000",
+      "attempt": 3,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0014",
+      "attempt": 4,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0009",
+      "attempt": 4,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0007",
+      "attempt": 4,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0010",
+      "attempt": 4,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0003",
+      "attempt": 4,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0008",
+      "attempt": 4,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0001",
+      "attempt": 4,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0011",
+      "attempt": 4,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0005",
+      "attempt": 4,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0004",
+      "attempt": 4,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0015",
+      "attempt": 4,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0013",
+      "attempt": 4,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0006",
+      "attempt": 4,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0012",
+      "attempt": 4,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0002",
+      "attempt": 4,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0000",
+      "attempt": 4,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0014",
+      "attempt": 5,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0009",
+      "attempt": 5,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0003",
+      "attempt": 5,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0008",
+      "attempt": 5,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0007",
+      "attempt": 5,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0001",
+      "attempt": 5,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0010",
+      "attempt": 5,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0012",
+      "attempt": 5,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0011",
+      "attempt": 5,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0015",
+      "attempt": 5,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0005",
+      "attempt": 5,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0013",
+      "attempt": 5,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0004",
+      "attempt": 5,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0006",
+      "attempt": 5,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0002",
+      "attempt": 5,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0000",
+      "attempt": 5,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0009",
+      "attempt": 6,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0003",
+      "attempt": 6,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0008",
+      "attempt": 6,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0007",
+      "attempt": 6,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0001",
+      "attempt": 6,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0014",
+      "attempt": 6,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0010",
+      "attempt": 6,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0005",
+      "attempt": 6,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0015",
+      "attempt": 6,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0013",
+      "attempt": 6,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0004",
+      "attempt": 6,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0011",
+      "attempt": 6,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0012",
+      "attempt": 6,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0006",
+      "attempt": 6,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0002",
+      "attempt": 6,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0000",
+      "attempt": 6,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0008",
+      "attempt": 7,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0009",
+      "attempt": 7,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0003",
+      "attempt": 7,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0014",
+      "attempt": 7,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0007",
+      "attempt": 7,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0001",
+      "attempt": 7,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0010",
+      "attempt": 7,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0015",
+      "attempt": 7,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0013",
+      "attempt": 7,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0005",
+      "attempt": 7,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0011",
+      "attempt": 7,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0012",
+      "attempt": 7,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0004",
+      "attempt": 7,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0006",
+      "attempt": 7,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0000",
+      "attempt": 7,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0002",
+      "attempt": 7,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0008",
+      "attempt": 8,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0000",
+      "attempt": 8,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0003",
+      "attempt": 8,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0009",
+      "attempt": 8,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0014",
+      "attempt": 8,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0007",
+      "attempt": 8,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0010",
+      "attempt": 8,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0001",
+      "attempt": 8,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0015",
+      "attempt": 8,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0013",
+      "attempt": 8,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0005",
+      "attempt": 8,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0011",
+      "attempt": 8,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0012",
+      "attempt": 8,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0004",
+      "attempt": 8,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0006",
+      "attempt": 8,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0002",
+      "attempt": 8,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0008",
+      "attempt": 9,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0009",
+      "attempt": 9,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0003",
+      "attempt": 9,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0000",
+      "attempt": 9,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0007",
+      "attempt": 9,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0014",
+      "attempt": 9,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0015",
+      "attempt": 9,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0010",
+      "attempt": 9,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0001",
+      "attempt": 9,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0013",
+      "attempt": 9,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0005",
+      "attempt": 9,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0012",
+      "attempt": 9,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0011",
+      "attempt": 9,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0004",
+      "attempt": 9,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0006",
+      "attempt": 9,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0002",
+      "attempt": 9,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0009",
+      "attempt": 10,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0000",
+      "attempt": 10,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0008",
+      "attempt": 10,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0013",
+      "attempt": 10,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0007",
+      "attempt": 10,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0003",
+      "attempt": 10,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0014",
+      "attempt": 10,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0010",
+      "attempt": 10,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0015",
+      "attempt": 10,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0001",
+      "attempt": 10,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0005",
+      "attempt": 10,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0012",
+      "attempt": 10,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0011",
+      "attempt": 10,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0004",
+      "attempt": 10,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0006",
+      "attempt": 10,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0002",
+      "attempt": 10,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0000",
+      "attempt": 11,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0008",
+      "attempt": 11,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0013",
+      "attempt": 11,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0009",
+      "attempt": 11,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0014",
+      "attempt": 11,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0007",
+      "attempt": 11,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0015",
+      "attempt": 11,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0003",
+      "attempt": 11,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0001",
+      "attempt": 11,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0010",
+      "attempt": 11,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0005",
+      "attempt": 11,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0012",
+      "attempt": 11,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0011",
+      "attempt": 11,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0004",
+      "attempt": 11,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0006",
+      "attempt": 11,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0002",
+      "attempt": 11,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0008",
+      "attempt": 12,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0000",
+      "attempt": 12,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0014",
+      "attempt": 12,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0013",
+      "attempt": 12,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0015",
+      "attempt": 12,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0009",
+      "attempt": 12,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0007",
+      "attempt": 12,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0001",
+      "attempt": 12,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0003",
+      "attempt": 12,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0010",
+      "attempt": 12,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0005",
+      "attempt": 12,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0012",
+      "attempt": 12,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0011",
+      "attempt": 12,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0004",
+      "attempt": 12,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0006",
+      "attempt": 12,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0002",
+      "attempt": 12,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0014",
+      "attempt": 13,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0008",
+      "attempt": 13,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0000",
+      "attempt": 13,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0013",
+      "attempt": 13,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0015",
+      "attempt": 13,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0009",
+      "attempt": 13,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0007",
+      "attempt": 13,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0001",
+      "attempt": 13,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0003",
+      "attempt": 13,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0010",
+      "attempt": 13,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0005",
+      "attempt": 13,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0012",
+      "attempt": 13,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0011",
+      "attempt": 13,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0004",
+      "attempt": 13,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0006",
+      "attempt": 13,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0002",
+      "attempt": 13,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0008",
+      "attempt": 14,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0014",
+      "attempt": 14,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0013",
+      "attempt": 14,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0000",
+      "attempt": 14,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0009",
+      "attempt": 14,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0015",
+      "attempt": 14,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0007",
+      "attempt": 14,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0001",
+      "attempt": 14,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0003",
+      "attempt": 14,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0010",
+      "attempt": 14,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0005",
+      "attempt": 14,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0012",
+      "attempt": 14,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0011",
+      "attempt": 14,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0004",
+      "attempt": 14,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0006",
+      "attempt": 14,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0002",
+      "attempt": 14,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0000",
+      "attempt": 15,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0008",
+      "attempt": 15,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0007",
+      "attempt": 15,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0014",
+      "attempt": 15,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0013",
+      "attempt": 15,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0009",
+      "attempt": 15,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0015",
+      "attempt": 15,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0003",
+      "attempt": 15,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0001",
+      "attempt": 15,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0010",
+      "attempt": 15,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0005",
+      "attempt": 15,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0012",
+      "attempt": 15,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0011",
+      "attempt": 15,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0004",
+      "attempt": 15,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0006",
+      "attempt": 15,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0002",
+      "attempt": 15,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0014",
+      "attempt": 16,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0007",
+      "attempt": 16,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0000",
+      "attempt": 16,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0008",
+      "attempt": 16,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0009",
+      "attempt": 16,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0013",
+      "attempt": 16,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0015",
+      "attempt": 16,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0003",
+      "attempt": 16,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0001",
+      "attempt": 16,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0010",
+      "attempt": 16,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0005",
+      "attempt": 16,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0011",
+      "attempt": 16,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0012",
+      "attempt": 16,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0004",
+      "attempt": 16,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0006",
+      "attempt": 16,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0002",
+      "attempt": 16,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0007",
+      "attempt": 17,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0014",
+      "attempt": 17,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0015",
+      "attempt": 17,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0013",
+      "attempt": 17,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0009",
+      "attempt": 17,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0000",
+      "attempt": 17,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0008",
+      "attempt": 17,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0003",
+      "attempt": 17,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0001",
+      "attempt": 17,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0010",
+      "attempt": 17,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0005",
+      "attempt": 17,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0011",
+      "attempt": 17,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0012",
+      "attempt": 17,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0004",
+      "attempt": 17,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0006",
+      "attempt": 17,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0002",
+      "attempt": 17,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0007",
+      "attempt": 18,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0012",
+      "attempt": 18,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0029",
+      "attempt": 1,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0028",
+      "attempt": 1,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0011",
+      "attempt": 18,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0003",
+      "attempt": 18,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0004",
+      "attempt": 18,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0023",
+      "attempt": 1,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0014",
+      "attempt": 18,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0015",
+      "attempt": 18,
+      "status": 504
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0008",
+      "attempt": 18,
+      "status": 504
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0010",
+      "attempt": 18,
+      "status": 504
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0002",
+      "attempt": 18,
+      "status": 504
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0009",
+      "attempt": 18,
+      "status": 504
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0029",
+      "attempt": 2,
+      "status": 504
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0028",
+      "attempt": 2,
+      "status": 504
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0023",
+      "attempt": 2,
+      "status": 504
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0003",
+      "attempt": 19,
+      "status": 504
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0011",
+      "attempt": 19,
+      "status": 504
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0014",
+      "attempt": 19,
+      "status": 504
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0004",
+      "attempt": 19,
+      "status": 504
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0011",
+      "attempt": 20,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0014",
+      "attempt": 20,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0028",
+      "attempt": 3,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0029",
+      "attempt": 3,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0023",
+      "attempt": 3,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0004",
+      "attempt": 20,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0003",
+      "attempt": 20,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0028",
+      "attempt": 4,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0029",
+      "attempt": 4,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0023",
+      "attempt": 4,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0028",
+      "attempt": 5,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0029",
+      "attempt": 5,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0023",
+      "attempt": 5,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0035",
+      "attempt": 1,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0028",
+      "attempt": 6,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0029",
+      "attempt": 6,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0023",
+      "attempt": 6,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0028",
+      "attempt": 7,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0029",
+      "attempt": 7,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0023",
+      "attempt": 7,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0011",
+      "attempt": 21,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0014",
+      "attempt": 21,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0004",
+      "attempt": 21,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0003",
+      "attempt": 21,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0029",
+      "attempt": 8,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0023",
+      "attempt": 8,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0028",
+      "attempt": 8,
+      "status": 409
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-d0bf2463839e-0003",
+      "attempt": 22,
+      "status": 409
+    }
+  ],
+  "resource_errors": [
+    {
+      "at": "2026-09-23T14:15:14.878951+00:00",
+      "error": "ClientResponseError: 503, message='Service Unavailable', url='https://app-sandboxes.cloud.sdu.dk/v1/nodes'",
+      "status": 503,
+      "headers": {
+        "Content-Type": "text/html; charset=UTF-8",
+        "Server": "nginx"
+      },
+      "body_preview": "<!doctype html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\"\n          content=\"width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0\">\n    <meta http-equiv=\"X-UA-Compatible\" content=\"ie=edge\">\n    <title>Job is unavailable | UCloud</title>\n    <style>\n        body {\n            font-family: 'IBM Plex Sans', sans-serif;\n            background: #282c35;\n            color: white;\n            display: flex;\n            align-items: center;\n            justify-content: center;\n            flex-direction: column;\n            height: 100vh;\n            width: 100vw;\n            margin: 0;\n            padding: 0;\n        }\n\n        section {\n            width: 800px;\n            height: auto;\n            display: flex;\n            flex-direction: column;\n        }\n\n        img {\n            height: 128px;\n            align-self: center;\n        }\n\n        h1 {\n            align-self: center;\n            margin: 24px 0;\n        }\n\n        p {\n            margin: 0;\n        }\n\n        ul {\n            margin: 24px 0;\n        }\n    </style>\n</head>\n<body>\n\n<section>\n    <img src=\"data:image/png;base64,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",
+      "body_truncated": true
+    },
+    {
+      "at": "2026-09-23T14:15:20.183066+00:00",
+      "error": "ClientResponseError: 503, message='Service Unavailable', url='https://app-sandboxes.cloud.sdu.dk/v1/nodes'",
+      "status": 503,
+      "headers": {
+        "Content-Type": "text/html; charset=UTF-8",
+        "Server": "nginx"
+      },
+      "body_preview": "<!doctype html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\"\n          content=\"width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0\">\n    <meta http-equiv=\"X-UA-Compatible\" content=\"ie=edge\">\n    <title>Job is unavailable | UCloud</title>\n    <style>\n        body {\n            font-family: 'IBM Plex Sans', sans-serif;\n            background: #282c35;\n            color: white;\n            display: flex;\n            align-items: center;\n            justify-content: center;\n            flex-direction: column;\n            height: 100vh;\n            width: 100vw;\n            margin: 0;\n            padding: 0;\n        }\n\n        section {\n            width: 800px;\n            height: auto;\n            display: flex;\n            flex-direction: column;\n        }\n\n        img {\n            height: 128px;\n            align-self: center;\n        }\n\n        h1 {\n            align-self: center;\n            margin: 24px 0;\n        }\n\n        p {\n            margin: 0;\n        }\n\n        ul {\n            margin: 24px 0;\n        }\n    </style>\n</head>\n<body>\n\n<section>\n    <img src=\"data:image/png;base64,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",
+      "body_truncated": true
+    }
+  ],
+  "fleet_health_checks": [
+    {
+      "at": "2026-09-23T14:14:49.439881+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T14:14:54.475065+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T14:14:59.508396+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400603",
+        "12400605",
+        "12400606",
+        "12400608"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T14:15:04.555458+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400603",
+        "12400605",
+        "12400606",
+        "12400608"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T14:15:09.609038+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400603",
+        "12400605",
+        "12400606",
+        "12400608"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T14:15:14.878951+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400603",
+        "12400605",
+        "12400606",
+        "12400608"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T14:15:20.183066+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400603",
+        "12400605",
+        "12400606",
+        "12400608"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T14:15:25.287298+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12400603",
+        "12400605",
+        "12400606",
+        "12400608"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-23T14:15:30.334124+00:00",
+      "required_jobs": [
+        "12400603",
+        "12400605",
+        "12400606",
+        "12400608"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400603",
+        "12400605",
+        "12400608"
+      ],
+      "failures": [
+        {
+          "at": "2026-09-23T14:15:30.334124+00:00",
+          "job_id": "12400606",
+          "kind": "stale_heartbeat"
+        }
+      ]
+    },
+    {
+      "at": "2026-09-23T14:15:35.384084+00:00",
+      "required_jobs": [
+        "12400603",
+        "12400605",
+        "12400606",
+        "12400608"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400603",
+        "12400605",
+        "12400606"
+      ],
+      "failures": [
+        {
+          "at": "2026-09-23T14:15:35.384084+00:00",
+          "job_id": "12400608",
+          "kind": "stale_heartbeat"
+        }
+      ]
+    },
+    {
+      "at": "2026-09-23T14:15:40.432766+00:00",
+      "required_jobs": [
+        "12400603",
+        "12400605",
+        "12400606",
+        "12400608"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400603",
+        "12400605",
+        "12400606"
+      ],
+      "failures": [
+        {
+          "at": "2026-09-23T14:15:40.432766+00:00",
+          "job_id": "12400608",
+          "kind": "stale_heartbeat"
+        }
+      ]
+    },
+    {
+      "at": "2026-09-23T14:15:43.769228+00:00",
+      "required_jobs": [
+        "12400603",
+        "12400605",
+        "12400606",
+        "12400608"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12400603",
+        "12400605",
+        "12400606"
+      ],
+      "failures": [
+        {
+          "at": "2026-09-23T14:15:43.769228+00:00",
+          "job_id": "12400608",
+          "kind": "stale_heartbeat"
+        }
+      ]
+    }
+  ],
+  "fleet_health_failures": [
+    {
+      "at": "2026-09-23T14:15:30.334124+00:00",
+      "job_id": "12400606",
+      "kind": "stale_heartbeat"
+    },
+    {
+      "at": "2026-09-23T14:15:35.384084+00:00",
+      "job_id": "12400608",
+      "kind": "stale_heartbeat"
+    },
+    {
+      "at": "2026-09-23T14:15:40.432766+00:00",
+      "job_id": "12400608",
+      "kind": "stale_heartbeat"
+    },
+    {
+      "at": "2026-09-23T14:15:43.769228+00:00",
+      "job_id": "12400608",
+      "kind": "stale_heartbeat"
+    }
+  ],
+  "driver_python": "3.13.2",
+  "sdk_version": "0.4.26",
+  "sdk_client_sha256": "010a8e2406592224a1b339e7fcc4ac983ed394a56a4a8786c5f188569a2d5bb0",
+  "latency_definition": "model ready through guest-originated continuation receipt, then uploaded tool confirmation; receipt includes observation tunnel overhead; full integrity is a separate mandatory gate",
+  "harness_sha256": "f0d671f877a69173651e879ba708db27f24822a1bc3032f51738b74ad3d6e5bf",
+  "deployed_health": {
+    "ok": true,
+    "service": "control-plane",
+    "version": "0.5.114rc17"
+  },
+  "fleet_health": {
+    "enabled": true,
+    "passed": false,
+    "status": "failed",
+    "used_jobs": [
+      "12400603",
+      "12400605",
+      "12400606",
+      "12400608"
+    ],
+    "observed_healthy_jobs": [
+      "12400603",
+      "12400605",
+      "12400606",
+      "12400608"
+    ],
+    "failure_count": 4,
+    "placement_grace_seconds": 30,
+    "freshness_seconds": 30
+  },
+  "failure": "RelayApiError: relay request failed (500): {'error': '500 Internal Server Error\\n\\nServer got itself in trouble'}",
+  "response_commit_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "usable_exec_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "response_ready_to_usable_exec_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "response_ready_to_commit_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "response_ready_to_guest_continuation_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "post_continuation_exec_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "post_continuation_exec_start_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "post_continuation_exec_wait_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "full_integrity_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "guest_verification_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "guest_tool_seconds": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "guest_transport_retries": {
+    "count": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "measured_park_observed_cycles": 0,
+  "phase_latency_seconds": {
+    "during_provisioning": {
+      "count": 0,
+      "p50": null,
+      "p95": null,
+      "p99": null,
+      "max": null
+    },
+    "after_provisioning": {
+      "count": 0,
+      "p50": null,
+      "p95": null,
+      "p99": null,
+      "max": null
+    }
+  },
+  "phase_continuation_seconds": {
+    "during_provisioning": {
+      "count": 0,
+      "p50": null,
+      "p95": null,
+      "p99": null,
+      "max": null
+    },
+    "after_provisioning": {
+      "count": 0,
+      "p50": null,
+      "p95": null,
+      "p99": null,
+      "max": null
+    }
+  },
+  "completed_cycles": 0,
+  "resource_summary": {
+    "sample_count": 10,
+    "observed_worker_seconds": 156.85931277275085,
+    "sampled_cpu_seconds": 2414.1617540785705,
+    "cpu_coverage_worker_seconds": 156.85931277275085,
+    "host_cpu_usage_seconds": 1922.4,
+    "host_cpu_steal_seconds": 2.15,
+    "host_cpu_usage_coverage_worker_seconds": 156.85931277275085,
+    "host_cpu_steal_coverage_worker_seconds": 156.85931277275085,
+    "sampled_host_memory_mib_seconds": 5984298.723395348,
+    "memory_coverage_worker_seconds": 156.85931277275085,
+    "device_read_bytes": 1994752,
+    "device_write_bytes": 6114776064,
+    "device_read_bytes_coverage_worker_seconds": 156.85931277275085,
+    "device_write_bytes_coverage_worker_seconds": 156.85931277275085,
+    "scope": "sampled whole worker costs; excludes missing/stale intervals; not per-sandbox attribution"
+  },
+  "correct": false,
+  "slo_passed": false,
+  "finished_at": "2026-09-23T14:18:27.051975+00:00",
+  "source_report_sha256": "e19b456be0ae73a21a0aeb7f43993ad23fa205afa388158a450e96002f50446e",
+  "health_checks": {
+    "total": 26,
+    "failed": 0
+  },
+  "fleet_polls_checks": {
+    "total": 1118,
+    "failed": 0
+  }
+}

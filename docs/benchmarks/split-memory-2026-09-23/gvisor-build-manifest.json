@@ -1,0 +1,59 @@
+{
+  "artifact": "gvisor-hibernate-ff829b833d68c1a3dbc306ea6529bf927d0e12d38fb8f3e5993c30651cac1a4d",
+  "bazel_version": "bazel 8.3.1",
+  "build_config": "opt",
+  "files": {
+    "gvisor-bin/checkpointgofer": {
+      "sha256": "c029af1042ce82468af8cb20644f2f0f403ba9530aa05f8f809f59b06e82d876",
+      "size": 46989474
+    },
+    "gvisor-bin/gvisor-sentry-prewarmer": {
+      "sha256": "70425fafd4f5b7ed5c96f78ce4f23c68948304da6fd6dd60ad33dd945a34760e",
+      "size": 1392
+    },
+    "gvisor-bin/gvisor_sentry": {
+      "sha256": "b2a3d8cbb5d193d6960fd73fe5882b8994c9a04baa18da14d015f5864f95d689",
+      "size": 32424098
+    },
+    "gvisor-bin/runsc-metric-server": {
+      "sha256": "47a4520f0782737b7842b096b88891307c353902d5a0b170b413322183122a84",
+      "size": 35791010
+    },
+    "runsc": {
+      "sha256": "a005058b5a097a9ec6c28d0d3e14ea7d2992fc0cf2c11a0eb62d7553e7068613",
+      "size": 82440354
+    }
+  },
+  "gvisor_commit": "50e1502a95d36ad2faf2c7ef33b8bf21fe975293",
+  "host_architecture": "x86_64",
+  "patch_series_sha256": "7564cda41ed25740f6877498ac4cccb8d71faa9b32ae2e10c53f14d53e55a088",
+  "patched_files_sha256": "4068196ae81fa4729d17554183f04f89e35abc87d92d6bdfb520956b2c318365",
+  "patches": [
+    {
+      "name": "20260817/0001-ucloud-hibernation.patch",
+      "sha256": "bed13a2a1ef790a61a7a09d3a70511a15a7504d1ef2342edc672b4203950f5e6"
+    },
+    {
+      "name": "20260817/0002-ucloud-default-acl-umask.patch",
+      "sha256": "361476d2fe3ab4c8adc80ab0c54e63c18f96984c2d59c00b51b770cb9f3fd506"
+    },
+    {
+      "name": "20260817/0003-ucloud-release-detached-mounts.patch",
+      "sha256": "0b3d2eb13a8f417e1ee9c5d9e80ef5df38eba59d6cde3623dfa9d058bd7f493c"
+    },
+    {
+      "name": "20260817/0004-ucloud-abort-hibernation.patch",
+      "sha256": "c97ae915c984f50a554c9b79ede4b73a5ab68e0ad5d89469e8f09819468519fe"
+    },
+    {
+      "name": "20260817/0005-ucloud-erofs-filestore.patch",
+      "sha256": "46a0caae4f05c1b5822fc626316460e53f87b541a5a1d25b55aa2bc67c68c29f"
+    },
+    {
+      "name": "20260817/0006-ucloud-ram-application-memory.patch",
+      "sha256": "af09c7f45e666c4e7e46c5a999cc8414034deb069c7c25c9fdcf29c9b808310e"
+    }
+  ],
+  "runsc_sha256": "a005058b5a097a9ec6c28d0d3e14ea7d2992fc0cf2c11a0eb62d7553e7068613",
+  "schema": 2
+}

@@ -1,0 +1,102 @@
+{
+  "abort_same_original": true,
+  "cycles": [
+    {
+      "capture_id": "cebeb888d952ed7f6bd797698d768299ab448f14ed5d292c386682583d5755ee",
+      "memory_charge": {
+        "cgroup": "/sys/fs/cgroup/ucloud-sandboxes/469dec017465959b8ed619379d0afb93aa5c33ffc9a934f1e6de901e183084c7",
+        "current": 46673920,
+        "limit": 536870912,
+        "shmem": 17543168
+      },
+      "timings_ms": {
+        "artifact_cleanup": 5.186735000279441,
+        "begin_restore_journal": 4.799108999577584,
+        "candidate_fence": 0.8535990000382299,
+        "candidate_journal": 5.683946999852196,
+        "candidate_resume": 25.67059800003335,
+        "commit_running_journal": 5.037910000282864,
+        "readiness_exec": 20.66335400013486,
+        "runsc_restore": 105.69264900004782,
+        "runsc_state": 18.12625099955767,
+        "validate_artifact": 58.76210600035847,
+        "warden_total": 250.62758000058238
+      },
+      "wake_seconds": 0.2506685810003546
+    },
+    {
+      "capture_id": "66e66acbde0a589a61bdc705a6922602cfcdade54bded41c82bc23ca46c767e8",
+      "memory_charge": {
+        "cgroup": "/sys/fs/cgroup/ucloud-sandboxes/469dec017465959b8ed619379d0afb93aa5c33ffc9a934f1e6de901e183084c7",
+        "current": 47128576,
+        "limit": 536870912,
+        "shmem": 17543168
+      },
+      "timings_ms": {
+        "artifact_cleanup": 4.036237999571313,
+        "begin_restore_journal": 4.026743000395072,
+        "candidate_fence": 0.5869060005352367,
+        "candidate_journal": 3.0874429994582897,
+        "candidate_resume": 20.728702999804227,
+        "commit_running_journal": 3.9814239999031997,
+        "readiness_exec": 14.456466999945405,
+        "runsc_restore": 112.48933800015948,
+        "runsc_state": 13.263857000310963,
+        "validate_artifact": 60.94788699920173,
+        "warden_total": 237.76504000034038
+      },
+      "wake_seconds": 0.23778640099953918
+    },
+    {
+      "capture_id": "c6285402f1a66385e3678669cf9789f6b7c21b55258ab6da41c06d754baff713",
+      "memory_charge": {
+        "cgroup": "/sys/fs/cgroup/ucloud-sandboxes/469dec017465959b8ed619379d0afb93aa5c33ffc9a934f1e6de901e183084c7",
+        "current": 46321664,
+        "limit": 536870912,
+        "shmem": 17555456
+      },
+      "timings_ms": {
+        "artifact_cleanup": 3.7891239999225945,
+        "begin_restore_journal": 4.558524999993097,
+        "candidate_fence": 0.8134790004987735,
+        "candidate_journal": 3.569081999557966,
+        "candidate_resume": 26.369663999503246,
+        "commit_running_journal": 5.94243599971378,
+        "readiness_exec": 18.662872999811952,
+        "runsc_restore": 105.97411499929876,
+        "runsc_state": 15.776702000039222,
+        "validate_artifact": 70.53506100055529,
+        "warden_total": 256.1303009997573
+      },
+      "wake_seconds": 0.25616499300031137
+    }
+  ],
+  "project_quota_errno": 28,
+  "quota": {
+    "memory_backing_allocations": 1,
+    "memory_backing_hard_reserved_bytes": 1677721600
+  },
+  "remote_import": {
+    "memory_manifest": "sha256:283130426b4d411098d2924a74a6b6eee639cde9a73b44aeaecbfe09ed847616",
+    "root_manifest": "sha256:90029ce451c90fa25a8669638a70e0af70d1164783a6fae13ece15209aabe113",
+    "status": "passed",
+    "wake_timings_ms": {
+      "artifact_cleanup": 4.042126000058488,
+      "begin_restore_journal": 3.620208000029379,
+      "candidate_fence": 0.7946410005388316,
+      "candidate_journal": 3.2331339998563635,
+      "candidate_resume": 22.090408999247302,
+      "commit_running_journal": 3.9102259997889632,
+      "readiness_exec": 16.392853000070318,
+      "runsc_restore": 101.80815199964854,
+      "runsc_state": 14.486854000097082,
+      "validate_artifact": 70.16698500046914,
+      "warden_total": 240.6444680000277
+    },
+    "workspace_manifest": "sha256:4cc4540cc4a3705bdbefcd6deed5e368001500313d9f63dfd20a2137aeb30db9"
+  },
+  "schema": 1,
+  "status": "passed",
+  "test_root": "/home/ucloud/native-capture-qualification/memory-xfs/ucloud-storage-native-ojtmfgx3",
+  "workload_ready_seconds": 0.02860197700010758
+}

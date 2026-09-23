@@ -1,0 +1,19 @@
+{
+  "base_gate": "rc19-full-gate.json",
+  "files": {
+    "ucloud_sandboxes/memory_backing.py": {
+      "before_sha256": "e608d08efd67b8cfbc7408dbef37665dd35dd5f123dc8e67cec5dd0a96f99132",
+      "after_sha256": "0d22e7dcdeb69b637e9185b5bd2481c0e019f71f60a97b233d2782ada030af76"
+    },
+    "tests/test_reflink_retention.py": {
+      "before_sha256": "fcc71b0cbbb9b5d7018f7dc9446298ec9b2e80362dce9d0b85ba0bc0e8254e3b",
+      "after_sha256": "d7ef8a82aa11029bd618d3ac773eab919ff3f19e525a5931a776d8644ba6c2ef"
+    }
+  },
+  "tests": 90,
+  "seconds": 14.45,
+  "failures": 0,
+  "errors": 0,
+  "ruff": "passed",
+  "reason": "Deleted checkpoint-retention record may be replaced by a freshly admitted source after full retirement and same-generation reimport; live/preparing identity mismatches still reject."
+}

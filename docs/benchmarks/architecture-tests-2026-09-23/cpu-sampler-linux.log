@@ -1,0 +1,8 @@
+<string>:2: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f805113ba60>
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+deferred rootfs cache collection for deleted image sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: injected image collection failure
+deferred 1 durable sandbox deletion(s); first=sandbox: injected mounted-volume cleanup failure
+----------------------------------------------------------------------
+Ran 146 tests in 41.591s
+
+OK

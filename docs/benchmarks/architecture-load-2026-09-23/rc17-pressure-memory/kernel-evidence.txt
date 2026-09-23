@@ -1,0 +1,8 @@
+2026-09-23T14:13:43+00:00 sandbox-node-44d7196cf6-1 kernel: clocksource: Long readout interval, skipping watchdog check: cs_nsec: 1064769828 wd_nsec: 1064769521
+2026-09-23T14:16:16+00:00 sandbox-node-44d7196cf6-1 kernel: clocksource: Long readout interval, skipping watchdog check: cs_nsec: 4537753187 wd_nsec: 4537752881
+2026-09-23T14:14:42+00:00 sandbox-node-c5add598c5-1 kernel: clocksource: Long readout interval, skipping watchdog check: cs_nsec: 1478644824 wd_nsec: 1478644879
+2026-09-23T14:15:45+00:00 sandbox-node-c5add598c5-1 kernel: clocksource: Long readout interval, skipping watchdog check: cs_nsec: 4554961844 wd_nsec: 4554961839
+2026-09-23T14:14:23+00:00 sandbox-node-d1a49ab258-1 kernel: clocksource: Long readout interval, skipping watchdog check: cs_nsec: 1238923643 wd_nsec: 1238923736
+2026-09-23T14:15:40+00:00 sandbox-node-d1a49ab258-1 kernel: clocksource: Long readout interval, skipping watchdog check: cs_nsec: 3166895973 wd_nsec: 3166895532
+2026-09-23T14:14:33+00:00 sandbox-node-77c7f04204-1 kernel: clocksource: Long readout interval, skipping watchdog check: cs_nsec: 1262080688 wd_nsec: 1262080563
+2026-09-23T14:16:17+00:00 sandbox-node-77c7f04204-1 kernel: clocksource: Long readout interval, skipping watchdog check: cs_nsec: 3614023976 wd_nsec: 3614023977

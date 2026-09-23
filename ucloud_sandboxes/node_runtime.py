@@ -390,7 +390,6 @@ class DirectNodeRuntime:
             ram_bytes = self.service.resident_memory_ram_bytes(key[0], key[1], sample)
             if time.monotonic() < entry['retry_at'] or not self._warm_parks.ready(
                 key, memory_bytes=entry['memory_bytes'], ram_bytes=ram_bytes,
-                application_file_bytes=self._resident_application_file_bytes(key, sample),
             ):
                 continue
             with self._relay_parking_guard:
@@ -583,17 +582,14 @@ class DirectNodeRuntime:
             self._warm_parks.observe_phase(key, resource_phase)
         memory_bytes = 0
         ram_bytes = None
-        application_file_bytes = 0
         if relay_request_id is not None:
             sample = self._resident_wait_memory_sample(key)
             if sample is not None:
                 memory_bytes = sample.current_bytes
             ram_bytes = self.service.resident_memory_ram_bytes(sandbox_id, generation, sample)
-            application_file_bytes = self._resident_application_file_bytes(key, sample)
         snapshot = self.service.get_snapshot(sandbox_id) if hasattr(self.service, 'get_snapshot') else None
         delay = (
-            self._warm_parks.defer(key, memory_bytes=memory_bytes, ram_bytes=ram_bytes,
-                                   application_file_bytes=application_file_bytes, blocking=False)
+            self._warm_parks.defer(key, memory_bytes=memory_bytes, ram_bytes=ram_bytes, blocking=False)
             if relay_request_id is not None and (snapshot is None or snapshot.state == 'running')
             else nullcontext(None)
         )
@@ -603,7 +599,7 @@ class DirectNodeRuntime:
                     # Keep the same live wait. Actual MemAvailable decides
                     # whether another reclaim/park is needed after settling.
                     raise WarmParkDeferred(0.25)
-                if relay_request_id is not None and not self._warm_parks.checkpoint_ready(key):
+                if relay_request_id is not None and not self._warm_parks.ready(key, memory_bytes=memory_bytes, ram_bytes=ram_bytes):
                     if cancelled is None or not cancelled.is_set():
                         raise WarmParkDeferred(0.25)
                 # Join a concurrent park/wake and then re-evaluate the stable
@@ -658,14 +654,6 @@ class DirectNodeRuntime:
         ):
             return None
         return sample
-
-    def _resident_application_file_bytes(self, key, sample):
-        if sample is None or not getattr(
-            self.service, 'resident_application_reclaim_enabled', lambda *_: False
-        )(key[0], key[1]):
-            return 0
-        return max(0, min(sample.current_bytes,
-                          sample.file_bytes - sample.shared_memory_bytes))
 
     def _reclaim_wait_cache(self, key, sample, cancelled):
         reclaim = getattr(self.service, "reclaim_resident_wait", None)

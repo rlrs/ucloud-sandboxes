@@ -35,96 +35,14 @@ class ResidentWaitRankingTests(TestCase):
         self.pressure = Pressure(0.8, 0, 0, 80 * self.GIB)
         return self.policy._history[(sandbox, generation)]
 
-    def retain(self, sandbox, *, memory=None, generation=1, request="next",
-               application_file_bytes=0):
+    def retain(self, sandbox, *, memory=None, generation=1, request="next"):
         key = (sandbox, generation, request)
         with self.assertRaises(WarmParkDeferred):
             with self.policy.defer(
-                key, memory_bytes=memory or 4 * self.GIB, blocking=False,
-                application_file_bytes=application_file_bytes,
+                key, memory_bytes=memory or 4 * self.GIB, blocking=False
             ):
                 self.fail("memory headroom must retain even an observed long wait")
         return key
-
-    def test_file_action_precedes_unknown_capture_despite_expensive_park_history(self):
-        self.train("file", wait=20, park=15, wake=15)
-        ram = self.retain("ram")
-        file = self.retain("file", application_file_bytes=4 * self.GIB)
-        self.pressure_on()
-        self.assertFalse(self.policy.ready(ram, memory_bytes=4 * self.GIB,
-                                           ram_bytes=4 * self.GIB))
-        self.assertTrue(self.policy.ready(file, memory_bytes=4 * self.GIB, ram_bytes=0,
-            application_file_bytes=4 * self.GIB))
-        with self.policy.defer(file, memory_bytes=4 * self.GIB, ram_bytes=0,
-                application_file_bytes=4 * self.GIB, blocking=False):
-            self.assertFalse(self.policy.ready(ram, memory_bytes=4 * self.GIB))
-
-    def test_file_action_does_not_steal_tmpfs_deficit_or_psi_probe(self):
-        from ucloud_sandboxes.resource_evidence import MemoryBackingCapacity
-
-        self.train("file", wait=20, park=15, wake=15)
-        ram = self.retain("ram")
-        file = self.retain("file", application_file_bytes=4 * self.GIB)
-        for pressure in (
-            Pressure(.5, 20, 0, 50 * self.GIB),
-            Pressure(.5, 0, 0, 50 * self.GIB,
-                     memory_backing=MemoryBackingCapacity(100 * self.GIB, self.GIB, "tmpfs")),
-        ):
-            with self.subTest(pressure=pressure):
-                self.pressure = pressure
-                self.assertTrue(self.policy.ready(ram, memory_bytes=4 * self.GIB,
-                                                   ram_bytes=4 * self.GIB))
-                self.assertFalse(self.policy.ready(file, memory_bytes=4 * self.GIB,
-                    ram_bytes=0, application_file_bytes=4 * self.GIB))
-
-    def test_response_ready_order_precedes_file_action_preference(self):
-        ram = self.retain("ram")
-        file = self.retain("file", application_file_bytes=4 * self.GIB)
-        self.policy.response_ready(file)
-        self.pressure_on()
-        self.assertTrue(self.policy.ready(ram, memory_bytes=4 * self.GIB))
-        self.assertFalse(self.policy.ready(file, memory_bytes=4 * self.GIB, ram_bytes=0,
-            application_file_bytes=4 * self.GIB))
-        self.policy.response_ready(ram)
-        self.assertTrue(self.policy.ready(file, memory_bytes=4 * self.GIB, ram_bytes=0,
-            application_file_bytes=4 * self.GIB))
-
-    def test_file_action_credits_only_measured_cache_and_failed_probe_loses_preference(self):
-        from ucloud_sandboxes.resident_memory import ResidentMemorySample
-
-        self.train("file", wait=20, park=15, wake=15)
-        ram = self.retain("ram")
-        cache = 128 * 1024**2
-        file = self.retain("file", application_file_bytes=cache)
-        self.pressure_on()
-        with self.policy.defer(file, memory_bytes=4 * self.GIB, ram_bytes=0,
-                application_file_bytes=cache, blocking=False):
-            self.assertEqual(self.policy.snapshot()["projected_reclaim_bytes"], cache)
-            self.assertTrue(self.policy.ready(ram, memory_bytes=4 * self.GIB))
-            sample = ResidentMemorySample(4 * self.GIB, 0, cache, 0, 0, 0,
-                                          "/cg/file", 1, 2, 100, 200, self.now)
-            self.assertEqual(self.policy.cache_reclaim_target(file, sample,
-                application_file_backed=True), cache)
-            self.policy.record_cache_reclaim(file, sample, None)
-        self.now += 2
-        self.assertTrue(self.policy.ready(ram, memory_bytes=4 * self.GIB))
-        self.assertFalse(self.policy.ready(file, memory_bytes=4 * self.GIB, ram_bytes=0,
-            application_file_bytes=cache))
-
-    def test_unknown_inflight_probe_and_missing_sample_still_fence_file_selection(self):
-        unknown = self.retain("unknown")
-        self.pressure_on()
-        with self.policy.defer(unknown, memory_bytes=0, blocking=False):
-            file = ("file", 1, "wait")
-            with self.assertRaises(WarmParkDeferred):
-                with self.policy.defer(file, memory_bytes=4 * self.GIB, ram_bytes=0,
-                        application_file_bytes=4 * self.GIB, blocking=False):
-                    self.fail("unknown reclaim still owns the progress probe")
-        self.now += 2
-        self.policy.forget(unknown)
-        # A disappeared/expired measurement must drop cached action eligibility.
-        self.policy.ready(file, memory_bytes=0, ram_bytes=0)
-        self.assertEqual(self.policy._application_file_bytes[file], 0)
 
     def pressure_on(self):
         self.pressure = Pressure(0.04, 0, 0, 4 * self.GIB)

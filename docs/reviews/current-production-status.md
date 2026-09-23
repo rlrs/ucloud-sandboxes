@@ -40,8 +40,6 @@ change production or imply that the performance objective is complete.
 
 The coupled implementation, native runtime patches, test contracts and load
 harness form one qualified baseline commit. Documentation and successful/failed
-qualification evidence form a separate commit. Background artifact retirement and resident-reclaim selection/telemetry
-are separate follow-up commits, each with its tests, so that they can be reviewed
-or reverted without changing the production baseline. The retirement commit is
-`65e7947`. The combined follow-up source passed [108 focused Linux tests](../benchmarks/commit-cleanup-2026-09-23/deferred-memory-tests.json);
-this is not loaded qualification or authorization to deploy these changes.
+qualification evidence form a separate commit. Subsequent reclaim experiments
+and their tests form another commit so that they can be reviewed or reverted
+without changing the production baseline.

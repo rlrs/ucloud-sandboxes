@@ -78,6 +78,7 @@ PINNED_STORAGE_NATIVE_PATCHES = (
     "agentenv-device-reuse.patch",
     "agentenv-jemalloc.patch",
     "agentenv-storage-upgrade-compatibility.patch",
+    "agentenv-positioned-read-advice.patch",
 )
 DEFAULT_DIRECT_DISK_HEADROOM_MB = 16 * 1024
 DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES = 8

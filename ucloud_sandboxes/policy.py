@@ -656,6 +656,11 @@ def _live_pressure_reason(
     ):
         values.append(f"memory-psi={signals.memory_psi_full_avg10:g}")
     if (
+        signals.io_psi_full_avg10 is not None
+        and signals.io_psi_full_avg10 >= policy.max_io_psi_full_avg10
+    ):
+        values.append(f"io-psi={signals.io_psi_full_avg10:g}")
+    if (
         signals.storage_queue_utilization is not None
         and signals.storage_queue_utilization >= policy.target_storage_queue_utilization
     ):

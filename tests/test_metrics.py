@@ -46,6 +46,34 @@ def sandbox_route(**values: object) -> SandboxRoute:
 
 
 class MetricsTests(unittest.TestCase):
+    def test_kernel_io_stalls_trigger_headroom_without_cpu_or_queue_saturation(self):
+        from tests.test_policy import node
+        from ucloud_sandboxes.models import SandboxDemand
+        from ucloud_sandboxes.policy import evaluate_scale
+        now = utc_now()
+        events = [MetricEvent(
+            timestamp=(now - timedelta(seconds=offset)).isoformat(), kind="node_heartbeat",
+            data={"job_id": "worker", "capabilities": ["sandbox"], "active_workloads": 64,
+                  "actual_usage": {"cpu_percent": 15, "memory_percent": 10,
+                                   "io_psi_full_avg10": 35, "storage_waiting_operations": 0}},
+        ) for offset in (20, 10, 1)]
+        policy = ScalePolicy(max_nodes=4)
+        signals = build_live_scale_signals(events, policy)
+        self.assertEqual(signals.pressure_samples, 3)
+        self.assertEqual(signals.io_psi_full_avg10, 35)
+        decision = evaluate_scale([node("busy", active=64)], SandboxDemand(), policy=policy, live_signals=signals)
+        self.assertEqual(decision.creates, 1)
+        self.assertTrue(any("io-psi=35" in reason for reason in decision.reasons))
+        decision = evaluate_scale([node("busy", active=64), node("idle")], SandboxDemand(), policy=policy, live_signals=signals)
+        self.assertEqual(decision.creates, 0)
+        for event in events:
+            event.data["active_workloads"] = 0
+        self.assertEqual(build_live_scale_signals(events, policy).pressure_samples, 0)
+        for event in events:
+            event.data["active_workloads"] = 64
+            event.data["capabilities"] = ["builder"]
+        self.assertEqual(build_live_scale_signals(events, policy).pressure_samples, 0)
+
     def test_file_backed_working_set_requests_capacity_before_reclaim_stalls(self):
         now = utc_now()
         events = [MetricEvent(

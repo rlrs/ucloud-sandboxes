@@ -415,7 +415,11 @@ async def run(args):
                                                          headers={'Content-Type': 'application/json'},
                                                          attempts=120, retry_delay_seconds=.1)
                     committed = time.monotonic()
-                    probe = await handle.exec(['python', '-c', PROBE, str(cycle), 'usable'], timeout_seconds=150)
+                    # Same SDK start/wait path as handle.exec(), split only to
+                    # distinguish dispatch delay from guest execution/event reads.
+                    probe_handle = await handle.start_exec(['python', '-c', PROBE, str(cycle), 'usable'])
+                    probe_dispatched = time.monotonic()
+                    probe = await probe_handle.wait(timeout_seconds=150)
                     finished = time.monotonic()
                     if not probe.success:
                         raise RuntimeError('usable-exec probe failed: ' + probe.stderr[:500])
@@ -443,6 +447,8 @@ async def run(args):
                                              'response_ready_to_submit_seconds': started - model_ready,
                                              'response_ready_to_wake_seconds': committed - model_ready,
                                              'post_wake_exec_seconds': finished - committed,
+                                             'post_wake_exec_start_seconds': probe_dispatched - committed,
+                                             'post_wake_exec_wait_seconds': finished - probe_dispatched,
                                              'guest_transport_retries': ack['transport_retries'],
                                              'guest_verification_seconds': ack['verification_seconds'],
                                              'guest_tool_seconds': ack['tool_seconds'],
@@ -501,7 +507,7 @@ async def run(args):
         result['commit_and_wake_seconds'] = summary([r['commit_and_wake_seconds'] for r in measured])
         result['usable_exec_seconds'] = summary([r['usable_exec_seconds'] for r in measured])
         result['response_ready_to_usable_exec_seconds'] = summary([r['response_ready_to_usable_exec_seconds'] for r in measured])
-        for field in ('response_ready_to_wake_seconds', 'post_wake_exec_seconds', 'full_integrity_seconds',
+        for field in ('response_ready_to_wake_seconds', 'post_wake_exec_seconds', 'post_wake_exec_start_seconds', 'post_wake_exec_wait_seconds', 'full_integrity_seconds',
                       'guest_verification_seconds', 'guest_tool_seconds', 'guest_transport_retries'):
             result[field] = summary([r[field] for r in measured])
         result['measured_park_observed_cycles'] = sum(r['park_observed_after_seconds'] is not None for r in measured)

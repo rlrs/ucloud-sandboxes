@@ -820,7 +820,8 @@ def _decode_policy(
         raise ValueError("policy must be a JSON object")
     defaults = ScalePolicy()
     # Existing deployments retain local wake placement until explicitly enabled.
-    raw = {"parked_wake_consolidation_enabled": False, **raw}
+    raw = {"parked_wake_consolidation_enabled": False,
+           "max_io_psi_full_avg10": defaults.max_io_psi_full_avg10, **raw}
     expected = {item.name for item in fields(defaults)} - _RUNTIME_POLICY_FIELDS
     _require_exact_keys("policy", raw, expected)
     values: dict[str, object] = {}
@@ -863,6 +864,8 @@ def _decode_policy(
         elif isinstance(default, float):
             minimum = 0.01 if name in unit_interval_fields else 0.0
             maximum = 1.0 if name in unit_interval_fields else None
+            if name == "max_io_psi_full_avg10":
+                maximum = 100.0
             if name in {
                 "provisioning_capacity_weight",
                 "stale_provisioning_capacity_weight",

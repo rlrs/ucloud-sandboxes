@@ -13,6 +13,15 @@ class ConfigTests(unittest.TestCase):
     def _raw() -> dict[str, object]:
         return DeploymentConfig.default(scope_id="project-1").to_dict()
 
+    def test_io_pressure_policy_is_additive_and_validated(self):
+        raw = self._raw()
+        raw["policy"].pop("max_io_psi_full_avg10")
+        self.assertEqual(DeploymentConfig.from_dict(raw).policy.max_io_psi_full_avg10, 10)
+        for value in (-1, 101, True, "10", float("nan")):
+            raw["policy"]["max_io_psi_full_avg10"] = value
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                DeploymentConfig.from_dict(raw)
+
     def test_exact_config_round_trip_and_derived_authority(self) -> None:
         raw = self._raw()
         sandbox = raw["sandbox"]

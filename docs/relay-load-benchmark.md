@@ -62,8 +62,9 @@ The first cycle per agent is warmup. Remaining samples produce median, p95, p99,
 and maximum latency. Exit status zero requires all cycles and cleanup to succeed,
 all health checks to pass, and **response-ready-to-usable-exec p95 below one second**. A correct but
 slower baseline exits nonzero; inspect `correct` and `slo_passed` separately.
-This deliberately includes post-restore verification and driver network latency,
-so it is stricter than a worker-only restore timer.
+This includes the first subprocess tool and its external SDK confirmation, plus driver network latency,
+so it is stricter than a worker-only restore timer. Full resident-memory and file
+integrity checks are mandatory separate correctness gates after that timer.
 
 Cleanup targets only the run's unique `relay-load-...` IDs and reservation.
 Cancellation also enters cleanup. If the driver is forcibly killed or its host
@@ -85,3 +86,40 @@ After `all_agents_ready` appears in the event log, verify the candidate on every
 worker listed in `placements`, then create that file to release model traffic.
 The overall deadline and exact-ID cleanup still apply while paused. This avoids
 quietly benchmarking a mix of patched workers and newly booted release workers.
+
+## Release acceptance profile
+
+The production-like profile used in September has 512 MiB resident memory,
+128 MiB dirtied each cycle, 64 files of 64 KiB, 32 KiB model payloads,
+100 ms CPU work, and 20 seconds plus up to 5 seconds of model delay. Use
+16 concurrent creates and 24 concurrent fleet pollers. Explicitly pass:
+
+```sh
+--resident-mb 512 --dirty-mb 128 --model-seconds 20 --model-jitter 5 \
+--create-concurrency 16 --fleet-pollers 24 --wake-p95-seconds 1
+```
+
+Qualify actual forced parking with 64 agents and four cycles, then immediately
+run 256 agents and eight cycles with `--startup-mode rolling --parking-mode natural`.
+Repeat against the already used fleet, and extend to 512. A passing fresh-worker
+run alone is insufficient: reused/dense workers have exposed memory-compaction
+stalls that short component tests missed. Natural warm retention can yield zero
+observed parks; it does not qualify restore. Every forced measured cycle must
+actually park. Keep launch-overlap and steady-state latency visible separately.
+
+Do not change worker tuning or attach a profiler during an acceptance run. Use
+separate diagnostic runs for profiling. Retain correctness, cleanup, health,
+placement, kernel compaction/pressure evidence, runtime identity, and raw reports
+for both passing and failed runs. Record experiment tradeoffs and rejected
+changes, including filesystem throughput regressions.
+
+Before a gateway upgrade, also validate retained heartbeat records with the
+candidate package, not merely `/healthz` after starting it:
+
+```sh
+PYTHONPATH=/path/to/candidate.whl python scripts/verify_heartbeat_upgrade.py /path/to/control.sqlite
+```
+
+This read-only check exercises the persisted canonical heartbeat schema. It
+complements live HTTP and Linux tests, including old-format records and failed
+writer/ownership paths. It does not replace them.

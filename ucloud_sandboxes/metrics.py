@@ -1035,6 +1035,7 @@ def build_live_scale_signals(
     latest_cpu: float | None = None
     latest_memory: float | None = None
     latest_psi: float | None = None
+    latest_io_psi: float | None = None
     latest_storage_queue: float | None = None
     latest_image_materialization_queue: float | None = None
     create_cutoff = now.timestamp() - max(1, policy.create_pressure_window_seconds)
@@ -1102,6 +1103,7 @@ def build_live_scale_signals(
         if total_memory > 0 and working_set > 0:
             memory = max(memory or 0.0, min(1.0, working_set / total_memory))
         psi = _optional_float(actual.get("memory_psi_full_avg10"))
+        io_psi = _optional_float(actual.get("io_psi_full_avg10"))
         storage_limit = (
             _optional_int(actual.get("storage_max_concurrent_operations")) or 0
         )
@@ -1130,6 +1132,7 @@ def build_live_scale_signals(
             latest_cpu = cpu
             latest_memory = memory
             latest_psi = psi
+            latest_io_psi = io_psi
             latest_storage_queue = storage_queue
             latest_image_materialization_queue = materialization_queue
         is_pressure = any(
@@ -1137,6 +1140,7 @@ def build_live_scale_signals(
                 cpu is not None and cpu >= policy.target_cpu_utilization,
                 memory is not None and memory >= policy.target_memory_utilization,
                 psi is not None and psi >= policy.max_memory_psi_full_avg10,
+                io_psi is not None and io_psi >= policy.max_io_psi_full_avg10,
                 storage_queue is not None
                 and storage_queue >= policy.target_storage_queue_utilization,
                 materialization_queue is not None
@@ -1180,6 +1184,7 @@ def build_live_scale_signals(
         cpu_utilization=latest_cpu,
         memory_utilization=latest_memory,
         memory_psi_full_avg10=latest_psi,
+        io_psi_full_avg10=latest_io_psi,
         storage_queue_utilization=latest_storage_queue,
         image_materialization_queue_utilization=(latest_image_materialization_queue),
         create_pressure_samples=create_pressure_samples,

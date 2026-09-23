@@ -19,7 +19,10 @@ from an exact, clean checkout:
 
 The build applies the dense/compacted-stream export, pooled-exclusive-delete,
 owner-identity, owner-transition, premerged-identity, device-reuse, jemalloc,
-and storage-upgrade-compatibility patches. The tagged upstream daemon does
+storage-upgrade-compatibility, and positioned-read-advice patches. The latter
+keeps buffered I/O and caching but suppresses speculative Linux readahead on
+backing files: the block backend already requests explicit byte ranges.
+It does not change the writable format. The tagged upstream daemon does
 not activate jemalloc; our patch restores upstream's allocator change.
 It runs targeted compaction, cache, ownership, device-pool, and protocol tests and emits a
 content-addressed binary, license, and schema-3 build manifest with every patch

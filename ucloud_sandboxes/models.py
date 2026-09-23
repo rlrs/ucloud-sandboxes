@@ -731,6 +731,7 @@ class LiveScaleSignals:
     cpu_utilization: float | None = None
     memory_utilization: float | None = None
     memory_psi_full_avg10: float | None = None
+    io_psi_full_avg10: float | None = None
     storage_queue_utilization: float | None = None
     image_materialization_queue_utilization: float | None = None
     create_pressure_samples: int = 0
@@ -752,6 +753,7 @@ class LiveScaleSignals:
             "cpu_utilization": self.cpu_utilization,
             "memory_utilization": self.memory_utilization,
             "memory_psi_full_avg10": self.memory_psi_full_avg10,
+            "io_psi_full_avg10": self.io_psi_full_avg10,
             "storage_queue_utilization": self.storage_queue_utilization,
             "image_materialization_queue_utilization": (
                 self.image_materialization_queue_utilization
@@ -830,6 +832,7 @@ class ScalePolicy:
     target_cpu_utilization: float = 0.70
     target_memory_utilization: float = 0.80
     max_memory_psi_full_avg10: float = 5.0
+    max_io_psi_full_avg10: float = 10.0
     target_storage_queue_utilization: float = 0.75
     create_pressure_enabled: bool = True
     create_pressure_window_seconds: int = 30

@@ -1,0 +1,139 @@
+{
+  "destination_backend_sha256": "1467ab24852d33d5ad20c0c78855cbf8eb3260c5d4aeda5d761a001e29f94feb",
+  "enospc_errno": 28,
+  "gvisor": {
+    "checkpoint_artifacts": {
+      "application_memory.img": {
+        "allocated_bytes": 17141760,
+        "file_bytes": 1073741824
+      },
+      "checkpoint.img": {
+        "allocated_bytes": 274432,
+        "file_bytes": 273087
+      },
+      "pages.img": {
+        "allocated_bytes": 0,
+        "file_bytes": 0
+      },
+      "pages_meta.img": {
+        "allocated_bytes": 4096,
+        "file_bytes": 636
+      }
+    },
+    "initial_response": "ok 4295489536",
+    "park_seconds": 0.027338244000020495,
+    "restore": {
+      "conformance_read_bytes": 16875520,
+      "conformance_seconds": 0.18827265799995985,
+      "noop_read_bytes": 4096,
+      "noop_seconds": 0.01755312199998116,
+      "response": "ok 8590456832",
+      "restore_read_bytes": 331776,
+      "restore_seconds": 0.16660749100014982
+    }
+  },
+  "gvisor_network_namespace": "ucloud-storage-native-200869",
+  "layer": null,
+  "phases": {
+    "create_and_format": {
+      "counters": {
+        "daemon_read_bytes": 0,
+        "daemon_system_ticks": 5,
+        "daemon_user_ticks": 0,
+        "daemon_write_bytes": 34590720,
+        "device_read_sectors": 0,
+        "device_write_sectors": 0
+      },
+      "seconds": 0.07459849699989718
+    },
+    "daemon_start": {
+      "counter_note": "daemon changed during phase",
+      "counters": null,
+      "seconds": 0.05107141500002399
+    },
+    "enospc": {
+      "counters": {
+        "daemon_read_bytes": 0,
+        "daemon_system_ticks": 0,
+        "daemon_user_ticks": 0,
+        "daemon_write_bytes": 94208,
+        "device_read_sectors": 40,
+        "device_write_sectors": 184
+      },
+      "seconds": 0.0024776029999884486
+    },
+    "freeze_and_seal": {
+      "counters": {
+        "daemon_read_bytes": 0,
+        "daemon_system_ticks": 4,
+        "daemon_user_ticks": 3,
+        "daemon_write_bytes": 700416,
+        "device_read_sectors": 0,
+        "device_write_sectors": 872
+      },
+      "seconds": 0.2570188899999266
+    },
+    "mount_and_populate": {
+      "counters": {
+        "daemon_read_bytes": 0,
+        "daemon_system_ticks": 1,
+        "daemon_user_ticks": 0,
+        "daemon_write_bytes": 18485248,
+        "device_read_sectors": 610,
+        "device_write_sectors": 36240
+      },
+      "seconds": 0.37186525700008133
+    },
+    "reconstruct_and_mount": {
+      "counter_note": "daemon changed during phase",
+      "counters": null,
+      "seconds": 0.16137246600010258
+    },
+    "release_initial": {
+      "counters": {
+        "daemon_read_bytes": 0,
+        "daemon_system_ticks": 1,
+        "daemon_user_ticks": 0,
+        "daemon_write_bytes": 4096,
+        "device_read_sectors": 0,
+        "device_write_sectors": 0
+      },
+      "seconds": 0.043443515000035404
+    },
+    "release_resumed": {
+      "counters": {
+        "daemon_read_bytes": 4096,
+        "daemon_system_ticks": 0,
+        "daemon_user_ticks": 0,
+        "daemon_write_bytes": 122880,
+        "device_read_sectors": 0,
+        "device_write_sectors": 0
+      },
+      "seconds": 0.0683924190000198
+    },
+    "verify_reconstructed": {
+      "counters": {
+        "daemon_read_bytes": 4096,
+        "daemon_system_ticks": 9,
+        "daemon_user_ticks": 1,
+        "daemon_write_bytes": 17473536,
+        "device_read_sectors": 33792,
+        "device_write_sectors": 320
+      },
+      "seconds": 0.7619154980000076
+    }
+  },
+  "remote_bytes_served": 18857985,
+  "schema": 2,
+  "snapshot": {
+    "allocated_bytes": 52219904,
+    "allocated_to_logical_ratio": 0.048633575439453125,
+    "file_bytes": 52219904,
+    "file_to_logical_ratio": 0.048633575439453125,
+    "logical_device_bytes": 1073741824
+  },
+  "status": "passed",
+  "test_root": "/var/lib/ucloud-positioned-qualification/ucloud-storage-native-8sw8gg7z",
+  "upper_mode": "hybridLogStructured",
+  "virtual_size": 1073741824
+}

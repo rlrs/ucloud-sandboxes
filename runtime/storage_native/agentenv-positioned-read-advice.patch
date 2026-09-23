@@ -1,0 +1,49 @@
+diff --git a/storage/overlaybd/src/backend/local.rs b/storage/overlaybd/src/backend/local.rs
+--- a/storage/overlaybd/src/backend/local.rs
++++ b/storage/overlaybd/src/backend/local.rs
+@@ -115,6 +115,22 @@
+         }
+ 
+         let file = options.open(&path)?;
++        #[cfg(target_os = "linux")]
++        if !self.direct_io {
++            // VirtualFile reads specify exact block ranges. Kernel sequential
++            // speculation duplicates our cache/refill policy and can stall ublk
++            // queues in high-order page-cache compaction under guest density.
++            // Keep buffered writes and caching; only suppress speculative reads.
++            // SAFETY: file owns a live descriptor; all arguments are scalars.
++            let error =
++                unsafe { libc::posix_fadvise(file.as_raw_fd(), 0, 0, libc::POSIX_FADV_RANDOM) };
++            ensure!(
++                error == 0,
++                "advise positioned reads on {}: {}",
++                path.display(),
++                std::io::Error::from_raw_os_error(error)
++            );
++        }
+         if self.direct_io {
+             // Platforms with no open-time flag finish the job here (macOS
+             // `fcntl(F_NOCACHE)`). Propagating the failure rather than quietly
+@@ -826,6 +842,22 @@
+     }
+ 
+     #[tokio::test]
++    async fn test_buffered_positioned_reads_preserve_unaligned_data_after_reopen() {
++        let temp = TempDir::new().expect("tempdir");
++        let path = temp.path().join("buffered-random.bin");
++        let file = LocalFile::new(&path).expect("create buffered file");
++        let payload = vec![0x5A; 513];
++        file.write_at(5, &payload).await.expect("unaligned write");
++        file.sync().await.expect("sync data");
++        drop(file);
++        let reopened = LocalFile::open_ro(&path).expect("reopen buffered file");
++        assert!(!reopened.inner.direct_io);
++        assert_eq!(reopened.read_at(5, 513).await.unwrap().as_ref(), payload);
++        assert_eq!(reopened.read_at(510, 100).await.unwrap().len(), 8);
++        assert!(reopened.read_at(518, 1).await.unwrap().is_empty());
++    }
++
++    #[tokio::test]
+     async fn test_local_file_write_at_preserves_offset_semantics() {
+         let temp = TempDir::new().expect("tempdir");
+         let path = temp.path().join("offset.bin");

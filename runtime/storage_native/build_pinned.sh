@@ -14,6 +14,7 @@ readonly PATCH_PATHS=(
   "${SCRIPT_DIR}/agentenv-device-reuse.patch"
   "${SCRIPT_DIR}/agentenv-jemalloc.patch"
   "${SCRIPT_DIR}/agentenv-storage-upgrade-compatibility.patch"
+  "${SCRIPT_DIR}/agentenv-positioned-read-advice.patch"
 )
 
 usage() {
@@ -53,6 +54,8 @@ done
 
 (
   cd "${SOURCE_DIR}"
+  cargo test --locked --release -p overlaybd --features io-uring --lib backend::local::tests
+  cargo test --locked --release -p overlaybd --features io-uring --lib image::tests
   cargo test --locked --release -p overlaybd --features io-uring --lib lsmt::file::tests
   cargo test --locked --release -p overlaybd --features io-uring --lib backend::cache::tests
   cargo test --locked --release -p "${PACKAGE}" --lib

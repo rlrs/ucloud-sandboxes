@@ -89,8 +89,8 @@ class SplitLifecycleTests(unittest.TestCase):
     setUp = fixtures.DirectRunscWardenTests.setUp
     tearDown = fixtures.DirectRunscWardenTests.tearDown
 
-    def split(self, memory=None):
-        memory = memory or MemoryBackingRef(self.memory_directory, 8 * 1024 * 1024)
+    def split(self):
+        memory = MemoryBackingRef(self.memory_directory, 8 * 1024 * 1024)
         self.sandbox = replace(
             self.sandbox,
             workspace_directory="workspace-" + self.memory_directory,
@@ -108,7 +108,7 @@ class SplitLifecycleTests(unittest.TestCase):
         self.warden.memory_backing = MemoryBackingStore(
             self.config.memory_root,
             self.root / "allocations.sqlite",
-            hard_capacity_bytes=max(16 * 1024 * 1024, memory.quota_bytes),
+            hard_capacity_bytes=16 * 1024 * 1024,
             quota=FakeQuota(),
         )
         self.warden.memory_backing.prepare(

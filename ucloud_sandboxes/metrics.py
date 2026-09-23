@@ -1097,6 +1097,10 @@ def build_live_scale_signals(
 
         cpu = _fraction_from_percent(actual.get("cpu_percent"))
         memory = _fraction_from_percent(actual.get("memory_percent"))
+        total_memory = _optional_int(actual.get("memory_total_mb")) or 0
+        working_set = _optional_int(actual.get("memory_working_set_mb")) or 0
+        if total_memory > 0 and working_set > 0:
+            memory = max(memory or 0.0, min(1.0, working_set / total_memory))
         psi = _optional_float(actual.get("memory_psi_full_avg10"))
         storage_limit = (
             _optional_int(actual.get("storage_max_concurrent_operations")) or 0

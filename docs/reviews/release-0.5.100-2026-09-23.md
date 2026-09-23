@@ -35,3 +35,20 @@ XFS log-recovery allocation was also present. THP counters stayed zero. The
 experimental THP setting was restored on both workers and is not shipped.
 The 512 run had sparse sampled kernel tracing plus short gateway profiling;
 it is diagnostic evidence, not clean qualification.
+
+## Clean production measurements
+
+After deployment, the rolling 256-agent × 8-cycle run completed all 2,048
+cycles with no scenario or cleanup failures. Each guest retained 512 MiB,
+dirtied 128 MiB per cycle, and performed filesystem, CPU, relay, and tool work.
+Measured wake p95 was 0.545s; response-ready to externally confirmed usable
+tool p95 was 1.436s. Provisioning overlap remained slower (2.475s tool p95)
+than steady operation (1.061s). No parks were observed in this naturally
+warm-retained run, so it does not establish restore performance.
+
+A separate 64-agent × 4-cycle forced-parking run completed all 256 cycles,
+with 192/192 measured cycles actually parked, and no errors. Wake p95 was
+0.979s; first usable tool p95 was 1.676s. Both runs were unprofiled. The
+strict end-to-end <1s acceptance still fails. These are partial improvements,
+not completed qualification. Raw reports are retained alongside this release's
+diagnostic reports.

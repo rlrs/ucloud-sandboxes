@@ -46,6 +46,23 @@ def sandbox_route(**values: object) -> SandboxRoute:
 
 
 class MetricsTests(unittest.TestCase):
+    def test_file_backed_working_set_requests_capacity_before_reclaim_stalls(self):
+        now = utc_now()
+        events = [MetricEvent(
+            timestamp=(now - timedelta(seconds=offset)).isoformat(),
+            kind="node_heartbeat",
+            data={"job_id": "worker", "capabilities": ["sandbox"], "active_workloads": 128,
+                  "actual_usage": {"cpu_percent": 20, "memory_percent": 10,
+                                   "memory_total_mb": 90000, "memory_working_set_mb": 80000,
+                                   "memory_psi_full_avg10": 0}},
+        ) for offset in (20, 10, 1)]
+        signals = build_live_scale_signals(events, ScalePolicy())
+        self.assertEqual(signals.pressure_samples, 3)
+        self.assertAlmostEqual(signals.memory_utilization, 8 / 9)
+        for event in events:
+            event.data["actual_usage"].pop("memory_working_set_mb")
+        self.assertEqual(build_live_scale_signals(events, ScalePolicy()).pressure_samples, 0)
+
     def test_vacuum_reclaims_free_pages_without_evicting_retained_history(self):
         with TemporaryDirectory() as raw_dir:
             path = Path(raw_dir) / "metrics.sqlite"

@@ -63,6 +63,12 @@ def sample_node_runtime_metrics(
     memory_total_mb = memory.get("MemTotal", 0) // 1024
     memory_available_mb = memory.get("MemAvailable", 0) // 1024
     memory_used_mb = max(0, memory_total_mb - memory_available_mb)
+    # MemAvailable treats file-backed guest RAM as reclaimable cache. It can
+    # report an almost empty worker while most RAM backs running sandboxes.
+    # This estimate guides placement/scaling only; keep raw host admission
+    # evidence unchanged. Shmem is already charged in used memory.
+    mapped_file_mb = max(0, memory.get("Mapped", 0) - memory.get("Shmem", 0)) // 1024
+    memory_working_set_mb = min(memory_total_mb, memory_used_mb + mapped_file_mb)
     swap_total_mb = memory.get("SwapTotal", 0) // 1024
     swap_free_mb = memory.get("SwapFree", 0) // 1024
     swap_used_mb = max(0, swap_total_mb - swap_free_mb)
@@ -80,6 +86,7 @@ def sample_node_runtime_metrics(
         memory_used_mb=memory_used_mb,
         memory_available_mb=memory_available_mb,
         memory_percent=memory_percent,
+        memory_working_set_mb=memory_working_set_mb,
         swap_total_mb=swap_total_mb,
         swap_used_mb=swap_used_mb,
         swap_free_mb=swap_free_mb,

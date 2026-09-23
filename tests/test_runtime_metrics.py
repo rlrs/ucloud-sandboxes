@@ -17,6 +17,26 @@ from ucloud_sandboxes.runtime_metrics import (
 
 
 class RuntimeMetricsTests(unittest.TestCase):
+    def test_file_backed_guest_ram_is_visible_without_changing_host_free_memory(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "meminfo").write_text(
+                "MemTotal: 92160000 kB\nMemAvailable: 81920000 kB\n"
+                "Mapped: 71680000 kB\nShmem: 1024000 kB\n"
+            )
+            metrics = sample_node_runtime_metrics(proc_root=root, sample_seconds=0)
+            self.assertEqual(metrics.memory_available_mb, 80000)
+            self.assertEqual(metrics.memory_used_mb, 10000)
+            self.assertEqual(metrics.memory_working_set_mb, 79000)
+            self.assertLess(metrics.memory_percent, 12)
+            raw = metrics.to_dict()
+            self.assertEqual(NodeRuntimeMetrics.from_dict(raw), metrics)
+            raw.pop("memory_working_set_mb")
+            self.assertEqual(NodeRuntimeMetrics.from_dict(raw).memory_working_set_mb, 0)
+            for invalid in (-1, True, "79000"):
+                raw["memory_working_set_mb"] = invalid
+                self.assertIsNone(NodeRuntimeMetrics.from_dict(raw))
+
     def test_single_flight_rejects_invalid_freshness(self) -> None:
         def provider() -> NodeRuntimeMetrics:
             return NodeRuntimeMetrics(collected_at=utc_now())

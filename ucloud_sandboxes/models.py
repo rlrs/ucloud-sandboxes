@@ -326,6 +326,7 @@ class NodeRuntimeMetrics:
     memory_used_mb: int = 0
     memory_available_mb: int = 0
     memory_percent: float | None = None
+    memory_working_set_mb: int = 0
     swap_total_mb: int = 0
     swap_used_mb: int = 0
     swap_free_mb: int = 0
@@ -382,6 +383,7 @@ class NodeRuntimeMetrics:
         # storage signals remain optional at that rolling-upgrade boundary.
         raw = dict(raw)
         raw.setdefault("storage_ublk_max_devices", 0)
+        raw.setdefault("memory_working_set_mb", 0)
         raw.setdefault("io_psi_some_avg10", None)
         raw.setdefault("io_psi_full_avg10", None)
         raw.setdefault("storage_publication_active", 0)

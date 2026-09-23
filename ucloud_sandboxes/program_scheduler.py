@@ -47,6 +47,7 @@ def node_pressure_score(heartbeat: NodeHeartbeat) -> float:
     values = [
         max(0.0, min(1.0, float(metrics.cpu_percent or 0.0) / 100.0)),
         max(0.0, min(1.0, float(metrics.memory_percent or 0.0) / 100.0)),
+        min(1.0, metrics.memory_working_set_mb / max(1, metrics.memory_total_mb)),
         max(
             0.0,
             min(1.0, float(metrics.memory_psi_full_avg10 or 0.0) / 100.0),

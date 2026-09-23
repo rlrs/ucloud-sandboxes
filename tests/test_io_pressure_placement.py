@@ -16,6 +16,21 @@ from ucloud_sandboxes.runtime_metrics import sample_node_runtime_metrics
 
 
 class IoPressurePlacementTests(unittest.TestCase):
+    def test_mapped_guest_memory_guides_placement_without_blocking_admission(self):
+        quiet = self.heartbeat("quiet")
+        busy = replace(quiet, node_id="busy", job_id="busy", node_url="http://busy:8090",
+                       runtime_metrics=replace(quiet.runtime_metrics, memory_working_set_mb=88000))
+        handler = object.__new__(control_plane.ControlPlaneHandler)
+        handler._placement_routes = lambda: []
+        handler._ready_sandbox_heartbeats = lambda: [busy, quiet]
+        handler._nodes_with_image = lambda *_args, **_kwargs: {"busy", "quiet"}
+        handler.registry_layer_cache = None
+        handler.create_target_concurrency_per_node = 4
+        requested = ResourceQuantity(1, 1024, 4096)
+        self.assertEqual(handler._select_node(requested, image="image").node_id, "quiet")
+        handler._ready_sandbox_heartbeats = lambda: [busy]
+        self.assertEqual(handler._select_node(requested, image="image").node_id, "busy")
+
     def heartbeat(self, node, *, io=0, memory=0, used_disk=0):
         return build_heartbeat(
             node_id=node, job_id=node, node_url=f"http://{node}:8090",

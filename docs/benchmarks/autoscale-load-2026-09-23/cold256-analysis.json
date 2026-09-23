@@ -1,0 +1,120 @@
+{
+  "run_id": "relay-load-266d3599c196",
+  "placement_counts": {
+    "12400751": 76,
+    "12400752": 30,
+    "12400754": 30,
+    "12400755": 30,
+    "12400753": 30,
+    "12400756": 30,
+    "12400757": 30
+  },
+  "by_worker": {
+    "12400751": {
+      "assigned": 76,
+      "measured_cycles": 117,
+      "continuation_p95_seconds": 52.61337882070802,
+      "useful_exec_p95_seconds": 57.85314818425104,
+      "sampled_checkpoint_counter_increase": 28,
+      "max_io_psi_some_avg10": 86.71,
+      "max_memory_working_set_mb": 88782,
+      "min_memory_available_mb": 10844
+    },
+    "12400752": {
+      "assigned": 30,
+      "measured_cycles": 94,
+      "continuation_p95_seconds": 0.2603364384267479,
+      "useful_exec_p95_seconds": 0.6194224131759256,
+      "sampled_checkpoint_counter_increase": 0,
+      "max_io_psi_some_avg10": 1.0,
+      "max_memory_working_set_mb": 52895,
+      "min_memory_available_mb": 37003
+    },
+    "12400753": {
+      "assigned": 30,
+      "measured_cycles": 91,
+      "continuation_p95_seconds": 0.28116062097251415,
+      "useful_exec_p95_seconds": 0.6626346088014543,
+      "sampled_checkpoint_counter_increase": 0,
+      "max_io_psi_some_avg10": 7.92,
+      "max_memory_working_set_mb": 52938,
+      "min_memory_available_mb": 36960
+    },
+    "12400754": {
+      "assigned": 30,
+      "measured_cycles": 93,
+      "continuation_p95_seconds": 0.26437892368994653,
+      "useful_exec_p95_seconds": 0.5969049877021462,
+      "sampled_checkpoint_counter_increase": 0,
+      "max_io_psi_some_avg10": 3.11,
+      "max_memory_working_set_mb": 53021,
+      "min_memory_available_mb": 36877
+    },
+    "12400755": {
+      "assigned": 30,
+      "measured_cycles": 91,
+      "continuation_p95_seconds": 0.30824787984602153,
+      "useful_exec_p95_seconds": 0.6385961249470711,
+      "sampled_checkpoint_counter_increase": 0,
+      "max_io_psi_some_avg10": 2.32,
+      "max_memory_working_set_mb": 53352,
+      "min_memory_available_mb": 36683
+    },
+    "12400756": {
+      "assigned": 30,
+      "measured_cycles": 85,
+      "continuation_p95_seconds": 0.2542540936265141,
+      "useful_exec_p95_seconds": 0.5993145015090704,
+      "sampled_checkpoint_counter_increase": 0,
+      "max_io_psi_some_avg10": 1.29,
+      "max_memory_working_set_mb": 53655,
+      "min_memory_available_mb": 36243
+    },
+    "12400757": {
+      "assigned": 30,
+      "measured_cycles": 88,
+      "continuation_p95_seconds": 0.25371265364810824,
+      "useful_exec_p95_seconds": 0.618031102931127,
+      "sampled_checkpoint_counter_increase": 0,
+      "max_io_psi_some_avg10": 1.34,
+      "max_memory_working_set_mb": 53346,
+      "min_memory_available_mb": 36914
+    },
+    "12400759": {
+      "assigned": 0,
+      "measured_cycles": 0,
+      "continuation_p95_seconds": null,
+      "useful_exec_p95_seconds": null,
+      "sampled_checkpoint_counter_increase": 0,
+      "max_io_psi_some_avg10": 4.15,
+      "max_memory_working_set_mb": 4761,
+      "min_memory_available_mb": 85332
+    }
+  },
+  "health": {
+    "checks": 117,
+    "failed": 0,
+    "p95_seconds": 0.02783500007353723
+  },
+  "fleet_health_failures": 0,
+  "kernel_sigbus_or_oom_found": false,
+  "failed_stage": "agent_start",
+  "failed_worker": "12400751",
+  "limits": "Only the overloaded worker kernel/service logs were reviewed; no worker loss was reported by fleet checks.",
+  "scale_out_recovery_window": {
+    "first_eight_worker_sample": "2026-09-23T18:24:56.203073+00:00",
+    "last_sample": "2026-09-23T18:26:09.358862+00:00",
+    "seconds": 73.16,
+    "last_active_counts": [
+      70,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      0
+    ],
+    "interpretation": "No recovery in the observed interval before agent-start timeout; longer eventual recovery not tested because harness aborts on first correctness failure."
+  }
+}

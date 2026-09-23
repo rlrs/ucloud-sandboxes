@@ -1,0 +1,15 @@
+{
+  "routes": 0,
+  "relay_backend": "postgres",
+  "inflight": 0,
+  "delivery_pending": 0,
+  "services": {
+    "gateway": "active",
+    "relay": "active",
+    "autoscaler": "active",
+    "registry": "active"
+  },
+  "worker_inventory_empty": true,
+  "production_policy_changed": false,
+  "check_order": "After the 512-run report completed at 2026-09-23T18:39:10.871687+00:00"
+}

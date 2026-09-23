@@ -1,0 +1,103 @@
+{
+  "run_id": "relay-load-f006a0f7a91f",
+  "source_report_sha256": "9d352a5d31fe1e181595fb3384e08d9ec776c88f976784777ad4adc64a0f4ec6",
+  "placement_counts": {
+    "12400751": 64,
+    "12400759": 64,
+    "12400752": 64,
+    "12400757": 64,
+    "12400753": 64,
+    "12400754": 64,
+    "12400756": 64,
+    "12400755": 64
+  },
+  "by_worker": {
+    "12400751": {
+      "assigned": 64,
+      "measured_cycles": 448,
+      "continuation_p95_seconds": 15.137501994613558,
+      "useful_exec_p95_seconds": 21.03190698940307,
+      "sampled_checkpoint_counter_increase": 28,
+      "max_io_psi_some_avg10": 65.69,
+      "max_memory_working_set_mb": 73711,
+      "min_memory_available_mb": 24763
+    },
+    "12400752": {
+      "assigned": 64,
+      "measured_cycles": 448,
+      "continuation_p95_seconds": 16.69546112138778,
+      "useful_exec_p95_seconds": 21.314390826737508,
+      "sampled_checkpoint_counter_increase": 27,
+      "max_io_psi_some_avg10": 49.94,
+      "max_memory_working_set_mb": 73572,
+      "min_memory_available_mb": 24443
+    },
+    "12400753": {
+      "assigned": 64,
+      "measured_cycles": 448,
+      "continuation_p95_seconds": 16.891682564048097,
+      "useful_exec_p95_seconds": 22.258835195098072,
+      "sampled_checkpoint_counter_increase": 34,
+      "max_io_psi_some_avg10": 52.64,
+      "max_memory_working_set_mb": 74203,
+      "min_memory_available_mb": 21560
+    },
+    "12400754": {
+      "assigned": 64,
+      "measured_cycles": 448,
+      "continuation_p95_seconds": 16.846678142203018,
+      "useful_exec_p95_seconds": 23.959237915696576,
+      "sampled_checkpoint_counter_increase": 28,
+      "max_io_psi_some_avg10": 58.26,
+      "max_memory_working_set_mb": 73607,
+      "min_memory_available_mb": 20720
+    },
+    "12400755": {
+      "assigned": 64,
+      "measured_cycles": 448,
+      "continuation_p95_seconds": 16.55447630910203,
+      "useful_exec_p95_seconds": 21.146700599463657,
+      "sampled_checkpoint_counter_increase": 28,
+      "max_io_psi_some_avg10": 50.93,
+      "max_memory_working_set_mb": 73623,
+      "min_memory_available_mb": 24596
+    },
+    "12400756": {
+      "assigned": 64,
+      "measured_cycles": 448,
+      "continuation_p95_seconds": 15.276620486518368,
+      "useful_exec_p95_seconds": 20.729790480807424,
+      "sampled_checkpoint_counter_increase": 30,
+      "max_io_psi_some_avg10": 69.63,
+      "max_memory_working_set_mb": 73583,
+      "min_memory_available_mb": 24871
+    },
+    "12400757": {
+      "assigned": 64,
+      "measured_cycles": 448,
+      "continuation_p95_seconds": 18.045817310921848,
+      "useful_exec_p95_seconds": 23.06495336838998,
+      "sampled_checkpoint_counter_increase": 29,
+      "max_io_psi_some_avg10": 66.12,
+      "max_memory_working_set_mb": 73576,
+      "min_memory_available_mb": 23404
+    },
+    "12400759": {
+      "assigned": 64,
+      "measured_cycles": 448,
+      "continuation_p95_seconds": 16.70207149698399,
+      "useful_exec_p95_seconds": 19.619171282509342,
+      "sampled_checkpoint_counter_increase": 27,
+      "max_io_psi_some_avg10": 65.17,
+      "max_memory_working_set_mb": 73585,
+      "min_memory_available_mb": 20148
+    }
+  },
+  "health": {
+    "checks": 159,
+    "failed": 0,
+    "p95_seconds": 0.15837753796949983
+  },
+  "fleet_health_failures": 18,
+  "limits": "Whole-worker samples, not per-sandbox attribution. Counter deltas cover sampled intervals and exclude earlier runs. Latency quantiles exclude configured warmup cycles."
+}

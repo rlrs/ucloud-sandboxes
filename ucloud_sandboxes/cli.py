@@ -1042,6 +1042,7 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         deployment_id=config.deployment_id,
         heartbeat_ttl_seconds=config.gateway_heartbeat_ttl_seconds,
         isolate_fleet_reads=True,
+        isolate_routing_writes=True,
         image_file=config.image_file(),
         metrics_file=config.metrics_path(),
         registry_url=config.registry_url,

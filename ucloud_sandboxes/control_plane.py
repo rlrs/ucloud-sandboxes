@@ -791,12 +791,19 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     wake_consolidation_policy: ScalePolicy = ScalePolicy()
     wake_consolidation_next_at: float = 0.0
     server_version = "ucloud-sandboxes-control-plane/0.1"
+    routing_write_process = None
 
     @traced_http_request
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if self.path == "/healthz":
             health = service_health("control-plane")
+            writer_error = (self.routing_write_process.health_error()
+                            if self.routing_write_process is not None else "")
+            if writer_error:
+                health.update(ok=False, routing_writer={"ok": False, "error": writer_error})
+                self._write_json(health, status=HTTPStatus.SERVICE_UNAVAILABLE)
+                return
             registry_usage_error = self._registry_usage_health_error()
             if registry_usage_error:
                 health["ok"] = False
@@ -3344,7 +3351,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             refreshed_available = (
                 _node_available_resources(
                     refreshed_heartbeat,
-                    self._placement_routes(),
+                    self._placement_routes_for_node(refreshed_heartbeat),
                 )
                 if refreshed_heartbeat is not None
                 else ResourceQuantity()
@@ -7223,6 +7230,7 @@ def build_server(
     metrics_file: Path,
     heartbeat_ttl_seconds: int = 120,
     isolate_fleet_reads: bool = False,
+    isolate_routing_writes: bool = False,
     registry_url: str | None = None,
     registry_worker_url: str | None = None,
     registry_usage_file: Path | None = None,
@@ -7261,6 +7269,10 @@ def build_server(
     resolved_telemetry = telemetry or Telemetry.disabled("ucloud-sandbox-gateway")
     store = ControlStateStore(control_state_file)
     routing_store = RoutingStore(routing_file)
+    from .routing_writer import RoutingWriteProcess
+    routing_writer = RoutingWriteProcess(routing_store) if isolate_routing_writes else None
+    if routing_writer is not None:
+        routing_store = routing_writer
     metrics_store = BufferedMetricsStore(metrics_file)
     registry_usage_store = (
         RegistryUsageStore(registry_usage_file)
@@ -7291,6 +7303,7 @@ def build_server(
     # Private gateway-to-worker clients retain pooled keep-alives.
     BoundHandler.allow_http_keep_alive = False
     BoundHandler.routing_store = routing_store
+    BoundHandler.routing_write_process = routing_writer
     BoundHandler.gateway_bearer_token = gateway_bearer_token
     BoundHandler.sandbox_api_token = sandbox_api_token
     BoundHandler.heartbeat_bearer_token = heartbeat_bearer_token
@@ -7360,6 +7373,8 @@ def build_server(
             finally:
                 if fleet_reader is not None:
                     fleet_reader.close()
+                if routing_writer is not None:
+                    routing_writer.close()
                 metrics_store.close()
 
     try:
@@ -7367,6 +7382,8 @@ def build_server(
             (host, port), BoundHandler, max_request_threads=max_http_request_threads,
         )
     except BaseException:
+        if routing_writer is not None:
+            routing_writer.close()
         metrics_store.close()
         raise
 

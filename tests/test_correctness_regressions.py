@@ -18,7 +18,6 @@ from tests import test_direct_provisioner as direct_fixtures
 from tests import test_storage_native_daemon as storage_fixtures
 from tests import test_storage_native_s3 as s3_fixtures
 from tests import test_storage_native_s3_gc as gc_fixtures
-from ucloud_sandboxes.control_plane import ControlPlaneHandler
 from ucloud_sandboxes.direct_registry import (
     DirectRegistryConflictError,
     DirectRegistryError,
@@ -106,7 +105,7 @@ class LifecycleBoundaryTests(unittest.TestCase):
     def test_explicit_wake_checks_drain_and_live_pressure(self):
         for closed, cpu, memory, error in (
             (True, 0, 8192, SandboxAdmissionClosedError),
-            (False, 99, 8192, SandboxCapacityUnavailableError),
+            (False, 99, 8192, None),
             (False, 0, 10, SandboxCapacityUnavailableError),
         ):
             with (
@@ -131,10 +130,19 @@ class LifecycleBoundaryTests(unittest.TestCase):
                 runtime = DirectNodeRuntime(service)
                 if closed:
                     service.close_admission()
-                with self.assertRaises(error):
+                if error is None:
+                    # CPU utilization is advisory: the existing restore permit
+                    # and guest cgroup govern execution, while RAM and drain
+                    # remain admission constraints.
                     runtime.wake("sandbox", generation=7, operation_id="wake:test")
+                else:
+                    with self.assertRaises(error):
+                        runtime.wake("sandbox", generation=7, operation_id="wake:test")
                 sandbox = provisioner.registry.get("sandbox").to_direct_sandbox()
-                self.assertEqual(service.warden.inspect(sandbox).state.value, "parked")
+                self.assertEqual(
+                    service.warden.inspect(sandbox).state.value,
+                    "running" if error is None else "parked",
+                )
 
     def test_restore_saturation_rejects_before_work_and_retry_succeeds(self):
         for implicit in (False, True):
@@ -434,13 +442,15 @@ class StorageBoundaryTests(unittest.TestCase):
                     storage_snapshot=migration.to_dict(),
                 )
             )
-            handler = SimpleNamespace(
-                routing_store=store,
-                _lifecycle_response_fence=lambda *args: ("boot", 11),
-                _release_registry_snapshot_reference=lambda *args, **kwargs: None,
-                _write_json=lambda *args, **kwargs: self.fail("wake commit failed"),
-            )
-            running = ControlPlaneHandler._commit_successful_wake(handler, route, None)
+            from ucloud_sandboxes.lifecycle_commit import LifecycleCommitter, SnapshotReferences
+            from ucloud_sandboxes.models import NodeHeartbeat
+            committer = LifecycleCommitter(store,
+                heartbeat=lambda _: NodeHeartbeat(node_id="node", job_id="job",
+                    node_url="http://node", deployment_id="test", updated_at=utc_now(),
+                    active_sandboxes=0, node_epoch="boot", activity_epoch=10),
+                snapshots=SnapshotReferences(protect=lambda route: None,
+                    release=lambda route, **kwargs: None))
+            running = committer.wake(route, {"node_epoch": "boot", "activity_epoch": 11}).route
             self.assertEqual(running.state, "running")
             self.assertEqual(running.storage_snapshot, {})
             store = RoutingStore(store.path)

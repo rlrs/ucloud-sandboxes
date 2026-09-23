@@ -1,4 +1,4 @@
-"""Explicit schema management for the qualification backend."""
+"""Explicit live relay migration/status and isolated scheduling qualification."""
 from __future__ import annotations
 
 import argparse
@@ -9,27 +9,44 @@ import sys
 
 
 async def run(args):
-    from .postgres import PostgresControlStore
+    from .database import PostgresDatabase
     from .credentials import read_private_dsn
-    store = PostgresControlStore(read_private_dsn(args.dsn_file), args.deployment_id, schema=args.schema)
+
+    qualification = args.command.startswith("qualification-")
+    if qualification:
+        from .qualification import QualificationControlStore
+        database = QualificationControlStore
+    else:
+        database = PostgresDatabase
+    store = database(read_private_dsn(args.dsn_file), args.deployment_id, schema=args.schema)
     try:
         await store.open()
-        if args.command == "migrate":
+        if args.command in {"migrate", "qualification-migrate"}:
             await store.migrate()
-            return {"schema": args.schema, "version": 1, "relay_version": 1, "migrated": True}
+            return {
+                "schema": args.schema,
+                "authority": "qualification-only" if qualification else "relay",
+                "version": store.schema_version,
+                "migrated": True,
+            }
         if args.command == "import-idle-relay":
             from .migration import import_idle_relay
             if args.sqlite_file is None:
                 raise ValueError("--sqlite-file is required for idle relay cutover")
             return await import_idle_relay(store, args.sqlite_file)
-        return await store.snapshot()
+        if qualification:
+            return {"authority": "qualification-only", **await store.snapshot()}
+        from .relay import PostgresRelayState
+        # Status is read-only: do not start dispatchers, record runtime mode,
+        # initialize quota, or otherwise pretend this CLI is a relay process.
+        return {"authority": "relay", "schema": args.schema, **await PostgresRelayState(store).stats()}
     finally:
         await store.close()
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("migrate", "status", "import-idle-relay"))
+    parser.add_argument("command", choices=("migrate", "status", "import-idle-relay", "qualification-migrate", "qualification-status"))
     parser.add_argument("--sqlite-file", type=Path)
     parser.add_argument("--dsn-file", type=Path, required=True)
     parser.add_argument("--deployment-id", required=True)

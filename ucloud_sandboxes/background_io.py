@@ -5,6 +5,12 @@ from pathlib import Path
 import threading
 import time
 
+from .resource_evidence import (
+    MemoryBackingCapacity,
+    read_memory_pressure,
+    sample_memory_backing,
+)
+
 
 @dataclass(frozen=True)
 class Pressure:
@@ -12,11 +18,13 @@ class Pressure:
     memory_stall: float = 100.0
     io_stall: float = 0.0
     memory_available_bytes: int = 0
+    memory_backing: MemoryBackingCapacity | None = None
 
 
 class PressureSampler:
-    def __init__(self, root=Path("/proc")):
+    def __init__(self, root=Path("/proc"), *, memory_backing_root: Path | None = None):
         self.root = root
+        self.memory_backing_root = memory_backing_root
         self._lock = threading.Lock()
         self._at = 0.0
         self._value = Pressure()
@@ -26,32 +34,21 @@ class PressureSampler:
             now = time.monotonic()
             if now - self._at < 0.1:
                 return self._value
-            try:
-                memory = {
-                    k: int(v.split()[0])
-                    for line in (self.root / "meminfo").read_text().splitlines()
-                    for k, v in [line.split(":", 1)]
-                }
-
-                def stall(kind):
-                    fields = (
-                        (self.root / "pressure" / kind)
-                        .read_text()
-                        .splitlines()[0]
-                        .split()
-                    )
-                    return float(dict(item.split("=") for item in fields[1:])["avg10"])
-
-                self._value = Pressure(
-                    memory["MemAvailable"] / memory["MemTotal"],
-                    stall("memory"),
-                    stall("io"),
-                    memory["MemAvailable"] * 1024,
-                )
-            except (OSError, ValueError, KeyError, ZeroDivisionError):
-                self._value = (
-                    Pressure()
-                )  # Missing memory evidence never delays reclaim.
+            evidence = read_memory_pressure(Path(self.root))
+            memory = evidence.memory
+            total, available = memory.get("MemTotal"), memory.get("MemAvailable")
+            # Unknown evidence is explicit in the canonical sample. This policy
+            # adapter conservatively disables warm retention, without delaying
+            # reclaim or treating an unreadable PSI file as observed zero.
+            self._value = Pressure(
+                available / total if total and available is not None else 0.0,
+                evidence.memory_psi.get("some", 100.0),
+                evidence.io_psi.get("some", 0.0),
+                available * 1024 if available is not None else 0,
+                sample_memory_backing(
+                    self.memory_backing_root, proc_root=Path(self.root)
+                ),
+            )
             self._at = now
             return self._value
 

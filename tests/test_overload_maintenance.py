@@ -1,3 +1,4 @@
+from ucloud_sandboxes.transition_admission import MemoryDemand
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from pathlib import Path
@@ -221,38 +222,10 @@ class BackgroundSchedulingTests(unittest.TestCase):
         pacer.pace()
         self.assertEqual(waits, [0.02])
 
-    def test_nonblocking_park_retries_preserve_deadline_and_recheck_pressure(self):
-        from unittest.mock import patch
-        from ucloud_sandboxes.warm_park import WarmParkDeferred
-        pressure = [Pressure(.8, 0)]
-        policy = WarmParkPolicy(lambda: pressure[0], max_delay=15)
-        for now, remaining in ((10, 15), (15, 10)):
-            with patch("ucloud_sandboxes.warm_park.time.monotonic", return_value=now):
-                with self.assertRaises(WarmParkDeferred) as caught:
-                    with policy.defer("request", blocking=False):
-                        self.fail("warm request should defer")
-                self.assertEqual(caught.exception.seconds, remaining)
-                self.assertFalse(policy._pending)
-        pressure[0] = Pressure(.05, 0)
-        with patch("ucloud_sandboxes.warm_park.time.monotonic", return_value=16):
-            with policy.defer("request", blocking=False):
-                pass
 
-    def test_warm_retention_uses_psi_percent_without_parking_on_minor_stalls(self):
-        from ucloud_sandboxes.warm_park import WarmParkDeferred
-        for psi, seconds in ((0, 15), (1, 14.85), (10, 13.5), (50, 7.5), (100, 0)):
-            with self.subTest(psi=psi):
-                policy = WarmParkPolicy(lambda: Pressure(.8, psi), max_delay=15)
-                self.assertAlmostEqual(policy._budget(), seconds)
-                if seconds:
-                    with self.assertRaises(WarmParkDeferred):
-                        with policy.defer("minor-stall", blocking=False):
-                            self.fail("available memory should retain a short wait")
-        policy = WarmParkPolicy(lambda: Pressure(.05, 0), max_delay=15)
-        self.assertEqual(policy._budget(), 0)
 
     def test_wake_cancels_grace_and_generation_does_not_cross(self):
-        policy = WarmParkPolicy(lambda: Pressure(0.8, 0), max_delay=1)
+        policy = WarmParkPolicy(lambda: Pressure(0.8, 0))
         key = ("sandbox", 1, "request")
         ready = threading.Event()
 
@@ -273,23 +246,10 @@ class BackgroundSchedulingTests(unittest.TestCase):
             self.assertTrue(future.result(2))
         self.assertFalse(policy._pending)
 
-    def test_response_after_grace_informs_prediction_and_retry_does_not_reset_clock(
-        self,
-    ):
-        from unittest.mock import patch
-
-        policy = WarmParkPolicy(lambda: Pressure(0.8, 0), max_delay=2)
-        policy._waiting_since["request"] = 10.0
-        with patch("ucloud_sandboxes.warm_park.time.monotonic", return_value=15.0):
-            with policy.defer("request") as event:
-                self.assertFalse(event.is_set())
-            policy.wake("request")
-        self.assertEqual(list(policy._responses), [5.0])
-        self.assertEqual(policy._budget(), 2)
 
     def test_pressure_ends_grace_and_missing_pressure_does_not_delay_reclaim(self):
         state = [Pressure(0.8, 0)]
-        policy = WarmParkPolicy(lambda: state[0], max_delay=10)
+        policy = WarmParkPolicy(lambda: state[0])
 
         def park():
             with policy.defer("request") as event:
@@ -304,8 +264,8 @@ class BackgroundSchedulingTests(unittest.TestCase):
             self.assertFalse(future.result(1))
         with tempfile.TemporaryDirectory() as directory:
             missing = PressureSampler(Path(directory))
-            policy = WarmParkPolicy(missing.sample, max_delay=10)
-            self.assertEqual(policy._budget(), 0)
+            policy = WarmParkPolicy(missing.sample)
+            self.assertTrue(policy._needs_reclaim(missing.sample(), MemoryDemand()))
 
     def test_native_control_wait_uses_export_progress_but_stalls_expire(self):
         for progressing in [True, False]:
@@ -353,22 +313,11 @@ class BackgroundSchedulingTests(unittest.TestCase):
 
 
 class WarmDemandTests(unittest.TestCase):
-    def test_memory_demand_and_large_footprint_shorten_retention(self):
-        gib = 1024**3
-        incoming = [0]
-        policy = WarmParkPolicy(lambda: Pressure(.8, 0, 0, 8*gib), max_delay=15,
-                                demand_bytes=lambda: incoming[0])
-        self.assertEqual(policy._budget(gib), 15)
-        self.assertLess(policy._budget(4*gib), policy._budget(gib))
-        incoming[0] = 4*gib
-        self.assertEqual(policy._budget(gib), 7.5)
-        incoming[0] = 8*gib
-        self.assertEqual(policy._budget(gib), 0)
 
     def test_queued_wake_demand_ends_an_existing_warm_wait(self):
         incoming = [0]
         policy = WarmParkPolicy(lambda: Pressure(.8, 0, 0, 1024),
-                                demand_bytes=lambda: incoming[0])
+                                demand=lambda: MemoryDemand(incoming[0], incoming[0]))
         def wait():
             with policy.defer('sandbox') as event:
                 return event.is_set()
@@ -381,11 +330,6 @@ class WarmDemandTests(unittest.TestCase):
             incoming[0] = 1024
             self.assertFalse(waiting.result(timeout=1))
 
-    def test_learning_can_retain_waits_longer_than_two_seconds(self):
-        policy = WarmParkPolicy(lambda: Pressure(.8, 0), max_delay=15)
-        policy._responses.extend([4, 7, 9, 12])
-        self.assertEqual(policy._budget(), 12)
-
 
 class PressureDrivenWarmParkTests(unittest.TestCase):
     def test_spare_memory_retains_long_model_wait_without_an_infinite_retry(self):
@@ -393,7 +337,7 @@ class PressureDrivenWarmParkTests(unittest.TestCase):
         from ucloud_sandboxes.warm_park import WarmParkDeferred
         pressure = [Pressure(.8, 0, 0, 80 * 1024**3)]
         incoming = [0]
-        policy = WarmParkPolicy(lambda: pressure[0], demand_bytes=lambda: incoming[0])
+        policy = WarmParkPolicy(lambda: pressure[0], demand=lambda: MemoryDemand(incoming[0], incoming[0]))
         for now in (0, 20, 60, 600):
             with patch('ucloud_sandboxes.warm_park.time.monotonic', return_value=now):
                 with self.assertRaises(WarmParkDeferred) as deferred:
@@ -418,7 +362,106 @@ class PressureDrivenWarmParkTests(unittest.TestCase):
         self.assertIn(key, policy._waiting_since)
         for low in (Pressure(.05, 0, 0, 1024), Pressure(.8, 10, 0, 80 * 1024**3)):
             pressure[0] = low
+            policy._settle_until = 0
+            policy._retry_after.clear()
             with policy.defer(key, blocking=False):
                 pass
         policy.wake(key)
         self.assertNotIn(key, policy._waiting_since)
+
+
+class ResidentWaitReclaimTests(unittest.TestCase):
+    GIB = 1024**3
+
+    def retain(self, policy, key, memory_bytes=0):
+        from ucloud_sandboxes.warm_park import WarmParkDeferred
+        with self.assertRaises(WarmParkDeferred):
+            with policy.defer(key, memory_bytes=memory_bytes, blocking=False):
+                self.fail('wait should stay resident')
+
+    def test_512_old_waits_use_available_memory_without_checkpoint_expiry(self):
+        from unittest.mock import patch
+        policy = WarmParkPolicy(lambda: Pressure(.20, 1, 0, 20*self.GIB))
+        with patch('ucloud_sandboxes.warm_park.time.monotonic', return_value=10):
+            for key in range(512):
+                self.retain(policy, key, 4*self.GIB)
+        # Large configured limits are not another resident-memory charge.
+        with patch('ucloud_sandboxes.warm_park.time.monotonic', return_value=3610):
+            for key in range(512):
+                self.assertFalse(policy.ready(key, memory_bytes=4*self.GIB))
+        self.assertEqual(policy.snapshot()['resident_waits'], 512)
+        self.assertEqual(policy.snapshot()['checkpoints_completed'], 0)
+
+    def test_memory_hysteresis_and_completed_reclaim_stop_at_recovered_headroom(self):
+        from contextlib import ExitStack
+        from unittest.mock import patch
+        pressure = [Pressure(.20, 0, 0, 20*self.GIB)]
+        policy = WarmParkPolicy(lambda: pressure[0])
+        for key in range(8):
+            self.retain(policy, key, self.GIB)
+        pressure[0] = Pressure(.04, 0, 0, 4*self.GIB)
+        # To recover 7.5 GiB headroom from 4 GiB needs four 1 GiB
+        # projected releases, not all eight and not a fixed concurrency cap.
+        with ExitStack() as stack:
+            for key in range(4):
+                stack.enter_context(policy.defer(key, memory_bytes=self.GIB, blocking=False))
+            self.retain(policy, 4, self.GIB)
+            self.assertEqual(policy.snapshot()['checkpoint_inflight'], 4)
+            for key in range(4):
+                policy.parked(key)
+        # Recovery above the entrance floor but below the exit floor remains
+        # latched; once it reaches 8 GiB remaining waits stay resident.
+        pressure[0] = Pressure(.06, 0, 0, 6*self.GIB)
+        self.assertTrue(policy._needs_reclaim(pressure[0], MemoryDemand()))
+        pressure[0] = Pressure(.08, 0, 0, 8*self.GIB)
+        with patch('ucloud_sandboxes.warm_park.time.monotonic', return_value=time.monotonic()+1):
+            self.assertFalse(policy.ready(4, memory_bytes=self.GIB))
+        self.assertEqual(policy.snapshot()['checkpoints_completed'], 4)
+        self.assertEqual(policy.snapshot()['resident_waits'], 4)
+        pressure[0] = Pressure(.06, 0, 0, 6*self.GIB)
+        self.assertFalse(policy._needs_reclaim(pressure[0], MemoryDemand()))
+
+    def test_saturated_storage_does_not_turn_reclaim_psi_into_more_checkpoints(self):
+        pressure = [Pressure(.20, 30, 75, 20*self.GIB)]
+        demand = [0]
+        policy = WarmParkPolicy(lambda: pressure[0], demand=lambda: MemoryDemand(demand[0], demand[0]))
+        self.retain(policy, 'model', self.GIB)
+        self.assertEqual(policy.snapshot()['reason'], 'storage_backpressure')
+        # Real foreground memory demand still makes progress under disk PSI.
+        demand[0] = 20*self.GIB
+        with policy.defer('model', memory_bytes=self.GIB, blocking=False):
+            self.assertEqual(policy.snapshot()['reason'], 'queued_demand')
+            self.assertLessEqual(policy.snapshot()['reclaim_target_bytes'], 5*self.GIB)
+            policy.parked('model')
+
+    def test_failed_or_busy_oldest_wait_does_not_block_other_safe_points(self):
+        from unittest.mock import patch
+        pressure = [Pressure(.8, 0)]
+        policy = WarmParkPolicy(lambda: pressure[0])
+        self.retain(policy, 'busy')
+        self.retain(policy, 'ready')
+        pressure[0] = Pressure(.01, 20)
+        with self.assertRaisesRegex(RuntimeError, 'busy'):
+            with policy.defer('busy', blocking=False):
+                raise RuntimeError('busy')
+        with patch('ucloud_sandboxes.warm_park.time.monotonic', return_value=time.monotonic()+.3):
+            with policy.defer('ready', blocking=False):
+                policy.parked('ready')
+        policy.forget('busy')
+        policy.wake('ready')
+        self.assertEqual(policy.snapshot()['resident_waits'], 0)
+        self.assertEqual(policy.snapshot()['checkpoint_inflight'], 0)
+
+    def test_cancellation_returns_projected_credit_without_faking_reclaimed_memory(self):
+        from unittest.mock import patch
+        policy = WarmParkPolicy(lambda: Pressure(.01, 20, 50, self.GIB))
+        with self.assertRaises(KeyboardInterrupt):
+            with policy.defer('cancelled', memory_bytes=self.GIB, blocking=False):
+                self.assertGreater(policy.snapshot()['projected_reclaim_bytes'], 0)
+                raise KeyboardInterrupt()
+        self.assertEqual(policy.snapshot()['projected_reclaim_bytes'], 0)
+        self.assertEqual(policy.snapshot()['checkpoints_completed'], 0)
+        with patch('ucloud_sandboxes.warm_park.time.monotonic', return_value=time.monotonic()+.3):
+            with policy.defer('next', memory_bytes=self.GIB, blocking=False):
+                policy.parked('next')
+        self.assertEqual(policy.snapshot()['checkpoints_completed'], 1)

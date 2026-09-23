@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+from concurrent.futures import ThreadPoolExecutor
 import time
 from contextlib import contextmanager, nullcontext
 from dataclasses import replace
@@ -9,9 +11,11 @@ from threading import Event, Lock, RLock, Thread, local
 from typing import BinaryIO, Iterator
 from uuid import uuid4
 
+from .background_io import PressureSampler
 from .direct_service import DirectSandboxService
 from .direct_registry import DirectRegistryConflictError
 from .warm_park import WarmParkDeferred, WarmParkPolicy
+from .transition_admission import MemoryDemand
 from .managed_process import (
     ManagedProcessLogChunk,
     ManagedProcessRecord,
@@ -202,6 +206,9 @@ class DirectLifecycle:
         self.owner = owner
         self._coordinator = SandboxLifecycleCoordinator()
 
+    def is_idle(self, sandbox_id: str) -> bool:
+        return self._coordinator.is_idle(sandbox_id)
+
     def acquire_shared(self, sandbox_id: str) -> None:
         # A parked guest can race a tool request with a local deferred park.
         # Queue before accepting exec/file activity, then re-read registration
@@ -278,8 +285,13 @@ class DirectNodeRuntime:
         service: DirectSandboxService,
     ) -> None:
         self.service = service
+        memory_backing_root = getattr(
+            getattr(getattr(service, "warden", None), "config", None),
+            "application_memory_root", None,
+        )
         self._warm_parks = WarmParkPolicy(
-            demand_bytes=getattr(service, "warm_park_demand_bytes", lambda: 0),
+            PressureSampler(memory_backing_root=memory_backing_root).sample,
+            demand=getattr(service, "warm_park_demand", lambda: MemoryDemand()),
         )
         self.lifecycle = DirectLifecycle(self)
         self.runtime = DirectExecRuntime(self)
@@ -300,6 +312,12 @@ class DirectNodeRuntime:
         self._relay_parking_thread: Thread | None = None
         self._relay_parking_guard = Lock()
         self._deferred_relay_parks: dict[tuple, dict] = {}
+        # Own one executor for local lifecycle rechecks, not one per request.
+        # CPU parallelism bounds Python/kernel orchestration; reclaim byte
+        # credits independently decide which checkpoints resources need.
+        self._relay_park_workers = max(1, os.cpu_count() or 1)
+        self._relay_park_executor = None
+        self._relay_park_tasks = {}
 
     def start(self) -> None:
         self._background_stop.clear()
@@ -333,43 +351,92 @@ class DirectNodeRuntime:
         if thread is not None:
             thread.join(timeout=2.0)
         self._relay_parking_thread = None
+        with self._relay_parking_guard:
+            executor, self._relay_park_executor = self._relay_park_executor, None
+        if executor is not None:
+            # Do not cancel an in-flight checkpoint mid-transaction. Queued
+            # rechecks may be cancelled; their durable relay intent survives.
+            executor.shutdown(wait=False, cancel_futures=True)
+
+    def resident_wait_snapshot(self):
+        return {**self._warm_parks.snapshot(), **self.service.resident_demand_snapshot()}
 
     def _relay_parking_loop(self) -> None:
+        next_sample = 0.0
         while not self._background_stop.wait(0.25):
+            if time.monotonic() >= next_sample:
+                try:
+                    sampler = getattr(self.service, "refresh_resident_memory", None)
+                    if sampler is not None:
+                        sampler()
+                except (OSError, RuntimeError, ValueError):
+                    pass  # Missing observations carry no projected reclaim credit.
+                next_sample = time.monotonic() + 1.0
             self._recheck_relay_parks()
 
     def _recheck_relay_parks(self) -> None:
-        # The relay retains the durable intent and retries it after a restart.
-        # This local optimization only avoids round trips to re-read pressure.
-        # No registry read/write occurs for sandboxes still retained warm.
+        # The relay retains durable intents. Local scheduling never changes
+        # their generation/activity fences or grants lifecycle authority.
         with self._relay_parking_guard:
+            for key, task in tuple(self._relay_park_tasks.items()):
+                if task.done():
+                    self._relay_park_tasks.pop(key)
             pending = tuple(self._deferred_relay_parks.items())
         for key, entry in pending:
             if self._background_stop.is_set():
                 return
+            sample = self._resident_wait_memory_sample(key)
+            entry['memory_bytes'] = sample.current_bytes if sample is not None else 0
+            ram_bytes = self.service.resident_memory_ram_bytes(key[0], key[1], sample)
             if time.monotonic() < entry['retry_at'] or not self._warm_parks.ready(
-                key, memory_bytes=entry['memory_bytes'],
+                key, memory_bytes=entry['memory_bytes'], ram_bytes=ram_bytes,
             ):
                 continue
-            try:
-                record, _ = self.park_with_activity_revision(
-                    key[0], generation=key[1], relay_request_id=key[2],
-                    operation_id=entry['operation_id'], background=entry['background'],
-                )
-            except WarmParkDeferred:
-                continue
-            except (SandboxConflictError, DirectRegistryConflictError):
-                record = None  # A durable wake/deletion/replacement wins.
-            except (RuntimeError, ValueError):
-                # Busy or temporarily failed checkpoints keep their intent.
-                entry['retry_at'] = time.monotonic() + 1.0
-                continue
-            if record is not None and record.state == 'running':
-                entry['retry_at'] = time.monotonic() + 1.0
-                continue
             with self._relay_parking_guard:
-                if self._deferred_relay_parks.get(key) is entry:
-                    self._deferred_relay_parks.pop(key, None)
+                if self._background_stop.is_set():
+                    return
+                if key in self._relay_park_tasks:
+                    continue
+                if len(self._relay_park_tasks) >= self._relay_park_workers:
+                    return  # No unbounded executor queue or blocked HTTP caller.
+                if self._deferred_relay_parks.get(key) is not entry:
+                    continue
+                if self._relay_park_executor is None:
+                    self._relay_park_executor = ThreadPoolExecutor(
+                        max_workers=self._relay_park_workers,
+                        thread_name_prefix="resident-reclaim",
+                    )
+                self._relay_park_tasks[key] = self._relay_park_executor.submit(
+                    self._recheck_relay_park, key, entry,
+                )
+
+    def _recheck_relay_park(self, key, entry) -> None:
+        if self._background_stop.is_set():
+            return
+        with self._relay_parking_guard:
+            if self._deferred_relay_parks.get(key) is not entry:
+                return
+        try:
+            # Re-evaluate the byte budget after scheduling. A wake can win
+            # while this task waits for a CPU worker, or headroom may recover.
+            record, _ = self.park_with_activity_revision(
+                key[0], generation=key[1], relay_request_id=key[2],
+                operation_id=entry['operation_id'], background=entry['background'],
+            )
+        except WarmParkDeferred:
+            return
+        except (SandboxConflictError, DirectRegistryConflictError):
+            record = None  # A durable wake/deletion/replacement wins.
+            self._warm_parks.forget(key)
+        except (RuntimeError, ValueError):
+            entry['retry_at'] = time.monotonic() + 1.0
+            return
+        if record is not None and record.state == 'running':
+            entry['retry_at'] = time.monotonic() + 1.0
+            return
+        with self._relay_parking_guard:
+            if self._deferred_relay_parks.get(key) is entry:
+                self._deferred_relay_parks.pop(key, None)
 
     def _idle_parking_loop(self) -> None:
         idle_seconds = self.service.idle_park_seconds
@@ -459,7 +526,8 @@ class DirectNodeRuntime:
             for key in tuple(self._deferred_relay_parks):
                 if key[:2] == (sandbox_id, generation):
                     self._deferred_relay_parks.pop(key, None)
-                    self._warm_parks.wake(key)
+                    self._warm_parks.forget(key)
+        self._warm_parks.forget_incarnation(sandbox_id, generation)
         return record
 
     def get(self, sandbox_id: str) -> SandboxRecord | None:
@@ -491,6 +559,7 @@ class DirectNodeRuntime:
         background: bool = False,
         relay_request_id: str | None = None,
         generation: int | None = None,
+        resource_phase: dict | None = None,
     ) -> tuple[SandboxRecord, int]:
         if not isinstance(operation_id, str) or not OPERATION_ID_RE.fullmatch(
             operation_id
@@ -502,20 +571,37 @@ class DirectNodeRuntime:
             sandbox_id, generation, relay_request_id,
         ):
             raise SandboxConflictError("relay park was superseded by durable wake")
-        key = (sandbox_id, generation, relay_request_id)
-        memory_bytes = 0
         if relay_request_id is not None:
-            registration = self.service.provisioner.registry.get(sandbox_id)
-            if registration is not None:
-                memory_bytes = (registration.spec.memory_mb or 0) * 1024**2
+            observe_wait = getattr(self.service, "observe_managed_wait", None)
+            if observe_wait is not None:
+                observe_wait(sandbox_id, generation, relay_request_id)
+        key = (sandbox_id, generation, relay_request_id)
+        if resource_phase is not None:
+            if relay_request_id is None or generation is None:
+                raise ValueError("resource phase requires a generation-bound relay park")
+            self._warm_parks.observe_phase(key, resource_phase)
+        memory_bytes = 0
+        ram_bytes = None
+        if relay_request_id is not None:
+            sample = self._resident_wait_memory_sample(key)
+            if sample is not None:
+                memory_bytes = sample.current_bytes
+            ram_bytes = self.service.resident_memory_ram_bytes(sandbox_id, generation, sample)
         snapshot = self.service.get_snapshot(sandbox_id) if hasattr(self.service, 'get_snapshot') else None
         delay = (
-            self._warm_parks.defer(key, memory_bytes=memory_bytes, blocking=False)
+            self._warm_parks.defer(key, memory_bytes=memory_bytes, ram_bytes=ram_bytes, blocking=False)
             if relay_request_id is not None and (snapshot is None or snapshot.state == 'running')
             else nullcontext(None)
         )
         try:
             with delay as cancelled:
+                if relay_request_id is not None and self._reclaim_wait_cache(key, sample, cancelled):
+                    # Keep the same live wait. Actual MemAvailable decides
+                    # whether another reclaim/park is needed after settling.
+                    raise WarmParkDeferred(0.25)
+                if relay_request_id is not None and not self._warm_parks.ready(key, memory_bytes=memory_bytes, ram_bytes=ram_bytes):
+                    if cancelled is None or not cancelled.is_set():
+                        raise WarmParkDeferred(0.25)
                 # Join a concurrent park/wake and then re-evaluate the stable
                 # runtime state. This makes exact replays and crossed lifecycle
                 # calls idempotent without weakening the attached-activity fence.
@@ -534,6 +620,8 @@ class DirectNodeRuntime:
                         operation_id=operation_id,
                         background=background,
                     )
+                    if relay_request_id is not None and record.state == "parked":
+                        self._warm_parks.parked(key)
                     activity_revision = self.service.advance_lifecycle_activity_revision()
                     return record, activity_revision
         except WarmParkDeferred as exc:
@@ -555,6 +643,49 @@ class DirectNodeRuntime:
                 f"{sandbox_id}; launch a long-lived agent in a managed_process "
                 "sandbox through the SDK start_agent() API"
             ) from exc
+
+    def _resident_wait_memory_sample(self, key):
+        sample = (
+            self.service.resident_memory_sample(key[0], key[1])
+            if hasattr(self.service, 'resident_memory_sample') else None
+        )
+        if sample is None or not self._warm_parks.observed_after_wait(
+            key, sample.sampled_at,
+        ):
+            return None
+        return sample
+
+    def _reclaim_wait_cache(self, key, sample, cancelled):
+        reclaim = getattr(self.service, "reclaim_resident_wait", None)
+        if reclaim is None or sample is None or not self.lifecycle.is_idle(key[0]):
+            return False
+        file_backed = getattr(self.service, "resident_application_reclaim_enabled", lambda *_: False)(key[0], key[1])
+        target = self._warm_parks.cache_reclaim_target(
+            key, sample, application_file_backed=file_backed,
+        )
+        if not target:
+            return False
+        try:
+            result = reclaim(
+                key[0],
+                generation=key[1],
+                relay_request_id=key[2],
+                target_bytes=target,
+                is_wait_current=lambda: (
+                    (cancelled is None or not cancelled.is_set())
+                    and self.lifecycle.is_idle(key[0])
+                    and self._warm_parks.cache_reclaim_still_needed(
+                        key, application_file_backed=file_backed,
+                    )
+                ),
+            )
+        except (RuntimeError, ValueError, OSError):
+            self._warm_parks.record_cache_reclaim(key, sample, None)
+            # Cache reclaim is optional. A real deficit still progresses
+            # through the canonical, fully fenced checkpoint path below.
+            return False
+        self._warm_parks.record_cache_reclaim(key, sample, result)
+        return result.reclaimed_bytes >= 16 * 1024**2
 
     def wake(
         self,
@@ -584,8 +715,17 @@ class DirectNodeRuntime:
             operation_id
         ):
             raise ValueError("wake operation id is invalid")
+        # Keep the current safe wait reclaimable until growth is admitted.
+        # Cancelling/fencing every wait before a response burst obtains memory
+        # would leave only non-reclaimable queued continuations on a full node.
         if relay_request_id is not None:
-            self._warm_parks.wake((sandbox_id, generation, relay_request_id))
+            self._warm_parks.response_ready((sandbox_id, generation, relay_request_id))
+            continuation = getattr(self.service, "admit_managed_continuation", None)
+            if continuation is not None:
+                continuation(sandbox_id, generation, relay_request_id)
+        wake_observation = None
+        if relay_request_id is not None:
+            wake_observation = self._warm_parks.wake((sandbox_id, generation, relay_request_id))
             with self._relay_parking_guard:
                 self._deferred_relay_parks.pop((sandbox_id, generation, relay_request_id), None)
         # Waking an already-running sandbox is a successful no-op. Attached
@@ -611,6 +751,8 @@ class DirectNodeRuntime:
                 operation_id=operation_id,
             )
             activity_revision = self.service.advance_lifecycle_activity_revision()
+            if relay_request_id is not None:
+                self._warm_parks.record_wake((sandbox_id, generation, relay_request_id), wake_observation)
             return record, activity_revision
 
     def start_managed_process(
@@ -833,19 +975,24 @@ class DirectNodeRuntime:
                 else record.spec.disk_mb or 0
             )
             storage_dependencies[record.spec.id] = {}
-            disk_charged = True
+            charged_disk_mb = quota_disk
             # Planned and quota-ready registrations are valid, durable create
             # reservations but do not own a runsc sandbox yet. They remain
             # visible in heartbeat capacity accounting while a cold image is
             # materialized.
             if registration.has_direct_sandbox:
-                storage = storage_records[registration.memory_directory]
-                disk_charged = storage.state.value != "published"
+                storage = storage_records[registration.workspace_volume_id]
+                if storage.state.value == "published":
+                    # Publication releases the workspace volume only. Split
+                    # checkpoint memory retains its local quota until deletion.
+                    memory = registration.memory_reference
+                    charged_disk_mb = ((memory.quota_bytes + 1024**2 - 1) // 1024**2
+                                       if memory is not None else 0)
                 if storage.published_layers:
                     storage_dependencies[record.spec.id] = (
                         storage.dependency_publication().to_dict()
                     )
-            resources = ResourceQuantity(disk_mb=quota_disk if disk_charged else 0)
+            resources = ResourceQuantity(disk_mb=charged_disk_mb)
             if record.state == "running":
                 # Direct-runtime CPU and memory limits bound an individual
                 # sandbox; they are not permanent node reservations. Actual
@@ -856,7 +1003,7 @@ class DirectNodeRuntime:
                 reserved = reserved + ResourceQuantity(
                     vcpu=record.spec.cpus or 0,
                     memory_mb=record.spec.memory_mb or 0,
-                    disk_mb=quota_disk if disk_charged else 0,
+                    disk_mb=charged_disk_mb,
                 )
             else:
                 used = used + resources

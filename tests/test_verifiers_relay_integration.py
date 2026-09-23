@@ -4,9 +4,7 @@ import asyncio
 import contextlib
 import importlib.util
 import os
-from pathlib import Path
 import signal
-import tempfile
 import time
 from types import SimpleNamespace
 import unittest
@@ -14,6 +12,7 @@ import unittest
 from aiohttp import web
 
 from ucloud_sandboxes.model_relay import create_model_relay_app
+from tests.postgres_fixture import postgres_database
 
 
 HAS_VERIFIERS = importlib.util.find_spec("verifiers") is not None
@@ -168,13 +167,13 @@ class VerifiersRelayIntegrationTests(unittest.IsolatedAsyncioTestCase):
             runtime.resume_program()
             lifecycle.append(("wake", sandbox_id, sandbox_generation))
 
-        with tempfile.TemporaryDirectory() as directory:
+        async with postgres_database() as database:
             relay_app = create_model_relay_app(
                 sandbox_bearer_token=sandbox_token,
                 worker_bearer_token=worker_token,
                 worker_poll_timeout_seconds=0.1,
                 worker_lease_seconds=30,
-                state_path=Path(directory) / "relay.sqlite3",
+                postgres_store=database,
                 accepted_notifier=park,
                 result_notifier=wake,
             )

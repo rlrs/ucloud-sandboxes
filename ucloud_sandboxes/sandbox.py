@@ -870,6 +870,11 @@ class SandboxLifecycleCoordinator:
         self._shared: dict[str, int] = {}
         self._exclusive: set[str] = set()
 
+    def is_idle(self, sandbox_id: str) -> bool:
+        """An observation for optional cache reclaim, never lifecycle authority."""
+        with self._condition:
+            return sandbox_id not in self._exclusive and not self._shared.get(sandbox_id, 0)
+
     def acquire_shared(
         self,
         sandbox_id: str,

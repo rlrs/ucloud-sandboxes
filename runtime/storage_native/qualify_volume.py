@@ -67,6 +67,8 @@ class Qualifier:
         runsc: Path | None = None,
         conformance_workload: Path | None = None,
         noop_workload: Path | None = None,
+        capture_barrier: bool = False,
+        filesystem: str = "ext4",
     ) -> None:
         self.daemon_binary = daemon_binary
         self.work_root = work_root
@@ -76,14 +78,19 @@ class Qualifier:
         self.runsc = runsc
         self.conformance_workload = conformance_workload
         self.noop_workload = noop_workload
+        self.capture_barrier = capture_barrier
+        self.filesystem = filesystem
         self.test_root: Path | None = None
         self.daemon: subprocess.Popen[str] | None = None
         self.client: AgentEnvUblkClient | None = None
         self.devices: dict[int, StorageNativeDevice] = {}
         self.mounts: list[Path] = []
+        self.snapshot_lowers: list[dict[str, Any]] = []
         self.phases: dict[str, dict[str, Any]] = {}
         self.result: dict[str, Any] = {
-            "schema": 2,
+            "schema": 3,
+            "capture_barrier": capture_barrier,
+            "filesystem": filesystem,
             "status": "failed",
             "upper_mode": upper_mode,
             "virtual_size": virtual_size,
@@ -97,16 +104,24 @@ class Qualifier:
                 self._start_daemon()
             with self._phase("create_and_format"):
                 initial = self._create_initial_device()
-                self._command("mkfs.ext4", "-F", "-m", "0", str(initial.device_path))
+                if self.filesystem == "xfs":
+                    self._command("mkfs.xfs", "-f", str(initial.device_path))
+                else:
+                    self._command("mkfs.ext4", "-F", "-m", "0", str(initial.device_path))
             with self._phase("mount_and_populate", initial):
                 initial_mount = self.test_root / "initial-mount"
                 initial_mount.mkdir()
-                self._mount(initial.device_path, initial_mount, "-o", "noatime")
+                self._mount(initial.device_path, initial_mount, "-o", self._mount_options)
                 self._populate_and_verify_initial(initial_mount)
                 if self.runsc is not None:
                     self._gvisor_create_and_park(initial_mount)
             with self._phase("freeze_and_seal", initial):
+                if self.capture_barrier:
+                    self._capture_abort_and_recapture(initial, initial_mount)
                 layer = self._freeze_and_seal(initial, initial_mount)
+                if self.capture_barrier:
+                    self._gvisor_release()
+                    self._unmount(self.test_root / "gvisor-bundle" / "rootfs")
             with self._phase("release_initial"):
                 self._unmount(self.test_root / "overlay-merged")
                 self._unmount(initial_mount)
@@ -115,7 +130,7 @@ class Qualifier:
                 resumed = self._create_resumed_device(layer)
                 resumed_mount = self.test_root / "resumed-mount"
                 resumed_mount.mkdir()
-                self._mount(resumed.device_path, resumed_mount, "-o", "noatime")
+                self._mount(resumed.device_path, resumed_mount, "-o", self._mount_options)
             with self._phase("verify_reconstructed", resumed):
                 self._verify_reconstructed(resumed_mount)
                 if self.runsc is not None:
@@ -144,6 +159,9 @@ class Qualifier:
             return self.result
         except BaseException as exc:
             self.result["error"] = f"{type(exc).__name__}: {exc}"
+            if isinstance(exc, subprocess.CalledProcessError):
+                self.result["command_stderr"] = exc.stderr
+                self.result["command_stdout"] = exc.stdout
             raise
         finally:
             self.result["phases"] = self.phases
@@ -153,6 +171,10 @@ class Qualifier:
                 json.dumps(self.result, indent=2, sort_keys=True) + "\n",
                 encoding="utf-8",
             )
+
+    @property
+    def _mount_options(self) -> str:
+        return "noatime,nouuid" if self.filesystem == "xfs" else "noatime"
 
     def _preflight(self) -> None:
         if sys.platform != "linux":
@@ -177,6 +199,10 @@ class Qualifier:
             "hybridLogStructured",
         }:
             raise ValueError("unsupported overlaybd upper mode")
+        if self.filesystem not in {"ext4", "xfs"}:
+            raise ValueError("unsupported qualification filesystem")
+        if self.capture_barrier and self.runsc is None:
+            raise ValueError("--capture-barrier requires the gVisor fixture")
         gvisor_inputs = (
             self.runsc,
             self.conformance_workload,
@@ -202,7 +228,7 @@ class Qualifier:
             "fallocate",
             "fsfreeze",
             "getfacl",
-            "mkfs.ext4",
+            f"mkfs.{self.filesystem}",
             "mount",
             "setfacl",
             "umount",
@@ -378,12 +404,12 @@ class Qualifier:
         self._sync_directory(hibernate)
         self._command("sync")
 
-    def _freeze_and_seal(self, device: StorageNativeDevice, mount_path: Path):
+    def _freeze_and_seal(self, device: StorageNativeDevice, mount_path: Path, *, name: str = "generation-1"):
         assert self.test_root is not None
         assert self.client is not None
         layers = self.test_root / "layers"
-        layers.mkdir()
-        output = layers / "generation-1.commit"
+        layers.mkdir(exist_ok=True)
+        output = layers / f"{name}.commit"
         self._command("fsfreeze", "--freeze", str(mount_path))
         try:
             layer = self.client.restack_snapshot(device.device_id, output)
@@ -393,22 +419,26 @@ class Qualifier:
             raise RuntimeError("restack did not create the snapshot layer")
         if layer is not None and output.stat().st_size != layer.size:
             raise RuntimeError("snapshot descriptor size does not match the layer")
+        lower: dict[str, Any] = {"file": str(output)}
+        if layer is not None:
+            lower.update({"digest": layer.digest, "size": layer.size})
+        self.snapshot_lowers.append(lower)
         self.result["layer"] = asdict(layer) if layer is not None else None
         return layer
 
-    def _create_resumed_device(self, layer) -> StorageNativeDevice:
+    def _create_resumed_device(self, layer, *, name: str = "resumed", layer_name: str = "generation-1") -> StorageNativeDevice:
         assert self.test_root is not None
         assert self.client is not None
-        layer_path = self.test_root / "layers" / "generation-1.commit"
-        source = self.test_root / "source-resumed.json"
-        lower = {"file": str(layer_path)}
-        if layer is not None:
-            lower.update({"digest": layer.digest, "size": layer.size})
+        layer_path = self.test_root / "layers" / f"{layer_name}.commit"
+        source = self.test_root / f"source-{name}.json"
+        index = next(index for index, lower in enumerate(self.snapshot_lowers)
+                     if lower["file"] == str(layer_path))
+        lowers = self.snapshot_lowers[:index + 1]
         self._write_json(
             source,
             {
                 "repoBlobUrl": "",
-                "lowers": [lower],
+                "lowers": lowers,
                 "upper": {},
                 "resultFile": "",
             },
@@ -416,9 +446,9 @@ class Qualifier:
         device = self.client.create_runtime_device(
             source_image_config=source,
             global_config=self.test_root / "global.json",
-            runtime_dir=self.test_root / "runtime-resumed",
+            runtime_dir=self.test_root / f"runtime-{name}",
             virtual_size=self.virtual_size,
-            owner_id="qualification-resumed",
+            owner_id=f"qualification-{name}",
             upper_mode=self.upper_mode,
         )
         self._register_device(device)
@@ -462,6 +492,10 @@ class Qualifier:
         bundle = self.test_root / "gvisor-bundle"
         rootfs = bundle / "rootfs"
         rootfs.mkdir(parents=True)
+        if self.capture_barrier:
+            backing_rootfs = volume / "gvisor-rootfs"
+            backing_rootfs.mkdir()
+            self._mount(backing_rootfs, rootfs, "--bind")
         for directory in ("dev", "proc", "run", "sys", "tmp"):
             (rootfs / directory).mkdir()
         shutil.copyfile(
@@ -487,9 +521,9 @@ class Qualifier:
             "up",
         )
         memory_directory = "gvisor-qualifier.sandbox-1"
-        memory_root = volume / "gvisor-memory"
+        memory_root = (self.test_root if self.capture_barrier else volume) / "gvisor-memory"
         (memory_root / memory_directory).mkdir(mode=0o700, parents=True)
-        checkpoint = volume / "gvisor-checkpoint" / "generation-1"
+        checkpoint = (self.test_root if self.capture_barrier else volume) / "gvisor-checkpoint" / "generation-1"
         checkpoint.mkdir(mode=0o700, parents=True)
         self._write_json(
             bundle / "config.json",
@@ -540,15 +574,13 @@ class Qualifier:
         park_seconds = time.monotonic() - started
         if not Path(f"/proc/{sentry_pid}").exists():
             raise RuntimeError("gVisor sentry died before explicit release")
-        self._gvisor_command(
-            *state,
-            "delete",
-            "--force",
-            "storage-native-qualifier",
-            capture=False,
-        )
-        if Path(f"/proc/{sentry_pid}").exists():
-            raise RuntimeError("gVisor sentry survived explicit release")
+        if not self.capture_barrier:
+            self._gvisor_release()
+        else:
+            paused = json.loads(self._gvisor_command(*state, "state", "storage-native-qualifier").stdout)
+            if paused["pid"] != sentry_pid or paused["status"] != "paused":
+                raise RuntimeError("capture did not retain the exact paused sentry")
+            self.result["capture_sentry_pid"] = sentry_pid
         memory_artifact = checkpoint / "application_memory.img"
         if not memory_artifact.is_file():
             raise RuntimeError("gVisor hibernate did not capture application memory")
@@ -566,14 +598,78 @@ class Qualifier:
             "checkpoint_artifacts": artifacts,
         }
 
+    def _gvisor_release(self) -> None:
+        state = self._gvisor_state()
+        current = json.loads(self._gvisor_command(*state, "state", "storage-native-qualifier").stdout)
+        pid = int(current["pid"])
+        self._gvisor_command(*state, "delete", "--force", "storage-native-qualifier", capture=False)
+        if Path(f"/proc/{pid}").exists():
+            raise RuntimeError("gVisor sentry survived explicit release")
+
+    def _capture_abort_and_recapture(self, device: StorageNativeDevice, volume: Path) -> None:
+        """Prove a pre-reap revision stays immutable after the original resumes."""
+        assert self.test_root is not None
+        rootfs = self.test_root / "gvisor-bundle" / "rootfs"
+        marker = rootfs / "capture-identity"
+        marker.write_text("prepared\n")
+        layer = self._freeze_and_seal(device, volume, name="abort-proof")
+        state = self._gvisor_state()
+        self._gvisor_command(*state, "resume", "storage-native-qualifier")
+        current = json.loads(self._gvisor_command(*state, "state", "storage-native-qualifier").stdout)
+        if current["pid"] != self.result["capture_sentry_pid"] or current["status"] != "running":
+            raise RuntimeError("capture abort did not resume the exact original sentry")
+        response = self._gvisor_command(*state, "exec", "storage-native-qualifier", "/conformance-workload", "client").stdout.strip()
+        if not response.startswith("ok "):
+            raise RuntimeError("capture abort corrupted application memory")
+        marker.write_text("resumed\n")
+        clone = self._create_resumed_device(layer, name="abort-proof", layer_name="abort-proof")
+        clone_mount = self.test_root / "abort-proof-mount"
+        clone_mount.mkdir()
+        self._mount(clone.device_path, clone_mount, "-o", self._mount_options)
+        if (clone_mount / "gvisor-rootfs" / "capture-identity").read_text() != "prepared\n":
+            raise RuntimeError("prepared revision observed writes after abort")
+        self._unmount(clone_mount)
+        self._delete_device(clone)
+        checkpoint = self.test_root / "gvisor-checkpoint" / "generation-1"
+        # A resumed capture moves its application-memory file back to active
+        # ownership. Remaining obsolete kernel state has no live references.
+        shutil.rmtree(checkpoint)
+        checkpoint.mkdir()
+        self._gvisor_command(*self._gvisor_common(self.test_root / "gvisor-memory"),
+            "checkpoint", "--hibernate", f"--image-path={checkpoint}", "storage-native-qualifier", timeout=120)
+        current = json.loads(self._gvisor_command(*state, "state", "storage-native-qualifier").stdout)
+        if current["pid"] != self.result["capture_sentry_pid"] or current["status"] != "paused":
+            raise RuntimeError("second capture lost original paused ownership")
+        self.result["capture_abort"] = {"same_sentry": True, "response": response, "snapshot_immutable": True}
+
     def _gvisor_restore_and_verify(
         self,
         device: StorageNativeDevice,
         volume: Path,
     ) -> None:
         assert self.test_root is not None
-        memory_root = volume / "gvisor-memory"
-        checkpoint = volume / "gvisor-checkpoint" / "generation-1"
+        memory_root = (self.test_root if self.capture_barrier else volume) / "gvisor-memory"
+        checkpoint = (self.test_root if self.capture_barrier else volume) / "gvisor-checkpoint" / "generation-1"
+        if self.capture_barrier:
+            rootfs = self.test_root / "gvisor-bundle" / "rootfs"
+            self._mount(volume / "gvisor-rootfs", rootfs, "--bind")
+            if (rootfs / "capture-identity").read_text() != "resumed\n":
+                raise RuntimeError("committed workspace revision is not the second capture")
+            # The original sentry is reaped. Its self-backed gofer file is
+            # private runtime backing captured by pages.img; runsc requires a
+            # fresh file for the new candidate. Remove only that exact file
+            # from the writable restore clone, never from the sealed revision.
+            filestore = rootfs / ".gvisor.filestore.storage-native-qualifier"
+            metadata = filestore.lstat()
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != 0:
+                raise RuntimeError("captured runtime filestore has unexpected ownership/type")
+            filestore.unlink()
+            self._sync_directory(rootfs)
+            self.result["restore_filestore_cleanup"] = {
+                "path": filestore.name, "allocated_bytes": metadata.st_blocks * 512,
+                "scope": "writable restore clone",
+            }
+
         common = self._gvisor_common(memory_root)
         state = self._gvisor_state()
         self._command("sync")
@@ -586,6 +682,7 @@ class Qualifier:
             "restore",
             "--detach",
             "--background",
+            *(["--start-paused"] if self.capture_barrier else []),
             f"--image-path={checkpoint}",
             f"--bundle={self.test_root / 'gvisor-bundle'}",
             "storage-native-qualifier",
@@ -594,6 +691,13 @@ class Qualifier:
         )
         restore_seconds = time.monotonic() - started
         after_restore = self._device_sectors(device)
+
+        if self.capture_barrier:
+            candidate = json.loads(self._gvisor_command(*state, "state", "storage-native-qualifier").stdout)
+            if candidate["status"] != "paused":
+                raise RuntimeError("restore candidate executed before authority handoff")
+            self._gvisor_command(*state, "resume", "storage-native-qualifier")
+            self.result["restore_candidate_paused"] = True
 
         started = time.monotonic()
         self._gvisor_command(
@@ -627,6 +731,8 @@ class Qualifier:
             capture=False,
         )
 
+        if self.capture_barrier:
+            self._unmount(self.test_root / "gvisor-bundle" / "rootfs")
         gvisor = self.result["gvisor"]
         memory_allocated = int(
             gvisor["checkpoint_artifacts"]["application_memory.img"][
@@ -670,6 +776,7 @@ class Qualifier:
             },
             "hostname": "storage-native-qualifier",
             "linux": {
+                "cgroupsPath": f"/ucloud-capture-qualification-{os.getpid()}",
                 "namespaces": [
                     {"type": "pid"},
                     {"path": f"/run/netns/{namespace}", "type": "network"},
@@ -797,14 +904,21 @@ class Qualifier:
         timeout: float = 60,
         capture: bool = True,
     ) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            args,
-            check=True,
-            text=True,
-            stdout=subprocess.PIPE if capture else subprocess.DEVNULL,
-            stderr=subprocess.PIPE if capture else subprocess.DEVNULL,
-            timeout=timeout,
-        )
+        # Detached gofer/sentry children inherit stderr. A PIPE would make
+        # communicate wait for those children, even after runsc has exited.
+        with tempfile.TemporaryFile(mode="w+t") as error_stream:
+            result = subprocess.run(
+                args, check=False, text=True,
+                stdout=subprocess.PIPE if capture else subprocess.DEVNULL,
+                stderr=error_stream, timeout=timeout,
+            )
+            error_stream.seek(0)
+            result.stderr = error_stream.read()
+            if result.returncode:
+                raise subprocess.CalledProcessError(
+                    result.returncode, args, output=result.stdout, stderr=result.stderr,
+                )
+            return result
 
     def _verify_fs_semantics(self, fs_dir: Path) -> None:
         renamed = fs_dir / "renamed.txt"
@@ -1003,6 +1117,9 @@ def parse_args() -> argparse.Namespace:
         choices=("sparse", "logStructured", "hybridLogStructured"),
         default="hybridLogStructured",
     )
+    parser.add_argument("--filesystem", choices=("ext4", "xfs"), default="ext4")
+    parser.add_argument("--capture-barrier", action="store_true",
+                        help="Qualify pre-reap workspace snapshot and independent memory backing")
     parser.add_argument("--runsc", type=Path)
     parser.add_argument("--conformance-workload", type=Path)
     parser.add_argument("--noop-workload", type=Path)
@@ -1017,6 +1134,8 @@ def main() -> int:
         output=args.output.resolve(),
         virtual_size=args.size_gib * GIB,
         upper_mode=args.upper_mode,
+        capture_barrier=args.capture_barrier,
+        filesystem=args.filesystem,
         runsc=args.runsc.resolve() if args.runsc else None,
         conformance_workload=(
             args.conformance_workload.resolve()

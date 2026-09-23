@@ -699,7 +699,9 @@ class ImageManager:
         queue_builds: bool = False,
         max_concurrent_pulls: int = 8,
         telemetry: Telemetry | None = None,
+        environment_publisher: Callable[[ImageBuildSpec], str] | None = None,
     ) -> None:
+        self.environment_publisher = environment_publisher
         self.store = store
         self.runtime = runtime
         self.build_store = build_store or ImageBuildStore(store.path)
@@ -1089,6 +1091,13 @@ class ImageManager:
                 finally:
                     phases["docker_push_ms"] = _elapsed_ms(phase)
                     self._update_build_timings(build_id, phases, started)
+            manifest_digest = ""
+            if push and not self.runtime.dry_run and self.environment_publisher is not None:
+                phase = time.monotonic()
+                manifest_digest = self.environment_publisher(spec)
+                if not normalize_manifest_digest(manifest_digest):
+                    raise ValueError("immutable environment publisher returned an invalid image digest")
+                phases["immutable_environment_ms"] = _elapsed_ms(phase)
             now = utc_now()
             image_record = ImageRecord(
                 id=spec.id,
@@ -1099,6 +1108,7 @@ class ImageManager:
                 updated_at=now,
                 labels=spec.labels,
                 pushed=push,
+                manifest_digest=manifest_digest,
             )
             self.store.upsert(image_record)
             self._update_build(

@@ -5,7 +5,7 @@ from collections.abc import Awaitable, Callable
 import logging
 
 from .model import StateConflict, WakeOperation, WakeProof, positive_seconds
-from .postgres import PostgresControlStore
+from .qualification import QualificationControlStore
 
 
 class WakeDispatcher:
@@ -18,7 +18,7 @@ class WakeDispatcher:
     """
 
     def __init__(
-        self, store: PostgresControlStore,
+        self, store: QualificationControlStore,
         wake: Callable[[WakeOperation], Awaitable[WakeProof]], *,
         concurrency: int = 16, claim_seconds: float = 30,
         rpc_seconds: float = 10, retry_seconds: float = .1,

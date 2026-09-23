@@ -14,6 +14,7 @@ from ucloud_sandboxes.config import DeploymentConfig
 from ucloud_sandboxes.vm_init import render_vm_init_script
 from ucloud_sandboxes.models import (
     LiveScaleSignals,
+    NodeRuntimeMetrics,
     ResourceQuantity,
     SandboxDemand,
     SandboxPlacementRequest,
@@ -89,18 +90,25 @@ class StartupScalingTests(unittest.TestCase):
             max_create_per_cycle=4,
             create_pressure_max_headroom_nodes=1,
         )
-        self.ready = node("busy", active=8, total_resources=self.resources)
+        # This queue already fits RAM. These tests isolate sustained startup
+        # headroom, while test_memory_forecast_policy covers large cold bursts.
+        self.low_memory = NodeRuntimeMetrics(collected_at=utc_now(),
+            memory_total_mb=self.resources.memory_mb,
+            memory_available_mb=self.resources.memory_mb - 8192,
+            memory_working_set_mb=8192)
+        self.ready = node("busy", active=8, total_resources=self.resources,
+                          runtime_metrics=self.low_memory)
         self.signals = LiveScaleSignals(
             observation_samples=2,
             latest_observation_age_seconds=1,
             cpu_utilization=0.30,
         )
         self.demand = SandboxDemand(
-            pending_count=256,
+            pending_count=8,
             oldest_capacity_pending_seconds=30,
             oldest_pending_seconds=30,
             placement_requests=(
-                SandboxPlacementRequest(resources=self.shape, count=256),
+                SandboxPlacementRequest(resources=self.shape, count=8),
             ),
         )
 
@@ -139,7 +147,7 @@ class StartupScalingTests(unittest.TestCase):
         self.assertTrue(result.create_pressure_scale_up)
         self.assertEqual(result.creates, 1)
         self.assertIn(
-            "256 capacity request(s) queued for 30s", " ".join(result.reasons)
+            "8 capacity request(s) queued for 30s", " ".join(result.reasons)
         )
 
     def test_short_stale_disabled_or_idle_queues_do_not_buy_headroom(self):
@@ -195,25 +203,22 @@ class StartupScalingTests(unittest.TestCase):
                     0,
                 )
 
-    def test_booting_and_ready_headroom_prevent_repeated_scale_out(self):
-        for extra in (
-            node(
-                "starting",
-                state="IN_QUEUE",
-                fresh=False,
-                heartbeat_present=False,
-                total_resources=self.resources,
-            ),
-            node("busy-2", active=8, total_resources=self.resources),
-        ):
+    def test_provisioning_credit_and_continued_busy_backlog(self):
+        starting = node("starting",state="IN_QUEUE",fresh=False,
+                        heartbeat_present=False,total_resources=self.resources)
+        busy = node("busy-2",active=8,total_resources=self.resources,
+                    runtime_metrics=self.low_memory)
+        for extra, expected in ((starting,0),(busy,1)):
             with self.subTest(extra=extra.job.id):
-                decision = evaluate_scale(
-                    [self.ready, extra],
-                    self.demand,
-                    self.policy,
-                    live_signals=self.signals,
-                )
-                self.assertEqual(decision.creates, 0)
+                decision = evaluate_scale([self.ready,extra],self.demand,self.policy,
+                                          live_signals=self.signals)
+                self.assertEqual(decision.resource_deficit,ResourceQuantity())
+                self.assertEqual(decision.creates,expected)
+        # The newly requested headroom is credited on the next cycle while it
+        # boots; the same queue cannot purchase it a second time.
+        decision = evaluate_scale([self.ready,busy,starting],self.demand,self.policy,
+                                  live_signals=self.signals)
+        self.assertEqual(decision.creates,0)
 
     def test_preparations_and_noncapacity_errors_do_not_age_capacity_queue(self):
         now = utc_now()

@@ -21,7 +21,8 @@ from psycopg import AsyncConnection, sql
 from psycopg.types.json import Jsonb
 
 from .. import model_relay as api
-from .postgres import PostgresControlStore
+from ..relay_phase import METADATA_KEY as PHASE_METADATA_KEY, current_phase, phase_update
+from .database import PostgresDatabase
 
 LOGGER = logging.getLogger(__name__)
 # Reserve response space BEFORE accepting work. This is a durable-storage safety
@@ -30,12 +31,30 @@ RESPONSE_RESERVATION = api.MAX_WORKER_RESPONSE_BYTES + 65536
 DEFAULT_STORAGE_BUDGET = 64 * 1024**3
 
 
+async def _wait_cancellable(awaitable, timeout):
+    """Bound a wait without losing cancellation when its result becomes ready.
+
+    Python 3.10's wait_for can consume task cancellation if the inner future
+    finishes at the same time. A dispatcher then survives shutdown indefinitely.
+    wait() keeps cancellation with this task; we always retire its child wait.
+    """
+    future = asyncio.ensure_future(awaitable)
+    try:
+        done, _ = await asyncio.wait({future}, timeout=timeout)
+        if not done:
+            raise asyncio.TimeoutError
+        return future.result()
+    finally:
+        future.cancel()
+        await asyncio.gather(future, return_exceptions=True)
+
+
 class PostgresRelayState:
     durable_lifecycle = True
 
     def __init__(
         self,
-        store: PostgresControlStore,
+        store: PostgresDatabase,
         *,
         request_timeout_seconds=7200,
         completed_request_retention_seconds=3600,
@@ -70,13 +89,16 @@ class PostgresRelayState:
         )
         self._waiters: dict[str, set[asyncio.Event]] = {}
         self._tasks: list[asyncio.Task] = []
+        self._closing = False
         self._active: set[asyncio.Task] = set()
         self._active_by_action = {action: set() for action in self.notifiers}
+        self._active_claims: dict[tuple[str, str], object] = {}
         self._response_waiters: dict[str, set[asyncio.Future]] = {}
-        self._delivery_waiters: dict[str, set[asyncio.Future]] = {}
         self._delivery_event = asyncio.Event()
+        self._dirty_deliveries: set[str] = set()
         self._notify_event = asyncio.Event()
         self._pending_notifications: set[str] = set()
+        self._poll_waiters: dict[asyncio.Event, tuple[str, str]] = {}
 
     async def open(self):
         await self.store.open()
@@ -131,23 +153,37 @@ class PostgresRelayState:
             self._tasks = [asyncio.create_task(self._listen())]
             if any(self.notifiers.values()):
                 self._tasks.append(asyncio.create_task(self._dispatch_loop()))
+                self._tasks.append(asyncio.create_task(self._renew_lifecycle_loop()))
             self._tasks.append(asyncio.create_task(self._deliver_loop()))
+            self._tasks.append(asyncio.create_task(self._reconcile_poll_waiters()))
             self._tasks.append(asyncio.create_task(self._notify_loop()))
         except BaseException:
             await self.store.close()
             raise
 
     async def aclose(self):
-        for task in self._tasks + list(self._active):
-            task.cancel()
-        await asyncio.gather(*self._tasks, *self._active, return_exceptions=True)
+        # Also record shutdown outside cancellation: a dependency's timed wait
+        # may consume cancellation racing readiness on Python 3.10. In that
+        # case the background loop must not enter another indefinite wait.
+        self._closing = True
+        tasks = set(self._tasks) | self._active
+        pending = tasks
+        while pending:
+            for task in pending:
+                task.cancel()
+            # Retrying cancellation is needed when a dependency consumes the
+            # first signal while entering another wait. asyncio.wait itself
+            # does not consume cancellation; transaction rollback is shielded.
+            _, pending = await asyncio.wait(pending, timeout=0.1)
+        await asyncio.gather(*tasks, return_exceptions=True)
         await self.store.close()
 
     def _signal(self, key):
         if key.startswith("r:") and (
-            key[2:] in self._response_waiters or key[2:] in self._delivery_waiters
+            key[2:] in self._response_waiters
             or key[2:] in self._active_parks
         ):
+            self._dirty_deliveries.add(key[2:])
             self._delivery_event.set()
         for event in tuple(self._waiters.get(key, ())):
             event.set()
@@ -175,7 +211,7 @@ class PostgresRelayState:
         self.store.after_commit(committed)
 
     async def _notify_loop(self):
-        while True:
+        while not self._closing:
             await self._notify_event.wait()
             self._notify_event.clear()
             await asyncio.sleep(0.002)
@@ -197,7 +233,7 @@ class PostgresRelayState:
                 )
 
     async def _listen(self):
-        while True:
+        while not self._closing:
             try:
                 # Dedicated LISTEN connection, never consumes the transaction pool.
                 async with await AsyncConnection.connect(
@@ -209,6 +245,8 @@ class PostgresRelayState:
                     for key in tuple(self._waiters):
                         self._signal(key)
                     async for notification in conn.notifies():
+                        if self._closing:
+                            return
                         self._signal(notification.payload)
             except asyncio.CancelledError:
                 raise
@@ -217,6 +255,57 @@ class PostgresRelayState:
                 # recover missed events and reconnects, without resetting work.
                 LOGGER.warning("relay notification connection lost; reconnecting")
                 await asyncio.sleep(0.5)
+
+    async def _reconcile_poll_waiters(self):
+        """Recover lost queue hints with one read, not a transaction per socket.
+
+        This only wakes existing pollers. The normal claim transaction remains
+        the sole authority for registration, lease expiry and work assignment.
+        """
+        while not self._closing:
+            await asyncio.sleep(0.5)
+            waiting = tuple(self._poll_waiters.items())
+            if not waiting:
+                continue
+            rollouts = list({registration[0] for _, registration in waiting})
+            try:
+                async with self.store.transaction("relay_poll_readiness") as conn:
+                    rows = await (await conn.execute(
+                        """SELECT wanted.rollout_id,g.registration_token,g.enabled,
+                        EXISTS (
+                          SELECT 1 FROM relay_requests r WHERE r.deployment_id=%s
+                          AND r.rollout_id=wanted.rollout_id
+                          AND r.registration_token=g.registration_token
+                          AND r.expires_at>extract(epoch FROM clock_timestamp())
+                          AND (r.state='pending' OR (r.state='leased'
+                            AND r.lease_expires_at<=extract(epoch FROM clock_timestamp())))
+                        ) AS ready
+                        FROM unnest(%s::text[]) AS wanted(rollout_id)
+                        LEFT JOIN relay_rollouts g ON g.deployment_id=%s
+                          AND g.rollout_id=wanted.rollout_id""",
+                        (self.deployment, rollouts, self.deployment),
+                    )).fetchall()
+                by_rollout = {row["rollout_id"]: row for row in rows}
+                for event, (rollout, token) in waiting:
+                    row = by_rollout[rollout]
+                    if (row["ready"] or not row["enabled"]
+                            or row["registration_token"] != token):
+                        event.set()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                # Poll deadlines still perform an authoritative final check;
+                # another batch recovers temporary read/connection failures.
+                LOGGER.warning("relay queue readiness failed; durable work retained")
+
+    @asynccontextmanager
+    async def _watch_poll(self, rollout, token):
+        async with self._watch("q:" + rollout) as event:
+            self._poll_waiters[event] = (rollout, token)
+            try:
+                yield event
+            finally:
+                self._poll_waiters.pop(event, None)
 
     @staticmethod
     async def _now(conn):
@@ -231,19 +320,46 @@ class PostgresRelayState:
         )
 
     async def _registration(self, conn, rollout_id, token=None, *, lock="SHARE"):
+        if lock not in {None, "SHARE", "UPDATE"}:
+            raise ValueError("invalid registration lock")
+        suffix = "" if lock is None else f" FOR {lock}"
         record = await (
             await conn.execute(
-                f"SELECT * FROM relay_rollouts WHERE deployment_id=%s AND rollout_id=%s FOR {lock}",
+                f"SELECT * FROM relay_rollouts WHERE deployment_id=%s AND rollout_id=%s{suffix}",
                 (self.deployment, rollout_id),
             )
         ).fetchone()
+        self._validate_registration(record, token)
+        return record
+
+    @staticmethod
+    def _validate_registration(record, token):
         if record is None or not record["enabled"]:
             raise web.HTTPNotFound(text="rollout is not registered")
         if token is not None and not hmac.compare_digest(
             record["registration_token"], token
         ):
             raise web.HTTPConflict(text="rollout registration is no longer current")
-        return record
+
+    async def _poll_observation(self, conn, rollout_id, token, worker_id, heartbeat_seconds):
+        """Read-only readiness/authentication, never a grant of inference work."""
+        row = await (await conn.execute(
+            """WITH clock AS (SELECT extract(epoch FROM clock_timestamp()) AS now)
+            SELECT g.registration_token,g.enabled,
+              EXISTS (SELECT 1 FROM relay_requests r
+                WHERE r.deployment_id=g.deployment_id AND r.rollout_id=g.rollout_id
+                AND r.registration_token=g.registration_token AND r.expires_at>clock.now
+                AND (r.state='pending' OR (r.state='leased' AND r.lease_expires_at<=clock.now))) AS ready,
+              CASE WHEN %s::text IS NULL THEN NULL
+                ELSE greatest(0,coalesce(w.last_seen_at+%s-clock.now,0)) END AS heartbeat_wait
+            FROM relay_rollouts g CROSS JOIN clock
+            LEFT JOIN relay_workers w ON w.deployment_id=g.deployment_id AND w.rollout_id=g.rollout_id
+              AND w.registration_token=g.registration_token AND w.worker_id=%s
+            WHERE g.deployment_id=%s AND g.rollout_id=%s""",
+            (worker_id, heartbeat_seconds, worker_id, self.deployment, rollout_id),
+        )).fetchone()
+        self._validate_registration(row, token)
+        return row["ready"], (None if row["heartbeat_wait"] is None else float(row["heartbeat_wait"]))
 
     @staticmethod
     def _registration_record(row):
@@ -313,6 +429,36 @@ class PostgresRelayState:
             await self._notify(conn, "q:" + rollout_id)
             return True
 
+    async def update_resource_phase(self, rollout_id, *, registration_token, update):
+        api.validate_rollout_id(rollout_id)
+        api.validate_registration_token(registration_token)
+        try:
+            update = phase_update(update)
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text=str(exc)) from exc
+        async with self.store.transaction("relay_resource_phase") as conn:
+            # The immutable registration token also fences its sandbox binding.
+            # Re-registration/revocation serialize on this same authoritative row.
+            row = await self._registration(conn, rollout_id, registration_token, lock="UPDATE")
+            now = await self._now(conn)
+            metadata = dict(row["metadata"])
+            previous = metadata.get(PHASE_METADATA_KEY)
+            if previous is not None and previous["sequence"] >= update["sequence"]:
+                duplicate = previous["sequence"] == update["sequence"]
+                original = {key: previous[key] for key in update if key in previous}
+                original_keys = set(previous) - {"observed_at", "expires_at"}
+                if duplicate and (original != update or original_keys != set(update)):
+                    raise web.HTTPConflict(text="resource phase sequence already has another payload")
+                return {"accepted": duplicate, "current": current_phase(metadata, now=now)}
+            metadata[PHASE_METADATA_KEY] = {
+                **update, "observed_at": now, "expires_at": now + update["ttl_seconds"],
+            }
+            await conn.execute(
+                "UPDATE relay_rollouts SET metadata=%s WHERE deployment_id=%s AND rollout_id=%s",
+                (Jsonb(metadata), self.deployment, rollout_id),
+            )
+            return {"accepted": True, "current": current_phase(metadata, now=now)}
+
     async def _retire_registration(self, conn, rollout, token, now):
         rows = await (
             await conn.execute(
@@ -349,7 +495,10 @@ class PostgresRelayState:
             raise web.HTTPUnauthorized(text="invalid rollout registration token")
         try:
             async with self.store.transaction("relay_authorize") as conn:
-                await self._registration(conn, rollout_id, registration_token)
+                # This precheck protects body admission, not subsequent work.
+                # Tuple locks here force WAL/COMMIT I/O but expire before the
+                # HTTP body is read. Enqueue checks the token under its lock.
+                await self._registration(conn, rollout_id, registration_token, lock=None)
         except (web.HTTPNotFound, web.HTTPConflict) as exc:
             raise web.HTTPUnauthorized(
                 text="invalid rollout registration token"
@@ -405,6 +554,7 @@ class PostgresRelayState:
         method="POST",
         idempotency_key=None,
         defer_idempotency_until_disconnect=False,
+        expected_registration_token=None,
     ):
         api.validate_rollout_id(rollout_id)
         method = method.upper()
@@ -447,7 +597,7 @@ class PostgresRelayState:
         ).hexdigest()
         size = len(raw) + len(metadata)
         async with self.store.transaction("relay_enqueue") as conn:
-            reg = await self._registration(conn, rollout_id)
+            reg = await self._registration(conn, rollout_id, expected_registration_token)
             token = reg["registration_token"]
             # Serialize only equal idempotency keys; unrelated requests progress.
             if idempotency_key is not None:
@@ -661,50 +811,70 @@ class PostgresRelayState:
         api.validate_registration_token(registration_token)
         if worker_id is not None:
             api.validate_worker_id(worker_id)
-        heartbeat_pending = worker_id is not None
+        # Worker rows are observational retention, not execution leases. Persist
+        # their presence at least three times within either existing lifetime;
+        # explicit heartbeat calls remain immediate. No local auth/freshness cache.
+        heartbeat_seconds = max(0, min(self.worker_retention, lease_seconds)) / 3
         deadline = time.monotonic() + max(0, timeout_seconds)
-        async with self._watch("q:" + rollout_id) as event:
+        async with self._watch_poll(rollout_id, registration_token) as event:
             while True:
                 event.clear()
                 async with self.store.transaction("relay_claim_inference") as conn:
-                    await self._registration(conn, rollout_id, registration_token)
-                    if heartbeat_pending:
-                        await self._write_worker_heartbeat(
-                            conn, rollout_id, registration_token, worker_id, None,
-                        )
-                        heartbeat_pending = False
-                    # A concurrent heartbeat may hold the worker row. Start the
-                    # inference lease only after acquiring that row's lock.
-                    now = await self._now(conn)
-                    # Lock candidates, assign distinct leases and hydrate their
-                    # immutable input bodies in one statement. The row locks
-                    # remain held through commit, including for peer claimers.
-                    rows = await (await conn.execute(
-                        """WITH candidates AS (
-                        SELECT deployment_id,request_id FROM relay_requests
-                        WHERE deployment_id=%s AND rollout_id=%s AND registration_token=%s
-                        AND expires_at>%s AND (state='pending' OR (state='leased' AND lease_expires_at<=%s))
-                        ORDER BY created_at,request_id LIMIT %s FOR UPDATE SKIP LOCKED
-                        ), claimed AS (
-                        UPDATE relay_requests r SET state='leased',
-                        lease_id=replace(gen_random_uuid()::text,'-',''),lease_expires_at=%s,leased_by=%s,
-                        delivered_at=%s,first_delivered_at=coalesce(r.first_delivered_at,%s),
-                        delivery_count=r.delivery_count+1 FROM candidates c
-                        WHERE (r.deployment_id,r.request_id)=(c.deployment_id,c.request_id) RETURNING r.*)
-                        SELECT claimed.*,p.body AS input_body,p.encoding AS input_encoding,p.headers AS input_headers
-                        FROM claimed LEFT JOIN relay_payloads p USING(deployment_id,request_id)
-                        ORDER BY claimed.created_at,claimed.request_id""",
-                        (self.deployment, rollout_id, registration_token, now, now,
-                         max(1, min(256, limit)), now + max(0.001, lease_seconds),
-                         worker_id, now, now),
-                    )).fetchall()
-                    result = [self._loaded_request(row) for row in rows]
+                    ready, heartbeat_wait = await self._poll_observation(
+                        conn, rollout_id, registration_token, worker_id, heartbeat_seconds)
+                    result = []
+                    if ready or heartbeat_wait == 0:
+                        if heartbeat_wait == 0:
+                            # Peers racing a due heartbeat recheck after one
+                            # transaction-scoped gate. A fresh/empty loser never
+                            # takes a row lock or issues a no-op UPSERT/WAL write.
+                            await conn.execute(
+                                "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+                                (self.channel + ":worker:" + rollout_id + ":" + worker_id,),
+                            )
+                            ready, heartbeat_wait = await self._poll_observation(
+                                conn, rollout_id, registration_token, worker_id, heartbeat_seconds)
+                        if ready or heartbeat_wait == 0:
+                            # The read-only observation cannot authorize a claim:
+                            # registration replacement is fenced atomically here.
+                            await self._registration(conn, rollout_id, registration_token)
+                            if heartbeat_wait == 0:
+                                await self._write_worker_heartbeat(
+                                    conn, rollout_id, registration_token, worker_id, None)
+                                heartbeat_wait = heartbeat_seconds
+                            # A concurrent heartbeat may hold the worker row. Start the
+                            # inference lease only after acquiring that row's lock.
+                            now = await self._now(conn)
+                            # Lock candidates, assign distinct leases and hydrate their
+                            # immutable input bodies in one statement. The row locks
+                            # remain held through commit, including for peer claimers.
+                            rows = await (await conn.execute(
+                                """WITH candidates AS (
+                                SELECT deployment_id,request_id FROM relay_requests
+                                WHERE deployment_id=%s AND rollout_id=%s AND registration_token=%s
+                                AND expires_at>%s AND (state='pending' OR (state='leased' AND lease_expires_at<=%s))
+                                ORDER BY created_at,request_id LIMIT %s FOR UPDATE SKIP LOCKED
+                                ), claimed AS (
+                                UPDATE relay_requests r SET state='leased',
+                                lease_id=replace(gen_random_uuid()::text,'-',''),lease_expires_at=%s,leased_by=%s,
+                                delivered_at=%s,first_delivered_at=coalesce(r.first_delivered_at,%s),
+                                delivery_count=r.delivery_count+1 FROM candidates c
+                                WHERE (r.deployment_id,r.request_id)=(c.deployment_id,c.request_id) RETURNING r.*)
+                                SELECT claimed.*,p.body AS input_body,p.encoding AS input_encoding,p.headers AS input_headers
+                                FROM claimed LEFT JOIN relay_payloads p USING(deployment_id,request_id)
+                                ORDER BY claimed.created_at,claimed.request_id""",
+                                (self.deployment, rollout_id, registration_token, now, now,
+                                 max(1, min(256, limit)), now + max(0.001, lease_seconds),
+                                 worker_id, now, now),
+                            )).fetchall()
+                            result = [self._loaded_request(row) for row in rows]
                 if result or time.monotonic() >= deadline:
                     return result
+                wait = deadline - time.monotonic()
+                if heartbeat_wait is not None:
+                    wait = min(wait, heartbeat_wait)
                 with suppress(asyncio.TimeoutError):
-                    await asyncio.wait_for(
-                        event.wait(), min(0.5, max(0.001, deadline - time.monotonic()))
-                    )
+                    await _wait_cancellable(event.wait(), max(0.001, wait))
 
     @staticmethod
     def _valid_lease(row, lease_id, now):
@@ -865,25 +1035,13 @@ class PostgresRelayState:
     async def wait_for_response(self, request, *, timeout_seconds):
         if request.future.done():
             return request.future.result()
-        return await self._wait_for_delivery_value(
-            request.request_id, self._response_waiters, timeout_seconds
-        )
-
-    async def wait_for_delivery(self, request, *, timeout_seconds):
-        """Worker acknowledgments need readiness, not another copy of the body."""
-        if request.future.done():
-            request.future.result()
-            return
-        await self._wait_for_delivery_value(
-            request.request_id, self._delivery_waiters, timeout_seconds
-        )
-
-    async def _wait_for_delivery_value(self, request_id, waiters, timeout_seconds):
+        request_id = request.request_id
+        waiters = self._response_waiters
         future = asyncio.get_running_loop().create_future()
         waiters.setdefault(request_id, set()).add(future)
-        self._delivery_event.set()
+        self._signal("r:" + request_id)
         try:
-            return await asyncio.wait_for(future, timeout_seconds)
+            return await _wait_cancellable(future, timeout_seconds)
         finally:
             waiting = waiters[request_id]
             waiting.discard(future)
@@ -896,14 +1054,25 @@ class PostgresRelayState:
         This cache owns no work. A restart loses only socket futures, and any
         authenticated reattach reconstructs delivery from the committed rows.
         """
-        while True:
+        next_reconcile = time.monotonic() + 0.5
+        while not self._closing:
             with suppress(asyncio.TimeoutError):
-                await asyncio.wait_for(self._delivery_event.wait(), 0.5)
+                await _wait_cancellable(
+                    self._delivery_event.wait(), max(0, next_reconcile - time.monotonic())
+                )
             self._delivery_event.clear()
             await asyncio.sleep(
                 0.002
             )  # Coalesce a notification burst, not work admission.
-            ids = list(self._response_waiters.keys() | self._delivery_waiters.keys() | self._active_parks.keys())
+            if time.monotonic() >= next_reconcile:
+                # A fixed schedule recovers missed hints even during a stream
+                # of unrelated notifications. Hints are never authority.
+                ids = list(self._response_waiters.keys() | self._active_parks.keys())
+                next_reconcile = time.monotonic() + 0.5
+            else:
+                ids = [request_id for request_id in self._dirty_deliveries
+                       if request_id in self._response_waiters or request_id in self._active_parks]
+            self._dirty_deliveries.clear()
             if not ids:
                 continue
             try:
@@ -916,7 +1085,7 @@ class PostgresRelayState:
                     ).fetchall()
                 # A park notifier may still be queued behind checkpoint work.
                 # Tell it when the durable result supersedes that work, just
-                # as the SQLite relay does for its live request objects. This
+                # for the same durable request identity. This
                 # is only an optimization; worker wake fences remain authority.
                 for row in rows:
                     park = self._active_parks.get(row["request_id"])
@@ -925,24 +1094,18 @@ class PostgresRelayState:
                         park.response_committed.set()
                 missing = set(ids) - {r["request_id"] for r in rows}
                 for request_id in missing:
-                    for waiters in (self._response_waiters, self._delivery_waiters):
-                        for future in tuple(waiters.get(request_id, ())):
-                            if not future.done():
-                                future.set_exception(
-                                    web.HTTPGone(text="relay result retention expired")
-                                )
+                    for future in tuple(self._response_waiters.get(request_id, ())):
+                        if not future.done():
+                            future.set_exception(
+                                web.HTTPGone(text="relay result retention expired")
+                            )
                 ready = [
                     r
                     for r in rows
-                    if r["state"] == "completed" and not r["delivery_pending"]
+                    if r["state"] == "completed"
+                    and not r["delivery_pending"]
+                    and r["request_id"] in self._response_waiters
                 ]
-                for row in ready:
-                    for future in tuple(
-                        self._delivery_waiters.get(row["request_id"], ())
-                    ):
-                        if not future.done():
-                            future.set_result(None)
-                ready = [r for r in ready if r["request_id"] in self._response_waiters]
                 while ready:
                     batch, size = [], 0
                     while ready and (
@@ -1157,7 +1320,7 @@ class PostgresRelayState:
             ),
             "workers": workers,
             "lifecycle": lifecycle,
-            "reserved_storage_bytes": quota["reserved_bytes"],
+            "reserved_storage_bytes": quota["reserved_bytes"] if quota else 0,
             "database_pool": self.store.pool.get_stats(),
             "limits": {"storage_budget_bytes": self.storage_budget},
             "counters": {},
@@ -1179,7 +1342,11 @@ class PostgresRelayState:
                 UPDATE relay_lifecycle l SET claim_token=gen_random_uuid(),claim_until=clock_timestamp()+%s*interval '1 second',attempts=l.attempts+1
                 FROM due JOIN relay_requests r ON (r.deployment_id,r.request_id)=(due.deployment_id,due.request_id)
                 WHERE (l.deployment_id,l.request_id,l.action)=(due.deployment_id,due.request_id,due.action)
-                RETURNING l.*,to_jsonb(r) AS request_record""",
+                RETURNING l.*,to_jsonb(r) AS request_record,
+                CASE WHEN l.action='park' THEN (SELECT g.metadata->'_ucloud_resource_phase' FROM relay_rollouts g
+                 WHERE g.deployment_id=r.deployment_id AND g.rollout_id=r.rollout_id
+                 AND g.registration_token=r.registration_token AND g.enabled)
+                ELSE NULL END AS phase_observation""",
                     (
                         self.deployment,
                         [k for k, v in self.notifiers.items() if v is not None and (action is None or k == action)],
@@ -1192,7 +1359,7 @@ class PostgresRelayState:
 
     async def _dispatch_loop(self):
         async with self._watch("l") as event:
-            while True:
+            while not self._closing:
                 event.clear()
                 try:
                     claimed = False
@@ -1203,6 +1370,8 @@ class PostgresRelayState:
                         if available <= 0 or self.notifiers[action] is None:
                             continue
                         rows = await self._claim_lifecycle(available, action=action)
+                        if self._closing:
+                            return  # Any claimed work recovers after lease expiry.
                         for row in rows:
                             task = asyncio.create_task(self._dispatch(row))
                             self._active.add(task)
@@ -1218,7 +1387,7 @@ class PostgresRelayState:
                         "relay lifecycle claim failed; durable work retained"
                     )
                 with suppress(asyncio.TimeoutError):
-                    await asyncio.wait_for(event.wait(), 0.25)
+                    await _wait_cancellable(event.wait(), 0.25)
 
     def _dispatch_done(self, task):
         self._active.discard(task)
@@ -1231,37 +1400,68 @@ class PostgresRelayState:
                 type(task.exception()).__name__,
             )
 
-    async def _renew_claim(self, work):
-        while True:
+    async def _renew_lifecycle_claims(self):
+        # One physical commit renews all this process's in-flight claims. The
+        # snapshot is only a hint: each exact token is checked by PostgreSQL.
+        owned = tuple(self._active_claims.items())
+        if not owned:
+            return
+        async with self.store.transaction("relay_renew_lifecycle") as conn:
+            rows = await (await conn.execute(
+                """WITH owned AS (
+                    SELECT * FROM unnest(%s::text[],%s::text[],%s::uuid[])
+                    AS x(request_id,action,claim_token)
+                ), eligible AS (
+                    SELECT l.deployment_id,l.request_id,l.action
+                    FROM relay_lifecycle l JOIN owned x
+                    ON (l.request_id,l.action,l.claim_token)=(x.request_id,x.action,x.claim_token)
+                    WHERE l.deployment_id=%s AND NOT l.done
+                    ORDER BY l.request_id,l.action FOR UPDATE OF l
+                ) UPDATE relay_lifecycle l
+                SET claim_until=clock_timestamp()+%s*interval '1 second'
+                FROM eligible e
+                WHERE (l.deployment_id,l.request_id,l.action)=(e.deployment_id,e.request_id,e.action)
+                RETURNING l.request_id,l.action""",
+                ([key[0] for key, _ in owned], [key[1] for key, _ in owned],
+                 [token for _, token in owned], self.deployment, self.claim_seconds),
+            )).fetchall()
+        renewed = {(row["request_id"], row["action"]) for row in rows}
+        for key, token in owned:
+            if key not in renewed and self._active_claims.get(key) == token:
+                self._active_claims.pop(key)
+
+    async def _renew_lifecycle_loop(self):
+        while not self._closing:
             await asyncio.sleep(self.claim_seconds / 3)
-            async with self.store.transaction("relay_renew_lifecycle") as conn:
-                row = await (
-                    await conn.execute(
-                        "UPDATE relay_lifecycle SET claim_until=clock_timestamp()+%s*interval '1 second' WHERE deployment_id=%s AND request_id=%s AND action=%s AND claim_token=%s AND NOT done RETURNING request_id",
-                        (
-                            self.claim_seconds,
-                            self.deployment,
-                            work["request_id"],
-                            work["action"],
-                            work["claim_token"],
-                        ),
-                    )
-                ).fetchone()
-                if row is None:
-                    return
+            try:
+                await self._renew_lifecycle_claims()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                # Loss of a lease is recoverable by the existing durable claim
+                # loop. Never turn an uncertain renewal into lifecycle success.
+                LOGGER.warning("relay lifecycle renewal failed; durable claims remain fenced")
 
     async def _dispatch(self, work):
         request_id, action = work["request_id"], work["action"]
         # The claim hydrates only small request columns, never model bodies.
         request = self._request_value(work["request_record"])
+        if action == "park":
+            request.resource_phase = current_phase(
+                {PHASE_METADATA_KEY: work.get("phase_observation")}, now=time.time())
+            if request.resource_phase is not None:
+                request.resource_phase["registration_incarnation"] = hashlib.sha256(
+                    request.registration_token.encode()
+                ).hexdigest()
         if request.state == "completed":
             request.expires_at = (
                 None  # Accepted result delivery outlives inference timeout.
             )
-        renew = asyncio.create_task(self._renew_claim(work))
+        claim_key = (request_id, action)
+        self._active_claims[claim_key] = work["claim_token"]
         if action == "park":
             self._active_parks[request_id] = request
-            self._delivery_event.set()
+            self._signal("r:" + request_id)
         epoch, unavailable, failure = None, False, None
         deferred = None
         try:
@@ -1283,8 +1483,8 @@ class PostgresRelayState:
         finally:
             if action == "park":
                 self._active_parks.pop(request_id, None)
-            renew.cancel()
-            await asyncio.gather(renew, return_exceptions=True)
+            if self._active_claims.get(claim_key) == work["claim_token"]:
+                self._active_claims.pop(claim_key)
         async with self.store.transaction("relay_dispatch_complete") as conn:
             row = await self._request_lock(conn, request_id)
             current = await (
@@ -1302,11 +1502,13 @@ class PostgresRelayState:
             if failure or deferred is not None:
                 if action == 'park' and epoch is not None:
                     # A retained sandbox can park locally as pressure changes.
-                    # Remember its original transport before releasing the
-                    # claim, so a subsequent migration still forces reattach.
+                    # The worker accepted ownership of the local park decision.
+                    # Publish that receipt with its original transport as one
+                    # monotonic pair; SDK lease renewal observes this state.
+                    # This is not a claim that checkpointing has completed.
                     await conn.execute(
-                        "UPDATE relay_requests SET parked_transport_epoch=COALESCE(parked_transport_epoch,%s) WHERE deployment_id=%s AND request_id=%s",
-                        (epoch, self.deployment, request_id),
+                        "UPDATE relay_requests SET accepted_notified_at=COALESCE(accepted_notified_at,%s),parked_transport_epoch=COALESCE(parked_transport_epoch,%s) WHERE deployment_id=%s AND request_id=%s",
+                        (await self._now(conn), epoch, self.deployment, request_id),
                     )
                 await conn.execute(
                     "UPDATE relay_lifecycle SET claim_token=NULL,claim_until=NULL,last_error=%s,next_attempt_at=clock_timestamp()+%s*interval '1 second' WHERE deployment_id=%s AND request_id=%s AND action=%s",
@@ -1341,13 +1543,14 @@ class PostgresRelayState:
                 await self._notify(conn, "r:" + request_id)
             else:
                 await conn.execute(
-                    "UPDATE relay_requests SET accepted_notified_at=%s,parked_transport_epoch=%s WHERE deployment_id=%s AND request_id=%s",
+                    "UPDATE relay_requests SET accepted_notified_at=COALESCE(accepted_notified_at,%s),parked_transport_epoch=COALESCE(parked_transport_epoch,%s) WHERE deployment_id=%s AND request_id=%s",
                     (now, epoch, self.deployment, request_id),
                 )
+                original_epoch = row["parked_transport_epoch"] or epoch
                 if (
-                    epoch is not None
+                    original_epoch is not None
                     and row["wake_transport_epoch"] is not None
-                    and epoch != row["wake_transport_epoch"]
+                    and original_epoch != row["wake_transport_epoch"]
                 ):
                     await self._reattach(conn, row)
             await conn.execute(

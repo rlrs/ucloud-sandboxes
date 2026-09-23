@@ -1,0 +1,52 @@
+--- a/pkg/sentry/kernel/kernel.go
++++ b/pkg/sentry/kernel/kernel.go
+@@ -162,6 +162,12 @@
+ 	// all Kernel fields become immutable once started becomes true.
+ 	started bool `state:"nosave"`
+ 
++	// externalMemoryCaptured records an original runtime awaiting a capture
++	// decision. It is deliberately not restored into a new candidate: Start
++	// already restores that candidate's time and filesystem state.
++	// Protected by extMu.
++	externalMemoryCaptured bool `state:"nosave"`
++
+ 	// All of the following fields are immutable unless otherwise specified.
+ 
+ 	// Platform is the platform that is used to execute tasks in the created
+@@ -819,8 +825,9 @@
+ 		if rootNS := k.rootNetworkNamespace; rootNS != nil && rootNS.Stack() != nil {
+ 			// Pause the network stack.
+ 			netstackPauseStart := time.Now()
+-			// Stack.removeConf should be true when resume=false and vice versa.
+-			k.rootNetworkNamespace.Stack().SetRemoveConf(!resume)
++			// External-memory capture can still be aborted back into this runtime.
++			// Do not destroy its network configuration before that decision.
++			k.rootNetworkNamespace.Stack().SetRemoveConf(!resume && !appMFExternalBacking)
+ 			log.Infof("Pausing root network namespace")
+ 			k.rootNetworkNamespace.Stack().Pause()
+ 			defer k.rootNetworkNamespace.Stack().Resume()
+@@ -875,6 +882,9 @@
+ 			}
+ 		}
+ 
++		if appMFExternalBacking {
++			k.externalMemoryCaptured = true
++		}
+ 		log.Infof("Overall save took [%s].", time.Since(saveStart))
+ 		return nil
+ 	})
+@@ -1844,6 +1854,14 @@
+ func (k *Kernel) Unpause() {
+ 	k.extMu.Lock()
+ 	defer k.extMu.Unlock()
++	if k.externalMemoryCaptured {
++		// SaveTo deliberately left timers stopped and filesystem save hooks
++		// active. Restore both before allowing original guest tasks to run.
++		ctx := k.SupervisorContext()
++		k.BeforeResume(ctx)
++		k.resumeTimeLocked(ctx)
++		k.externalMemoryCaptured = false
++	}
+ 	k.tasks.EndExternalStop()
+ }
+ 

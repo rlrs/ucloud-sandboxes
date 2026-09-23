@@ -1,179 +1,24 @@
+"""Unshipped central-scheduling qualification store, not live relay authority."""
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
-import asyncio
-from contextvars import ContextVar
 import hashlib
-from importlib.resources import files
 import json
-import logging
 import re
-import time
-from typing import Callable
 from uuid import UUID, uuid4
 
-from psycopg import sql
-from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
-from psycopg_pool import AsyncConnectionPool
 
-from .model import (
-    AcceptedResult, StateConflict, StoredResponse, TransactionSample, WakeOperation, WakeProof,
-    positive_seconds,
-)
+from .database import PostgresDatabase
+from .model import AcceptedResult, StateConflict, StoredResponse, WakeOperation, WakeProof, positive_seconds
 
-LOGGER = logging.getLogger(__name__)
-SCHEMA_VERSION = 1
 MAX_RESPONSE_BYTES = 32 * 1024 * 1024
 
 
-class PostgresControlStore:
-    """Shared pool/schema primitives plus the scheduling qualification contract.
+class QualificationControlStore(PostgresDatabase):
+    """Fixture-owned scheduling experiments, isolated from production relay DDL."""
 
-    The live relay uses the pool and transaction API, with its own domain tables.
-    Fixture-based sandbox scheduling methods remain qualification-only; this is
-    not a RoutingStore replacement. Worker RPCs never occur in transactions.
-    """
-
-    def __init__(
-        self, dsn: str, deployment_id: str, *, schema: str = "ucloud_shared",
-        max_connections: int = 16, timeout_seconds: float = 10,
-        observe: Callable[[TransactionSample], None] | None = None,
-    ) -> None:
-        if not re.fullmatch(r"ucloud_shared(?:_[a-z0-9_]+)?", schema) or len(schema) > 63:
-            raise ValueError("invalid shared-control schema")
-        if not deployment_id.strip() or max_connections < 1:
-            raise ValueError("deployment identity and positive connection budget required")
-        self.deployment_id = deployment_id
-        self.schema = schema
-        self.timeout = positive_seconds(timeout_seconds)
-        self.observe = observe
-        self._lock_times: ContextVar[list[float] | None] = ContextVar("shared_control_lock_times", default=None)
-        self._commit_callbacks: ContextVar[list | None] = ContextVar("shared_control_commit_callbacks", default=None)
-        self.pool = AsyncConnectionPool(
-            dsn, open=False, min_size=1, max_size=max_connections,
-            timeout=self.timeout, kwargs={"autocommit": True, "row_factory": dict_row},
-            configure=self._configure,
-        )
-
-    async def _configure(self, conn):
-        await conn.execute(sql.SQL("SET search_path TO {}, pg_catalog").format(sql.Identifier(self.schema)))
-        # Ownership/result acknowledgments must survive a database process crash.
-        # A synchronous standby is a separate deployment requirement.
-        await conn.execute("SET synchronous_commit = on")
-        await conn.execute("SELECT set_config('statement_timeout', %s, false)", (str(max(1, int(self.timeout * 1000))),))
-
-    async def open(self) -> None:
-        await self.pool.open(wait=True, timeout=self.timeout)
-        try:
-            async with self.pool.connection() as conn:
-                row = await (await conn.execute("SELECT to_regclass(%s) AS name", (f"{self.schema}.schema_version",))).fetchone()
-                if row["name"] is not None:
-                    await self._check_version(conn)
-        except BaseException:
-            await self.pool.close()
-            raise
-
-    async def close(self) -> None:
-        await self.pool.close()
-
-    @staticmethod
-    async def _check_version(conn):
-        row = await (await conn.execute("SELECT version FROM schema_version WHERE singleton")).fetchone()
-        if row is None or row["version"] != SCHEMA_VERSION:
-            raise ValueError("unsupported shared-control schema version")
-
-    async def migrate(self) -> None:
-        """Explicit, transactional, serialized initialization; never startup DDL."""
-        async with self.pool.connection() as conn, conn.transaction():
-            await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (self.schema,))
-            await conn.execute(sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(self.schema)))
-            row = await (await conn.execute("SELECT to_regclass(%s) AS name", (f"{self.schema}.schema_version",))).fetchone()
-            if row["name"] is None:
-                await conn.execute(files(__package__).joinpath("schema.sql").read_text())
-            await self._check_version(conn)
-            relay = await (await conn.execute("SELECT to_regclass(%s) AS name", (f"{self.schema}.relay_schema_version",))).fetchone()
-            if relay["name"] is None:
-                await conn.execute(files(__package__).joinpath("relay_schema.sql").read_text())
-            row = await (await conn.execute("SELECT version FROM relay_schema_version WHERE singleton")).fetchone()
-            if row is None or row["version"] != 1:
-                raise ValueError("unsupported relay schema version")
-
-    @asynccontextmanager
-    async def transaction(self, operation: str):
-        """One short transaction per acquired connection; cancellation rolls back."""
-        started = time.monotonic()
-        acquired = body_done = ended = None
-        succeeded = False
-        lock_times: list[float] = []
-        token = self._lock_times.set(lock_times)
-        callbacks = []
-        callback_token = self._commit_callbacks.set(callbacks)
-        try:
-            async with self.pool.connection() as conn:
-                acquired = time.monotonic()
-                # Explicit BEGIN also covers cancellation *during* transaction
-                # entry. A context manager whose __aenter__ is interrupted can
-                # leave psycopg's savepoint stack active without an __aexit__.
-                try:
-                    await conn.execute("BEGIN")
-                    yield conn
-                    body_done = time.monotonic()
-                    await conn.execute("COMMIT")
-                except BaseException:
-                    cleanup = asyncio.create_task(conn.execute("ROLLBACK"))
-                    while not cleanup.done():
-                        try:
-                            await asyncio.shield(cleanup)
-                        except asyncio.CancelledError:
-                            continue
-                        except Exception:
-                            break
-                    try:
-                        cleanup.result()
-                    except BaseException:
-                        await conn.close()
-                    raise
-                ended = time.monotonic()
-                succeeded = True
-                for callback in callbacks:
-                    try:
-                        callback()
-                    except Exception:
-                        LOGGER.warning("shared-control post-commit hint failed")
-        finally:
-            self._lock_times.reset(token)
-            self._commit_callbacks.reset(callback_token)
-            if self.observe is not None:
-                now = time.monotonic()
-                sample = TransactionSample(
-                    operation, (acquired or now) - started,
-                    (body_done or ended or now) - (acquired or now),
-                    (ended or now) - body_done if body_done is not None else 0,
-                    succeeded,
-                    sum(lock_times),
-                )
-                try:
-                    self.observe(sample)
-                except Exception:
-                    LOGGER.exception("shared-control metrics callback failed")
-
-    def after_commit(self, callback):
-        callbacks = self._commit_callbacks.get()
-        if callbacks is None:
-            raise RuntimeError("post-commit callback requires a transaction")
-        callbacks.append(callback)
-
-    async def _lock_query(self, conn, query, params):
-        started = time.monotonic()
-        try:
-            return await conn.execute(query, params)
-        finally:
-            times = self._lock_times.get()
-            if times is not None:
-                # Includes query execution and round-trip, not only server lock
-                # wait. Correlate with pg_stat_activity for that distinction.
-                times.append(time.monotonic() - started)
+    version_table = "schema_version"
+    schema_file = "schema.sql"
 
     async def _lock_owner(self, conn, sandbox_id: str, node_id: str):
         node = await (await self._lock_query(conn,

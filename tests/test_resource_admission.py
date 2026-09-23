@@ -94,6 +94,27 @@ class DynamicResourceAdmissionTests(unittest.TestCase):
             )
         )
 
+    def test_cached_cpu_advice_does_not_relax_memory_disk_or_capabilities(self):
+        request = ResourceQuantity(vcpu=1, memory_mb=2048, disk_mb=4096)
+        heartbeat = self.heartbeat(cpu_percent=100, load_average_1m=100)
+        available = ResourceQuantity(disk_mb=5000)
+        self.assertTrue(node_accepts_dynamic_request(heartbeat, request, available,
+                                                    check_cpu=False))
+        for unsafe in (
+            replace(heartbeat, runtime_metrics=replace(heartbeat.runtime_metrics,
+                                                       memory_available_mb=1024)),
+            replace(heartbeat, runtime_metrics=replace(heartbeat.runtime_metrics,
+                                                       memory_psi_full_avg10=20)),
+            replace(heartbeat, runtime_metrics=None),
+            replace(heartbeat, capabilities=()),
+        ):
+            self.assertFalse(node_accepts_dynamic_request(unsafe, request, available,
+                                                         check_cpu=False))
+        self.assertFalse(node_accepts_dynamic_request(heartbeat, request,
+            ResourceQuantity(disk_mb=4095), check_cpu=False))
+        self.assertFalse(node_accepts_dynamic_request(heartbeat,
+            replace(request, vcpu=33), available, check_cpu=False))
+
     def test_request_must_still_fit_physical_shape_and_hard_disk(self) -> None:
         heartbeat = self.heartbeat()
         available = ResourceQuantity(disk_mb=10_000)

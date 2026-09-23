@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 import json
+import hashlib
 import logging
 import os
 import selectors
@@ -22,28 +23,31 @@ from .direct_provisioner import DirectSandboxProvisioner
 from .storage_native_migration import (
     StorageNativeSandboxManifest,
     StorageNativeMigration,
+    SPLIT_MIGRATION_SCHEMA,
+    StorageNativeMigrationError,
 )
 from .storage_native_daemon import StorageNativeCapacityError
 from .managed_process import (
     MANAGED_PROCESS_BINARY,
     MAX_LOG_READ_BYTES,
     ManagedProcessError,
+    ManagedProcessReadUnavailable,
     ManagedProcessLogChunk,
     ManagedProcessRecord,
     ManagedProcessStart,
     control_request_bytes,
     parse_control_response,
 )
-from .direct_registry import DirectSandboxRegistration
+from .direct_registry import DirectSandboxRegistration, DirectRegistryCapacityUnavailable
 from .direct_warden import DirectWardenError
-from .hibernation import HibernationState
+from .hibernation import HibernationError, HibernationState
 from .models import NodeRuntimeMetrics, ResourceQuantity
 from .resource_admission import (
     dynamic_cpu_pressure_retryable,
     dynamic_pressure_error,
     dynamic_request_fits,
 )
-from .runtime_metrics import DEFAULT_CPU_SAMPLE_SECONDS
+from .resident_memory import ResidentMemorySampler, ResidentMemoryReclaimer, ResidentReclaimResult
 from .sandbox import (
     OPERATION_ID_RE,
     SandboxAdmissionClosedError,
@@ -61,6 +65,7 @@ from .sandbox import (
 )
 from .telemetry import Telemetry
 from .upload_spool import UploadSpool
+from .transition_admission import MemoryDemand, TransitionCost, TransitionKind, TransitionLedger
 
 
 _LOG = logging.getLogger(__name__)
@@ -72,6 +77,12 @@ _CPU_ADMISSION_DEADLINE_SECONDS = 1.0
 # Leave room in the SDK's default 30-second HTTP deadline for transport and a
 # safe retry response. This bounds one wait, not the number of admitted tools.
 _FILE_ADMISSION_RETRY_WINDOW_SECONDS = 5.0
+_MANAGED_CONTROL_DEADLINE_SECONDS = 15.0
+
+
+class DirectExecTimeoutError(DirectWardenError):
+    """A dispatched guest exec exceeded its deadline; its result is ambiguous."""
+
 
 
 def sandbox_file_write_script() -> str:
@@ -242,7 +253,7 @@ class DirectProcessRunner:
                 pass
             process.wait()
             if isinstance(exc, subprocess.TimeoutExpired):
-                raise DirectWardenError("direct sandbox exec timed out") from exc
+                raise DirectExecTimeoutError("direct sandbox exec timed out") from exc
             raise
         finally:
             for stream in (process.stdin, process.stdout, process.stderr):
@@ -286,18 +297,20 @@ class DirectSandboxService:
         self.process_runner = process_runner or DirectProcessRunner()
         self.telemetry = telemetry or Telemetry.disabled("direct-sandbox-service")
         self._restore_slots = FairCapacity(max_concurrent_restores)
-        self._restore_demands: dict[tuple[str, int], tuple[ResourceQuantity, int]] = {}
-        self._startup_demands: dict[tuple[str, int], tuple[ResourceQuantity, int]] = {}
+        self._transitions = TransitionLedger()
         self._startup_slots = FairCapacity(max_concurrent_startups)
-        self._file_read_slots = FairCapacity(max_concurrent_startups)
+        self._management_read_slots = FairCapacity(max_concurrent_startups)
+        self._resident_memory = ResidentMemorySampler(proc_root=getattr(
+            self.warden.config, "proc_root", Path("/proc")))
+        self._resident_cgroup_paths: dict[tuple[str, int], str | None] = {}
         self.upload_spool = UploadSpool(provisioner.registry.path.parent / "upload-staging")
         self.admission_wait_seconds = 30.0
         self._startup_admission_state = threading.local()
+        self._held_lifecycle = threading.local()
         self._active_capacity: ResourceQuantity | None = None
         self._runtime_metrics_provider: (
             Callable[[], NodeRuntimeMetrics | None] | None
         ) = None
-        self._active_reservations: dict[tuple[str, int], ResourceQuantity] = {}
         self._active_exec_reservations: dict[
             str, tuple[tuple[str, int], ResourceQuantity]
         ] = {}
@@ -328,10 +341,14 @@ class DirectSandboxService:
         self._publication_threads: dict[tuple[str, int], threading.Thread] = {}
         self._publication_errors: dict[tuple[str, int], BaseException] = {}
         self._publication_guard = threading.Lock()
-        self._publication_slots = threading.BoundedSemaphore(16)
+        self._publication_slots = FairCapacity(16)
         self._published_snapshots: dict[tuple[str, int], StorageNativeMigration] = {}
         self._published_snapshots_guard = threading.Lock()
         self._snapshot_hydration_thread: threading.Thread | None = None
+        self._growth_intents = {
+            (item.sandbox_id, item.generation): item
+            for item in self.provisioner.registry.growth_intents()
+        }
 
     def configure_active_capacity(
         self,
@@ -353,6 +370,11 @@ class DirectSandboxService:
     def start(self) -> tuple[SandboxRecord, ...]:
         results = self.provisioner.start()
         records = tuple(self._record(item) for item in results)
+        # A daemon crash may follow durable capture but precede forecast update.
+        # Reconcile only from the canonical Warden result, never heartbeat age.
+        for registration, record in zip(results, records):
+            if record.state == "parked":
+                self._observe_managed_park(registration)
         self._stop_event.clear()
         self._next_image_reconcile = (
             time.monotonic() + self._image_reconcile_interval_seconds
@@ -424,7 +446,7 @@ class DirectSandboxService:
                 continue
             try:
                 registration = self._require_registration(record.spec.id)
-                storage = self.warden._storage_record(registration.to_direct_sandbox())
+                storage = self.warden.workspace_record(registration.to_direct_sandbox())
                 if storage.state.value != "published":
                     continue
                 self.describe_storage_native_snapshot(record.spec.id)
@@ -495,6 +517,12 @@ class DirectSandboxService:
                     exc,
                 )
                 continue
+            try:
+                # Existing overlap claims are the durable worklist. Physical
+                # trim stays off foreground wake and holds no lifecycle lock.
+                self.warden.reconcile_retired_memory_capacity()
+            except Exception as exc:
+                _LOG.warning("could not retire restored memory capacity: %s", exc)
             for registration in registrations:
                 if registration.phase != "deleting":
                     continue
@@ -538,32 +566,28 @@ class DirectSandboxService:
         operation.validate_spec(spec)
         with (
             self._startup_demand(spec.id, operation.generation, spec.requested_resources()),
-            self.startup_admission(),
+            self.startup_admission(owner=(spec.id, operation.generation)),
+            self._reserve_active_capacity(spec.id, operation.generation, spec.requested_resources()),
             self._request_lock(spec.id, operation.generation),
         ):
-            with self._reserve_active_capacity(
-                spec.id,
-                operation.generation,
-                spec.requested_resources(),
-            ):
+            try:
+                registration = self.provisioner.create(
+                    spec=spec,
+                    sandbox_generation=operation.generation,
+                    operation_id=operation.operation_id,
+                )
+            except StorageNativeCapacityError as exc:
+                # Capacity rejection is safe to place on another node only
+                # after this worker has rolled back every partial owner.
                 try:
-                    registration = self.provisioner.create(
-                        spec=spec,
-                        sandbox_generation=operation.generation,
-                        operation_id=operation.operation_id,
+                    self.provisioner.delete(
+                        spec.id, generation=operation.generation
                     )
-                except StorageNativeCapacityError as exc:
-                    # Capacity rejection is safe to place on another node only
-                    # after this worker has rolled back every partial owner.
-                    try:
-                        self.provisioner.delete(
-                            spec.id, generation=operation.generation
-                        )
-                    except Exception as cleanup_exc:
-                        raise DirectWardenError(
-                            "storage capacity rejection rollback failed"
-                        ) from cleanup_exc
-                    raise SandboxCapacityUnavailableError(str(exc)) from exc
+                except Exception as cleanup_exc:
+                    raise DirectWardenError(
+                        "storage capacity rejection rollback failed"
+                    ) from cleanup_exc
+                raise SandboxCapacityUnavailableError(str(exc)) from exc
             self._forget_published_snapshot(spec.id, operation.generation)
             self.mark_activity(spec.id, operation.generation)
             return self._record(registration)
@@ -626,6 +650,12 @@ class DirectSandboxService:
                 self.provisioner.delete(sandbox_id, generation=generation)
                 deleted = True
         assert deleted
+        self._restore_slots.cancel_waiters(key)
+        self._startup_slots.cancel_waiters(key)
+        with self._capacity_guard:
+            self._growth_intents.pop(key, None)
+            self._refresh_growth_forecasts_locked()
+            self._admission_changed.notify_all()
         with self._activity_guard:
             self._last_activity.pop(key, None)
         self._forget_published_snapshot(*key)
@@ -647,6 +677,12 @@ class DirectSandboxService:
         key = (sandbox_id, registration.sandbox_generation)
         with self._lock(*key):
             self.provisioner.delete(sandbox_id, generation=generation)
+        self._restore_slots.cancel_waiters(key)
+        self._startup_slots.cancel_waiters(key)
+        with self._capacity_guard:
+            self._growth_intents.pop(key, None)
+            self._refresh_growth_forecasts_locked()
+            self._admission_changed.notify_all()
         with self._activity_guard:
             self._last_activity.pop(key, None)
         self._forget_published_snapshot(*key)
@@ -698,18 +734,100 @@ class DirectSandboxService:
                     raise DirectWardenError(
                         "only a parked sandbox can be evicted from its worker"
                     )
-                storage = self.warden._storage_record(sandbox)
-                if (
-                    storage.state.value != "published"
-                    or storage.published_manifest_digest != digest
-                ):
-                    raise DirectWardenError(
-                        "worker publication does not match the durable route"
-                    )
+                storage = self.warden.workspace_record(sandbox)
+                published_digest = storage.published_manifest_digest
+                if registration.memory_reference is not None:
+                    snapshot = self.cached_storage_native_snapshot(sandbox_id, generation)
+                    if (snapshot is None or snapshot.reference.manifest_digest != digest
+                            or snapshot.manifest.hibernation_generation != lifecycle.hibernation_generation
+                            or snapshot.publication.manifest_digest != published_digest):
+                        raise DirectWardenError("complete checkpoint does not match the durable route")
+                    self.provisioner.checkpoint_store.verify_root(snapshot.reference, snapshot.publication,
+                        snapshot.memory_publication, portable_manifest=snapshot.manifest.to_dict())
+                    published_digest = snapshot.reference.manifest_digest
+                if storage.state.value != "published" or published_digest != digest:
+                    raise DirectWardenError("worker publication does not match the durable route")
                 self.provisioner.delete(sandbox_id, generation=generation)
         with self._activity_guard:
             self._last_activity.pop(key, None)
         self._forget_published_snapshot(*key)
+
+
+    def reclaim_resident_wait(
+        self,
+        sandbox_id: str,
+        *,
+        generation: int,
+        relay_request_id: str,
+        target_bytes: int,
+        is_wait_current,
+    ):
+        """Reclaim measured file cache without blocking a foreground response."""
+        registration = self._require_managed_registration(sandbox_id)
+        if (
+            registration.sandbox_generation != generation
+            or not registration.spec.parkable
+        ):
+            raise DirectWardenError("resident reclaim no longer owns the managed wait")
+        key = (sandbox_id, registration.sandbox_generation)
+        sandbox = registration.to_direct_sandbox()
+        with self._lock(*key):
+            captured = self.warden.inspect_snapshot(sandbox)
+            sample = self.resident_memory_sample(*key)
+            if (
+                captured is None
+                or captured.state != HibernationState.RUNNING
+                or sample is None
+                or (sample.sentry_pid, sample.sentry_start_time_ticks)
+                != (captured.sentry_pid, captured.sentry_start_time_ticks)
+            ):
+                raise DirectWardenError("reclaim requires a measured live incarnation")
+
+        with self._activity_guard:
+            activity = self._last_activity.get(key)
+
+        def is_current():
+            if not is_wait_current():
+                return False
+            with self._lock(*key):
+                current = self.provisioner.registry.get(sandbox_id)
+                with self._activity_guard:
+                    unchanged_activity = self._last_activity.get(key) == activity
+                return (
+                    current == registration
+                    and unchanged_activity
+                    and self.warden.inspect_snapshot(sandbox) == captured
+                    and not self.provisioner.registry.relay_wake_fence(
+                        sandbox_id, generation, relay_request_id
+                    )
+                )
+
+        if self.resident_application_reclaim_enabled(*key):
+            # Writeback may block, so neither it nor kernel reclaim owns the
+            # service lifecycle lock. The exact wait and native owner are fenced
+            # before and after; a response cancels all subsequent work.
+            if (not is_current()
+                    or not self.warden.flush_reclaimable_memory(sandbox)
+                    or not is_current()):
+                return ResidentReclaimResult(0, 0, 0.0, 0, "superseded")
+            refreshed = self._resident_memory.sample(
+                key, pid=sample.sentry_pid,
+                start_time_ticks=sample.sentry_start_time_ticks,
+                container_id=Path(sample.cgroup_path).name,
+                expected_path=sample.cgroup_path,
+            )
+            if refreshed is None or (
+                refreshed.cgroup_device, refreshed.cgroup_inode,
+                refreshed.sentry_pid, refreshed.sentry_start_time_ticks,
+            ) != (
+                sample.cgroup_device, sample.cgroup_inode,
+                sample.sentry_pid, sample.sentry_start_time_ticks,
+            ):
+                return ResidentReclaimResult(0, 0, 0.0, 0, "cgroup_changed")
+            sample = refreshed
+        return ResidentMemoryReclaimer(self._resident_memory).reclaim(
+            key, sample, target_bytes=target_bytes, is_current=is_current
+        )
 
     def park(
         self,
@@ -732,6 +850,7 @@ class DirectSandboxService:
             ):
                 record = self.warden.reconcile(sandbox)
             if record.state == HibernationState.PARKED:
+                self._observe_managed_park(registration)
                 if background:
                     self._start_storage_publication(
                         registration,
@@ -766,10 +885,15 @@ class DirectSandboxService:
                     sandbox_id,
                     registration.sandbox_generation,
                 )
-                self.warden.park(
-                    sandbox,
-                    operation_id=operation_id,
-                )
+                # Capture releases resident memory. Observe its bounded native
+                # work without charging the same guest memory a second time or
+                # queueing reclamation behind the work waiting for that memory.
+                with self._observe_transition(
+                    (sandbox_id, registration.sandbox_generation),
+                    TransitionCost(TransitionKind.CAPTURE, None, provenance="native-bounded-capture"),
+                ):
+                    self.warden.park(sandbox, operation_id=operation_id)
+                self._observe_managed_park(registration)
             if background:
                 self._start_storage_publication(
                     registration,
@@ -812,8 +936,17 @@ class DirectSandboxService:
             existing = self._publication_threads.get(key)
             if existing is not None and existing.is_alive():
                 return
+            with self._capacity_guard:
+                # Keep one maintenance operation progressing through foreground
+                # bursts, but don't launch a whole upload wave ahead of wakes.
+                if (self._transitions.foreground_waiting
+                        and self._transitions.active_count(TransitionKind.PUBLICATION)):
+                    return
             if not self._publication_slots.acquire(blocking=False):
                 return
+            with self._capacity_guard:
+                publication_claim = self._transitions.claim(key, TransitionCost(
+                    TransitionKind.PUBLICATION, None, provenance="bounded-storage-backend-stream"))
             self._publication_errors.pop(key, None)
             trace_context = self.telemetry.current_trace_headers()
 
@@ -837,6 +970,9 @@ class DirectSandboxService:
                             self._publication_errors[key] = exc
                         span.set_error(exc)
                     finally:
+                        with self._capacity_guard:
+                            self._transitions.release(publication_claim)
+                            self._admission_changed.notify_all()
                         self._publication_slots.release()
 
             thread = threading.Thread(
@@ -852,6 +988,9 @@ class DirectSandboxService:
                 thread.start()
             except BaseException:
                 self._publication_threads.pop(key, None)
+                with self._capacity_guard:
+                    self._transitions.release(publication_claim)
+                    self._admission_changed.notify_all()
                 self._publication_slots.release()
                 raise
 
@@ -942,8 +1081,10 @@ class DirectSandboxService:
                 )
             return migration
         registration = self._require_registration(sandbox_id)
+        migration = self.describe_storage_native_snapshot(sandbox_id)
         with self._lock(sandbox_id, registration.sandbox_generation):
-            migration = self._storage_native_snapshot_locked(registration)
+            registration = self._require_registration(sandbox_id)
+            self._require_snapshot_current(registration, migration)
             self.provisioner.storage_migrations.save(migration_id, migration)
             self.provisioner.registry.begin_move_out(
                 sandbox_id,
@@ -960,6 +1101,8 @@ class DirectSandboxService:
         """Return a complete portable descriptor for durable parked authority."""
 
         registration = self._require_registration(sandbox_id)
+        if registration.memory_reference is not None:
+            return self._split_storage_native_snapshot(registration)
         with self._lock(sandbox_id, registration.sandbox_generation):
             return self._remember_published_snapshot(
                 self._storage_native_snapshot_locked(registration)
@@ -1006,9 +1149,117 @@ class DirectSandboxService:
                 raise DirectWardenError(
                     "direct sandbox is busy with another ownership transition"
                 )
-            return self._remember_published_snapshot(
-                self._storage_native_snapshot_locked(registration)
-            )
+            if registration.memory_reference is None:
+                return self._remember_published_snapshot(
+                    self._storage_native_snapshot_locked(registration)
+                )
+        return self._split_storage_native_snapshot(registration)
+
+    def _require_snapshot_current(self, registration, migration):
+        lifecycle = self.warden.inspect(registration.to_direct_sandbox())
+        if (lifecycle is None or lifecycle.state != HibernationState.PARKED
+                or lifecycle.hibernation_generation != migration.manifest.hibernation_generation
+                or lifecycle.manifest_sha256 != migration.manifest.source_manifest_sha256):
+            raise DirectWardenError("checkpoint publication was superseded by local lifecycle")
+
+    def _split_storage_native_snapshot(self, registration):
+        """Stream a supersedable generation, then expose both components together.
+
+        Open descriptors retain source inodes without another full memory copy.
+        A resume permanently invalidates this lifecycle revision, so uploaded
+        bytes from a superseded source can never become a portable checkpoint.
+        """
+        store = self.provisioner.checkpoint_store
+        if store is None:
+            raise DirectWardenError("split checkpoint Registry transport is unavailable")
+        key = (registration.sandbox_id, registration.sandbox_generation)
+        sources, identities = {}, {}
+        with ExitStack() as handles:
+            handles.enter_context(self.warden.memory_backing.read_lease(
+                registration.memory_reference, sandbox_id=key[0], sandbox_generation=key[1]))
+            with self._lock(*key):
+                current = self._require_registration(registration.sandbox_id)
+                if current != registration or current.phase != "owned":
+                    raise DirectWardenError("checkpoint source ownership changed")
+                sandbox = registration.to_direct_sandbox()
+                lifecycle = self.warden.inspect(sandbox)
+                if lifecycle is None or lifecycle.state != HibernationState.PARKED:
+                    raise DirectWardenError("only an already parked sandbox has a checkpoint")
+                local = self.warden.load_parked_manifest(sandbox)
+                portable = self._portable_manifest(registration, local)
+                cached = self.cached_storage_native_snapshot(*key)
+                if cached is not None and cached.manifest.source_manifest_sha256 == local.metadata_sha256:
+                    return cached
+                storage = self.warden.workspace_record(sandbox)
+                try:
+                    recovered = self.provisioner.storage_migrations.load_publication(*key)
+                except StorageNativeMigrationError:
+                    recovered = None
+                if (recovered is not None and recovered.manifest == portable
+                        and recovered.publication.manifest_digest == storage.published_manifest_digest):
+                    return self._remember_published_snapshot(recovered)
+                generation = self.warden.artifacts.generation_path(
+                    sandbox_id=key[0], sandbox_generation=key[1],
+                    hibernation_generation=lifecycle.hibernation_generation)
+                names = {file.artifact.name for file in local.files} | {
+                    self.warden.artifacts.MANIFEST_NAME, self.warden.artifacts.COMPLETE_NAME}
+                for name in sorted(names):
+                    path = generation / name
+                    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+                    handles.callback(os.close, fd)
+                    info = os.fstat(fd)
+                    sources[name] = fd
+                    identities[name] = (path, info.st_dev, info.st_ino, info.st_size,
+                                        info.st_mtime_ns, info.st_ctime_ns)
+
+            def check_current_locked():
+                now = self._require_registration(key[0])
+                record = self.warden.inspect(sandbox)
+                if now != registration or record != lifecycle:
+                    raise DirectWardenError("checkpoint publication was superseded by local lifecycle")
+                for identity in identities.values():
+                    path, *expected = identity
+                    info = path.lstat()
+                    if list((info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns,
+                             info.st_ctime_ns)) != expected:
+                        raise DirectWardenError("checkpoint source artifact changed")
+
+            def check_current():
+                with self._lock(*key):
+                    check_current_locked()
+
+            check_current()
+            storage = self.warden.workspace_record(sandbox)
+            if storage.state.value != "published":
+                storage = self.warden.publish_storage_snapshot(
+                    sandbox, operation_id=f"snapshot:{lifecycle.hibernation_generation}:publish")
+            check_current()
+            if (storage.state.value != "published" or storage.capture_id != local.workspace.capture_id
+                    or storage.volume_id != local.workspace.volume_id):
+                raise DirectWardenError("workspace publication belongs to another capture")
+            memory = store.publish_memory(sources, source_manifest_sha256=local.metadata_sha256,
+                                          check_current=check_current)
+            root = store.publish_root(storage.publication(), memory,
+                                      portable_manifest=portable.to_dict(), check_current=check_current)
+            migration = StorageNativeMigration(manifest=portable, publication=storage.publication(),
+                schema=SPLIT_MIGRATION_SCHEMA, memory_publication=memory, checkpoint_publication=root)
+            with self._lock(*key):
+                check_current_locked()
+                self.provisioner.storage_migrations.save_publication(migration)
+                return self._remember_published_snapshot(migration)
+
+    def _portable_manifest(self, registration, local_manifest):
+        source_guest_ip = None
+        if registration.spec.network != "none":
+            network_manager = self.provisioner.network_manager
+            if network_manager is None:
+                raise DirectWardenError("networked snapshot has no source network manager")
+            network_lease = network_manager.lease(registration.sandbox_id, registration.sandbox_generation)
+            if network_lease is None:
+                raise DirectWardenError("networked snapshot has no durable source network lease")
+            source_guest_ip = network_lease.guest_ip
+        return StorageNativeSandboxManifest.from_local(registration, local_manifest,
+                                                       source_guest_ip=source_guest_ip)
 
     def _storage_native_snapshot_locked(
         self,
@@ -1021,28 +1272,8 @@ class DirectSandboxService:
                 "only an already parked sandbox has a storage snapshot"
             )
         local_manifest = self.warden.load_parked_manifest(sandbox)
-        source_guest_ip: str | None = None
-        if registration.spec.network != "none":
-            network_manager = self.provisioner.network_manager
-            if network_manager is None:
-                raise DirectWardenError(
-                    "networked snapshot has no source network manager"
-                )
-            network_lease = network_manager.lease(
-                registration.sandbox_id,
-                registration.sandbox_generation,
-            )
-            if network_lease is None:
-                raise DirectWardenError(
-                    "networked snapshot has no durable source network lease"
-                )
-            source_guest_ip = network_lease.guest_ip
-        portable = StorageNativeSandboxManifest.from_local(
-            registration,
-            local_manifest,
-            source_guest_ip=source_guest_ip,
-        )
-        storage = self.warden._storage_record(sandbox)
+        portable = self._portable_manifest(registration, local_manifest)
+        storage = self.warden.workspace_record(sandbox)
         if storage.state.value != "published":
             storage = self.warden.publish_storage_snapshot(
                 sandbox,
@@ -1148,11 +1379,13 @@ class DirectSandboxService:
         *,
         migration_id: str,
     ) -> tuple[SandboxRecord, StorageNativeMigration]:
-        registration, stored = self.provisioner.stage_storage_native_import(
-            migration,
-            migration_id=migration_id,
-        )
-        return self._record(registration), stored
+        # The destination has no running execution authority. Serialize retries,
+        # cancellation and deletion with this exact incarnation while staging.
+        with self._lock(migration.manifest.sandbox_id, migration.manifest.sandbox_generation):
+            registration, stored = self.provisioner.stage_storage_native_import(
+                migration, migration_id=migration_id,
+            )
+            return self._record(registration), stored
 
     def finalize_moved_source(
         self,
@@ -1266,12 +1499,172 @@ class DirectSandboxService:
                     "managed process default cwd is unavailable"
                 ) from exc
         payload = spec.control_payload(uid=uid, gid=gid, default_cwd=default_cwd)
+        # Match the supervisor's one-primary-per-generation invariant before
+        # reserving future growth. Commit active BEFORE the ambiguous RPC.
+        digest = hashlib.sha256(control_request_bytes(payload)).hexdigest()
+        with self._capacity_guard:
+            intent = self.provisioner.registry.growth_intent(
+                sandbox_id, registration.sandbox_generation, action="launch",
+                job_id=spec.job_id, launch_sha256=digest)
+            self._growth_intents[(sandbox_id, registration.sandbox_generation)] = intent
+        if intent.phase == "queued":
+            try:
+                self._admit_managed_growth(registration, request_id="", startup=True)
+            except SandboxCapacityUnavailableError as exc:
+                # The primary has not been dispatched. Keep its durable queued
+                # identity and expose the existing bounded safe-retry contract.
+                # Never wrap the supervisor RPC: a failure there is ambiguous.
+                raise SandboxStartupBusyError(str(exc)) from exc
         raw = self._managed_control(registration, payload, retry_not_ready=True)
-        return ManagedProcessRecord.from_control_response(
-            raw,
-            sandbox_id=sandbox_id,
-            sandbox_generation=registration.sandbox_generation,
+        result = ManagedProcessRecord.from_control_response(
+            raw, sandbox_id=sandbox_id, sandbox_generation=registration.sandbox_generation)
+        if not intent.job_id:
+            with self._capacity_guard:
+                bound = self.provisioner.registry.growth_intent(
+                    sandbox_id, registration.sandbox_generation, action="bind",
+                    job_id=result.job_id, launch_sha256=digest)
+                self._growth_intents[(sandbox_id, registration.sandbox_generation)] = bound
+        self._observe_managed_terminal(result)
+        return result
+
+    def _growth_remaining(self, owner, bound):
+        sample = self._resident_memory.get(owner)
+        # Credit only currently observed resident pages. On RAM backing shmem
+        # is the common charge shared by physical memory and tmpfs capacity;
+        # filesystem page cache cannot buy future tmpfs allocation space.
+        observed = 0 if sample is None else (
+            min(sample.current_bytes, sample.shared_memory_bytes)
+            if self.warden.application_memory_mode(*owner) == "ram"
+            else sample.current_bytes)
+        return max(0, bound - observed)
+
+    def _transition_memory_cost(self, kind, owner, memory_bytes, **kwargs):
+        return TransitionCost(
+            kind, memory_bytes,
+            ram_backing_bytes=(memory_bytes if self.warden.application_memory_mode(*owner) == "ram" else 0),
+            **kwargs,
         )
+
+    def _growth_cost(self, owner, bound, *, kind=TransitionKind.RESTORE, request_id=""):
+        file_backed = self.warden.application_memory_mode(*owner) == "file"
+        # After a safe wait, file-backed application pages can be evicted and
+        # refaulted. They are not permanent unswappable growth debt. Private
+        # runtime growth is unknown, not a fictional zero-cost bound. Keep the
+        # initial launch bound until the first authoritative safe wait.
+        memory = None if file_backed and request_id else self._growth_remaining(owner, bound)
+        return self._transition_memory_cost(kind, owner, memory,
+            provenance="reclaimable-file-growth" if memory is None else "primary-process-growth-forecast")
+
+    def _refresh_growth_forecasts_locked(self):
+        self._transitions.set_growth_forecasts({
+            key: self._growth_cost(key, item.memory_bytes, request_id=item.request_id)
+            for key, item in self._growth_intents.items() if item.phase == "active"
+        })
+
+    def _observe_managed_park(self, registration):
+        if not registration.spec.managed_process:
+            return
+        key = (registration.sandbox_id, registration.sandbox_generation)
+        self._resident_memory.forget(key)
+        with self._capacity_guard:
+            intent = self.provisioner.registry.growth_intent(*key, action="park")
+            if intent is not None:
+                self._growth_intents[key] = intent
+            self._refresh_growth_forecasts_locked()
+            self._admission_changed.notify_all()
+
+    def observe_managed_wait(self, sandbox_id, generation, request_id):
+        registration = self._require_registration(sandbox_id)
+        if not registration.spec.managed_process:
+            return
+        with self._capacity_guard:
+            intent = self.provisioner.registry.growth_intent(
+                sandbox_id, generation, action="wait", request_id=request_id)
+            self._growth_intents[(sandbox_id, generation)] = intent
+            self._refresh_growth_forecasts_locked()
+            self._admission_changed.notify_all()
+
+    def _observe_managed_terminal(self, record):
+        if not record.terminal:
+            return
+        with self._capacity_guard:
+            intent = self.provisioner.registry.growth_intent(
+                record.sandbox_id, record.sandbox_generation,
+                action="terminal", job_id=record.job_id)
+            if intent is not None:
+                self._growth_intents[(record.sandbox_id, record.sandbox_generation)] = intent
+            self._refresh_growth_forecasts_locked()
+            self._admission_changed.notify_all()
+
+    def admit_managed_continuation(self, sandbox_id, generation, request_id):
+        """Before acknowledging a relay wake, reserve the next growth exposure.
+
+        Called before the runtime's exclusive lifecycle lock, so another waiting
+        guest can park and deletion can cancel this queued continuation.
+        """
+        registration = self._require_registration(sandbox_id)
+        if registration.sandbox_generation != generation:
+            raise SandboxConflictError("managed continuation lost incarnation")
+        if registration.spec.managed_process:
+            # A capture already in progress must not delay response admission.
+            # Its durable park commits the same monotonic placement before
+            # waking admission waiters. This short probe handles recovered or
+            # imported checkpoints that have not passed that local boundary.
+            with self._try_lock(sandbox_id, generation) as available:
+                if available:
+                    current = self._require_registration(sandbox_id)
+                    if current.sandbox_generation != generation:
+                        raise SandboxConflictError("managed continuation lost incarnation")
+                    sandbox = current.to_direct_sandbox()
+                    lifecycle = self.warden.inspect(sandbox)
+                    if lifecycle is not None and lifecycle.state == HibernationState.PARKED:
+                        self.warden.prepare_restore_memory(sandbox)
+            try:
+                self._admit_managed_growth(registration, request_id=request_id, startup=False)
+            except SandboxCapacityUnavailableError as exc:
+                # No continuation has been acknowledged or runtime restored.
+                # Use the existing activation retry contract without asserting
+                # that this still-resident safe wait is physically parked.
+                raise SandboxStartupBusyError(str(exc)) from exc
+
+    def _admit_managed_growth(self, registration, *, request_id, startup):
+        key = (registration.sandbox_id, registration.sandbox_generation)
+        kind = TransitionKind.STARTUP if startup else TransitionKind.RESTORE
+        bound = int(registration.spec.memory_mb * 1024**2)
+        deadline = time.monotonic() + self.admission_wait_seconds
+
+        def current_cost():
+            return self._growth_cost(key, bound, kind=kind, request_id=request_id)
+
+        def validate_owner():
+            current = self._require_registration(key[0])
+            if current.sandbox_generation != key[1] or current.phase != "owned":
+                raise SandboxConflictError("queued primary growth lost incarnation")
+
+        with self._capacity_guard:
+            previous = self._growth_intents.get(key)
+            if previous is not None and (previous.phase in {"active", "terminal"} or (
+                    not startup and previous.phase == "safe" and previous.request_id
+                    and previous.request_id != request_id)):
+                if request_id:
+                    # The existing exposure already covers a fast response, but
+                    # its old park must be revoked in the same durable order.
+                    self.provisioner.registry.relay_wake_fence(*key, request_id, record=True)
+                return
+        # Existing queues and exact owner tokens remain the only admission
+        # mechanism. Pending intent cannot allocate; active is durable before
+        # this method returns and remains counted after the short permit ends.
+        with self._transition_demand(key, current_cost()):
+            slot = self.startup_admission(owner=key) if startup else self._restore_slot(owner=key, deadline=deadline)
+            with slot:
+                with self._active_admission_guard(
+                    ResourceQuantity(memory_mb=registration.spec.memory_mb), check_shape=True,
+                    check_cpu=False, transition_cost=current_cost(), transition_owner=key,
+                    transition_cost_provider=current_cost, validate_owner=validate_owner, deadline=deadline):
+                    intent = self.provisioner.registry.growth_intent(
+                        *key, action="activate", request_id=request_id)
+                    self._growth_intents[key] = intent
+                    self._refresh_growth_forecasts_locked()
 
     @staticmethod
     def _managed_workload_credentials(
@@ -1308,11 +1701,10 @@ class DirectSandboxService:
                 "job_id": job_id,
             },
         )
-        return ManagedProcessRecord.from_control_response(
-            raw,
-            sandbox_id=sandbox_id,
-            sandbox_generation=registration.sandbox_generation,
-        )
+        result = ManagedProcessRecord.from_control_response(
+            raw, sandbox_id=sandbox_id, sandbox_generation=registration.sandbox_generation)
+        self._observe_managed_terminal(result)
+        return result
 
     def managed_process_logs(
         self,
@@ -1383,54 +1775,159 @@ class DirectSandboxService:
         retry_not_ready: bool = False,
         max_stdout_bytes: int = 2 * 1024 * 1024,
     ) -> dict[str, object]:
-        with self._lock(
-            registration.sandbox_id,
-            registration.sandbox_generation,
-        ):
+        read_only = payload.get("action") in {"status", "logs"}
+        deadline = time.monotonic() + _MANAGED_CONTROL_DEADLINE_SECONDS
+        request_bytes = control_request_bytes(payload)
+        last_error = "managed process control exchange failed"
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or not self._management_read_slots.acquire(timeout=max(0, remaining)):
+                if read_only:
+                    raise ManagedProcessReadUnavailable("managed process read admission deadline exceeded")
+                raise SandboxStartupBusyError("managed process control admission deadline exceeded")
+            retry = False
+            try:
+                # Queue before taking ownership. Backoff never retains a sandbox
+                # lifecycle lock, exec lease or host-management permit.
+                with self._request_lock(registration.sandbox_id, registration.sandbox_generation):
+                    current = self._require_managed_registration(registration.sandbox_id)
+                    if (current.sandbox_generation != registration.sandbox_generation
+                            or current.operation_id != registration.operation_id):
+                        raise SandboxConflictError("managed process control no longer owns this incarnation")
+                    sandbox = current.to_direct_sandbox()
+                    lifecycle = self.warden.inspect(sandbox)
+                    if lifecycle is None:
+                        raise ManagedProcessError("managed process sandbox has no lifecycle journal")
+                    if lifecycle.state == HibernationState.PARKED:
+                        raise ManagedProcessError("managed process is suspended; status is served by the gateway")
+                    self._ensure_running(sandbox)
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        if read_only:
+                            raise ManagedProcessReadUnavailable("managed process read deadline exceeded")
+                        raise SandboxStartupBusyError("managed process control admission deadline exceeded")
+                    # Keep the supervisor timeout within the remaining HTTP
+                    # operation budget, including time spent in its FIFO queue.
+                    guest_timeout = max(1, min(10000, int(remaining * 1000) - 100))
+                    with self.warden.exec_lease(
+                        sandbox, (MANAGED_PROCESS_BINARY, "ctl", "--timeout", f"{guest_timeout}ms"),
+                        user="0:0",
+                    ) as command:
+                        result = self.process_runner.run(
+                            command, input_bytes=request_bytes, timeout_seconds=remaining,
+                            max_stdout_bytes=max_stdout_bytes, max_stderr_bytes=64 * 1024,
+                        )
+                    if result.exit_code == 0:
+                        self.mark_activity(registration.sandbox_id, registration.sandbox_generation)
+                        return parse_control_response(result.stdout)
+                    try:
+                        failed_response = parse_control_response(result.stdout)
+                        last_error = str(failed_response.get("error") or "").strip()
+                    except ManagedProcessError:
+                        failed_response = None
+                        last_error = ""
+                    last_error = last_error or result.stderr.decode("utf-8", errors="replace").strip()
+                    not_connected = (failed_response is not None
+                                     and failed_response.get("error_code") == "control_not_connected")
+                    if failed_response is not None and not not_connected:
+                        # An authoritative supervisor rejection is a semantic
+                        # failure (including persistence errors), never overload.
+                        raise ManagedProcessError(last_error or "managed process control request failed")
+                    if read_only:
+                        raise ManagedProcessReadUnavailable(last_error or "managed process read transport failed")
+                    # Only the helper can prove that no request byte reached the
+                    # supervisor. Ambiguous start/signal exchanges never retry.
+                    retry = retry_not_ready and not_connected
+            except DirectExecTimeoutError as exc:
+                if read_only:
+                    raise ManagedProcessReadUnavailable("managed process read timed out; retry the read") from exc
+                raise
+            except SandboxStartupBusyError:
+                retry = True  # No control command was dispatched.
+            finally:
+                self._management_read_slots.release()
+            if not retry:
+                raise ManagedProcessError(last_error or "managed process control exchange failed")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                if read_only:
+                    raise ManagedProcessReadUnavailable("managed process read deadline exceeded")
+                raise SandboxStartupBusyError("managed process control admission deadline exceeded")
+            time.sleep(min(0.02, remaining))
+
+    def resident_memory_sample(self, sandbox_id: str, generation: int):
+        return self._resident_memory.get((sandbox_id, generation))
+
+    def resident_memory_ram_bytes(self, sandbox_id, generation, sample):
+        if self.resident_memory_file_backed(sandbox_id, generation):
+            return 0
+        return None if sample is None else sample.shared_memory_bytes
+
+    def resident_memory_file_backed(self, sandbox_id, generation):
+        return self.warden.application_memory_mode(sandbox_id, generation) == "file"
+
+    def resident_application_reclaim_enabled(self, sandbox_id, generation):
+        return (bool(getattr(self.warden.config, "reflink_memory_restore", False))
+                and self.resident_memory_file_backed(sandbox_id, generation))
+
+    def cached_resident_memory_sample(self, sandbox_id: str, generation: int):
+        """Historical calibration evidence; not an active admission measurement."""
+        return self._resident_memory.historical((sandbox_id, generation))
+
+    def refresh_resident_memory(self, keys=None) -> None:
+        """Sample live managed candidates before their first pressure wait."""
+        registrations = {
+            (item.sandbox_id, item.sandbox_generation): item
+            for item in self.provisioner.registry.snapshot().records
+        }
+        with self._capacity_guard:
+            for stale in self._growth_intents.keys() - registrations.keys():
+                self._growth_intents.pop(stale, None)
+            self._refresh_growth_forecasts_locked()
+        keys = (
+            set(keys)
+            if keys is not None
+            else {
+                key
+                for key, item in registrations.items()
+                if item.phase == "owned"
+                and item.spec.parkable
+                and item.spec.managed_process
+            }
+        )
+        self._resident_memory.retain(keys)
+        self._resident_cgroup_paths = {
+            key: path
+            for key, path in self._resident_cgroup_paths.items()
+            if key in keys
+        }
+        for key in keys:
+            registration = registrations.get(key)
+            if registration is None or registration.phase != "owned":
+                continue
             sandbox = registration.to_direct_sandbox()
-            lifecycle = self.warden.inspect(sandbox)
-            if lifecycle is None:
-                raise ManagedProcessError(
-                    "managed process sandbox has no lifecycle journal"
-                )
-            if lifecycle.state == HibernationState.PARKED:
-                raise ManagedProcessError(
-                    "managed process is suspended; status is served by the gateway"
-                )
-            self._ensure_running(sandbox)
-            attempts = 50 if retry_not_ready else 1
-            last_error = ""
-            for attempt in range(attempts):
-                with self.warden.exec_lease(
-                    sandbox,
-                    (MANAGED_PROCESS_BINARY, "ctl", "--timeout", "10s"),
-                    user="0:0",
-                ) as command:
-                    result = self.process_runner.run(
-                        command,
-                        input_bytes=control_request_bytes(payload),
-                        timeout_seconds=15,
-                        max_stdout_bytes=max_stdout_bytes,
-                        max_stderr_bytes=64 * 1024,
-                    )
-                if result.exit_code == 0:
-                    self.mark_activity(
-                        registration.sandbox_id,
-                        registration.sandbox_generation,
-                    )
-                    return parse_control_response(result.stdout)
+            lifecycle = self.warden.inspect_snapshot(sandbox)
+            if (
+                lifecycle is None
+                or not lifecycle.sentry_pid
+                or not lifecycle.sentry_start_time_ticks
+            ):
+                continue
+            if key not in self._resident_cgroup_paths:
                 try:
-                    failed_response = parse_control_response(result.stdout)
-                    last_error = str(failed_response.get("error") or "").strip()
-                except ManagedProcessError:
-                    last_error = ""
-                if not last_error:
-                    last_error = result.stderr.decode("utf-8", errors="replace").strip()
-                if not retry_not_ready or attempt + 1 >= attempts:
-                    break
-                time.sleep(0.02)
-            raise ManagedProcessError(
-                last_error or "managed process control exchange failed"
+                    config = json.loads((sandbox.bundle / "config.json").read_text())
+                    path = config.get("linux", {}).get("cgroupsPath")
+                    if path is not None and not isinstance(path, str):
+                        continue
+                    self._resident_cgroup_paths[key] = path
+                except (OSError, ValueError, TypeError):
+                    continue
+            self._resident_memory.sample(
+                key,
+                pid=lifecycle.sentry_pid,
+                start_time_ticks=lifecycle.sentry_start_time_ticks,
+                container_id=sandbox.container_id,
+                expected_path=self._resident_cgroup_paths[key],
             )
 
     def mark_activity(self, sandbox_id: str, generation: int) -> None:
@@ -1464,11 +1961,11 @@ class DirectSandboxService:
         validate_container_path("sandbox file path", path)
         registration = self._require_registration(sandbox_id)
         command = ("/bin/cat", "--", path)
-        if registration.spec.filesystem.management_helper == "static":
-            command = ("/.ucloud-job-init", "files", "read", path, str(max_bytes))
+        if registration.spec.managed_process or registration.spec.filesystem.management_helper == "static":
+            command = (MANAGED_PROCESS_BINARY, "files", "read", path, str(max_bytes))
         # The node buffers file output. Bound those buffers independently of
         # cold starts; an implicit wake uses the separate restore queue.
-        if not self._file_read_slots.acquire(timeout=self.admission_wait_seconds):
+        if not self._management_read_slots.acquire(timeout=self.admission_wait_seconds):
             raise SandboxStartupBusyError("node file read admission wait deadline exceeded")
         try:
             result = self._file_exec(
@@ -1479,7 +1976,7 @@ class DirectSandboxService:
                 max_stderr_bytes=64 * 1024,
             )
         finally:
-            self._file_read_slots.release()
+            self._management_read_slots.release()
         if result.exit_code != 0:
             raise DirectWardenError(
                 f"sandbox file read failed with exit {result.exit_code}"
@@ -1526,9 +2023,11 @@ class DirectSandboxService:
         validate_container_path("sandbox file path", path)
         registration = self._require_registration(sandbox_id)
         command = ("/bin/sh", "-c", sandbox_file_write_script(), "ucloud-write", path)
-        if registration.spec.filesystem.management_helper == "static":
+        # Managed sandboxes already own this injected helper. Avoid starting
+        # a shell and several utilities for each uploaded tool.
+        if registration.spec.managed_process or registration.spec.filesystem.management_helper == "static":
             command = (
-                "/.ucloud-job-init",
+                MANAGED_PROCESS_BINARY,
                 "files",
                 "write",
                 path,
@@ -1595,6 +2094,8 @@ class DirectSandboxService:
         with self._capacity_guard:
             self._admission_open = False
             self._admission_changed.notify_all()
+        self._startup_slots.cancel_waiters()
+        self._restore_slots.cancel_waiters()
 
     def open_admission(self) -> None:
         with self._capacity_guard:
@@ -1609,25 +2110,57 @@ class DirectSandboxService:
         self.ensure_running_with_timings(sandbox)
 
     @contextmanager
-    def _startup_demand(self, sandbox_id: str, generation: int, requested: ResourceQuantity):
-        # Track actual memory before queueing for a startup slot. A single
-        # queued create must not evict every warm sandbox on the worker.
-        key = (sandbox_id, generation)
+    def _observe_transition(self, owner, cost):
         with self._capacity_guard:
-            previous, users = self._startup_demands.get(key, (requested, 0))
-            self._startup_demands[key] = (previous, users + 1)
+            claim = self._transitions.claim(owner, cost)
         try:
             yield
         finally:
             with self._capacity_guard:
-                previous, users = self._startup_demands[key]
-                if users == 1:
-                    del self._startup_demands[key]
-                else:
-                    self._startup_demands[key] = (previous, users - 1)
+                self._transitions.release(claim)
+                self._admission_changed.notify_all()
 
     @contextmanager
-    def startup_admission(self):
+    def _transition_demand(self, owner, cost):
+        with self._capacity_guard:
+            token = self._transitions.wait(owner, cost)
+        try:
+            yield
+        finally:
+            with self._capacity_guard:
+                self._transitions.unwait(token)
+                self._admission_changed.notify_all()
+
+    def _startup_demand(self, sandbox_id, generation, requested):
+        owner = (sandbox_id, generation)
+        return self._transition_demand(owner, self._transition_memory_cost(
+            TransitionKind.STARTUP, owner, int(requested.memory_mb * 1024 ** 2), provenance="requested-memory-bound"))
+
+    def _restore_cost(self, sandbox_id, generation, requested):
+        # This small authenticated metadata read contains actual sparse capture
+        # allocation, not the sandbox's disk quota or virtual address-space size.
+        registration = self._require_registration(sandbox_id)
+        if registration.sandbox_generation != generation:
+            raise SandboxConflictError("restore cost no longer owns incarnation")
+        record = self.warden.inspect(registration.to_direct_sandbox())
+        try:
+            manifest = self.warden.artifacts.load_published_metadata(
+                sandbox_id=sandbox_id, sandbox_generation=generation,
+                hibernation_generation=record.hibernation_generation)
+        except (AttributeError, OSError, ValueError, HibernationError):
+            return self._transition_memory_cost(TransitionKind.RESTORE, (sandbox_id, generation), int(requested.memory_mb * 1024 ** 2),
+                                  provenance="requested-memory-bound")
+        allocated = sum(file.artifact.allocated_bytes for file in manifest.files)
+        memory = max(allocated, int(requested.memory_mb * 1024**2)) if registration.spec.managed_process else allocated
+        return self._transition_memory_cost(TransitionKind.RESTORE, (sandbox_id, generation), memory, read_bytes=allocated,
+                              provenance="authenticated-checkpoint-allocation")
+
+    def transition_admission_snapshot(self):
+        with self._capacity_guard:
+            return self._transitions.snapshot()
+
+    @contextmanager
+    def startup_admission(self, *, owner=None):
         """Queue cold creates and buffered uploads before allocating resources.
 
         Reentrant upload helpers reuse the outer request's reservation.
@@ -1637,20 +2170,29 @@ class DirectSandboxService:
         if getattr(self._startup_admission_state, "admitted", False):
             yield
             return
-        if not self._startup_slots.acquire(timeout=self.admission_wait_seconds):
+        with self._capacity_guard:
+            if not self._admission_open:
+                raise SandboxAdmissionClosedError("direct node admission is closed")
+        deadline = time.monotonic() + self.admission_wait_seconds
+        if not self._startup_slots.acquire(timeout=self.admission_wait_seconds, owner=owner):
             raise SandboxStartupBusyError("node startup admission wait deadline exceeded")
         self._startup_admission_state.admitted = True
+        self._startup_admission_state.deadline = deadline
         try:
+            with self._capacity_guard:
+                if not self._admission_open:
+                    raise SandboxAdmissionClosedError("direct node admission is closed")
             yield
         finally:
             self._startup_admission_state.admitted = False
+            self._startup_admission_state.deadline = None
             self._startup_slots.release()
 
     @contextmanager
-    def _restore_slot(self):
-        # FIFO admission prevents a retrying wake from repeatedly losing to new
-        # arrivals. Only this sandbox's lifecycle lock is held while waiting.
-        if not self._restore_slots.acquire(timeout=self.admission_wait_seconds):
+    def _restore_slot(self, *, owner=None, deadline=None):
+        # FIFO tickets own no lifecycle lock while waiting.
+        remaining = self.admission_wait_seconds if deadline is None else max(0, deadline - time.monotonic())
+        if not self._restore_slots.acquire(timeout=remaining, owner=owner):
             raise SandboxRestoreBusyError("node restore admission wait deadline exceeded")
         try:
             yield
@@ -1659,40 +2201,75 @@ class DirectSandboxService:
 
     @contextmanager
     def _restore_admission(self, sandbox_id: str, generation: int, requested: ResourceQuantity):
-        # Only admission failures before resume begins are safe to replay.
-        # Do not infer that guarantee from a later, fallible inventory read.
+        # Publish demand before releasing lifecycle ownership. Deletion/drain
+        # can now cancel a queued wake; no parked guest has been activated yet.
         key = (sandbox_id, generation)
-        with self._capacity_guard:
-            previous, users = self._restore_demands.get(key, (requested, 0))
-            self._restore_demands[key] = (previous, users + 1)
-        try:
-            with ExitStack() as stack:
-                try:
-                    stack.enter_context(self._restore_slot())
-                    stack.enter_context(self._reserve_active_capacity(sandbox_id, generation, requested))
-                except SandboxCapacityUnavailableError as exc:
-                    raise SandboxRestoreBusyError(str(exc)) from exc
-                yield
-        finally:
-            with self._capacity_guard:
-                previous, users = self._restore_demands[key]
-                if users == 1:
-                    del self._restore_demands[key]
-                else:
-                    self._restore_demands[key] = (previous, users - 1)
+        registration = self._require_registration(sandbox_id)
+        if registration.sandbox_generation != generation:
+            raise DirectWardenError("queued restore generation lost incarnation ownership")
+        self.warden.prepare_restore_memory(registration.to_direct_sandbox())
+        cost = self._restore_cost(sandbox_id, generation, requested)
+        initial = self.warden.inspect(self._require_registration(sandbox_id).to_direct_sandbox())
+        deadline = time.monotonic() + self.admission_wait_seconds
+        def validate_owner():
+            current = self._require_registration(sandbox_id)
+            if current.sandbox_generation != generation:
+                raise DirectWardenError("queued restore generation lost incarnation ownership")
 
-    def warm_park_demand_bytes(self) -> int:
-        """Memory to leave for queued/in-progress restores and cold starts."""
+        with self._transition_demand(key, cost), ExitStack() as stack:
+            try:
+                with self._unlocked_for_admission(key):
+                    stack.enter_context(self._restore_slot(owner=key, deadline=deadline))
+                    stack.enter_context(self._reserve_active_capacity(sandbox_id, generation, requested,
+                                                                     cost=cost, deadline=deadline,
+                                                                     validate_owner=validate_owner))
+            except SandboxCapacityUnavailableError as exc:
+                raise SandboxRestoreBusyError(str(exc)) from exc
+            # A peer may delete, park again or replace ownership while queued.
+            validate_owner()
+            current = self.warden.inspect(self._require_registration(sandbox_id).to_direct_sandbox())
+            if initial is None or current is None or current.hibernation_generation != initial.hibernation_generation:
+                raise SandboxRestoreBusyError("checkpoint changed during restore admission")
+            yield
+
+    def warm_park_demand(self) -> MemoryDemand:
+        """Memory for admitted work and the next eligible foreground owner.
+
+        The rest of a FIFO queue cannot allocate yet. Charging every request's
+        configured limit at once would evict resident waits to fill concurrency
+        slots. Reclaim enough for progress; actual admission remains concurrent
+        whenever live headroom covers the full guarantees.
+        """
         with self._capacity_guard:
             if not self._admission_open:
-                return 1 << 63  # draining should reclaim, never retain warm work
-            requests = dict(self._active_reservations)
-            requests.update({key: value[0] for key, value in self._startup_demands.items()})
-            requests.update({key: value[0] for key, value in self._restore_demands.items()})
-            incoming = sum(item.memory_mb for item in requests.values()) * 1024**2
-        return incoming
+                return MemoryDemand(1 << 63, 1 << 63)
+            self._refresh_growth_forecasts_locked()
+            limits = {
+                TransitionKind.STARTUP: self._startup_slots.capacity,
+                TransitionKind.RESTORE: self._restore_slots.capacity,
+            }
+            return MemoryDemand(
+                self._transitions.next_memory_demands(limits),
+                self._transitions.next_memory_demands(limits, resource="ram_backing_bytes"),
+            )
+
+    def resident_demand_snapshot(self):
+        """Observed ledger costs, never another resource reservation."""
+        with self._capacity_guard:
+            self._refresh_growth_forecasts_locked()
+            return self._transitions.demand_snapshot({
+                TransitionKind.STARTUP: self._startup_slots.capacity,
+                TransitionKind.RESTORE: self._restore_slots.capacity,
+            })
 
     def _resume_with_network(self, registration, *, operation_id, timings):
+        # Admission temporarily releases the lifecycle lock. A preceding waiter
+        # may already have resumed this exact checkpoint before we reacquire it.
+        current = self.warden.inspect(registration.to_direct_sandbox())
+        if (current is not None and current.state == HibernationState.RUNNING
+                and self.warden.running_process_alive(registration.to_direct_sandbox())):
+            return current
+        self._resident_memory.forget((registration.sandbox_id, registration.sandbox_generation))
         # The caller holds this sandbox's lifecycle lock and restore admission.
         # Storage and network preparation are independent; join both before
         # starting runsc, including on failure so no work escapes the lock.
@@ -1709,10 +2286,26 @@ class DirectSandboxService:
                 timings["network_prepare"] = ready.result()
 
             with _translate_storage_capacity():
-                return self.warden.resume(
-                    registration.to_direct_sandbox(), operation_id=operation_id,
-                    timings=timings, before_restore=require_network,
-                )
+                try:
+                    restored = self.warden.resume(
+                        registration.to_direct_sandbox(), operation_id=operation_id,
+                        timings=timings, before_restore=require_network,
+                    )
+                except DirectRegistryCapacityUnavailable as exc:
+                    # The disk overlap claim precedes candidate launch. Keep
+                    # the exact durable checkpoint parked and route this safe
+                    # retry through the same internal restore admission result.
+                    current = self.warden.inspect(registration.to_direct_sandbox())
+                    if current is not None and current.state == HibernationState.PARKED:
+                        raise SandboxRestoreBusyError(str(exc)) from exc
+                    raise
+                if registration.spec.managed_process:
+                    key = (registration.sandbox_id, registration.sandbox_generation)
+                    with self._capacity_guard:
+                        intent = self.provisioner.registry.growth_intent(*key, action="activate")
+                        self._growth_intents[key] = intent
+                        self._refresh_growth_forecasts_locked()
+                return restored
 
     def ensure_running_with_timings(self, sandbox) -> dict[str, float]:
         started = time.monotonic()
@@ -1782,6 +2375,10 @@ class DirectSandboxService:
         check_cpu: bool = True,
         check_memory_pressure: bool = True,
         validate_owner: Callable[[], None] | None = None,
+        transition_cost: TransitionCost | None = None,
+        transition_owner: tuple[str, int] | None = None,
+        transition_cost_provider: Callable[[], TransitionCost] | None = None,
+        deadline: float | None = None,
     ):
         """Yield the capacity lock only to publish an admitted operation's lease.
 
@@ -1791,8 +2388,10 @@ class DirectSandboxService:
         Existing lifecycle locks/leases keep create, wake and exec owners stable.
         """
 
-        deadline = time.monotonic() + _CPU_ADMISSION_DEADLINE_SECONDS
+        cpu_deadline = time.monotonic() + _CPU_ADMISSION_DEADLINE_SECONDS
+        deadline = deadline if deadline is not None else cpu_deadline
         previous_error: str | None = None
+        retry_deadline = deadline
 
         def check_capacity() -> ResourceQuantity | None:
             if not self._admission_open:
@@ -1808,7 +2407,7 @@ class DirectSandboxService:
         while True:
             with self._capacity_guard:
                 capacity = check_capacity()
-                if previous_error is not None and time.monotonic() >= deadline:
+                if previous_error is not None and time.monotonic() >= retry_deadline:
                     raise SandboxCapacityUnavailableError(previous_error)
                 metrics_provider = (
                     self._runtime_metrics_provider if capacity is not None else None
@@ -1818,6 +2417,8 @@ class DirectSandboxService:
             metrics = metrics_provider() if metrics_provider is not None else None
             if validate_owner is not None:
                 validate_owner()
+            if transition_cost_provider is not None:
+                transition_cost = transition_cost_provider()
             with self._capacity_guard:
                 capacity = check_capacity()
                 if (
@@ -1827,33 +2428,90 @@ class DirectSandboxService:
                     raise SandboxCapacityUnavailableError(
                         "direct node runtime metrics provider changed during admission"
                     )
+                pressure_request = requested
+                if transition_cost is not None and transition_cost.memory_bytes is not None:
+                    pressure_request = ResourceQuantity(vcpu=requested.vcpu,
+                        memory_mb=(transition_cost.memory_bytes + 1024**2 - 1) // 1024**2)
                 pressure_error = (
                     dynamic_pressure_error(
-                        metrics, requested, check_cpu=check_cpu,
+                        metrics, pressure_request, check_cpu=check_cpu,
                         check_memory_pressure=check_memory_pressure,
                     )
                     if capacity is not None
                     else None
                 )
+                projected_error = False
+                if transition_cost is not None and capacity is not None and metrics is not None:
+                    # MemAvailable can be shared by many concurrent requests.
+                    # Reserve each in-flight footprint exactly once before it
+                    # allocates; preserve the existing physical 2 GiB floor.
+                    headroom = (max(0, metrics.memory_available_mb - 2048) * 1024 ** 2
+                                if metrics.memory_total_mb > 0 else 0)
+                    self._refresh_growth_forecasts_locked()
+                    if transition_cost_provider is not None:
+                        self._transitions.refresh_wait_cost(transition_owner, transition_cost)
+                    projected = self._transitions.projected_memory_bytes(
+                        transition_owner, transition_cost,
+                        restore_capacity=self._restore_slots.capacity,
+                    )
+                    if metrics.memory_total_mb <= 0 or projected > headroom:
+                        pressure_error = "node memory headroom is reserved by in-flight transitions"
+                        projected_error = True
+                    # File-backed restores spend physical headroom but no tmpfs
+                    # blocks. They still cannot consume physical bytes already
+                    # promised to RAM-backed owners above. The independent RAM
+                    # projection preserves their complete unswappable guarantee.
+                    projected_ram = self._transitions.projected_memory_bytes(
+                        transition_owner, transition_cost,
+                        restore_capacity=self._restore_slots.capacity,
+                        resource="ram_backing_bytes",
+                    )
+                    backing = metrics.memory_backing
+                    configured_ram = getattr(self.warden.config, "application_memory_root", None) is not None
+                    ram_available = (backing.available_bytes or 0) if backing is not None else (
+                        0 if configured_ram else None)
+                    if ram_available is not None and projected_ram > ram_available:
+                        pressure_error = "node RAM backing headroom is reserved by in-flight transitions"
+                        projected_error = True
                 now = time.monotonic()
-                if previous_error is not None and now >= deadline:
+                if previous_error is not None and now >= retry_deadline:
                     # A slow collector must not grant an operation after its
                     # pressure retry deadline, even if its late sample is low.
                     raise SandboxCapacityUnavailableError(previous_error)
                 if pressure_error is None:
                     yield
                     return
-                if not dynamic_cpu_pressure_retryable(metrics, requested):
+                memory_wait = bool(
+                    transition_cost is not None
+                    and transition_cost.kind in {TransitionKind.STARTUP, TransitionKind.RESTORE}
+                    and metrics is not None
+                    and metrics.memory_total_mb > 0
+                    and dynamic_pressure_error(
+                        metrics, pressure_request, check_cpu=False,
+                        check_memory_pressure=check_memory_pressure,
+                    ) is not None
+                )
+                demand_wait = projected_error or memory_wait
+                if not demand_wait and not dynamic_cpu_pressure_retryable(metrics, pressure_request):
                     raise SandboxCapacityUnavailableError(pressure_error)
-                # Do not start a retry unless its backoff and the normal CPU
-                # sampling interval both fit within the one-second deadline.
+                # CPU comes from the background collector; only backoff must
+                # fit. The next sample still checks the actual deadline above.
                 retry_at = now + _CPU_ADMISSION_RETRY_SECONDS
-                if retry_at + DEFAULT_CPU_SAMPLE_SECONDS >= deadline:
+                retry_deadline = deadline if demand_wait else min(deadline, cpu_deadline)
+                if retry_at >= retry_deadline:
                     raise SandboxCapacityUnavailableError(pressure_error)
                 previous_error = pressure_error
-                while time.monotonic() < retry_at:
-                    check_capacity()
-                    self._admission_changed.wait(retry_at - time.monotonic())
+                if demand_wait:
+                    # Keep pending demand visible until actual headroom returns.
+                    # Otherwise immediate memory rejection removes the ledger
+                    # entry before resident-wait reclamation can observe it.
+                    # No lifecycle lock is held here during restore admission;
+                    # delete and drain remain able to cancel this operation.
+                    self._admission_changed.wait(min(_CPU_ADMISSION_RETRY_SECONDS, retry_deadline - now))
+                else:
+                    while time.monotonic() < retry_at:
+                        check_capacity()
+                        self._admission_changed.wait(retry_at - time.monotonic())
 
     @contextmanager
     def _reserve_active_capacity(
@@ -1861,28 +2519,38 @@ class DirectSandboxService:
         sandbox_id: str,
         generation: int,
         requested: ResourceQuantity,
+        *,
+        cost: TransitionCost | None = None,
+        deadline: float | None = None,
+        validate_owner: Callable[[], None] | None = None,
     ):
         key = (sandbox_id, generation)
         active_requested = ResourceQuantity(
             vcpu=requested.vcpu,
             memory_mb=requested.memory_mb,
         )
-        with self._active_admission_guard(active_requested, check_shape=True):
-            self._active_reservations[key] = requested
+        cost = cost or self._transition_memory_cost(TransitionKind.STARTUP, key, int(requested.memory_mb * 1024 ** 2),
+                                      provenance="requested-memory-bound")
+        deadline = deadline or getattr(self._startup_admission_state, "deadline", None) or time.monotonic() + self.admission_wait_seconds
+        # Existing startup/restore queues bound transition fanout. CPU is shared
+        # through native cgroups; a sampled utilization spike must not reject an
+        # otherwise safe queued transition and send the burst to another worker.
+        # Physical memory, RAM backing, shape and owner fences remain mandatory.
+        with self._active_admission_guard(active_requested, check_shape=True, check_cpu=False, transition_cost=cost,
+                                          deadline=deadline, validate_owner=validate_owner, transition_owner=key):
+            claim = self._transitions.claim(key, cost, requested=requested)
             self._activity_epoch += 1
         try:
             yield
         finally:
             with self._capacity_guard:
-                self._active_reservations.pop(key, None)
+                self._transitions.release(claim)
                 self._activity_epoch += 1
+                self._admission_changed.notify_all()
 
     def acquire_exec_capacity(self, sandbox_id: str, generation: int) -> str:
         """Fence an existing sandbox's exec and retain the memory safety floor."""
 
-        registration = self._require_registration(sandbox_id)
-        if registration.sandbox_generation != generation:
-            raise SandboxConflictError("exec generation does not own direct sandbox")
         token = f"exec:{uuid4().hex}"
         key = (sandbox_id, generation)
 
@@ -1929,8 +2597,8 @@ class DirectSandboxService:
 
         with self._capacity_guard:
             return DirectServiceActivitySnapshot(
-                resource_reservations=dict(self._active_reservations),
-                active_sandbox_creates=len(self._active_reservations),
+                resource_reservations=self._transitions.resource_reservations(),
+                active_sandbox_creates=len(self._transitions.resource_reservations()),
                 active_exec_operations=len(self._active_exec_reservations),
                 activity_revision=self._activity_epoch,
             )
@@ -1987,15 +2655,36 @@ class DirectSandboxService:
             yield
 
     @contextmanager
+    def _unlocked_for_admission(self, key):
+        held = getattr(self._held_lifecycle, "entries", ())
+        entry = held[-1][1] if held and held[-1][0] == key else None
+        if entry is not None:
+            entry.lock.release()
+        try:
+            yield
+        finally:
+            if entry is not None:
+                # The retained entry cannot be replaced while this caller's
+                # reference lives. Revalidate durable ownership after reacquire.
+                entry.lock.acquire()
+
+    def _track_lifecycle_lock(self, key, entry):
+        if not hasattr(self._held_lifecycle, "entries"):
+            self._held_lifecycle.entries = []
+        self._held_lifecycle.entries.append((key, entry))
+
+    @contextmanager
     def _lock(self, sandbox_id: str, generation: int) -> Iterator[None]:
         key, entry = self._retain_lock(sandbox_id, generation)
         acquired = False
         try:
             entry.lock.acquire()
             acquired = True
+            self._track_lifecycle_lock(key, entry)
             yield
         finally:
             if acquired:
+                self._held_lifecycle.entries.pop()
                 entry.lock.release()
             self._release_lock_entry(key, entry)
 
@@ -2005,9 +2694,12 @@ class DirectSandboxService:
         acquired = False
         try:
             acquired = entry.lock.acquire(blocking=False)
+            if acquired:
+                self._track_lifecycle_lock(key, entry)
             yield acquired
         finally:
             if acquired:
+                self._held_lifecycle.entries.pop()
                 entry.lock.release()
             self._release_lock_entry(key, entry)
 

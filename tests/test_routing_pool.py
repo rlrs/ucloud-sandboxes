@@ -180,16 +180,26 @@ class RoutingPoolTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             store = RoutingStore(Path(tmp) / 'routing.sqlite')
             barrier = threading.Barrier(24)
+            active, peak, identities = set(), [0], set()
+            guard = threading.Lock()
             def read(_):
+                import time
+                barrier.wait(timeout=10)
                 with store._connect() as conn:
-                    identity = id(conn)
                     self.assertEqual(conn.execute('PRAGMA synchronous').fetchone()[0], 2)
-                    barrier.wait(timeout=10)
-                    return identity
+                    with guard:
+                        self.assertNotIn(id(conn), active)
+                        active.add(id(conn))
+                        identities.add(id(conn))
+                        peak[0] = max(peak[0], len(active))
+                    time.sleep(.02)
+                    with guard:
+                        active.remove(id(conn))
             with ThreadPoolExecutor(max_workers=24) as pool:
-                identities = list(pool.map(read, range(24)))
-            self.assertEqual(len(set(identities)), 24)
-            self.assertLessEqual(len(store._connections), 16)
+                list(pool.map(read, range(24)))
+            self.assertLessEqual(peak[0], 16)
+            self.assertLessEqual(len(identities), 16)
+            self.assertFalse(active)
 
     def test_returned_connections_have_no_uncommitted_state_or_read_snapshot(self):
         with TemporaryDirectory() as tmp:

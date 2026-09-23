@@ -9,8 +9,10 @@ import time
 @dataclass(eq=False)
 class _Waiter:
     weight: int
+    owner: object = None
     ready: Event = field(default_factory=Event)
     granted: bool = False
+    cancelled: bool = False
 
 
 class FairCapacity:
@@ -23,7 +25,8 @@ class FairCapacity:
         self._waiters: deque[_Waiter] = deque()
 
     def acquire(
-        self, blocking: bool = True, timeout: float | None = None, *, weight: int = 1
+        self, blocking: bool = True, timeout: float | None = None, *, weight: int = 1,
+        owner: object = None,
     ) -> bool:
         if not 0 < weight <= self.capacity:
             raise ValueError("request weight exceeds capacity")
@@ -34,7 +37,7 @@ class FairCapacity:
                 return True
             if not blocking:
                 return False
-            ticket = _Waiter(weight)
+            ticket = _Waiter(weight, owner=owner)
             self._waiters.append(ticket)
         try:
             remaining = None if deadline is None else max(0, deadline - time.monotonic())
@@ -44,7 +47,8 @@ class FairCapacity:
                 # caller accepts or returns it; never leak or double-grant it.
                 if ticket.granted:
                     return True
-                self._waiters.remove(ticket)
+                if not ticket.cancelled:
+                    self._waiters.remove(ticket)
                 self._grant_waiters()
                 return False
         except BaseException:
@@ -72,6 +76,17 @@ class FairCapacity:
                 raise ValueError("capacity released without a reservation")
             self._available += weight
             self._grant_waiters()
+
+    def cancel_waiters(self, owner: object = None) -> int:
+        """Wake queued owners without revoking already-granted capacity."""
+        with self._condition:
+            selected = [ticket for ticket in self._waiters if owner is None or ticket.owner == owner]
+            for ticket in selected:
+                self._waiters.remove(ticket)
+                ticket.cancelled = True
+                ticket.ready.set()
+            self._grant_waiters()
+            return len(selected)
 
     @property
     def waiting(self) -> int:

@@ -174,7 +174,7 @@ class FakeRunsc:
             active = (
                 self.memory_root / self.memory_directory / "application_memory.active"
             )
-            if captured.exists():
+            if captured.exists() and not getattr(self, 'reflink_restored', False):
                 captured.replace(active)
             self.status = "running"
         elif verb == "restore":
@@ -190,7 +190,12 @@ class FakeRunsc:
             active = (
                 self.memory_root / self.memory_directory / "application_memory.active"
             )
-            captured.replace(active)
+            self.reflink_restored = '--application-memory-reflink-restore=true' in command
+            if self.reflink_restored:
+                shutil.copyfile(captured, active)
+                active.chmod(0o600)
+            else:
+                captured.replace(active)
             self._start_process()
             if "--start-paused" in command:
                 self.status = "paused"
@@ -481,6 +486,56 @@ class DirectRunscWardenTests(unittest.TestCase):
             ),
         )
 
+    def test_empty_runsc_null_inventory_proves_candidate_absent(self):
+        with patch.object(
+            self.runner,
+            "run",
+            side_effect=[
+                CommandResult(("state",), 1, stderr="not found"),
+                CommandResult(("list",), 0, "null\n"),
+            ],
+        ):
+            self.assertIsNone(self.warden._candidate_identity_or_none(self.sandbox))
+
+    def test_capture_recovery_resumes_original_before_any_export_file_exists(self):
+        running = self.warden.create(self.sandbox, operation_id="create:1")
+        journal = self.warden._journal(self.sandbox)
+        capturing = journal.begin_hibernate(
+            operation_id="park:1", expected_revision=running.revision
+        )
+        generation = self.warden.artifacts.prepare_generation(
+            sandbox_id=self.sandbox.sandbox_id,
+            sandbox_generation=1,
+            hibernation_generation=capturing.hibernation_generation,
+        )
+        self.runner.checkpoint = generation
+        self.runner.status = "paused"
+        self.assertFalse((generation / "application_memory.img").exists())
+        recovered = self.warden.reconcile(self.sandbox)
+        self.assertEqual(recovered.state, HibernationState.RUNNING)
+        self.assertEqual(self.runner.status, "running")
+        self.assertEqual(recovered.sentry_pid, running.sentry_pid)
+
+    def test_capture_resume_failure_does_not_commit_running(self):
+        running = self.warden.create(self.sandbox, operation_id="create:1")
+        journal = self.warden._journal(self.sandbox)
+        capturing = journal.begin_hibernate(
+            operation_id="park:1", expected_revision=running.revision
+        )
+        self.runner.checkpoint = self.warden.artifacts.prepare_generation(
+            sandbox_id=self.sandbox.sandbox_id,
+            sandbox_generation=1,
+            hibernation_generation=capturing.hibernation_generation,
+        )
+        self.runner.status = "paused"
+        self.runner.before_resume = lambda: (_ for _ in ()).throw(
+            DirectWardenError("ambiguous resume")
+        )
+        with self.assertRaisesRegex(DirectWardenError, "ambiguous resume"):
+            self.warden.reconcile(self.sandbox)
+        self.assertEqual(journal.load().state, HibernationState.HIBERNATING)
+        self.assertEqual(self.runner.status, "paused")
+
     def test_stale_candidate_cannot_adopt_unrelated_process(self):
         self.runner._start_process()
         process = self.proc_root / str(self.runner.pid)
@@ -544,6 +599,7 @@ class DirectRunscWardenTests(unittest.TestCase):
                 }
             )
         )
+        path.chmod(0o600)
         return path
 
     def test_cleanup_rejects_foreign_gofer_before_signalling_sentry(self):
@@ -690,10 +746,16 @@ class DirectRunscWardenTests(unittest.TestCase):
             self.assertEqual(self.storage.events, ["rootfs-park", "seal", "release"])
             return replace(current, state=StorageVolumeState.PUBLISHED)
 
-        with patch.object(self.storage, "ensure_published", side_effect=upload, create=True):
-            published = self.warden.publish_storage_snapshot(self.sandbox, operation_id="import:publish")
+        with patch.object(
+            self.storage, "ensure_published", side_effect=upload, create=True
+        ):
+            published = self.warden.publish_storage_snapshot(
+                self.sandbox, operation_id="import:publish"
+            )
         self.assertEqual(published.state, StorageVolumeState.PUBLISHED)
-        self.assertEqual(self.warden.inspect(self.sandbox).state, HibernationState.PARKED)
+        self.assertEqual(
+            self.warden.inspect(self.sandbox).state, HibernationState.PARKED
+        )
 
     def test_background_upload_does_not_hold_wake_lock(self):
         self.warden.create(self.sandbox, operation_id="create:1")
@@ -708,11 +770,22 @@ class DirectRunscWardenTests(unittest.TestCase):
                 raise TimeoutError("test did not release upload")
             raise StorageNativeConflictError("superseded publication")
 
-        with patch.object(self.storage, "ensure_published", side_effect=upload, create=True), ThreadPoolExecutor(max_workers=2) as pool:
-            publication = pool.submit(self.warden.publish_storage_snapshot, self.sandbox, operation_id="publish:1")
+        with (
+            patch.object(
+                self.storage, "ensure_published", side_effect=upload, create=True
+            ),
+            ThreadPoolExecutor(max_workers=2) as pool,
+        ):
+            publication = pool.submit(
+                self.warden.publish_storage_snapshot,
+                self.sandbox,
+                operation_id="publish:1",
+            )
             try:
                 self.assertTrue(entered.wait(5))
-                wake = pool.submit(self.warden.resume, self.sandbox, operation_id="wake:1")
+                wake = pool.submit(
+                    self.warden.resume, self.sandbox, operation_id="wake:1"
+                )
                 self.assertEqual(wake.result(timeout=2).state, HibernationState.RUNNING)
             finally:
                 finish.set()
@@ -789,9 +862,13 @@ class DirectRunscWardenTests(unittest.TestCase):
 
         with self.assertRaisesRegex(OSError, "network preparation failed"):
             self.warden.resume(
-                self.sandbox, operation_id="wake:1", before_restore=unavailable,
+                self.sandbox,
+                operation_id="wake:1",
+                before_restore=unavailable,
             )
-        self.assertEqual(self.warden.inspect(self.sandbox).state, HibernationState.PARKED)
+        self.assertEqual(
+            self.warden.inspect(self.sandbox).state, HibernationState.PARKED
+        )
         self.assertEqual(self.storage.record["state"], "released")
         self.assertEqual(self.runner.status, "absent")
         self.assertEqual(
@@ -852,6 +929,28 @@ class DirectRunscWardenTests(unittest.TestCase):
 
         with self.assertRaisesRegex(DirectWardenError, "duplicate volume"):
             self.warden.storage_records_snapshot((self.sandbox,))
+
+    def test_public_workspace_preparation_retains_lifecycle_and_checks_ownership(self):
+        storage, _rootfs, _incarnation = self._use_storage_native()
+        self.warden.create(self.sandbox, operation_id="create:1")
+        parked = self.warden.park(self.sandbox, operation_id="park:1")
+        record = self.warden.workspace_record(self.sandbox)
+        self.assertEqual(record.state.value, "released")
+        mounted = self.warden.ensure_workspace_mounted(
+            self.sandbox, operation_id="import:prepare-workspace")
+        self.assertEqual(mounted.owner, record.owner)
+        self.assertEqual(mounted.state.value, "mounted")
+        self.assertEqual(self.warden.inspect(self.sandbox), parked)
+        self.assertEqual(self.runner.status, "absent")
+
+        original = storage.ensure_mounted
+        storage.ensure_mounted = lambda *args, **kwargs: replace(
+            original(*args, **kwargs), sandbox_generation=999)
+        with self.assertRaisesRegex(DirectWardenError, "does not own"):
+            self.warden.ensure_workspace_mounted(self.sandbox, operation_id="bad-owner")
+        storage.get_volume = lambda _volume: replace(mounted, mount_path="/wrong/path")
+        with self.assertRaisesRegex(DirectWardenError, "does not own"):
+            self.warden.workspace_record(self.sandbox)
 
     def test_storage_native_delete_does_not_remount_or_traverse_volume(self) -> None:
         storage, _rootfs, _incarnation = self._use_storage_native()
@@ -1061,7 +1160,7 @@ class DirectRunscWardenTests(unittest.TestCase):
             hibernation_generation=hibernating.hibernation_generation,
         )
         self.warden._checked(
-            *self.warden._common(),
+            *self.warden._common(self.sandbox),
             "checkpoint",
             "--hibernate",
             f"--image-path={generation}",
@@ -1281,7 +1380,7 @@ class DirectRunscWardenTests(unittest.TestCase):
             sandbox_generation=self.sandbox.sandbox_generation,
             hibernation_generation=parked.hibernation_generation,
         )
-        self.warden._mount_storage(
+        self.warden.ensure_workspace_mounted(
             self.sandbox,
             operation_id="wake:crash:storage-mount",
         )
@@ -1294,7 +1393,7 @@ class DirectRunscWardenTests(unittest.TestCase):
             expected_revision=current.revision,
         )
         self.warden._checked(
-            *self.warden._common(),
+            *self.warden._common(self.sandbox),
             "restore",
             "--detach",
             "--background",

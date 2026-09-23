@@ -24,16 +24,21 @@
 #define ERROR_PATH "/conformance-error.log"
 #define CHECK(call) do { if ((call) < 0) { fail(#call); } } while (0)
 #define SOCKET_PATH "/tmp/conformance.sock"
+#ifndef MAPPING_BYTES
 #define MAPPING_BYTES (16U * 1024U * 1024U)
+#endif
 
 static int child_in[2];
 static int child_out[2];
 static int pair_fd[2];
+#ifndef CONFORMANCE_NO_TCP
 static int tcp_fd[2];
+#endif
 static int event_fd;
 static int epoll_fd;
 static int timer_fd;
 static int deleted_fd;
+static int durable_fd;
 static uint8_t *mapping;
 static volatile sig_atomic_t signal_count;
 static pthread_mutex_t cond_mu = PTHREAD_MUTEX_INITIALIZER;
@@ -77,6 +82,7 @@ static void *socket_worker(void *unused) {
   }
 }
 
+#ifndef CONFORMANCE_NO_TCP
 static void *tcp_worker(void *unused) {
   (void)unused;
   for (;;) {
@@ -94,6 +100,8 @@ static void *tcp_worker(void *unused) {
     }
   }
 }
+
+#endif
 
 static void *condition_worker(void *unused) {
   (void)unused;
@@ -136,12 +144,15 @@ static uint64_t verify_state(void) {
     return 2;
   }
 
+#ifndef CONFORMANCE_NO_TCP
   value = 0x47;
   if (write(tcp_fd[0], &value, 1) != 1 ||
       read(tcp_fd[0], &value, 1) != 1 ||
       value != (uint8_t)(0x47 ^ 0x3c)) {
     return 10;
   }
+
+#endif
 
   uint64_t one = 1;
   if (write(event_fd, &one, sizeof(one)) != sizeof(one)) return 3;
@@ -164,11 +175,12 @@ static uint64_t verify_state(void) {
     return 7;
   }
 
-  uint64_t checksum = 0;
+  uint64_t checksum = 0, expected_checksum = 0;
   for (size_t offset = 0; offset < MAPPING_BYTES; offset += 4096) {
     checksum += mapping[offset];
+    expected_checksum += (uint8_t)(offset / 4096);
   }
-  if (checksum != 522240) return 8;
+  if (checksum != expected_checksum) return 8;
 
   pthread_mutex_lock(&cond_mu);
   cond_requested++;
@@ -181,10 +193,29 @@ static uint64_t verify_state(void) {
 
   sig_atomic_t before = signal_count;
   if (kill(getpid(), SIGUSR1) != 0 || signal_count != before + 1) return 9;
+  // Capture abort must restart kernel time, not merely mark tasks running.
+  struct timespec delay = {.tv_nsec = 5000000};
+  while (nanosleep(&delay, &delay) != 0) {
+    if (errno != EINTR) return 11;
+  }
+
+  char durable[64] = {0};
+  if (pread(durable_fd, durable, sizeof(durable) - 1, 0) < 0 ||
+      strcmp(durable, "persistent-rootfs-state") != 0) return 12;
+  int reopened = open("/durable-state", O_RDONLY | O_CLOEXEC);
+  if (reopened < 0) return 13;
+  memset(durable, 0, sizeof(durable));
+  ssize_t durable_bytes = read(reopened, durable, sizeof(durable) - 1);
+  close(reopened);
+  if (durable_bytes < 0 || strcmp(durable, "persistent-rootfs-state") != 0) return 14;
   return generation << 32 | checksum;
 }
 
 static void run_server(void) {
+  durable_fd = open("/durable-state", O_CREAT | O_RDWR | O_TRUNC, 0600);
+  CHECK(durable_fd);
+  CHECK(write(durable_fd, "persistent-rootfs-state", sizeof("persistent-rootfs-state") - 1));
+  CHECK(fsync(durable_fd));
   CHECK(pipe(child_in));
   CHECK(pipe(child_out));
   pid_t child = fork();
@@ -194,6 +225,7 @@ static void run_server(void) {
   close(child_out[1]);
 
   CHECK(socketpair(AF_UNIX, SOCK_STREAM, 0, pair_fd));
+#ifndef CONFORMANCE_NO_TCP
   int tcp_listener = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
   CHECK(tcp_listener);
   struct sockaddr_in tcp_address = {
@@ -211,15 +243,21 @@ static void run_server(void) {
                 sizeof(tcp_address)));
   tcp_fd[1] = accept4(tcp_listener, NULL, NULL, SOCK_CLOEXEC);
   CHECK(tcp_fd[1]);
+  CHECK(close(tcp_listener));
+#endif
 
   pthread_t socket_thread;
+#ifndef CONFORMANCE_NO_TCP
   pthread_t tcp_thread;
+#endif
   pthread_t condition_thread;
   int pthread_error = pthread_create(
       &socket_thread, NULL, socket_worker, NULL);
+#ifndef CONFORMANCE_NO_TCP
   if (pthread_error == 0) {
     pthread_error = pthread_create(&tcp_thread, NULL, tcp_worker, NULL);
   }
+#endif
   if (pthread_error == 0) {
     pthread_error = pthread_create(
         &condition_thread, NULL, condition_worker, NULL);

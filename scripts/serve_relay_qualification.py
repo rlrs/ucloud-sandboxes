@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Mount a separate PostgreSQL qualification relay beside the live SQLite relay.
+"""Mount a separate PostgreSQL qualification relay beside the live PostgreSQL relay.
 
 This is a temporary Linux experiment entrypoint, not a production cutover. The
 original relay retains its journal and URLs. Only /qualification-NAME uses the
@@ -16,11 +16,12 @@ import re
 from aiohttp import web
 
 from ucloud_sandboxes import model_relay as api
-from ucloud_sandboxes.cli import _RelayLifecycleDispatcher, telemetry_from_config
+from ucloud_sandboxes.cli import telemetry_from_config
+from ucloud_sandboxes.relay_lifecycle import RelayLifecycleDispatcher
 from ucloud_sandboxes.config import DeploymentConfig
 from ucloud_sandboxes.routing import RoutingStore
 from ucloud_sandboxes.shared_control.credentials import read_private_dsn
-from ucloud_sandboxes.shared_control.postgres import PostgresControlStore
+from ucloud_sandboxes.shared_control.database import PostgresDatabase
 
 
 @web.middleware
@@ -39,8 +40,8 @@ async def qualification_scope(request, handler):
     return await handler(request)
 
 
-def combined_app(config, store, prefix):
-    lifecycle = _RelayLifecycleDispatcher(
+def combined_app(config, store, prefix, *, live_store=None):
+    lifecycle = RelayLifecycleDispatcher(
         f"http://127.0.0.1:{config.gateway_port}",
         config.gateway_token_file().read_text().strip(),
     )
@@ -63,8 +64,8 @@ def combined_app(config, store, prefix):
 
     store.observe = observe
 
-    async def unavailable():
-        return await asyncio.to_thread(routes.terminal_sandbox_incarnations)
+    async def unavailable(candidates):
+        return await asyncio.to_thread(routes.terminal_sandbox_incarnations, candidates)
 
     async def park(request):
         return await lifecycle.notify(request, action="park")
@@ -83,17 +84,32 @@ def combined_app(config, store, prefix):
         unavailable_callers=unavailable,
         telemetry=telemetry,
     )
-    legacy = api.create_model_relay_app(state_path=config.relay_state_file(), **common)
+    if live_store is None:
+        if config.relay_postgres is None:
+            raise ValueError(api.RELAY_POSTGRES_REQUIRED)
+        pg = config.relay_postgres
+        live_store = PostgresDatabase(
+            read_private_dsn(Path(pg.dsn_file)), config.deployment_id, schema=pg.schema
+        )
+    from ucloud_sandboxes.shared_control.migration import assert_relay_cutover
+
+    cutover = assert_relay_cutover(
+        config.relay_state_file(), live_store.deployment_id, live_store.schema
+    )
+    live_store.expected_relay_import_digest = (
+        cutover["source_digest"] if cutover else None
+    )
+    live = api.create_model_relay_app(postgres_store=live_store, **common)
     candidate = api.create_model_relay_app(postgres_store=store, **common)
     candidate.middlewares.append(qualification_scope)
-    legacy.add_subapp(prefix, candidate)
+    live.add_subapp(prefix, candidate)
 
     async def close(_app):
         await lifecycle.close()
         await asyncio.to_thread(telemetry.shutdown)
 
-    legacy.on_cleanup.append(close)
-    return legacy
+    live.on_cleanup.append(close)
+    return live
 
 
 def main():
@@ -105,11 +121,9 @@ def main():
     if not re.fullmatch(r"[a-z0-9]{1,24}", args.name):
         parser.error("name must be 1–24 lowercase letters/digits")
     config = DeploymentConfig.from_file(args.config)
-    if config.relay_postgres is not None:
-        parser.error(
-            "qualification entrypoint requires the original SQLite relay configuration"
-        )
-    store = PostgresControlStore(
+    if config.relay_postgres is None:
+        parser.error(api.RELAY_POSTGRES_REQUIRED)
+    store = PostgresDatabase(
         read_private_dsn(args.dsn_file),
         config.deployment_id + ":qualification:" + args.name,
         schema="ucloud_shared_live_" + args.name,

@@ -9,6 +9,7 @@ import stat
 
 
 GVISOR_COMMIT = "50e1502a95d36ad2faf2c7ef33b8bf21fe975293"
+REFLINK_RESTORE_PATCH_SHA256 = "17933cd7990ac28c0b9bdb8add8330f242fdd3dcf61621c2a7d3905c984f6619"
 GVISOR_SIDECARS = (
     "checkpointgofer",
     "gvisor-sentry-prewarmer",
@@ -90,3 +91,51 @@ def installed_sidecar_fingerprints(runsc: Path, commit: str) -> dict[str, str]:
                 digest.update(chunk)
         result[name] = digest.hexdigest()
     return result
+
+
+def require_capture_barrier_runtime(runsc: Path, commit: str) -> None:
+    """A writer may use prepare/abort only with the qualified netstack/time fix."""
+    distribution_files(runsc, commit)
+    manifest = json.loads((runsc.parent / "build-manifest.json").read_text())
+    if not any(
+        entry
+        == {
+            "name": "20260817/0004-ucloud-abort-hibernation.patch",
+            "sha256": "c97ae915c984f50a554c9b79ede4b73a5ab68e0ad5d89469e8f09819468519fe",
+        }
+        for entry in manifest.get("patches", [])
+    ):
+        raise ValueError(
+            "split memory backing requires the qualified capture-barrier runtime"
+        )
+
+
+def require_ram_backing_runtime(runsc: Path, commit: str) -> None:
+    """RAM restore must populate pages inside the sandbox memory cgroup."""
+    require_capture_barrier_runtime(runsc, commit)
+    manifest = json.loads((runsc.parent / "build-manifest.json").read_text())
+    if not any(
+        entry
+        == {
+            "name": "20260817/0006-ucloud-ram-application-memory.patch",
+            "sha256": "af09c7f45e666c4e7e46c5a999cc8414034deb069c7c25c9fdcf29c9b808310e",
+        }
+        for entry in manifest.get("patches", [])
+    ):
+        raise ValueError(
+            "RAM application memory requires the qualified sparse-capture runtime"
+        )
+
+
+def require_reflink_restore_runtime(runsc: Path, commit: str) -> None:
+    """File-backed reflink restores require the full pinned capture ABI."""
+    require_ram_backing_runtime(runsc, commit)
+    manifest = json.loads((runsc.parent / "build-manifest.json").read_text())
+    if not any(
+        entry == {
+            "name": "20260817/0007-ucloud-reflink-application-memory.patch",
+            "sha256": REFLINK_RESTORE_PATCH_SHA256,
+        }
+        for entry in manifest.get("patches", [])
+    ):
+        raise ValueError("reflink memory restore requires the qualified reflink runtime")

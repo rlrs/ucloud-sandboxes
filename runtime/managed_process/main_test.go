@@ -406,3 +406,24 @@ func callSupervisor(t *testing.T, socket string, req request) response {
 	}
 	return reply
 }
+
+func TestControlReportsOnlyDialFailureAsBeforeDispatch(t *testing.T) {
+	binary, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command(binary, "ctl", "--socket", filepath.Join(t.TempDir(), "absent.sock"))
+	command.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1")
+	command.Stdin = strings.NewReader(`{"version":1,"action":"start","job_id":"job"}`)
+	output, err := command.Output()
+	if err == nil {
+		t.Fatal("missing control socket unexpectedly succeeded")
+	}
+	var reply map[string]any
+	if err := json.Unmarshal(output, &reply); err != nil {
+		t.Fatalf("missing typed before-dispatch response: %s: %v", output, err)
+	}
+	if reply["ok"] != false || reply["error_code"] != "control_not_connected" {
+		t.Fatalf("wrong before-dispatch classification: %#v", reply)
+	}
+}

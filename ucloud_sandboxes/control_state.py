@@ -13,6 +13,7 @@ import time
 from typing import Any, Iterable, Iterator
 import weakref
 
+from .sqlite_pool import SqliteConnectionPool
 from .bootstrap import VmBootstrapRecord
 from .models import NODE_RUNTIME_METRIC_DEFAULTS, NodeHeartbeat
 from .registry import (
@@ -63,12 +64,6 @@ _TABLE_SQL = """CREATE TABLE control_records (
 ) STRICT, WITHOUT ROWID"""
 
 
-def _close_control_connections(connections, guard):
-    with guard:
-        while connections:
-            connections.pop().close()
-
-
 class ControlStateStore:
     """The gateway/autoscaler authority for heartbeats and VM bootstrap state."""
 
@@ -77,12 +72,12 @@ class ControlStateStore:
         self._heartbeat_cache: OrderedDict[str, tuple[str, NodeHeartbeat]] = OrderedDict()
         self._heartbeat_cache_bytes = 0
         self._heartbeat_cache_lock = Lock()
-        self._connections: list[sqlite3.Connection] = []
+        self._reader_pool = SqliteConnectionPool()
         self._connections_guard = Lock()
         self._connection_pid = os.getpid()
         self._connection_identity: tuple[int, int] | None = None
         self._connection_finalizer = weakref.finalize(
-            self, _close_control_connections, self._connections, self._connections_guard,
+            self, self._reader_pool.close,
         )
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._prepare_file()
@@ -384,6 +379,7 @@ class ControlStateStore:
         )
 
     def _connect(self) -> sqlite3.Connection:
+        connection = None
         try:
             connection = sqlite3.connect(
                 self.path, timeout=30, isolation_level=None, check_same_thread=False,
@@ -392,46 +388,38 @@ class ControlStateStore:
             connection.execute("PRAGMA synchronous = FULL")
             self._secure_files()
             return connection
-        except sqlite3.Error as exc:
-            raise ValueError(_ERROR) from exc
+        except BaseException as exc:
+            if connection is not None:
+                connection.close()
+            if isinstance(exc, sqlite3.Error):
+                raise ValueError(_ERROR) from exc
+            raise
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
-        connection = None
-        reusable = False
         try:
-            # Filesystem calls release the GIL and can block. They must not
-            # hold up another reader returning its connection to the pool.
+            # Reject inherited locks before borrowing. Validate the file after
+            # queued admission, outside the pool mutex, so slow stat calls do
+            # not block other readers returning their leases.
             if os.getpid() != self._connection_pid:
                 raise sqlite3.DatabaseError("reopen control state after fork")
-            info = self.path.stat()
-            identity = (info.st_dev, info.st_ino)
-            with self._connections_guard:
-                if self._connection_identity is not None and identity != self._connection_identity:
-                    raise sqlite3.DatabaseError("control state database file was replaced")
-                self._connection_identity = identity
-                if self._connections:
-                    connection = self._connections.pop()
-            if stat.S_IMODE(info.st_mode) != 0o600:
-                os.chmod(self.path, 0o600)
-            if connection is None:
-                connection = self._connect()
-            yield connection
-            if connection.in_transaction:
-                connection.rollback()
-            reusable = True
+            with self._reader_pool.connection(self._connect) as connection:
+                self._validate_connection_file()
+                yield connection
         except BaseException as exc:
             _reraise(exc)
-        finally:
-            if connection is not None:
-                with self._connections_guard:
-                    # Bound idle retention, never concurrent readers. Every
-                    # caller owns its connection until its snapshot is closed.
-                    if reusable and len(self._connections) < 16:
-                        self._connections.append(connection)
-                        connection = None
-                if connection is not None:
-                    connection.close()
+
+    def _validate_connection_file(self):
+        if os.getpid() != self._connection_pid:
+            raise sqlite3.DatabaseError("reopen control state after fork")
+        info = self.path.stat()
+        identity = (info.st_dev, info.st_ino)
+        with self._connections_guard:
+            if self._connection_identity is not None and identity != self._connection_identity:
+                raise sqlite3.DatabaseError("control state database file was replaced")
+            self._connection_identity = identity
+        if stat.S_IMODE(info.st_mode) != 0o600:
+            os.chmod(self.path, 0o600)
 
     @contextmanager
     def _transaction(self, *, write: bool) -> Iterator[sqlite3.Connection]:
@@ -516,8 +504,26 @@ def _heartbeat_payload_is_canonical(
     for name, default in NODE_RUNTIME_METRIC_DEFAULTS.items():
         if name not in raw_metrics and legacy_metrics.get(name) == default:
             legacy_metrics.pop(name)
-    legacy["runtime_metrics"] = legacy_metrics
+    # Nested metric decoders also accept explicitly supported older shapes
+    # (for example ResourceEvidence CPU counters and DeviceIO byte counters).
+    # Their absent optional fields re-encode as null. Preserve that absence
+    # only after heartbeat_from_dict has validated the complete nested schema;
+    # unknown keys, malformed values and noncanonical JSON still fail below.
+    legacy["runtime_metrics"] = _preserve_legacy_null_omissions(legacy_metrics, raw_metrics)
     return raw == legacy and _json(raw) == payload
+
+
+def _preserve_legacy_null_omissions(encoded: Any, raw: Any) -> Any:
+    if isinstance(encoded, dict) and isinstance(raw, dict):
+        return {
+            name: _preserve_legacy_null_omissions(value, raw.get(name))
+            for name, value in encoded.items()
+            if name in raw or value is not None
+        }
+    if isinstance(encoded, list) and isinstance(raw, list) and len(encoded) == len(raw):
+        return [_preserve_legacy_null_omissions(value, previous)
+                for value, previous in zip(encoded, raw, strict=True)]
+    return encoded
 
 
 def _encode_heartbeat(heartbeat: NodeHeartbeat) -> tuple[NodeHeartbeat, str]:

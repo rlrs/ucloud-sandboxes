@@ -9,10 +9,10 @@ from __future__ import annotations
 import hashlib
 
 from .model import StateConflict, positive_seconds
-from .postgres import PostgresControlStore
+from .qualification import QualificationControlStore
 
 
-async def node(store: PostgresControlStore, node_id: str, *, budget_mb: int = 4096, epoch: str = "boot-1"):
+async def node(store: QualificationControlStore, node_id: str, *, budget_mb: int = 4096, epoch: str = "boot-1"):
     if not node_id or not epoch or budget_mb <= 0:
         raise ValueError("invalid fixture node")
     async with store.transaction("fixture_node") as conn:
@@ -29,7 +29,7 @@ async def node(store: PostgresControlStore, node_id: str, *, budget_mb: int = 40
 
 
 async def sandbox(
-    store: PostgresControlStore, sandbox_id: str, node_id: str, *,
+    store: QualificationControlStore, sandbox_id: str, node_id: str, *,
     generation: int = 1, restore_mb: int = 128, epoch: str = "boot-1",
 ):
     if not sandbox_id or generation < 1 or restore_mb < 1:
@@ -47,7 +47,7 @@ async def sandbox(
 
 
 async def request(
-    store: PostgresControlStore, request_id: str, sandbox_id: str, *,
+    store: QualificationControlStore, request_id: str, sandbox_id: str, *,
     registration_id: str = "registration-1", lease_id: str = "lease-1", lease_seconds: float = 600,
 ):
     positive_seconds(lease_seconds)

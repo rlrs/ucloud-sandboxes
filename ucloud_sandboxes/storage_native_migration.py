@@ -11,6 +11,8 @@ import stat
 import tempfile
 from typing import Any
 
+from .checkpoint_components import MemoryBackingRef, WorkspaceCaptureRef
+from .checkpoint_registry import CheckpointReference, MemoryArtifactPublication, OCI_INDEX, MAX_HEADER
 from .direct_network import NETWORK_CIDR
 from .direct_registry import DirectSandboxRegistration
 from .hibernation import (
@@ -32,6 +34,9 @@ from .storage_native_registry import StorageSnapshotPublication
 
 STORAGE_NATIVE_RUNTIME_SCHEMA = "storage-native-runtime-v2"
 STORAGE_NATIVE_MIGRATION_SCHEMA = "storage-native-v1"
+SPLIT_RUNTIME_SCHEMA = "storage-native-runtime-v3"
+SPLIT_MIGRATION_SCHEMA = "storage-native-v3"
+SUPPORTED_STORAGE_NATIVE_MIGRATION_SCHEMAS = frozenset({STORAGE_NATIVE_MIGRATION_SCHEMA, SPLIT_MIGRATION_SCHEMA})
 MIGRATION_CONNECTION_POLICY_DISCONNECT = "disconnect"
 MIGRATION_CONNECTION_POLICY_NONE = "none"
 
@@ -64,10 +69,17 @@ class StorageNativeSandboxManifest:
     files: tuple[HibernationArtifactFile, ...]
     managed_process_sha256: str = ""
     schema: str = STORAGE_NATIVE_RUNTIME_SCHEMA
+    workspace: WorkspaceCaptureRef | None = None
+    memory: MemoryBackingRef | None = None
 
     def __post_init__(self) -> None:
-        if self.schema != STORAGE_NATIVE_RUNTIME_SCHEMA:
+        if self.schema not in {STORAGE_NATIVE_RUNTIME_SCHEMA, SPLIT_RUNTIME_SCHEMA}:
             raise ValueError("unsupported storage-native runtime schema")
+        if self.schema == SPLIT_RUNTIME_SCHEMA:
+            if not isinstance(self.workspace, WorkspaceCaptureRef) or not isinstance(self.memory, MemoryBackingRef):
+                raise ValueError("split checkpoint requires both component identities")
+        elif self.workspace is not None or self.memory is not None:
+            raise ValueError("legacy checkpoint cannot carry split components")
         self.spec.validate()
         _validate_positive_int("sandbox generation", self.sandbox_generation)
         _validate_positive_int("hibernation generation", self.hibernation_generation)
@@ -118,7 +130,7 @@ class StorageNativeSandboxManifest:
         return sandbox_spec_fingerprint(self.spec)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        result = {
             "captured_ns": self.captured_ns,
             "create_operation_id": self.create_operation_id,
             "files": [item.to_dict() for item in self.files],
@@ -134,6 +146,9 @@ class StorageNativeSandboxManifest:
             "spec": self.spec.to_dict(),
             "spec_sha256": self.spec_sha256,
         }
+        if self.schema == SPLIT_RUNTIME_SCHEMA:
+            result.update(workspace=self.workspace.to_dict(), memory=self.memory.to_dict())
+        return result
 
     @classmethod
     def from_dict(cls, raw: object) -> "StorageNativeSandboxManifest":
@@ -153,6 +168,8 @@ class StorageNativeSandboxManifest:
             "spec",
             "spec_sha256",
         }
+        if isinstance(raw, dict) and raw.get("schema") == SPLIT_RUNTIME_SCHEMA:
+            required_keys |= {"workspace", "memory"}
         if not isinstance(raw, dict) or set(raw) != required_keys:
             raise ValueError("direct migration manifest has an invalid schema")
         files = raw["files"]
@@ -172,6 +189,8 @@ class StorageNativeSandboxManifest:
             files=tuple(HibernationArtifactFile.from_dict(item) for item in files),
             managed_process_sha256=raw["managed_process_sha256"],
             schema=raw["schema"],
+            workspace=(WorkspaceCaptureRef.from_dict(raw["workspace"]) if raw["schema"] == SPLIT_RUNTIME_SCHEMA else None),
+            memory=(MemoryBackingRef.from_dict(raw["memory"]) if raw["schema"] == SPLIT_RUNTIME_SCHEMA else None),
         )
         if raw["spec_sha256"] != manifest.spec_sha256:
             raise ValueError("direct migration spec digest does not match")
@@ -224,6 +243,9 @@ class StorageNativeSandboxManifest:
             ),
             files=tuple(item.artifact for item in manifest.files),
             managed_process_sha256=manifest.managed_process_sha256,
+            schema=SPLIT_RUNTIME_SCHEMA if manifest.version == 3 else STORAGE_NATIVE_RUNTIME_SCHEMA,
+            workspace=manifest.workspace,
+            memory=manifest.memory,
         )
 
 
@@ -234,36 +256,79 @@ class StorageNativeMigration:
     manifest: StorageNativeSandboxManifest
     publication: StorageSnapshotPublication
     schema: str = STORAGE_NATIVE_MIGRATION_SCHEMA
+    memory_publication: MemoryArtifactPublication | None = None
+    checkpoint_publication: CheckpointReference | None = None
 
     def __post_init__(self) -> None:
-        if self.schema != STORAGE_NATIVE_MIGRATION_SCHEMA:
+        if self.schema not in {STORAGE_NATIVE_MIGRATION_SCHEMA, SPLIT_MIGRATION_SCHEMA}:
             raise ValueError("unsupported storage-native migration schema")
+        if self.schema == SPLIT_MIGRATION_SCHEMA:
+            if (self.manifest.schema != SPLIT_RUNTIME_SCHEMA
+                    or not isinstance(self.memory_publication, MemoryArtifactPublication)
+                    or not isinstance(self.checkpoint_publication, CheckpointReference)):
+                raise ValueError("split migration requires a complete two-component publication")
+            if (self.publication.backend != "registry"
+                    or self.checkpoint_publication.repository != self.publication.repository
+                    or self.memory_publication.reference.repository != self.publication.repository
+                    or self.memory_publication.source_manifest_sha256 != self.manifest.source_manifest_sha256
+                    or self.checkpoint_publication.media_type != OCI_INDEX):
+                raise ValueError("split migration components do not share one identity")
+            expected_files = {file.name: file.logical_bytes for file in self.manifest.files}
+            actual_files = {file.name: file.logical_bytes for file in self.memory_publication.files
+                            if file.name not in {HibernationArtifactStore.MANIFEST_NAME, HibernationArtifactStore.COMPLETE_NAME}}
+            if actual_files != expected_files or not {
+                HibernationArtifactStore.MANIFEST_NAME, HibernationArtifactStore.COMPLETE_NAME
+            } <= {file.name for file in self.memory_publication.files}:
+                raise ValueError("split migration memory inventory is incomplete")
+            if (sum(file.logical_bytes for file in self.memory_publication.files) > self.manifest.memory.quota_bytes
+                    or any(file.logical_bytes > MAX_HEADER for file in self.memory_publication.files
+                           if file.name in {HibernationArtifactStore.MANIFEST_NAME, HibernationArtifactStore.COMPLETE_NAME})):
+                raise ValueError("split migration memory inventory exceeds its quota")
+        elif (self.manifest.schema != STORAGE_NATIVE_RUNTIME_SCHEMA
+              or self.memory_publication is not None or self.checkpoint_publication is not None):
+            raise ValueError("legacy migration cannot omit or carry split components")
         if self.publication.virtual_size <= 0:
             raise ValueError("storage-native migration has no virtual size")
+
+    @property
+    def reference(self):
+        return self.checkpoint_publication or self.publication
+
+    @property
+    def references(self):
+        if self.schema == SPLIT_MIGRATION_SCHEMA:
+            return (self.checkpoint_publication, self.publication, self.memory_publication.reference)
+        return (self.publication,)
 
     @property
     def sha256(self) -> str:
         return hashlib.sha256(_canonical_json(self.to_dict())).hexdigest()
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        result = {
             "manifest": self.manifest.to_dict(),
             "publication": self.publication.to_dict(),
             "schema": self.schema,
         }
+        if self.schema == SPLIT_MIGRATION_SCHEMA:
+            result.update(memory_publication=self.memory_publication.to_dict(),
+                          checkpoint_publication=self.checkpoint_publication.to_dict())
+        return result
 
     @classmethod
     def from_dict(cls, raw: object) -> "StorageNativeMigration":
-        if not isinstance(raw, dict) or set(raw) != {
-            "manifest",
-            "publication",
-            "schema",
-        }:
+        required = {"manifest", "publication", "schema"}
+        split = isinstance(raw, dict) and raw.get("schema") == SPLIT_MIGRATION_SCHEMA
+        if split:
+            required |= {"memory_publication", "checkpoint_publication"}
+        if not isinstance(raw, dict) or set(raw) != required:
             raise ValueError("storage-native migration has an invalid schema")
         return cls(
             manifest=StorageNativeSandboxManifest.from_dict(raw["manifest"]),
             publication=StorageSnapshotPublication.from_dict(raw["publication"]),
             schema=str(raw["schema"]),
+            memory_publication=MemoryArtifactPublication.from_dict(raw["memory_publication"]) if split else None,
+            checkpoint_publication=CheckpointReference.from_dict(raw["checkpoint_publication"]) if split else None,
         )
 
 
@@ -282,7 +347,6 @@ class StorageNativeMigrationStore:
     ) -> StorageNativeMigration:
         target = self._path(migration_id)
         target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        payload = _canonical_json(migration.to_dict()) + b"\n"
         if target.exists():
             existing = self.load(migration_id)
             if existing.sha256 != migration.sha256:
@@ -290,6 +354,32 @@ class StorageNativeMigrationStore:
                     "migration metadata already has another snapshot identity"
                 )
             return existing
+        return self._write(target, migration)
+
+    @staticmethod
+    def _publication_id(sandbox_id: str, generation: int) -> str:
+        _validate_safe_id("sandbox id", sandbox_id)
+        _validate_positive_int("sandbox generation", generation)
+        return "published:" + hashlib.sha256(f"{sandbox_id}:{generation}".encode("ascii")).hexdigest()
+
+    def load_publication(self, sandbox_id: str, generation: int) -> StorageNativeMigration:
+        return self.load(self._publication_id(sandbox_id, generation))
+
+    def save_publication(self, migration: StorageNativeMigration) -> StorageNativeMigration:
+        """Replace the incarnation's one complete publication under its lifecycle fence.
+
+        This is a restart cache, never execution authority or a remote GC lease.
+        Its manifest must still match the current parked generation on every use.
+        """
+        identity = self._publication_id(migration.manifest.sandbox_id, migration.manifest.sandbox_generation)
+        return self._write(self._path(identity), migration)
+
+    def discard_publication(self, sandbox_id: str, generation: int) -> None:
+        self.discard(self._publication_id(sandbox_id, generation))
+
+    def _write(self, target: Path, migration: StorageNativeMigration) -> StorageNativeMigration:
+        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        payload = _canonical_json(migration.to_dict()) + b"\n"
         descriptor, temporary_name = tempfile.mkstemp(
             prefix=f".{target.name}.",
             dir=target.parent,
@@ -438,6 +528,9 @@ class StorageNativeMigrationStore:
             runtime=portable.runtime,
             files=local_files,
             managed_process_sha256=portable.managed_process_sha256,
+            version=3 if portable.schema == SPLIT_RUNTIME_SCHEMA else 2,
+            workspace=portable.workspace,
+            memory=portable.memory,
         )
         if published.metadata_sha256 == local_manifest.metadata_sha256:
             local_manifest.validate_files(

@@ -6,10 +6,9 @@ from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta
 import json
-import io
+import math
 import os
 from pathlib import Path, PurePosixPath
-import random
 import ssl
 import sys
 from threading import Event, Lock, local
@@ -21,7 +20,6 @@ from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_ope
 from uuid import uuid4
 
 from opentelemetry.propagate import inject
-from opentelemetry.trace import get_current_span
 
 from .gvisor_distribution import distribution_files
 
@@ -58,6 +56,7 @@ from .bootstrap import (
     prune_bootstrap_records,
 )
 from .config import DeploymentConfig
+from .cold_offload import plan_cold_offload
 from .control_state import ControlStateStore, QUARANTINE_REASON, QUARANTINE_EPOCH
 from .control_plane import build_server, release_registry_route_references
 from .deployment import (
@@ -100,14 +99,9 @@ from .metrics import (
     record_vm_observed,
     record_vm_submitted,
 )
+from .relay_lifecycle import RelayLifecycleDispatcher
 from .model_relay import (
-    DEFAULT_MAX_COMPLETED_BYTES,
-    DEFAULT_MAX_INFLIGHT_BYTES,
-    DEFAULT_MAX_INFLIGHT_REQUESTS,
-    DEFAULT_MAX_INFLIGHT_REQUESTS_PER_ROLLOUT,
-    RelayCallerUnavailable,
     RelayRequest,
-    _finish_before_cancellation,
     create_model_relay_app,
 )
 from .models import (
@@ -165,6 +159,7 @@ from .registry import (
     merge_jobs_and_heartbeats,
 )
 from .routing import (
+    cold_offload_fence,
     ProgramRequestState,
     RoutingStore,
     SandboxOwnerLossDisposition,
@@ -344,12 +339,39 @@ def build_parser() -> argparse.ArgumentParser:
     )
     agent_heartbeat.set_defaults(func=cmd_agent_heartbeat)
 
+    from .environment_config import add_environment_registry_args
+
+    environment_key = subparsers.add_parser("provision-environment-key", help="Provision or recover an owned immutable image producer key.")
+    environment_key.add_argument("--directory", type=Path, required=True)
+    environment_key.set_defaults(func=cmd_provision_environment_key)
+
+    environment_io = subparsers.add_parser(
+        "serve-environment-io", help="Run the optional nodewide authenticated immutable image backend.",
+    )
+    environment_io.add_argument("--root", type=Path, required=True)
+    environment_io.add_argument("--socket", type=Path, required=True)
+    environment_io.add_argument("--cache-bytes", type=int, default=1024 ** 3)
+    add_environment_registry_args(environment_io)
+    environment_io.set_defaults(func=cmd_serve_environment_io)
+
+    publish_environment = subparsers.add_parser(
+        "publish-environment", help="Publish a fresh allowlisted immutable artifact for an existing OCI image.",
+    )
+    publish_environment.add_argument("--image-ref", required=True)
+    publish_environment.add_argument("--state-root", type=Path, required=True)
+    publish_environment.add_argument("--docker-binary", default="docker")
+    publish_environment.add_argument("--environment-signing-key", type=Path, required=True)
+    publish_environment.add_argument("--environment-allow-path", action="append", default=[])
+    add_environment_registry_args(publish_environment)
+    publish_environment.set_defaults(func=cmd_publish_environment)
+
     serve = subparsers.add_parser(
         "serve-control-plane",
         help="Run the gateway/control-plane service.",
     )
     add_config_args(serve)
     serve.add_argument("--host", default="0.0.0.0", help="Bind host.")
+    add_environment_registry_args(serve)
     serve.set_defaults(func=cmd_serve_control_plane)
 
     direct_node_agent = subparsers.add_parser(
@@ -381,6 +403,21 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Root-only storage-native node service socket.",
     )
+    direct_node_agent.add_argument(
+        "--split-memory-backing", action="store_true",
+        help="Use qualified XFS project-quota memory backing on newly provisioned workers.",
+    )
+    direct_node_agent.add_argument("--memory-backing-hard-capacity-bytes", type=int, default=0)
+    direct_node_agent.add_argument("--application-memory-root", type=Path,
+                                   help="Qualified nodewide noswap tmpfs for active application memory.")
+    direct_node_agent.add_argument(
+        "--reflink-memory-restore", action="store_true",
+        help="Use the qualified file-backed reflink restore capability with split checkpoints.",
+    )
+    direct_node_agent.add_argument("--checkpoint-registry-url", default="")
+    direct_node_agent.add_argument("--checkpoint-registry-repository", default="")
+    add_environment_registry_args(direct_node_agent)
+    direct_node_agent.add_argument("--environment-backend-socket", type=Path)
     direct_node_agent.add_argument("--runsc", type=Path, required=True)
     direct_node_agent.add_argument("--runsc-commit", required=True)
     direct_node_agent.add_argument(
@@ -470,6 +507,9 @@ def build_parser() -> argparse.ArgumentParser:
     builder_agent.add_argument("--docker-binary", default="docker")
     builder_agent.add_argument("--buildx-direct-push", action="store_true")
     builder_agent.add_argument("--buildx-cache-ref")
+    add_environment_registry_args(builder_agent)
+    builder_agent.add_argument("--environment-signing-key", type=Path)
+    builder_agent.add_argument("--environment-allow-path", action="append", default=[])
     builder_agent.add_argument("--max-active-image-builds", type=int, default=DEFAULT_MAX_ACTIVE_IMAGE_BUILDS)
     builder_agent.add_argument(
         "--max-concurrent-image-pulls",
@@ -1019,7 +1059,27 @@ def cmd_agent_heartbeat(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_publish_environment(args: argparse.Namespace) -> int:
+    from .environment_builder import publish_from_args
+    return publish_from_args(args)
+
+
+def cmd_provision_environment_key(args: argparse.Namespace) -> int:
+    from .environment_keys import provision
+    print(json.dumps(provision(args.directory), sort_keys=True))
+    return 0
+
+
+def cmd_serve_environment_io(args: argparse.Namespace) -> int:
+    from .environment_backend import serve_backend
+    from .environment_config import environment_registry_from_args
+    serve_backend(environment_registry_from_args(args), root=args.root,
+                  socket_path=args.socket, cache_bytes=args.cache_bytes)
+    return 0
+
+
 def cmd_serve_control_plane(args: argparse.Namespace) -> int:
+    from .environment_config import environment_registry_from_args, environment_registry_from_deployment
     config = load_config(args)
     telemetry = telemetry_from_config(config, "ucloud-sandboxes-gateway")
     server = build_server(
@@ -1048,6 +1108,7 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         registry_url=config.registry_url,
         registry_worker_url=config.registry_worker_url,
         registry_usage_file=config.registry_usage_file(),
+        environment_registry=environment_registry_from_args(args) or environment_registry_from_deployment(config),
         max_concurrent_sandbox_creates=(config.gateway_max_concurrent_sandbox_creates),
         create_target_concurrency_per_node=(
             config.policy.create_target_concurrency_per_node
@@ -1070,6 +1131,7 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
 
 
 def cmd_serve_builder_agent(args: argparse.Namespace) -> int:
+    from .environment_config import environment_publisher_from_args
     from .node_agent import build_builder_node_agent_server
 
     job_id = args.job_id or detect_job_id()
@@ -1107,6 +1169,7 @@ def cmd_serve_builder_agent(args: argparse.Namespace) -> int:
             "node control bearer token",
         ),
         telemetry=telemetry,
+        environment_publisher=environment_publisher_from_args(args),
     )
     host, port = server.server_address
     print(f"Serving builder node agent on http://{host}:{port}")
@@ -1121,6 +1184,7 @@ def cmd_serve_builder_agent(args: argparse.Namespace) -> int:
 
 
 def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
+    from .environment_config import environment_registry_from_args
     from .direct_runtime import build_direct_runtime_service
     from .node_agent import build_direct_node_agent_server
 
@@ -1156,6 +1220,15 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
         max_concurrent_startups=args.max_concurrent_startups,
         idle_park_seconds=float(args.idle_park_seconds),
         storage_native_socket=args.storage_native_socket.absolute(),
+        split_memory_backing=args.split_memory_backing,
+        reflink_memory_restore=args.reflink_memory_restore,
+        application_memory_root=(args.application_memory_root.absolute()
+                                 if args.application_memory_root is not None else None),
+        memory_backing_hard_capacity_bytes=args.memory_backing_hard_capacity_bytes,
+        checkpoint_registry_url=args.checkpoint_registry_url,
+        checkpoint_registry_repository=args.checkpoint_registry_repository,
+        environment_registry=environment_registry_from_args(args),
+        environment_backend_socket=getattr(args, "environment_backend_socket", None),
         telemetry=telemetry,
     )
     server = build_direct_node_agent_server(
@@ -1206,12 +1279,15 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
     from aiohttp import web
 
     config = load_config(args)
+    if config.relay_postgres is None:
+        from .model_relay import RELAY_POSTGRES_REQUIRED
+        raise ValueError(RELAY_POSTGRES_REQUIRED)
     telemetry = telemetry_from_config(config, "ucloud-sandboxes-model-relay")
     gateway_url = f"http://127.0.0.1:{config.gateway_port}"
     gateway_token = read_required_token_file(
         config.gateway_token_file(), "gateway bearer token"
     )
-    lifecycle = _RelayLifecycleDispatcher(gateway_url, gateway_token)
+    lifecycle = RelayLifecycleDispatcher(gateway_url, gateway_token)
     routes = RoutingStore(config.routing_file())
 
     async def unavailable_callers(candidates: set[tuple[str, int]]) -> dict[tuple[str, int], str]:
@@ -1223,29 +1299,27 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
     async def result_notifier(relay_request: RelayRequest) -> str | None:
         return await lifecycle.notify(relay_request, action="wake")
 
-    postgres_store = None
-    if config.relay_postgres is not None:
-        from .shared_control.postgres import PostgresControlStore
-        from .shared_control.credentials import read_private_dsn
-        from .shared_control.migration import assert_relay_cutover
-        cutover = assert_relay_cutover(config.relay_state_file(), config.deployment_id, config.relay_postgres.schema)
-        postgres_store = PostgresControlStore(
-            read_private_dsn(Path(config.relay_postgres.dsn_file)), config.deployment_id,
-            schema=config.relay_postgres.schema,
-            max_connections=config.relay_postgres.max_connections,
-        )
-        postgres_store.expected_relay_import_digest = cutover['source_digest'] if cutover else None
-        duration = telemetry.meter.create_histogram(
-            "ucloud.platform.postgres.duration", unit="s",
-            description="PostgreSQL pool wait, transaction body and durable commit time",
-        )
-        def observe_transaction(sample):
-            for phase in ("pool_wait", "transaction", "commit", "lock_query"):
-                duration.record(getattr(sample, phase + "_seconds"), {
-                    "operation": sample.operation, "phase": phase,
-                    "status": "ok" if sample.succeeded else "error",
-                })
-        postgres_store.observe = observe_transaction
+    from .shared_control.database import PostgresDatabase
+    from .shared_control.credentials import read_private_dsn
+    from .shared_control.migration import assert_relay_cutover
+    cutover = assert_relay_cutover(config.relay_state_file(), config.deployment_id, config.relay_postgres.schema)
+    postgres_store = PostgresDatabase(
+        read_private_dsn(Path(config.relay_postgres.dsn_file)), config.deployment_id,
+        schema=config.relay_postgres.schema,
+        max_connections=config.relay_postgres.max_connections,
+    )
+    postgres_store.expected_relay_import_digest = cutover['source_digest'] if cutover else None
+    duration = telemetry.meter.create_histogram(
+        "ucloud.platform.postgres.duration", unit="s",
+        description="PostgreSQL pool wait, transaction body and durable commit time",
+    )
+    def observe_transaction(sample):
+        for phase in ("pool_wait", "transaction", "commit", "lock_query"):
+            duration.record(getattr(sample, phase + "_seconds"), {
+                "operation": sample.operation, "phase": phase,
+                "status": "ok" if sample.succeeded else "error",
+            })
+    postgres_store.observe = observe_transaction
     app = create_model_relay_app(
         sandbox_bearer_token=read_required_token_file(
             config.relay_sandbox_token_file(), "sandbox bearer token"
@@ -1259,14 +1333,9 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
         completed_request_retention_seconds=(
             config.relay_completed_request_retention_seconds
         ),
-        max_inflight_requests=DEFAULT_MAX_INFLIGHT_REQUESTS,
-        max_inflight_requests_per_rollout=(DEFAULT_MAX_INFLIGHT_REQUESTS_PER_ROLLOUT),
-        max_inflight_bytes=DEFAULT_MAX_INFLIGHT_BYTES,
-        max_completed_bytes=DEFAULT_MAX_COMPLETED_BYTES,
-        state_path=config.relay_state_file() if postgres_store is None else None,
         postgres_store=postgres_store,
         postgres_storage_budget_bytes=(
-            config.relay_postgres.storage_budget_bytes if config.relay_postgres else 64 * 1024**3
+            config.relay_postgres.storage_budget_bytes
         ),
         accepted_notifier=accepted_notifier,
         result_notifier=result_notifier,
@@ -1282,84 +1351,6 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
     print(f"Serving model relay on http://{args.host}:{config.relay_port}")
     web.run_app(app, host=args.host, port=config.relay_port, print=None)
     return 0
-
-
-class _RelayLifecycleDispatcher:
-    """Dispatch lifecycle HTTP asynchronously; workers own resource admission."""
-
-    def __init__(self, gateway_url: str, bearer_token: str) -> None:
-        self.gateway_url = gateway_url
-        self.bearer_token = bearer_token
-        self._closed = False
-        self._active: set[asyncio.Task[str | None]] = set()
-        self._wake_session = None
-
-    async def notify(self, request: RelayRequest, *, action: str) -> str | None:
-        if action not in {"park", "wake"}:
-            raise ValueError("unsupported relay sandbox lifecycle action")
-        if self._closed:
-            raise RuntimeError("relay lifecycle dispatcher is closed")
-        # Keep an accepted operation alive across caller cancellation, including
-        # async backoff. HTTP attempts do not reserve executor threads.
-        task = asyncio.create_task(self._notify(request, action=action))
-        self._active.add(task)
-        try:
-            return await _finish_before_cancellation(task)
-        finally:
-            self._active.discard(task)
-
-    async def _notify(self, request: RelayRequest, *, action: str) -> str | None:
-        deadline = _relay_lifecycle_deadline(request)
-        attempt = 0
-        while True:
-            if self._closed:
-                raise RuntimeError("relay lifecycle dispatcher is closed")
-            if action == "park" and getattr(request, "completed_at", None) is not None:
-                get_current_span().add_event("relay.park.skipped", {"reason": "response_committed"})
-                return None
-            if deadline <= time.monotonic():
-                raise TimeoutError(f"relay {action} deadline exceeded")
-            from aiohttp import ClientSession, TCPConnector
-            if self._wake_session is None:
-                # HTTP waits own no executor slots. Workers defer warm retention
-                # and own checkpoint/restore admission against local pressure.
-                self._wake_session = ClientSession(connector=TCPConnector(limit=0), trust_env=False)
-            try:
-                return await _post_gateway_sandbox_lifecycle_once_async(
-                    self._wake_session, self.gateway_url, self.bearer_token,
-                    request, action=action, attempt=attempt, deadline=deadline,
-                )
-            except _RelayLifecycleRetry as retry:
-                delay = retry.delay_seconds
-                if getattr(request, "durable_lifecycle", False):
-                    # Retain the intent in PostgreSQL, not a sleeping claimed
-                    # task. The durable dispatcher schedules the next attempt.
-                    from .model_relay import RelayLifecycleDeferred
-                    raise RelayLifecycleDeferred(delay, transport_epoch=retry.transport_epoch) from retry
-            # A capacity-blocked owner must not occupy fleet-wide dispatch
-            # capacity while unrelated, ready workers could make progress.
-            committed = getattr(request, "response_committed", None)
-            if action == "park" and committed is not None:
-                try:
-                    await asyncio.wait_for(committed.wait(), timeout=delay)
-                    get_current_span().add_event("relay.park.skipped", {
-                        "reason": "response_committed_during_backoff",
-                    })
-                    return None
-                except asyncio.TimeoutError:
-                    pass
-            else:
-                await asyncio.sleep(delay)
-            attempt += 1
-
-    async def close(self) -> None:
-        self._closed = True
-        # Include operations in async backoff, which no longer own a pool
-        # thread. They observe closure before submitting another HTTP attempt.
-        await asyncio.gather(*tuple(self._active), return_exceptions=True)
-        if self._wake_session is not None:
-            await self._wake_session.close()
-
 
 
 class _RejectControlRedirects(HTTPRedirectHandler):
@@ -1468,225 +1459,6 @@ def _delete_bounded_json(
         if not isinstance(decoded, dict):
             raise ValueError(f"{response_name} response must be a JSON object")
         return decoded, response.headers
-
-
-class _RelayLifecycleRetry(Exception):
-    """An identified, side-effect-safe retry; the response socket is closed."""
-
-    def __init__(self, delay_seconds: float, *, transport_epoch: str | None = None) -> None:
-        super().__init__("relay lifecycle retry pending")
-        self.delay_seconds = delay_seconds
-        self.transport_epoch = transport_epoch
-
-
-def _relay_lifecycle_deadline(relay_request: RelayRequest) -> float:
-    budget = 600.0
-    expires_at = getattr(relay_request, "expires_at", None)
-    if expires_at is not None:
-        budget = max(0.0, min(budget, expires_at - time.time()))
-    return time.monotonic() + budget
-
-
-def _post_gateway_sandbox_lifecycle(
-    gateway_url: str,
-    bearer_token: str | None,
-    relay_request: RelayRequest,
-    *,
-    action: str,
-) -> str | None:
-    """Synchronous entry point; the relay dispatcher yields between attempts."""
-    deadline = _relay_lifecycle_deadline(relay_request)
-    attempt = 0
-    while True:
-        try:
-            return _post_gateway_sandbox_lifecycle_once(
-                gateway_url, bearer_token, relay_request,
-                action=action, attempt=attempt, deadline=deadline,
-            )
-        except _RelayLifecycleRetry as retry:
-            time.sleep(retry.delay_seconds)
-            attempt += 1
-
-
-def _post_gateway_sandbox_lifecycle_once(
-    gateway_url: str,
-    bearer_token: str | None,
-    relay_request: RelayRequest,
-    *,
-    action: str,
-    attempt: int,
-    deadline: float,
-) -> str | None:
-    if action not in {"park", "wake"}:
-        raise ValueError("unsupported relay sandbox lifecycle action")
-    if relay_request.sandbox_id is None:
-        return
-    if relay_request.sandbox_generation is None:
-        raise ValueError("relay sandbox lifecycle binding has no generation")
-    remaining = deadline - time.monotonic()
-    if action == "wake" and remaining <= 0:
-        raise TimeoutError("relay wake deadline exceeded")
-    try:
-        _payload, headers = _post_bounded_json(
-            gateway_url,
-            f"/v1/sandboxes/{quote(relay_request.sandbox_id, safe='')}/{action}",
-            {
-                "generation": relay_request.sandbox_generation,
-                "operation_id": f"relay-{action}:{relay_request.request_id}",
-                "rollout_id": relay_request.rollout_id,
-                "request_id": relay_request.request_id,
-                "request_created_at": relay_request.created_at,
-                **({"durable_lifecycle": True} if getattr(relay_request, "durable_lifecycle", False) else {}),
-            },
-            bearer_token=bearer_token,
-            invalid_url_error="gateway URL is invalid",
-            empty_token_error="gateway bearer token cannot be empty",
-            timeout_seconds=(
-                remaining
-                if action == "wake" else 600.0
-            ),
-            response_name="gateway lifecycle",
-        )
-    except HTTPError as exc:
-        _raise_relay_lifecycle_http_error(exc, action=action, attempt=attempt, deadline=deadline)
-    transport_epoch = headers.get("X-UCloud-Sandbox-Transport-Epoch", "").strip()
-    return transport_epoch or None
-
-
-async def _post_gateway_sandbox_lifecycle_once_async(
-    session: Any,
-    gateway_url: str,
-    bearer_token: str | None,
-    relay_request: RelayRequest,
-    *,
-    action: str,
-    attempt: int,
-    deadline: float,
-) -> str | None:
-    """One bounded HTTP attempt, without reserving a blocking worker thread."""
-    from aiohttp import ClientTimeout
-
-    if action not in {'wake', 'park'}:
-        raise ValueError('unsupported relay sandbox lifecycle action')
-    if relay_request.sandbox_id is None:
-        return None
-    if relay_request.sandbox_generation is None:
-        raise ValueError('relay sandbox lifecycle binding has no generation')
-    remaining = deadline - time.monotonic()
-    if remaining <= 0:
-        raise TimeoutError('relay wake deadline exceeded')
-    base = str(gateway_url).strip().rstrip('/')
-    parsed = urlparse(base)
-    if parsed.scheme not in {'http', 'https'} or not parsed.netloc:
-        raise ValueError('gateway URL is invalid')
-    headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
-    if bearer_token is not None:
-        if not bearer_token.strip():
-            raise ValueError('gateway bearer token cannot be empty')
-        headers['Authorization'] = 'Bearer ' + bearer_token.strip()
-    inject(headers)
-    payload = {
-        'generation': relay_request.sandbox_generation,
-        'operation_id': f'relay-{action}:{relay_request.request_id}',
-        'rollout_id': relay_request.rollout_id,
-        'request_id': relay_request.request_id,
-        'request_created_at': relay_request.created_at,
-        **({'durable_lifecycle': True} if getattr(relay_request, "durable_lifecycle", False) else {}),
-    }
-    url = f'{base}/v1/sandboxes/{quote(relay_request.sandbox_id, safe="")}/{action}'
-    async with session.post(
-        url, json=payload, headers=headers, allow_redirects=False,
-        timeout=ClientTimeout(total=remaining),
-    ) as response:
-        body = bytearray()
-        async for chunk in response.content.iter_chunked(65536):
-            body.extend(chunk)
-            if len(body) > _MAX_CONTROL_RESPONSE_BYTES:
-                # An oversized failure must not become a retryable JSON error.
-                break
-        if not 200 <= response.status < 300:
-            _raise_relay_lifecycle_http_error(
-                HTTPError(url, response.status, response.reason, response.headers, io.BytesIO(body)),
-                action=action, attempt=attempt, deadline=deadline,
-            )
-        if len(body) > _MAX_CONTROL_RESPONSE_BYTES:
-            raise ValueError('gateway lifecycle response exceeds 1 MiB')
-        decoded = json.loads(body) if body else {}
-        if not isinstance(decoded, dict):
-            raise ValueError('gateway lifecycle response must be a JSON object')
-        return response.headers.get('X-UCloud-Sandbox-Transport-Epoch', '').strip() or None
-
-
-def _raise_relay_lifecycle_http_error(
-    exc: HTTPError, *, action: str, attempt: int, deadline: float,
-) -> None:
-    # HTTPError owns the response socket even though open() raised.
-    # Close every failure, including exhausted retries and 5xx errors.
-    try:
-        body = exc.read(_MAX_CONTROL_RESPONSE_BYTES + 1)
-        failure = (
-            json.loads(body)
-            if body and len(body) <= _MAX_CONTROL_RESPONSE_BYTES
-            else {}
-        )
-    except (ValueError, OSError):
-        failure = {}
-    finally:
-        exc.close()
-    if (action == "park" and exc.code == 409 and isinstance(failure, dict)
-            and failure.get("error_code") == "park_deferred" and failure.get("retryable") is True):
-        try:
-            delay = float(failure["retry_after_seconds"])
-        except (KeyError, TypeError, ValueError):
-            delay = 1.0
-        epoch = exc.headers.get('X-UCloud-Sandbox-Transport-Epoch', '').strip() or None
-        raise _RelayLifecycleRetry(max(0.05, min(30.0, delay)), transport_epoch=epoch) from exc
-    permanent = exc.code in {404, 410} or (
-        exc.code == 409
-        and isinstance(failure, dict)
-        and failure.get("retryable") is False
-    )
-    if action == "wake" and permanent:
-        raise RelayCallerUnavailable(exc.code) from exc
-    # Only retry positively identified admission failures here. An
-    # unclassified 5xx still reaches the worker's existing retry path.
-    capacity_pending = (
-        action == "wake"
-        and exc.code in {429, 503}
-        and isinstance(failure, dict)
-        and failure.get("retryable") is True
-    )
-    if isinstance(failure, dict) and failure.get("error_code"):
-        exc.msg = f"{exc.msg} ({str(failure['error_code'])[:160]})"
-    if capacity_pending:
-        try:
-            retry_after = float(exc.headers.get("Retry-After", "1"))
-        except (TypeError, ValueError):
-            retry_after = 1.0
-        delay = max(1.0, min(5.0, retry_after)) + random.uniform(0, 0.25)
-        if attempt >= 600 or time.monotonic() + delay >= deadline:
-            raise exc
-        get_current_span().add_event(
-            "relay.wake.capacity_retry",
-            {
-                "gateway.lifecycle.status_code": exc.code,
-                "gateway.lifecycle.error_code": str(failure.get("error_code", "")),
-                "retry.attempt": attempt + 1,
-                "retry.delay_seconds": delay,
-            },
-        )
-        raise _RelayLifecycleRetry(delay) from exc
-    # Another lifecycle request can win the fence between enqueue and
-    # this explicit park, and a concurrent status/log read can briefly
-    # hold the same activity fence. The bounded idempotent retry
-    # observes the stable result without giving transient reads a
-    # separate failure policy.
-    if (
-        permanent or exc.code != 409 or attempt >= 100
-        or (action == "wake" and time.monotonic() + 0.05 >= deadline)
-    ):
-        raise exc
-    raise _RelayLifecycleRetry(0.05) from exc
 
 
 def cmd_init_vm(args: argparse.Namespace) -> int:
@@ -2816,11 +2588,12 @@ def _post_gateway_sandbox_detach(
     *,
     bearer_token: str | None = None,
     timeout_seconds: float = 3600.0,
+    if_cold: SandboxRoute | None = None,
 ) -> dict[str, Any]:
     return _post_bounded_json(
         gateway_url,
         f"/v1/sandboxes/{quote(sandbox_id, safe='')}/detach",
-        {},
+        {"if_cold": cold_offload_fence(if_cold)} if if_cold is not None else {},
         bearer_token=bearer_token,
         invalid_url_error="gateway control URL is invalid",
         empty_token_error="gateway control bearer token cannot be empty",
@@ -3796,6 +3569,9 @@ def run_reconcile_cycle(
         list(sandbox_routes),
         effective_policy,
         pending_wake_sandbox_ids=pending_wake_sandbox_ids,
+        heartbeats=(node.heartbeat for node in sandbox_nodes if node.heartbeat is not None),
+        provider_ready_seconds=(live_scale_signals.provisioning_p95_seconds
+            if live_scale_signals is not None and live_scale_signals.provisioning_samples else None),
     )
     program_wake_plan = plan_shadow_wake_queue(
         list(program_requests),
@@ -4092,6 +3868,37 @@ def run_reconcile_cycle(
         0,
         config.autoscaler_max_storage_native_detaches_per_cycle,
     )
+    cold_offload_plan = plan_cold_offload(
+        sandbox_nodes, sandbox_routes, program_requests,
+        pending_wake_sandbox_ids=pending_wake_sandbox_ids or (),
+        excluded_job_ids=(*stop_job_ids, *destructive_job_id_set, *quarantined_job_ids),
+        limit=remaining_detach_budget,
+        pending_disk_mb=(
+            max((item.resources.disk_mb for item in demand.placement_requests), default=0)
+            or math.ceil(demand.pending_resources.disk_mb / max(1, demand.pending_count))
+        ) if demand.pending_count else 0,
+    )
+    if execution_requested and execution_authorized:
+        for candidate in cold_offload_plan:
+            assert_provider_fence()
+            detach_payload, detach_error = {}, ""
+            try:
+                detach_payload = _post_gateway_sandbox_detach(
+                    detach_gateway_url, candidate.route.sandbox_id,
+                    bearer_token=gateway_control_bearer_token, if_cold=candidate.route,
+                )
+            except Exception as exc:
+                # An ambiguous eviction retains the canonical detaching route;
+                # retry the same gateway protocol next cycle or during wake.
+                detach_error = str(exc)
+            storage_native_detach_results.append({
+                **candidate.to_dict(), "gateway_url": detach_gateway_url,
+                "request_succeeded": not detach_error,
+                "sandbox": detach_payload.get("sandbox", {}), "error": detach_error,
+            })
+            remaining_detach_budget -= 1
+            # No speculative capacity credit: routing/worker journal commit and
+            # the next heartbeat must expose the released hard reservation.
     if drain_workflow_enabled:
         nodes_by_job_id = {node.job_id: node for node in nodes}
         for job_id in destructive_stop_job_ids:
@@ -4555,6 +4362,7 @@ def run_reconcile_cycle(
         "pending_delete_results": pending_delete_results,
         "storage_native_migration_results": storage_native_migration_results,
         "storage_native_detach_results": storage_native_detach_results,
+        "coldOffloadPlan": [candidate.to_dict() for candidate in cold_offload_plan],
         "prunedFinalHeartbeats": list(final_heartbeat_job_ids),
         "prunedOrphanedStaleHeartbeats": list(orphaned_stale_heartbeat_job_ids),
         "fencedNodeLossHeartbeats": sorted(
@@ -5534,10 +5342,31 @@ def apply_route_reservations_to_heartbeats(
                 disk_mb=route.resources.disk_mb
             )
         used = heartbeat.used_resources + missing_resources
+        # A newly assigned create/wake may precede its worker reservation.
+        # Forecast that near-term RAM demand, but do not reserve every parked
+        # owner's limit. The worker and route views describe overlapping work;
+        # taking their maximum avoids charging the same transition twice.
+        transitioning = {
+            (item.sandbox_id, item.generation, item.spec_hash, item.operation_id):
+                item.resources.memory_mb
+            for item in heartbeat.inventory
+            if item.state in {"creating", "waking"}
+        }
+        for route in routes_by_job.get(job_id, ()):
+            if route.worker_state == "attached" and route.state in {"creating", "waking"}:
+                identity = (route.sandbox_id, route.generation, route.spec_hash,
+                            route.create_operation_id)
+                transitioning[identity] = max(
+                    transitioning.get(identity, 0), route.resources.memory_mb,
+                )
+        reserved = replace(heartbeat.reserved_resources, memory_mb=max(
+            heartbeat.reserved_resources.memory_mb, sum(transitioning.values()),
+        ))
         active_sandboxes = heartbeat.active_sandboxes + len(missing_routes)
         reconciled[job_id] = replace(
             heartbeat,
             used_resources=used,
+            reserved_resources=reserved,
             active_sandboxes=active_sandboxes,
         )
     return reconciled
@@ -6374,6 +6203,34 @@ def vm_init_options_for_job(
     host_alias = config.registry_host_alias
     snapshot_store = config.snapshot_store
     runtime_profile = vm_runtime_profile(config.provider.kind)
+    environment_options = {}
+    selected_environment = config.immutable_environments
+    if selected_environment is not None and (
+        (role == "sandbox" and selected_environment.worker_enabled)
+        or (role == "builder" and selected_environment.builder_enabled)
+    ):
+        from .environment_config import load_trusted_keys
+        import base64
+        import stat
+        trusted_keys = load_trusted_keys(selected_environment.trusted_keys_file)
+        environment_options = {
+            "environment_registry_url": config.registry_worker_url,
+            "environment_repository": selected_environment.repository,
+            "environment_trusted_keys_json": json.dumps({key: base64.b64encode(value).decode("ascii") for key, value in trusted_keys.items()}),
+            "environment_cache_bytes": selected_environment.cache_bytes,
+            "environment_allow_paths": selected_environment.allow_paths,
+        }
+        if role == "builder":
+            # Only the owned builder receives private material; workers get public trust alone.
+            descriptor = os.open(selected_environment.signing_key_file, os.O_RDONLY | os.O_NOFOLLOW)
+            with os.fdopen(descriptor, "rb") as stream:
+                info = os.fstat(stream.fileno())
+                if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
+                    raise ValueError("environment signing key must be a private owned file")
+                payload = stream.read(16385)
+            if len(payload) > 16384:
+                raise ValueError("environment signing key is too large")
+            environment_options["environment_signing_key_pem"] = payload.decode("ascii")
     s3_access_key_id = ""
     s3_secret_access_key = ""
     s3_security_token = ""
@@ -6392,6 +6249,7 @@ def vm_init_options_for_job(
                 f"{snapshot_store.secret_access_key_env}"
             )
     return VmInitOptions(
+        **environment_options,
         job_id=job.id,
         heartbeat_url=config.heartbeat_url,
         role=role,
@@ -6480,6 +6338,15 @@ def vm_init_options_for_job(
         direct_max_concurrent_restores=(config.sandbox.direct_max_concurrent_restores),
         direct_max_concurrent_startups=config.policy.create_target_concurrency_per_node,
         direct_idle_park_seconds=config.sandbox.direct_idle_park_seconds,
+        direct_split_memory_backing=(
+            role == "sandbox" and config.sandbox.direct_split_memory_backing
+        ),
+        direct_ram_memory_backing=(
+            role == "sandbox" and config.sandbox.direct_ram_memory_backing
+        ),
+        direct_reflink_memory_restore=(
+            role == "sandbox" and config.sandbox.direct_reflink_memory_restore
+        ),
         max_concurrent_image_pulls=(
             config.builder.max_concurrent_image_pulls
             if role == "builder"
@@ -6527,6 +6394,9 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         "directNetwork": options.direct_network,
         "directNetworkAllowTcp": list(options.direct_network_allow_tcp),
         "networkRelays": dict(options.network_relays or {}),
+        "directSplitMemoryBacking": options.direct_split_memory_backing,
+        "directRamMemoryBacking": options.direct_ram_memory_backing,
+        "directReflinkMemoryRestore": options.direct_reflink_memory_restore,
         "storageNativeRegistryUrl": options.storage_native_registry_url,
         "storageNativeRepository": options.storage_native_repository,
         "storageNativeSnapshotBackend": options.storage_native_snapshot_backend,

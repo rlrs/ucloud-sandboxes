@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import math
 from typing import Iterable
 
 from .models import (
     NodeHeartbeat,
     ProgramScaleSignals,
+    ProgramScaleCalibration,
     ResourceQuantity,
     SandboxPlacementRequest,
     ScalePolicy,
@@ -226,6 +228,8 @@ def build_program_scale_signals(
     *,
     pending_wake_sandbox_ids: set[str] | None = None,
     now: datetime | None = None,
+    heartbeats: Iterable[NodeHeartbeat] = (),
+    provider_ready_seconds: float | None = None,
 ) -> ProgramScaleSignals:
     """Reduce request phases without counting concurrent calls twice.
 
@@ -325,6 +329,129 @@ def build_program_scale_signals(
             now,
         ),
         action_enabled=policy.program_aware_autoscaling_enabled,
+        calibration=_calibrate_program_demand(
+            model_wait,
+            ready,
+            requests,
+            route_by_sandbox,
+            tuple(heartbeats),
+            policy,
+            provider_ready_seconds=provider_ready_seconds,
+            now=now,
+        ),
+    )
+
+
+def observed_memory_mb(
+    route: SandboxRoute,
+    heartbeats: Iterable[NodeHeartbeat],
+    *,
+    now: datetime,
+    max_age_seconds: float,
+) -> int | None:
+    """One exact-owner/incarnation historical observation for planning only."""
+    for heartbeat in heartbeats:
+        if (
+            heartbeat.job_id != route.job_id
+            or heartbeat.node_id != route.node_id
+            or (route.node_epoch and heartbeat.node_epoch != route.node_epoch)
+            or not heartbeat.is_fresh(now, max_age_seconds)
+        ):
+            continue
+        for entry in heartbeat.inventory:
+            if (
+                entry.sandbox_id != route.sandbox_id
+                or entry.generation != route.generation
+                or entry.spec_hash != route.spec_hash
+                or entry.memory_observation is None
+            ):
+                continue
+            sample = entry.memory_observation
+            sampled_at = parse_iso_datetime(sample.sampled_at)
+            if (
+                sampled_at is not None
+                and 0 <= (now - sampled_at).total_seconds() <= max_age_seconds
+            ):
+                return (sample.memory_bytes + 1024**2 - 1) // 1024**2
+    return None
+
+
+def _calibrate_program_demand(
+    waits: list[ProgramRequestState],
+    ready: list[ProgramRequestState],
+    history: list[ProgramRequestState],
+    routes: dict[str, SandboxRoute],
+    heartbeats: tuple[NodeHeartbeat, ...],
+    policy: ScalePolicy,
+    *,
+    provider_ready_seconds: float | None,
+    now: datetime,
+) -> ProgramScaleCalibration:
+    """Use observed charge and empirical residual waits without enabling actions.
+
+    Unknown memory uses the declared bound. Unknown wait distribution or provider
+    lead time assumes the whole wait may finish: a missing measurement is never
+    a zero-cost sandbox. CPU remains a declared bound, not claimed observation.
+    """
+    lead = provider_ready_seconds
+    if lead is not None and (not math.isfinite(lead) or lead < 0):
+        lead = None
+    durations = {}
+    seen = set()
+    for request in history:
+        if request.request_id in seen:
+            continue
+        seen.add(request.request_id)
+        accepted = parse_iso_datetime(request.accepted_at)
+        response = parse_iso_datetime(request.response_ready_at)
+        if (
+            accepted is None
+            or response is None
+            or response < accepted
+            or not 0
+            <= (now - response).total_seconds()
+            <= policy.live_pressure_window_seconds
+        ):
+            continue
+        durations.setdefault(
+            (request.sandbox_id, request.sandbox_generation), []
+        ).append((response - accepted).total_seconds())
+    total = ResourceQuantity()
+    observed = unknown = known_waits = unknown_waits = samples = 0
+    for request in (*ready, *waits):
+        memory = observed_memory_mb(
+            routes[request.sandbox_id],
+            heartbeats,
+            now=now,
+            max_age_seconds=policy.live_pressure_window_seconds,
+        )
+        if memory is None:
+            unknown += 1
+            memory = request.resources.memory_mb
+        else:
+            observed += 1
+        chance = 1.0
+        if request.state == "model_wait":
+            accepted = parse_iso_datetime(request.accepted_at)
+            age = (now - accepted).total_seconds() if accepted is not None else None
+            residuals = [
+                duration - age
+                for duration in durations.get(
+                    (request.sandbox_id, request.sandbox_generation), ()
+                )
+                if age is not None and age >= 0 and duration >= age
+            ]
+            if lead is not None and residuals:
+                chance = sum(value <= lead for value in residuals) / len(residuals)
+                known_waits += 1
+                samples += len(residuals)
+            else:
+                unknown_waits += 1
+        total += ResourceQuantity(
+            vcpu=request.resources.vcpu * chance, memory_mb=math.ceil(memory * chance)
+        )
+    return ProgramScaleCalibration(
+        total, observed, unknown, known_waits, unknown_waits, samples, lead
     )
 
 

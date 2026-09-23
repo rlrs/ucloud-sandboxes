@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import re
 import sqlite3
+import time
 from threading import RLock
 from typing import Any, Callable, Iterable, Iterator, Mapping
 from urllib import error, request
@@ -283,24 +284,34 @@ class RegistryClient:
             headers={"Accept": MANIFEST_ACCEPT},
         )
 
+    def open_blob(self, repository: str, digest: str):
+        """Open an immutable blob stream; the caller owns close and byte bounds."""
+        normalized = _validate_lease_digest(digest)
+        return self._request(
+            f"/v2/{_quote_repository(repository)}/blobs/{quote(normalized, safe=':')}"
+        )
+
     def blob_bytes(
         self,
         repository: str,
         digest: str,
         *,
         max_bytes: int = 16 * 1024 * 1024,
+        timeout_seconds: float | None = None,
     ) -> bytes:
         normalized = _validate_lease_digest(digest)
         if max_bytes <= 0:
             raise ValueError("registry blob byte limit must be positive")
+        deadline = time.monotonic() + timeout_seconds if timeout_seconds is not None else None
         response = self._request(
             (
                 f"/v2/{_quote_repository(repository)}/blobs/"
                 f"{quote(normalized, safe=':')}"
-            )
+            ),
+            timeout_seconds=timeout_seconds,
         )
         try:
-            payload = response.read(max_bytes + 1)
+            payload = _read_response_bytes(response, max_bytes + 1, deadline=deadline)
         finally:
             response.close()
         if len(payload) > max_bytes:
@@ -581,6 +592,7 @@ class RegistryClient:
         method: str = "GET",
         headers: dict[str, str] | None = None,
         data: bytes | None = None,
+        timeout_seconds: float | None = None,
     ) -> Any:
         req = request.Request(
             self.base_url + path,
@@ -588,17 +600,47 @@ class RegistryClient:
             method=method,
             headers=headers or {},
         )
+        timeout = self.timeout_seconds
+        if timeout_seconds is not None:
+            if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
+                raise ValueError("registry request timeout must be positive and finite")
+            timeout = min(timeout, timeout_seconds)
+        deadline = time.monotonic() + timeout_seconds if timeout_seconds is not None else None
         try:
-            return request.urlopen(req, timeout=self.timeout_seconds)
+            return request.urlopen(req, timeout=timeout)
         except error.HTTPError as exc:
             try:
-                raw = exc.read(MAX_REGISTRY_ERROR_PREVIEW_BYTES + 1)
+                raw = _read_response_bytes(exc, MAX_REGISTRY_ERROR_PREVIEW_BYTES + 1, deadline=deadline)
             finally:
                 exc.close()
             if len(raw) > MAX_REGISTRY_ERROR_PREVIEW_BYTES:
                 raw = raw[:MAX_REGISTRY_ERROR_PREVIEW_BYTES] + b"...<truncated>"
             body = raw.decode("utf-8", errors="replace")
             raise RegistryRequestError(exc.code, method, path, body) from exc
+
+
+def _read_response_bytes(response, limit: int, *, deadline: float | None) -> bytes:
+    """Bound reads by bytes and check a retry deadline between socket reads.
+
+    urllib's existing socket timeout still bounds an individual blocking read.
+    This is not a hard total network deadline: the final read can overshoot it
+    by one socket timeout. read1 prevents a slow body from extending it forever.
+    """
+    if deadline is None:
+        return response.read(limit)
+    chunks = []
+    size = 0
+    while size < limit:
+        if time.monotonic() >= deadline:
+            raise TimeoutError("registry response read deadline exceeded")
+        chunk = response.read1(min(64 * 1024, limit - size))
+        if time.monotonic() >= deadline:
+            raise TimeoutError("registry response read deadline exceeded")
+        if not chunk:
+            break
+        chunks.append(chunk)
+        size += len(chunk)
+    return b"".join(chunks)
 
 
 class RegistryUsageStore:
@@ -992,6 +1034,16 @@ class RegistryUsageStore:
             )
             self._advance_generation_unlocked(conn)
             return lease.is_active(timestamp)
+
+    def release_owner(self, owner: str) -> int:
+        """Release exact persisted owner rows without re-resolving mutable tags."""
+        if not isinstance(owner, str) or not owner or len(owner) > 256 or owner != owner.strip():
+            raise ValueError("invalid registry reference owner")
+        with self._transaction() as conn:
+            result = conn.execute("DELETE FROM registry_leases WHERE owner = ?", (owner,))
+            if result.rowcount:
+                self._advance_generation_unlocked(conn)
+            return result.rowcount
 
     @contextmanager
     def lease_fence(

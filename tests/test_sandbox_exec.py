@@ -18,6 +18,31 @@ from ucloud_sandboxes.sandbox_exec import (
 
 
 class SandboxExecProtocolTests(unittest.TestCase):
+    def test_start_timings_separate_capacity_wait_from_thread_cpu_and_child_execution(self):
+        owner = FakeSandboxManager()
+        manager = ExecSessionManager(owner)
+        original = owner.acquire_exec_capacity
+
+        def delayed_capacity(sandbox_id):
+            Event().wait(0.04)
+            return original(sandbox_id)
+
+        with patch.object(owner, "acquire_exec_capacity", side_effect=delayed_capacity):
+            session = manager.start(SandboxExecSpec(
+                sandbox_id="timed", command=(sys.executable, "-c", "print('done')"),
+            ))
+        first = dict(session.start_timings)
+        for stage in ("lifecycle", "capacity", "command", "session_registry",
+                      "popen", "process_registration", "pump_threads", "total"):
+            self.assertGreaterEqual(first[stage + "_ms"], 0)
+            self.assertGreaterEqual(first[stage + "_cpu_ms"], 0)
+        self.assertGreaterEqual(first["capacity_ms"], 30)
+        self.assertLess(first["capacity_cpu_ms"], first["capacity_ms"])
+        manager.initial_events(session.id, wait_seconds=2)
+        self.assertEqual(session.start_timings, first)
+        self.assertNotIn("start_timings", session.to_dict())
+        self.assertEqual(owner.capacity_released, ["capacity:timed"])
+
     def test_initial_snapshot_completes_short_process_and_keeps_all_output(self):
         manager = ExecSessionManager(FakeSandboxManager())
         session = manager.start(SandboxExecSpec(sandbox_id="one", command=("/bin/sh", "-c", "printf out; printf err >&2")))

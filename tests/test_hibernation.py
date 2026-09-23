@@ -22,6 +22,8 @@ from ucloud_sandboxes.hibernation import (
     HibernationRecoveryAction,
     HibernationRuntimeFingerprint,
     HibernationState,
+    HibernationDiskReservation,
+    hibernation_disk_reservation_mb,
     LocalHibernationArtifactFile,
     hibernation_process_identity_matches,
     linux_process_start_time_ticks,
@@ -36,6 +38,20 @@ RUNSC_COMMIT = "e" * 40
 
 
 class HibernationTests(unittest.TestCase):
+    def test_disk_guarantee_retains_allocator_growth_and_private_capture_overlap(self):
+        # The pinned allocator needs a growth chunk even exactly at its chunk
+        # boundary. Typical sparse usage must not under-reserve that case.
+        below = HibernationDiskReservation.for_sandbox(memory_mb=1023, writable_disk_mb=4096)
+        boundary = HibernationDiskReservation.for_sandbox(memory_mb=1024, writable_disk_mb=4096)
+        self.assertEqual(below.memory_backing_mb, 1024)
+        self.assertEqual(boundary.memory_backing_mb, 2048)
+        self.assertEqual(boundary.private_checkpoint_mb, 1024)
+        self.assertEqual(boundary.total_mb, 7232)
+        self.assertEqual(hibernation_disk_reservation_mb(memory_mb=1024, writable_disk_mb=4096),
+                         boundary.total_mb)
+        with self.assertRaises(ValueError):
+            HibernationDiskReservation(4096, 2048, -1, 64)
+
     @staticmethod
     def _write_proc_identity(
         proc_root: Path,

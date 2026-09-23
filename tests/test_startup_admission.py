@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from tests import test_control_plane as gateway_fixtures
 from tests import test_direct_provisioner as direct_fixtures
+from ucloud_sandboxes.transition_admission import TransitionCost, TransitionKind
 from ucloud_sandboxes.admission import FairCapacity
 from ucloud_sandboxes.direct_service import DirectSandboxService
 
@@ -96,6 +97,51 @@ class StartupAdmissionTests(unittest.TestCase):
                 finally:
                     release.set()
                 self.assertEqual(future.result(3).state, "running")
+
+    def test_busy_cpu_creates_keep_bounded_queue_instead_of_rejecting_node(self):
+        from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, utc_now
+
+        with TemporaryDirectory() as directory:
+            fixture = direct_fixtures.DirectProvisionerTests()
+            provisioner, *_ = fixture.make(Path(directory).resolve())
+            service = DirectSandboxService(provisioner, max_concurrent_startups=1)
+            service.configure_active_capacity(
+                ResourceQuantity(vcpu=4, memory_mb=8192),
+                runtime_metrics_provider=lambda: NodeRuntimeMetrics(
+                    collected_at=utc_now(), cpu_count=4, cpu_percent=100,
+                    load_average_1m=40, memory_total_mb=8192,
+                    memory_available_mb=8192,
+                ),
+            )
+            entered, release = Event(), Event()
+            calls = []
+            original = provisioner.create
+
+            def dispatch(**kwargs):
+                calls.append(kwargs["spec"].id)
+                if len(calls) == 1:
+                    entered.set()
+                    if not release.wait(3):
+                        raise TimeoutError("qualification release missing")
+                return original(**kwargs)
+
+            with patch.object(provisioner, "create", side_effect=dispatch), ThreadPoolExecutor(max_workers=2) as pool:
+                first = pool.submit(fixture.create, service, replace(fixture.spec(), id="first"))
+                try:
+                    self.assertTrue(entered.wait(2))
+                    second = pool.submit(fixture.create, service, replace(fixture.spec(), id="second"))
+                    wait_queued(service._startup_slots, 1)
+                    self.assertEqual(calls, ["first"])
+                    self.assertEqual(service.activity_snapshot().active_operations, 1)
+                    self.assertFalse(second.done())
+                finally:
+                    release.set()
+                self.assertEqual(first.result(3).state, "running")
+                self.assertEqual(second.result(3).state, "running")
+            self.assertEqual(calls, ["first", "second"])
+            self.assertEqual(service.activity_snapshot().active_operations, 0)
+            self.assertTrue(service._startup_slots.acquire(blocking=False))
+            service._startup_slots.release()
 
     def test_256_requests_queue_and_release_permits_on_failure(self):
         with TemporaryDirectory() as directory:
@@ -222,7 +268,7 @@ class WarmDemandTests(unittest.TestCase):
             spec = fixture.spec()
             policy = WarmParkPolicy(
                 lambda: Pressure(.8, 0, 0, 80 * 1024**3),
-                demand_bytes=service.warm_park_demand_bytes,
+                demand=service.warm_park_demand,
             )
             try:
                 with ThreadPoolExecutor(max_workers=2) as pool:
@@ -230,7 +276,7 @@ class WarmDemandTests(unittest.TestCase):
                     futures = [pool.submit(fixture.create, service, spec) for _ in range(2)]
                     wait_queued(service._startup_slots, 2)
                     self.assertEqual(
-                        service.warm_park_demand_bytes(),
+                        service.warm_park_demand().physical_bytes,
                         spec.requested_resources().memory_mb * 1024**2,
                     )
                     with self.assertRaises(WarmParkDeferred):
@@ -239,8 +285,8 @@ class WarmDemandTests(unittest.TestCase):
                     for future in futures:
                         with self.assertRaises(SandboxStartupBusyError):
                             future.result(3)
-                self.assertEqual(service.warm_park_demand_bytes(), 0)
-                self.assertEqual(service._startup_demands, {})
+                self.assertEqual(service.warm_park_demand().physical_bytes, 0)
+                self.assertEqual(service.transition_admission_snapshot()["startup"]["waiting"], 0)
             finally:
                 service._startup_slots.release()
 
@@ -254,17 +300,15 @@ class WarmDemandTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'injected'):
                 with service._startup_demand('first', 1, requested):
                     with service._startup_demand('first', 1, requested):
-                        service._active_reservations[('first', 1)] = requested
-                        self.assertEqual(service.warm_park_demand_bytes(), 256 * 1024**2)
+                        self.assertEqual(service.warm_park_demand().physical_bytes, 256 * 1024**2)
                     with service._startup_demand('second', 1, requested):
-                        self.assertEqual(service.warm_park_demand_bytes(), 512 * 1024**2)
-                    del service._active_reservations[('first', 1)]
-                    self.assertEqual(service.warm_park_demand_bytes(), 256 * 1024**2)
+                        self.assertEqual(service.warm_park_demand().physical_bytes, 256 * 1024**2)
+                    self.assertEqual(service.warm_park_demand().physical_bytes, 256 * 1024**2)
                     raise ValueError('injected')
-            self.assertEqual(service.warm_park_demand_bytes(), 0)
-            self.assertEqual(service._startup_demands, {})
+            self.assertEqual(service.warm_park_demand().physical_bytes, 0)
+            self.assertEqual(service.transition_admission_snapshot()["startup"]["waiting"], 0)
             service.close_admission()
-            self.assertEqual(service.warm_park_demand_bytes(), 1 << 63)
+            self.assertEqual(service.warm_park_demand().physical_bytes, 1 << 63)
 
     def test_queued_restore_exposes_demand_and_failure_cleans_it_up(self):
         from ucloud_sandboxes.models import ResourceQuantity
@@ -272,23 +316,26 @@ class WarmDemandTests(unittest.TestCase):
         with TemporaryDirectory() as directory:
             provisioner, *_ = direct_fixtures.DirectProvisionerTests().make(Path(directory).resolve())
             service = DirectSandboxService(provisioner, max_concurrent_restores=1)
+            fixture = direct_fixtures.DirectProvisionerTests()
+            fixture.create(service, fixture.spec())
+            service.park("sandbox", operation_id="park:queued")
             service.admission_wait_seconds = 0.1
             service._restore_slots.acquire()
             requested = ResourceQuantity(vcpu=1, memory_mb=1024)
 
             def restore():
-                with service._restore_admission('queued', 1, requested):
+                with patch.object(service, '_restore_cost', return_value=TransitionCost(TransitionKind.RESTORE, 1024**3)), service._restore_admission('sandbox', 7, requested):
                     self.fail('restore must not acquire held slot')
 
             try:
                 with ThreadPoolExecutor(max_workers=1) as pool:
                     future = pool.submit(restore)
                     wait_queued(service._restore_slots, 1)
-                    self.assertEqual(service.warm_park_demand_bytes(), 1024**3)
+                    self.assertEqual(service.warm_park_demand().physical_bytes, 1024**3)
                     with self.assertRaises(SandboxRestoreBusyError):
                         future.result(3)
-                self.assertEqual(service.warm_park_demand_bytes(), 0)
-                self.assertEqual(service._restore_demands, {})
+                self.assertEqual(service.warm_park_demand().physical_bytes, 0)
+                self.assertEqual(service.transition_admission_snapshot()["restore"]["waiting"], 0)
             finally:
                 service._restore_slots.release()
 
@@ -298,7 +345,32 @@ class WarmDemandTests(unittest.TestCase):
             provisioner, *_ = direct_fixtures.DirectProvisionerTests().make(Path(directory).resolve())
             service = DirectSandboxService(provisioner)
             requested = ResourceQuantity(vcpu=1, memory_mb=256)
-            service._active_reservations[('same', 1)] = requested
-            with service._restore_admission('same', 1, requested):
-                self.assertEqual(service.warm_park_demand_bytes(), 256*1024**2)
-            self.assertEqual(service._restore_demands, {})
+            cost = TransitionCost(TransitionKind.RESTORE, 256*1024**2)
+            with service._transition_demand(('same', 1), cost):
+                with service._reserve_active_capacity('same', 1, requested, cost=cost):
+                    self.assertEqual(service.warm_park_demand().physical_bytes, 256*1024**2)
+                    self.assertEqual(service.transition_admission_snapshot()['restore']['waiting'], 0)
+            self.assertEqual(service.warm_park_demand().physical_bytes, 0)
+
+
+class ResidentDemandForecastTests(unittest.TestCase):
+    def test_burst_prices_next_restore_plus_already_admitted_work(self):
+        from contextlib import ExitStack
+        from ucloud_sandboxes.models import ResourceQuantity
+
+        with TemporaryDirectory() as directory:
+            provisioner, *_ = direct_fixtures.DirectProvisionerTests().make(Path(directory).resolve())
+            service = DirectSandboxService(provisioner, max_concurrent_startups=2, max_concurrent_restores=3)
+            requested = ResourceQuantity(vcpu=1, memory_mb=256)
+            with ExitStack() as stack:
+                for index in range(256):
+                    stack.enter_context(service._startup_demand(str(index), 1, requested))
+                    # Restore demands use the same insertion-ordered, deduped
+                    # structure while waiting for the independent restore queue.
+                    stack.enter_context(service._transition_demand((f'restore-{index}', 1), TransitionCost(TransitionKind.RESTORE, 256*1024**2)))
+                self.assertEqual(service.warm_park_demand().physical_bytes, 256*1024**2)
+                with service._reserve_active_capacity('0', 1, requested):
+                    self.assertEqual(service.warm_park_demand().physical_bytes, 2*256*1024**2)
+                    with service._reserve_active_capacity('already-starting', 1, requested):
+                        self.assertEqual(service.warm_park_demand().physical_bytes, 3*256*1024**2)
+            self.assertEqual(service.warm_park_demand().physical_bytes, 0)

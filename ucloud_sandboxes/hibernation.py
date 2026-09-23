@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .checkpoint_components import MemoryBackingRef, WorkspaceCaptureRef
+
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 import errno
@@ -365,10 +367,19 @@ class HibernationManifest:
     files: tuple[LocalHibernationArtifactFile, ...]
     managed_process_sha256: str
     version: int = HIBERNATION_MANIFEST_VERSION
+    workspace: WorkspaceCaptureRef | None = None
+    memory: MemoryBackingRef | None = None
 
     def __post_init__(self) -> None:
-        if self.version != HIBERNATION_MANIFEST_VERSION:
+        if self.version not in {2, 3}:
             raise ValueError("unsupported hibernation manifest version")
+        if self.version == 2 and (self.workspace is not None or self.memory is not None):
+            raise ValueError("legacy manifest cannot contain split components")
+        if self.version == 3 and (
+            not isinstance(self.workspace, WorkspaceCaptureRef)
+            or not isinstance(self.memory, MemoryBackingRef)
+        ):
+            raise ValueError("split manifest requires both component identities")
         _validate_safe_id("sandbox_id", self.sandbox_id)
         _validate_positive_int("sandbox_generation", self.sandbox_generation)
         _validate_positive_int("hibernation_generation", self.hibernation_generation)
@@ -389,7 +400,7 @@ class HibernationManifest:
         )
 
     def _unsigned_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "container_id": self.container_id,
             "created_ns": self.created_ns,
             "files": [item.to_dict() for item in self.files],
@@ -402,6 +413,10 @@ class HibernationManifest:
             "spec_sha256": self.spec_sha256,
             "version": self.version,
         }
+        if self.version == 3:
+            payload["workspace"] = self.workspace.to_dict()
+            payload["memory"] = self.memory.to_dict()
+        return payload
 
     @property
     def metadata_sha256(self) -> str:
@@ -430,12 +445,16 @@ class HibernationManifest:
             "spec_sha256",
             "version",
         }
+        if raw.get("version") == 3:
+            required_keys |= {"workspace", "memory"}
         if set(raw) != required_keys:
             raise ValueError("hibernation manifest has an invalid schema")
         files_raw = raw["files"]
         if not isinstance(files_raw, list):
             raise ValueError("hibernation manifest files must be a list")
         manifest = cls(
+            workspace=WorkspaceCaptureRef.from_dict(raw["workspace"]) if raw["version"] == 3 else None,
+            memory=MemoryBackingRef.from_dict(raw["memory"]) if raw["version"] == 3 else None,
             version=_validate_positive_int("manifest version", raw["version"]),
             sandbox_id=_validate_safe_id("sandbox_id", raw["sandbox_id"]),
             sandbox_generation=_validate_nonnegative_int(
@@ -1522,6 +1541,7 @@ class HibernationJournal:
             self._save_unlocked(record)
             return record
 
+
     def begin_hibernate(
         self,
         *,
@@ -2317,23 +2337,66 @@ def hibernation_disk_reservation_mb(
     private_pages_mb: int | None = None,
     fixed_overhead_mb: int = HIBERNATION_FIXED_OVERHEAD_MB,
 ) -> int:
-    memory_mb = _validate_positive_int("memory_mb", memory_mb)
-    writable_disk_mb = _validate_positive_int("writable_disk_mb", writable_disk_mb)
-    # Until every private MemoryFile is externalized or a smaller universal
-    # limit is proven, its ordinary page image may consume another full guest
-    # memory bound. Admission must use this conservative value.
-    if private_pages_mb is None:
-        private_pages_mb = memory_mb
-    private_pages_mb = _validate_nonnegative_int("private_pages_mb", private_pages_mb)
-    fixed_overhead_mb = _validate_nonnegative_int(
-        "fixed_overhead_mb", fixed_overhead_mb
-    )
-    return (
-        writable_disk_mb
-        + hibernation_memory_backing_reservation_mb(
-            memory_mb,
-            allocator_chunk_mb=allocator_chunk_mb,
+    return HibernationDiskReservation.for_sandbox(
+        memory_mb=memory_mb, writable_disk_mb=writable_disk_mb,
+        allocator_chunk_mb=allocator_chunk_mb, private_pages_mb=private_pages_mb,
+        fixed_overhead_mb=fixed_overhead_mb,
+    ).total_mb
+
+
+@dataclass(frozen=True)
+class HibernationDiskReservation:
+    """The hard, peak-overlap disk guarantee for one parkable incarnation.
+
+    All components stay reserved while resident, capturing, parked or restoring.
+    A warm wait avoids materializing a checkpoint, but does not release the right
+    to create it. Sparse usage and observed working sets are not quota guarantees.
+    Persistent file backing transfers to the paused candidate. RAM-active
+    backing retains one durable image while restoring into cgroup-charged tmpfs;
+    that overlap consumes admitted RAM, not another persistent disk image.
+    Any future disk-to-disk copying layout must reserve its additional overlap.
+    """
+
+    workspace_mb: int
+    memory_backing_mb: int
+    private_checkpoint_mb: int
+    overhead_mb: int
+
+    def __post_init__(self):
+        _validate_positive_int('workspace_mb', self.workspace_mb)
+        _validate_positive_int('memory_backing_mb', self.memory_backing_mb)
+        _validate_nonnegative_int('private_checkpoint_mb', self.private_checkpoint_mb)
+        _validate_nonnegative_int('overhead_mb', self.overhead_mb)
+
+    @property
+    def total_mb(self) -> int:
+        return (self.workspace_mb + self.memory_backing_mb
+                + self.private_checkpoint_mb + self.overhead_mb)
+
+    @classmethod
+    def for_sandbox(
+        cls, *, memory_mb: int, writable_disk_mb: int,
+        allocator_chunk_mb: int = HIBERNATION_ALLOCATOR_CHUNK_MB,
+        private_pages_mb: int | None = None,
+        fixed_overhead_mb: int = HIBERNATION_FIXED_OVERHEAD_MB,
+    ) -> HibernationDiskReservation:
+        memory_mb = _validate_positive_int("memory_mb", memory_mb)
+        writable_disk_mb = _validate_positive_int("writable_disk_mb", writable_disk_mb)
+        # Until every private MemoryFile is externalized or a smaller universal
+        # limit is proven, its ordinary page image may consume another full guest
+        # memory bound. Admission must use this conservative value.
+        if private_pages_mb is None:
+            private_pages_mb = memory_mb
+        private_pages_mb = _validate_nonnegative_int("private_pages_mb", private_pages_mb)
+        fixed_overhead_mb = _validate_nonnegative_int(
+            "fixed_overhead_mb", fixed_overhead_mb
         )
-        + private_pages_mb
-        + fixed_overhead_mb
-    )
+        return cls(
+            workspace_mb=writable_disk_mb,
+            memory_backing_mb=hibernation_memory_backing_reservation_mb(
+                memory_mb,
+                allocator_chunk_mb=allocator_chunk_mb,
+            ),
+            private_checkpoint_mb=private_pages_mb,
+            overhead_mb=fixed_overhead_mb,
+        )

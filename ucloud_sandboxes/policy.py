@@ -163,31 +163,20 @@ def evaluate_scale(
         ),
         include_disk=True,
     )
-    if demand.prepared_placement_requests:
-        # prepare_capacity promises a concurrent cold burst. Before those
-        # guests exist there is no measured working set to scale from. Forecast
-        # their memory once, using the configured utilization target; do not
-        # assume every future guest can reuse the same RAM simultaneously.
-        # This only provisions capacity: it does not reserve resident limits
-        # or impose an admission cap on create, wake, or execution.
-        target = max(.01, min(1.0, policy.target_memory_utilization))
-        forecast = sum(
-            min(maximum_request.memory_mb, math.ceil(request.resources.memory_mb / target))
-            * request.count
-            for request in demand.prepared_placement_requests
-            if request.resources.fits_within(maximum_request)
-        )
-        # Once a preparation is consumed, live working-set evidence replaces
-        # its forecast. File-backed guest RAM is included in this metric even
-        # when Linux reports it as reclaimable MemAvailable.
-        observed = sum(
-            math.ceil(node.heartbeat.runtime_metrics.memory_working_set_mb / target)
-            for node in ready_nodes
-            if not node.is_idle and node.heartbeat is not None
-            and node.heartbeat.runtime_metrics is not None
-        )
-        prepared_resources = replace(prepared_resources, memory_mb=forecast + observed)
+    # A pending cold start is future resident demand, not a permanent charge
+    # for its sandbox limit. Once assigned, its transient worker reservation
+    # replaces this promise; once running, measured working memory replaces it.
+    pending_resources = replace(pending_resources, memory_mb=(
+        _cold_memory_forecast(demand.placement_requests, maximum_request, policy)
+        if demand.placement_requests else math.ceil(
+            pending_resources.memory_mb / policy.target_memory_utilization)))
+    prepared_resources = replace(prepared_resources, memory_mb=
+        _cold_memory_forecast(demand.prepared_placement_requests, maximum_request, policy))
+    resident_forecast = sum(_resident_memory_forecast(node, policy, now) for node in ready_nodes)
     demand_resources = _add_resources(pending_resources, prepared_resources)
+    demand_resources = replace(demand_resources,
+        memory_mb=demand_resources.memory_mb + resident_forecast)
+    forecast_node_memory = _forecast_node_memory(nodes, policy)
     program_placement_requests: tuple[SandboxPlacementRequest, ...] = ()
     if policy.program_aware_autoscaling_enabled and program_signals is not None:
         program_placement_requests = tuple(
@@ -308,7 +297,7 @@ def evaluate_scale(
         _has_resources(desired_resources) and _has_resources(resource_deficit)
     ):
         deficit_nodes = (
-            _nodes_for_resource_deficit(resource_deficit, policy)
+            _nodes_for_resource_deficit(resource_deficit, policy, memory_capacity_mb=forecast_node_memory)
             if _has_resources(resource_deficit)
             else 0
         )
@@ -407,12 +396,11 @@ def evaluate_scale(
         # Letting the generic branch act first would undercount a sustained
         # gateway backlog on every later cycle.
         and not create_pressure_scale_up
-        and _planned_creates(actions) == 0
-        and len(provisioning_nodes) == 0
         and ready_nodes
     ):
+        pressure_target = min(policy.max_nodes, len(ready_nodes) + policy.max_create_per_cycle)
         create_count = min(
-            1,
+            max(0, pressure_target - available_pool_nodes - _planned_creates(actions)),
             _create_budget(
                 policy,
                 available_pool_nodes,
@@ -426,14 +414,20 @@ def evaluate_scale(
                 ScaleAction(kind="create", count=create_count, reason=reason)
             )
             reasons.append(reason)
+        else:
+            reason = _create_limit_reason(
+                policy, available_pool_nodes, len(provisioning_nodes), actions
+            )
+            if reason:
+                reasons.append("cannot create for live pressure: " + reason)
 
-    if create_pressure_scale_up:
+    if create_pressure_scale_up and not any(node.is_idle for node in ready_nodes):
         assert live_signals is not None
-        baseline_nodes = max(0, policy.min_nodes)
+        baseline_nodes = max(len(ready_nodes), policy.min_nodes)
         if _has_resources(desired_resources):
             baseline_nodes = max(
                 baseline_nodes,
-                _nodes_for_resource_deficit(desired_resources, policy),
+                _nodes_for_resource_deficit(desired_resources, policy, memory_capacity_mb=forecast_node_memory),
             )
         elif available_pool_nodes > 0:
             baseline_nodes = max(baseline_nodes, 1)
@@ -450,14 +444,17 @@ def evaluate_scale(
                     max(1, policy.create_target_concurrency_per_node),
                 ),
             )
+        # Saturation on an already larger fleet still warrants its configured
+        # headroom; an absolute pipeline count must not suppress live pressure.
+        pipeline_nodes = max(pipeline_nodes, baseline_nodes + min(
+            policy.max_create_per_cycle, policy.create_pressure_max_headroom_nodes))
         target_nodes = min(
             policy.max_nodes,
             max(
                 baseline_nodes,
                 min(
                     pipeline_nodes,
-                    baseline_nodes
-                    + max(0, policy.create_pressure_max_headroom_nodes),
+                    baseline_nodes + max(0, policy.create_pressure_max_headroom_nodes),
                 ),
             ),
         )
@@ -476,14 +473,18 @@ def evaluate_scale(
         )
         if create_count > 0:
             reason = (
-                f"{demand.pending_count} capacity request(s) queued for "
-                f"{demand.oldest_capacity_pending_seconds}s; targeting "
-                f"{target_nodes} temporary startup node(s)"
-            ) if backlog_scale_up else (
-                "sandbox create pipeline saturated at "
-                f"{live_signals.sandbox_create_limit} concurrent request(s); "
-                f"targeting {target_nodes} temporary node(s) after "
-                f"{live_signals.sandbox_create_rejections} recent rejection(s)"
+                (
+                    f"{demand.pending_count} capacity request(s) queued for "
+                    f"{demand.oldest_capacity_pending_seconds}s; targeting "
+                    f"{target_nodes} temporary startup node(s)"
+                )
+                if backlog_scale_up
+                else (
+                    "sandbox create pipeline saturated at "
+                    f"{live_signals.sandbox_create_limit} concurrent request(s); "
+                    f"targeting {target_nodes} temporary node(s) after "
+                    f"{live_signals.sandbox_create_rejections} recent rejection(s)"
+                )
             )
             actions.append(
                 ScaleAction(kind="create", count=create_count, reason=reason)
@@ -636,8 +637,7 @@ def _startup_backlog_requires_capacity(
         and not any(node.is_idle for node in ready_nodes)
         and signals is not None
         and signals.latest_observation_age_seconds is not None
-        and signals.latest_observation_age_seconds
-        <= policy.live_pressure_fresh_seconds
+        and signals.latest_observation_age_seconds <= policy.live_pressure_fresh_seconds
     )
 
 
@@ -753,6 +753,78 @@ def _create_limit_reason(
     return ""
 
 
+def _physical_memory(node: SandboxNode) -> int:
+    heartbeat = node.heartbeat
+    if heartbeat is None:
+        return 0
+    metrics = heartbeat.runtime_metrics
+    actual = metrics.memory_total_mb if metrics is not None else 0
+    return min(heartbeat.total_resources.memory_mb, actual) if actual > 0 else heartbeat.total_resources.memory_mb
+
+
+def _forecast_node_memory(nodes: list[SandboxNode], policy: ScalePolicy) -> int:
+    observed = [_physical_memory(node) for node in nodes
+        if node.is_schedulable and node.heartbeat is not None
+        and node.heartbeat.total_resources.memory_mb == policy.default_node_resources.memory_mb
+        and node.heartbeat.total_resources.vcpu == policy.default_node_resources.vcpu
+        and node.heartbeat.runtime_metrics is not None
+        and node.heartbeat.runtime_metrics.memory_total_mb > 0]
+    return min([policy.default_node_resources.memory_mb, *observed])
+
+
+def _cold_memory_forecast(
+    requests: tuple[SandboxPlacementRequest, ...], maximum: ResourceQuantity,
+    policy: ScalePolicy,
+) -> int:
+    return sum(min(maximum.memory_mb, math.ceil(
+        item.resources.memory_mb / policy.target_memory_utilization)) * item.count
+        for item in requests if item.resources.fits_within(maximum))
+
+
+def _resident_memory_forecast(node: SandboxNode, policy: ScalePolicy, now: datetime) -> int:
+    heartbeat = node.heartbeat
+    if heartbeat is None:
+        return 0
+    active_entries = [item for item in heartbeat.inventory
+                      if item.state in {"running", "creating", "waking"}]
+    transition_bounds = sum(item.resources.memory_mb for item in active_entries
+                            if item.state in {"creating", "waking"})
+    promises = (max(heartbeat.reserved_resources.memory_mb, transition_bounds)
+                + heartbeat.build_reserved_resources.memory_mb)
+    metrics = heartbeat.runtime_metrics
+    measured = 0
+    if not node.is_idle or heartbeat.inventory:
+        if (metrics is not None
+                and (metrics.memory_total_mb > 0 or metrics.memory_working_set_mb > 0)
+                and 0 <= (now - metrics.collected_at).total_seconds() <= policy.live_pressure_fresh_seconds):
+            measured = max(metrics.memory_working_set_mb,
+                           max(0, metrics.memory_total_mb - metrics.memory_available_mb))
+        elif (not heartbeat.inventory_complete
+              or node.active_sandboxes > len(active_entries)):
+            # Unknown resident demand consumes existing physical credit, but
+            # does not buy another worker by itself. Incomplete inventory must
+            # not turn an occupied worker into apparently free RAM.
+            return max(_physical_memory(node),
+                       math.ceil(promises / policy.target_memory_utilization))
+        else:
+            # Missing telemetry is not evidence of a cheap owner. Known active
+            # inventory gives a conservative fallback; parked bounds never do.
+            measured = sum(item.resources.memory_mb for item in active_entries
+                           if item.state == "running")
+    # A promise can have partially materialized between heartbeats. Counting its
+    # full bound temporarily errs toward earlier provisioning, not admission;
+    # completion clears it. No long-lived parked or running limit is reserved.
+    return math.ceil((measured + promises) / policy.target_memory_utilization)
+
+
+def _forecast_free_resources(node: SandboxNode) -> ResourceQuantity:
+    heartbeat = node.heartbeat
+    assert heartbeat is not None
+    free = _security_adjusted_resources(node, heartbeat.free_resources)
+    physical = _security_adjusted_resources(node, heartbeat.total_resources)
+    return replace(free, memory_mb=min(physical.memory_mb, _physical_memory(node)))
+
+
 def _projected_free_resources(
     nodes: list[SandboxNode],
     policy: ScalePolicy,
@@ -760,6 +832,7 @@ def _projected_free_resources(
     oldest_pending_seconds: int,
 ) -> ResourceQuantity:
     total = ResourceQuantity()
+    forecast_memory = _forecast_node_memory(nodes, policy)
     for node in nodes:
         if node.job.is_final:
             continue
@@ -773,13 +846,17 @@ def _projected_free_resources(
                     node,
                     node.heartbeat.total_resources,
                 )
-                total = total + reusable_dynamic_resources(available, physical)
+                total = total + replace(
+                    reusable_dynamic_resources(available, physical),
+                    memory_mb=min(physical.memory_mb, _physical_memory(node)),
+                )
             elif node.is_provisioning:
                 total = total + _projected_provisioning_resources(
                     node,
                     policy,
                     now,
                     oldest_pending_seconds,
+                    memory_capacity_mb=forecast_memory,
                 )
             continue
         if node.is_provisioning:
@@ -788,6 +865,7 @@ def _projected_free_resources(
                 policy,
                 now,
                 oldest_pending_seconds,
+                memory_capacity_mb=forecast_memory,
             )
     return total
 
@@ -966,22 +1044,20 @@ def _projected_provisioning_resources(
     policy: ScalePolicy,
     now: datetime,
     oldest_pending_seconds: int,
+    *, memory_capacity_mb: int | None = None,
 ) -> ResourceQuantity:
-    weight = _provisioning_weight(
-        node,
-        policy,
-        now,
-        oldest_pending_seconds,
-    )
+    weight = _provisioning_weight(node, policy, now, oldest_pending_seconds)
     if node.heartbeat is not None and node.heartbeat.resources_known:
-        return _scale_resources(
-            _security_adjusted_resources(node, node.heartbeat.free_resources),
-            weight,
-        )
-    return _scale_resources(
-        _security_adjusted_resources(node, _estimated_node_resources(node, policy)),
-        weight,
-    )
+        available = _security_adjusted_resources(node, node.heartbeat.free_resources)
+        if memory_capacity_mb is not None:
+            available = replace(available, memory_mb=min(
+                _security_adjusted_resources(node, node.heartbeat.total_resources).memory_mb,
+                _physical_memory(node), memory_capacity_mb))
+    else:
+        available = _security_adjusted_resources(node, _estimated_node_resources(node, policy))
+        if memory_capacity_mb is not None:
+            available = replace(available, memory_mb=min(available.memory_mb, memory_capacity_mb))
+    return _scale_resources(available, weight)
 
 
 def _estimated_node_resources(
@@ -1146,7 +1222,7 @@ def _stop_candidates(
     for node in ready_nodes:
         if node.heartbeat is not None and node.heartbeat.resources_known:
             remaining_free_resources = remaining_free_resources + (
-                _security_adjusted_resources(node, node.heartbeat.free_resources)
+                _forecast_free_resources(node)
             )
     remaining_placement_nodes = list(placement_nodes)
     for node in ready_nodes:
@@ -1161,7 +1237,7 @@ def _stop_candidates(
         ):
             continue
         node_free_resources = (
-            _security_adjusted_resources(node, node.heartbeat.free_resources)
+            _forecast_free_resources(node)
             if node.heartbeat is not None and node.heartbeat.resources_known
             else ResourceQuantity()
         )
@@ -1340,7 +1416,7 @@ def _node_free_resources(
             node, _estimated_node_resources(node, policy)
         )
     if node.heartbeat.resources_known:
-        return _security_adjusted_resources(node, node.heartbeat.free_resources)
+        return _forecast_free_resources(node)
     return _security_adjusted_resources(node, _estimated_node_resources(node, policy))
 
 
@@ -1395,13 +1471,16 @@ def _has_resources(value: ResourceQuantity) -> bool:
     return value.vcpu > 0 or value.memory_mb > 0 or value.disk_mb > 0
 
 
-def _nodes_for_resource_deficit(deficit: ResourceQuantity, policy: ScalePolicy) -> int:
+def _nodes_for_resource_deficit(
+    deficit: ResourceQuantity, policy: ScalePolicy, *, memory_capacity_mb: int | None = None,
+) -> int:
     defaults = policy.default_node_resources
     counts = [1]
     if deficit.vcpu > 0 and defaults.vcpu > 0:
         counts.append(_ceil_div_float(deficit.vcpu, defaults.vcpu))
-    if deficit.memory_mb > 0 and defaults.memory_mb > 0:
-        counts.append(_ceil_div(deficit.memory_mb, defaults.memory_mb))
+    memory_capacity = defaults.memory_mb if memory_capacity_mb is None else memory_capacity_mb
+    if deficit.memory_mb > 0 and memory_capacity > 0:
+        counts.append(_ceil_div(deficit.memory_mb, memory_capacity))
     if deficit.disk_mb > 0 and defaults.disk_mb > 0:
         counts.append(_ceil_div(deficit.disk_mb, defaults.disk_mb))
     return max(counts)

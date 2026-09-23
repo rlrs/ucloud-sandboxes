@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Compare coordination persistence with simulated workers, never production load.
+"""Measure PostgreSQL coordination with simulated workers, never production load.
 
-PostgreSQL uses a fresh private schema, dropped at completion. SQLite uses the
-current RoutingStore/RelaySqliteStore persistence sequence in a temporary folder.
+PostgreSQL uses a fresh private schema, dropped at completion.
 This is NOT an end-to-end sandbox restore or a same-algorithm database shootout.
 """
 from __future__ import annotations
@@ -10,8 +9,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
-from dataclasses import replace
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -20,15 +17,11 @@ from pathlib import Path
 import platform
 import statistics
 import sys
-from tempfile import TemporaryDirectory
 import time
 from uuid import uuid4
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from ucloud_sandboxes.model_relay import RelayRequest, RelaySqliteStore, RelayWorkerResponse  # noqa: E402
-from ucloud_sandboxes.models import ResourceQuantity  # noqa: E402
-from ucloud_sandboxes.routing import RoutingStore, SandboxRoute  # noqa: E402
 
 
 def summary(samples):
@@ -45,12 +38,12 @@ async def postgres_trial(args, body):
     from ucloud_sandboxes.shared_control import fixtures
     from ucloud_sandboxes.shared_control.dispatcher import WakeDispatcher
     from ucloud_sandboxes.shared_control.model import WakeProof
-    from ucloud_sandboxes.shared_control.postgres import PostgresControlStore
+    from ucloud_sandboxes.shared_control.qualification import QualificationControlStore
 
     dsn = args.dsn_file.read_text().strip()
     schema = "ucloud_shared_bench_" + uuid4().hex
     samples = []
-    stores = [PostgresControlStore(dsn, "benchmark", schema=schema, max_connections=args.connections,
+    stores = [QualificationControlStore(dsn, "benchmark", schema=schema, max_connections=args.connections,
                                   observe=samples.append) for _ in range(args.dispatchers)]
     tasks = []
     stop = asyncio.Event()
@@ -123,60 +116,6 @@ async def postgres_trial(args, body):
             await conn.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema)))
 
 
-async def sqlite_trial(args, body):
-    loop = asyncio.get_running_loop()
-    with TemporaryDirectory(prefix="ucloud-shared-sqlite-") as directory:
-        root = Path(directory)
-        routing = RoutingStore(root / "routes.sqlite")
-        relay = RelaySqliteStore(root / "relay.sqlite")
-        routes, requests = [], []
-        for i in range(args.agents):
-            sid = f"s{i}"
-            route = SandboxRoute(
-                sandbox_id=sid, node_id=f"n{i % args.nodes}", job_id=f"n{i % args.nodes}",
-                node_url=f"http://n{i % args.nodes}", resources=ResourceQuantity(1, 1024, 4096),
-                spec={"id": sid, "image": "fixture"}, state="parked", generation=1,
-                create_operation_id="create-" + sid, spec_hash=hashlib.sha256(sid.encode()).hexdigest(), node_epoch="boot-1",
-            )
-            routing.upsert_sandbox(route)
-            routing.upsert_program_request_transition_with_change(route, request_id=f"r{i}", rollout_id=sid, state="model_wait")
-            request = RelayRequest(f"r{i}", sid, "registration-1", "/model", "POST", {}, {}, time.time(), loop.create_future(),
-                                   state="leased", lease_id="lease-1", sandbox_id=sid, sandbox_generation=1)
-            relay.save_request(request)
-            routes.append(route)
-            requests.append(request)
-        commits, elapsed = [], []
-        def submit(i, started):
-            request = replace(requests[i], state="completed", body=None, completed_at=time.time(),
-                              completed_response=RelayWorkerResponse(200, body, {}), completed_bytes=len(body), delivery_pending=True)
-            relay.save_request(request)
-            commit_seconds = time.monotonic() - started
-            route = routes[i]
-            routing.upsert_program_request_transition_with_change(route, request_id=f"r{i}", rollout_id=route.sandbox_id, state="ready_to_wake")
-            waking = routing.reserve_sandbox_wake(route, pending_id="wake-" + route.sandbox_id)
-            assert waking is not None
-            time.sleep(args.restore_ms / 1000)
-            running = routing.set_sandbox_state_if_current(waking, expected_states={"waking"}, state="running", node_epoch="boot-1", activity_epoch=1)
-            assert running is not None
-            routing.upsert_program_request_transition_with_change(running, request_id=f"r{i}", rollout_id=route.sandbox_id, state="acting")
-            relay.save_request(replace(request, delivery_pending=False, wake_notified_at=time.time()))
-            return commit_seconds, time.monotonic() - started
-        try:
-            with ThreadPoolExecutor(max_workers=args.connections * args.dispatchers) as pool:
-                started = time.monotonic()
-                async def offered_submit(i):
-                    offered = started + i / args.arrival_rate if args.arrival_rate else started
-                    await asyncio.sleep(max(0, offered - time.monotonic()))
-                    return await loop.run_in_executor(pool, submit, i, offered)
-                results = await asyncio.gather(*(offered_submit(i) for i in range(args.agents)))
-                total_seconds = time.monotonic() - started
-            commits, elapsed = zip(*results)
-            assert all(routing.get_sandbox_readonly(f"s{i}").state == "running" for i in range(args.agents))
-            assert len(relay.load_requests()) == args.agents
-            return {"backend": "sqlite-current-sequence", "correct": True, "seconds": total_seconds,
-                    "result_commit_seconds": summary(commits), "ready_seconds": summary(elapsed)}
-        finally:
-            relay.close()
 
 
 async def run(args):
@@ -186,17 +125,13 @@ async def run(args):
                                Path(__file__).resolve().parents[1] / "ucloud_sandboxes/shared_control/schema.sql"]}
     body = b"x" * args.response_bytes
     for repeat in range(args.repeats):
-        order = ("sqlite", "postgres") if repeat % 2 == 0 else ("postgres", "sqlite")
-        for backend in order:
-            trial = await (postgres_trial(args, body) if backend == "postgres" else sqlite_trial(args, body))
-            trial["repeat"] = repeat
-            trials.append(trial)
-            print(json.dumps({"backend": trial["backend"], "repeat": repeat, "ready_seconds": trial["ready_seconds"]}), flush=True)
+        trial = await postgres_trial(args, body)
+        trial["repeat"] = repeat
+        trials.append(trial)
+        print(json.dumps({"backend": trial["backend"], "repeat": repeat, "ready_seconds": trial["ready_seconds"]}), flush=True)
     return {"created_at": datetime.now(timezone.utc).isoformat(), "kind": "coordination-only-simulated-worker",
             "configuration": {k: v for k, v in vars(args).items() if k not in ("dsn_file", "output")},
             "limitations": ["No real sandbox, worker storage or network latency.",
-                            "SQLite uses current separate store transitions; PostgreSQL uses the new atomic result/queue protocol.",
-                            "SQLite reference omits HTTP, placement inventory and relay process-wide async locking.",
                             "This is not a full production qualification or a same-algorithm database comparison."],
             "python": sys.version.split()[0], "platform": platform.platform(),
             "source_sha256": source_sha256,

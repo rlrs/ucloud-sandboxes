@@ -21,6 +21,7 @@ def can_consolidate_wake(
     policy: ScalePolicy,
     *,
     now: datetime,
+    observed_memory_mb: int | None = None,
 ) -> bool:
     if not policy.parked_wake_consolidation_enabled:
         return False
@@ -72,15 +73,27 @@ def can_consolidate_wake(
         > policy.target_cpu_utilization
     ):
         return False
-    used_memory = max(dst.memory_used_mb, dst.memory_total_mb - dst.memory_available_mb)
+    # File-backed application RAM is reclaimable to Linux, but moving another
+    # sandbox onto it still adds fault/writeback work. Use the same observed
+    # working-set evidence as autoscaling, without reserving parked limits.
+    used_memory = max(
+        dst.memory_used_mb,
+        dst.memory_total_mb - dst.memory_available_mb,
+        dst.memory_working_set_mb,
+    )
     if (
-        used_memory + requested.memory_mb
+        used_memory + max(requested.memory_mb, observed_memory_mb or 0)
     ) / dst.memory_total_mb > policy.target_memory_utilization:
         return False
     if (
         dst.memory_psi_full_avg10 is None
         or not math.isfinite(dst.memory_psi_full_avg10)
         or dst.memory_psi_full_avg10 >= policy.max_memory_psi_full_avg10
+    ):
+        return False
+    if dst.io_psi_full_avg10 is not None and (
+        not math.isfinite(dst.io_psi_full_avg10)
+        or dst.io_psi_full_avg10 >= policy.max_io_psi_full_avg10
     ):
         return False
     if (

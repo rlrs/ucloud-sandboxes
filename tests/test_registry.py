@@ -134,6 +134,8 @@ class RegistryTests(unittest.TestCase):
         for entry in legacy_payload["inventory"]:
             if entry.get("storage_dependency") is None:
                 entry.pop("storage_dependency", None)
+            if entry.get("memory_observation") is None:
+                entry.pop("memory_observation", None)
         self.assertEqual(payload, legacy_payload)
         self.assertEqual(heartbeat_from_dict(payload), heartbeat)
         self.assertEqual(len(payload["cached_images"]), 600)

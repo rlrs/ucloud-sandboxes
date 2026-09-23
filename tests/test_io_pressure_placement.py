@@ -67,7 +67,7 @@ class IoPressurePlacementTests(unittest.TestCase):
             ))
         self.assertEqual(chosen[0], "quiet")
         counts = Counter(chosen)
-        self.assertGreater(counts["quiet"], counts["busy"])
+        self.assertEqual(counts["quiet"], counts["busy"])
         self.assertGreater(counts["busy"], 0)
         # Even extreme I/O PSI only affects ranking; it cannot close admission.
         handler._ready_sandbox_heartbeats = lambda: [self.heartbeat("busy", io=99)]
@@ -94,7 +94,50 @@ class IoPressurePlacementTests(unittest.TestCase):
         # strand most of a ready worker's capacity for the entire burst.
         self.assertEqual(len(counts), 4)
         self.assertLess(max(counts.values()) - min(counts.values()), 16)
-        self.assertLess(counts['3'], counts['0'])
+        self.assertEqual(counts['3'], counts['0'])
+
+    def test_pressure_burst_replays_cached_cpu_without_funneling_creates(self):
+        # Actual rc19 pressure run: balanced 35/36/37/38 owners, then three
+        # heartbeats captured a startup CPU wave. They stayed cached while
+        # the fourth worker accumulated 73 owners versus 55 on its peer.
+        handler = object.__new__(control_plane.ControlPlaneHandler)
+        nodes = [replace(self.heartbeat(str(i)), runtime_metrics=replace(
+            self.heartbeat(str(i)).runtime_metrics,
+            cpu_percent=(98, 97, 84, 98)[i], cpu_count=32,
+            load_average_1m=48, memory_available_mb=28000,
+        )) for i in range(4)]
+        request = ResourceQuantity(1, 2048, 9280)
+        routes = [
+            _sandbox_route(sandbox_id=f"prior-{node.node_id}-{i}",
+                           node_id=node.node_id, job_id=node.job_id,
+                           node_url=node.node_url, resources=request,
+                           state="running", spec={"image": "image"})
+            for node, count in zip(nodes, (35, 36, 37, 38)) for i in range(count)
+        ]
+        handler._placement_routes = lambda: routes
+        handler._ready_sandbox_heartbeats = lambda: nodes
+        handler._nodes_with_image = lambda *_args, **_kwargs: {n.node_id for n in nodes}
+        handler.registry_layer_cache = None
+        handler.create_target_concurrency_per_node = 4
+        selected = []
+        for i in range(256 - len(routes)):
+            node = handler._select_node(request, image="image")
+            self.assertIsNotNone(node)
+            selected.append(node.node_id)
+            routes.append(_sandbox_route(
+                sandbox_id=f"new-{i}", node_id=node.node_id, job_id=node.job_id,
+                node_url=node.node_url, resources=request,
+                state="creating" if i % 2 else "running", spec={"image": "image"},
+            ))
+        self.assertEqual(Counter(r.node_id for r in routes),
+                         Counter({str(i): 64 for i in range(4)}))
+        self.assertEqual(set(selected), {str(i) for i in range(4)})
+        # The other gateway paths keep their prior conservative admission
+        # contract. This change is specifically create placement + recheck.
+        self.assertFalse(control_plane._node_can_fit_available(nodes[0], request,
+                                                               nodes[0].total_resources))
+        self.assertTrue(control_plane._node_can_fit_available(nodes[0], request,
+                          nodes[0].total_resources, check_cpu=False))
 
     def test_partial_memory_reclaim_is_a_ranking_signal(self):
         self.assertGreater(node_pressure_score(self.heartbeat("reclaim", memory=60)),
@@ -122,11 +165,11 @@ class IoPressurePlacementTests(unittest.TestCase):
             (root / "pressure" / "io").write_text(
                 "some avg10=36.50 avg60=20 total=1\nfull avg10=11.25 avg60=10 total=1\n"
             )
-            sampled = sample_node_runtime_metrics(proc_root=root, sample_seconds=0)
+            sampled = sample_node_runtime_metrics(proc_root=root)
             self.assertEqual(sampled.io_psi_some_avg10, 36.5)
             self.assertEqual(sampled.io_psi_full_avg10, 11.25)
             (root / "pressure" / "io").unlink()
-            self.assertIsNone(sample_node_runtime_metrics(proc_root=root, sample_seconds=0).io_psi_some_avg10)
+            self.assertIsNone(sample_node_runtime_metrics(proc_root=root).io_psi_some_avg10)
 
     def test_legacy_database_rows_and_heartbeat_payloads_remain_readable(self):
         with TemporaryDirectory() as directory:

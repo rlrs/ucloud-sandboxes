@@ -10,13 +10,15 @@ import asyncio
 import os
 from pathlib import Path
 import sys
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from psycopg import sql  # noqa: E402
 from ucloud_sandboxes.shared_control import fixtures  # noqa: E402
 from ucloud_sandboxes.shared_control.model import WakeProof  # noqa: E402
-from ucloud_sandboxes.shared_control.postgres import PostgresControlStore  # noqa: E402
+from ucloud_sandboxes.shared_control.qualification import QualificationControlStore  # noqa: E402
+from ucloud_sandboxes.shared_control.database import PostgresDatabase  # noqa: E402
 from ucloud_sandboxes.shared_control.relay import PostgresRelayState  # noqa: E402
 from ucloud_sandboxes import model_relay as api  # noqa: E402
 
@@ -24,13 +26,21 @@ from ucloud_sandboxes import model_relay as api  # noqa: E402
 async def run(args):
     if not args.schema.startswith("ucloud_shared_crash_"):
         raise ValueError("a dedicated ucloud_shared_crash_ schema is required")
-    store = PostgresControlStore(
+    store = QualificationControlStore(
         os.environ["UCLOUD_TEST_POSTGRES_DSN"], "crash-test", schema=args.schema
     )
     await store.open()
     try:
         if args.phase == "prepare":
             await store.migrate()
+            relay_database = PostgresDatabase(
+                os.environ["UCLOUD_TEST_POSTGRES_DSN"], "relay-crash-test", schema=args.schema,
+            )
+            await relay_database.open()
+            try:
+                await relay_database.migrate()
+            finally:
+                await relay_database.close()
             await fixtures.node(store, "node")
             await fixtures.sandbox(store, "sandbox", "node")
             await fixtures.request(store, "request", "sandbox")
@@ -47,17 +57,18 @@ async def run(args):
                 return "crash-test-epoch"
 
             relay = PostgresRelayState(
-                PostgresControlStore(
+                PostgresDatabase(
                     os.environ["UCLOUD_TEST_POSTGRES_DSN"],
                     "relay-crash-test",
                     schema=args.schema,
                 ),
                 result_notifier=wake,
             )
-            await relay.open()
+            # Keep the durable claim pending without canceling arbitrary
+            # database work; shutdown/restart recovery has separate coverage.
+            with patch.object(relay, "_dispatch_loop", asyncio.Event().wait):
+                await relay.open()
             try:
-                relay._tasks[1].cancel()
-                await asyncio.gather(relay._tasks[1], return_exceptions=True)
                 reg = await relay.register_rollout(
                     "crash-test",
                     {
@@ -139,7 +150,7 @@ async def run(args):
                 return "crash-test-epoch"
 
             relay = PostgresRelayState(
-                PostgresControlStore(
+                PostgresDatabase(
                     os.environ["UCLOUD_TEST_POSTGRES_DSN"],
                     "relay-crash-test",
                     schema=args.schema,

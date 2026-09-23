@@ -22,6 +22,29 @@ class ExecSessionCapacityError(RuntimeError):
     """No session slot is available; the requested process has not started."""
 
 
+class _ExecStartTimer:
+    """Account stages on the accepting thread without changing ownership.
+
+    Wall time includes lock/I/O/scheduling waits. Thread CPU distinguishes that
+    time from Python work without attaching a profiler to a running worker.
+    """
+
+    def __init__(self, values):
+        self.values = values
+        self.started = self.wall = time.monotonic()
+        self.started_cpu = self.cpu = time.thread_time()
+
+    def mark(self, name):
+        wall, cpu = time.monotonic(), time.thread_time()
+        self.values[name + "_ms"] = (wall - self.wall) * 1000
+        self.values[name + "_cpu_ms"] = (cpu - self.cpu) * 1000
+        self.wall, self.cpu = wall, cpu
+
+    def finish(self):
+        self.values["total_ms"] = (time.monotonic() - self.started) * 1000
+        self.values["total_cpu_ms"] = (time.thread_time() - self.started_cpu) * 1000
+
+
 @dataclass(frozen=True)
 class SandboxExecSpec:
     sandbox_id: str
@@ -128,6 +151,7 @@ class ExecSession:
     )
     activity_lease: bool = field(default=False, repr=False, compare=False)
     capacity_lease: object | None = field(default=None, repr=False, compare=False)
+    start_timings: dict[str, float] = field(default_factory=dict, repr=False, compare=False)
     completion_lock: Lock = field(default_factory=Lock, repr=False, compare=False)
     stdin_lock: Lock = field(
         default_factory=Lock,
@@ -168,19 +192,21 @@ class ExecSessionManager:
         self._lock = RLock()
 
     def start(self, spec: SandboxExecSpec) -> ExecSession:
+        timings = {}
+        timer = _ExecStartTimer(timings)
         spec.validate()
         self.sandbox_manager.lifecycle.acquire_shared(spec.sandbox_id)
+        timer.mark("lifecycle")
         runtime = self.sandbox_manager.runtime
         capacity_lease: object | None = None
         try:
-            self.sandbox_manager.require_activity_sandbox(spec.sandbox_id)
-            acquire_capacity = getattr(
-                self.sandbox_manager,
-                "acquire_exec_capacity",
-                None,
-            )
-            if callable(acquire_capacity):
-                capacity_lease = acquire_capacity(spec.sandbox_id)
+            # Admission validates current owned registration before publishing
+            # the lease. Materializing an inventory record here would repeat
+            # lifecycle/liveness work already done by acquire_shared, without
+            # granting a fence that survives forced deletion. The final runtime
+            # exec lease still validates live authority under its own lock.
+            capacity_lease = self.sandbox_manager.acquire_exec_capacity(spec.sandbox_id)
+            timer.mark("capacity")
             argv = runtime.exec_command(
                 spec.sandbox_id,
                 spec.command,
@@ -189,6 +215,7 @@ class ExecSessionManager:
                 interactive=spec.stdin,
                 tty=spec.tty,
             )
+            timer.mark("command")
         except Exception:
             if capacity_lease is not None:
                 self._release_capacity_lease(capacity_lease)
@@ -207,12 +234,14 @@ class ExecSessionManager:
             events=deque(maxlen=self.max_events_per_session),
             activity_lease=True,
             capacity_lease=capacity_lease,
+            start_timings=timings,
         )
         try:
             with self._lock:
                 self._make_session_room_locked()
                 self._sessions[session.id] = session
                 self._append_event_locked(session, "status", "started")
+            timer.mark("session_registry")
         except Exception:
             try:
                 runtime.exec_start_failed(spec.sandbox_id)
@@ -224,6 +253,7 @@ class ExecSessionManager:
                 session.activity_lease = False
             raise
         self._start_process(session)
+        timer.finish()
         return session
 
     def get(self, session_id: str) -> ExecSession | None:
@@ -350,6 +380,7 @@ class ExecSessionManager:
         return session
 
     def _start_process(self, session: ExecSession) -> None:
+        timer = _ExecStartTimer(session.start_timings)
         try:
             process = subprocess.Popen(
                 list(session.argv),
@@ -362,12 +393,15 @@ class ExecSessionManager:
                 bufsize=1,
             )
         except Exception as exc:
+            timer.mark("popen")
             self._fail_process_start(session, exc)
             return
+        timer.mark("popen")
         with self._lock:
             session.process = process
         try:
             self.sandbox_manager.runtime.exec_started(session.spec.sandbox_id)
+            timer.mark("process_registration")
         except Exception as exc:
             self._abort_started_process(session, process, (), exc)
             return
@@ -398,6 +432,7 @@ class ExecSessionManager:
                 daemon=True,
             )
             wait_thread.start()
+            timer.mark("pump_threads")
         except Exception as exc:
             self._abort_started_process(
                 session,
@@ -645,10 +680,4 @@ class ExecSessionManager:
                     session.final_sequence = session.next_sequence - 1
 
     def _release_capacity_lease(self, capacity_lease: object) -> None:
-        release_capacity = getattr(
-            self.sandbox_manager,
-            "release_exec_capacity",
-            None,
-        )
-        if callable(release_capacity):
-            release_capacity(capacity_lease)
+        self.sandbox_manager.release_exec_capacity(capacity_lease)

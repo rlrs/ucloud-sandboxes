@@ -7,6 +7,8 @@ import math
 import re
 from typing import Any
 
+from .resource_evidence import MemoryBackingCapacity, ResourceEvidence
+
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -139,6 +141,29 @@ class ResourceQuantity:
 
 
 @dataclass(frozen=True)
+class SandboxMemoryObservation:
+    """Historical cgroup charge, not a memory limit or a capacity reservation."""
+
+    memory_bytes: int
+    sampled_at: str
+
+    def __post_init__(self):
+        if type(self.memory_bytes) is not int or not 0 <= self.memory_bytes <= 2**63 - 1:
+            raise ValueError("observed memory must be nonnegative signed 64-bit bytes")
+        if parse_iso_datetime(self.sampled_at) is None:
+            raise ValueError("observed memory requires a sample timestamp")
+
+    @classmethod
+    def from_dict(cls, value):
+        if not isinstance(value, dict) or set(value) != {"memory_bytes", "sampled_at"}:
+            return None
+        try:
+            return cls(**value)
+        except (TypeError, ValueError):
+            return None
+
+
+@dataclass(frozen=True)
 class SandboxInventoryEntry:
     """A versioned node-side observation of one sandbox.
 
@@ -158,6 +183,7 @@ class SandboxInventoryEntry:
     snapshot_tag: str = ""
     storage_snapshot: dict[str, Any] = field(default_factory=dict)
     storage_dependency: dict[str, Any] | None = None
+    memory_observation: SandboxMemoryObservation | None = None
 
     def __post_init__(self) -> None:
         if self.storage_dependency is not None and not isinstance(
@@ -219,7 +245,7 @@ class SandboxInventoryEntry:
             "storage_snapshot",
         }
         supplied_snapshot_keys = set(raw) & snapshot_keys
-        allowed_keys = required_keys | snapshot_keys | {"storage_dependency"}
+        allowed_keys = required_keys | snapshot_keys | {"storage_dependency", "memory_observation"}
         if not required_keys.issubset(raw) or set(raw) - allowed_keys:
             return None
         if supplied_snapshot_keys and supplied_snapshot_keys != snapshot_keys:
@@ -290,6 +316,7 @@ class SandboxInventoryEntry:
             storage_dependency=(
                 dict(storage_dependency) if storage_dependency is not None else None
             ),
+            memory_observation=SandboxMemoryObservation.from_dict(raw.get("memory_observation")),
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -303,6 +330,8 @@ class SandboxInventoryEntry:
         }
         if self.storage_dependency is not None:
             payload["storage_dependency"] = dict(self.storage_dependency)
+        if self.memory_observation is not None:
+            payload["memory_observation"] = asdict(self.memory_observation)
         if self.storage_snapshot:
             payload.update(
                 {
@@ -316,23 +345,83 @@ class SandboxInventoryEntry:
         return payload
 
 
+@dataclass(frozen=True)
+class ResidentWaitMetrics:
+    resident_waits: int
+    checkpoint_inflight: int
+    checkpoints_completed: int
+    reclaim_target_bytes: int
+    projected_reclaim_bytes: int
+    reason: str
+    cache_reclaim_inflight: int = 0
+    cache_reclaim_attempts: int = 0
+    cache_reclaimed_bytes: int = 0
+    cache_refault_backoffs: int = 0
+    admitted_demand_bytes: int | None = None
+    pending_demand_bytes: int | None = None
+    unknown_transition_memory_costs: int | None = None
+    admitted_ram_backing_bytes: int | None = None
+    pending_ram_backing_bytes: int | None = None
+
+    @classmethod
+    def from_dict(cls, raw: object) -> "ResidentWaitMetrics | None":
+        if not isinstance(raw, dict):
+            return None
+        raw = dict(raw)
+        for name in (
+            "cache_reclaim_inflight",
+            "cache_reclaim_attempts",
+            "cache_reclaimed_bytes",
+            "cache_refault_backoffs",
+        ):
+            raw.setdefault(name, 0)
+        optional = {
+            "admitted_demand_bytes", "pending_demand_bytes",
+            "unknown_transition_memory_costs",
+            "admitted_ram_backing_bytes", "pending_ram_backing_bytes",
+        }
+        for name in optional:
+            raw.setdefault(name, None)
+        if set(raw) != {item.name for item in fields(cls)}:
+            return None
+        if not isinstance(raw["reason"], str) or raw["reason"] not in {
+            "resident_headroom",
+            "storage_backpressure",
+            "queued_demand",
+            "memory_headroom",
+            "memory_reclaim",
+            "memory_backing_headroom",
+            "memory_backing_unavailable",
+        }:
+            return None
+        for name, value in raw.items():
+            if name in optional and value is None:
+                continue
+            if name != "reason" and (type(value) is not int or value < 0):
+                return None
+        return cls(**raw)
+
+
 # Additive telemetry fields must be accepted consistently on the wire and in
 # canonical persisted heartbeat records during a rolling upgrade.
 NODE_RUNTIME_METRIC_DEFAULTS = {
-    'storage_ublk_max_devices': 0,
-    'memory_working_set_mb': 0,
-    'io_psi_some_avg10': None,
-    'io_psi_full_avg10': None,
-    'storage_publication_active': 0,
-    'storage_publication_waiting': 0,
-    'storage_publication_limit': 0,
-    'storage_publication_queue_wait_ms_total': 0,
-    'storage_publication_queue_wait_ms_max': 0,
-    'storage_publication_duration_ms_total': 0,
-    'storage_publication_duration_ms_max': 0,
-    'storage_snapshot_publications': 0,
-    'storage_snapshot_compactions': 0,
-    'storage_snapshot_uploaded_bytes': 0,
+    "memory_backing": None,
+    "resource_evidence": None,
+    "resident_wait": None,
+    "storage_ublk_max_devices": 0,
+    "memory_working_set_mb": 0,
+    "io_psi_some_avg10": None,
+    "io_psi_full_avg10": None,
+    "storage_publication_active": 0,
+    "storage_publication_waiting": 0,
+    "storage_publication_limit": 0,
+    "storage_publication_queue_wait_ms_total": 0,
+    "storage_publication_queue_wait_ms_max": 0,
+    "storage_publication_duration_ms_total": 0,
+    "storage_publication_duration_ms_max": 0,
+    "storage_snapshot_publications": 0,
+    "storage_snapshot_compactions": 0,
+    "storage_snapshot_uploaded_bytes": 0,
 }
 
 
@@ -393,6 +482,9 @@ class NodeRuntimeMetrics:
     image_pull_active_operations: int = 0
     image_pull_waiting_operations: int = 0
     image_pull_max_concurrent_operations: int = 0
+    resource_evidence: ResourceEvidence | None = None
+    memory_backing: MemoryBackingCapacity | None = None
+    resident_wait: ResidentWaitMetrics | None = None
 
     @classmethod
     def from_dict(cls, raw: object) -> "NodeRuntimeMetrics | None":
@@ -421,7 +513,27 @@ class NodeRuntimeMetrics:
             "load_average_5m",
             "load_average_15m",
         }
-        values: dict[str, object] = {"collected_at": collected_at}
+        evidence = raw["resource_evidence"]
+        if evidence is not None:
+            evidence = ResourceEvidence.from_dict(evidence)
+            if evidence is None:
+                return None
+        resident_wait = raw["resident_wait"]
+        if resident_wait is not None:
+            resident_wait = ResidentWaitMetrics.from_dict(resident_wait)
+            if resident_wait is None:
+                return None
+        memory_backing = raw["memory_backing"]
+        if memory_backing is not None:
+            memory_backing = MemoryBackingCapacity.from_dict(memory_backing)
+            if memory_backing is None:
+                return None
+        values: dict[str, object] = {
+            "collected_at": collected_at,
+            "resource_evidence": evidence,
+            "resident_wait": resident_wait,
+            "memory_backing": memory_backing,
+        }
         for name in float_fields:
             value = raw[name]
             if value is not None and (
@@ -436,7 +548,13 @@ class NodeRuntimeMetrics:
             return None
         values["storage_device_pool_enabled"] = device_pool_enabled
         integer_fields = field_names - float_fields
-        integer_fields -= {"collected_at", "storage_device_pool_enabled"}
+        integer_fields -= {
+            "collected_at",
+            "storage_device_pool_enabled",
+            "resource_evidence",
+            "resident_wait",
+            "memory_backing",
+        }
         for name in integer_fields:
             value = raw[name]
             if isinstance(value, bool) or not isinstance(value, int) or value < 0:
@@ -444,9 +562,14 @@ class NodeRuntimeMetrics:
             values[name] = value
         return cls(**values)
 
-    def to_dict(self) -> dict[str, float | int | str | None]:
+    def to_dict(self) -> dict[str, object]:
         raw = asdict(self)
         raw["collected_at"] = self.collected_at.isoformat()
+        raw["resource_evidence"] = (
+            self.resource_evidence.to_dict()
+            if self.resource_evidence is not None
+            else None
+        )
         return raw
 
 
@@ -772,6 +895,23 @@ class LiveScaleSignals:
 
 
 @dataclass(frozen=True)
+class ProgramScaleCalibration:
+    """Observed prospective demand, kept separate from action-enabled policy."""
+
+    resources: ResourceQuantity
+    observed_memory_sandboxes: int
+    unknown_memory_sandboxes: int
+    known_wait_sandboxes: int
+    unknown_wait_sandboxes: int
+    wait_samples: int
+    provider_ready_seconds: float | None
+
+    def to_dict(self):
+        return {**asdict(self), "resources": self.resources.to_dict(),
+                "mode": "shadow", "cpu_basis": "declared_limit"}
+
+
+@dataclass(frozen=True)
 class ProgramScaleSignals:
     """Current rollout phases reduced into bounded autoscaler demand."""
 
@@ -789,6 +929,7 @@ class ProgramScaleSignals:
     oldest_model_wait_seconds: int = 0
     oldest_ready_to_wake_seconds: int = 0
     action_enabled: bool = False
+    calibration: ProgramScaleCalibration | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -807,6 +948,7 @@ class ProgramScaleSignals:
             "oldest_model_wait_seconds": self.oldest_model_wait_seconds,
             "oldest_ready_to_wake_seconds": self.oldest_ready_to_wake_seconds,
             "action_enabled": self.action_enabled,
+            "calibration": self.calibration.to_dict() if self.calibration else None,
         }
 
 

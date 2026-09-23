@@ -152,7 +152,7 @@ class EnvironmentContractTests(unittest.TestCase):
 
         service = object.__new__(DirectSandboxService)
         service.startup_admission = nullcontext
-        service._file_read_slots = Mock()
+        service._management_read_slots = Mock()
         service.admission_wait_seconds = 1.0
         spec = self.spec(filesystem={"management_helper": "static"})
         service._require_registration = Mock(return_value=SimpleNamespace(spec=spec, sandbox_generation=1))

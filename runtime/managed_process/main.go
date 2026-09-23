@@ -683,6 +683,11 @@ func runControl(arguments []string) error {
 	}
 	connection, err := net.DialTimeout("unix", *socket, *timeout)
 	if err != nil {
+		// This outcome proves no request byte was sent. The node may retry
+		// startup without replaying an ambiguously dispatched mutation.
+		_ = json.NewEncoder(os.Stdout).Encode(map[string]any{
+			"ok": false, "error": err.Error(), "error_code": "control_not_connected",
+		})
 		return err
 	}
 	defer connection.Close()

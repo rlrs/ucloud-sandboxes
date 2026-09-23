@@ -2,11 +2,11 @@
 set -euo pipefail
 
 readonly EXPECTED_COMMIT="50e1502a95d36ad2faf2c7ef33b8bf21fe975293"
-readonly EXPECTED_PATCH_SERIES_SHA256="e87ff7015c04691ee37905b0f54257acee060518a2672f3d764d4d8b36a4ad42"
-readonly EXPECTED_PATCHED_FILES_SHA256="53aa4c8bd9164196b5c6624d4f0cb19a0194ce56cf8f016863342dd83f35e571"
+readonly EXPECTED_PATCH_SERIES_SHA256="ce8e0979e7604b369b922f5819624fec2bd88f7eae0b0bbdf0817d5c8968755b"
+readonly EXPECTED_PATCHED_FILES_SHA256="d9ddb7c1c324505c0c4a92f95c919d60dc4433125502233c98d964a4680af19e"
 readonly BUILD_CONFIG="opt"
-readonly -a PATCH_NAMES=("20260817/0001-ucloud-hibernation.patch" "20260817/0002-ucloud-default-acl-umask.patch" "20260817/0003-ucloud-release-detached-mounts.patch")
-readonly -a EXPECTED_PATCH_SHA256S=("bed13a2a1ef790a61a7a09d3a70511a15a7504d1ef2342edc672b4203950f5e6" "361476d2fe3ab4c8adc80ab0c54e63c18f96984c2d59c00b51b770cb9f3fd506" "0b3d2eb13a8f417e1ee9c5d9e80ef5df38eba59d6cde3623dfa9d058bd7f493c")
+readonly -a PATCH_NAMES=("20260817/0001-ucloud-hibernation.patch" "20260817/0002-ucloud-default-acl-umask.patch" "20260817/0003-ucloud-release-detached-mounts.patch" "20260817/0004-ucloud-abort-hibernation.patch" "20260817/0005-ucloud-erofs-filestore.patch" "20260817/0006-ucloud-ram-application-memory.patch" "20260817/0007-ucloud-reflink-application-memory.patch")
+readonly -a EXPECTED_PATCH_SHA256S=("bed13a2a1ef790a61a7a09d3a70511a15a7504d1ef2342edc672b4203950f5e6" "361476d2fe3ab4c8adc80ab0c54e63c18f96984c2d59c00b51b770cb9f3fd506" "0b3d2eb13a8f417e1ee9c5d9e80ef5df38eba59d6cde3623dfa9d058bd7f493c" "c97ae915c984f50a554c9b79ede4b73a5ab68e0ad5d89469e8f09819468519fe" "46a0caae4f05c1b5822fc626316460e53f87b541a5a1d25b55aa2bc67c68c29f" "af09c7f45e666c4e7e46c5a999cc8414034deb069c7c25c9fdcf29c9b808310e" "17933cd7990ac28c0b9bdb8add8330f242fdd3dcf61621c2a7d3905c984f6619")
 
 usage() {
   echo "usage: $0 GVISOR_CHECKOUT OUTPUT_DIRECTORY" >&2
@@ -98,21 +98,21 @@ readonly BAZEL_VERSION
 
 (
   cd "${SOURCE_DIR}"
-  bazel test \
+  bazel test "-c" "${BUILD_CONFIG}" \
     "--test_filter=TestExternalBackingSaveRestore|TestExternalBackingRestoreRejectsWrongSize" \
     "//pkg/sentry/pgalloc:pgalloc_test"
-  bazel test \
-    "--test_filter=TestCreateMemoryFileWithDiskBacking" \
+  bazel test "-c" "${BUILD_CONFIG}" \
+    "--test_filter=TestCreateMemoryFileWithDiskBacking|TestCopySparseApplicationMemory|TestCloneApplicationMemory" \
     "//runsc/boot:boot_test"
-  bazel test \
+  bazel test "-c" "${BUILD_CONFIG}" \
     "--test_filter=TestRemoveCPUQuotaForStartup" \
     "//runsc/cmd:cmd_test"
-  bazel test \
-    "--test_filter=TestStartPausedStatusTransition" \
+  bazel test "-c" "${BUILD_CONFIG}" \
+    "--test_filter=TestStartPausedStatusTransition|TestRootfsEROFSDiskOverlay" \
     "//runsc/container:container_test"
-  bazel test "//pkg/sentry/fsimpl/tmpfs:tmpfs_test"
-  bazel test "--test_filter=TestPinnedBootExecutable" "//runsc/sandbox:sandbox_test"
-  bazel test "--test_filter=TestWithoutCgroupCPUWatcher" "//runsc/specutils:specutils_test"
+  bazel test "-c" "${BUILD_CONFIG}" "//pkg/sentry/fsimpl/tmpfs:tmpfs_test"
+  bazel test "-c" "${BUILD_CONFIG}" "--test_filter=TestPinnedBootExecutable" "//runsc/sandbox:sandbox_test"
+  bazel test "-c" "${BUILD_CONFIG}" "--test_filter=TestWithoutCgroupCPUWatcher" "//runsc/specutils:specutils_test"
   bazel build "-c" "${BUILD_CONFIG}" "//:release"
 )
 

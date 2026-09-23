@@ -55,7 +55,7 @@ class BurstInventoryTests(unittest.TestCase):
             )
             with (
                 patch.object(
-                    service.warden, "_storage_record", side_effect=AssertionError
+                    service.warden, "workspace_record", side_effect=AssertionError
                 ),
                 patch.object(service.warden, "inspect", side_effect=AssertionError),
                 patch.object(

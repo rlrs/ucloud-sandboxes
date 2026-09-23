@@ -72,6 +72,10 @@ _PROTOCOL_EXTRA_FIELDS = {
             "EnsureReleased",
         )
     },
+    **{
+        operation: (*_OWNER_REQUEST_FIELDS, "operation_id", "expected_revision")
+        for operation in ("PrepareCapture", "CommitCapture", "AbortCapture")
+    },
     "DeleteVolume": (
         *_OWNER_REQUEST_FIELDS,
         "expected_accounting_id",
@@ -88,6 +92,8 @@ _ACTIVE_CAPACITY_STATES = {
     "acquiring",
     "mounted",
     "sealing",
+    "preparing_capture",
+    "capture_prepared",
     "sealed",
     "releasing",
     "released",
@@ -126,6 +132,8 @@ class StorageVolumeState(str, Enum):
     IMPORTING = "importing"
     ACQUIRING = "acquiring"
     MOUNTED = "mounted"
+    PREPARING_CAPTURE = "preparing_capture"
+    CAPTURE_PREPARED = "capture_prepared"
     SEALING = "sealing"
     SEALED = "sealed"
     RELEASING = "releasing"
@@ -237,6 +245,7 @@ class StorageVolumeRecord:
     device_id: int | None = None
     device_path: str = ""
     runtime_image_config: str = ""
+    capture_id: str = ""
     sealed_layer_bytes: int = 0
     sealed_layer_paths: tuple[str, ...] = ()
     cached_layer_paths: tuple[str, ...] = ()
@@ -283,6 +292,8 @@ class StorageVolumeRecord:
         ):
             if raw and not Path(raw).is_absolute():
                 raise ValueError("record paths must be absolute")
+        if self.capture_id and not re.fullmatch(r"[0-9a-f]{64}", self.capture_id):
+            raise ValueError("invalid workspace capture identity")
         if self.sealed_layer_bytes < 0:
             raise ValueError("sealed_layer_bytes must be non-negative")
         if self.accounting_id < 0:
@@ -310,6 +321,8 @@ class StorageVolumeRecord:
 
     def to_json(self) -> dict[str, Any]:
         payload = asdict(self)
+        if not self.capture_id:
+            payload.pop("capture_id")
         payload["state"] = self.state.value
         payload["sealed_layer_paths"] = list(self.sealed_layer_paths)
         payload["cached_layer_paths"] = list(self.cached_layer_paths)
@@ -358,6 +371,8 @@ class StorageVolumeRecord:
     @classmethod
     def from_json(cls, raw: dict[str, Any]) -> "StorageVolumeRecord":
         expected = {field.name for field in fields(cls)}
+        if "capture_id" not in raw:
+            raw = {**raw, "capture_id": ""}
         if set(raw) == expected - {"published_backend"}:
             raw = {
                 **raw,
@@ -475,6 +490,30 @@ class StorageHostOperations(Protocol):
 class LinuxStorageHostOperations:
     def __init__(self, *, timeout_seconds: float = 120.0) -> None:
         self.timeout_seconds = timeout_seconds
+        self._format_options_lock = threading.Lock()
+        self._format_log_options: tuple[str, ...] | None = None
+
+    def _workspace_log_options(self) -> tuple[str, ...]:
+        with self._format_options_lock:
+            if self._format_log_options is None:
+                # New xfsprogs sizes SSD journals for the entire host CPU
+                # count. Each sandbox owns a separate filesystem; applying
+                # that estimate to every workspace multiplies creation I/O.
+                # Keep filesystem-size/minimum sizing, including large-volume
+                # growth, instead of imposing a fixed journal-size limit.
+                result = subprocess.run(
+                    ("mkfs.xfs", "-l", "help"), check=False, text=True,
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    timeout=self.timeout_seconds,
+                    env={**os.environ, "LC_ALL": "C"},
+                )
+                log_help = re.search(
+                    r"/\* log subvol \*/(.*?)(?=/\*|\Z)",
+                    result.stdout + result.stderr, re.DOTALL,
+                )
+                supported = log_help is not None and "concurrency=" in log_help[1]
+                self._format_log_options = ("-l", "concurrency=0") if supported else ()
+            return self._format_log_options
 
     @staticmethod
     def device_is_unused(device: Path) -> bool:
@@ -497,6 +536,7 @@ class LinuxStorageHostOperations:
             "reflink=1",
             "-n",
             "ftype=1",
+            *self._workspace_log_options(),
             str(device),
         )
 
@@ -919,6 +959,7 @@ class StorageNativeJournal:
         next_state: StorageVolumeState,
         reserve_capacity: bool = False,
         hard_capacity_bytes: int = 0,
+        complete: bool = False,
     ) -> StorageVolumeRecord | OperationReplay:
         request_sha256 = _request_sha256(request)
         with self._write_connection() as connection:
@@ -968,6 +1009,11 @@ class StorageNativeJournal:
                 volume_id,
             )
             self._upsert_record(connection, pending)
+            if complete:
+                connection.execute(
+                    "UPDATE operations SET status = 'completed' WHERE operation_id = ?",
+                    (operation_id,),
+                )
             connection.commit()
         return pending
 
@@ -1675,6 +1721,7 @@ class StorageNativeNodeService:
         volume_id: str,
         operation_id: str,
         publication_raw: dict[str, Any],
+        capture_id: str = "",
     ) -> StorageVolumeRecord:
         if self.publisher is None:
             raise StorageNativeConflictError(
@@ -1690,6 +1737,8 @@ class StorageNativeNodeService:
             "sandbox_id": sandbox_id,
             "volume_id": volume_id,
         }
+        if capture_id:
+            request["capture_id"] = capture_id
         volume_root = self._volume_root(volume_id)
         record = StorageVolumeRecord(
             volume_id=volume_id,
@@ -1697,6 +1746,7 @@ class StorageNativeNodeService:
             sandbox_generation=sandbox_generation,
             revision=1,
             state=StorageVolumeState.IMPORTING,
+            capture_id=capture_id,
             operation_id=operation_id,
             virtual_size=publication.virtual_size,
             runtime_dir=str(volume_root / "runtime"),
@@ -1757,6 +1807,7 @@ class StorageNativeNodeService:
         allowed_states: set[StorageVolumeState],
         next_state: StorageVolumeState,
         reserve_capacity: bool = False,
+        complete: bool = False,
     ) -> StorageVolumeRecord | OperationReplay:
         request = {
             "expected_revision": expected_revision,
@@ -1777,6 +1828,7 @@ class StorageNativeNodeService:
             allowed_states=allowed_states,
             next_state=next_state,
             reserve_capacity=reserve_capacity,
+            complete=complete,
             hard_capacity_bytes=(
                 self.config.hard_capacity_bytes if reserve_capacity else 0
             ),
@@ -1792,17 +1844,46 @@ class StorageNativeNodeService:
         operation_id: str,
         expected_revision: int,
     ) -> StorageVolumeRecord:
+        return self._snapshot_mounted(
+            sandbox_id=sandbox_id, sandbox_generation=sandbox_generation,
+            volume_id=volume_id, operation_id=operation_id,
+            expected_revision=expected_revision, capture=False,
+        )
+
+    @_storage_mutation
+    def prepare_capture(
+        self, *, sandbox_id: str, sandbox_generation: int, volume_id: str,
+        operation_id: str, expected_revision: int,
+    ) -> StorageVolumeRecord:
+        """Retain an immutable revision without relinquishing the live device.
+
+        The runtime owner must keep the guest quiesced until it explicitly
+        commits or aborts. Storage never grants guest execution authority.
+        """
+        return self._snapshot_mounted(
+            sandbox_id=sandbox_id, sandbox_generation=sandbox_generation,
+            volume_id=volume_id, operation_id=operation_id,
+            expected_revision=expected_revision, capture=True,
+        )
+
+    def _snapshot_mounted(
+        self, *, sandbox_id: str, sandbox_generation: int, volume_id: str,
+        operation_id: str, expected_revision: int, capture: bool,
+    ) -> StorageVolumeRecord:
         pending = self._begin_transition(
-            kind="FreezeAndSeal",
+            kind="PrepareCapture" if capture else "FreezeAndSeal",
             operation_id=operation_id,
             volume_id=volume_id,
             sandbox_id=sandbox_id,
             sandbox_generation=sandbox_generation,
             expected_revision=expected_revision,
             allowed_states={StorageVolumeState.MOUNTED},
-            next_state=StorageVolumeState.SEALING,
+            next_state=(StorageVolumeState.PREPARING_CAPTURE
+                        if capture else StorageVolumeState.SEALING),
         )
         if isinstance(pending, OperationReplay):
+            if capture and pending.record.operation_id != operation_id:
+                raise StorageNativeConflictError("capture preparation was superseded")
             return pending.record
         if pending.device_id is None:
             self.journal.fail(pending, "mounted volume has no block device")
@@ -1830,7 +1911,12 @@ class StorageNativeNodeService:
                 )
             record = replace(
                 pending,
-                state=StorageVolumeState.SEALED,
+                state=(StorageVolumeState.CAPTURE_PREPARED
+                       if capture else StorageVolumeState.SEALED),
+                capture_id=(_request_sha256({"volume_id": pending.volume_id,
+                    "sandbox_id": pending.sandbox_id, "generation": pending.sandbox_generation,
+                    "revision": pending.revision, "operation_id": pending.operation_id})
+                    if capture else ""),
                 sealed_layer_bytes=metadata.st_size,
                 sealed_layer_paths=(
                     *pending.sealed_layer_paths,
@@ -1851,6 +1937,54 @@ class StorageNativeNodeService:
                 frozen = False
             self.journal.fail(pending, f"{type(exc).__name__}: {exc}")
             raise
+
+    @_storage_mutation
+    def commit_capture(
+        self, *, sandbox_id: str, sandbox_generation: int, volume_id: str,
+        operation_id: str, expected_revision: int,
+    ) -> StorageVolumeRecord:
+        """Authorize release of a retained revision after manifest commit."""
+        return self._finish_capture(
+            sandbox_id=sandbox_id, sandbox_generation=sandbox_generation,
+            volume_id=volume_id, operation_id=operation_id,
+            expected_revision=expected_revision, commit=True,
+        )
+
+    @_storage_mutation
+    def abort_capture(
+        self, *, sandbox_id: str, sandbox_generation: int, volume_id: str,
+        operation_id: str, expected_revision: int,
+    ) -> StorageVolumeRecord:
+        """Return the exact device to mounted ownership before runtime thaw.
+
+        The captured layer remains a dependency of the restacked live device;
+        abort must not unlink it or pretend the snapshot operation was undone.
+        """
+        return self._finish_capture(
+            sandbox_id=sandbox_id, sandbox_generation=sandbox_generation,
+            volume_id=volume_id, operation_id=operation_id,
+            expected_revision=expected_revision, commit=False,
+        )
+
+    def _finish_capture(
+        self, *, sandbox_id: str, sandbox_generation: int, volume_id: str,
+        operation_id: str, expected_revision: int, commit: bool,
+    ) -> StorageVolumeRecord:
+        pending = self._begin_transition(
+            kind="CommitCapture" if commit else "AbortCapture",
+            sandbox_id=sandbox_id, sandbox_generation=sandbox_generation,
+            volume_id=volume_id, operation_id=operation_id,
+            expected_revision=expected_revision,
+            allowed_states={StorageVolumeState.CAPTURE_PREPARED},
+            complete=True,
+            next_state=(StorageVolumeState.SEALED if commit
+                        else StorageVolumeState.MOUNTED),
+        )
+        if isinstance(pending, OperationReplay):
+            if pending.record.operation_id != operation_id:
+                raise StorageNativeConflictError("capture decision was superseded")
+            return pending.record
+        return pending
 
     @_storage_mutation
     def mount_snapshot_cow(
@@ -2225,6 +2359,7 @@ class StorageNativeNodeService:
             expected_revision=expected_revision,
             allowed_states={
                 StorageVolumeState.MOUNTED,
+                StorageVolumeState.CAPTURE_PREPARED,
                 StorageVolumeState.SEALED,
                 StorageVolumeState.RELEASED,
                 StorageVolumeState.PUBLISHED,
@@ -2261,6 +2396,7 @@ class StorageNativeNodeService:
         publication: StorageSnapshotPublication | None = None,
         virtual_size: int | None = None,
         expected_accounting_id: int | None = None,
+        capture_id: str = "",
         expected_revision: int | None = None,
     ) -> StorageVolumeRecord:
         if action not in {
@@ -2279,7 +2415,7 @@ class StorageNativeNodeService:
                 raise ValueError("prepared storage requires a virtual size")
             record = self.create_volume(
                 **owner.request_fields(),
-                operation_id=_storage_operation_id(
+                operation_id=storage_operation_id(
                     owner,
                     operation_id,
                     "prepare-create",
@@ -2293,12 +2429,13 @@ class StorageNativeNodeService:
                 raise ValueError("imported storage requires a publication")
             record = self.acquire_snapshot(
                 **owner.request_fields(),
-                operation_id=_storage_operation_id(
+                operation_id=storage_operation_id(
                     owner,
                     operation_id,
                     "import-acquire",
                 ),
                 publication_raw=publication.to_dict(),
+                capture_id=capture_id,
             )
         if record is None:
             raise StorageNativeConflictError("storage-native volume does not exist")
@@ -2330,7 +2467,7 @@ class StorageNativeNodeService:
             if record.state != StorageVolumeState.DELETED:
                 record = self.delete_volume(
                     **owner.request_fields(),
-                    operation_id=_storage_operation_id(owner, operation_id, "delete"),
+                    operation_id=storage_operation_id(owner, operation_id, "delete"),
                     expected_revision=record.revision,
                 )
             return record
@@ -2340,13 +2477,13 @@ class StorageNativeNodeService:
         ):
             record = self.freeze_and_seal(
                 **owner.request_fields(),
-                operation_id=_storage_operation_id(owner, operation_id, "seal"),
+                operation_id=storage_operation_id(owner, operation_id, "seal"),
                 expected_revision=record.revision,
             )
         if record.state == StorageVolumeState.SEALED:
             record = self.release_runtime(
                 **owner.request_fields(),
-                operation_id=_storage_operation_id(owner, operation_id, "release"),
+                operation_id=storage_operation_id(owner, operation_id, "release"),
                 expected_revision=record.revision,
             )
         if action in {"import", "mount", "prepare"} and record.state in {
@@ -2355,13 +2492,13 @@ class StorageNativeNodeService:
         }:
             record = self.mount_snapshot_cow(
                 **owner.request_fields(),
-                operation_id=_storage_operation_id(owner, operation_id, "mount"),
+                operation_id=storage_operation_id(owner, operation_id, "mount"),
                 expected_revision=record.revision,
             )
         if action == "publish" and record.state == StorageVolumeState.RELEASED:
             record = self.publish_snapshot(
                 **owner.request_fields(),
-                operation_id=_storage_operation_id(owner, operation_id, "publish"),
+                operation_id=storage_operation_id(owner, operation_id, "publish"),
                 expected_revision=record.revision,
             )
         if action == "discard" and record.state in {
@@ -2370,7 +2507,7 @@ class StorageNativeNodeService:
         }:
             record = self.discard_mounted_cow(
                 **owner.request_fields(),
-                operation_id=_storage_operation_id(owner, operation_id, "discard"),
+                operation_id=storage_operation_id(owner, operation_id, "discard"),
                 expected_revision=record.revision,
             )
         expected_states = {
@@ -2467,6 +2604,8 @@ class StorageNativeNodeService:
                     StorageVolumeState.MOUNTED,
                     StorageVolumeState.ACQUIRING,
                     StorageVolumeState.SEALING,
+                    StorageVolumeState.PREPARING_CAPTURE,
+                    StorageVolumeState.CAPTURE_PREPARED,
                     StorageVolumeState.SEALED,
                 }
                 and not owner_matches
@@ -2504,7 +2643,7 @@ class StorageNativeNodeService:
                     "snapshot acquire was interrupted before mount became authoritative",
                 )
                 errors.append(self._record_result(updated))
-            elif record.state == StorageVolumeState.SEALING:
+            elif record.state in {StorageVolumeState.SEALING, StorageVolumeState.PREPARING_CAPTURE}:
                 updated = self.journal.mark_reconcile_error(
                     record,
                     "seal was interrupted and cannot be replayed safely",
@@ -2911,6 +3050,7 @@ class StorageNativeNodeService:
                 if current is not None and current.state in {
                     StorageVolumeState.ACQUIRING, StorageVolumeState.MOUNTED,
                     StorageVolumeState.SEALING, StorageVolumeState.SEALED,
+                    StorageVolumeState.PREPARING_CAPTURE, StorageVolumeState.CAPTURE_PREPARED,
                     StorageVolumeState.RELEASING,
                 }:
                     # The source filename records the mount revision even when
@@ -3015,13 +3155,33 @@ class StorageNativeNodeClient:
         *,
         operation_id: str,
         publication: StorageSnapshotPublication,
+        capture_id: str = "",
     ) -> StorageVolumeRecord:
         return self._record_call(
             "PrepareImport",
             owner,
             operation_id=operation_id,
             publication=publication.to_dict(),
+            **({"capture_id": capture_id} if capture_id else {}),
         )
+
+    def prepare_capture(
+        self, owner: StorageVolumeOwner, *, operation_id: str, expected_revision: int,
+    ) -> StorageVolumeRecord:
+        return self._record_call("PrepareCapture", owner, operation_id=operation_id,
+                                 expected_revision=expected_revision)
+
+    def commit_capture(
+        self, owner: StorageVolumeOwner, *, operation_id: str, expected_revision: int,
+    ) -> StorageVolumeRecord:
+        return self._record_call("CommitCapture", owner, operation_id=operation_id,
+                                 expected_revision=expected_revision)
+
+    def abort_capture(
+        self, owner: StorageVolumeOwner, *, operation_id: str, expected_revision: int,
+    ) -> StorageVolumeRecord:
+        return self._record_call("AbortCapture", owner, operation_id=operation_id,
+                                 expected_revision=expected_revision)
 
     def ensure_mounted(
         self,
@@ -3363,6 +3523,8 @@ class _StorageNativeUnixServer(
         if not isinstance(operation, str) or operation not in _PROTOCOL_EXTRA_FIELDS:
             raise ValueError("unknown storage-native operation")
         expected_fields = {"operation", "schema", *_PROTOCOL_EXTRA_FIELDS[operation]}
+        if operation == "PrepareImport" and "capture_id" in request:
+            expected_fields.add("capture_id")
         if operation == "EnsurePublished" and "expected_revision" in request:
             expected_fields.add("expected_revision")
         if set(request) != expected_fields:
@@ -3376,6 +3538,17 @@ class _StorageNativeUnixServer(
             }
         if operation == "GetMetrics":
             return self.metrics()
+        if operation in {"PrepareCapture", "CommitCapture", "AbortCapture"}:
+            handler = {
+                "PrepareCapture": self.service.prepare_capture,
+                "CommitCapture": self.service.commit_capture,
+                "AbortCapture": self.service.abort_capture,
+            }[operation]
+            return self.service._record_result(handler(
+                **_volume_owner_from_request(request).request_fields(),
+                operation_id=_string_field(request, "operation_id"),
+                expected_revision=_positive_int_field(request, "expected_revision"),
+            ))
         if operation == "PrepareVolume":
             return self.service._record_result(
                 self.service.converge_volume(
@@ -3395,6 +3568,7 @@ class _StorageNativeUnixServer(
                     action="import",
                     operation_id=_string_field(request, "operation_id"),
                     publication=StorageSnapshotPublication.from_dict(publication),
+                    capture_id=_string_field(request, "capture_id") if "capture_id" in request else "",
                 )
             )
         if operation in {
@@ -3556,11 +3730,12 @@ def _request_sha256(request: dict[str, Any]) -> str:
     return hashlib.sha256(_canonical_json(request).encode("ascii")).hexdigest()
 
 
-def _storage_operation_id(
+def storage_operation_id(
     owner: StorageVolumeOwner,
     operation_id: str,
     step: str,
 ) -> str:
+    """Scope a caller operation to one volume incarnation and internal step."""
     identity = _canonical_json(
         {**owner.request_fields(), "operation_id": operation_id, "step": step}
     )

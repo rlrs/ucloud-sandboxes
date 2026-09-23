@@ -1,0 +1,378 @@
+diff --git a/runsc/boot/BUILD b/runsc/boot/BUILD
+--- a/runsc/boot/BUILD
++++ b/runsc/boot/BUILD
+@@ -8,6 +8,7 @@
+ go_library(
+     name = "boot",
+     srcs = [
++        "application_memory.go",
+         "autosave.go",
+         "compat.go",
+         "compat_amd64.go",
+@@ -169,6 +170,7 @@
+     name = "boot_test",
+     size = "small",
+     srcs = [
++        "application_memory_test.go",
+         "compat_test.go",
+         "loader_test.go",
+         "mount_hints_test.go",
+diff --git a/runsc/boot/application_memory.go b/runsc/boot/application_memory.go
+new file mode 100644
+--- /dev/null
++++ b/runsc/boot/application_memory.go
+@@ -0,0 +1,77 @@
++// Copyright 2026 The gVisor Authors.
++// SPDX-License-Identifier: Apache-2.0
++package boot
++
++import (
++	"fmt"
++	"golang.org/x/sys/unix"
++	"io"
++	"os"
++)
++
++// CopySparseApplicationMemory copies the allocated extents of a quiesced memory
++// file. The caller must own an empty destination and hold the source immutable.
++// During restore the caller must execute in the sandbox cgroup so tmpfs pages
++// are charged to the sandbox's memory limit rather than the management process.
++func CopySparseApplicationMemory(dst, src *os.File) error {
++	var source, target unix.Stat_t
++	if err := unix.Fstat(int(src.Fd()), &source); err != nil {
++		return err
++	}
++	if err := unix.Fstat(int(dst.Fd()), &target); err != nil {
++		return err
++	}
++	if source.Mode&unix.S_IFMT != unix.S_IFREG || target.Mode&unix.S_IFMT != unix.S_IFREG || target.Size != 0 || (source.Dev == target.Dev && source.Ino == target.Ino) {
++		return fmt.Errorf("sparse application memory requires a regular source and distinct empty target")
++	}
++	if err := dst.Truncate(source.Size); err != nil {
++		return err
++	}
++	buffer := make([]byte, 256*1024)
++	for cursor := int64(0); cursor < source.Size; {
++		data, err := unix.Seek(int(src.Fd()), cursor, unix.SEEK_DATA)
++		if err == unix.ENXIO {
++			break
++		}
++		if err != nil {
++			return err
++		}
++		hole, err := unix.Seek(int(src.Fd()), data, unix.SEEK_HOLE)
++		if err != nil {
++			return err
++		}
++		if data < cursor || hole <= data || hole > source.Size {
++			return fmt.Errorf("invalid application memory extent")
++		}
++		for offset := data; offset < hole; {
++			size := int64(len(buffer))
++			if hole-offset < size {
++				size = hole - offset
++			}
++			n, err := src.ReadAt(buffer[:size], offset)
++			if err != nil {
++				return err
++			}
++			if n == 0 {
++				return io.ErrNoProgress
++			}
++			written, err := dst.WriteAt(buffer[:n], offset)
++			if err != nil {
++				return err
++			}
++			if written != n {
++				return io.ErrShortWrite
++			}
++			offset += int64(n)
++		}
++		cursor = hole
++	}
++	var final unix.Stat_t
++	if err := unix.Fstat(int(src.Fd()), &final); err != nil {
++		return err
++	}
++	if final.Dev != source.Dev || final.Ino != source.Ino || final.Size != source.Size || final.Mtim != source.Mtim || final.Ctim != source.Ctim {
++		return fmt.Errorf("application memory changed during sparse copy")
++	}
++	return nil
++}
+diff --git a/runsc/boot/application_memory_test.go b/runsc/boot/application_memory_test.go
+new file mode 100644
+--- /dev/null
++++ b/runsc/boot/application_memory_test.go
+@@ -0,0 +1,47 @@
++// Copyright 2026 The gVisor Authors.
++// SPDX-License-Identifier: Apache-2.0
++package boot
++
++import (
++	"bytes"
++	"os"
++	"path/filepath"
++	"testing"
++)
++
++func TestCopySparseApplicationMemory(t *testing.T) {
++	dir := t.TempDir()
++	src, err := os.Create(filepath.Join(dir, "source"))
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer src.Close()
++	dst, err := os.Create(filepath.Join(dir, "target"))
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer dst.Close()
++	if err := src.Truncate(8 << 20); err != nil {
++		t.Fatal(err)
++	}
++	payload := bytes.Repeat([]byte{0xa5}, 4096)
++	for _, offset := range []int64{0, 3 << 20, (8 << 20) - 4096} {
++		if _, err := src.WriteAt(payload, offset); err != nil {
++			t.Fatal(err)
++		}
++	}
++	if err := CopySparseApplicationMemory(dst, src); err != nil {
++		t.Fatal(err)
++	}
++	want, _ := os.ReadFile(src.Name())
++	got, _ := os.ReadFile(dst.Name())
++	if !bytes.Equal(want, got) {
++		t.Fatal("sparse bytes differ")
++	}
++	if err := CopySparseApplicationMemory(dst, src); err == nil {
++		t.Fatal("nonempty target accepted")
++	}
++	if err := CopySparseApplicationMemory(src, src); err == nil {
++		t.Fatal("same source/target accepted")
++	}
++}
+diff --git a/runsc/boot/controller.go b/runsc/boot/controller.go
+--- a/runsc/boot/controller.go
++++ b/runsc/boot/controller.go
+@@ -563,11 +563,12 @@
+ 	// 4. optional persistent application memory file.
+ 	// 5. optional platform device file.
+ 	urpc.FilePayload
+-	HavePagesFile             bool
+-	HaveApplicationMemoryFile bool
+-	HaveDeviceFile            bool
+-	Background                bool
+-	StartPaused               bool
++	HavePagesFile                      bool
++	HaveApplicationMemoryFile          bool
++	HaveApplicationMemoryRestoreTarget bool
++	HaveDeviceFile                     bool
++	Background                         bool
++	StartPaused                        bool
+ 
+ 	// If UseCheckpointGofer is true, the first file in FilePayload is a Unix
+ 	// domain socket connected to a URPC server implementing
+@@ -649,6 +650,33 @@
+ 			return fmt.Errorf("releasing application memory file: %w", err)
+ 		}
+ 		applicationMemoryFile = applicationMemoryFD.ReleaseToFile("application-memory")
++	}
++
++	if o.HaveApplicationMemoryRestoreTarget {
++		if applicationMemoryFile == nil {
++			return fmt.Errorf("RAM restore target requires external memory source")
++		}
++		targetFD, err := o.ReleaseFD(4)
++		if err != nil {
++			applicationMemoryFile.Close()
++			return err
++		}
++		target := targetFD.ReleaseToFile("application-memory-ram")
++		var fs unix.Statfs_t
++		if err := unix.Fstatfs(int(target.Fd()), &fs); err != nil || fs.Type != unix.TMPFS_MAGIC {
++			applicationMemoryFile.Close()
++			target.Close()
++			return fmt.Errorf("RAM restore target must be tmpfs: %v", err)
++		}
++		// This copy runs inside the restored sandbox cgroup. A host-side copy
++		// would charge tmpfs pages to the node agent and bypass memory.max.
++		err = CopySparseApplicationMemory(target, applicationMemoryFile)
++		applicationMemoryFile.Close()
++		if err != nil {
++			target.Close()
++			return fmt.Errorf("restoring RAM application memory: %w", err)
++		}
++		applicationMemoryFile = target
+ 	}
+ 
+ 	// Create the main MemoryFile.
+diff --git a/runsc/config/config.go b/runsc/config/config.go
+--- a/runsc/config/config.go
++++ b/runsc/config/config.go
+@@ -58,6 +58,9 @@
+ 	// MemoryFile. This is an experimental UCloud benchmarking option.
+ 	ApplicationMemoryFileDir string `flag:"application-memory-file-dir"`
+ 
++	// ApplicationMemoryRAMBacking keeps live guest pages in tmpfs and exports them only at capture.
++	ApplicationMemoryRAMBacking bool `flag:"application-memory-ram-backing"`
++
+ 	// Traceback changes the Go runtime's traceback level.
+ 	Traceback string `flag:"traceback"`
+ 
+@@ -490,6 +493,9 @@
+ // Config.Override does not validate, so callers must call Validate once they
+ // are done overriding.
+ func (c *Config) Validate() error {
++	if c.ApplicationMemoryRAMBacking && c.ApplicationMemoryFileDir == "" {
++		return fmt.Errorf("application-memory-ram-backing requires application-memory-file-dir")
++	}
+ 	if c.ApplicationMemoryFileDir != "" && !filepath.IsAbs(c.ApplicationMemoryFileDir) {
+ 		return fmt.Errorf("application-memory-file-dir must be absolute, got %q", c.ApplicationMemoryFileDir)
+ 	}
+diff --git a/runsc/config/flags.go b/runsc/config/flags.go
+--- a/runsc/config/flags.go
++++ b/runsc/config/flags.go
+@@ -101,6 +101,7 @@
+ 	// Flags that control sandbox runtime behavior.
+ 	flagSet.String("platform", "systrap", "specifies which platform to use: systrap (default), ptrace, kvm.")
+ 	flagSet.String("platform_device_path", "", "path to a platform-specific device file (e.g. /dev/kvm for KVM platform). If unset, will use a sane platform-specific default.")
++	flagSet.Bool("application-memory-ram-backing", false, "EXPERIMENTAL: require tmpfs for live application memory and sparse-export it at hibernation.")
+ 	flagSet.String("application-memory-file-dir", "", "EXPERIMENTAL: if non-empty, back each sandbox's main application MemoryFile with a regular file created in this host directory instead of a memfd.")
+ 	flagSet.String("watchdog-action", "log", "sets what action the watchdog takes when triggered: log (default), panic.")
+ 	flagSet.Int("panic-signal", -1, "register signal handling that panics. Usually set to SIGUSR2(12) to troubleshoot hangs. -1 disables it.")
+diff --git a/runsc/sandbox/sandbox.go b/runsc/sandbox/sandbox.go
+--- a/runsc/sandbox/sandbox.go
++++ b/runsc/sandbox/sandbox.go
+@@ -207,7 +207,8 @@
+ 
+ 	// ApplicationMemoryFilePath is the host path to the experimental regular
+ 	// file backing the sandbox's main application MemoryFile.
+-	ApplicationMemoryFilePath string `json:"applicationMemoryFilePath,omitempty"`
++	ApplicationMemoryFilePath   string `json:"applicationMemoryFilePath,omitempty"`
++	ApplicationMemoryRAMBacking bool   `json:"applicationMemoryRAMBacking,omitempty"`
+ 
+ 	// HibernatedMemoryFilePath is set while a hibernation checkpoint has
+ 	// quiesced the sentry and moved its application memory backing into the
+@@ -572,6 +573,18 @@
+ 		return fmt.Errorf("hibernation restore requires --application-memory-file-dir")
+ 	}
+ 
++	var restoredMemoryPath string
++	if opt.HaveApplicationMemoryFile && s.ApplicationMemoryRAMBacking {
++		restoredMemoryPath = s.ApplicationMemoryFilePath + ".restore"
++		output, err := os.OpenFile(restoredMemoryPath, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
++		if err != nil {
++			return fmt.Errorf("creating RAM restore target: %w", err)
++		}
++		defer os.Remove(restoredMemoryPath)
++		opt.FilePayload.Files = append(opt.FilePayload.Files, output)
++		opt.HaveApplicationMemoryRestoreTarget = true
++	}
++
+ 	// If the platform needs a device FD we must pass it in.
+ 	if deviceFile, err := deviceFileForPlatform(conf.Platform, conf.PlatformDevicePath); err != nil {
+ 		return err
+@@ -613,11 +626,16 @@
+ 	}
+ 	if opt.HaveApplicationMemoryFile {
+ 		hibernatedMemoryPath := filepath.Join(imagePath, checkpointfiles.ApplicationMemoryFileName)
++		if s.ApplicationMemoryRAMBacking {
++			hibernatedMemoryPath = restoredMemoryPath
++		}
+ 		if err := os.Rename(hibernatedMemoryPath, s.ApplicationMemoryFilePath); err != nil {
+ 			// The running sentry still owns the artifact's open file. Track its
+ 			// actual path so that destroy and a later hibernation act on the
+ 			// correct backing file.
+-			s.ApplicationMemoryFilePath = hibernatedMemoryPath
++			if !s.ApplicationMemoryRAMBacking {
++				s.ApplicationMemoryFilePath = hibernatedMemoryPath
++			}
+ 			return fmt.Errorf("moving restored application memory into active storage: %w", err)
+ 		}
+ 	}
+@@ -955,6 +973,16 @@
+ 			return fmt.Errorf("opening application memory file directory: %w", err)
+ 		}
+ 		defer unix.Close(directoryFD)
++		if conf.ApplicationMemoryRAMBacking {
++			var fs unix.Statfs_t
++			if err := unix.Fstatfs(directoryFD, &fs); err != nil {
++				return err
++			}
++			if fs.Type != unix.TMPFS_MAGIC {
++				return fmt.Errorf("RAM application memory requires tmpfs")
++			}
++		}
++		s.ApplicationMemoryRAMBacking = conf.ApplicationMemoryRAMBacking
+ 		const applicationMemoryFileName = "application_memory.active"
+ 		applicationMemoryFD, err := unix.Openat(
+ 			directoryFD,
+@@ -1681,6 +1709,12 @@
+ 		if err := os.Remove(s.ApplicationMemoryFilePath); err != nil && !os.IsNotExist(err) {
+ 			return fmt.Errorf("deleting application memory file %q: %w", s.ApplicationMemoryFilePath, err)
+ 		}
++		if s.ApplicationMemoryRAMBacking {
++			// A killed restore CLI may not have executed its deferred cleanup.
++			if err := os.Remove(s.ApplicationMemoryFilePath + ".restore"); err != nil && !os.IsNotExist(err) {
++				return fmt.Errorf("deleting incomplete RAM restore target: %w", err)
++			}
++		}
+ 	}
+ 
+ 	return nil
+@@ -1825,7 +1859,33 @@
+ 		return fmt.Errorf("checkpointing container %q: %w", cid, err)
+ 	}
+ 	if opts.Hibernate {
+-		if err := os.Rename(s.ApplicationMemoryFilePath, hibernatedMemoryPath); err != nil {
++		var exportErr error
++		if s.ApplicationMemoryRAMBacking {
++			source, err := os.Open(s.ApplicationMemoryFilePath)
++			if err != nil {
++				exportErr = err
++			} else {
++				defer source.Close()
++				target, err := os.OpenFile(hibernatedMemoryPath, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
++				if err != nil {
++					exportErr = err
++				} else {
++					exportErr = boot.CopySparseApplicationMemory(target, source)
++					if exportErr == nil {
++						exportErr = target.Sync()
++					}
++					if err := target.Close(); exportErr == nil {
++						exportErr = err
++					}
++					if exportErr != nil {
++						_ = os.Remove(hibernatedMemoryPath)
++					}
++				}
++			}
++		} else {
++			exportErr = os.Rename(s.ApplicationMemoryFilePath, hibernatedMemoryPath)
++		}
++		if err := exportErr; err != nil {
+ 			if resumeErr := s.call(boot.ContMgrResume, nil, nil); resumeErr != nil {
+ 				return fmt.Errorf("moving application memory into checkpoint: %w (also failed to resume quiesced sandbox: %v)", err, resumeErr)
+ 			}
+@@ -2268,13 +2328,18 @@
+ // Resume sends the resume call for a container in the sandbox.
+ func (s *Sandbox) Resume(cid string) error {
+ 	log.Debugf("Resume sandbox %q", s.ID)
+-	if s.HibernatedMemoryFilePath != "" {
++	if s.HibernatedMemoryFilePath != "" && !s.ApplicationMemoryRAMBacking {
+ 		if err := os.Rename(s.HibernatedMemoryFilePath, s.ApplicationMemoryFilePath); err != nil {
+ 			return fmt.Errorf("moving captured application memory back into active storage: %w", err)
+ 		}
+ 	}
++	if s.ApplicationMemoryRAMBacking && s.HibernatedMemoryFilePath != "" {
++		if err := os.Remove(s.HibernatedMemoryFilePath); err != nil && !os.IsNotExist(err) {
++			return err
++		}
++	}
+ 	if err := s.call(boot.ContMgrResume, nil, nil); err != nil {
+-		if s.HibernatedMemoryFilePath != "" {
++		if s.HibernatedMemoryFilePath != "" && !s.ApplicationMemoryRAMBacking {
+ 			if renameErr := os.Rename(s.ApplicationMemoryFilePath, s.HibernatedMemoryFilePath); renameErr != nil {
+ 				return fmt.Errorf("resuming container %q: %w (also failed to return application memory to checkpoint: %v)", cid, err, renameErr)
+ 			}

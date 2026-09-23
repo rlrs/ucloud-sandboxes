@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
+from .checkpoint_components import MemoryBackingRef
+
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 import fcntl
 import hashlib
@@ -11,7 +13,7 @@ import re
 import shutil
 import tempfile
 from threading import BoundedSemaphore, Lock
-from typing import Any, Callable, Iterable, Iterator
+from typing import Any, Callable, Iterable, Iterator, Protocol
 
 from .direct_warden import (
     CommandRunner,
@@ -20,6 +22,7 @@ from .direct_warden import (
     SubprocessCommandRunner,
 )
 from .mount_status import linux_mount_root
+from .environment_manifest import DOCKER_OVERLAY2_ABI, HOST_EROFS_ABI, EnvironmentManifest
 
 
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
@@ -158,6 +161,24 @@ class MaterializedRootfs:
     rootfs_identity_sha256: str
     rootfs: Path
     image_config: DockerImageConfig
+    immutable_environment: EnvironmentManifest | None = None
+    backend_abi: str = DOCKER_OVERLAY2_ABI
+
+    @property
+    def environment(self) -> EnvironmentManifest:
+        return self.immutable_environment or EnvironmentManifest(base=self.image_id)
+
+
+class ImmutableRootfsStore(Protocol):
+    """Image acquisition/GC contract; sandbox writable lifecycle stays in the manager."""
+    images: Path
+
+    def operation_lease(self, image_ref: str) -> AbstractContextManager[MaterializedRootfs]: ...
+    def mounted_rootfs_lease(self, image_id: str, *, rootfs_identity_sha256: str) -> AbstractContextManager[Path]: ...
+    def warm(self, image_ref: str) -> None: ...
+    def collect_image(self, image_id: str, *, is_referenced: Callable[[str], bool]) -> bool: ...
+    def reconcile_images(self, image_ids: Iterable[str], *, is_referenced: Callable[[str], bool]) -> dict[str, int]: ...
+    def operation_snapshot(self) -> dict[str, int]: ...
 
 
 class DockerOverlay2RootfsStore:
@@ -171,6 +192,8 @@ class DockerOverlay2RootfsStore:
     PIN_REPOSITORY = "ucloud-sandbox-rootfs-cache"
     MAX_CONCURRENT_OPERATIONS = 32
     COMPLETE = "COMPLETE"
+
+    backend_abi = DOCKER_OVERLAY2_ABI
 
     def __init__(
         self,
@@ -924,7 +947,7 @@ class DockerOverlay2RootfsStore:
 
     @staticmethod
     def _rootfs_identity(image_id: str) -> str:
-        return _sha256(b"ucloud-overlay2-rootfs-v1\0" + image_id.encode("ascii"))
+        return EnvironmentManifest(base=image_id).rootfs_fingerprint(DOCKER_OVERLAY2_ABI)
 
 
 @dataclass(frozen=True)
@@ -939,11 +962,11 @@ class OverlayRootfsLease:
 
 
 class OverlayRootfsManager:
-    """Create per-sandbox overlays over a shared immutable Docker image view."""
+    """Create disk-backed writable overlays over the selected immutable image adapter."""
 
     def __init__(
         self,
-        image_store: DockerOverlay2RootfsStore,
+        image_store: ImmutableRootfsStore,
         *,
         writable_root: Path,
         bundle_root: Path,
@@ -967,6 +990,26 @@ class OverlayRootfsManager:
             path.mkdir(mode=0o700, parents=True, exist_ok=True)
             _require_private_directory(path)
 
+    def resolve(self, image_ref: str) -> AbstractContextManager[MaterializedRootfs]:
+        """Lease resolved immutable content until its registry owner commits."""
+        return self.image_store.operation_lease(image_ref)
+
+    def warm(self, image_ref: str) -> None:
+        self.image_store.warm(image_ref)
+
+    def operation_snapshot(self) -> dict[str, int]:
+        return self.image_store.operation_snapshot()
+
+    def collect_image(
+        self, image_id: str, *, is_referenced: Callable[[str], bool]
+    ) -> bool:
+        return self.image_store.collect_image(image_id, is_referenced=is_referenced)
+
+    def reconcile_images(
+        self, image_ids: Iterable[str], *, is_referenced: Callable[[str], bool]
+    ) -> dict[str, int]:
+        return self.image_store.reconcile_images(image_ids, is_referenced=is_referenced)
+
     def prepare(
         self,
         *,
@@ -976,11 +1019,18 @@ class OverlayRootfsManager:
         config_template: dict[str, Any],
         spec_sha256: str | None = None,
         imported_parked: bool = False,
+        workspace_directory: str = "",
+        memory: MemoryBackingRef | None = None,
     ) -> OverlayRootfsLease:
         if not _SAFE_ID.fullmatch(sandbox_id) or sandbox_generation < 1:
             raise ValueError("sandbox incarnation is invalid")
         incarnation = f"{sandbox_id}.sandbox-{sandbox_generation}"
-        writable = self.writable_root / incarnation
+        container_id = hashlib.sha256(f"{sandbox_id}:{sandbox_generation}".encode("utf-8")).hexdigest()
+        if bool(workspace_directory) != (memory is not None):
+            raise ValueError("split rootfs requires both component references")
+        if workspace_directory and workspace_directory != f"workspace-{incarnation}":
+            raise ValueError("workspace directory belongs to another incarnation")
+        writable = self.writable_root / (workspace_directory or incarnation)
         bundle = self.bundle_root / incarnation
         upper = writable / "upper"
         work = writable / "work"
@@ -1001,7 +1051,14 @@ class OverlayRootfsManager:
                     for name in existing_names
                     if re.fullmatch(r"hibernate-[1-9][0-9]*", name)
                 }
-                if (
+                if memory is not None:
+                    if existing_names not in ({"upper"}, {"upper", "work"}):
+                        raise DirectWardenError("imported split workspace has an invalid layout")
+                    if "work" in existing_names:
+                        _require_real_directory(work)
+                        shutil.rmtree(work)  # Captured before source runtime reap.
+
+                elif (
                     "upper" not in existing_names
                     or len(generations) != 1
                     or existing_names != {"upper", *generations}
@@ -1055,11 +1112,20 @@ class OverlayRootfsManager:
             mounted = True
             memory_directory = incarnation
             config = json.loads(json.dumps(config_template))
+            # Stable, incarnation-specific ownership for accounting and reclaim.
+            config.setdefault("linux", {})["cgroupsPath"] = "/ucloud-sandboxes/" + container_id
             config.setdefault("root", {})["path"] = "rootfs"
             config["root"].setdefault("readonly", False)
-            config.setdefault("annotations", {})[
+            if memory is None:
+                # Bounded legacy layout writer. Split runtime spec owns this
+                # annotation independently of rootfs composition.
+                config.setdefault("annotations", {})[
+                    "dev.gvisor.internal.application-memory-directory"
+                ] = memory_directory
+            elif config.get("annotations", {}).get(
                 "dev.gvisor.internal.application-memory-directory"
-            ] = memory_directory
+            ) != memory.allocation_id:
+                raise DirectWardenError("runtime spec lacks its memory allocation identity")
             config_path = bundle / "config.json"
             _atomic_write(
                 config_path,
@@ -1069,10 +1135,11 @@ class OverlayRootfsManager:
                 bundle / _OVERLAY_METADATA,
                 _canonical_json(
                     {
-                        "image_id": image.image_id,
                         "lowerdir": str(image.rootfs),
                         "rootfs_identity_sha256": image.rootfs_identity_sha256,
-                        "schema": _OVERLAY_METADATA_SCHEMA,
+                        **({"image_id": image.environment.base, "schema": _OVERLAY_METADATA_SCHEMA}
+                           if image.backend_abi == DOCKER_OVERLAY2_ABI else
+                           {"environment": image.environment.to_dict(), "backend_abi": image.backend_abi, "schema": 2}),
                     }
                 )
                 + b"\n",
@@ -1096,9 +1163,6 @@ class OverlayRootfsManager:
                 shutil.rmtree(upper, ignore_errors=True)
                 shutil.rmtree(work, ignore_errors=True)
             raise
-        container_id = hashlib.sha256(
-            f"{sandbox_id}:{sandbox_generation}".encode("utf-8")
-        ).hexdigest()
         sandbox = DirectSandbox(
             sandbox_id=sandbox_id,
             sandbox_generation=sandbox_generation,
@@ -1107,6 +1171,8 @@ class OverlayRootfsManager:
             rootfs_sha256=image.rootfs_identity_sha256,
             bundle=bundle,
             memory_directory=memory_directory,
+            workspace_directory=workspace_directory,
+            memory=memory,
         )
         return OverlayRootfsLease(
             sandbox=sandbox,
@@ -1141,7 +1207,7 @@ class OverlayRootfsManager:
         if expected_bundle.exists():
             self._unmount_if_mounted(merged)
             shutil.rmtree(expected_bundle)
-        writable = self.writable_root / incarnation
+        writable = self.writable_root / sandbox.workspace_volume_id
         if not self.require_precreated_writable and writable.exists():
             shutil.rmtree(writable)
 
@@ -1163,31 +1229,23 @@ class OverlayRootfsManager:
         upper = writable / "upper"
         work = writable / "work"
         _require_real_directory(upper)
-        work.mkdir(mode=0o700, exist_ok=True)
-        _require_private_directory(work)
         _require_real_directory(merged)
         if _mount_present(merged, self.runner, self.mountpoint_binary):
             return
+        if sandbox.memory is not None and work.exists():
+            _require_real_directory(work)
+            shutil.rmtree(work)  # Stale captured overlay scratch, never live work.
+        work.mkdir(mode=0o700, exist_ok=True)
+        _require_private_directory(work)
         metadata_path = bundle / _OVERLAY_METADATA
         try:
             metadata = json.loads(metadata_path.read_text(encoding="ascii"))
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise DirectWardenError("overlay bundle metadata is invalid") from exc
-        if (
-            not isinstance(metadata, dict)
-            or set(metadata)
-            != {
-                "image_id",
-                "lowerdir",
-                "rootfs_identity_sha256",
-                "schema",
-            }
-            or metadata.get("schema") != _OVERLAY_METADATA_SCHEMA
-            or metadata.get("rootfs_identity_sha256") != sandbox.rootfs_sha256
-        ):
-            raise DirectWardenError("overlay bundle metadata changed")
+        environment = self._decode_environment(metadata, sandbox.rootfs_sha256)
         with self.image_store.mounted_rootfs_lease(
-            str(metadata["image_id"]), rootfs_identity_sha256=sandbox.rootfs_sha256,
+            ("sha256:" + environment.sha256 if metadata.get("backend_abi") == HOST_EROFS_ABI else environment.base),
+            rootfs_identity_sha256=sandbox.rootfs_sha256,
         ) as rootfs:
             try:
                 lower = Path(str(metadata["lowerdir"])).resolve(strict=True)
@@ -1216,11 +1274,42 @@ class OverlayRootfsManager:
                     f"overlay remount failed: {result.stderr or result.stdout}"
                 )
 
+    @staticmethod
+    def _decode_environment(
+        metadata: object, expected_fingerprint: str
+    ) -> EnvironmentManifest:
+        """Read legacy bundles without rewriting or relabeling their identity."""
+        try:
+            if not isinstance(metadata, dict):
+                raise ValueError("metadata must be an object")
+            common = {"lowerdir", "rootfs_identity_sha256", "schema"}
+            if type(metadata.get("schema")) is not int:
+                raise ValueError("invalid schema")
+            if metadata["schema"] == 1 and set(metadata) == common | {"image_id"}:
+                environment = EnvironmentManifest(base=metadata["image_id"])
+                backend_abi = DOCKER_OVERLAY2_ABI
+            elif metadata["schema"] == 2 and set(metadata) == common | {
+                "environment", "backend_abi"
+            }:
+                environment = EnvironmentManifest.from_dict(metadata["environment"])
+                backend_abi = metadata["backend_abi"]
+            else:
+                raise ValueError("unsupported bundle metadata")
+            if (
+                metadata["rootfs_identity_sha256"] != expected_fingerprint
+                or environment.rootfs_fingerprint(backend_abi) != expected_fingerprint
+            ):
+                raise ValueError("environment fingerprint changed")
+            return environment
+        except (ValueError, TypeError) as exc:
+            raise DirectWardenError("overlay bundle metadata changed") from exc
+
     def discard_unregistered(
         self,
         *,
         sandbox_id: str,
         sandbox_generation: int,
+        workspace_directory: str = "",
     ) -> None:
         """Remove overlay state from a create that crashed before registration."""
         if not _SAFE_ID.fullmatch(sandbox_id) or sandbox_generation < 0:
@@ -1230,7 +1319,9 @@ class OverlayRootfsManager:
         if bundle.exists():
             self._unmount_if_mounted(bundle / "rootfs")
             shutil.rmtree(bundle)
-        writable = self.writable_root / incarnation
+        if workspace_directory and workspace_directory != f"workspace-{incarnation}":
+            raise ValueError("workspace directory belongs to another incarnation")
+        writable = self.writable_root / (workspace_directory or incarnation)
         if writable.exists():
             if self.require_precreated_writable:
                 for name in ("upper", "work"):
@@ -1260,5 +1351,5 @@ class OverlayRootfsManager:
         bundle = self.bundle_root / incarnation
         if sandbox.bundle != bundle:
             raise DirectWardenError("registered sandbox bundle escaped overlay root")
-        writable = self.writable_root / incarnation
+        writable = self.writable_root / sandbox.workspace_volume_id
         return bundle, writable, bundle / "rootfs"

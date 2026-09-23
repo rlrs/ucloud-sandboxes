@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import subprocess
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
@@ -194,7 +195,7 @@ class GuestEnvironmentTests(unittest.TestCase):
 
     def test_file_upload_handles_linux_filenames_and_directory_targets(self):
         service = object.__new__(DirectSandboxService)
-        service._require_registration = Mock()
+        service._require_registration = Mock(return_value=SimpleNamespace(spec=self.spec(), sandbox_generation=1))
         service._file_exec = Mock()
         service.startup_admission = nullcontext
 
@@ -215,7 +216,7 @@ class GuestEnvironmentTests(unittest.TestCase):
 
     def test_root_level_upload_selects_root_parent(self):
         service = object.__new__(DirectSandboxService)
-        service._require_registration = Mock()
+        service._require_registration = Mock(return_value=SimpleNamespace(spec=self.spec(), sandbox_generation=1))
         service._file_exec = Mock()
         service.startup_admission = nullcontext
         service._file_exec.return_value = Mock(exit_code=0)

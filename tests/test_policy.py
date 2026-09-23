@@ -346,7 +346,7 @@ class ScalePolicyTests(unittest.TestCase):
         self.assertEqual(decision.creates, 0)
         self.assertEqual(decision.desired_resources, ResourceQuantity())
 
-    def test_dynamic_admission_does_not_sum_nominal_cpu_and_memory_limits(
+    def test_cold_start_forecast_sums_memory_but_keeps_cpu_shared(
         self,
     ) -> None:
         shape = ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=4096)
@@ -356,6 +356,8 @@ class ScalePolicyTests(unittest.TestCase):
                 node(
                     "dynamic",
                     active=64,
+                    runtime_metrics=NodeRuntimeMetrics(collected_at=utc_now(),
+                        memory_total_mb=98304, memory_available_mb=98304),
                     total_resources=ResourceQuantity(
                         vcpu=32,
                         memory_mb=98304,
@@ -379,9 +381,9 @@ class ScalePolicyTests(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(decision.creates, 0)
+        self.assertEqual(decision.creates, 6)
         self.assertEqual(decision.desired_resources.vcpu, shape.vcpu)
-        self.assertEqual(decision.desired_resources.memory_mb, shape.memory_mb)
+        self.assertEqual(decision.desired_resources.memory_mb, 64 * 10240)
         self.assertEqual(
             decision.desired_resources.disk_mb,
             64 * shape.disk_mb,
@@ -433,7 +435,7 @@ class ScalePolicyTests(unittest.TestCase):
         )
 
         self.assertEqual(decision.creates, 2)
-        self.assertIn("45 pressure-confirmed", decision.actions[0].reason)
+        self.assertTrue(any("projected free resources" in action.reason for action in decision.actions))
 
     def test_draining_or_admission_closed_node_contributes_no_ready_capacity(
         self,
@@ -495,11 +497,19 @@ class ScalePolicyTests(unittest.TestCase):
             with self.subTest(cpus=cpus):
                 decision = evaluate_scale(
                     [],
-                    SandboxDemand(prepared_placement_requests=(SandboxPlacementRequest(
-                        resources=ResourceQuantity(vcpu=cpus, memory_mb=1024, disk_mb=4096),
-                        count=256,
-                    ),)),
-                    ScalePolicy(max_nodes=10, max_create_per_cycle=10, max_provisioning_nodes=10),
+                    SandboxDemand(
+                        prepared_placement_requests=(
+                            SandboxPlacementRequest(
+                                resources=ResourceQuantity(
+                                    vcpu=cpus, memory_mb=1024, disk_mb=4096
+                                ),
+                                count=256,
+                            ),
+                        )
+                    ),
+                    ScalePolicy(
+                        max_nodes=10, max_create_per_cycle=10, max_provisioning_nodes=10
+                    ),
                 )
                 self.assertEqual(decision.creates, 4)
                 self.assertEqual(decision.desired_resources.memory_mb, 327680)
@@ -507,15 +517,26 @@ class ScalePolicyTests(unittest.TestCase):
     def test_prepared_burst_accounts_for_observed_existing_guests(self) -> None:
         resources = ResourceQuantity(vcpu=32, memory_mb=98304, disk_mb=1449984)
         busy = node(
-            "resident", active=100, total_resources=resources,
-            runtime_metrics=NodeRuntimeMetrics(collected_at=utc_now(), memory_working_set_mb=55000),
+            "resident",
+            active=100,
+            total_resources=resources,
+            runtime_metrics=NodeRuntimeMetrics(
+                collected_at=utc_now(), memory_working_set_mb=55000
+            ),
         )
-        prepared = SandboxDemand(prepared_placement_requests=(SandboxPlacementRequest(
-            resources=ResourceQuantity(vcpu=1, memory_mb=1024, disk_mb=4096), count=32,
-        ),))
+        prepared = SandboxDemand(
+            prepared_placement_requests=(
+                SandboxPlacementRequest(
+                    resources=ResourceQuantity(vcpu=1, memory_mb=1024, disk_mb=4096),
+                    count=32,
+                ),
+            )
+        )
         self.assertEqual(evaluate_scale([busy], prepared, ScalePolicy()).creates, 1)
         # Consumed/expired preparation stops charging hypothetical limits.
-        self.assertEqual(evaluate_scale([busy], SandboxDemand(), ScalePolicy()).creates, 0)
+        self.assertEqual(
+            evaluate_scale([busy], SandboxDemand(), ScalePolicy()).creates, 0
+        )
 
     def test_relocation_demand_excludes_the_current_owner(self) -> None:
         requested = ResourceQuantity(disk_mb=8192)
@@ -595,7 +616,9 @@ class ScalePolicyTests(unittest.TestCase):
         decision = evaluate_scale(
             [
                 node(
-                    "ready",
+                    "ready", active=1,
+                    runtime_metrics=NodeRuntimeMetrics(collected_at=utc_now(),
+                        memory_total_mb=98304, memory_available_mb=94208),
                     total_resources=ResourceQuantity(
                         vcpu=32,
                         memory_mb=98304,
@@ -684,12 +707,16 @@ class ScalePolicyTests(unittest.TestCase):
                 node(
                     "busy-1",
                     active=1,
+                    runtime_metrics=NodeRuntimeMetrics(collected_at=utc_now(),
+                        memory_total_mb=98304, memory_available_mb=94208),
                     total_resources=resources,
                     used_resources=ResourceQuantity(vcpu=2, memory_mb=4096),
                 ),
                 node(
                     "busy-2",
                     active=1,
+                    runtime_metrics=NodeRuntimeMetrics(collected_at=utc_now(),
+                        memory_total_mb=98304, memory_available_mb=94208),
                     total_resources=resources,
                     used_resources=ResourceQuantity(vcpu=2, memory_mb=4096),
                 ),
@@ -724,7 +751,7 @@ class ScalePolicyTests(unittest.TestCase):
 
         self.assertTrue(decision.pressure_scale_up)
         self.assertTrue(decision.create_pressure_scale_up)
-        self.assertEqual(decision.creates, 0)
+        self.assertEqual(decision.creates, 1)
 
     def test_booting_node_exact_zero_resources_do_not_fall_back_to_estimate(
         self,
@@ -1168,6 +1195,26 @@ class ScalePolicyTests(unittest.TestCase):
 
         self.assertEqual(decision.stops, ())
 
+    def test_live_pressure_explains_exhausted_operator_worker_cap(self):
+        capacity = ResourceQuantity(vcpu=32, memory_mb=98304, disk_mb=2000000)
+        workers = [node(str(i), active=85, total_resources=capacity) for i in range(6)]
+        decision = evaluate_scale(
+            workers,
+            demand(),
+            ScalePolicy(max_nodes=6),
+            now=utc_now(),
+            live_signals=LiveScaleSignals(
+                pressure_samples=3,
+                latest_pressure_age_seconds=2,
+                io_psi_full_avg10=15,
+            ),
+        )
+        self.assertTrue(decision.pressure_scale_up)
+        self.assertEqual(decision.creates, 0)
+        self.assertIn(
+            "cannot create for live pressure: max_nodes=6 reached", decision.reasons
+        )
+
     def test_live_pressure_changes_only_bounded_headroom_and_retention(self) -> None:
         now = utc_now()
         capacity = ResourceQuantity(vcpu=32, memory_mb=98_304, disk_mb=2_000_000)
@@ -1184,11 +1231,11 @@ class ScalePolicyTests(unittest.TestCase):
         )
         cases = (
             (
-                "sustained pressure adds one node",
+                "sustained pressure adds a bounded wave",
                 [busy],
                 ScalePolicy(max_nodes=4),
                 pressure,
-                1,
+                3,
                 (),
                 True,
                 600,

@@ -40,7 +40,7 @@ DIRECT_REGISTRATION_PHASES = _ROOTFS_PHASES | {
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 _CONTAINER_ID = re.compile(r"[0-9a-f]{64}\Z")
 _DIRECT_REGISTRY_APPLICATION_ID = 0x55435247
-_DIRECT_REGISTRY_SCHEMA_VERSION = 4
+_DIRECT_REGISTRY_SCHEMA_VERSION = 6
 _DIRECT_REGISTRY_IDENTITY = (
     _DIRECT_REGISTRY_APPLICATION_ID,
     _DIRECT_REGISTRY_SCHEMA_VERSION,
@@ -53,6 +53,19 @@ class DirectRegistryError(RuntimeError):
 
 class DirectRegistryConflictError(DirectRegistryError):
     pass
+
+
+class DirectRegistryCapacityUnavailable(DirectRegistryConflictError):
+    """No disk claim was granted; the caller may wait for physical capacity."""
+
+
+@dataclass(frozen=True)
+class ReflinkOverlapClaim:
+    sandbox_id: str
+    sandbox_generation: int
+    hibernation_generation: int
+    allocated_bytes: int
+    manifest_sha256: str
 
 
 @dataclass(frozen=True)
@@ -73,13 +86,25 @@ class DirectSandboxRegistration:
     container_id: str = ""
     bundle: str = ""
     memory_directory: str = ""
+    workspace_directory: str = ""
+    memory_allocation_id: str = ""
     migration_id: str = ""
     migration_sha256: str = ""
     version: int = DIRECT_REGISTRATION_VERSION
 
     def __post_init__(self) -> None:
-        if self.version != DIRECT_REGISTRATION_VERSION:
+        if self.version not in {3, 4}:
             raise ValueError("unsupported direct registration version")
+        if self.version == 3 and (
+            self.workspace_directory or self.memory_allocation_id
+        ):
+            raise ValueError("legacy registration cannot contain split backing")
+        incarnation = f"{self.spec.id}.sandbox-{self.sandbox_generation}"
+        if self.version == 4 and (
+            self.workspace_directory != f"workspace-{incarnation}"
+            or self.memory_allocation_id != incarnation
+        ):
+            raise ValueError("split registration has invalid component identities")
         self.spec.validate()
         if self.sandbox_generation <= 0:
             raise ValueError("sandbox generation must be positive")
@@ -157,9 +182,7 @@ class DirectSandboxRegistration:
             not quota_present or rootfs_present
         ):
             raise ValueError("quota-ready direct registration is inconsistent")
-        if self.phase in _ROOTFS_PHASES and (
-            not quota_present or not rootfs_present
-        ):
+        if self.phase in _ROOTFS_PHASES and (not quota_present or not rootfs_present):
             raise ValueError("direct registration is missing owned resources")
 
     @property
@@ -169,6 +192,13 @@ class DirectSandboxRegistration:
     @property
     def spec_sha256(self) -> str:
         return sandbox_spec_fingerprint(self.spec)
+
+    @property
+    def workspace_volume_id(self) -> str:
+        """Canonical storage identity, including pre-materialization records."""
+        return self.workspace_directory or self.memory_directory or (
+            f"{self.sandbox_id}.sandbox-{self.sandbox_generation}"
+        )
 
     @property
     def has_direct_sandbox(self) -> bool:
@@ -187,20 +217,39 @@ class DirectSandboxRegistration:
             rootfs_sha256=self.rootfs_sha256,
             bundle=Path(self.bundle),
             memory_directory=self.memory_directory,
+            workspace_directory=self.workspace_directory,
+            memory=self.memory_reference,
+        )
+
+    @property
+    def memory_reference(self):
+        from .checkpoint_components import MemoryBackingRef
+
+        if not self.memory_allocation_id:
+            return None
+        return MemoryBackingRef(
+            self.memory_allocation_id,
+            (self.spec.requested_resources().disk_mb - self.spec.disk_mb) * 1024**2,
         )
 
     def to_dict(self) -> dict[str, Any]:
         raw = vars(self).copy()
         raw["spec"] = self.spec.to_dict()
+        if self.version == 3:
+            raw.pop("workspace_directory")
+            raw.pop("memory_allocation_id")
         return raw
 
     @classmethod
     def from_dict(cls, raw: object) -> DirectSandboxRegistration:
         if not isinstance(raw, dict):
             raise DirectRegistryError("direct registration must be an object")
+        expected = set(cls.__dataclass_fields__)
+        if raw.get("version") == 3:
+            expected -= {"workspace_directory", "memory_allocation_id"}
         if (
-            raw.get("version") != DIRECT_REGISTRATION_VERSION
-            or set(raw) != set(cls.__dataclass_fields__)
+            raw.get("version") not in {3, 4}
+            or set(raw) != expected
             or not isinstance(raw["spec"], dict)
         ):
             raise DirectRegistryError("direct registration schema is invalid")
@@ -232,6 +281,23 @@ class DirectSandboxRegistration:
             return cls(**values)
         except (TypeError, ValueError) as exc:
             raise DirectRegistryError("direct registration is invalid") from exc
+
+
+@dataclass(frozen=True)
+class ManagedGrowthIntent:
+    """Host forecast for the supervisor's sole primary process per incarnation.
+
+    This does not grant execution authority. Active survives an ambiguous launch;
+    safe means an authoritative model wait (or completed checkpoint) was observed.
+    """
+
+    sandbox_id: str
+    generation: int
+    job_id: str
+    launch_sha256: str
+    memory_bytes: int
+    phase: str
+    request_id: str
 
 
 @dataclass(frozen=True)
@@ -296,6 +362,26 @@ class DirectSandboxRegistry:
             request_id TEXT NOT NULL,
             PRIMARY KEY (sandbox_id, generation, request_id)
         ) STRICT;
+        CREATE TABLE managed_growth (
+            sandbox_id TEXT PRIMARY KEY,
+            generation INTEGER NOT NULL CHECK (generation > 0),
+            job_id TEXT NOT NULL,
+            launch_sha256 TEXT NOT NULL,
+            memory_bytes INTEGER NOT NULL CHECK (memory_bytes > 0),
+            phase TEXT NOT NULL CHECK (phase IN ('queued','active','safe','parked','terminal')),
+            request_id TEXT NOT NULL
+        ) STRICT;
+        CREATE TABLE reflink_overlaps (
+            sandbox_id TEXT NOT NULL,
+            sandbox_generation INTEGER NOT NULL CHECK (sandbox_generation > 0),
+            hibernation_generation INTEGER NOT NULL CHECK (hibernation_generation > 0),
+            allocated_bytes INTEGER NOT NULL CHECK (allocated_bytes >= 0),
+            manifest_sha256 TEXT NOT NULL CHECK (
+                length(manifest_sha256) = 64 AND
+                manifest_sha256 NOT GLOB '*[^0-9a-f]*'
+            ),
+            PRIMARY KEY (sandbox_id, sandbox_generation, hibernation_generation)
+        ) STRICT;
         INSERT INTO registry_metadata VALUES (
             1,
             0,
@@ -304,16 +390,22 @@ class DirectSandboxRegistry:
         );
     """
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, hard_disk_capacity_mb: int = 0) -> None:
         if not path.is_absolute():
             raise ValueError("direct registry path must be absolute")
         self.path = path
+        if hard_disk_capacity_mb < 0:
+            raise ValueError("disk capacity cannot be negative")
+        self.hard_disk_capacity_mb = hard_disk_capacity_mb
         self._connections: list[_RegistryConnection] = []
         self._connections_guard = Lock()
         self._file_identity: tuple[int, int] | None = None
         self._connection_pid = os.getpid()
         self._connection_finalizer = weakref.finalize(
-            self, _close_idle_registry_connections, self._connections, self._connections_guard,
+            self,
+            _close_idle_registry_connections,
+            self._connections,
+            self._connections_guard,
         )
 
     def bind_runtime_compatibility(
@@ -354,6 +446,102 @@ class DirectSandboxRegistry:
         with self._transaction(write=False) as connection:
             return self._metadata(connection)[2]
 
+    @staticmethod
+    def _validate_overlap_identity(sandbox_id, sandbox_generation, hibernation_generation, manifest_sha256):
+        if (not isinstance(sandbox_id, str) or not sandbox_id
+                or type(sandbox_generation) is not int or sandbox_generation <= 0
+                or type(hibernation_generation) is not int or hibernation_generation <= 0
+                or not isinstance(manifest_sha256, str) or not _DIGEST.fullmatch(manifest_sha256)):
+            raise ValueError("invalid reflink overlap identity")
+
+    @classmethod
+    def _reserved_disk_bytes(cls, connection):
+        # Plans and both component allocators share this transaction authority.
+        # Allocator metrics are observations, never an independent free budget.
+        reserved_mb = connection.execute(
+            "SELECT COALESCE(SUM(json_extract(record_json, '$.quota_total_mb')),0) FROM registrations"
+        ).fetchone()[0]
+        for row in connection.execute(
+            "SELECT sandbox_id,image_id,record_json FROM registrations "
+            "WHERE json_extract(record_json, '$.quota_total_mb') IS NULL"
+        ):
+            reserved_mb += cls._decode(row).spec.requested_resources().disk_mb
+        overlap = connection.execute(
+            "SELECT COALESCE(SUM(allocated_bytes),0) FROM reflink_overlaps"
+        ).fetchone()[0]
+        return reserved_mb * 1024**2 + overlap
+
+    def reserve_reflink_overlap(self, sandbox_id: str, sandbox_generation: int,
+                               hibernation_generation: int, allocated_bytes: int, *,
+                               manifest_sha256: str) -> None:
+        """Persist exact source overlap before the caller raises a project quota.
+
+        The Warden authenticates the source and owns PARKED lifecycle authority.
+        This ledger only grants physical capacity, atomically with new creates.
+        Ambiguous caller failure retains the claim for exact-owner recovery.
+        """
+        self._validate_overlap_identity(sandbox_id, sandbox_generation, hibernation_generation, manifest_sha256)
+        if type(allocated_bytes) is not int or not 0 <= allocated_bytes <= 2**63 - 1:
+            raise ValueError("invalid reflink overlap bytes")
+        with self._transaction(write=True) as connection:
+            record = self._require(connection, sandbox_id)
+            if record.sandbox_generation != sandbox_generation or record.phase != "owned":
+                raise DirectRegistryConflictError("reflink overlap lost incarnation ownership")
+            identity = (sandbox_id, sandbox_generation, hibernation_generation)
+            existing = connection.execute(
+                "SELECT allocated_bytes,manifest_sha256 FROM reflink_overlaps "
+                "WHERE sandbox_id=? AND sandbox_generation=? AND hibernation_generation=?", identity
+            ).fetchone()
+            if existing is not None:
+                if existing != (allocated_bytes, manifest_sha256):
+                    raise DirectRegistryConflictError("reflink overlap source changed")
+                return
+            if (not self.hard_disk_capacity_mb or self._reserved_disk_bytes(connection) + allocated_bytes
+                    > self.hard_disk_capacity_mb * 1024**2):
+                raise DirectRegistryCapacityUnavailable("reflink overlap physical disk capacity exhausted")
+            connection.execute("INSERT INTO reflink_overlaps VALUES (?,?,?,?,?)",
+                               (*identity, allocated_bytes, manifest_sha256))
+            self._bump_activity(connection)
+
+    def release_reflink_overlap(self, sandbox_id: str, sandbox_generation: int,
+                               hibernation_generation: int, *, manifest_sha256: str) -> None:
+        """Release only after source/candidate cleanup and quota reconciliation.
+
+        Lifecycle cleanup owns that proof. The digest fence prevents stale
+        retries from releasing a different source, including across restart.
+        """
+        self._validate_overlap_identity(sandbox_id, sandbox_generation, hibernation_generation, manifest_sha256)
+        with self._transaction(write=True) as connection:
+            identity = (sandbox_id, sandbox_generation, hibernation_generation)
+            row = connection.execute(
+                "SELECT manifest_sha256 FROM reflink_overlaps "
+                "WHERE sandbox_id=? AND sandbox_generation=? AND hibernation_generation=?", identity
+            ).fetchone()
+            if row is None:
+                return
+            if row[0] != manifest_sha256:
+                raise DirectRegistryConflictError("reflink overlap release lost source ownership")
+            connection.execute(
+                "DELETE FROM reflink_overlaps WHERE sandbox_id=? AND sandbox_generation=? AND hibernation_generation=?",
+                identity)
+            self._bump_activity(connection)
+
+    def list_reflink_overlaps(self, sandbox_id: str | None = None,
+                             sandbox_generation: int | None = None) -> tuple[ReflinkOverlapClaim, ...]:
+        if (sandbox_id is None) != (sandbox_generation is None):
+            raise ValueError("reflink overlap owner is incomplete")
+        where = "" if sandbox_id is None else " WHERE sandbox_id=? AND sandbox_generation=?"
+        args = () if sandbox_id is None else (sandbox_id, sandbox_generation)
+        with self._transaction(write=False) as connection:
+            return tuple(ReflinkOverlapClaim(*row) for row in connection.execute(
+                "SELECT sandbox_id,sandbox_generation,hibernation_generation,allocated_bytes,manifest_sha256 "
+                "FROM reflink_overlaps" + where + " ORDER BY sandbox_id,sandbox_generation,hibernation_generation",
+                args))
+
+    def reflink_overlap_bytes(self) -> int:
+        with self._transaction(write=False) as connection:
+            return connection.execute("SELECT COALESCE(SUM(allocated_bytes),0) FROM reflink_overlaps").fetchone()[0]
+
     def save_drain(self, drain: NodeDrainState) -> None:
         encoded = _canonical_json(drain.to_dict())
         self._decode_drain(encoded)
@@ -374,6 +562,7 @@ class DirectSandboxRegistry:
         sandbox_generation: int,
         operation_id: str,
         runtime_compatibility_sha256: str,
+        split_memory_backing: bool = False,
     ) -> DirectSandboxRegistration:
         if sandbox_generation <= 0:
             raise ValueError("sandbox generation must be positive")
@@ -385,6 +574,13 @@ class DirectSandboxRegistry:
                 operation_id=operation_id,
                 runtime_compatibility_sha256=runtime_compatibility_sha256,
                 phase="planned",
+                version=4 if split_memory_backing else 3,
+                workspace_directory=f"workspace-{spec.id}.sandbox-{sandbox_generation}"
+                if split_memory_backing
+                else "",
+                memory_allocation_id=f"{spec.id}.sandbox-{sandbox_generation}"
+                if split_memory_backing
+                else "",
                 revision=1,
                 created_ns=now,
                 updated_ns=now,
@@ -401,6 +597,7 @@ class DirectSandboxRegistry:
         runtime_compatibility_sha256: str,
         migration_id: str,
         migration_sha256: str,
+        split_memory_backing: bool = False,
     ) -> DirectSandboxRegistration:
         if sandbox_generation <= 0:
             raise ValueError("sandbox generation must be positive")
@@ -412,6 +609,13 @@ class DirectSandboxRegistry:
                 operation_id=operation_id,
                 runtime_compatibility_sha256=runtime_compatibility_sha256,
                 phase="import_planned",
+                version=4 if split_memory_backing else 3,
+                workspace_directory=f"workspace-{spec.id}.sandbox-{sandbox_generation}"
+                if split_memory_backing
+                else "",
+                memory_allocation_id=f"{spec.id}.sandbox-{sandbox_generation}"
+                if split_memory_backing
+                else "",
                 revision=1,
                 created_ns=now,
                 updated_ns=now,
@@ -649,6 +853,11 @@ class DirectSandboxRegistry:
                 raise DirectRegistryConflictError(
                     "direct deletion completion lost its ownership fence"
                 )
+            if connection.execute(
+                "SELECT 1 FROM reflink_overlaps WHERE sandbox_id=? AND sandbox_generation=? LIMIT 1",
+                (sandbox_id, sandbox_generation),
+            ).fetchone() is not None:
+                raise DirectRegistryConflictError("deletion retains unreconciled reflink overlap")
             connection.execute(
                 """
                 INSERT INTO generation_tombstones VALUES (?, ?)
@@ -659,7 +868,12 @@ class DirectSandboxRegistry:
             )
             if record.migration_id:
                 self._retire(connection, sandbox_id, record.migration_id)
-            connection.execute("DELETE FROM relay_wake_fences WHERE sandbox_id=? AND generation=?", (sandbox_id, sandbox_generation))
+            connection.execute("DELETE FROM managed_growth WHERE sandbox_id=? AND generation=?",
+                               (sandbox_id, sandbox_generation))
+            connection.execute(
+                "DELETE FROM relay_wake_fences WHERE sandbox_id=? AND generation=?",
+                (sandbox_id, sandbox_generation),
+            )
             if (
                 connection.execute(
                     "DELETE FROM registrations WHERE sandbox_id = ?",
@@ -670,7 +884,9 @@ class DirectSandboxRegistry:
                 raise DirectRegistryError("direct registration disappeared")
             self._bump_activity(connection)
 
-    def relay_wake_fence(self, sandbox_id: str, generation: int, request_id: str, *, record: bool = False) -> bool:
+    def relay_wake_fence(
+        self, sandbox_id: str, generation: int, request_id: str, *, record: bool = False
+    ) -> bool:
         """A committed wake intent permanently supersedes this request's park.
 
         Caller holds the runtime lifecycle lock. Persist before attempting wake:
@@ -683,9 +899,96 @@ class DirectSandboxRegistry:
             if owner.sandbox_generation != generation:
                 raise DirectRegistryConflictError("relay lifecycle generation changed")
             if record:
-                connection.execute("INSERT OR IGNORE INTO relay_wake_fences VALUES (?,?,?)", (sandbox_id, generation, request_id))
+                connection.execute(
+                    "INSERT OR IGNORE INTO relay_wake_fences VALUES (?,?,?)",
+                    (sandbox_id, generation, request_id),
+                )
                 return True
-            return connection.execute("SELECT 1 FROM relay_wake_fences WHERE sandbox_id=? AND generation=? AND request_id=?", (sandbox_id, generation, request_id)).fetchone() is not None
+            return (
+                connection.execute(
+                    "SELECT 1 FROM relay_wake_fences WHERE sandbox_id=? AND generation=? AND request_id=?",
+                    (sandbox_id, generation, request_id),
+                ).fetchone()
+                is not None
+            )
+
+    def growth_intents(self) -> tuple[ManagedGrowthIntent, ...]:
+        with self._transaction(write=False) as connection:
+            return tuple(ManagedGrowthIntent(*row) for row in connection.execute(
+                "SELECT * FROM managed_growth ORDER BY sandbox_id"))
+
+    def growth_intent(self, sandbox_id, generation, *, action, job_id="", launch_sha256="", request_id=""):
+        """Mutate a forecast under the same durable incarnation/wake fences.
+
+        The guest supervisor accepts only one primary job/spec for its entire
+        generation. A different launch cannot replace an ambiguous first launch.
+        Imported generations initially have unknown job identity; their existing
+        lifecycle authority still fences wait and continuation observations.
+        """
+        if action not in {"launch", "bind", "activate", "wait", "park", "terminal"}:
+            raise ValueError("invalid growth action")
+        with self._transaction(write=True) as connection:
+            owner = self._require(connection, sandbox_id)
+            if owner.sandbox_generation != generation or owner.phase != "owned":
+                raise DirectRegistryConflictError("growth intent lost incarnation ownership")
+            row = connection.execute("SELECT * FROM managed_growth WHERE sandbox_id=?", (sandbox_id,)).fetchone()
+            intent = ManagedGrowthIntent(*row) if row else None
+            if intent is not None and intent.generation != generation:
+                raise DirectRegistryConflictError("growth intent has stale generation")
+            if action in {"launch", "bind"}:
+                if not job_id or not _DIGEST.fullmatch(launch_sha256):
+                    raise ValueError("invalid managed launch identity")
+                if intent is not None:
+                    if not intent.job_id:
+                        if action == "launch":
+                            return intent  # Imported primary: only supervisor can bind it.
+                        intent = replace(intent, job_id=job_id, launch_sha256=launch_sha256)
+                        connection.execute("INSERT OR REPLACE INTO managed_growth VALUES (?,?,?,?,?,?,?)", tuple(vars(intent).values()))
+                        return intent
+                    if (intent.job_id, intent.launch_sha256) != (job_id, launch_sha256):
+                        raise DirectRegistryConflictError("sandbox generation already owns another primary process")
+                    return intent
+                intent = ManagedGrowthIntent(sandbox_id, generation, job_id, launch_sha256,
+                    int(owner.spec.memory_mb * 1024**2), "queued", "")
+            else:
+                if action == "terminal":
+                    if intent is None or not job_id or (intent.job_id and intent.job_id != job_id):
+                        return intent
+                    # An imported primary has no local launch identity yet.
+                    # The supervisor's authoritative terminal response still
+                    # proves this generation's sole primary cannot grow again.
+                    intent = replace(intent, phase="terminal")
+                elif action == "park":
+                    if intent is None or intent.phase == "terminal":
+                        return intent
+                    intent = replace(intent, phase="parked")
+                elif action == "wait":
+                    if not request_id or connection.execute(
+                        "SELECT 1 FROM relay_wake_fences WHERE sandbox_id=? AND generation=? AND request_id=?",
+                        (sandbox_id, generation, request_id)).fetchone():
+                        raise DirectRegistryConflictError("growth wait was superseded by wake")
+                    if intent is None:
+                        intent = ManagedGrowthIntent(sandbox_id, generation, "", "",
+                            int(owner.spec.memory_mb * 1024**2), "safe", request_id)
+                    elif intent.phase in {"active", "safe", "parked"}:
+                        intent = replace(intent, phase="parked" if intent.phase == "parked" else "safe", request_id=request_id)
+                elif action == "activate":
+                    if intent is None:
+                        intent = ManagedGrowthIntent(sandbox_id, generation, "", "",
+                            int(owner.spec.memory_mb * 1024**2), "active", request_id)
+                    elif intent.phase in {"queued", "parked"} or (
+                        intent.phase == "safe" and (not intent.request_id or intent.request_id == request_id)):
+                        intent = replace(intent, phase="active", request_id=request_id)
+            if action == "activate" and request_id:
+                # Admission and revocation of this safe wait are one commit.
+                # Before this commit a queued continuation remains reclaimable;
+                # after it an old park cannot erase the admitted growth claim.
+                connection.execute("INSERT OR IGNORE INTO relay_wake_fences VALUES (?,?,?)",
+                                   (sandbox_id, generation, request_id))
+            encoded = tuple(vars(intent).values())
+            if row != encoded:
+                connection.execute("INSERT OR REPLACE INTO managed_growth VALUES (?,?,?,?,?,?,?)", encoded)
+            return intent
 
     def get(self, sandbox_id: str) -> DirectSandboxRegistration | None:
         with self._transaction(write=False) as connection:
@@ -802,6 +1105,15 @@ class DirectSandboxRegistry:
                 error = "direct registration is fenced by a tombstone"
             if fenced:
                 raise DirectRegistryConflictError(error)
+            if self.hard_disk_capacity_mb:
+                if (
+                    self._reserved_disk_bytes(connection)
+                    + candidate.spec.requested_resources().disk_mb * 1024**2
+                    > self.hard_disk_capacity_mb * 1024**2
+                ):
+                    raise DirectRegistryConflictError(
+                        "combined workspace and memory backing capacity exhausted"
+                    )
             self._write(connection, candidate, insert=True)
             self._bump_activity(connection)
         return candidate
@@ -1055,14 +1367,21 @@ class DirectSandboxRegistry:
                 if os.getpid() != self._connection_pid:
                     raise DirectRegistryError("reopen direct registry after fork")
                 if self._file_identity is not None and self._file_identity != identity:
-                    raise DirectRegistryError("direct registry file was replaced; reopen it")
+                    raise DirectRegistryError(
+                        "direct registry file was replaced; reopen it"
+                    )
                 self._file_identity = identity
                 if self._connections:
                     entry = self._connections.pop()
             if entry is None:
-                entry = _RegistryConnection(sqlite3.connect(
-                    self.path, timeout=30.0, isolation_level=None, check_same_thread=False,
-                ))
+                entry = _RegistryConnection(
+                    sqlite3.connect(
+                        self.path,
+                        timeout=30.0,
+                        isolation_level=None,
+                        check_same_thread=False,
+                    )
+                )
                 entry.connection.execute("PRAGMA trusted_schema = OFF")
                 entry.connection.execute("PRAGMA synchronous = FULL")
             connection = entry.connection
@@ -1102,11 +1421,13 @@ class DirectSandboxRegistry:
 
     @staticmethod
     def _schema_stamp(connection: sqlite3.Connection) -> tuple[Any, ...]:
-        return tuple(connection.execute(
-            "SELECT schema_version, application_id, user_version, journal_mode "
-            "FROM pragma_schema_version, pragma_application_id, "
-            "pragma_user_version, pragma_journal_mode"
-        ).fetchone())
+        return tuple(
+            connection.execute(
+                "SELECT schema_version, application_id, user_version, journal_mode "
+                "FROM pragma_schema_version, pragma_application_id, "
+                "pragma_user_version, pragma_journal_mode"
+            ).fetchone()
+        )
 
     def _prepare_file(self) -> None:
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -1159,12 +1480,20 @@ class DirectSandboxRegistry:
                 )
             connection.execute("BEGIN IMMEDIATE")
             has_schema = connection.execute(
-                "SELECT 1 FROM sqlite_schema " "WHERE name NOT LIKE 'sqlite_%' LIMIT 1"
+                "SELECT 1 FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' LIMIT 1"
             ).fetchone()
-            if cls._versions(connection) == (_DIRECT_REGISTRY_APPLICATION_ID, 3):
-                cls._validate_schema(connection, legacy=True)
-                statement = next(raw.strip() for raw in cls._SCHEMA.split(";") if raw.strip().startswith("CREATE TABLE relay_wake_fences"))
-                connection.execute(statement)
+            version = cls._versions(connection)
+            if version in {(_DIRECT_REGISTRY_APPLICATION_ID, old) for old in (3, 4, 5)}:
+                cls._validate_schema(connection, legacy_version=version[1])
+                missing = {"reflink_overlaps"}
+                if version[1] < 5:
+                    missing.add("managed_growth")
+                if version[1] == 3:
+                    missing.add("relay_wake_fences")
+                for raw in cls._SCHEMA.split(";"):
+                    statement = raw.strip()
+                    if statement.startswith("CREATE TABLE ") and statement.split()[2] in missing:
+                        connection.execute(statement)
                 connection.execute(f"PRAGMA user_version = {_DIRECT_REGISTRY_SCHEMA_VERSION}")
             if cls._versions(connection) == (0, 0) and not has_schema:
                 for statement in cls._SCHEMA.split(";"):
@@ -1205,14 +1534,20 @@ class DirectSandboxRegistry:
         )
 
     @classmethod
-    def _validate_schema(cls, connection: sqlite3.Connection, *, legacy: bool = False) -> None:
+    def _validate_schema(
+        cls, connection: sqlite3.Connection, *, legacy_version: int | None = None
+    ) -> None:
         expected = {
             statement.split()[2]: statement
             for raw in cls._SCHEMA.split(";")
             if (statement := raw.strip()).startswith("CREATE ")
         }
-        if legacy:
-            expected.pop("relay_wake_fences")
+        if legacy_version is not None:
+            expected.pop("reflink_overlaps")
+            if legacy_version < 5:
+                expected.pop("managed_growth")
+            if legacy_version == 3:
+                expected.pop("relay_wake_fences")
         actual = dict(
             connection.execute(
                 "SELECT name, sql FROM sqlite_schema "
@@ -1220,7 +1555,12 @@ class DirectSandboxRegistry:
             )
         )
         if (
-            cls._versions(connection) != ((_DIRECT_REGISTRY_APPLICATION_ID, 3) if legacy else _DIRECT_REGISTRY_IDENTITY)
+            cls._versions(connection)
+            != (
+                (_DIRECT_REGISTRY_APPLICATION_ID, legacy_version)
+                if legacy_version is not None
+                else _DIRECT_REGISTRY_IDENTITY
+            )
             or connection.execute("PRAGMA journal_mode").fetchone() != ("wal",)
             or actual != expected
         ):

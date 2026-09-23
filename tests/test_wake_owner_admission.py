@@ -100,6 +100,30 @@ class WakeOwnerAdmissionTests(unittest.TestCase):
             finally:
                 server.server_close()
 
+    def test_placement_reread_rejects_recreated_incarnation_before_worker_dispatch(self):
+        for operation in ("_prepare_wake_placement",):
+            with self.subTest(operation=operation), TemporaryDirectory() as temp:
+                server = _gateway_server(Path(temp))
+                try:
+                    handler = object.__new__(server.RequestHandlerClass)
+                    previous = _sandbox_route(sandbox_id="recreated", state="parked",
+                                              node_id="node", job_id="job", node_url="http://node")
+                    handler.routing_store.upsert_sandbox(previous)
+                    handler.routing_store.delete_sandbox(previous.sandbox_id)
+                    replacement = handler.routing_store.upsert_sandbox(replace(
+                        previous, generation=previous.generation + 1,
+                        create_operation_id="replacement", state="running",
+                    ))
+                    with patch.object(handler, "_write_json") as reply, patch.object(
+                        handler, "_proxy_request", side_effect=AssertionError("replacement received stale wake"),
+                    ):
+                        self.assertIsNone(getattr(handler, operation)(previous))
+                    self.assertEqual(reply.call_args.kwargs["status"], 503)
+                    self.assertTrue(reply.call_args.args[0]["retryable"])
+                    self.assertEqual(handler.routing_store.get_sandbox_readonly(previous.sandbox_id), replacement)
+                finally:
+                    server.server_close()
+
     def test_owner_view_preserves_incoming_migration_reservations(self):
         owner = build_heartbeat(node_id="owner", job_id="job-owner", node_url="http://owner")
         local = _sandbox_route(

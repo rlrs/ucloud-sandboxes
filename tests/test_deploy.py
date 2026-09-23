@@ -360,6 +360,11 @@ class DeployTests(unittest.TestCase):
                     0o644,
                 )
                 self.assertEqual(archive.getmember("runtime/direct/runsc").mode, 0o755)
+                provenance = manifest["runtime"]["direct_runsc"]["build_manifest"]
+                provenance_bytes = archive.extractfile(provenance["file"]).read()
+                self.assertEqual(provenance["file"], "runtime/direct/build-manifest.json")
+                self.assertEqual(len(provenance_bytes), provenance["size"])
+                self.assertEqual(hashlib.sha256(provenance_bytes).hexdigest(), provenance["sha256"])
                 sidecars = manifest["runtime"]["direct_runsc"]["sidecars"]
                 self.assertEqual(len(sidecars), 4)
                 for item in sidecars:

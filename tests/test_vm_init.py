@@ -159,6 +159,13 @@ class VmInitTests(unittest.TestCase):
         end = script.index('\nPY\n)"', start)
         return script, script[start:end]
 
+    def test_split_checkpoint_rejects_s3_before_rendering_worker(self):
+        with self.assertRaisesRegex(ValueError, "requires registry checkpoint"):
+            render_vm_init_script(self._options(
+                direct_split_memory_backing=True, storage_native_snapshot_backend="s3"))
+        script = render_vm_init_script(self._options(direct_split_memory_backing=True))
+        self.assertIn("--checkpoint-registry-url", script)
+
     def test_s3_snapshot_backend_configures_native_agentenv_reads(self) -> None:
         script = render_vm_init_script(
             self._options(

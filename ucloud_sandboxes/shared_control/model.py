@@ -9,6 +9,10 @@ class StateConflict(ValueError):
     """Identity, lease or incarnation no longer matches the submitted intent."""
 
 
+class DatabaseAdmissionUnavailable(RuntimeError):
+    """No connection acquired; this transaction has not executed BEGIN."""
+
+
 def positive_seconds(value: float) -> float:
     if not math.isfinite(value) or value <= 0:
         raise ValueError("duration must be finite and positive")

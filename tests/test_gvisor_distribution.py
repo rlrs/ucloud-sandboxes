@@ -9,10 +9,39 @@ from ucloud_sandboxes.gvisor_distribution import (
     GVISOR_SIDECARS,
     distribution_files,
     installed_sidecar_fingerprints,
+    require_reflink_restore_runtime,
+    REFLINK_RESTORE_PATCH_SHA256,
 )
 
 
 class GvisorDistributionTests(unittest.TestCase):
+    def test_reflink_gate_requires_pinned_patch_and_complete_distribution(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            runsc = self.fixture(root)
+            path = root / "build-manifest.json"
+            manifest = json.loads(path.read_text())
+            manifest["patches"] = [
+                {"name": "20260817/0004-ucloud-abort-hibernation.patch",
+                 "sha256": "c97ae915c984f50a554c9b79ede4b73a5ab68e0ad5d89469e8f09819468519fe"},
+                {"name": "20260817/0006-ucloud-ram-application-memory.patch",
+                 "sha256": "af09c7f45e666c4e7e46c5a999cc8414034deb069c7c25c9fdcf29c9b808310e"},
+            ]
+            path.write_text(json.dumps(manifest))
+            with self.assertRaisesRegex(ValueError, "qualified reflink"):
+                require_reflink_restore_runtime(runsc, GVISOR_COMMIT)
+            entry = {"name": "20260817/0007-ucloud-reflink-application-memory.patch", "sha256": "0" * 64}
+            manifest["patches"].append(entry)
+            path.write_text(json.dumps(manifest))
+            with self.assertRaisesRegex(ValueError, "qualified reflink"):
+                require_reflink_restore_runtime(runsc, GVISOR_COMMIT)
+            entry["sha256"] = REFLINK_RESTORE_PATCH_SHA256
+            path.write_text(json.dumps(manifest))
+            require_reflink_restore_runtime(runsc, GVISOR_COMMIT)
+            (root / "gvisor-bin" / "gvisor_sentry").write_bytes(b"changed")
+            with self.assertRaisesRegex(ValueError, "mismatch"):
+                require_reflink_restore_runtime(runsc, GVISOR_COMMIT)
+
     def fixture(self, root):
         files = {}
         for name in ["runsc", *(f"gvisor-bin/{n}" for n in GVISOR_SIDECARS)]:

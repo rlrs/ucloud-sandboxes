@@ -1,10 +1,13 @@
 from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor
+import asyncio
 import gzip
+import inspect
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import socket
-from threading import Event, Thread
+from threading import Event, Thread, current_thread
 import unittest
+from unittest.mock import patch
 from urllib.error import URLError
 from ucloud_sandboxes.node_http_async import AsyncNodeHttpPool
 
@@ -56,6 +59,143 @@ class AsyncNodeHttpTests(unittest.TestCase):
             response_limit=limit,
             event_poll=poll,
         )
+
+    def test_blocked_enqueue_does_not_block_loop_completions_or_race_shutdown(self):
+        loop = self.pool._start()
+        active, cleaned = Event(), Event()
+        async def waiting():
+            active.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cleaned.set()
+        existing = self.pool.submit(waiting())
+        self.assertTrue(active.wait(1))
+        entered, release, closed = Event(), Event(), Event()
+        self.addCleanup(release.set)
+        original = loop.call_soon_threadsafe
+        def enqueue(*args, **kwargs):
+            if current_thread().name == "blocked-submitter":
+                entered.set()
+                if not release.wait(2):
+                    raise AssertionError("test did not release enqueue")
+            return original(*args, **kwargs)
+        owned = waiting()
+        results, errors = [], []
+        def submit():
+            try:
+                results.append(self.pool.submit(owned))
+            except BaseException as exc:
+                errors.append(exc)
+        def close():
+            self.pool.close()
+            closed.set()
+        with patch.object(loop, "call_soon_threadsafe", side_effect=enqueue):
+            submitter = Thread(target=submit, name="blocked-submitter")
+            submitter.start()
+            self.assertTrue(entered.wait(1))
+            unlocked = self.pool._guard.acquire(blocking=False)
+            self.assertTrue(unlocked, "enqueue syscall must not own the shared guard")
+            if unlocked:
+                self.pool._guard.release()
+            existing.cancel()
+            self.assertTrue(cleaned.wait(1), "loop cleanup stalled behind enqueue")
+            closer = Thread(target=close)
+            closer.start()
+            self.assertFalse(closed.wait(.02))
+            release.set()
+            submitter.join(2)
+            closer.join(2)
+        self.assertEqual(errors, [])
+        self.assertTrue(closed.is_set())
+        self.assertFalse(self.pool._thread.is_alive())
+        self.assertTrue(results[0].done())
+        self.assertEqual(inspect.getcoroutinestate(owned), inspect.CORO_CLOSED)
+        self.assertEqual(self.pool._pending, set())
+
+    def test_callback_handoff_finishes_before_racing_loop_stop(self):
+        loop = self.pool._start()
+        entered, release, delivered = Event(), Event(), Event()
+        self.addCleanup(release.set)
+        original = loop.call_soon_threadsafe
+        def enqueue(*args, **kwargs):
+            if current_thread().name == "callback-submitter":
+                entered.set()
+                if not release.wait(2):
+                    raise AssertionError("test did not release callback")
+            return original(*args, **kwargs)
+        with patch.object(loop, "call_soon_threadsafe", side_effect=enqueue):
+            sender = Thread(target=lambda: self.pool.call_soon(delivered.set), name="callback-submitter")
+            sender.start()
+            self.assertTrue(entered.wait(1))
+            closer = Thread(target=self.pool.close)
+            closer.start()
+            release.set()
+            sender.join(2)
+            closer.join(2)
+        self.assertTrue(delivered.is_set())
+        self.assertFalse(self.pool._thread.is_alive())
+
+    def test_completed_callback_can_close_pool_on_owning_loop(self):
+        loop = self.pool._start()
+        ready, closed = Event(), Event()
+        gate = asyncio.Event()
+        async def work():
+            ready.set()
+            await gate.wait()
+            return 42
+        future = self.pool.submit(work())
+        self.assertTrue(ready.wait(1))
+        failures = []
+        def completed(_future):
+            try:
+                self.pool.close()
+            except BaseException as exc:
+                failures.append(exc)
+            finally:
+                closed.set()
+        future.add_done_callback(completed)
+        loop.call_soon_threadsafe(gate.set)
+        self.assertEqual(future.result(timeout=2), 42)
+        self.assertTrue(closed.wait(1))
+        self.pool._thread.join(2)
+        self.assertEqual(failures, [])
+        self.assertFalse(self.pool._thread.is_alive())
+
+    def test_cancel_before_loop_dispatch_releases_coroutine_on_shutdown(self):
+        entered, release = Event(), Event()
+        self.addCleanup(release.set)
+        def block_loop():
+            entered.set()
+            release.wait(2)
+        self.pool.call_soon(block_loop)
+        self.assertTrue(entered.wait(1))
+        async def work():
+            await asyncio.Event().wait()
+        owned = work()
+        future = self.pool.submit(owned)
+        self.assertTrue(future.cancel())
+        release.set()
+        self.pool.close()
+        self.assertEqual(inspect.getcoroutinestate(owned), inspect.CORO_CLOSED)
+        self.assertEqual(self.pool._pending, set())
+        self.assertFalse(self.pool._thread.is_alive())
+
+    def test_rejected_and_failed_submissions_close_unstarted_coroutine(self):
+        async def work():
+            return 42
+        loop = self.pool._start()
+        owned = work()
+        with patch.object(loop, "call_soon_threadsafe", side_effect=RuntimeError("injected enqueue failure")):
+            with self.assertRaisesRegex(RuntimeError, "injected enqueue failure"):
+                self.pool.submit(owned)
+        self.assertEqual(inspect.getcoroutinestate(owned), inspect.CORO_CLOSED)
+        self.assertEqual(self.pool._enqueuing, 0)
+        self.pool.close()
+        owned = work()
+        with self.assertRaises(URLError):
+            self.pool.submit(owned)
+        self.assertEqual(inspect.getcoroutinestate(owned), inspect.CORO_CLOSED)
 
     def test_redirect_is_not_followed_and_compressed_bytes_are_unchanged(self):
         compressed = gzip.compress(b"binary\0body")

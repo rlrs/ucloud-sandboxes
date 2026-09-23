@@ -118,6 +118,44 @@ class StreamingUploadTests(unittest.TestCase):
                 with _running_server(gateway):
                     yield gateway, service, runner
 
+    def test_small_uploads_use_buffered_rpc_without_stream_connection(self):
+        from ucloud_sandboxes import control_plane
+        with self.servers() as (gateway, service, runner):
+            with patch.object(control_plane._NODE_FILE_UPLOAD_HTTP_POOL, 'request',
+                              side_effect=AssertionError('small upload opened streaming connection')):
+                for payload in (b'', b'go', b'x' * TRANSFER_CHUNK_BYTES):
+                    connection = HTTPConnection(*gateway.server_address, timeout=5)
+                    try:
+                        connection.request('PUT', '/v1/sandboxes/small/files?path=/tool',
+                                           body=payload)
+                        response = connection.getresponse()
+                        result = json.load(response)
+                        self.assertEqual(response.status, 200, result)
+                        self.assertEqual(result['size'], len(payload))
+                        self.assertEqual(runner.calls[-1][:2],
+                                         (len(payload), hashlib.sha256(payload).hexdigest()))
+                    finally:
+                        connection.close()
+            self.assertEqual(service.upload_spool._unwritten_bytes, 0)
+
+    def test_truncated_small_upload_never_reaches_worker(self):
+        from ucloud_sandboxes import control_plane
+        with self.servers() as (gateway, service, runner):
+            connection = HTTPConnection(*gateway.server_address, timeout=5)
+            try:
+                with patch.object(control_plane, '_open_node_request',
+                                  side_effect=AssertionError('partial body was dispatched')):
+                    connection.putrequest('PUT', '/v1/sandboxes/small/files?path=/tool')
+                    connection.putheader('Content-Length', '8')
+                    connection.endheaders()
+                    connection.send(b'part')
+                    connection.sock.shutdown(socket.SHUT_WR)
+                    response = connection.getresponse()
+                    self.assertEqual(response.status, 400, response.read())
+                self.assertEqual(runner.calls, [])
+            finally:
+                connection.close()
+
     def test_small_write_passes_a_stalled_large_upload_and_full_cold_start_queue(self):
         payload = b'abc\0' * (TRANSFER_CHUNK_BYTES // 4 * 3)
         with self.servers() as (gateway, service, runner):

@@ -28,7 +28,7 @@ from psycopg import sql
 
 from ucloud_sandboxes import model_relay as api
 from ucloud_sandboxes.shared_control.credentials import read_private_dsn
-from ucloud_sandboxes.shared_control.postgres import PostgresControlStore
+from ucloud_sandboxes.shared_control.database import PostgresDatabase
 
 
 def dsn(args):
@@ -46,7 +46,7 @@ async def serve(args):
         return "qualification-epoch"
 
     samples = []
-    store = PostgresControlStore(
+    store = PostgresDatabase(
         dsn(args),
         "http-benchmark",
         schema=args.schema,
@@ -112,7 +112,7 @@ async def benchmark(args):
     if platform.system() != "Linux":
         raise ValueError("run this qualification on Linux")
     schema = "ucloud_shared_http_" + uuid4().hex
-    store = PostgresControlStore(dsn(args), "http-benchmark", schema=schema)
+    store = PostgresDatabase(dsn(args), "http-benchmark", schema=schema)
     await store.open()
     await store.migrate()
     await store.close()
@@ -124,7 +124,7 @@ async def benchmark(args):
         p: hashlib.sha256(Path(p).read_bytes()).hexdigest()
         for p in (
             "ucloud_sandboxes/shared_control/relay.py",
-            "ucloud_sandboxes/shared_control/postgres.py",
+            "ucloud_sandboxes/shared_control/database.py",
             "ucloud_sandboxes/shared_control/relay_schema.sql",
             "ucloud_sandboxes/model_relay.py",
             __file__,
@@ -201,6 +201,7 @@ async def benchmark(args):
                 )
                 ready_at = {}
                 latencies = {}
+                acceptance_latencies = {}
                 retries = {"caller": 0, "response": 0}
 
                 async def caller(i):
@@ -253,7 +254,7 @@ async def benchmark(args):
                     target = (i + 1) % 2
                     while True:
                         try:
-                            return await json_request(
+                            receipt = await json_request(
                                 "POST",
                                 urls[target] + "/worker/respond",
                                 json={
@@ -263,6 +264,14 @@ async def benchmark(args):
                                     "body": api._encoded_body(expected[i]),
                                 },
                             )
+                            if (
+                                receipt.get("committed") is not True
+                                or receipt.get("request_id") != requests[i]["request_id"]
+                                or receipt.get("delivery_status") not in {"pending", "released"}
+                            ):
+                                raise RuntimeError("invalid durable acceptance receipt")
+                            acceptance_latencies[i] = time.monotonic() - ready_at[i]
+                            return receipt
                         except (OSError, asyncio.TimeoutError, ClientConnectionError):
                             if not args.kill_relay:
                                 raise
@@ -290,6 +299,10 @@ async def benchmark(args):
                     "agents": args.agents,
                     "servers": 2,
                     "responses_verified": len(latencies),
+                    "durable_acceptances_verified": len(acceptance_latencies),
+                    "response_ready_to_acceptance_seconds": quantiles(
+                        list(acceptance_latencies.values())
+                    ),
                     "response_ready_to_http_response_seconds": quantiles(
                         list(latencies.values())
                     ),

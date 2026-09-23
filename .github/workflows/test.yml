@@ -13,6 +13,13 @@ jobs:
   shared-control-postgres:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
+      PYTHONPATH: ${{ github.workspace }}/ucloud-sandboxes-sdk/src
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10.13", "3.13"]
     services:
       postgres:
         image: postgres:17
@@ -28,9 +35,16 @@ jobs:
           --health-retries 10
     steps:
       - uses: actions/checkout@v6
+      - name: Check out the SDK contract peer
+        uses: actions/checkout@v6
+        with:
+          repository: rlrs/ucloud-sandboxes-sdk
+          ref: e728daf99aacf9ebf7f6ab1abc8b28a7c77ea9e9
+          path: ucloud-sandboxes-sdk
+          persist-credentials: false
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.13"
+          python-version: ${{ matrix.python-version }}
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           version: "0.11.2"
@@ -38,7 +52,7 @@ jobs:
       - name: Exercise real concurrent transactions and recovery
         env:
           UCLOUD_TEST_POSTGRES_DSN: postgresql://postgres:qualification-only@127.0.0.1:5432/shared_control_test
-        run: uv run --extra postgres python -m unittest tests.test_shared_control_postgres tests.test_postgres_relay
+        run: uv run --extra postgres python -u -m unittest -v tests.test_shared_control_postgres tests.test_postgres_relay tests.test_model_relay tests.test_model_relay_stateful tests.test_relay_retirement tests.test_relay_lifecycle_dispatch tests.test_relay_keepalive
       - name: Recover HTTP callers after killing a relay process
         env:
           UCLOUD_TEST_POSTGRES_DSN: postgresql://postgres:qualification-only@127.0.0.1:5432/shared_control_test
@@ -77,7 +91,7 @@ jobs:
         with:
           repository: rlrs/ucloud-sandboxes-sdk
           # Deliberately pinned: update this SHA with coordinated SDK changes.
-          ref: 1adf5d50f42874c0d5ccd3ea07e9c3d3a94f0686
+          ref: e728daf99aacf9ebf7f6ab1abc8b28a7c77ea9e9
           path: ucloud-sandboxes-sdk
           persist-credentials: false
       - uses: actions/setup-python@v6

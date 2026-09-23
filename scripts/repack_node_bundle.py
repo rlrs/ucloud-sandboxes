@@ -22,6 +22,7 @@ from pathlib import Path, PurePosixPath
 import re
 import shutil
 import stat
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -147,6 +148,14 @@ def validate_source_bundle(root: Path, manifest: dict[str, object]) -> None:
             if path.is_symlink() or path.stat().st_size != item.get("size"):
                 raise ValueError("invalid gVisor companion executable")
             validate_digest(path, item["sha256"], "gVisor companion")
+        provenance = direct.get("build_manifest")
+        provenance_path = root / "runtime/direct/build-manifest.json"
+        if provenance is not None or provenance_path.exists():
+            if not isinstance(provenance, dict) or provenance.get("file") != "runtime/direct/build-manifest.json":
+                raise ValueError("gVisor build provenance metadata is absent or invalid")
+            if provenance_path.is_symlink() or provenance_path.stat().st_size != provenance.get("size"):
+                raise ValueError("gVisor build provenance size mismatch")
+            validate_digest(provenance_path, provenance["sha256"], "gVisor build provenance")
 
     kernel = runtime.get("kernel")
     if not isinstance(kernel, dict) or not isinstance(kernel.get("files"), list):
@@ -354,6 +363,43 @@ def validate_storage_build(
     return payload
 
 
+def add_runtime_debs(root: Path, manifest: dict, additions: list[Path]) -> None:
+    """Extend an explicitly qualified OS closure without silently upgrading it."""
+    if not additions:
+        return
+    runtime = manifest["runtime"]
+    destination = root / "runtime/debs"
+    architecture = runtime["platform"]["architecture"]
+
+    def identity(path):
+        result = subprocess.run(["dpkg-deb", "--show", "--showformat", "${Package}\n${Version}\n${Architecture}", str(path)],
+                                check=True, text=True, capture_output=True)
+        parts = result.stdout.splitlines()
+        if len(parts) != 3 or not all(parts) or parts[2] not in {architecture, "all"}:
+            raise ValueError(f"invalid or wrong-architecture runtime package: {path.name}")
+        return tuple(parts)
+
+    existing = {identity(path)[0]: (identity(path), path) for path in destination.glob("*.deb")}
+    planned = []
+    for path in additions:
+        if not path.is_file() or path.suffix != ".deb":
+            raise ValueError(f"invalid runtime package input: {path}")
+        selected = identity(path)
+        previous = existing.get(selected[0])
+        if previous is not None:
+            if previous[0] != selected or sha256_file(previous[1]) != sha256_file(path):
+                raise ValueError(f"extra runtime package would replace qualified package {selected[0]}")
+            continue
+        if (destination / path.name).exists() or any(other.name == path.name for other in planned):
+            raise ValueError("extra runtime package filename collision")
+        planned.append(path)
+        existing[selected[0]] = (selected, path)
+    for path in planned:
+        shutil.copyfile(path, destination / path.name)
+    runtime["files"] = [{"name": path.name, "sha256": sha256_file(path), "size": path.stat().st_size}
+                        for path in sorted(destination.glob("*.deb"))]
+
+
 def update_manifest(
     manifest: dict[str, object],
     *,
@@ -473,9 +519,9 @@ def replace_direct_runtime(
         **install(runsc, "runsc"),
         "commit": commit,
         "sidecars": [install(source, relative) for source, relative in companions],
+        "build_manifest": install(runsc.parent / "build-manifest.json", "build-manifest.json"),
     }
     runtime["managed_init"] = install(managed_init, "ucloud-sandbox-init")
-    shutil.copy2(runsc.parent / "build-manifest.json", direct / "build-manifest.json")
 
 
 def parse_args() -> argparse.Namespace:
@@ -483,6 +529,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--direct-runsc", type=Path)
     parser.add_argument("--direct-runsc-commit")
     parser.add_argument("--managed-init", type=Path)
+    parser.add_argument("--extra-runtime-deb", action="append", default=[], type=Path,
+                        help="explicit qualified Debian closure addition; existing package replacement is refused")
     parser.add_argument("--source", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--wheel", required=True, type=Path)
@@ -530,6 +578,7 @@ def main() -> None:
         args.storage_manifest,
         args.storage_license,
         *args.agent_dependency_wheel,
+        *args.extra_runtime_deb,
     )
     for path in inputs:
         if not path.is_file():
@@ -568,6 +617,7 @@ def main() -> None:
             (bundle_root / "package-bundle.json").read_text(encoding="utf-8")
         )
         validate_source_bundle(bundle_root, manifest)
+        add_runtime_debs(bundle_root, manifest, args.extra_runtime_deb)
 
         agent_archive = bundle_root / "runtime/agent/node-agent-runtime.tar"
         if args.agent_runtime_root is None:

@@ -44,6 +44,13 @@ class _IdleService:
     def close_admission(self) -> None:
         pass
 
+    def resident_demand_snapshot(self):
+        return {"admitted_demand_bytes": 0, "pending_demand_bytes": 0,
+                "unknown_transition_memory_costs": 0}
+
+    def resident_memory_ram_bytes(self, sandbox_id, generation, sample):
+        return None if sample is None else sample.shared_memory_bytes
+
     def idle_for_seconds(self, *_args: object, **_kwargs: object) -> float:
         return 1.0
 
@@ -345,7 +352,7 @@ class WarmRelayParkTests(unittest.TestCase):
             return key in seen
         service.provisioner.registry.relay_wake_fence = fence
         manager = DirectNodeRuntime(service)
-        manager._warm_parks = WarmParkPolicy(lambda: Pressure(.8, 0), max_delay=2)
+        manager._warm_parks = WarmParkPolicy(lambda: Pressure(.8, 0))
         key = ('agent', 1, 'request')
         with self.assertRaises(WarmParkDeferred):
             manager.park_with_activity_revision('agent', generation=1,
@@ -382,12 +389,18 @@ class LocalRelayParkTests(unittest.TestCase):
             return key in seen
         service.provisioner.registry.relay_wake_fence = fence
         manager = DirectNodeRuntime(service)
+        self.addCleanup(manager.stop)
         pressure = [Pressure(.8, 0)]
         manager._warm_parks = WarmParkPolicy(lambda: pressure[0])
         # Drive individual ticks deterministically; production start() runs
         # this same check even when the independent idle parker is disabled.
-        manager._relay_parking_thread = SimpleNamespace(is_alive=lambda: True)
+        manager._relay_parking_thread = SimpleNamespace(is_alive=lambda: True, join=lambda **_: None)
         return manager, service, pressure
+
+    def recheck(self, manager):
+        manager._recheck_relay_parks()
+        for task in tuple(manager._relay_park_tasks.values()):
+            task.result(timeout=2)
 
     def defer(self, manager):
         from ucloud_sandboxes.warm_park import WarmParkDeferred
@@ -404,11 +417,11 @@ class LocalRelayParkTests(unittest.TestCase):
         original = service.provisioner.registry.relay_wake_fence
         service.provisioner.registry.relay_wake_fence = Mock(side_effect=original)
         for _ in range(10):
-            manager._recheck_relay_parks()
+            self.recheck(manager)
         service.provisioner.registry.relay_wake_fence.assert_not_called()
         self.assertFalse(service.park_calls)
         pressure[0] = Pressure(.01, 20)
-        manager._recheck_relay_parks()
+        self.recheck(manager)
         self.assertEqual(service.park_calls, ['agent'])
         self.assertFalse(manager._deferred_relay_parks)
 
@@ -419,7 +432,7 @@ class LocalRelayParkTests(unittest.TestCase):
         manager.wake_with_activity_revision('agent', generation=1,
             operation_id='wake:req', relay_request_id='request')
         pressure[0] = Pressure(.01, 20)
-        manager._recheck_relay_parks()
+        self.recheck(manager)
         self.assertFalse(manager._deferred_relay_parks)
         self.assertFalse(service.park_calls)
 
@@ -429,7 +442,7 @@ class LocalRelayParkTests(unittest.TestCase):
         self.defer(manager)
         service.provisioner.registry._registrations[0].sandbox_generation = 2
         pressure[0] = Pressure(.01, 20)
-        manager._recheck_relay_parks()
+        self.recheck(manager)
         self.assertFalse(manager._deferred_relay_parks)
         self.assertFalse(service.park_calls)
 
@@ -439,15 +452,17 @@ class LocalRelayParkTests(unittest.TestCase):
         self.defer(manager)
         pressure[0] = Pressure(.01, 20)
         service.park = Mock(side_effect=RuntimeError('temporary I/O failure'))
-        manager._recheck_relay_parks()
+        self.recheck(manager)
         self.assertEqual(len(manager._deferred_relay_parks), 1)
-        manager._recheck_relay_parks()
+        self.recheck(manager)
         service.park.assert_called_once()
         entry = next(iter(manager._deferred_relay_parks.values()))
         entry['retry_at'] = 0
+        manager._warm_parks._retry_after.clear()
+        manager._warm_parks._settle_until = 0
         service.park.side_effect = None
         service.park.return_value = SimpleNamespace(state='parked')
-        manager._recheck_relay_parks()
+        self.recheck(manager)
         self.assertFalse(manager._deferred_relay_parks)
 
     def test_restarted_worker_accepts_durable_retry(self):
@@ -473,3 +488,116 @@ class LocalRelayParkTests(unittest.TestCase):
         finally:
             manager.stop()
         self.assertFalse(thread.is_alive())
+
+    def test_slow_checkpoint_does_not_block_another_selected_safe_wait(self):
+        from copy import copy
+        from ucloud_sandboxes.background_io import Pressure
+        from ucloud_sandboxes.warm_park import WarmParkDeferred
+        from ucloud_sandboxes.resident_memory import ResidentMemorySample
+        manager, service, pressure = self.make_runtime()
+        sample = ResidentMemorySample(
+            current_bytes=1024**3, anonymous_bytes=1024**3, file_bytes=0,
+            dirty_bytes=0, writeback_bytes=0, refault_file_pages=0,
+            cgroup_path='/owned', cgroup_device=1, cgroup_inode=1,
+            sentry_pid=1, sentry_start_time_ticks=1, sampled_at=0,
+        )
+        from dataclasses import replace
+        import time
+        service.resident_memory_sample = lambda *_: replace(sample, sampled_at=time.monotonic())
+        manager._relay_park_workers = 2
+        registry = service.provisioner.registry
+        other = copy(registry._registrations[0])
+        other.sandbox_id = 'other'
+        registry._registrations += (other,)
+        self.defer(manager)
+        with self.assertRaises(WarmParkDeferred):
+            manager.park_with_activity_revision('other', generation=1,
+                operation_id='park:other', relay_request_id='other-request')
+        slow_started, release_slow, other_done = Event(), Event(), Event()
+        original = service.park
+        def park(sandbox_id, **kwargs):
+            if sandbox_id == 'agent':
+                slow_started.set()
+                if not release_slow.wait(2):
+                    raise RuntimeError('test checkpoint timed out')
+            else:
+                other_done.set()
+                if not release_slow.wait(2):
+                    raise RuntimeError('test checkpoint timed out')
+            return original(sandbox_id, **kwargs)
+        service.park = park
+        pressure[0] = Pressure(.01, 20, 0, 1024**3)
+        try:
+            manager._recheck_relay_parks()
+            self.assertTrue(slow_started.wait(1))
+            self.assertTrue(other_done.wait(1))
+            # Repeated ticks do not queue another task for the blocked park.
+            for _ in range(10):
+                manager._recheck_relay_parks()
+            self.assertLessEqual(len(manager._relay_park_tasks), 2)
+        finally:
+            release_slow.set()
+            for task in tuple(manager._relay_park_tasks.values()):
+                task.result(timeout=2)
+        self.assertEqual(sorted(service.park_calls), ['agent', 'other'])
+        self.assertEqual(manager.resident_wait_snapshot()['checkpoints_completed'], 2)
+
+    def test_missing_footprints_do_not_fan_out_foreground_or_background_captures(self):
+        from copy import copy
+        from ucloud_sandboxes.background_io import Pressure
+        from ucloud_sandboxes.warm_park import WarmParkDeferred
+
+        manager, service, pressure = self.make_runtime()
+        manager._relay_park_workers = 32
+        registry = service.provisioner.registry
+        names = ['agent'] + [f'other-{index}' for index in range(16)]
+        for name in names[1:]:
+            record = copy(registry._registrations[0])
+            record.sandbox_id = name
+            registry._registrations += (record,)
+        for name in names:
+            with self.assertRaises(WarmParkDeferred):
+                manager.park_with_activity_revision(
+                    name, generation=1, operation_id='park:request',
+                    relay_request_id='request',
+                )
+        started, release = Event(), Event()
+        original = service.park
+        calls = []
+
+        def park(sandbox_id, **kwargs):
+            calls.append(sandbox_id)
+            started.set()
+            if not release.wait(2):
+                raise RuntimeError('test checkpoint timed out')
+            return original(sandbox_id, **kwargs)
+
+        service.park = park
+        pressure[0] = Pressure(.01, 20, 50, 1024**3)
+        try:
+            manager._recheck_relay_parks()
+            self.assertTrue(started.wait(1))
+            for name in names[1:]:
+                with self.assertRaises(WarmParkDeferred):
+                    manager.park_with_activity_revision(
+                        name, generation=1, operation_id='park:request',
+                        relay_request_id='request',
+                    )
+            manager._recheck_relay_parks()
+            self.assertEqual(calls, ['agent'])
+            self.assertEqual(manager.resident_wait_snapshot()['checkpoint_inflight'], 1)
+        finally:
+            release.set()
+            for task in tuple(manager._relay_park_tasks.values()):
+                task.result(timeout=2)
+
+    def test_stopped_local_recheck_keeps_durable_intent_without_parking(self):
+        from ucloud_sandboxes.background_io import Pressure
+        manager, service, pressure = self.make_runtime()
+        self.defer(manager)
+        pressure[0] = Pressure(.01, 20)
+        manager.stop()
+        manager._recheck_relay_parks()
+        self.assertFalse(service.park_calls)
+        self.assertEqual(len(manager._deferred_relay_parks), 1)
+        self.assertIsNone(manager._relay_park_executor)

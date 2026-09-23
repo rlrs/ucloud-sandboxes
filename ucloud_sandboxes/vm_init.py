@@ -212,6 +212,15 @@ class VmInitOptions:
     direct_max_concurrent_restores: int = DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES
     direct_max_concurrent_startups: int = 8
     direct_idle_park_seconds: float = 0.0
+    direct_split_memory_backing: bool = False
+    direct_ram_memory_backing: bool = False
+    direct_reflink_memory_restore: bool = False
+    environment_registry_url: str = ""
+    environment_repository: str = ""
+    environment_trusted_keys_json: str = ""
+    environment_signing_key_pem: str = ""
+    environment_allow_paths: tuple[str, ...] = ()
+    environment_cache_bytes: int = 1024 ** 3
     heartbeat_interval_seconds: int = DEFAULT_HEARTBEAT_INTERVAL_SECONDS
     labels: dict[str, str] | None = None
 
@@ -361,6 +370,17 @@ def render_vm_init_script(options: VmInitOptions) -> str:
                     options.network_relays, sort_keys=True, separators=(",", ":")
                 )
             )
+        split_memory_flags = (
+            " --split-memory-backing"
+            " --memory-backing-hard-capacity-bytes ${UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES}"
+            " --checkpoint-registry-url ${UCLOUD_STORAGE_NATIVE_REGISTRY_URL}"
+            " --checkpoint-registry-repository ${UCLOUD_STORAGE_NATIVE_REPOSITORY}"
+            if options.direct_split_memory_backing else ""
+        )
+        if options.direct_ram_memory_backing:
+            split_memory_flags += " --application-memory-root ${UCLOUD_APPLICATION_MEMORY_ROOT}"
+        if options.direct_reflink_memory_restore:
+            split_memory_flags += " --reflink-memory-restore"
         direct_agent_command = (
             f"{agent_bin} serve-direct-node-agent"
             " --job-id ${UCLOUD_JOB_ID}"
@@ -376,7 +396,7 @@ def render_vm_init_script(options: VmInitOptions) -> str:
             " --runsc ${UCLOUD_DIRECT_RUNSC}"
             " --runsc-commit ${UCLOUD_DIRECT_RUNSC_COMMIT}"
             " --network ${UCLOUD_DIRECT_NETWORK}"
-            f"{direct_network_allow_flags}"
+            f"{direct_network_allow_flags}{split_memory_flags}"
             " --init-binary ${UCLOUD_DIRECT_INIT_BINARY}"
             " --managed-init-binary ${UCLOUD_MANAGED_INIT}"
             " --storage-native-socket ${UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET}"
@@ -428,6 +448,38 @@ def render_vm_init_script(options: VmInitOptions) -> str:
         node_service_after = "network-online.target docker.service"
         node_service_requires = "docker.service"
 
+    from .environment_bootstrap import settings as environment_bootstrap_settings
+    environment_flags, environment_setup, environment_start = environment_bootstrap_settings(options)
+    direct_agent_command += environment_flags
+    if environment_flags and options.role == "builder":
+        # Fresh allowlisted publication uses the canonical Docker overlay mount
+        # adapter and preserves ownership/xattrs in a private build view.
+        node_service_user = "root"
+        node_service_group = "root"
+    if environment_flags and options.role == "sandbox":
+        node_service_after += " ucloud-environment-io.service"
+        node_service_requires += " ucloud-environment-io.service"
+    if not environment_flags and options.role == "sandbox":
+        environment_setup = '''if [ -e "$UCLOUD_STATE_DIR/environment-adapter" ]; then
+  echo 'immutable adapter rollback requires a fresh worker' >&2; exit 1
+fi
+'''
+    memory_filesystem_prestart = (
+        "ExecStartPre=/usr/bin/env PYTHONPATH=$UCLOUD_AGENT_RUNTIME_DIR/site-packages /usr/bin/python3"
+        " -m ucloud_sandboxes.memory_filesystem --mount-root $UCLOUD_STORAGE_NATIVE_MOUNT_ROOT"
+        " --hard-capacity-bytes $UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES\n"
+        if options.direct_split_memory_backing else ""
+    )
+    if options.direct_ram_memory_backing:
+        memory_filesystem_prestart = memory_filesystem_prestart.rstrip("\n") + (
+            " --ram-root $UCLOUD_APPLICATION_MEMORY_ROOT"
+            " --ram-capacity-bytes $UCLOUD_APPLICATION_MEMORY_CAPACITY_BYTES\n"
+        )
+    storage_runtime_root = (
+        "${UCLOUD_STORAGE_NATIVE_MOUNT_ROOT}/.runtime"
+        if options.direct_split_memory_backing
+        else "${UCLOUD_STORAGE_NATIVE_ROOT}/runtime"
+    )
     script = f"""#!/usr/bin/env bash
 set -euo pipefail
 
@@ -503,6 +555,11 @@ UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET={shlex.quote(storage_native_backend_socket)
 UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET={shlex.quote(storage_native_service_socket)}
 UCLOUD_STORAGE_NATIVE_ROOT={shlex.quote(storage_native_root)}
 UCLOUD_STORAGE_NATIVE_MOUNT_ROOT=$UCLOUD_STORAGE_NATIVE_ROOT/mounts
+UCLOUD_DIRECT_SPLIT_MEMORY_BACKING={int(options.direct_split_memory_backing)}
+UCLOUD_DIRECT_RAM_MEMORY_BACKING={int(options.direct_ram_memory_backing)}
+UCLOUD_DIRECT_REFLINK_MEMORY_RESTORE={int(options.direct_reflink_memory_restore)}
+UCLOUD_APPLICATION_MEMORY_ROOT=/run/ucloud-sandboxes/application-memory
+UCLOUD_APPLICATION_MEMORY_CAPACITY_BYTES={int(options.total_resources.memory_mb) * 1024**2}
 UCLOUD_STORAGE_NATIVE_CACHE_ROOT={shlex.quote(storage_native_cache_root)}
 UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG={shlex.quote(storage_native_backend_config)}
 UCLOUD_STORAGE_NATIVE_RESIZE_BACKEND_CONFIG={shlex.quote(storage_native_resize_backend_config)}
@@ -651,6 +708,8 @@ if [ -f "$UCLOUD_STATIC_RUNTIME_RECEIPT" ] \
       || {{ [ -x "$UCLOUD_DIRECT_RUNSC" ] \
         && [ -x "$UCLOUD_MANAGED_INIT" ] \
         && [ -x "$UCLOUD_STORAGE_NATIVE_BACKEND" ] \
+        && {{ [ "$UCLOUD_DIRECT_SPLIT_MEMORY_BACKING" -eq 0 ] \
+          || [ -f "$(dirname "$UCLOUD_DIRECT_RUNSC")/build-manifest.json" ]; }} \
         && {{ [ "$UCLOUD_DIRECT_RUNSC_COMMIT" != {GVISOR_COMMIT} ] \
           || {{ [ -x "$(dirname \"$UCLOUD_DIRECT_RUNSC\")/gvisor-bin/checkpointgofer" ] \
             && [ -x "$(dirname \"$UCLOUD_DIRECT_RUNSC\")/gvisor-bin/gvisor-sentry-prewarmer" ] \
@@ -841,6 +900,15 @@ if runtime.get("role") == "sandbox":
         raise SystemExit("gVisor companion files do not match metadata")
     for item in sidecars:
         verified_artifact(item, item["file"], "gVisor companion executable")
+
+    build_manifest = direct.get("build_manifest")
+    build_manifest_path = bundle_dir / "runtime/direct/build-manifest.json"
+    if build_manifest is not None or build_manifest_path.exists():
+        if not isinstance(build_manifest, dict):
+            raise SystemExit("gVisor build provenance metadata is absent")
+        verified_artifact(build_manifest, "runtime/direct/build-manifest.json", "gVisor build provenance")
+    elif {options.direct_split_memory_backing!r}:
+        raise SystemExit("split memory backing requires authenticated gVisor build provenance")
 
     managed = runtime.get("managed_init")
     if not isinstance(managed, dict):
@@ -1251,6 +1319,11 @@ if [ "$UCLOUD_NODE_ROLE" = sandbox ]; then
           "$(dirname "$UCLOUD_DIRECT_RUNSC")/gvisor-bin/$sidecar"
       done
     fi
+    if [ -f "$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/direct/build-manifest.json" ]; then
+      $SUDO install -m 0644 -o root -g root \
+        "$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/direct/build-manifest.json" \
+        "$(dirname "$UCLOUD_DIRECT_RUNSC")/build-manifest.json"
+    fi
     "$UCLOUD_DIRECT_RUNSC" --version >/dev/null
     echo "Installing bundle-verified managed-process init"
     $SUDO install -m 0755 -o root -g root "$UCLOUD_BUNDLED_MANAGED_INIT" "$UCLOUD_MANAGED_INIT"
@@ -1508,6 +1581,16 @@ printf '#!/bin/sh\nexec env PYTHONPATH=%q /usr/bin/python3 -m ucloud_sandboxes.s
   "$UCLOUD_AGENT_RUNTIME_DIR/site-packages" > "$UCLOUD_STORAGE_AGENT_LAUNCHER"
 $SUDO install -m 0755 -o root -g root "$UCLOUD_STORAGE_AGENT_LAUNCHER" "$UCLOUD_STORAGE_AGENT_BIN"
 rm -f "$UCLOUD_STORAGE_AGENT_LAUNCHER"
+if [ "$UCLOUD_DIRECT_SPLIT_MEMORY_BACKING" -eq 1 ]; then
+  UCLOUD_RAM_MEMORY_ARGS=()
+  if [ "$UCLOUD_DIRECT_RAM_MEMORY_BACKING" -eq 1 ]; then
+    UCLOUD_RAM_MEMORY_ARGS=(--ram-root "$UCLOUD_APPLICATION_MEMORY_ROOT" --ram-capacity-bytes "$UCLOUD_APPLICATION_MEMORY_CAPACITY_BYTES")
+  fi
+  $SUDO env PYTHONPATH="$UCLOUD_AGENT_RUNTIME_DIR/site-packages" /usr/bin/python3 \
+    -m ucloud_sandboxes.memory_filesystem \
+    --mount-root "$UCLOUD_STORAGE_NATIVE_MOUNT_ROOT" \
+    --hard-capacity-bytes "$UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES" "${{UCLOUD_RAM_MEMORY_ARGS[@]}}"
+fi
 if [ "$UCLOUD_STATIC_RUNTIME_READY" -eq 0 ]; then
   UCLOUD_STATIC_RUNTIME_RECEIPT_TMP="$($SUDO mktemp "$UCLOUD_PACKAGE_CACHE_DIR/.runtime-ready.XXXXXX")"
   printf '%s\n' \
@@ -1525,6 +1608,7 @@ if [ "$UCLOUD_STATIC_RUNTIME_READY" -eq 0 ]; then
 fi
 log_init_phase "python-package"
 
+{environment_setup}
 echo "Writing node environment"
 $SUDO tee {shlex.quote(env_file)} >/dev/null <<NODE_ENV
 UCLOUD_JOB_ID=$UCLOUD_JOB_ID
@@ -1577,6 +1661,7 @@ UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET=$UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET
 UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET=$UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET
 UCLOUD_STORAGE_NATIVE_ROOT=$UCLOUD_STORAGE_NATIVE_ROOT
 UCLOUD_STORAGE_NATIVE_MOUNT_ROOT=$UCLOUD_STORAGE_NATIVE_MOUNT_ROOT
+UCLOUD_DIRECT_SPLIT_MEMORY_BACKING=$UCLOUD_DIRECT_SPLIT_MEMORY_BACKING
 UCLOUD_STORAGE_NATIVE_CACHE_ROOT=$UCLOUD_STORAGE_NATIVE_CACHE_ROOT
 UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG=$UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG
 UCLOUD_STORAGE_NATIVE_RESIZE_BACKEND_CONFIG=$UCLOUD_STORAGE_NATIVE_RESIZE_BACKEND_CONFIG
@@ -1593,6 +1678,8 @@ UCLOUD_STORAGE_NATIVE_S3_REGION=$UCLOUD_STORAGE_NATIVE_S3_REGION
 UCLOUD_STORAGE_NATIVE_S3_PREFIX=$UCLOUD_STORAGE_NATIVE_S3_PREFIX
 UCLOUD_STORAGE_NATIVE_S3_CREDENTIAL_PROCESS=$UCLOUD_STORAGE_NATIVE_S3_CREDENTIAL_PROCESS
 UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES=$UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES
+UCLOUD_APPLICATION_MEMORY_ROOT=$UCLOUD_APPLICATION_MEMORY_ROOT
+UCLOUD_APPLICATION_MEMORY_CAPACITY_BYTES=$UCLOUD_APPLICATION_MEMORY_CAPACITY_BYTES
 NODE_ENV
 
 if [ "$UCLOUD_NODE_ROLE" = sandbox ]; then
@@ -1631,7 +1718,7 @@ User=root
 Group=root
 EnvironmentFile={env_file}
 WorkingDirectory={work_dir}
-ExecStart=${{UCLOUD_STORAGE_AGENT_BIN}} --socket ${{UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET}} --backend-socket ${{UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET}} --backend-global-config ${{UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG}} --journal ${{UCLOUD_STORAGE_NATIVE_ROOT}}/journal.sqlite --runtime-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/runtime --mount-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/mounts --hard-capacity-bytes ${{UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES}}{storage_publication_args} --max-concurrent-publications ${{UCLOUD_STORAGE_NATIVE_MAX_CONCURRENT_PUBLICATIONS}} --snapshot-compact-after-layers {DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_LAYERS} --snapshot-compact-after-bytes {DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_BYTES} --device-pool-enabled --device-pool-low-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK}} --device-pool-high-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK}} --max-ublk-devices ${{UCLOUD_STORAGE_NATIVE_MAX_UBLK_DEVICES}}{telemetry_args} --deployment-id ${{UCLOUD_DEPLOYMENT_ID}} --node-id ${{UCLOUD_NODE_ID}}
+{memory_filesystem_prestart}ExecStart=${{UCLOUD_STORAGE_AGENT_BIN}} --socket ${{UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET}} --backend-socket ${{UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET}} --backend-global-config ${{UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG}} --journal ${{UCLOUD_STORAGE_NATIVE_ROOT}}/journal.sqlite --runtime-root {storage_runtime_root} --mount-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/mounts --hard-capacity-bytes ${{UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES}}{storage_publication_args} --max-concurrent-publications ${{UCLOUD_STORAGE_NATIVE_MAX_CONCURRENT_PUBLICATIONS}} --snapshot-compact-after-layers {DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_LAYERS} --snapshot-compact-after-bytes {DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_BYTES} --device-pool-enabled --device-pool-low-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK}} --device-pool-high-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK}} --max-ublk-devices ${{UCLOUD_STORAGE_NATIVE_MAX_UBLK_DEVICES}}{telemetry_args} --deployment-id ${{UCLOUD_DEPLOYMENT_ID}} --node-id ${{UCLOUD_NODE_ID}}
 Restart=always
 RestartSec=2
 
@@ -1698,6 +1785,7 @@ WantedBy=timers.target
 HEARTBEAT_TIMER
 
 $SUDO systemctl daemon-reload
+{environment_start}
 $SUDO systemctl reset-failed ucloud-sandbox-node.service || true
 if [ "$UCLOUD_NODE_ROLE" = sandbox ]; then
   $SUDO systemctl reset-failed ucloud-storage-native-backend.service ucloud-storage-native.service || true
@@ -1731,6 +1819,8 @@ log_init_phase "systemd-services"
 
 
 def validate_vm_init_options(options: VmInitOptions) -> None:
+    from .environment_bootstrap import validate as validate_environment_bootstrap
+    validate_environment_bootstrap(options)
     if not options.job_id:
         raise ValueError("job id is required.")
     if not options.heartbeat_url:
@@ -1749,6 +1839,20 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         raise ValueError("heartbeat interval must be positive.")
     if options.role not in {"sandbox", "builder"}:
         raise ValueError("node role must be sandbox or builder")
+    if not isinstance(options.direct_split_memory_backing, bool):
+        raise ValueError("direct_split_memory_backing must be a boolean")
+    if options.direct_split_memory_backing and options.role != "sandbox":
+        raise ValueError("split memory backing is only supported by sandbox workers")
+    if options.direct_split_memory_backing and options.storage_native_snapshot_backend != "registry":
+        raise ValueError("split memory backing requires registry checkpoint publication; S3 split checkpoints are unsupported")
+    if not isinstance(options.direct_ram_memory_backing, bool):
+        raise ValueError("direct_ram_memory_backing must be a boolean")
+    if options.direct_ram_memory_backing and not options.direct_split_memory_backing:
+        raise ValueError("RAM memory backing requires split memory backing")
+    if not isinstance(options.direct_reflink_memory_restore, bool):
+        raise ValueError("direct_reflink_memory_restore must be a boolean")
+    if options.direct_reflink_memory_restore and not options.direct_split_memory_backing:
+        raise ValueError("reflink memory restore requires split memory backing")
     if options.role == "sandbox":
         if not re.fullmatch(r"[0-9a-f]{40}", options.direct_runsc_commit):
             raise ValueError(

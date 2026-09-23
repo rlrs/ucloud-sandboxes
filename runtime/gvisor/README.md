@@ -33,8 +33,33 @@ CPU count. These changes prevent executable mappings and cached `cpu.max`
 descriptors from retaining detached cloned mount trees and sibling sandbox disks.
 Live density qualification is required before rollout.
 
+The fourth patch adds capture-abort recovery. The fifth fixes root EROFS
+filestore FD donation; the host EROFS adapter remains an optional image backend.
+The sixth adds RAM-active application memory with sparse export and restore
+population inside the candidate's cgroup. The seventh adds
+`--application-memory-reflink-restore`: file-backed restore creates a private
+XFS reflink before installing the allocator, so it does not eagerly copy the
+entire application heap or consume the immutable checkpoint. RAM and reflink
+flags are mutually exclusive for an individual runtime invocation. The Warden
+persists each allocation's backing mode and owns the transition at parked
+restore; runtime flags do not create a second lifecycle authority.
+
+The clone path requires a same-filesystem, regular, immutable source and an
+exclusively created target. It has no eager-copy fallback. Failure leaves the
+complete source intact; successful restore installs the candidate as the active
+file, and only the Warden's durable RUNNING handoff permits source retirement.
+The source occupies its own exact-quota retention project, admitted through the
+existing physical-capacity ledger before cloning. Sharing extents is not treated
+as free quota or permission to overcommit physical disk.
+
+The native and product Warden qualification is recorded in
+[`memory-tiers-2026-09-23`](../../docs/benchmarks/memory-tiers-2026-09-23/README.md).
+It includes incomplete restore, private-clone integrity, real project transfer,
+RAM-to-file ownership, live reclaim, TCP and SQLite checks. Density and provider
+performance remain separate rollout gates.
+
 The original five July patches remain here as historical reference. They are
-not applied by the current build. All three August patches are applied and attested.
+not applied by the current build. All seven August-series patches are applied and attested.
 The port uses upstream's new protobuf memory
 metadata, checks external backing size before installing allocator state, and
 patches the sentry's new `runsc/cmd/sentry/sentrycmd/boot.go` location.
@@ -83,7 +108,7 @@ Actual UCloud qualification and artifact identity are recorded in
 
 ## Image root filesystems
 
-`DockerOverlay2RootfsStore` is the only image-rootfs implementation. It mounts
+`DockerOverlay2RootfsStore` is the default image-rootfs implementation. It mounts
 Docker's immutable overlay2 layers without flattening or exporting the image,
 and pins every referenced image by digest so pruning cannot remove layers below
 a live or parked sandbox. Startup calls `reconcile_images()` to recover the

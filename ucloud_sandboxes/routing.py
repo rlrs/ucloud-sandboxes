@@ -15,7 +15,8 @@ from typing import Any, Iterable, Iterator
 from uuid import uuid4
 import weakref
 
-from .capabilities import STORAGE_NATIVE_CAPABILITY
+from .sqlite_pool import SqliteConnectionPool
+
 from .durable_batch import DurableSqliteBatch
 from .models import (
     ResourceQuantity,
@@ -175,9 +176,11 @@ def is_portable_parked_route(route: SandboxRoute) -> bool:
     still be in progress.
     """
 
+    from .storage_native_migration import SUPPORTED_STORAGE_NATIVE_MIGRATION_SCHEMAS
+
     return bool(
         (route.state or "unknown").lower() == "parked"
-        and route.storage_schema == STORAGE_NATIVE_CAPABILITY
+        and route.storage_schema in SUPPORTED_STORAGE_NATIVE_MIGRATION_SCHEMAS
         and route.storage_snapshot
         and route.snapshot_manifest_digest
         and route.snapshot_repository
@@ -218,8 +221,6 @@ def route_with_inventory_snapshot(
         raise ValueError("inventory snapshot does not own its sandbox route")
     if item.state.strip().lower() != "parked":
         raise ValueError("only a parked inventory entry can publish a snapshot")
-    if item.storage_schema != STORAGE_NATIVE_CAPABILITY:
-        raise ValueError("inventory snapshot has an unknown storage schema")
 
     # Keep the heavy descriptor parser out of routing module import startup and
     # avoid a module cycle through the sandbox/storage lifecycle modules.
@@ -227,13 +228,14 @@ def route_with_inventory_snapshot(
 
     snapshot = StorageNativeMigration.from_dict(item.storage_snapshot)
     if (
-        snapshot.manifest.sandbox_id != route.sandbox_id
+        snapshot.schema != item.storage_schema
+        or snapshot.manifest.sandbox_id != route.sandbox_id
         or snapshot.manifest.sandbox_generation != route.generation
         or snapshot.manifest.create_operation_id != route.create_operation_id
         or snapshot.manifest.spec_sha256 != route.spec_hash
-        or snapshot.publication.manifest_digest != item.snapshot_manifest_digest
-        or snapshot.publication.repository != item.snapshot_repository
-        or snapshot.publication.tag != item.snapshot_tag
+        or snapshot.reference.manifest_digest != item.snapshot_manifest_digest
+        or snapshot.reference.repository != item.snapshot_repository
+        or snapshot.reference.tag != item.snapshot_tag
     ):
         raise ValueError("inventory snapshot descriptor does not match its route")
     return replace(
@@ -244,6 +246,18 @@ def route_with_inventory_snapshot(
         snapshot_tag=item.snapshot_tag,
         storage_snapshot=snapshot.to_dict(),
     )
+
+
+def wake_pending_demand_id(sandbox_id: str) -> str:
+    return f"__wake__:{sandbox_id}"
+
+
+def cold_offload_fence(route: SandboxRoute) -> dict[str, object]:
+    """Compact exact owner/snapshot observation for conditional maintenance."""
+    return {name: getattr(route, name) for name in (
+        "generation", "create_operation_id", "spec_hash", "node_id", "job_id",
+        "node_epoch", "activity_epoch", "snapshot_manifest_digest",
+    )}
 
 
 def is_worker_detachable_parked_route(route: SandboxRoute) -> bool:
@@ -596,17 +610,10 @@ class RoutingState:
     image_warmups: dict[str, PendingImageWarmup] = field(default_factory=dict)
 
 
-def _close_routing_connections(connections, guard):
-    with guard:
-        idle, connections[:] = list(connections), []
-    for connection in idle:
-        connection.close()
-
-
 class RoutingStore:
     def __init__(self, path: Path) -> None:
         self.path = path
-        self._connections: list[sqlite3.Connection] = []
+        self._reader_pool = SqliteConnectionPool()
         self._connections_guard = Lock()
         # Fleet scans release/reacquire the GIL for every SQLite row. Concurrent
         # scans otherwise starve the short writer and heartbeat transactions.
@@ -616,7 +623,7 @@ class RoutingStore:
         self._connection_identity: tuple[int, int] | None = None
         self._connection_pid = os.getpid()
         self._connection_finalizer = weakref.finalize(
-            self, _close_routing_connections, self._connections, self._connections_guard,
+            self, self._reader_pool.close,
         )
         self._lock = _route_lock(path)
         with self._lock:
@@ -1367,6 +1374,8 @@ class RoutingStore:
     def begin_sandbox_detach(
         self,
         route: SandboxRoute,
+        *,
+        require_cold: bool = False,
     ) -> SandboxRoute | None:
         """Fence a portable park before removing its worker-local incarnation."""
 
@@ -1377,6 +1386,20 @@ class RoutingStore:
                     current, route
                 ):
                     return None
+                if require_cold:
+                    if cold_offload_fence(current) != cold_offload_fence(route):
+                        return None
+                    if current.worker_state == "attached" and conn.execute(
+                        "SELECT 1 FROM pending WHERE sandbox_id = ? LIMIT 1",
+                        (wake_pending_demand_id(current.sandbox_id),),
+                    ).fetchone() is not None:
+                        return None
+                    if current.worker_state == "attached" and conn.execute(
+                        "SELECT 1 FROM program_requests WHERE sandbox_id = ? "
+                        "AND sandbox_generation = ? AND state != 'terminal' LIMIT 1",
+                        (current.sandbox_id, current.generation),
+                    ).fetchone() is not None:
+                        return None
                 if current.worker_state in {"detaching", "detached"}:
                     return current
                 if (
@@ -1861,6 +1884,11 @@ class RoutingStore:
                         and current is not None
                         and current.node_id == migration.destination_node_id
                         and current.job_id == migration.destination_job_id
+                        and current.node_url.rstrip("/") == migration.destination_node_url.rstrip("/")
+                        and current.generation == migration.generation
+                        and current.create_operation_id == migration.create_operation_id
+                        and current.spec_hash == migration.spec_hash
+                        and not current.delete_operation_id
                         and (current.state or "unknown").lower() == "parked"
                     ):
                         current = replace(
@@ -1937,7 +1965,18 @@ class RoutingStore:
                 snapshot_repository = ""
                 snapshot_tag = ""
                 if migration.storage_schema:
-                    publication = migration.storage_snapshot.get("publication")
+                    from .storage_native_migration import SPLIT_MIGRATION_SCHEMA, StorageNativeMigration
+
+                    if migration.storage_schema == SPLIT_MIGRATION_SCHEMA:
+                        try:
+                            descriptor = StorageNativeMigration.from_dict(migration.storage_snapshot)
+                        except ValueError:
+                            return None
+                        if descriptor.schema != migration.storage_schema:
+                            return None
+                        publication = descriptor.reference.to_dict()
+                    else:
+                        publication = migration.storage_snapshot.get("publication")
                     if not isinstance(publication, dict):
                         return None
                     snapshot_manifest_digest = str(
@@ -3642,59 +3681,46 @@ class RoutingStore:
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
-        conn = None
-        reusable = False
-        opened = False
-        try:
-            # stat can block and releases the GIL. It must not hold the pool
-            # mutex while every returning reader waits to release a connection.
-            if os.getpid() != self._connection_pid:
-                raise sqlite3.DatabaseError("reopen routing store after fork")
-            if self._connection_identity is not None:
-                info = self.path.stat()
-                if (info.st_dev, info.st_ino) != self._connection_identity:
-                    raise sqlite3.DatabaseError("routing database file was replaced")
-                if stat.S_IMODE(info.st_mode) != 0o600:
-                    os.chmod(self.path, 0o600)
-            with self._connections_guard:
-                if self._connections:
-                    conn = self._connections.pop()
-            if conn is None:
-                opened = True
-                # Create the database securely before SQLite can create WAL/
-                # SHM files, which inherit its mode. Audit sidecars when opening
-                # a connection rather than stat-ing all three files twice for
-                # every pooled read and repeatedly inside each writer turn.
-                try:
-                    fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-                except FileExistsError:
-                    pass
-                else:
-                    os.close(fd)
-                _chmod_sqlite_state_files(self.path)
-                conn = sqlite3.connect(self.path, timeout=30, check_same_thread=False)
-                conn.row_factory = sqlite3.Row
-                conn.execute("PRAGMA busy_timeout=30000")
-                conn.execute("PRAGMA synchronous=FULL")
-                info = self.path.stat()
-                with self._connections_guard:
-                    self._connection_identity = (info.st_dev, info.st_ino)
+        if os.getpid() != self._connection_pid:
+            raise sqlite3.DatabaseError("reopen routing store after fork")
+        with self._reader_pool.connection(self._open_connection) as conn:
+            self._validate_connection_file()
             yield conn
-            # Returning a read connection must never retain a snapshot; closing
-            # the old per-call connection also rolled back unfinished work.
-            if conn.in_transaction:
-                conn.rollback()
-            reusable = True
-        finally:
-            if conn is not None:
-                with self._connections_guard:
-                    if reusable and len(self._connections) < 16:
-                        self._connections.append(conn)
-                        conn = None
-                if conn is not None:
-                    conn.close()
-            if opened:
-                _chmod_sqlite_state_files(self.path)
+
+    def _validate_connection_file(self):
+        if os.getpid() != self._connection_pid:
+            raise sqlite3.DatabaseError("reopen routing store after fork")
+        if self._connection_identity is not None:
+            info = self.path.stat()
+            if (info.st_dev, info.st_ino) != self._connection_identity:
+                raise sqlite3.DatabaseError("routing database file was replaced")
+            if stat.S_IMODE(info.st_mode) != 0o600:
+                os.chmod(self.path, 0o600)
+
+    def _open_connection(self):
+        try:
+            fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except FileExistsError:
+            pass
+        else:
+            os.close(fd)
+        _chmod_sqlite_state_files(self.path)
+        conn = sqlite3.connect(self.path, timeout=30, check_same_thread=False)
+        try:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA busy_timeout=30000")
+            conn.execute("PRAGMA synchronous=FULL")
+            info = self.path.stat()
+            with self._connections_guard:
+                identity = (info.st_dev, info.st_ino)
+                if self._connection_identity is not None and identity != self._connection_identity:
+                    raise sqlite3.DatabaseError("routing database file was replaced")
+                self._connection_identity = identity
+            _chmod_sqlite_state_files(self.path)
+            return conn
+        except BaseException:
+            conn.close()
+            raise
 
     @contextmanager
     def _transaction(self) -> Iterator[sqlite3.Connection]:

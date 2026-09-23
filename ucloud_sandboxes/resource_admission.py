@@ -63,8 +63,14 @@ def node_accepts_dynamic_request(
     available: ResourceQuantity,
     *,
     total: ResourceQuantity | None = None,
+    check_cpu: bool = True,
 ) -> bool:
-    """Return one canonical live admission answer for create and wake paths."""
+    """Check physical/storage fit and the caller's pressure admission contract.
+
+    Gateway create placement treats cached CPU as a ranking signal. Existing
+    wake/migration placement callers retain their current CPU gate.
+    Memory, disk, shape and storage safety never depend on this choice.
+    """
 
     if not dynamic_request_fits(
         requested,
@@ -78,7 +84,7 @@ def node_accepts_dynamic_request(
     ):
         return False
     return bool(
-        dynamic_pressure_error(heartbeat.runtime_metrics, requested) is None
+        dynamic_pressure_error(heartbeat.runtime_metrics, requested, check_cpu=check_cpu) is None
         and node_storage_pressure_allows(heartbeat, requested)
     )
 

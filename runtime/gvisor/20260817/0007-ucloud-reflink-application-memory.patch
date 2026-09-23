@@ -1,0 +1,215 @@
+diff --git a/runsc/boot/application_memory.go b/runsc/boot/application_memory.go
+--- a/runsc/boot/application_memory.go
++++ b/runsc/boot/application_memory.go
+@@ -75,3 +75,30 @@
+ 	}
+ 	return nil
+ }
++
++// CloneApplicationMemory creates a writable COW view of an immutable checkpoint.
++// The destination belongs to the candidate's quota allocation. Reflink support
++// is required: a full copy fallback would silently reintroduce eager restore.
++func CloneApplicationMemory(dst, src *os.File) error {
++	var source, target unix.Stat_t
++	if err := unix.Fstat(int(src.Fd()), &source); err != nil {
++		return err
++	}
++	if err := unix.Fstat(int(dst.Fd()), &target); err != nil {
++		return err
++	}
++	if source.Mode&unix.S_IFMT != unix.S_IFREG || target.Mode&unix.S_IFMT != unix.S_IFREG || target.Size != 0 || source.Dev != target.Dev || (source.Dev == target.Dev && source.Ino == target.Ino) {
++		return fmt.Errorf("application memory clone requires distinct regular files, an empty target, and one filesystem")
++	}
++	if err := unix.IoctlFileClone(int(dst.Fd()), int(src.Fd())); err != nil {
++		return err
++	}
++	var final unix.Stat_t
++	if err := unix.Fstat(int(src.Fd()), &final); err != nil {
++		return err
++	}
++	if final.Dev != source.Dev || final.Ino != source.Ino || final.Size != source.Size || final.Mtim != source.Mtim || final.Ctim != source.Ctim {
++		return fmt.Errorf("application memory changed during reflink clone")
++	}
++	return nil
++}
+diff --git a/runsc/boot/application_memory_test.go b/runsc/boot/application_memory_test.go
+--- a/runsc/boot/application_memory_test.go
++++ b/runsc/boot/application_memory_test.go
+@@ -4,6 +4,7 @@
+ 
+ import (
+ 	"bytes"
++	"golang.org/x/sys/unix"
+ 	"os"
+ 	"path/filepath"
+ 	"testing"
+@@ -45,3 +46,52 @@
+ 		t.Fatal("same source/target accepted")
+ 	}
+ }
++
++func TestCloneApplicationMemory(t *testing.T) {
++	dir := t.TempDir()
++	src, err := os.Create(filepath.Join(dir, "source"))
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer src.Close()
++	dst, err := os.Create(filepath.Join(dir, "target"))
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer dst.Close()
++	if err := src.Truncate(8 << 20); err != nil {
++		t.Fatal(err)
++	}
++	payload := bytes.Repeat([]byte{0xa5}, 4096)
++	if _, err := src.WriteAt(payload, 3<<20); err != nil {
++		t.Fatal(err)
++	}
++	if err := CloneApplicationMemory(src, src); err == nil {
++		t.Fatal("same file accepted")
++	}
++	if err := CloneApplicationMemory(dst, src); err != nil {
++		if err == unix.EOPNOTSUPP || err == unix.ENOTTY {
++			t.Skip("test filesystem lacks reflink")
++		}
++		t.Fatal(err)
++	}
++	got := make([]byte, len(payload))
++	if _, err := dst.ReadAt(got, 3<<20); err != nil {
++		t.Fatal(err)
++	}
++	if !bytes.Equal(got, payload) {
++		t.Fatal("clone bytes differ")
++	}
++	if _, err := dst.WriteAt([]byte{0x11}, 3<<20); err != nil {
++		t.Fatal(err)
++	}
++	if _, err := src.ReadAt(got, 3<<20); err != nil {
++		t.Fatal(err)
++	}
++	if !bytes.Equal(got, payload) {
++		t.Fatal("clone mutated source")
++	}
++	if err := CloneApplicationMemory(dst, src); err == nil {
++		t.Fatal("nonempty target accepted")
++	}
++}
+diff --git a/runsc/config/config.go b/runsc/config/config.go
+--- a/runsc/config/config.go
++++ b/runsc/config/config.go
+@@ -59,7 +59,8 @@
+ 	ApplicationMemoryFileDir string `flag:"application-memory-file-dir"`
+ 
+ 	// ApplicationMemoryRAMBacking keeps live guest pages in tmpfs and exports them only at capture.
+-	ApplicationMemoryRAMBacking bool `flag:"application-memory-ram-backing"`
++	ApplicationMemoryRAMBacking     bool `flag:"application-memory-ram-backing"`
++	ApplicationMemoryReflinkRestore bool `flag:"application-memory-reflink-restore"`
+ 
+ 	// Traceback changes the Go runtime's traceback level.
+ 	Traceback string `flag:"traceback"`
+@@ -493,6 +494,9 @@
+ // Config.Override does not validate, so callers must call Validate once they
+ // are done overriding.
+ func (c *Config) Validate() error {
++	if c.ApplicationMemoryReflinkRestore && (c.ApplicationMemoryRAMBacking || c.ApplicationMemoryFileDir == "") {
++		return fmt.Errorf("application-memory-reflink-restore requires file backing and excludes RAM backing")
++	}
+ 	if c.ApplicationMemoryRAMBacking && c.ApplicationMemoryFileDir == "" {
+ 		return fmt.Errorf("application-memory-ram-backing requires application-memory-file-dir")
+ 	}
+diff --git a/runsc/config/flags.go b/runsc/config/flags.go
+--- a/runsc/config/flags.go
++++ b/runsc/config/flags.go
+@@ -101,6 +101,7 @@
+ 	// Flags that control sandbox runtime behavior.
+ 	flagSet.String("platform", "systrap", "specifies which platform to use: systrap (default), ptrace, kvm.")
+ 	flagSet.String("platform_device_path", "", "path to a platform-specific device file (e.g. /dev/kvm for KVM platform). If unset, will use a sane platform-specific default.")
++	flagSet.Bool("application-memory-reflink-restore", false, "EXPERIMENTAL: restore immutable application memory through a same-filesystem private reflink; never copy or consume the checkpoint.")
+ 	flagSet.Bool("application-memory-ram-backing", false, "EXPERIMENTAL: require tmpfs for live application memory and sparse-export it at hibernation.")
+ 	flagSet.String("application-memory-file-dir", "", "EXPERIMENTAL: if non-empty, back each sandbox's main application MemoryFile with a regular file created in this host directory instead of a memfd.")
+ 	flagSet.String("watchdog-action", "log", "sets what action the watchdog takes when triggered: log (default), panic.")
+diff --git a/runsc/sandbox/sandbox.go b/runsc/sandbox/sandbox.go
+--- a/runsc/sandbox/sandbox.go
++++ b/runsc/sandbox/sandbox.go
+@@ -207,8 +207,9 @@
+ 
+ 	// ApplicationMemoryFilePath is the host path to the experimental regular
+ 	// file backing the sandbox's main application MemoryFile.
+-	ApplicationMemoryFilePath   string `json:"applicationMemoryFilePath,omitempty"`
+-	ApplicationMemoryRAMBacking bool   `json:"applicationMemoryRAMBacking,omitempty"`
++	ApplicationMemoryFilePath       string `json:"applicationMemoryFilePath,omitempty"`
++	ApplicationMemoryRAMBacking     bool   `json:"applicationMemoryRAMBacking,omitempty"`
++	ApplicationMemoryReflinkRestore bool   `json:"applicationMemoryReflinkRestore,omitempty"`
+ 
+ 	// HibernatedMemoryFilePath is set while a hibernation checkpoint has
+ 	// quiesced the sentry and moved its application memory backing into the
+@@ -574,6 +575,11 @@
+ 	}
+ 
+ 	var restoredMemoryPath string
++	if opt.HaveApplicationMemoryFile && s.ApplicationMemoryReflinkRestore {
++		restoredMemoryPath = s.ApplicationMemoryFilePath + ".restore"
++		defer os.Remove(restoredMemoryPath)
++	}
++
+ 	if opt.HaveApplicationMemoryFile && s.ApplicationMemoryRAMBacking {
+ 		restoredMemoryPath = s.ApplicationMemoryFilePath + ".restore"
+ 		output, err := os.OpenFile(restoredMemoryPath, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
+@@ -626,7 +632,7 @@
+ 	}
+ 	if opt.HaveApplicationMemoryFile {
+ 		hibernatedMemoryPath := filepath.Join(imagePath, checkpointfiles.ApplicationMemoryFileName)
+-		if s.ApplicationMemoryRAMBacking {
++		if s.ApplicationMemoryRAMBacking || s.ApplicationMemoryReflinkRestore {
+ 			hibernatedMemoryPath = restoredMemoryPath
+ 		}
+ 		if err := os.Rename(hibernatedMemoryPath, s.ApplicationMemoryFilePath); err != nil {
+@@ -689,10 +695,28 @@
+ 	}
+ 
+ 	applicationMemoryFileName := path.Join(imagePath, checkpointfiles.ApplicationMemoryFileName)
+-	if applicationMemoryFile, err := os.OpenFile(applicationMemoryFileName, os.O_RDWR, 0); err == nil {
++	applicationFlags := os.O_RDWR
++	if s.ApplicationMemoryReflinkRestore {
++		applicationFlags = os.O_RDONLY
++	}
++	if applicationMemoryFile, err := os.OpenFile(applicationMemoryFileName, applicationFlags, 0); err == nil {
+ 		if !opt.HavePagesFile {
+ 			applicationMemoryFile.Close()
+ 			return fmt.Errorf("hibernation checkpoint requires separate pages metadata and page files")
++		}
++		if s.ApplicationMemoryReflinkRestore {
++			source := applicationMemoryFile
++			defer source.Close()
++			target, err := os.OpenFile(s.ApplicationMemoryFilePath+".restore", os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
++			if err != nil {
++				return fmt.Errorf("creating private application memory clone: %w", err)
++			}
++			if err := boot.CloneApplicationMemory(target, source); err != nil {
++				target.Close()
++				os.Remove(s.ApplicationMemoryFilePath + ".restore")
++				return fmt.Errorf("cloning immutable application memory: %w", err)
++			}
++			applicationMemoryFile = target
+ 		}
+ 		opt.FilePayload.Files = append(opt.FilePayload.Files, applicationMemoryFile)
+ 		opt.HaveApplicationMemoryFile = true
+@@ -983,6 +1007,7 @@
+ 			}
+ 		}
+ 		s.ApplicationMemoryRAMBacking = conf.ApplicationMemoryRAMBacking
++		s.ApplicationMemoryReflinkRestore = conf.ApplicationMemoryReflinkRestore
+ 		const applicationMemoryFileName = "application_memory.active"
+ 		applicationMemoryFD, err := unix.Openat(
+ 			directoryFD,
+@@ -1709,7 +1734,7 @@
+ 		if err := os.Remove(s.ApplicationMemoryFilePath); err != nil && !os.IsNotExist(err) {
+ 			return fmt.Errorf("deleting application memory file %q: %w", s.ApplicationMemoryFilePath, err)
+ 		}
+-		if s.ApplicationMemoryRAMBacking {
++		if s.ApplicationMemoryRAMBacking || s.ApplicationMemoryReflinkRestore {
+ 			// A killed restore CLI may not have executed its deferred cleanup.
+ 			if err := os.Remove(s.ApplicationMemoryFilePath + ".restore"); err != nil && !os.IsNotExist(err) {
+ 				return fmt.Errorf("deleting incomplete RAM restore target: %w", err)

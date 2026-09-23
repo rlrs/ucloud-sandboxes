@@ -2,6 +2,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Barrier, Event, Lock, Thread
 import unittest
+from unittest.mock import patch
 
 from hypothesis import given, settings, strategies as st
 
@@ -17,6 +18,48 @@ from ucloud_sandboxes.runtime_metrics import (
 
 
 class RuntimeMetricsTests(unittest.TestCase):
+    def test_configured_backing_evidence_is_shared_with_custom_host_provider(self):
+        from ucloud_sandboxes.node_agent import _host_runtime_metrics_sampler
+        from ucloud_sandboxes.resource_evidence import MemoryBackingCapacity
+
+        metrics = NodeRuntimeMetrics(collected_at=utc_now())
+        unknown = MemoryBackingCapacity()
+        with patch('ucloud_sandboxes.resource_evidence.sample_memory_backing', return_value=unknown) as backing:
+            sampler = _host_runtime_metrics_sampler(lambda: metrics,
+                                                    memory_backing_root=Path('/active'))
+            samples = [sampler() for _ in range(100)]
+        self.assertTrue(all(sample is samples[0] for sample in samples))
+        self.assertEqual(samples[0].memory_backing, unknown)
+        backing.assert_called_once_with(Path('/active'))
+
+    def test_foreground_uses_cached_cpu_but_reads_current_memory_without_sleep(self):
+        from ucloud_sandboxes.resource_admission import dynamic_pressure_error
+        from ucloud_sandboxes.models import ResourceQuantity
+        from ucloud_sandboxes.resource_evidence import MemoryPressure
+
+        def pressure(available):
+            return MemoryPressure(0, {"MemTotal": 8192 * 1024, "MemAvailable": available * 1024}, {}, {})
+
+        with (
+            patch("ucloud_sandboxes.runtime_metrics._RESOURCE_EVIDENCE") as background,
+            patch("ucloud_sandboxes.runtime_metrics.read_memory_pressure", side_effect=[pressure(6000), pressure(100)]),
+            patch("ucloud_sandboxes.runtime_metrics.os.getloadavg", return_value=(0, 0, 0)),
+            patch("ucloud_sandboxes.runtime_metrics.os.cpu_count", return_value=4),
+            patch("time.sleep", side_effect=AssertionError("foreground must not sleep")),
+        ):
+            background.cached.return_value = None
+            background.cached_cpu_percent.side_effect = [25, None]
+            first = sample_node_runtime_metrics()
+            second = sample_node_runtime_metrics()
+        self.assertEqual(first.cpu_percent, 25)
+        self.assertEqual(first.cpu_vcpu, 1)
+        self.assertIsNone(second.cpu_percent)
+        self.assertIsNone(second.cpu_vcpu)
+        self.assertEqual(second.memory_available_mb, 100)
+        requested = ResourceQuantity(1, 1024, 0)
+        self.assertIsNone(dynamic_pressure_error(first, requested))
+        self.assertIn("memory", dynamic_pressure_error(second, requested))
+
     def test_file_backed_guest_ram_is_visible_without_changing_host_free_memory(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)
@@ -24,7 +67,7 @@ class RuntimeMetricsTests(unittest.TestCase):
                 "MemTotal: 92160000 kB\nMemAvailable: 81920000 kB\n"
                 "Mapped: 71680000 kB\nShmem: 1024000 kB\n"
             )
-            metrics = sample_node_runtime_metrics(proc_root=root, sample_seconds=0)
+            metrics = sample_node_runtime_metrics(proc_root=root)
             self.assertEqual(metrics.memory_available_mb, 80000)
             self.assertEqual(metrics.memory_used_mb, 10000)
             self.assertEqual(metrics.memory_working_set_mb, 79000)
@@ -262,7 +305,7 @@ class RuntimeMetricsTests(unittest.TestCase):
                 read_proc_pressure(root / "pressure" / "memory"),
                 {"some": 1.25, "full": 0.75},
             )
-            sampled = sample_node_runtime_metrics(proc_root=root, sample_seconds=0)
+            sampled = sample_node_runtime_metrics(proc_root=root)
 
         self.assertEqual(sampled.memory_total_mb, 1024)
         self.assertEqual(sampled.memory_available_mb, 768)
@@ -277,3 +320,45 @@ class RuntimeMetricsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ResidentWaitMetricsTests(unittest.TestCase):
+    def test_worker_snapshot_roundtrips_and_gateway_accepts_older_workers(self):
+        from dataclasses import replace
+        from types import SimpleNamespace
+        from ucloud_sandboxes.background_io import Pressure
+        from ucloud_sandboxes.models import ResidentWaitMetrics
+        from ucloud_sandboxes.node_agent import NodeAgentHandler
+        from ucloud_sandboxes.warm_park import WarmParkPolicy
+
+        policy = WarmParkPolicy(lambda: Pressure(.20, 0))
+        handler = SimpleNamespace(
+            runtime_metrics_provider=lambda: NodeRuntimeMetrics(collected_at=utc_now()),
+            image_manager=SimpleNamespace(pull_operation_snapshot=lambda: {}),
+            manager=SimpleNamespace(resident_wait_snapshot=policy.snapshot),
+            rootfs_metrics_provider=None,
+        )
+        metrics = NodeAgentHandler._runtime_metrics_snapshot(handler)
+        self.assertIsInstance(metrics.resident_wait, ResidentWaitMetrics)
+        self.assertEqual(NodeRuntimeMetrics.from_dict(metrics.to_dict()), metrics)
+        wire = metrics.to_dict()
+        for name in ("admitted_demand_bytes", "pending_demand_bytes",
+                     "unknown_transition_memory_costs", "admitted_ram_backing_bytes", "pending_ram_backing_bytes"):
+            del wire['resident_wait'][name]
+        # Readers precede workers: old reports mean unknown, never zero demand.
+        self.assertEqual(NodeRuntimeMetrics.from_dict(wire), metrics)
+        current = metrics.to_dict()
+        current['resident_wait'].update(admitted_demand_bytes=4096,
+                                       pending_demand_bytes=2048,
+                                       unknown_transition_memory_costs=1)
+        self.assertEqual(NodeRuntimeMetrics.from_dict(current).to_dict(), current)
+        legacy = metrics.to_dict()
+        del legacy['resident_wait']
+        self.assertEqual(NodeRuntimeMetrics.from_dict(legacy), replace(metrics, resident_wait=None))
+        for field, value in [('reason', []), ('reason', 'invented'), ('resident_waits', True),
+                             ('reclaim_target_bytes', -1), ('checkpoint_inflight', 1.5),
+                             ('admitted_demand_bytes', True), ('pending_demand_bytes', -1),
+                             ('unknown_transition_memory_costs', 1.5)]:
+            raw = metrics.to_dict()
+            raw['resident_wait'][field] = value
+            self.assertIsNone(NodeRuntimeMetrics.from_dict(raw))

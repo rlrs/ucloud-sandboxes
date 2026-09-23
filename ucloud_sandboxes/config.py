@@ -15,6 +15,7 @@ from .providers import (
 )
 from .storage_native_publication import DEFAULT_MAX_CONCURRENT_PUBLICATIONS
 from .telemetry import TelemetrySettings
+from .environment_config import EnvironmentDeploymentConfig
 
 
 DEPLOYMENT_CONFIG_SCHEMA = 5
@@ -273,6 +274,9 @@ class SandboxPoolConfig:
     direct_disk_headroom_mb: int = 16 * 1024
     direct_max_concurrent_restores: int = 8
     direct_idle_park_seconds: float = 0.0
+    direct_split_memory_backing: bool = False
+    direct_ram_memory_backing: bool = False
+    direct_reflink_memory_restore: bool = False
     max_concurrent_image_pulls: int = 8
 
     @property
@@ -293,7 +297,9 @@ class SandboxPoolConfig:
     def from_dict(cls, raw: object) -> "SandboxPoolConfig":
         # Optional extension of schema 5; existing deployment files remain valid.
         if isinstance(raw, dict):
-            raw = {"network_relays": {}, **raw}
+            raw = {"network_relays": {}, "direct_split_memory_backing": False,
+                   "direct_ram_memory_backing": False,
+                   "direct_reflink_memory_restore": False, **raw}
         values = _exact_dataclass_values("sandbox", raw, cls())
         values["direct_network_allow_tcp"] = _string_tuple(
             "sandbox.direct_network_allow_tcp",
@@ -347,6 +353,16 @@ class SandboxPoolConfig:
                 "sandbox.storage_native_pool_high_watermark cannot exceed "
                 "sandbox.storage_native_max_ublk_devices"
             )
+        if not isinstance(result.direct_split_memory_backing, bool):
+            raise ValueError("sandbox.direct_split_memory_backing must be a boolean")
+        if not isinstance(result.direct_ram_memory_backing, bool):
+            raise ValueError("sandbox.direct_ram_memory_backing must be a boolean")
+        if result.direct_ram_memory_backing and not result.direct_split_memory_backing:
+            raise ValueError("RAM memory backing requires split memory backing")
+        if not isinstance(result.direct_reflink_memory_restore, bool):
+            raise ValueError("sandbox.direct_reflink_memory_restore must be a boolean")
+        if result.direct_reflink_memory_restore and not result.direct_split_memory_backing:
+            raise ValueError("reflink memory restore requires split memory backing")
         _require_sha1("sandbox.direct_runsc_commit", result.direct_runsc_commit)
         _require_repository(
             "sandbox.storage_native_repository", result.storage_native_repository
@@ -452,6 +468,7 @@ class DeploymentConfig:
     builder: BuilderPoolConfig
     node_package_root: str = DEFAULT_INSTALL_ROOT + "/release"
     relay_postgres: RelayPostgresConfig | None = None
+    immutable_environments: EnvironmentDeploymentConfig | None = None
 
     @classmethod
     def default(cls, scope_id: str = "project-id") -> "DeploymentConfig":
@@ -508,7 +525,7 @@ class DeploymentConfig:
     def from_dict(cls, raw: object) -> "DeploymentConfig":
         if not isinstance(raw, dict):
             raise ValueError("deployment config must be a JSON object")
-        raw = {"node_package_root": DEFAULT_INSTALL_ROOT + "/release", "relay_postgres": None, **raw}
+        raw = {"node_package_root": DEFAULT_INSTALL_ROOT + "/release", "relay_postgres": None, "immutable_environments": None, **raw}
         expected = {item.name for item in fields(cls)}
         schema = _require_int("schema", raw.get("schema"), minimum=1)
         if schema != DEPLOYMENT_CONFIG_SCHEMA:
@@ -544,6 +561,7 @@ class DeploymentConfig:
             schema=schema,
             deployment_id=_require_string("deployment_id", raw["deployment_id"]),
             relay_postgres=RelayPostgresConfig.from_dict(raw["relay_postgres"]),
+            immutable_environments=EnvironmentDeploymentConfig.from_dict(raw["immutable_environments"]),
             provider=provider,
             data_root=_require_absolute_path("data_root", raw["data_root"]),
             node_package_root=_require_absolute_path(
@@ -639,6 +657,8 @@ class DeploymentConfig:
             sandbox=sandbox,
             builder=builder,
         )
+        if result.sandbox.direct_split_memory_backing and result.snapshot_store.kind != "registry":
+            raise ValueError("split memory backing requires registry checkpoint publication; S3 split checkpoints are unsupported")
         if result.gateway_port in {result.relay_port, result.registry_port} or (
             result.relay_port == result.registry_port
         ):
@@ -759,6 +779,7 @@ class DeploymentConfig:
             "schema": self.schema,
             "deployment_id": self.deployment_id,
             **({"relay_postgres": asdict(self.relay_postgres)} if self.relay_postgres is not None else {}),
+            **({"immutable_environments": asdict(self.immutable_environments)} if self.immutable_environments is not None else {}),
             "provider": provider,
             "data_root": self.data_root,
             **(

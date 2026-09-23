@@ -358,6 +358,12 @@ def _store_build_context(server, archive: bytes) -> dict[str, object]:
     }
 
 
+def _prepare_wake_route(handler, route):
+    """Exercise the HTTP adapter's canonical preparation and return its route."""
+    prepared = handler._prepare_wake_placement(route)
+    return prepared[0] if prepared is not None else None
+
+
 class ControlPlaneTests(unittest.TestCase):
     def test_warm_wake_records_readiness_without_reading_placement_inventory(self):
         handler = object.__new__(control_plane.ControlPlaneHandler)
@@ -430,7 +436,7 @@ class ControlPlaneTests(unittest.TestCase):
                     with (
                         patch.object(handler, "_prepare_wake_placement", return_value=(route, False)),
                         patch.object(handler, "_route_worker_is_fresh", return_value=True),
-                        patch.object(handler, "_commit_successful_wake", return_value=replace(route, state="running")),
+                        patch.object(handler, "_commit_lifecycle_response", return_value=replace(route, state="running")),
                         patch.object(handler, "_proxy_request", proxy),
                         _running_server(gateway) as base,
                     ):
@@ -1932,6 +1938,8 @@ class ControlPlaneTests(unittest.TestCase):
                     capabilities=(
                         *legacy_destination.capabilities,
                         control_plane.HIBERNATE_LOCAL_CAPABILITY,
+                        control_plane.RUNTIME_COMPATIBILITY_CAPABILITY_PREFIX
+                        + snapshot.manifest.runtime.node_compatibility_sha256,
                     ),
                 )
             )
@@ -1959,7 +1967,7 @@ class ControlPlaneTests(unittest.TestCase):
 
             handler._proxy_request = proxy
 
-            selected = handler._ensure_parked_sandbox_wake_placement(route)
+            selected = _prepare_wake_route(handler, route)
             stored = routing.get_sandbox_readonly(route.sandbox_id)
 
         assert selected is not None
@@ -2931,6 +2939,13 @@ class ControlPlaneTests(unittest.TestCase):
         with _temporary_root() as root:
             routing = RoutingStore(root / "routes.sqlite")
             resources = ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=8192)
+            snapshot = _portable_snapshot("parked")
+            snapshot = replace(snapshot, manifest=replace(
+                snapshot.manifest, spec=SandboxSpec.from_dict({
+                    "id": "parked", "image": "cold-image", "parkable": True,
+                    "network": "none", "cpus": 4, "memory_mb": 8192, "disk_mb": 8192,
+                }),
+            ))
             parked = routing.upsert_sandbox(
                 _sandbox_route(
                     sandbox_id="parked",
@@ -2938,13 +2953,13 @@ class ControlPlaneTests(unittest.TestCase):
                     job_id="source-job",
                     node_url="http://source:8090",
                     resources=resources,
-                    spec={"id": "parked", "image": "cold-image"},
+                    spec=snapshot.manifest.spec.to_dict(),
                     state="parked",
                     storage_schema="storage-native-v1",
-                    snapshot_manifest_digest="sha256:" + "a" * 64,
-                    snapshot_repository="snapshots",
-                    snapshot_tag="parked-1",
-                    storage_snapshot={"published": True},
+                    snapshot_manifest_digest=snapshot.reference.manifest_digest,
+                    snapshot_repository=snapshot.reference.repository,
+                    snapshot_tag=snapshot.reference.tag,
+                    storage_snapshot=snapshot.to_dict(),
                 )
             )
             routing.upsert_sandbox(
@@ -3016,7 +3031,11 @@ class ControlPlaneTests(unittest.TestCase):
                     inventory_complete=True,
                 ),
             ):
-                heartbeats.upsert_heartbeat(heartbeat)
+                heartbeats.upsert_heartbeat(replace(heartbeat, capabilities=(
+                    *heartbeat.capabilities, control_plane.HIBERNATE_LOCAL_CAPABILITY,
+                    control_plane.RUNTIME_COMPATIBILITY_CAPABILITY_PREFIX
+                    + snapshot.manifest.runtime.node_compatibility_sha256,
+                )))
 
             handler = object.__new__(control_plane.ControlPlaneHandler)
             handler.routing_store = routing
@@ -3033,7 +3052,7 @@ class ControlPlaneTests(unittest.TestCase):
             def slow_prepare(_source, _destination):
                 pull_started.set()
                 release_pull.wait(timeout=2)
-                return False
+                raise control_plane.WakePlacementStopped(control_plane.WakeUnavailable("test image preparation pending"))
 
             handler._prepare_migration_destination_image = slow_prepare
             # This case intentionally exercises remote placement. The source
@@ -3041,7 +3060,7 @@ class ControlPlaneTests(unittest.TestCase):
             # host named "source" before the controlled slow image pull.
             handler._proxy_request = lambda *_args, **_kwargs: control_plane.ProxiedResponse(503, {}, b"{}")
             wake_thread = Thread(
-                target=handler._ensure_parked_sandbox_wake_placement,
+                target=lambda route: _prepare_wake_route(handler, route),
                 args=(parked,),
                 daemon=True,
             )
@@ -3147,7 +3166,7 @@ class ControlPlaneTests(unittest.TestCase):
             ).throw(AssertionError("unpublished wake must not begin migration"))
             handler._proxy_request = lambda *_args, **_kwargs: control_plane.ProxiedResponse(202, {}, b"{}")
 
-            selected = handler._ensure_parked_sandbox_wake_placement(parked)
+            selected = _prepare_wake_route(handler, parked)
             migrations = routing.sandbox_migrations(active_only=True)
 
         self.assertIsNone(selected)
@@ -5364,82 +5383,44 @@ class ControlPlaneTests(unittest.TestCase):
 
     def test_gateway_forwards_the_complete_file_upload_body(self) -> None:
         body = b"# /// script\n# dependencies = ['requests']\n# ///\nprint('visible')\n"
-        forwarded_requests: list[request.Request] = []
-        forwarded_bodies: list[bytes] = []
-        response_payload = json.dumps(
-            {
-                "ok": True,
-                "sandbox_id": "file-one",
-                "path": "/workspace/harness.py",
-                "size": len(body),
-            }
-        ).encode("utf-8")
-        remaining_response = bytearray(response_payload)
+        forwarded = []
 
-        class UploadResponse:
-            status = 200
-            headers = {
-                "Content-Type": "application/json",
-                "Content-Length": str(len(response_payload)),
-            }
+        class UploadNode(BaseHTTPRequestHandler):
+            def log_message(self, *_args):
+                pass
 
-            def __enter__(self) -> "UploadResponse":
-                return self
+            def do_PUT(self):
+                payload = self.rfile.read(int(self.headers['Content-Length']))
+                forwarded.append((payload, dict(self.headers)))
+                response = json.dumps({'ok': True, 'size': len(payload)}).encode()
+                self.send_response(200)
+                self.send_header('Content-Length', str(len(response)))
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(response)
 
-            def __exit__(self, *args: object) -> None:
-                return None
-
-            def read(self, size: int | None = None) -> bytes:
-                assert size is not None
-                chunk = bytes(remaining_response[:size])
-                del remaining_response[:size]
-                return chunk
-
-        def open_node(
-            proxied: request.Request,
-            **_kwargs: object,
-        ) -> UploadResponse:
-            forwarded_requests.append(proxied)
-            self.assertIsInstance(proxied.data, control_plane.RequestBodyStream)
-            forwarded_bodies.append(b"".join(iter(lambda: proxied.data.read(65536), b"")))
-            return UploadResponse()
-
-        with _temporary_root() as root:
+        node = ThreadingHTTPServer(('127.0.0.1', 0), UploadNode)
+        with _temporary_root() as root, _running_server(node) as node_url:
             heartbeat_file, route_file = _seed_gateway_node(
-                root,
-                node_url="http://node.invalid:8090",
-                sandbox_id="file-one",
+                root, node_url=node_url, sandbox_id='file-one',
             )
-            gateway = _gateway_server(
-                root,
-                heartbeat_file=heartbeat_file,
-                routing_file=route_file,
-            )
+            gateway = _gateway_server(root, heartbeat_file=heartbeat_file, routing_file=route_file)
             with _running_server(gateway):
-                host, port = gateway.server_address
-                with patch.object(control_plane, "_open_node_request", open_node):
-                    conn = HTTPConnection(host, port, timeout=5)
-                    try:
-                        conn.request(
-                            "PUT",
-                            ("/v1/sandboxes/file-one/files?path=/workspace/harness.py"),
-                            body=body,
-                            headers={"Content-Type": "application/octet-stream"},
-                        )
-                        response = conn.getresponse()
-                        uploaded = json.loads(response.read().decode("utf-8"))
-                    finally:
-                        conn.close()
-
+                conn = HTTPConnection(*gateway.server_address, timeout=5)
+                try:
+                    conn.request('PUT', '/v1/sandboxes/file-one/files?path=/workspace/harness.py',
+                                 body=body, headers={'Content-Type': 'application/octet-stream'})
+                    response = conn.getresponse()
+                    uploaded = json.loads(response.read())
+                finally:
+                    conn.close()
         self.assertEqual(response.status, 200)
-        self.assertEqual(uploaded["size"], len(body))
-        self.assertEqual(len(forwarded_requests), 1)
-        self.assertEqual(forwarded_bodies, [body])
-        self.assertEqual(forwarded_requests[0].get_header("Content-length"), str(len(body)))
-        self.assertEqual(
-            forwarded_requests[0].get_header("Content-type"),
-            "application/octet-stream",
-        )
+        self.assertEqual(uploaded['size'], len(body))
+        self.assertEqual(len(forwarded), 1)
+        self.assertEqual(forwarded[0][0], body)
+        headers = {key.lower(): value for key, value in forwarded[0][1].items()}
+        self.assertEqual(headers['content-length'], str(len(body)))
+        self.assertEqual(headers['content-type'], 'application/octet-stream')
 
     def test_content_addressed_context_survives_503_and_streams_to_builder(
         self,

@@ -260,6 +260,17 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "no local registry data directory"):
             config.registry_data_dir()
 
+    def test_split_checkpoint_requires_registry_before_worker_launch(self):
+        raw = self._raw()
+        raw["sandbox"]["direct_split_memory_backing"] = True
+        self.assertTrue(DeploymentConfig.from_dict(raw).sandbox.direct_split_memory_backing)
+        raw["snapshot_store"].update(kind="s3", endpoint="https://store.example",
+                                     bucket="snapshots", region="eu")
+        with self.assertRaisesRegex(ValueError, "requires registry checkpoint"):
+            DeploymentConfig.from_dict(raw)
+        raw["sandbox"]["direct_split_memory_backing"] = False
+        self.assertEqual(DeploymentConfig.from_dict(raw).snapshot_store.kind, "s3")
+
     def test_s3_snapshot_store_keeps_only_environment_names_in_state(self) -> None:
         raw = self._raw()
         raw["snapshot_store"] = {

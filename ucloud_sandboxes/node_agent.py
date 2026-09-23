@@ -3,12 +3,14 @@ from __future__ import annotations
 from .warm_park import WarmParkDeferred
 
 import base64
+import sqlite3
 import hmac
 import math
 import shutil
 import sys
 import time
 from dataclasses import replace
+from datetime import timedelta
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any, Callable
@@ -28,8 +30,13 @@ from .capabilities import (
     DISK_QUOTA_CAPABILITY,
     HIBERNATE_LOCAL_CAPABILITY,
     RELAY_WAKE_FENCE_CAPABILITY,
+    RESOURCE_PHASE_CAPABILITY,
     MANAGED_PRIMARY_CAPABILITY,
     STORAGE_NATIVE_CAPABILITY,
+    SPLIT_CHECKPOINT_CAPABILITY,
+    REFLINK_MEMORY_RESTORE_CAPABILITY,
+    HOST_EROFS_CAPABILITY,
+    RUNTIME_COMPATIBILITY_CAPABILITY_PREFIX,
     STORAGE_NATIVE_DETACH_CAPABILITY,
     STORAGE_NATIVE_MIGRATION_CAPABILITY,
 )
@@ -54,8 +61,8 @@ from .images import (
     materialize_uploaded_build_context,
     uploaded_build_context_reference,
 )
-from .managed_process import ManagedProcessError, ManagedProcessStart
-from .models import NodeRuntimeMetrics, ResourceQuantity, SandboxInventoryEntry, utc_now
+from .managed_process import ManagedProcessError, ManagedProcessReadUnavailable, ManagedProcessStart
+from .models import NodeRuntimeMetrics, ResidentWaitMetrics, ResourceQuantity, SandboxInventoryEntry, SandboxMemoryObservation, utc_now
 from .node_runtime import BuilderNodeRuntime, DirectNodeRuntime, NodeStateStore
 from .registry import heartbeat_to_dict
 from .runtime_metrics import (
@@ -79,7 +86,7 @@ from .sandbox import (
 )
 from .sandbox_exec import ExecSessionCapacityError, ExecSessionManager, SandboxExecSpec
 from .storage_native_migration import (
-    STORAGE_NATIVE_MIGRATION_SCHEMA,
+    SUPPORTED_STORAGE_NATIVE_MIGRATION_SCHEMAS,
     StorageNativeMigration,
 )
 from .telemetry import Telemetry
@@ -98,6 +105,7 @@ _PROCESS_NODE_EPOCH = uuid4().hex
 
 def _host_runtime_metrics_sampler(
     provider: Callable[[], NodeRuntimeMetrics | None] | None,
+    *, memory_backing_root: Path | None = None,
 ) -> SingleFlightRuntimeMetricsSampler:
     """Return the one host sampler shared by node heartbeat and admission.
 
@@ -106,7 +114,17 @@ def _host_runtime_metrics_sampler(
     lets tests and alternate collectors choose a different freshness window.
     """
 
-    source = provider if provider is not None else sample_node_runtime_metrics
+    source = provider if provider is not None else (
+        lambda: sample_node_runtime_metrics(memory_backing_root=memory_backing_root)
+    )
+    if provider is not None and memory_backing_root is not None:
+        from .resource_evidence import sample_memory_backing
+        # Explicit collectors still share the configured backing constraint;
+        # never silently disable RAM admission evidence in a custom provider.
+        def source():
+            metrics = provider()
+            return (replace(metrics, memory_backing=sample_memory_backing(memory_backing_root))
+                    if metrics is not None else None)
     if isinstance(source, SingleFlightRuntimeMetricsSampler):
         return source
     return SingleFlightRuntimeMetricsSampler(source)
@@ -612,11 +630,14 @@ class NodeAgentHandler(BuildContextHttpHandler):
             ) as span:
                 session = self.exec_manager.start(spec)
                 manager_timings = self.manager.consume_exec_start_timings()
+                session_timings = dict(session.start_timings)
                 start_ms = _elapsed_ms(started)
                 span.set_attribute("node.exec.start_ms", start_ms)
                 for key, value in manager_timings.items():
                     if isinstance(value, (int, float)) and not isinstance(value, bool):
                         span.set_attribute(f"node.exec.manager.{key}", value)
+                for key, value in session_timings.items():
+                    span.set_attribute(f"node.exec.session_start.{key}", value)
         except SandboxAdmissionClosedError as exc:
             self._write_json(
                 {
@@ -647,13 +668,15 @@ class NodeAgentHandler(BuildContextHttpHandler):
             {
                 "start_ms": start_ms,
                 "manager": manager_timings,
+                "session_start": session_timings,
             },
         )
         payload = (
             self.exec_manager.initial_events(session.id, wait_seconds=wait_seconds)
             if wait_seconds is not None else {"session": session.to_dict()}
         )
-        payload["timings"] = {"manager": manager_timings, "start_ms": start_ms}
+        payload["timings"] = {"manager": manager_timings, "start_ms": start_ms,
+                              "session_start": session_timings}
         self._write_json(payload, status=HTTPStatus.CREATED)
 
     def _start_managed_process(self, sandbox_id: str) -> None:
@@ -671,6 +694,9 @@ class NodeAgentHandler(BuildContextHttpHandler):
     def _managed_process_status(self, sandbox_id: str, job_id: str) -> None:
         try:
             record = self.manager.managed_process_status(sandbox_id, job_id)
+        except ManagedProcessReadUnavailable as exc:
+            self._write_exception(exc)
+            return
         except ManagedProcessError as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
             return
@@ -695,6 +721,9 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 offset=int((query.get("offset") or ["0"])[0]),
                 limit=int((query.get("limit") or [str(1024 * 1024)])[0]),
             )
+        except ManagedProcessReadUnavailable as exc:
+            self._write_exception(exc)
+            return
         except ManagedProcessError as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
             return
@@ -736,9 +765,14 @@ class NodeAgentHandler(BuildContextHttpHandler):
             if not isinstance(raw, dict):
                 raise ValueError("park payload must be a JSON object")
             relay_fields = {"relay_request_id", "generation"} if "relay_request_id" in raw else set()
+            if relay_fields and "resource_phase" in raw:
+                relay_fields.add("resource_phase")
             if set(raw) - relay_fields not in ({"operation_id"}, {"background", "operation_id"}):
                 raise ValueError("park payload has an invalid schema")
             relay_args = _relay_lifecycle_args(raw)
+            if "resource_phase" in raw:
+                from .relay_phase import transport_phase
+                relay_args["resource_phase"] = transport_phase(raw["resource_phase"])
             operation_id = raw.get("operation_id")
             if not isinstance(operation_id, str) or not operation_id.strip():
                 raise ValueError("operation_id must be a nonempty string")
@@ -789,17 +823,17 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 self._write_json(payload, status=HTTPStatus.ACCEPTED)
                 return
             registration = service._require_registration(sandbox_id)
-            storage_record = warden._storage_record(registration.to_direct_sandbox())
+            storage_record = warden.workspace_record(registration.to_direct_sandbox())
             if storage_record.state.value != "published":
                 self._write_json(payload)
                 return
             snapshot = service.describe_storage_native_snapshot(sandbox_id)
-            payload["storage_schema"] = "storage-native-v1"
+            payload["storage_schema"] = snapshot.schema
             payload["snapshot_sha256"] = snapshot.sha256
             payload["storage_snapshot"] = snapshot.to_dict()
-            payload["snapshot_manifest_digest"] = snapshot.publication.manifest_digest
-            payload["snapshot_repository"] = snapshot.publication.repository
-            payload["snapshot_tag"] = snapshot.publication.tag
+            payload["snapshot_manifest_digest"] = snapshot.reference.manifest_digest
+            payload["snapshot_repository"] = snapshot.reference.repository
+            payload["snapshot_tag"] = snapshot.reference.tag
         except (RuntimeError, ValueError) as exc:
             self._write_exception(exc)
             return
@@ -837,11 +871,11 @@ class NodeAgentHandler(BuildContextHttpHandler):
             return payload
         payload.update(
             {
-                "snapshot_manifest_digest": (snapshot.publication.manifest_digest),
-                "snapshot_repository": snapshot.publication.repository,
+                "snapshot_manifest_digest": (snapshot.reference.manifest_digest),
+                "snapshot_repository": snapshot.reference.repository,
                 "snapshot_sha256": snapshot.sha256,
-                "snapshot_tag": snapshot.publication.tag,
-                "storage_schema": STORAGE_NATIVE_MIGRATION_SCHEMA,
+                "snapshot_tag": snapshot.reference.tag,
+                "storage_schema": snapshot.schema,
                 "storage_snapshot": snapshot.to_dict(),
             }
         )
@@ -858,6 +892,14 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 record.spec.id,
                 record.generation,
             )
+        observation = None
+        sample_reader = getattr(self.manager.service, "cached_resident_memory_sample", None)
+        sample = sample_reader(record.spec.id, record.generation) if callable(sample_reader) else None
+        if sample is not None:
+            age = time.monotonic() - sample.sampled_at
+            if age >= 0:
+                observation = SandboxMemoryObservation(
+                    sample.current_bytes, (utc_now() - timedelta(seconds=age)).isoformat())
         return SandboxInventoryEntry(
             sandbox_id=record.spec.id,
             generation=record.generation,
@@ -865,14 +907,15 @@ class NodeAgentHandler(BuildContextHttpHandler):
             spec_hash=record.spec_hash or sandbox_spec_fingerprint(record.spec),
             state=record.state,
             resources=record.spec.requested_resources(),
-            storage_schema=(STORAGE_NATIVE_MIGRATION_SCHEMA if snapshot else ""),
+            storage_schema=(snapshot.schema if snapshot else ""),
             snapshot_manifest_digest=(
-                snapshot.publication.manifest_digest if snapshot else ""
+                snapshot.reference.manifest_digest if snapshot else ""
             ),
-            snapshot_repository=(snapshot.publication.repository if snapshot else ""),
-            snapshot_tag=(snapshot.publication.tag if snapshot else ""),
+            snapshot_repository=(snapshot.reference.repository if snapshot else ""),
+            snapshot_tag=(snapshot.reference.tag if snapshot else ""),
             storage_snapshot=(snapshot.to_dict() if snapshot else {}),
             storage_dependency=storage_dependency,
+            memory_observation=observation,
         )
 
     def _wake_sandbox(self, path: str) -> None:
@@ -957,7 +1000,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
             migration_id = str(raw.get("migration_id") or "").strip()
             requested_format = str(raw.get("format") or "").strip()
             service = self._direct_service()
-            if requested_format != STORAGE_NATIVE_MIGRATION_SCHEMA:
+            if requested_format not in SUPPORTED_STORAGE_NATIVE_MIGRATION_SCHEMAS:
                 raise ValueError("unsupported migration storage schema")
             migration = service.prepare_storage_native_move(
                 sandbox_id,
@@ -969,7 +1012,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
                         "migration_id": migration_id,
                         "sandbox_id": sandbox_id,
                         "snapshot_sha256": migration.sha256,
-                        "storage_schema": STORAGE_NATIVE_MIGRATION_SCHEMA,
+                        "storage_schema": migration.schema,
                         "storage_snapshot": migration.to_dict(),
                     }
                 }
@@ -987,9 +1030,11 @@ class NodeAgentHandler(BuildContextHttpHandler):
             sandbox_id = str(raw.get("sandbox_id") or "").strip()
             migration_id = str(raw.get("migration_id") or "").strip()
             storage_schema = str(raw.get("storage_schema") or "").strip()
-            if storage_schema != STORAGE_NATIVE_MIGRATION_SCHEMA:
+            if storage_schema not in SUPPORTED_STORAGE_NATIVE_MIGRATION_SCHEMAS:
                 raise ValueError("unsupported migration storage schema")
             migration = StorageNativeMigration.from_dict(raw.get("storage_snapshot"))
+            if migration.schema != storage_schema:
+                raise ValueError("migration envelope schema does not match its descriptor")
             if migration.manifest.sandbox_id != sandbox_id:
                 raise ValueError("storage-native migration belongs to another sandbox")
             expected_sha256 = str(raw.get("snapshot_sha256") or "").strip()
@@ -1005,7 +1050,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
         self._write_json(
             {
                 "sandbox": result.to_dict(),
-                "storage_schema": STORAGE_NATIVE_MIGRATION_SCHEMA,
+                "storage_schema": destination.schema,
                 "storage_snapshot": destination.to_dict(),
             },
             status=HTTPStatus.CREATED,
@@ -1075,12 +1120,12 @@ class NodeAgentHandler(BuildContextHttpHandler):
             return
         self._write_json(
             {
-                "storage_schema": STORAGE_NATIVE_MIGRATION_SCHEMA,
+                "storage_schema": snapshot.schema,
                 "snapshot_sha256": snapshot.sha256,
                 "storage_snapshot": snapshot.to_dict(),
-                "snapshot_manifest_digest": snapshot.publication.manifest_digest,
-                "snapshot_repository": snapshot.publication.repository,
-                "snapshot_tag": snapshot.publication.tag,
+                "snapshot_manifest_digest": snapshot.reference.manifest_digest,
+                "snapshot_repository": snapshot.reference.repository,
+                "snapshot_tag": snapshot.reference.tag,
             }
         )
 
@@ -1421,7 +1466,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
             image = str(raw.get("image") or "")
             image_id = str(raw["id"]) if raw.get("id") else None
             with self.manager.image_operation(self.image_manager):
-                failed_phase = "docker_pull"
+                failed_phase = getattr(self.image_manager.runtime, "pull_phase", "docker_pull")
                 with self.image_manager.pull_slot() as pull_admission:
                     pull_queue_ms = int(pull_admission["queue_wait_ms"])
                     pull_started = time.monotonic()
@@ -1493,8 +1538,13 @@ class NodeAgentHandler(BuildContextHttpHandler):
         pull_snapshot = self.image_manager.pull_operation_snapshot()
         if metrics is None:
             metrics = NodeRuntimeMetrics(collected_at=utc_now())
+        resident_wait_snapshot = getattr(self.manager, "resident_wait_snapshot", None)
         metrics = replace(
             metrics,
+            resident_wait=(
+                ResidentWaitMetrics.from_dict(resident_wait_snapshot())
+                if resident_wait_snapshot is not None else None
+            ),
             image_pull_active_operations=max(
                 0, int(pull_snapshot.get("active_operations") or 0)
             ),
@@ -1596,6 +1646,13 @@ class NodeAgentHandler(BuildContextHttpHandler):
         return False
 
     def _write_exception(self, exc: RuntimeError | ValueError) -> None:
+        if isinstance(exc, ManagedProcessReadUnavailable):
+            self._write_json(
+                {"error": str(exc), "error_code": "managed_process_read_unavailable", "retryable": True},
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+                headers={"Retry-After": "1", "X-UCloud-Sandbox-Retryable": "true"},
+            )
+            return
         if isinstance(exc, SandboxExecAdmissionDeferredError):
             self._write_json(
                 {
@@ -1682,6 +1739,7 @@ def build_builder_node_agent_server(
     build_context_store_dir: Path | None = None,
     node_epoch: str | None = None,
     telemetry: Telemetry | None = None,
+    environment_publisher: Callable[[Any], str] | None = None,
 ) -> HighBacklogThreadingHTTPServer:
     token = node_control_bearer_token.strip()
     if not token:
@@ -1708,6 +1766,7 @@ def build_builder_node_agent_server(
         queue_builds=True,
         max_concurrent_pulls=max_concurrent_image_pulls,
         telemetry=resolved_telemetry,
+        environment_publisher=environment_publisher,
     )
     context_store = BuildContextBlobStore(
         build_context_store_dir or image_file.parent / f"{image_file.stem}-contexts",
@@ -1779,7 +1838,10 @@ def build_direct_node_agent_server(
     configured_resources = total_resources or ResourceQuantity()
     if not configured_resources.is_valid:
         raise ValueError("total_resources cannot contain negative values")
-    host_runtime_metrics = _host_runtime_metrics_sampler(runtime_metrics_provider)
+    host_runtime_metrics = _host_runtime_metrics_sampler(
+        runtime_metrics_provider,
+        memory_backing_root=getattr(service.warden.config, "application_memory_root", None),
+    )
     resolved_telemetry = telemetry or Telemetry.disabled("ucloud-sandbox-node")
     if configured_resources.vcpu > 0 or configured_resources.memory_mb > 0:
         service.configure_active_capacity(
@@ -1790,6 +1852,10 @@ def build_direct_node_agent_server(
     manager = DirectNodeRuntime(service)
     manager.start()
     exec_manager = ExecSessionManager(manager, telemetry=resolved_telemetry)
+    from .environment_manifest import HOST_EROFS_ABI
+    if getattr(service.provisioner.overlays.image_store, "backend_abi", "") == HOST_EROFS_ABI:
+        from .environment_rootfs import EnvironmentImageRuntime
+        image_runtime = EnvironmentImageRuntime(service.provisioner.overlays.image_store)
     image_manager = ImageManager(
         ImageStore(image_file),
         image_runtime,
@@ -1826,6 +1892,7 @@ def build_direct_node_agent_server(
         DISK_QUOTA_CAPABILITY,
         HIBERNATE_LOCAL_CAPABILITY,
         RELAY_WAKE_FENCE_CAPABILITY,
+        RESOURCE_PHASE_CAPABILITY,
         "direct-runsc-v1",
     ]
     if service.provisioner.network_manager is not None:
@@ -1855,16 +1922,27 @@ def build_direct_node_agent_server(
             STORAGE_NATIVE_MIGRATION_CAPABILITY,
         )
     )
+    if (getattr(service.warden, "memory_backing", None) is not None
+            and getattr(service.provisioner, "checkpoint_store", None) is not None):
+        direct_capabilities.append(SPLIT_CHECKPOINT_CAPABILITY)
+        if getattr(service.warden.config, "reflink_memory_restore", False):
+            direct_capabilities.append(REFLINK_MEMORY_RESTORE_CAPABILITY)
+    fingerprint = getattr(getattr(service.warden, "config", None), "runtime_fingerprint", None)
+    if fingerprint is not None:
+        direct_capabilities.append(RUNTIME_COMPATIBILITY_CAPABILITY_PREFIX + fingerprint.node_compatibility_sha256)
+    if getattr(service.provisioner.overlays.image_store, "backend_abi", None) == HOST_EROFS_ABI:
+        direct_capabilities.append(HOST_EROFS_CAPABILITY)
     DirectBoundHandler.capabilities = tuple(direct_capabilities)
     DirectBoundHandler.image_builds_enabled = False
     DirectBoundHandler.sandboxes_enabled = True
     DirectBoundHandler.node_epoch = _resolve_node_epoch(node_epoch)
     DirectBoundHandler.physical_disk_path = service.provisioner.overlays.writable_root
-    DirectBoundHandler.image_materializer = staticmethod(
-        service.provisioner.image_store.warm
+    DirectBoundHandler.image_materializer = (
+        None if getattr(image_runtime, "materializes_rootfs", False)
+        else staticmethod(service.provisioner.overlays.warm)
     )
     DirectBoundHandler.rootfs_metrics_provider = staticmethod(
-        service.provisioner.image_store.operation_snapshot
+        service.provisioner.overlays.operation_snapshot
     )
     DirectBoundHandler.node_control_bearer_token = node_control_bearer_token
     DirectBoundHandler.max_json_body_bytes = max_json_body_bytes
@@ -1876,14 +1954,26 @@ def build_direct_node_agent_server(
         if metrics is None:
             return metrics
         try:
-            raw = storage.get_metrics()
-        except (OSError, RuntimeError):
+            raw = dict(storage.get_metrics())
+            memory_backing = getattr(service.warden, "memory_backing", None)
+            if memory_backing is not None:
+                # Both reservation ledgers charge the same physical budget.
+                # Native volumes contain only workspace bytes for split owners;
+                # add memory backing once, never another capacity/free figure.
+                memory = memory_backing.metrics()
+                raw["hard_reserved_bytes"] = int(raw.get("hard_reserved_bytes", 0)) + int(
+                    memory["memory_backing_hard_reserved_bytes"]
+                )
+                # Temporary source/clone overlap is owned by the same registry
+                # that admits new allocations, not by another capacity pool.
+                raw["hard_reserved_bytes"] += service.provisioner.registry.reflink_overlap_bytes()
+        except (OSError, RuntimeError, sqlite3.Error):
             return metrics
         mib = 1024 * 1024
         return replace(
             metrics,
             storage_hard_capacity_mb=(int(raw.get("hard_capacity_bytes", 0)) // mib),
-            storage_hard_reserved_mb=(int(raw.get("hard_reserved_bytes", 0)) // mib),
+            storage_hard_reserved_mb=((int(raw.get("hard_reserved_bytes", 0)) + mib - 1) // mib),
             storage_cache_mb=int(raw.get("cache_bytes", 0)) // mib,
             storage_active_operations=int(raw.get("active_operations", 0)),
             storage_waiting_operations=int(raw.get("waiting_operations", 0)),

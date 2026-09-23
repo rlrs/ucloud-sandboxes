@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
 import sqlite3
+import subprocess
 from tempfile import TemporaryDirectory
 import threading
 import time
@@ -39,6 +40,25 @@ from ucloud_sandboxes.storage_native_registry import (
 
 
 class LinuxVolumeReadaheadTests(unittest.TestCase):
+    def test_workspace_format_disables_only_supported_host_cpu_log_sizing(self):
+        for log_help, expected in (
+            ("/* log subvol */ [-l size=num,concurrency=num]\n/* label */", ("-l", "concurrency=0")),
+            ("/* log subvol */ [-l size=num]\n/* label */", ()),
+            # Data-device concurrency is not proof of log-option support.
+            ("/* data subvol */ [-d concurrency=num]\n/* log subvol */ [-l size=num]\n/* label */", ()),
+        ):
+            with self.subTest(log_help=log_help):
+                host = LinuxStorageHostOperations()
+                result = subprocess.CompletedProcess(("mkfs.xfs",), 1, "", log_help)
+                with (patch("ucloud_sandboxes.storage_native_daemon.subprocess.run", return_value=result) as probe,
+                      patch.object(host, "_run") as run):
+                    host.format_xfs(Path("/dev/ublkb17"))
+                    host.format_xfs(Path("/dev/ublkb18"))
+                probe.assert_called_once()
+                self.assertEqual(probe.call_args.args[0], ("mkfs.xfs", "-l", "help"))
+                for call, device in zip(run.call_args_list, ("/dev/ublkb17", "/dev/ublkb18")):
+                    self.assertEqual(call.args, ("mkfs.xfs", "-f", "-m", "reflink=1", "-n", "ftype=1", *expected, device))
+
     def test_reused_and_restored_mounts_configure_readahead_before_opening_files(self):
         host = LinuxStorageHostOperations()
         calls = []
@@ -531,6 +551,84 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
             migrated = StorageNativeJournal(service.journal.path)
             self.assertEqual(migrated.load("vol"), record)
             self.assertEqual(migrated.retired_devices(), [])
+
+    def test_capture_abort_retains_live_stack_and_fences_decisions(self):
+        with TemporaryDirectory() as raw:
+            service, backend, host = self._service(Path(raw))
+            owner = StorageVolumeOwner("volume", "sandbox", 1)
+            live = service.converge_volume(owner, action="prepare", operation_id="create", virtual_size=1 << 30)
+            args = {**owner.request_fields(), "operation_id": "capture", "expected_revision": live.revision}
+            captured = service.prepare_capture(**args)
+            self.assertEqual(captured.state, StorageVolumeState.CAPTURE_PREPARED)
+            self.assertEqual(captured.device_id, live.device_id)
+            self.assertEqual(host.frozen, set())
+            self.assertEqual(backend.restack_calls, 1)
+            self.assertEqual(service.prepare_capture(**args), captured)
+            service.reconcile()
+            self.assertEqual(service.journal.load(owner.volume_id).state, StorageVolumeState.CAPTURE_PREPARED)
+            with self.assertRaises(StorageNativeConflictError):
+                service.release_runtime(**owner.request_fields(), operation_id="early-release", expected_revision=captured.revision)
+            aborted = service.abort_capture(**owner.request_fields(), operation_id="abort", expected_revision=captured.revision)
+            self.assertEqual(aborted.state, StorageVolumeState.MOUNTED)
+            self.assertEqual(aborted.sealed_layer_paths, captured.sealed_layer_paths)
+            self.assertTrue(all(Path(path).exists() for path in aborted.sealed_layer_paths))
+            self.assertEqual(backend.delete_calls, [])
+            with self.assertRaises(StorageNativeConflictError):
+                service.commit_capture(**owner.request_fields(), operation_id="late-commit", expected_revision=captured.revision)
+            second = service.prepare_capture(**owner.request_fields(), operation_id="capture-2", expected_revision=aborted.revision)
+            self.assertEqual(len(second.sealed_layer_paths), 2)
+            with self.assertRaisesRegex(StorageNativeConflictError, "superseded"):
+                service.prepare_capture(**args)
+            with self.assertRaisesRegex(StorageNativeConflictError, "superseded"):
+                service.abort_capture(**owner.request_fields(), operation_id="abort", expected_revision=captured.revision)
+
+            committed = service.commit_capture(**owner.request_fields(), operation_id="commit", expected_revision=second.revision)
+            self.assertEqual(committed.state, StorageVolumeState.SEALED)
+            released = service.release_runtime(**owner.request_fields(), operation_id="release", expected_revision=committed.revision)
+            self.assertEqual(released.state, StorageVolumeState.RELEASED)
+            with self.assertRaisesRegex(StorageNativeConflictError, "superseded"):
+                service.commit_capture(**owner.request_fields(), operation_id="commit", expected_revision=second.revision)
+
+
+    def test_capture_failure_is_fenced_and_thaws_filesystem(self):
+        for failure in ("sync", "freeze", "snapshot", "thaw", "journal"):
+            with self.subTest(failure=failure), TemporaryDirectory() as raw:
+                service, backend, host = self._service(Path(raw))
+                owner = StorageVolumeOwner("volume", "sandbox", 1)
+                live = service.converge_volume(owner, action="prepare", operation_id="create", virtual_size=1 << 30)
+                target, method = {
+                    "sync": (host, "sync"), "freeze": (host, "freeze"),
+                    "snapshot": (backend, "restack_snapshot"),
+                    "thaw": (host, "unfreeze"), "journal": (service.journal, "finish"),
+                }[failure]
+                original = getattr(target, method)
+                calls = []
+                def fail_once(*args, **kwargs):
+                    calls.append(None)
+                    if len(calls) == 1:
+                        raise RuntimeError("injected capture failure")
+                    return original(*args, **kwargs)
+                with patch.object(target, method, side_effect=fail_once):
+                    with self.assertRaisesRegex(RuntimeError, "injected capture failure"):
+                        service.prepare_capture(**owner.request_fields(), operation_id="capture", expected_revision=live.revision)
+                failed = service.journal.load(owner.volume_id)
+                self.assertEqual(failed.state, StorageVolumeState.ERROR)
+                self.assertEqual(host.frozen, set())
+                self.assertIn(live.device_id, backend.live)
+                with self.assertRaises(StorageNativeConflictError):
+                    service.abort_capture(**owner.request_fields(), operation_id="abort", expected_revision=failed.revision)
+
+    def test_interrupted_capture_is_not_replayed_or_released(self):
+        with TemporaryDirectory() as raw:
+            service, backend, _ = self._service(Path(raw))
+            owner = StorageVolumeOwner("volume", "sandbox", 1)
+            live = service.converge_volume(owner, action="prepare", operation_id="create", virtual_size=1 << 30)
+            service._begin_transition(**owner.request_fields(), operation_id="capture", expected_revision=live.revision,
+                kind="PrepareCapture", allowed_states={StorageVolumeState.MOUNTED}, next_state=StorageVolumeState.PREPARING_CAPTURE)
+            service.reconcile()
+            self.assertEqual(service.journal.load(owner.volume_id).state, StorageVolumeState.ERROR)
+            self.assertIn(live.device_id, backend.live)
+            self.assertEqual(backend.restack_calls, 0)
 
     def _service(
         self,
@@ -1400,6 +1498,15 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
                 virtual_size=1 << 30,
             )
             self.assertEqual(created.state, StorageVolumeState.MOUNTED)
+            owner = StorageVolumeOwner("volume-1", "sandbox-1", 4)
+            prepared = client.prepare_capture(owner, operation_id="capture", expected_revision=created.revision)
+            self.assertEqual(prepared.state, StorageVolumeState.CAPTURE_PREPARED)
+            aborted = client.abort_capture(owner, operation_id="abort", expected_revision=prepared.revision)
+            self.assertEqual(aborted.state, StorageVolumeState.MOUNTED)
+            prepared = client.prepare_capture(owner, operation_id="capture-again", expected_revision=aborted.revision)
+            sealed = client.commit_capture(owner, operation_id="commit", expected_revision=prepared.revision)
+            self.assertEqual(sealed.state, StorageVolumeState.SEALED)
+            capture_released = client.ensure_released(owner, operation_id="release-capture")
             other = client.prepare_volume(
                 StorageVolumeOwner("volume-2", "sandbox-2", 4),
                 operation_id="create:1",
@@ -1421,7 +1528,7 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
             self.assertEqual(metrics["waiting_operations"], 0)
             self.assertEqual(
                 client.get_volume("volume-1").revision,
-                1,
+                capture_released.revision,
             )
             released = client.ensure_released(
                 created.owner,

@@ -533,6 +533,73 @@ class ImageRootfsTests(unittest.TestCase):
             self.assertFalse(lease.sandbox.bundle.exists())
             self.assertFalse(lease.upper.parent.exists())
 
+    def test_legacy_bundle_rebind_preserves_metadata_and_checkpoint_identity(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            runner = Overlay2Runner(root / "docker")
+            manager = OverlayRootfsManager(
+                image_store(root, runner),
+                writable_root=(root / "writable").resolve(),
+                bundle_root=(root / "bundles").resolve(),
+                runner=runner,
+            )
+            with manager.resolve("example/image:latest") as image:
+                lease = manager.prepare(
+                    sandbox_id="sandbox-legacy", sandbox_generation=1,
+                    image=image, config_template={},
+                )
+            metadata_path = lease.sandbox.bundle / ".ucloud-overlay.json"
+            legacy = json.dumps({
+                "schema": 1, "image_id": image.image_id,
+                "lowerdir": str(image.rootfs),
+                "rootfs_identity_sha256": image.rootfs_identity_sha256,
+            }).encode("ascii")
+            metadata_path.write_bytes(legacy)
+            manager.park_sandbox(lease.sandbox)
+            manager.resume_sandbox(lease.sandbox)
+            self.assertIn(str(lease.merged), runner.mounted)
+            self.assertEqual(metadata_path.read_bytes(), legacy)
+            self.assertEqual(lease.sandbox.rootfs_sha256, image.rootfs_identity_sha256)
+            manager.release(lease)
+
+    def test_bundle_rejects_changed_environment_before_remount(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            runner = Overlay2Runner(root / "docker")
+            manager = OverlayRootfsManager(
+                image_store(root, runner),
+                writable_root=(root / "writable").resolve(),
+                bundle_root=(root / "bundles").resolve(),
+                runner=runner,
+            )
+            with manager.resolve("example/image:latest") as image:
+                lease = manager.prepare(
+                    sandbox_id="sandbox-changed", sandbox_generation=1,
+                    image=image, config_template={},
+                )
+            metadata_path = lease.sandbox.bundle / ".ucloud-overlay.json"
+            metadata = json.loads(metadata_path.read_text())
+            self.assertEqual(metadata["schema"], 1)
+            # Qualify the new reader before any production writer is enabled.
+            metadata.pop("image_id")
+            metadata.update({
+                "schema": 2, "environment": image.environment.to_dict(),
+                "backend_abi": "ucloud-overlay2-rootfs-v1",
+            })
+            manager.park_sandbox(lease.sandbox)
+            for change in (
+                {"environment": {**metadata["environment"], "base": "sha256:" + "b" * 64}},
+                {"backend_abi": "erofs-v1"},
+                {"environment": {**metadata["environment"], "toolkits": ["sha256:" + "b" * 64]}},
+            ):
+                metadata_path.write_text(json.dumps({**metadata, **change}))
+                with self.assertRaisesRegex(DirectWardenError, "metadata changed"):
+                    manager.resume_sandbox(lease.sandbox)
+                self.assertNotIn(str(lease.merged), runner.mounted)
+            metadata_path.write_text(json.dumps(metadata))
+            manager.resume_sandbox(lease.sandbox)
+            manager.release(lease)
+
     def test_overlay_prepare_unmounts_and_removes_partial_state(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw)

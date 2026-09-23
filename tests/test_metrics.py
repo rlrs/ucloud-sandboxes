@@ -62,7 +62,7 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(signals.pressure_samples, 3)
         self.assertEqual(signals.io_psi_full_avg10, 35)
         decision = evaluate_scale([node("busy", active=64)], SandboxDemand(), policy=policy, live_signals=signals)
-        self.assertEqual(decision.creates, 1)
+        self.assertEqual(decision.creates, min(policy.max_create_per_cycle, policy.max_nodes - 1))
         self.assertTrue(any("io-psi=35" in reason for reason in decision.reasons))
         decision = evaluate_scale([node("busy", active=64), node("idle")], SandboxDemand(), policy=policy, live_signals=signals)
         self.assertEqual(decision.creates, 0)

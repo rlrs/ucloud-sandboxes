@@ -8,13 +8,14 @@ import argparse
 import asyncio
 
 from ucloud_sandboxes import cli
+from ucloud_sandboxes.relay_lifecycle import RelayLifecycleDispatcher
 
 
 def dispatcher_with_park_concurrency(concurrency):
     if concurrency < 1:
         raise ValueError("park concurrency must be positive")
 
-    class QualifiedDispatcher(cli._RelayLifecycleDispatcher):
+    class QualifiedDispatcher(RelayLifecycleDispatcher):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
             self._qualification_park_slots = asyncio.Semaphore(concurrency)
@@ -35,7 +36,9 @@ def main():
     args = parser.parse_args()
     if args.park_concurrency < 1:
         parser.error("park concurrency must be positive")
-    cli._RelayLifecycleDispatcher = dispatcher_with_park_concurrency(args.park_concurrency)
+    cli.RelayLifecycleDispatcher = dispatcher_with_park_concurrency(
+        args.park_concurrency
+    )
     return cli.main(["serve-model-relay", "--config", args.config])
 
 

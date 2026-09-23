@@ -14,6 +14,12 @@ from psycopg.types.json import Jsonb
 
 from .. import model_relay as api
 from .relay import PostgresRelayState
+from .legacy_relay import (
+    SQLITE_RELAY_VERSION,
+    read_rows,
+    decode_request,
+    encode_request,
+)
 
 AUTHORITY_KEY = "postgres_authority"
 
@@ -59,23 +65,10 @@ async def import_idle_relay(store, path: Path):
         fenced = source.execute(
             "SELECT value FROM relay_meta WHERE key=?", (AUTHORITY_KEY,)
         ).fetchone()
-        valid_version = (
-            api.RelaySqliteStore.VERSION + 1 if fenced else api.RelaySqliteStore.VERSION
-        )
+        valid_version = SQLITE_RELAY_VERSION + 1 if fenced else SQLITE_RELAY_VERSION
         if version is None or int(version[0]) != valid_version:
             raise ValueError("unsupported SQLite relay version")
-        rollouts = [
-            json.loads(r[0])
-            for r in source.execute(
-                "SELECT payload FROM relay_rollouts ORDER BY rollout_id"
-            )
-        ]
-        requests = [
-            json.loads(r[0])
-            for r in source.execute(
-                "SELECT payload FROM relay_requests ORDER BY request_id"
-            )
-        ]
+        rollouts, requests = read_rows(source)
         digest = hashlib.sha256(
             json.dumps(
                 [rollouts, requests], sort_keys=True, separators=(",", ":")
@@ -91,10 +84,7 @@ async def import_idle_relay(store, path: Path):
             raise ValueError(
                 "SQLite relay is already assigned to another authority or its contents changed"
             )
-        decoded = [
-            api._request_from_persisted_payload(r, loop=asyncio.get_running_loop())
-            for r in requests
-        ]
+        decoded = [decode_request(r, loop=asyncio.get_running_loop()) for r in requests]
         if any(r.state != "completed" or r.delivery_pending for r in decoded):
             raise ValueError(
                 "relay must be idle with no pending deliveries before cutover"
@@ -157,7 +147,7 @@ async def import_idle_relay(store, path: Path):
                             ),
                         )
                         known.add(request.rollout_id)
-                    values = api._persisted_request_payload(request)
+                    values = encode_request(request)
                     for key in ("body", "headers", "completed_response"):
                         values.pop(key)
                     values["deployment_id"] = store.deployment_id
@@ -207,7 +197,7 @@ async def import_idle_relay(store, path: Path):
         # before import is still mandatory; never rely on a startup-only fence.
         source.execute(
             "UPDATE relay_meta SET value=? WHERE key='version'",
-            (str(api.RelaySqliteStore.VERSION + 1),),
+            (str(SQLITE_RELAY_VERSION + 1),),
         )
         source.commit()
         async with store.transaction("relay_activate_import") as conn:

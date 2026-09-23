@@ -28,6 +28,7 @@ from ucloud_sandboxes.image_rootfs import (
     DockerImageConfig,
     MaterializedRootfs,
     OverlayRootfsLease,
+    OverlayRootfsManager,
 )
 from ucloud_sandboxes.images import DockerImageRuntime
 from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, utc_now
@@ -243,7 +244,7 @@ class FakeStorage:
         )
 
 
-class FakeOverlays:
+class FakeOverlays(OverlayRootfsManager):
     require_precreated_writable = True
 
     def __init__(self, image_store: FakeImageStore, root: Path) -> None:
@@ -253,7 +254,7 @@ class FakeOverlays:
         self.writable_root.mkdir()
         self.bundle_root.mkdir()
 
-    def discard_unregistered(self, *, sandbox_id, sandbox_generation):
+    def discard_unregistered(self, *, sandbox_id, sandbox_generation, workspace_directory=""):
         bundle = self.bundle_root / f"{sandbox_id}.sandbox-{sandbox_generation}"
         if bundle.exists():
             shutil.rmtree(bundle)
@@ -267,9 +268,11 @@ class FakeOverlays:
         config_template,
         spec_sha256,
         imported_parked=False,
+        workspace_directory="",
+        memory=None,
     ):
         incarnation = f"{sandbox_id}.sandbox-{sandbox_generation}"
-        writable = self.writable_root / incarnation
+        writable = self.writable_root / (workspace_directory or incarnation)
         if not writable.is_dir():
             raise AssertionError("quota was not prepared first")
         upper = writable / "upper"
@@ -293,6 +296,8 @@ class FakeOverlays:
             rootfs_sha256=image.rootfs_identity_sha256,
             bundle=bundle,
             memory_directory=incarnation,
+            workspace_directory=workspace_directory,
+            memory=memory,
         )
         return OverlayRootfsLease(
             sandbox=sandbox,
@@ -310,6 +315,9 @@ class FakeOverlays:
 
 
 class FakeWarden:
+    memory_backing = None
+    def application_memory_mode(self, sandbox_id, generation):
+        return "ram"  # These admission fixtures model bounded unswappable heaps.
     def __init__(self, root: Path, storage: FakeStorage) -> None:
         fingerprint = HibernationRuntimeFingerprint(
             runsc_sha256="d" * 64,
@@ -345,6 +353,9 @@ class FakeWarden:
     def inspect_snapshot(self, sandbox):
         return self.records.get(self.key(sandbox))
 
+    def reconcile_retired_memory_capacity(self):
+        return 0
+
     def discard_unjournaled(self, sandbox):
         if self.inspect(sandbox) is not None:
             raise AssertionError("journal already exists")
@@ -352,7 +363,7 @@ class FakeWarden:
 
     def create(self, sandbox, *, operation_id):
         del operation_id
-        record = SimpleNamespace(state=HibernationState.RUNNING)
+        record = SimpleNamespace(state=HibernationState.RUNNING, hibernation_generation=1)
         self.records[self.key(sandbox)] = record
         return record
 
@@ -373,7 +384,7 @@ class FakeWarden:
         )
 
     @staticmethod
-    def _storage_record(_sandbox):
+    def workspace_record(_sandbox):
         return SimpleNamespace(state=StorageVolumeState.MOUNTED)
 
     def storage_records_snapshot(self, sandboxes):
@@ -384,9 +395,13 @@ class FakeWarden:
 
     def park(self, sandbox, *, operation_id):
         del operation_id
-        record = SimpleNamespace(state=HibernationState.PARKED)
+        record = SimpleNamespace(state=HibernationState.PARKED, hibernation_generation=1)
         self.records[self.key(sandbox)] = record
         return record
+
+    def prepare_restore_memory(self, sandbox):
+        if self.records[self.key(sandbox)].state != HibernationState.PARKED:
+            raise AssertionError("memory placement requires a parked owner")
 
     def resume(self, sandbox, *, operation_id, timings=None, before_restore=None):
         del operation_id
@@ -394,13 +409,13 @@ class FakeWarden:
             before_restore()
         if timings is not None:
             timings["runsc_restore"] = 1.0
-        record = SimpleNamespace(state=HibernationState.RUNNING)
+        record = SimpleNamespace(state=HibernationState.RUNNING, hibernation_generation=1)
         self.records[self.key(sandbox)] = record
         return record
 
     def adopt_parked(self, sandbox, manifest):
         del manifest
-        record = SimpleNamespace(state=HibernationState.PARKED)
+        record = SimpleNamespace(state=HibernationState.PARKED, hibernation_generation=1)
         self.records[self.key(sandbox)] = record
         return record
 
@@ -441,7 +456,6 @@ class DirectProvisionerTests(unittest.TestCase):
         registry = DirectSandboxRegistry((root / "registry.sqlite").resolve())
         provisioner = DirectSandboxProvisioner(
             registry=registry,
-            image_store=images,
             overlays=overlays,
             oci=DirectOciConfigBuilder(),
             warden=warden,
@@ -1249,6 +1263,23 @@ class DirectProvisionerTests(unittest.TestCase):
                 self.assertEqual(len(runner.calls), 1)
                 self.assertEqual(service.activity_snapshot().active_operations, 0)
 
+    def test_managed_file_operations_reuse_injected_helper(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, _ = self.make(root)
+            binary = Path("/bin/sh").resolve()
+            provisioner.oci = replace(provisioner.oci, managed_init_binary=binary)
+            runner = FakeProcessRunner()
+            service = DirectSandboxService(provisioner, process_runner=runner)
+            record = self.create(service, replace(self.spec(), parkable=True, managed_process=True))
+            service.write_file(record.spec.id, "/workspace/quoted '$ file", b"\0binary")
+            self.assertEqual(runner.calls[-1][0][3:],
+                ("/.ucloud-job-init", "files", "write", "/workspace/quoted '$ file", "7"))
+            self.assertEqual(runner.calls[-1][1], b"\0binary")
+            self.assertEqual(service.read_file(record.spec.id, "/workspace/quoted '$ file", max_bytes=4096), b"ok\n")
+            self.assertEqual(runner.calls[-1][0][3:],
+                ("/.ucloud-job-init", "files", "read", "/workspace/quoted '$ file", "4096"))
+
     def test_file_wait_releases_owner_lock_and_fences_replacement_and_drain(self) -> None:
         for change in ("generation", "drain"):
             with self.subTest(change=change), TemporaryDirectory() as raw:
@@ -1419,7 +1450,7 @@ class DirectProvisionerTests(unittest.TestCase):
             created = self.create(service, self.spec())
             service.park(created.spec.id, operation_id="park:test")
             digest = "sha256:" + "a" * 64
-            warden._storage_record = lambda _sandbox: SimpleNamespace(
+            warden.workspace_record = lambda _sandbox: SimpleNamespace(
                 state=StorageVolumeState.PUBLISHED,
                 published_manifest_digest=digest,
             )
@@ -1592,6 +1623,7 @@ class DirectProvisionerTests(unittest.TestCase):
                 provisioner,
                 process_runner=FakeProcessRunner(),
             )
+            service.admission_wait_seconds = 0.02
             service.configure_active_capacity(
                 ResourceQuantity(vcpu=4, memory_mb=8192),
                 runtime_metrics_provider=lambda: NodeRuntimeMetrics(
@@ -1599,17 +1631,17 @@ class DirectProvisionerTests(unittest.TestCase):
                     cpu_percent=95.0,
                     cpu_count=4,
                     memory_total_mb=8192,
-                    memory_available_mb=8192,
+                    memory_available_mb=1024,
                 ),
             )
 
             with self.assertRaisesRegex(
                 SandboxCapacityUnavailableError,
-                "CPU pressure",
+                "memory headroom",
             ):
                 self.create(service, self.spec())
 
-    def test_wake_waits_for_a_fresh_cpu_sample(self) -> None:
+    def test_wake_does_not_wait_for_a_lower_cpu_sample(self) -> None:
         for action in ("wake", "implicit_wake"):
             with self.subTest(action=action), TemporaryDirectory() as raw:
                 provisioner, _, _, _, _ = self.make(Path(raw).resolve())
@@ -1657,11 +1689,10 @@ class DirectProvisionerTests(unittest.TestCase):
                         service.activity_snapshot().active_exec_operations, 1
                     )
                     service.release_exec_capacity(token)
-                self.assertEqual(len(calls), 2)
-                self.assertGreaterEqual(calls[1] - calls[0], 0.2)
+                self.assertEqual(len(calls), 1)
                 self.assertEqual(service.activity_snapshot().active_operations, 0)
 
-    def test_sustained_cpu_wait_has_one_second_deadline_and_no_reservation(
+    def test_sustained_cpu_load_uses_existing_transition_reservation(
         self,
     ) -> None:
         with TemporaryDirectory() as raw:
@@ -1696,36 +1727,24 @@ class DirectProvisionerTests(unittest.TestCase):
                     side_effect=lambda seconds: now.__setitem__(0, now[0] + seconds),
                 ) as wait,
             ):
-                with self.assertRaisesRegex(
-                    SandboxCapacityUnavailableError, "CPU pressure"
+                with service._reserve_active_capacity(
+                    "new", 1, ResourceQuantity(vcpu=1, memory_mb=1024)
                 ):
-                    with service._reserve_active_capacity(
-                        "new", 1, ResourceQuantity(vcpu=1, memory_mb=1024)
-                    ):
-                        self.fail("persistent CPU pressure admitted work")
-            self.assertEqual(len(calls), 4)
-            self.assertEqual(wait.call_count, 3)
+                    self.assertEqual(service.activity_snapshot().active_operations, 1)
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(wait.call_count, 0)
             self.assertLessEqual(now[0] - 10.0, 1.0)
             self.assertEqual(service.activity_snapshot().active_operations, 0)
 
-    def test_unknown_or_memory_pressure_never_waits_even_with_cpu_pressure(
+    def test_unknown_pressure_never_waits_even_with_cpu_pressure(
         self,
     ) -> None:
         with TemporaryDirectory() as raw:
             provisioner, _, _, _, _ = self.make(Path(raw).resolve())
             service = DirectSandboxService(provisioner)
-            cpu = NodeRuntimeMetrics(
-                collected_at=utc_now(),
-                cpu_percent=95.0,
-                cpu_count=4,
-                memory_total_mb=8192,
-                memory_available_mb=8192,
-            )
             for metrics in (
                 None,
-                replace(cpu, cpu_percent=None, load_average_1m=8.0),
-                replace(cpu, memory_available_mb=1024),
-                replace(cpu, memory_psi_full_avg10=10.0),
+
             ):
                 with self.subTest(metrics=metrics):
                     service.configure_active_capacity(
@@ -1741,7 +1760,7 @@ class DirectProvisionerTests(unittest.TestCase):
                     wait.assert_not_called()
                     self.assertEqual(service.activity_snapshot().active_operations, 0)
 
-    def test_cpu_retry_never_admits_a_low_sample_returned_after_deadline(self) -> None:
+    def test_memory_wait_never_admits_a_late_headroom_sample(self) -> None:
         with TemporaryDirectory() as raw:
             provisioner, _, _, _, _ = self.make(Path(raw).resolve())
             service = DirectSandboxService(provisioner)
@@ -1757,7 +1776,7 @@ class DirectProvisionerTests(unittest.TestCase):
                     cpu_percent=95.0 if calls[0] == 1 else 0.0,
                     cpu_count=4,
                     memory_total_mb=8192,
-                    memory_available_mb=8192,
+                    memory_available_mb=2048 if calls[0] == 1 else 8192,
                 )
 
             service.configure_active_capacity(
@@ -1776,16 +1795,16 @@ class DirectProvisionerTests(unittest.TestCase):
                 ),
             ):
                 with self.assertRaisesRegex(
-                    SandboxCapacityUnavailableError, "CPU pressure"
+                    SandboxCapacityUnavailableError, "memory headroom"
                 ):
                     with service._reserve_active_capacity(
-                        "new", 1, ResourceQuantity(vcpu=1, memory_mb=1024)
+                        "new", 1, ResourceQuantity(vcpu=1, memory_mb=1024), deadline=10.75
                     ):
                         self.fail("late sample admitted")
             self.assertEqual(calls[0], 2)
             self.assertEqual(service.activity_snapshot().active_operations, 0)
 
-    def test_drain_interrupts_cpu_wait_before_create_or_wake(self) -> None:
+    def test_drain_interrupts_memory_wait_before_create_or_wake(self) -> None:
         for action in ("create", "wake"):
             with self.subTest(action=action), TemporaryDirectory() as raw:
                 provisioner, _, images_storage, images, _ = self.make(
@@ -1803,7 +1822,7 @@ class DirectProvisionerTests(unittest.TestCase):
                         cpu_percent=95.0,
                         cpu_count=4,
                         memory_total_mb=8192,
-                        memory_available_mb=8192,
+                        memory_available_mb=2048,
                     ),
                 )
                 waiting = Event()
@@ -1848,7 +1867,7 @@ class DirectProvisionerTests(unittest.TestCase):
                 elif action == "wake":
                     self.assertEqual(service.get(record.spec.id).state, "parked")
 
-    def test_cpu_retry_rechecks_current_shape_and_owner_generation(self) -> None:
+    def test_memory_retry_rechecks_current_shape_and_owner_generation(self) -> None:
         for action in ("shape", "wake"):
             with self.subTest(action=action), TemporaryDirectory() as raw:
                 provisioner, registry, _, _, warden = self.make(Path(raw).resolve())
@@ -1877,7 +1896,7 @@ class DirectProvisionerTests(unittest.TestCase):
                         cpu_percent=95.0 if calls[0] == 1 else 10.0,
                         cpu_count=4,
                         memory_total_mb=8192,
-                        memory_available_mb=8192,
+                        memory_available_mb=2048 if calls[0] == 1 else 8192,
                     )
 
                 service.configure_active_capacity(
@@ -1962,7 +1981,7 @@ class DirectProvisionerTests(unittest.TestCase):
         self.assertEqual(second_heartbeat.storage_hard_reserved_mb, 2)
         self.assertEqual(first_heartbeat.cpu_percent, second_heartbeat.cpu_percent)
 
-    def test_node_server_coalescing_preserves_pressure_admission(self) -> None:
+    def test_node_server_coalescing_keeps_cpu_as_advice(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
             provisioner, _, _, _, _ = self.make(root)
@@ -1987,11 +2006,8 @@ class DirectProvisionerTests(unittest.TestCase):
                 ),
             )
             try:
-                with self.assertRaisesRegex(
-                    SandboxCapacityUnavailableError,
-                    "CPU pressure",
-                ):
-                    self.create(service, self.spec())
+                created = self.create(service, self.spec())
+                self.assertEqual(created.state, "running")
             finally:
                 server.server_close()
 
@@ -2035,7 +2051,7 @@ class DirectProvisionerTests(unittest.TestCase):
                     memory_available_mb=8192,
                 ),
             )
-            request = ResourceQuantity(vcpu=4, memory_mb=4096)
+            request = ResourceQuantity(vcpu=4, memory_mb=2048)
 
             with service._reserve_active_capacity("first", 1, request):
                 with service._reserve_active_capacity("second", 1, request):

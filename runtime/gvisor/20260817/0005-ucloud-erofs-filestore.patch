@@ -1,0 +1,139 @@
+--- a/runsc/container/container.go
++++ b/runsc/container/container.go
+@@ -1200,18 +1200,32 @@
+ // createGoferFilestores creates the regular files that will back the
+ // tmpfs/overlayfs mounts that will overlay some gofer mounts.
+ //
+-// Precondition: gofer process must be running.
+-func (c *Container) createGoferFilestores(ovlConf config.Overlay2, mountHints *boot.PodMountHints) ([]*os.File, error) {
++// The gofer mount namespace is used when present; goferless EROFS uses the
++// runtime mount namespace and still needs any disk-backed overlay files.
++func (c *Container) createGoferFilestores(ovlConf config.Overlay2, mountHints *boot.PodMountHints, rootfsHint *boot.RootfsHint) ([]*os.File, error) {
+ 	var goferFilestores []*os.File
+ 	// NOTE(gvisor.dev/issue/9834): Create the filestores in the gofer mount
+ 	// namespace, so that they don't prevent the host mount points from being
+ 	// unmounted from the host's mount namespace. We will use /proc/pid/root
+ 	// to access gofer's mount namespace. See proc_pid_root(5).
+-	goferRootfs := fmt.Sprintf("/proc/%d/root", c.GoferPid.Load())
++	goferRootfs := "/"
++	if pid := c.GoferPid.Load(); pid != 0 {
++		goferRootfs = fmt.Sprintf("/proc/%d/root", pid)
++	}
++	cu := cleanup.Make(func() {
++		for _, file := range goferFilestores {
++			_ = file.Close()
++		}
++	})
++	defer cu.Clean()
+ 
+ 	// Handle rootfs first.
+ 	rootfsConf := c.GoferMountConfs[0]
+-	filestore, err := c.createGoferFilestore(goferRootfs, ovlConf, rootfsConf, c.Spec.Root.Path, mountHints)
++	rootMedium := ovlConf.RootOverlayMedium()
++	if rootfsHint != nil {
++		rootMedium = rootfsHint.Overlay
++	}
++	filestore, err := c.createGoferFilestore(goferRootfs, rootMedium, rootfsConf, c.Spec.Root.Path, mountHints)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+@@ -1227,7 +1241,7 @@
+ 		}
+ 		mountConf := c.GoferMountConfs[mountIdx]
+ 		mountIdx++
+-		filestore, err := c.createGoferFilestore(goferRootfs, ovlConf, mountConf, m.Source, mountHints)
++		filestore, err := c.createGoferFilestore(goferRootfs, ovlConf.SubMountOverlayMedium(), mountConf, m.Source, mountHints)
+ 		if err != nil {
+ 			return nil, err
+ 		}
+@@ -1240,10 +1254,11 @@
+ 		// running with seccomp filters that do not allow this.
+ 		pgalloc.IMAWorkAroundForMemFile(filestore.Fd())
+ 	}
++	cu.Release()
+ 	return goferFilestores, nil
+ }
+ 
+-func (c *Container) createGoferFilestore(goferRootfs string, ovlConf config.Overlay2, goferConf specutils.GoferMountConf, mountSrc string, mountHints *boot.PodMountHints) (*os.File, error) {
++func (c *Container) createGoferFilestore(goferRootfs string, medium config.OverlayMedium, goferConf specutils.GoferMountConf, mountSrc string, mountHints *boot.PodMountHints) (*os.File, error) {
+ 	if !goferConf.IsFilestorePresent() {
+ 		return nil, nil
+ 	}
+@@ -1251,7 +1266,7 @@
+ 	case specutils.SelfOverlay:
+ 		return c.createGoferFilestoreInSelf(goferRootfs, mountSrc, mountHints)
+ 	case specutils.AnonOverlay:
+-		return c.createGoferFilestoreInDir(goferRootfs, ovlConf.Medium().HostFileDir())
++		return c.createGoferFilestoreInDir(goferRootfs, medium.HostFileDir())
+ 	default:
+ 		return nil, fmt.Errorf("unexpected upper layer with filestore %s", goferConf)
+ 	}
+@@ -1480,8 +1495,12 @@
+ 			}
+ 			cfgIdx++
+ 		}
++		filestores, err := c.createGoferFilestores(conf.GetOverlay2(), mountHints, rootfsHint)
++		if err != nil {
++			return nil, nil, nil, nil, fmt.Errorf("creating goferless filestore files: %w", err)
++		}
+ 		cu.Release()
+-		return ioFiles, nil, nil, nil, nil
++		return ioFiles, filestores, nil, nil, nil
+ 	}
+ 
+ 	// Ensure we don't leak FDs to the gofer process.
+@@ -1758,7 +1777,7 @@
+ 
+ 	// Create gofer filestore files with the Gofer's mount namespaces while
+ 	// chrootSyncSandEnd is still open.
+-	goferFilestores, err := c.createGoferFilestores(conf.GetOverlay2(), mountHints)
++	goferFilestores, err := c.createGoferFilestores(conf.GetOverlay2(), mountHints, rootfsHint)
+ 	if err != nil {
+ 		return nil, nil, nil, nil, fmt.Errorf("creating gofer filestore files: %w", err)
+ 	}
+--- a/runsc/container/container_test.go
++++ b/runsc/container/container_test.go
+@@ -6527,3 +6527,43 @@
+ 		t.Errorf("unexpected content of %q: got %q, want %q", guestFile, got, "hello")
+ 	}
+ }
++
++// TestRootfsEROFSDiskOverlay covers descriptor donation without a gofer and
++// honors the root annotation's directory independently of the global overlay.
++func TestRootfsEROFSDiskOverlay(t *testing.T) {
++	skipIfNotAvailable(t, "mkfs.erofs", "busybox")
++	testDir := t.TempDir()
++	rootfsDir, image, err := createRootfsEROFS(testDir)
++	if err != nil {
++		t.Fatal(err)
++	}
++	for _, withGofer := range []bool{false, true} {
++		t.Run(fmt.Sprintf("withGofer=%v", withGofer), func(t *testing.T) {
++			spec := testutil.NewSpecWithArgs("/busybox", "sh", "-ec", "echo written >/new-file; test \"$(/busybox cat /new-file)\" = written")
++			spec.Root.Path = rootfsDir
++			spec.Root.Readonly = false
++			spec.Annotations = map[string]string{
++				boot.RootfsPrefix + "type": erofs.Name,
++				boot.RootfsPrefix + "source": image,
++				boot.RootfsPrefix + "overlay": "dir=" + t.TempDir(),
++			}
++			spec.Mounts = nil
++			if withGofer {
++				spec.Mounts = []specs.Mount{{Type: "bind", Destination: "/tmp", Source: t.TempDir(), Options: []string{"bind", "rw"}}}
++			}
++			conf := testutil.TestConfig(t)
++			_, bundle, cleanup, err := testutil.SetupContainer(spec, conf)
++			if err != nil {
++				t.Fatal(err)
++			}
++			defer cleanup()
++			ws, err := Run(conf, Args{ID: testutil.RandomContainerID(), Spec: spec, BundleDir: bundle, Attached: true})
++			if err != nil {
++				t.Fatal(err)
++			}
++			if ws.ExitStatus() != 0 {
++				t.Fatalf("exit status = %v, want 0", ws.ExitStatus())
++			}
++		})
++	}
++}

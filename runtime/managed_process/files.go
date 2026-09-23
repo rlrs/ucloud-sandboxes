@@ -87,9 +87,10 @@ func runFiles(args []string, input io.Reader, output io.Writer) error {
 	if count > limit {
 		return errors.New("file exceeds byte limit")
 	}
-	if err := file.Sync(); err != nil {
-		return err
-	}
+	// File upload promises atomic visibility, like the shell implementation.
+	// The lifecycle capture barrier owns durable workspace synchronization.
+	// A per-upload fsync adds storage latency to every generated tool without
+	// making the subsequent rename crash-durable (that needs a directory sync).
 	if err := file.Close(); err != nil {
 		return err
 	}

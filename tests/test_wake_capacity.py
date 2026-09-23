@@ -13,7 +13,8 @@ from ucloud_sandboxes.control_state import ControlStateStore
 from ucloud_sandboxes.registry import heartbeat_to_dict
 from ucloud_sandboxes.direct_service import DirectSandboxService
 from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, SandboxInventoryEntry, utc_now
-from ucloud_sandboxes.routing import RoutingStore
+from ucloud_sandboxes.routing import RoutingStore, wake_pending_demand_id
+from ucloud_sandboxes.wake_placement import WakeCapacityRefreshPending, WakeSnapshotPublicationRequired
 from ucloud_sandboxes.node_agent import NodeAgentHandler
 from ucloud_sandboxes.sandbox import SandboxCapacityUnavailableError
 
@@ -110,7 +111,7 @@ class WakeCapacityTests(unittest.TestCase):
                 return control_plane.ProxiedResponse(202, {}, b"{}")
 
             handler._proxy_request = queue_publication
-            self.assertIsNone(handler._ensure_parked_sandbox_wake_placement(route))
+            self.assertIsNone(fixtures._prepare_wake_route(handler, route))
             self.assertEqual(acquired, [True])
             self.assertEqual(handler._write_json.call_args.args[0]["error_code"], "snapshot_publication_pending")
             self.assertEqual(handler.routing_store.get_sandbox_readonly("parked").state, "parked")
@@ -132,16 +133,16 @@ class WakeCapacityTests(unittest.TestCase):
             handler._write_json = Mock()
             handler._refresh_wake_capacity = Mock(return_value=False)
             handler._proxy_request = Mock(return_value=control_plane.ProxiedResponse(202, {}, b"{}"))
-            self.assertIsNone(handler._ensure_parked_sandbox_wake_placement(route))
+            self.assertIsNone(fixtures._prepare_wake_route(handler, route))
             handler._proxy_request.assert_not_called()
             self.assertEqual(handler._write_json.call_args.args[0]["error_code"], "wake_destination_unavailable")
-            pending = handler.routing_store.get_pending(control_plane._wake_pending_demand_id(route.sandbox_id))
+            pending = handler.routing_store.get_pending(wake_pending_demand_id(route.sandbox_id))
             self.assertEqual(pending.resources, route.resources)
             self.assertEqual(pending.failure_reason, "wake_destination_unavailable")
             handler.store.upsert_heartbeat(replace(destination, runtime_metrics=replace(
                 destination.runtime_metrics, storage_ublk_active_devices=0,
             )))
-            self.assertIsNone(handler._ensure_parked_sandbox_wake_placement(route))
+            self.assertIsNone(fixtures._prepare_wake_route(handler, route))
             self.assertEqual(handler._proxy_request.call_count, 1)
             self.assertTrue(handler._proxy_request.call_args.args[1].endswith("/snapshot/publish"))
 
@@ -170,8 +171,8 @@ class WakeCapacityTests(unittest.TestCase):
             handler.store.upsert_heartbeat(replace(
                 source, draining=False, runtime_metrics=destination.runtime_metrics,
             ))
-            with self.assertRaises(control_plane._WakeSnapshotPublicationRequired):
-                handler._reserve_parked_sandbox_wake(route)
+            with self.assertRaises(WakeSnapshotPublicationRequired):
+                handler._wake_placement().reserve(route)
             self.assertEqual(handler.routing_store.get_sandbox(route.sandbox_id).state, "parked")
             handler.store.upsert_heartbeat(replace(destination, admission_open=False))
             self.assertIsNone(handler._select_migration_destination(route, requested_node_id="", require_active_resources=True))
@@ -189,9 +190,6 @@ class WakeCapacityTests(unittest.TestCase):
             refreshed = replace(heartbeat, runtime_metrics=replace(
                 heartbeat.runtime_metrics, storage_ublk_active_devices=0,
             ))
-            handler._reserve_parked_sandbox_wake = Mock(side_effect=[
-                control_plane._WakeCapacityRefreshRequired(route), replace(route, state='waking'),
-            ])
             acquired = []
             def refresh(url, path, **kwargs):
                 def check_lock():
@@ -204,14 +202,14 @@ class WakeCapacityTests(unittest.TestCase):
                 thread.join(1)
                 self.assertEqual(path, "/v1/heartbeat")
                 # Concurrent callers defer rather than fetching or publishing.
-                with self.assertRaises(control_plane._WakeCapacityRefreshPending):
+                with self.assertRaises(WakeCapacityRefreshPending):
                     handler._refresh_wake_capacity(route)
                 import json
                 return control_plane.ProxiedResponse(200, {}, json.dumps({
                     "heartbeat": heartbeat_to_dict(refreshed),
                 }).encode())
             handler._proxy_request = Mock(side_effect=refresh)
-            self.assertEqual(handler._ensure_parked_sandbox_wake_placement(route).state, "waking")
+            self.assertEqual(fixtures._prepare_wake_route(handler, route).state, "waking")
             self.assertEqual(acquired, [True])
             self.assertEqual(handler._proxy_request.call_count, 1)
             self.assertEqual(handler.store.load_heartbeats()["job"].runtime_metrics.storage_ublk_active_devices, 0)
@@ -232,7 +230,7 @@ class WakeCapacityTests(unittest.TestCase):
                     patch.object(handler, '_refresh_wake_capacity', side_effect=AssertionError('redundant refresh')),
                     patch.object(handler, '_placement_routes_for_node', wraps=handler._placement_routes_for_node) as inventory,
                 ):
-                    result = handler._ensure_parked_sandbox_wake_placement(route)
+                    result = fixtures._prepare_wake_route(handler, route)
                 self.assertEqual(result.state, 'waking')
                 self.assertEqual(inventory.call_count, 1)
             finally:
@@ -242,6 +240,8 @@ class WakeCapacityTests(unittest.TestCase):
         with TemporaryDirectory() as directory:
             handler = object.__new__(control_plane.ControlPlaneHandler)
             handler.routing_store = RoutingStore(Path(directory) / "routes.sqlite")
+            handler.store = ControlStateStore(Path(directory) / "control.sqlite")
+            handler.heartbeat_ttl_seconds = 120
             snapshot = fixtures._portable_snapshot("parked")
             spec = snapshot.manifest.spec
             route = handler.routing_store.upsert_sandbox(replace(
@@ -256,11 +256,11 @@ class WakeCapacityTests(unittest.TestCase):
                 "snapshot_repository": snapshot.publication.repository,
                 "snapshot_tag": snapshot.publication.tag, "snapshot_sha256": snapshot.sha256,
             }
-            refreshed = handler._refresh_wake_publication(route, {"sandbox": record})
+            refreshed = handler._wake_placement().accept_publication(route, {"sandbox": record})
             self.assertIsNotNone(refreshed)
             self.assertTrue(control_plane.is_portable_parked_route(refreshed))
             handler.routing_store.upsert_sandbox(replace(refreshed, state="running"))
-            self.assertIsNone(handler._refresh_wake_publication(route, {"sandbox": record}))
+            self.assertIsNone(handler._wake_placement().accept_publication(route, {"sandbox": record}))
             self.assertEqual(handler.routing_store.get_sandbox_readonly("parked").state, "running")
 
     def test_migration_reserves_last_destination_device_slot(self):
@@ -334,7 +334,7 @@ class WakeCapacityTests(unittest.TestCase):
                 handler._proxy_request = Mock(return_value=control_plane.ProxiedResponse(200, {}, json.dumps({
                     'heartbeat': heartbeat_to_dict(healthy),
                 }).encode()))
-                result = handler._ensure_parked_sandbox_wake_placement(route)
+                result = fixtures._prepare_wake_route(handler, route)
                 self.assertEqual(result.state, 'waking')
                 self.assertEqual(result.job_id, route.job_id)
                 self.assertEqual(handler.routing_store.sandbox_migrations(), [])

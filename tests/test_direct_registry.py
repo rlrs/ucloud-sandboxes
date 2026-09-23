@@ -582,6 +582,8 @@ class RelayWakeFenceTests(unittest.TestCase):
             # Exact prior on-disk schema, not a hand-written approximation.
             with closing(sqlite3.connect(path)) as conn:
                 conn.execute('DROP TABLE relay_wake_fences')
+                conn.execute('DROP TABLE managed_growth')
+                conn.execute('DROP TABLE reflink_overlaps')
                 conn.execute('PRAGMA user_version=3')
             reopened=DirectSandboxRegistry(path)
             self.assertEqual(reopened.get('sandbox'),original)

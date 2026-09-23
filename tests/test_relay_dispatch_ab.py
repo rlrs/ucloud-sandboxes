@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from scripts.relay_dispatch_ab import dispatcher_with_park_concurrency
-from ucloud_sandboxes import cli
+from ucloud_sandboxes import relay_lifecycle as lifecycle
 
 
 class DispatchQualificationTests(unittest.IsolatedAsyncioTestCase):
@@ -23,14 +23,23 @@ class DispatchQualificationTests(unittest.IsolatedAsyncioTestCase):
 
         def request(name):
             return SimpleNamespace(request_id=name, completed_at=None)
+
         first, obsolete = request("first"), request("obsolete")
-        with patch.object(cli, "_post_gateway_sandbox_lifecycle_once_async", side_effect=post):
+        with patch.object(lifecycle, "_post_lifecycle_attempt", side_effect=post):
             tasks = []
             try:
-                tasks.append(asyncio.create_task(dispatcher.notify(first, action="park")))
+                tasks.append(
+                    asyncio.create_task(dispatcher.notify(first, action="park"))
+                )
                 await asyncio.wait_for(entered.wait(), 1)
-                tasks.append(asyncio.create_task(dispatcher.notify(obsolete, action="park")))
-                tasks.append(asyncio.create_task(dispatcher.notify(request("wake"), action="wake")))
+                tasks.append(
+                    asyncio.create_task(dispatcher.notify(obsolete, action="park"))
+                )
+                tasks.append(
+                    asyncio.create_task(
+                        dispatcher.notify(request("wake"), action="wake")
+                    )
+                )
                 await asyncio.wait_for(woke.wait(), 1)
                 self.assertNotIn(("obsolete", "park"), calls)
                 obsolete.completed_at = 1

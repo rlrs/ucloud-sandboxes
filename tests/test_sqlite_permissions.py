@@ -42,9 +42,8 @@ class SqlitePermissionTests(unittest.TestCase):
                     # connection opens, rather than on every reused read.
                     for candidate in files[1:]:
                         candidate.chmod(0o644)
-                    with store._connections_guard:
-                        while store._connections:
-                            store._connections.pop().close()
+                    store._connection_finalizer()
+                    store = store_type(path)
                     read()
                     self.assertEqual([stat.S_IMODE(f.stat().st_mode) for f in files], [0o600] * 3)
                 finally:
@@ -52,14 +51,13 @@ class SqlitePermissionTests(unittest.TestCase):
 
                 # Drop retained readers so the next read opens a connection
                 # and audits any existing or recreated sidecars again.
-                with store._connections_guard:
-                    while store._connections:
-                        store._connections.pop().close()
+                store._connection_finalizer()
                 connection = sqlite3.connect(path)
                 try:
                     connection.execute("SELECT name FROM sqlite_schema").fetchall()
                     for candidate in files[1:]:
                         candidate.chmod(0o640)
+                    store = store_type(path)
                     read()
                     self.assertEqual([stat.S_IMODE(f.stat().st_mode) for f in files], [0o600] * 3)
                 finally:

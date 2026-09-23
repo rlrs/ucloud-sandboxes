@@ -15,7 +15,7 @@ if DSN:
     from ucloud_sandboxes.shared_control import fixtures
     from ucloud_sandboxes.shared_control.dispatcher import WakeDispatcher
     from ucloud_sandboxes.shared_control.model import StateConflict, WakeProof
-    from ucloud_sandboxes.shared_control.postgres import PostgresControlStore
+    from ucloud_sandboxes.shared_control.qualification import QualificationControlStore
 
 
 @unittest.skipUnless(DSN, "set UCLOUD_TEST_POSTGRES_DSN for the real PostgreSQL contract")
@@ -30,7 +30,7 @@ class SharedControlPostgresTests(unittest.IsolatedAsyncioTestCase):
         await self.seed("sandbox-1", "request-1")
 
     async def new_store(self, deployment="test", max_connections=8):
-        store = PostgresControlStore(DSN, deployment, schema=self.schema, max_connections=max_connections, observe=self.samples.append)
+        store = QualificationControlStore(DSN, deployment, schema=self.schema, max_connections=max_connections, observe=self.samples.append)
         await store.open()
         self.stores.append(store)
         return store
@@ -235,6 +235,10 @@ class SharedControlPostgresTests(unittest.IsolatedAsyncioTestCase):
     async def test_migration_is_idempotent_and_newer_version_is_rejected(self):
         await asyncio.gather(self.store.migrate(), self.store.migrate())
         async with self.store.transaction("future_schema") as conn:
+            row = await (await conn.execute(
+                "SELECT to_regclass(%s) AS name", (f"{self.schema}.relay_schema_version",),
+            )).fetchone()
+            self.assertIsNone(row["name"])
             await conn.execute("UPDATE schema_version SET version=2")
         with self.assertRaises(ValueError):
             await self.new_store()
@@ -329,9 +333,9 @@ class SharedControlPostgresTests(unittest.IsolatedAsyncioTestCase):
         await self.accept()
         code = """
 import asyncio,os
-from ucloud_sandboxes.shared_control.postgres import PostgresControlStore
+from ucloud_sandboxes.shared_control.qualification import QualificationControlStore
 async def main():
-    store=PostgresControlStore(os.environ['UCLOUD_TEST_POSTGRES_DSN'],'test',schema=os.environ['UCLOUD_TEST_SCHEMA'])
+    store=QualificationControlStore(os.environ['UCLOUD_TEST_POSTGRES_DSN'],'test',schema=os.environ['UCLOUD_TEST_SCHEMA'])
     await store.open()
     op,=await store.claim_due()
     assert await store.prepare_dispatch(op)
@@ -352,7 +356,7 @@ asyncio.run(main())
 
     async def test_result_size_and_configuration_validation(self):
         with self.assertRaises(ValueError):
-            PostgresControlStore(DSN, "test", schema="public")
+            QualificationControlStore(DSN, "test", schema="public")
         for value in (0, -1, float("nan"), float("inf")):
             with self.assertRaises(ValueError):
                 await self.store.claim_due(lease_seconds=value)

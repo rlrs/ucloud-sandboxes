@@ -5,6 +5,7 @@ import json
 from dataclasses import replace
 from pathlib import Path
 import logging
+import shutil
 from threading import Lock
 from typing import Any
 
@@ -15,6 +16,7 @@ from .storage_native_migration import (
     StorageNativeMigration,
     StorageNativeMigrationStore,
 )
+from .checkpoint_registry import RegistryCheckpointStore
 from .direct_network import DirectNetworkManager
 from .direct_oci import DirectOciConfigBuilder
 from .direct_registry import (
@@ -24,14 +26,13 @@ from .direct_registry import (
 )
 from .direct_warden import DirectRunscWarden, DirectWardenError
 from .hibernation import HibernationState
-from .image_rootfs import DockerOverlay2RootfsStore, OverlayRootfsManager
+from .image_rootfs import OverlayRootfsManager
 from .sandbox import SandboxSpec
 from .storage_native_daemon import (
     StorageNativeConflictError,
     StorageNativeNodeError,
     StorageVolumeOwner,
     StorageVolumeRecord,
-    StorageVolumeState,
 )
 
 
@@ -46,19 +47,19 @@ class DirectSandboxProvisioner:
         self,
         *,
         registry: DirectSandboxRegistry,
-        image_store: DockerOverlay2RootfsStore,
         overlays: OverlayRootfsManager,
         oci: DirectOciConfigBuilder,
         warden: DirectRunscWarden,
         network_manager: DirectNetworkManager | None = None,
         storage_migrations: StorageNativeMigrationStore | None = None,
+        checkpoint_store: RegistryCheckpointStore | None = None,
     ) -> None:
         self.registry = registry
-        self.image_store = image_store
         self.overlays = overlays
         self.oci = oci
         self.warden = warden
         self.network_manager = network_manager
+        self.checkpoint_store = checkpoint_store
         self.storage_migrations = storage_migrations or StorageNativeMigrationStore(
             registry.path.parent / "storage-native-migrations"
         )
@@ -147,12 +148,13 @@ class DirectSandboxProvisioner:
         self._validate_spec(spec)
         # Resolve immutable image metadata and validate the full OCI translation
         # before persisting an operation or reserving node capacity.
-        with self.image_store.operation_lease(spec.image) as image:
+        with self.overlays.resolve(spec.image) as image:
             registration = self.registry.plan(
                 spec=spec,
                 sandbox_generation=sandbox_generation,
                 operation_id=operation_id,
                 runtime_compatibility_sha256=self.runtime_compatibility_sha256,
+                split_memory_backing=self.warden.memory_backing is not None and spec.parkable,
             )
             if registration.phase == "planned":
                 registration = self._prepare_quota(registration)
@@ -181,7 +183,7 @@ class DirectSandboxProvisioner:
                 "storage-native migration belongs to another runtime compatibility"
             )
         self._validate_spec(portable.spec)
-        with self.image_store.operation_lease(portable.spec.image) as image:
+        with self.overlays.resolve(portable.spec.image) as image:
             return self._stage_storage_native_import_materialized(
                 migration,
                 migration_id=migration_id,
@@ -198,6 +200,12 @@ class DirectSandboxProvisioner:
         portable = migration.manifest
         migration_sha256 = migration.sha256
         storage_manifest_changed = True
+        split = portable.memory is not None
+        if split:
+            if self.checkpoint_store is None or self.warden.memory_backing is None:
+                raise StorageNativeMigrationError("split checkpoint import is unavailable")
+            self.checkpoint_store.verify_root(migration.reference, migration.publication,
+                migration.memory_publication, portable_manifest=portable.to_dict())
         registration = self.registry.plan_import(
             spec=portable.spec,
             sandbox_generation=portable.sandbox_generation,
@@ -205,13 +213,21 @@ class DirectSandboxProvisioner:
             runtime_compatibility_sha256=self.runtime_compatibility_sha256,
             migration_id=migration_id,
             migration_sha256=migration_sha256,
+            split_memory_backing=split,
         )
         if registration.phase == "import_planned":
             total_mb = self._quota_total_mb(registration)
+            if split:
+                if registration.memory_reference != portable.memory:
+                    raise StorageNativeMigrationError("import memory allocation differs from checkpoint")
+                self.warden.memory_backing.prepare(registration.memory_reference,
+                    sandbox_id=registration.sandbox_id,
+                    sandbox_generation=registration.sandbox_generation)
             prepared = self.warden.storage.prepare_import(
                 self._storage_owner(registration),
                 publication=migration.publication,
                 operation_id=f"quota-import:{migration_id}",
+                **({"capture_id": portable.workspace.capture_id} if split else {}),
             )
             quota_path = self._require_storage_record(
                 registration,
@@ -234,6 +250,10 @@ class DirectSandboxProvisioner:
                 connection_policy=portable.connection_policy,
             ),
         )
+        if split:
+            config.setdefault("annotations", {})[
+                "dev.gvisor.internal.application-memory-directory"
+            ] = registration.memory_reference.allocation_id
         if registration.phase == "owned":
             record = self.warden.inspect(registration.to_direct_sandbox())
             if record is None:
@@ -246,6 +266,34 @@ class DirectSandboxProvisioner:
         ):
             raise DirectRegistryError("destination already owns another migration")
         if registration.phase == "importing":
+            if split:
+                allocation = self.warden.memory_backing.require(registration.memory_reference,
+                    sandbox_id=registration.sandbox_id,
+                    sandbox_generation=registration.sandbox_generation)
+                generation = self.warden.artifacts.generation_path(
+                    sandbox_id=registration.sandbox_id,
+                    sandbox_generation=registration.sandbox_generation,
+                    hibernation_generation=portable.hibernation_generation)
+                if generation.parent != allocation.path:
+                    raise StorageNativeMigrationError("import artifacts escaped their quota allocation")
+                def check_import_current():
+                    if self.registry.get(registration.sandbox_id) != registration:
+                        raise StorageNativeMigrationError("checkpoint import ownership changed")
+                check_import_current()
+                if generation.exists() and not (generation / self.warden.artifacts.COMPLETE_NAME).exists():
+                    # This exact import owns an incomplete generation. Delete
+                    # it before retrying so quota never includes two full copies.
+                    if generation.is_symlink():
+                        raise StorageNativeMigrationError("import generation cannot be a symlink")
+                    shutil.rmtree(generation)
+                if not generation.exists():
+                    with self.warden.memory_backing.read_lease(registration.memory_reference,
+                            sandbox_id=registration.sandbox_id,
+                            sandbox_generation=registration.sandbox_generation):
+                        self.checkpoint_store.restore_memory(migration.memory_publication, generation,
+                            allowed_files={file.name for file in portable.files} | {
+                                self.warden.artifacts.MANIFEST_NAME, self.warden.artifacts.COMPLETE_NAME},
+                            check_current=check_import_current)
             (
                 local_manifest,
                 storage_manifest_changed,
@@ -256,7 +304,8 @@ class DirectSandboxProvisioner:
                     rootfs_sha256=image.rootfs_identity_sha256,
                 ),
                 artifact_store=self.warden.artifacts,
-                writable_incarnation=Path(registration.quota_path),
+                writable_incarnation=(self.warden.config.memory_root / registration.memory_reference.allocation_id
+                                      if split else Path(registration.quota_path)),
             )
             lease = self.overlays.prepare(
                 sandbox_id=registration.sandbox_id,
@@ -265,6 +314,8 @@ class DirectSandboxProvisioner:
                 config_template=config,
                 spec_sha256=registration.spec_sha256,
                 imported_parked=True,
+                workspace_directory=registration.workspace_directory,
+                memory=registration.memory_reference,
             )
             registration = self.registry.commit_import_rootfs(
                 registration.sandbox_id,
@@ -276,9 +327,9 @@ class DirectSandboxProvisioner:
             sandbox = registration.to_direct_sandbox()
             record = self.warden.inspect(sandbox)
             if record is None:
-                storage_record = self.warden._storage_record(sandbox)
+                storage_record = self.warden.workspace_record(sandbox)
                 if storage_record.state.value == "published":
-                    self.warden._mount_storage(
+                    self.warden.ensure_workspace_mounted(
                         sandbox,
                         operation_id=f"import:{migration_id}:remount",
                     )
@@ -293,7 +344,8 @@ class DirectSandboxProvisioner:
                             rootfs_sha256=image.rootfs_identity_sha256,
                         ),
                         artifact_store=self.warden.artifacts,
-                        writable_incarnation=Path(registration.quota_path),
+                        writable_incarnation=(self.warden.config.memory_root / registration.memory_reference.allocation_id
+                                      if split else Path(registration.quota_path)),
                     )
                 else:
                     local_manifest = self.warden.artifacts.load_complete(
@@ -306,7 +358,7 @@ class DirectSandboxProvisioner:
                 raise DirectRegistryError(
                     "storage-native destination is not durably parked"
                 )
-            if storage_manifest_changed:
+            if storage_manifest_changed and not split:
                 published = self.warden.publish_storage_snapshot(
                     sandbox,
                     operation_id=f"import:{migration_id}:publish",
@@ -325,7 +377,7 @@ class DirectSandboxProvisioner:
                     raise DirectRegistryError(
                         "unchanged storage-native import did not restore publication"
                     )
-            destination_migration = StorageNativeMigration(
+            destination_migration = migration if split else StorageNativeMigration(
                 manifest=portable,
                 publication=published.publication(),
             )
@@ -478,6 +530,7 @@ class DirectSandboxProvisioner:
             self.overlays.discard_unregistered(
                 sandbox_id=registration.sandbox_id,
                 sandbox_generation=registration.sandbox_generation,
+                workspace_directory=registration.workspace_directory,
             )
         if self.network_manager is not None:
             self.network_manager.release(
@@ -487,6 +540,9 @@ class DirectSandboxProvisioner:
         self._drop_storage(
             registration,
             expected_project_id=registration.quota_project_id,
+        )
+        self.storage_migrations.discard_publication(
+            registration.sandbox_id, registration.sandbox_generation
         )
         self.registry.commit_deleted(
             sandbox_id,
@@ -515,7 +571,7 @@ class DirectSandboxProvisioner:
 
     def _collect_deleted_image(self, image_id: str) -> None:
         try:
-            self.image_store.collect_image(
+            self.overlays.collect_image(
                 image_id,
                 is_referenced=self.registry.references_image,
             )
@@ -554,7 +610,7 @@ class DirectSandboxProvisioner:
             if registrations is None:
                 registrations = self.registry.snapshot().records
             try:
-                self.image_store.reconcile_images(
+                self.overlays.reconcile_images(
                     (item.image_id for item in registrations if item.image_id),
                     is_referenced=self.registry.references_image,
                 )
@@ -585,7 +641,7 @@ class DirectSandboxProvisioner:
         if registration.phase == "planned":
             registration = self._prepare_quota(registration)
         if registration.phase == "quota_ready" and image is None:
-            with self.image_store.operation_lease(registration.spec.image) as image:
+            with self.overlays.resolve(registration.spec.image) as image:
                 return self._advance(
                     registration,
                     image=image,
@@ -605,9 +661,14 @@ class DirectSandboxProvisioner:
             )
             # A crash can leave a mounted overlay only before rootfs_ready commits.
             # No runsc backend is allowed to exist at this phase.
+            if registration.memory_reference is not None:
+                config.setdefault("annotations", {})[
+                    "dev.gvisor.internal.application-memory-directory"
+                ] = registration.memory_reference.allocation_id
             self.overlays.discard_unregistered(
                 sandbox_id=registration.sandbox_id,
                 sandbox_generation=registration.sandbox_generation,
+                workspace_directory=registration.workspace_directory,
             )
             lease = self.overlays.prepare(
                 sandbox_id=registration.sandbox_id,
@@ -615,6 +676,8 @@ class DirectSandboxProvisioner:
                 image=image,
                 config_template=config,
                 spec_sha256=registration.spec_sha256,
+                workspace_directory=registration.workspace_directory,
+                memory=registration.memory_reference,
             )
             expected_path = Path(registration.quota_path)
             if lease.writable != expected_path:
@@ -732,10 +795,16 @@ class DirectSandboxProvisioner:
         registration: DirectSandboxRegistration,
     ) -> DirectSandboxRegistration:
         total_mb = self._quota_total_mb(registration)
+        if registration.memory_reference is not None:
+            if self.warden.memory_backing is None:
+                raise DirectWardenError("split memory allocator is unavailable")
+            self.warden.memory_backing.prepare(registration.memory_reference,
+                sandbox_id=registration.sandbox_id,
+                sandbox_generation=registration.sandbox_generation)
         record = self.warden.storage.prepare_volume(
             self._storage_owner(registration),
             operation_id=registration.operation_id,
-            virtual_size=total_mb * _MIB,
+            virtual_size=self._workspace_quota_mb(registration) * _MIB,
         )
         expected = self._require_storage_record(
             registration,
@@ -762,6 +831,7 @@ class DirectSandboxProvisioner:
             record = self.warden.storage.get_volume(owner.volume_id)
         except StorageNativeConflictError as exc:
             if expected_project_id is None:
+                self._drop_memory_backing(registration)
                 return
             raise StorageNativeNodeError(
                 "storage-native quota owner is absent"
@@ -772,8 +842,6 @@ class DirectSandboxProvisioner:
             total_mb=total_mb,
             expected_project_id=expected_project_id,
         )
-        if record.state == StorageVolumeState.DELETED:
-            return
         delete_operation_id = f"quota-delete:{record.accounting_id}"
         if registration.migration_id:
             # A detached sandbox can later import the same generation and
@@ -786,8 +854,20 @@ class DirectSandboxProvisioner:
             owner,
             operation_id=delete_operation_id,
             expected_accounting_id=expected_project_id,
-            expected_virtual_size=total_mb * _MIB,
+            expected_virtual_size=self._workspace_quota_mb(registration) * _MIB,
         )
+
+        self._drop_memory_backing(registration)
+
+    def _drop_memory_backing(self, registration: DirectSandboxRegistration) -> None:
+        if registration.memory_reference is not None:
+            if self.warden.memory_backing is None:
+                raise DirectWardenError("split memory allocator is unavailable")
+            self.warden.memory_backing.delete(registration.memory_reference,
+                sandbox_id=registration.sandbox_id,
+                sandbox_generation=registration.sandbox_generation)
+            if registration.has_direct_sandbox and getattr(self.warden, "memory_capacity", None) is not None:
+                self.warden.release_deleted_memory_capacity(registration.to_direct_sandbox())
 
     def _require_storage_record(
         self,
@@ -799,7 +879,7 @@ class DirectSandboxProvisioner:
     ) -> Path:
         if (
             record.owner != self._storage_owner(registration)
-            or record.virtual_size != total_mb * _MIB
+            or record.virtual_size != self._workspace_quota_mb(registration) * _MIB
             or (
                 expected_project_id is not None
                 and record.accounting_id != expected_project_id
@@ -824,12 +904,15 @@ class DirectSandboxProvisioner:
         registration: DirectSandboxRegistration,
     ) -> StorageVolumeOwner:
         return StorageVolumeOwner(
-            volume_id=(
-                f"{registration.sandbox_id}.sandbox-{registration.sandbox_generation}"
-            ),
+            volume_id=registration.workspace_volume_id,
             sandbox_id=registration.sandbox_id,
             sandbox_generation=registration.sandbox_generation,
         )
+
+    @staticmethod
+    def _workspace_quota_mb(registration: DirectSandboxRegistration) -> int:
+        return (registration.spec.disk_mb if registration.memory_reference is not None
+                else DirectSandboxProvisioner._quota_total_mb(registration))
 
     @staticmethod
     def _quota_total_mb(registration: DirectSandboxRegistration) -> int:

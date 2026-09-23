@@ -1,16 +1,25 @@
 from __future__ import annotations
 
-import math
 import os
 from pathlib import Path
 import time
 from typing import Callable
 
 from .models import NodeRuntimeMetrics, utc_now
+from .resource_evidence import (
+    ResourceEvidenceSampler,
+    read_memory_pressure,
+    sample_memory_backing,
+    cpu_percent_from_samples as cpu_percent_from_samples,
+    read_proc_stat_cpu as read_proc_stat_cpu,
+    read_proc_meminfo as read_proc_meminfo,
+    read_proc_pressure as read_proc_pressure,
+)
 from .singleflight_cache import GenerationFencedSingleFlightCache
 
 
-DEFAULT_CPU_SAMPLE_SECONDS = 0.05
+_RESOURCE_EVIDENCE = ResourceEvidenceSampler()
+
 DEFAULT_RUNTIME_METRICS_FRESHNESS_SECONDS = 0.2
 
 
@@ -18,7 +27,7 @@ class SingleFlightRuntimeMetricsSampler:
     """Coalesce adjacent host samples without serving materially stale pressure.
 
     The first caller after the freshness window invokes ``provider``. Concurrent
-    callers wait for that same sample instead of repeating its /proc interval.
+    callers wait for that same sample instead of repeating its /proc reads.
     ``None`` is cached just like a metrics value so an unavailable collector
     remains fail-closed for the short freshness window. Exceptions are not
     cached: waiters are woken and one of them, or the next caller, retries.
@@ -44,16 +53,19 @@ class SingleFlightRuntimeMetricsSampler:
 def sample_node_runtime_metrics(
     *,
     proc_root: Path | str = "/proc",
-    sample_seconds: float = DEFAULT_CPU_SAMPLE_SECONDS,
+    memory_backing_root: Path | None = None,
 ) -> NodeRuntimeMetrics:
     proc_path = Path(proc_root)
     cpu_count = os.cpu_count() or 0
-    first_cpu = read_proc_stat_cpu(proc_path / "stat")
-    if first_cpu is not None and sample_seconds > 0:
-        time.sleep(sample_seconds)
-    second_cpu = read_proc_stat_cpu(proc_path / "stat")
-    cpu_percent = cpu_percent_from_samples(first_cpu, second_cpu)
-    memory = read_proc_meminfo(proc_path / "meminfo")
+    # CPU needs an interval, but foreground admission must not wait for one.
+    # Missing or stale observations remain unknown. Physical memory and PSI
+    # are still read now, independently of the background CPU cadence.
+    cpu_percent = (
+        _RESOURCE_EVIDENCE.cached_cpu_percent()
+        if proc_path == Path("/proc") else None
+    )
+    pressure = read_memory_pressure(proc_path)
+    memory = pressure.memory
     load = os.getloadavg() if hasattr(os, "getloadavg") else (None, None, None)
     cpu_vcpu = (
         (cpu_percent / 100.0) * cpu_count
@@ -72,13 +84,17 @@ def sample_node_runtime_metrics(
     swap_total_mb = memory.get("SwapTotal", 0) // 1024
     swap_free_mb = memory.get("SwapFree", 0) // 1024
     swap_used_mb = max(0, swap_total_mb - swap_free_mb)
-    memory_pressure = read_proc_pressure(proc_path / "pressure" / "memory")
-    io_pressure = read_proc_pressure(proc_path / "pressure" / "io")
+    memory_pressure = pressure.memory_psi
+    io_pressure = pressure.io_psi
     memory_percent = (
         (memory_used_mb / memory_total_mb) * 100.0 if memory_total_mb > 0 else None
     )
     return NodeRuntimeMetrics(
         collected_at=utc_now(),
+        memory_backing=sample_memory_backing(memory_backing_root, proc_root=proc_path),
+        resource_evidence=_RESOURCE_EVIDENCE.cached()
+        if proc_path == Path("/proc")
+        else None,
         cpu_percent=cpu_percent,
         cpu_vcpu=cpu_vcpu,
         cpu_count=cpu_count,
@@ -98,88 +114,3 @@ def sample_node_runtime_metrics(
         load_average_5m=load[1],
         load_average_15m=load[2],
     )
-
-
-def read_proc_stat_cpu(path: Path) -> tuple[int, int] | None:
-    try:
-        first_line = path.read_text(encoding="utf-8").splitlines()[0]
-    except (OSError, IndexError):
-        return None
-    fields = first_line.split()
-    if not fields or fields[0] != "cpu":
-        return None
-    try:
-        values = [int(value) for value in fields[1:]]
-    except ValueError:
-        return None
-    if len(values) < 4 or any(value < 0 for value in values):
-        return None
-    idle = values[3] + (values[4] if len(values) > 4 else 0)
-    total = sum(values)
-    return total, idle
-
-
-def read_proc_meminfo(path: Path) -> dict[str, int]:
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return {}
-    result: dict[str, int] = {}
-    for line in lines:
-        key, separator, value = line.partition(":")
-        if not separator:
-            continue
-        parts = value.strip().split()
-        if not parts:
-            continue
-        try:
-            parsed = int(parts[0])
-        except ValueError:
-            continue
-        if parsed >= 0:
-            result[key] = parsed
-    if "MemAvailable" not in result and "MemFree" in result:
-        result["MemAvailable"] = result["MemFree"]
-    return result
-
-
-def read_proc_pressure(path: Path) -> dict[str, float]:
-    """Read the 10-second Linux PSI averages for a pressure resource."""
-
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return {}
-    result: dict[str, float] = {}
-    for line in lines:
-        fields = line.split()
-        if not fields:
-            continue
-        sample_type = fields[0]
-        for field in fields[1:]:
-            key, separator, value = field.partition("=")
-            if key != "avg10" or not separator:
-                continue
-            try:
-                parsed = float(value)
-            except ValueError:
-                pass
-            else:
-                if math.isfinite(parsed) and 0.0 <= parsed <= 100.0:
-                    result[sample_type] = parsed
-            break
-    return result
-
-
-def cpu_percent_from_samples(
-    first: tuple[int, int] | None,
-    second: tuple[int, int] | None,
-) -> float | None:
-    if first is None or second is None:
-        return None
-    total_delta = second[0] - first[0]
-    idle_delta = second[1] - first[1]
-    if total_delta <= 0 or idle_delta < 0 or idle_delta > total_delta:
-        return None
-    busy_delta = total_delta - idle_delta
-    return (busy_delta / total_delta) * 100.0

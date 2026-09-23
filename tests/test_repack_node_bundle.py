@@ -5,8 +5,11 @@ from ucloud_sandboxes.gvisor_distribution import GVISOR_COMMIT, GVISOR_SIDECARS
 from tempfile import TemporaryDirectory
 import unittest
 import zipfile
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from scripts.repack_node_bundle import (
+    add_runtime_debs,
     replace_direct_runtime,
     replace_agent_package,
     sha256_file,
@@ -16,6 +19,32 @@ from scripts.repack_node_bundle import (
 
 
 class RepackNodeBundleTests(unittest.TestCase):
+    def test_explicit_debian_extension_keeps_prior_closure_and_rejects_upgrade(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            destination = root / "bundle/runtime/debs"
+            destination.mkdir(parents=True)
+            old = destination / "libc_1_amd64.deb"
+            old.write_bytes(b"qualified")
+            extra = root / "erofs-utils_1_amd64.deb"
+            extra.write_bytes(b"extra")
+            newer = root / "libc_2_amd64.deb"
+            newer.write_bytes(b"unqualified-upgrade")
+            wrong = root / "wrong_1_arm64.deb"
+            wrong.write_bytes(b"wrong-architecture")
+            manifest = {"runtime": {"platform": {"architecture": "amd64"}, "packages": ["libc"]}}
+            def inspect(argv, **kwargs):
+                return SimpleNamespace(stdout="\n".join(Path(argv[-1]).stem.split("_")))
+            with patch("scripts.repack_node_bundle.subprocess.run", side_effect=inspect):
+                add_runtime_debs(root / "bundle", manifest, [extra, extra])
+                self.assertEqual({item["name"] for item in manifest["runtime"]["files"]}, {old.name, extra.name})
+                self.assertEqual(manifest["runtime"]["packages"], ["libc"])
+                with self.assertRaisesRegex(ValueError, "replace qualified"):
+                    add_runtime_debs(root / "bundle", manifest, [newer])
+                with self.assertRaisesRegex(ValueError, "wrong-architecture"):
+                    add_runtime_debs(root / "bundle", manifest, [wrong])
+            self.assertEqual(old.read_bytes(), b"qualified")
+
     def test_repacked_agent_is_traversable_under_restrictive_umask(self):
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
@@ -153,9 +182,34 @@ class RepackNodeBundleTests(unittest.TestCase):
             for item in [
                 direct,
                 *direct["sidecars"],
+                direct["build_manifest"],
                 manifest["runtime"]["managed_init"],
             ]:
                 self.assertEqual(sha256_file(bundle / item["file"]), item["sha256"])
+                self.assertEqual((bundle / item["file"]).stat().st_size, item["size"])
+            # Run the complete fresh-worker validator on the repacker output.
+            from ucloud_sandboxes.vm_init import render_vm_init_script
+            from tests.test_vm_init import VmInitTests, write_bundle
+            complete = root / "complete"
+            full_manifest = write_bundle(complete, "sandbox")
+            replace_direct_runtime(complete, full_manifest, source / "runsc", GVISOR_COMMIT, helper)
+            manifest_path = complete / "package-bundle.json"
+            manifest_path.write_text(json.dumps(full_manifest))
+            script = render_vm_init_script(VmInitTests._options(
+                direct_runsc_commit=GVISOR_COMMIT, direct_split_memory_backing=True,
+            ))
+            start = script.index("import hashlib\nimport json\nimport os")
+            validator = script[start:script.index('\nPY\n)"', start)]
+            result = VmInitTests._run_bundle_validator(validator, complete)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            validate_source_bundle(complete, full_manifest)
+            full_manifest["runtime"]["direct_runsc"].pop("build_manifest")
+            manifest_path.write_text(json.dumps(full_manifest))
+            result = VmInitTests._run_bundle_validator(validator, complete)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("provenance metadata is absent", result.stderr)
+            with self.assertRaisesRegex(ValueError, "provenance metadata is absent"):
+                validate_source_bundle(complete, full_manifest)
 
     @staticmethod
     def _metadata(runtime: Path, directory: str, contents: str) -> None:

@@ -17,16 +17,26 @@ class ControlStatePoolTests(unittest.TestCase):
         with TemporaryDirectory() as directory:
             store = ControlStateStore(Path(directory) / 'state.sqlite')
             barrier = threading.Barrier(24)
+            active, peak, identities = set(), [0], set()
+            guard = threading.Lock()
             def read(_):
+                import time
+                barrier.wait(timeout=10)
                 with store._transaction(write=False) as conn:
                     self.assertEqual(conn.execute('PRAGMA synchronous').fetchone()[0], 2)
-                    identity = id(conn)
-                    barrier.wait(timeout=10)
-                    return identity
+                    with guard:
+                        self.assertNotIn(id(conn), active)
+                        active.add(id(conn))
+                        identities.add(id(conn))
+                        peak[0] = max(peak[0], len(active))
+                    time.sleep(.02)
+                    with guard:
+                        active.remove(id(conn))
             with ThreadPoolExecutor(max_workers=24) as pool:
-                identities = list(pool.map(read, range(24)))
-            self.assertEqual(len(set(identities)), 24)
-            self.assertLessEqual(len(store._connections), 16)
+                list(pool.map(read, range(24)))
+            self.assertLessEqual(peak[0], 16)
+            self.assertLessEqual(len(identities), 16)
+            self.assertFalse(active)
 
     def test_failed_write_rolls_back_and_reused_reader_observes_external_commit(self):
         with TemporaryDirectory() as directory:

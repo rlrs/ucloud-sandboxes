@@ -25,6 +25,10 @@ class ManagedProcessError(RuntimeError):
     pass
 
 
+class ManagedProcessReadUnavailable(ManagedProcessError):
+    """No authoritative read result was obtained; replaying this read is safe."""
+
+
 @dataclass(frozen=True)
 class ManagedProcessStart:
     job_id: str

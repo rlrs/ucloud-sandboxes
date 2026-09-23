@@ -42,3 +42,11 @@ The initial forced-park run failed before completing a cycle because the
 harness used an SDK credential for a control-only park endpoint. Production
 correctly returned HTTP 403. The harness now requires a separate gateway token
 for forced mode; natural traffic continues to use the least-privileged SDK key.
+
+The corrected forced-restore run `relay-load-bb416f7e2418` completed all 256
+cycles correctly at 64 concurrent sandboxes; all 192 measured cycles were
+observed parked. Wake p95 was 0.807 s; first usable tool p95 1.230 s, max 1.335 s.
+No workload or cleanup errors occurred. This still fails the response-to-tool
+criterion. It also had no provisioning-overlap samples: the small fleet was
+ready before its model requests were claimed. Future small forced-restore
+qualification uses barrier startup; the 256-agent test separately checks overlap.

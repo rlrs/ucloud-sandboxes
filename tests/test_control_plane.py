@@ -1526,7 +1526,8 @@ class ControlPlaneTests(unittest.TestCase):
 
                         gateway.RequestHandlerClass._proxy_request = lifecycle_response
                         gateway_routing = gateway.RequestHandlerClass.routing_store
-                        real_commit = gateway_routing.set_sandbox_state_if_current
+                        commit_method = ('confirm_sandbox_wake' if action == 'wake' else 'set_sandbox_state_if_current')
+                        real_commit = getattr(gateway_routing, commit_method)
 
                         def ambiguous_commit(*args, **kwargs):
                             if kwargs.get("node_epoch") is None:
@@ -1537,9 +1538,7 @@ class ControlPlaneTests(unittest.TestCase):
                                 "lifecycle commit acknowledgement lost"
                             )
 
-                        gateway_routing.set_sandbox_state_if_current = (  # type: ignore[method-assign]
-                            ambiguous_commit
-                        )
+                        setattr(gateway_routing, commit_method, ambiguous_commit)
                         with _running_server(gateway) as base:
                             payload = {"operation_id": f"{action}:ambiguous"}
                             if action == "wake":
@@ -1636,7 +1635,7 @@ class ControlPlaneTests(unittest.TestCase):
 
                 gateway.RequestHandlerClass._proxy_request = lifecycle_response
                 gateway_routing = gateway.RequestHandlerClass.routing_store
-                real_commit = gateway_routing.set_sandbox_state_if_current
+                real_commit = gateway_routing.confirm_sandbox_wake
 
                 def ambiguous_commit(*args, **kwargs):
                     if kwargs.get("node_epoch") is None:
@@ -1644,12 +1643,12 @@ class ControlPlaneTests(unittest.TestCase):
                     if outcome == "error_after_commit":
                         real_commit(*args, **kwargs)
                     if outcome == "conflict":
-                        return None
+                        return None, (None, False)
                     raise sqlite3.OperationalError(
                         "implicit wake commit acknowledgement lost"
                     )
 
-                gateway_routing.set_sandbox_state_if_current = (  # type: ignore[method-assign]
+                gateway_routing.confirm_sandbox_wake = (  # type: ignore[method-assign]
                     ambiguous_commit
                 )
                 with _running_server(gateway) as base:

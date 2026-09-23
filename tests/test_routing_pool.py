@@ -359,3 +359,61 @@ class RoutingPoolTests(unittest.TestCase):
             self.assertEqual(program.wake_started_at, started)
             self.assertEqual(program.response_ready_at, started)
             self.assertEqual(program.last_error, 'temporary node failure')
+
+    def test_wake_confirmation_and_program_outcome_share_one_durable_commit(self):
+        with TemporaryDirectory() as tmp:
+            store = RoutingStore(Path(tmp) / 'routing.sqlite')
+            route = store.upsert_sandbox(_sandbox_route(
+                sandbox_id='live', state='running', node_id='node', job_id='job',
+                node_url='http://node', node_epoch='boot', activity_epoch=10,
+            ))
+            before = store._write_batches.commits
+            confirmed, (program, changed) = store.confirm_sandbox_wake(
+                route, node_epoch='boot', activity_epoch=11,
+                program_transition=dict(request_id='request', rollout_id='rollout', state='acting'),
+            )
+            self.assertEqual(store._write_batches.commits, before + 1)
+            self.assertEqual(confirmed.activity_epoch, 11)
+            self.assertTrue(changed)
+            self.assertEqual(program.state, 'acting')
+            peer = RoutingStore(store.path)
+            self.assertEqual(peer.get_sandbox('live'), confirmed)
+            self.assertEqual(peer.program_request_readonly('request'), program)
+
+    def test_failed_program_commit_cannot_acknowledge_partial_wake_confirmation(self):
+        with TemporaryDirectory() as tmp:
+            store = RoutingStore(Path(tmp) / 'routing.sqlite')
+            route = store.upsert_sandbox(_sandbox_route(
+                sandbox_id='live', state='running', node_id='node', job_id='job',
+                node_url='http://node', node_epoch='boot', activity_epoch=10,
+            ))
+            with store._transaction() as conn:
+                conn.execute("CREATE TRIGGER fail_program BEFORE INSERT ON program_requests BEGIN SELECT RAISE(ABORT, 'injected projection failure'); END")
+            args = dict(node_epoch='boot', activity_epoch=11,
+                        program_transition=dict(request_id='request', rollout_id='rollout', state='acting'))
+            with self.assertRaises(sqlite3.DatabaseError):
+                store.confirm_sandbox_wake(route, **args)
+            self.assertEqual(store.get_sandbox('live'), route)
+            self.assertIsNone(store.program_request_readonly('request'))
+            with store._transaction() as conn:
+                conn.execute('DROP TRIGGER fail_program')
+            confirmed, (program, changed) = store.confirm_sandbox_wake(route, **args)
+            self.assertEqual(confirmed.activity_epoch, 11)
+            self.assertTrue(changed)
+            self.assertEqual(program.state, 'acting')
+
+    def test_stale_wake_proof_cannot_publish_program_success(self):
+        with TemporaryDirectory() as tmp:
+            store = RoutingStore(Path(tmp) / 'routing.sqlite')
+            route = store.upsert_sandbox(_sandbox_route(
+                sandbox_id='live', state='running', node_id='node', job_id='job',
+                node_url='http://node', node_epoch='boot', activity_epoch=10,
+            ))
+            confirmed, result = store.confirm_sandbox_wake(
+                route, node_epoch='old-boot', activity_epoch=11,
+                program_transition=dict(request_id='request', rollout_id='rollout', state='acting'),
+            )
+            self.assertIsNone(confirmed)
+            self.assertEqual(result, (None, False))
+            self.assertIsNone(store.program_request_readonly('request'))
+            self.assertEqual(store.get_sandbox('live'), route)

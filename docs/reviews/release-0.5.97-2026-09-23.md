@@ -1,0 +1,19 @@
+# Commit wake confirmation and program outcome together
+
+Warm and restored wakes previously queued route confirmation and program
+completion as separate SQLite writes. They now share one FULL transaction.
+The existing owner, generation, boot epoch and activity revision checks run
+inside that transaction. A stale proof cannot publish an acting program, and
+a program write failure rolls back the route update instead of acknowledging
+partial progress. Implicit wakes use the same confirmation path without a
+program projection. Snapshot-reference retirement still happens after commit
+and uses readback after an ambiguous error.
+
+161 Linux routing/gateway tests pass, including injected program-write failure,
+stale worker proof, externally visible committed state and exact commit count.
+The existing lost-commit-acknowledgment tests now inject at the outer combined
+transaction boundary; they continue covering both pre-commit and post-commit
+failures and the corresponding snapshot-reference cleanup.
+
+This reduces durable operations without relaxing durability or lifecycle
+fences. The full load tests remain the performance acceptance criterion.

@@ -958,6 +958,7 @@ class RoutingStore:
         wake_started_at: str | None = None,
         last_error: str = "",
         clear_error: bool = False,
+        _connection=None,
     ) -> tuple[ProgramRequestState, bool]:
         request_id = request_id.strip()
         rollout_id = rollout_id.strip()
@@ -1052,12 +1053,12 @@ class RoutingStore:
 
         # Retries are observational. Changed projections recheck both request
         # identity and generation in one joined read under the writer fence.
-        with self._connect() as conn:
+        with (self._connect() if _connection is None else nullcontext(_connection)) as conn:
             previous = read_current(conn)
         if previous is not None and project(previous)[3]:
             return previous, False
-        with self._transaction() as conn:
-            existing = read_current(conn)
+        with (self._transaction() if _connection is None else nullcontext(_connection)) as conn:
+            existing = read_current(conn) if _connection is None else previous
             effective_state, timestamps, error, unchanged = project(existing)
             if unchanged:
                 return existing, False
@@ -1156,6 +1157,7 @@ class RoutingStore:
         snapshot_repository: str | None = None,
         snapshot_tag: str | None = None,
         storage_snapshot: dict[str, Any] | None = None,
+        _connection=None,
     ) -> SandboxRoute | None:
         """Change only the state of the exact routed sandbox incarnation.
 
@@ -1183,7 +1185,7 @@ class RoutingStore:
             lifecycle_activity_epoch = activity_epoch
         # SQLite and the shared writer serialize this database-only
         # mutation. Inventory projection must not block lifecycle progress.
-        with self._transaction() as conn:
+        with (self._transaction() if _connection is None else nullcontext(_connection)) as conn:
             current = self._get_sandbox_unlocked(conn, route.sandbox_id)
             if (
                 current is None
@@ -1249,6 +1251,26 @@ class RoutingStore:
             )
             self._write_sandbox_lifecycle(conn, stored)
         return stored
+
+    def confirm_sandbox_wake(
+        self, route: SandboxRoute, *, node_epoch: str, activity_epoch: int,
+        program_transition: dict[str, Any] | None = None,
+    ):
+        """Confirm ownership and its program outcome in one FULL commit."""
+        program = (None, False)
+        with self._transaction() as conn:
+            updated = self.set_sandbox_state_if_current(
+                route, expected_states={"parked", "waking", "running"}, state="running",
+                node_epoch=node_epoch, activity_epoch=activity_epoch,
+                storage_schema=route.storage_schema, snapshot_manifest_digest="",
+                snapshot_repository="", snapshot_tag="", storage_snapshot={},
+                _connection=conn,
+            )
+            if updated is not None and program_transition is not None:
+                program = self.upsert_program_request_transition_with_change(
+                    updated, **program_transition, _connection=conn,
+                )
+        return updated, program
 
     def reserve_sandbox_wake(self, route: SandboxRoute, *, pending_id: str) -> SandboxRoute | None:
         """Atomically reserve an exact owner and remove its wake demand.

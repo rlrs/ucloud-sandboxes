@@ -4902,13 +4902,14 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         if not 200 <= response.status < 300:
             return route
         updated = (
-            self._commit_successful_wake(route, response)
+            self._commit_successful_wake(route, response, lifecycle_payload=payload)
             if action == "wake"
             else self._commit_successful_park(route, response)
         )
         if updated is None:
             return None
-        self._record_completed_program_lifecycle(updated, action, payload)
+        if action != "wake":
+            self._record_completed_program_lifecycle(updated, action, payload)
         return updated
 
     def _commit_successful_park(
@@ -5003,6 +5004,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         route: SandboxRoute,
         action: str,
         payload: dict[str, Any],
+        *, committed=None,
     ) -> None:
         if not payload.get("request_id"):
             return
@@ -5015,12 +5017,14 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 clear_error=True,
             )
             return
-        _program, changed = self._record_program_request_transition(
-            route,
-            payload,
-            state="acting",
-            clear_error=True,
-        )
+        if committed is None:
+            _program, changed = self._record_program_request_transition(
+                route, payload, state="acting", clear_error=True,
+            )
+        else:
+            _program, changed = committed
+            if changed:
+                self.metrics_store.append("program_state_transition", _program.to_dict())
         if not changed:
             return
         self.metrics_store.append(
@@ -5064,7 +5068,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             self._release_registry_route_reference(removed)
         return True
 
-    def _record_program_request_transition(
+    def _program_request_transition_args(
         self,
         route: SandboxRoute,
         lifecycle_payload: dict[str, Any],
@@ -5074,11 +5078,11 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         response_ready: bool = False,
         last_error: str = "",
         clear_error: bool = False,
-    ) -> tuple[ProgramRequestState | None, bool]:
+    ) -> dict[str, Any] | None:
         request_id = str(lifecycle_payload.get("request_id") or "").strip()
         rollout_id = str(lifecycle_payload.get("rollout_id") or "").strip()
         if not request_id or not rollout_id:
-            return None, False
+            return None
         observed = getattr(self, "_warm_program_wake_observation", None)
         warm_started_at = (
             observed[3] if observed is not None
@@ -5095,27 +5099,39 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 ).isoformat()
         except (TypeError, ValueError, OverflowError, OSError):
             pass
+        return dict(
+            request_id=request_id, rollout_id=rollout_id, state=state,
+            accepted_at=accepted_at or None, parked_at=parked_at,
+            response_ready_at=warm_started_at or (utc_now().isoformat() if response_ready else None),
+            **({"wake_started_at": warm_started_at} if warm_started_at else {}),
+            last_error=last_error, clear_error=clear_error,
+        )
+
+    def _record_program_request_transition(
+        self,
+        route: SandboxRoute,
+        lifecycle_payload: dict[str, Any],
+        *,
+        state: str,
+        parked_at: str | None = None,
+        response_ready: bool = False,
+        last_error: str = "",
+        clear_error: bool = False,
+    ) -> tuple[ProgramRequestState | None, bool]:
+        args = self._program_request_transition_args(
+            route, lifecycle_payload, state=state, parked_at=parked_at,
+            response_ready=response_ready, last_error=last_error, clear_error=clear_error,
+        )
+        if args is None:
+            return None, False
         try:
-            program, changed = (
-                self.routing_store.upsert_program_request_transition_with_change(
-                    route,
-                    request_id=request_id,
-                    rollout_id=rollout_id,
-                    state=state,
-                    accepted_at=accepted_at or None,
-                    parked_at=parked_at,
-                    response_ready_at=warm_started_at or (utc_now().isoformat() if response_ready else None),
-                    **({"wake_started_at": warm_started_at} if warm_started_at else {}),
-                    last_error=last_error,
-                    clear_error=clear_error,
-                )
-            )
+            program, changed = self.routing_store.upsert_program_request_transition_with_change(route, **args)
         except (OSError, sqlite3.Error, ValueError, SandboxRouteConflictError) as exc:
             self.metrics_store.append(
                 "program_state_projection_error",
                 {
-                    "request_id": request_id,
-                    "rollout_id": rollout_id,
+                    "request_id": args["request_id"],
+                    "rollout_id": args["rollout_id"],
                     "sandbox_id": route.sandbox_id,
                     "sandbox_generation": route.generation,
                     "state": state,
@@ -5726,6 +5742,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         self,
         route: SandboxRoute,
         response: ProxiedResponse,
+        *, lifecycle_payload: dict[str, Any] | None = None,
     ) -> SandboxRoute | None:
         """Commit one proven wake and retire its obsolete snapshot authority."""
 
@@ -5741,22 +5758,11 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             )
             return None
         try:
-            updated = self.routing_store.set_sandbox_state_if_current(
-                route,
-                # A same-epoch heartbeat sampled before the wake can restore
-                # ``parked`` while the node response is in flight. The newer
-                # activity proof is authoritative for that exact owner.
-                expected_states={"parked", "waking", "running"},
-                state="running",
-                node_epoch=node_epoch,
-                activity_epoch=activity_epoch,
-                # Live writes make the resumed snapshot stale. Retain only
-                # the storage schema needed by the current worker.
-                storage_schema=route.storage_schema,
-                snapshot_manifest_digest="",
-                snapshot_repository="",
-                snapshot_tag="",
-                storage_snapshot={},
+            updated, program = self.routing_store.confirm_sandbox_wake(
+                route, node_epoch=node_epoch, activity_epoch=activity_epoch,
+                program_transition=(self._program_request_transition_args(
+                    route, lifecycle_payload, state="acting", clear_error=True,
+                ) if lifecycle_payload is not None else None),
             )
         except BaseException:
             try:
@@ -5789,6 +5795,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             route,
             keep_route=updated,
         )
+        if lifecycle_payload is not None:
+            self._record_completed_program_lifecycle(updated, "wake", lifecycle_payload, committed=program)
         return updated
 
     def _route_exec_request(self, session_id: str) -> None:

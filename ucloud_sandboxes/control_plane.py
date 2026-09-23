@@ -4494,8 +4494,19 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         self._deferred_program_wake_shadow = None
         self._program_wake_owner_view = None
         self._program_wake_started = False
+        self._warm_program_wake_observation = None
         request_id = str(payload.get("request_id") or "").strip()
         if not action or not request_id:
+            return
+        if action == "wake" and route.state.lower() == "running" and payload.get("durable_lifecycle"):
+            # PostgreSQL has already committed this response and wake intent.
+            # A running owner needs no placement demand. Persist the local
+            # observational timestamps with the outcome, rather than make a
+            # warm wake wait for an extra SQLite commit before contacting it.
+            self._warm_program_wake_observation = (
+                request_id, route.sandbox_id, route.generation, utc_now().isoformat(),
+            )
+            self._program_wake_started = True
             return
         warm_wake = action == "wake" and route.state.lower() in {"running", "waking"}
         # Warm work has no placement wait between response-ready and dispatch.
@@ -5068,6 +5079,12 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         rollout_id = str(lifecycle_payload.get("rollout_id") or "").strip()
         if not request_id or not rollout_id:
             return None, False
+        observed = getattr(self, "_warm_program_wake_observation", None)
+        warm_started_at = (
+            observed[3] if observed is not None
+            and observed[:3] == (request_id, route.sandbox_id, route.generation)
+            and state in {"waking", "acting"} else None
+        )
         accepted_at = ""
         try:
             raw_created_at = float(lifecycle_payload.get("request_created_at"))
@@ -5087,7 +5104,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     state=state,
                     accepted_at=accepted_at or None,
                     parked_at=parked_at,
-                    response_ready_at=utc_now().isoformat() if response_ready else None,
+                    response_ready_at=warm_started_at or (utc_now().isoformat() if response_ready else None),
+                    **({"wake_started_at": warm_started_at} if warm_started_at else {}),
                     last_error=last_error,
                     clear_error=clear_error,
                 )

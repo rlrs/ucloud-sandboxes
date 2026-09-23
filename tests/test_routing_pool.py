@@ -311,3 +311,51 @@ class RoutingPoolTests(unittest.TestCase):
                 store.upsert_program_request_transition_with_change(
                     route, request_id='request', rollout_id='rollout', state='model_wait',
                 )
+
+    def test_warm_durable_wake_records_observation_with_outcome_only(self):
+        from unittest.mock import Mock
+        from ucloud_sandboxes.control_plane import ControlPlaneHandler
+        with TemporaryDirectory() as tmp:
+            store = RoutingStore(Path(tmp) / 'routing.sqlite')
+            route = store.upsert_sandbox(_sandbox_route(
+                sandbox_id='live', state='running', node_id='node', job_id='job', node_url='http://node',
+            ))
+            handler = object.__new__(ControlPlaneHandler)
+            handler.routing_store = store
+            handler.metrics_store = Mock()
+            payload = dict(request_id='request', rollout_id='rollout', durable_lifecycle=True)
+            handler._prepare_program_lifecycle(route, 'wake', payload)
+            self.assertIsNone(store.program_request_readonly('request'))
+            started = handler._warm_program_wake_observation[3]
+            handler._record_completed_program_lifecycle(route, 'wake', payload)
+            committed = store.program_request_readonly('request')
+            self.assertEqual(committed.state, 'acting')
+            self.assertEqual(committed.response_ready_at, started)
+            self.assertEqual(committed.wake_started_at, started)
+            self.assertGreaterEqual(committed.wake_completed_at, started)
+            # An exact replay retains the first timestamps and no-op semantics.
+            handler._prepare_program_lifecycle(route, 'wake', payload)
+            handler._record_completed_program_lifecycle(route, 'wake', payload)
+            self.assertEqual(store.program_request_readonly('request'), committed)
+
+    def test_failed_warm_wake_retains_demand_and_original_start_observation(self):
+        from unittest.mock import Mock
+        from ucloud_sandboxes.control_plane import ControlPlaneHandler
+        with TemporaryDirectory() as tmp:
+            store = RoutingStore(Path(tmp) / 'routing.sqlite')
+            route = store.upsert_sandbox(_sandbox_route(
+                sandbox_id='live', state='running', node_id='node', job_id='job', node_url='http://node',
+            ))
+            handler = object.__new__(ControlPlaneHandler)
+            handler.routing_store = store
+            handler.metrics_store = Mock()
+            payload = dict(request_id='request', rollout_id='rollout', durable_lifecycle=True)
+            handler._prepare_program_lifecycle(route, 'wake', payload)
+            started = handler._warm_program_wake_observation[3]
+            program, changed = handler._record_program_request_transition(
+                route, payload, state='waking', last_error='temporary node failure',
+            )
+            self.assertTrue(changed)
+            self.assertEqual(program.wake_started_at, started)
+            self.assertEqual(program.response_ready_at, started)
+            self.assertEqual(program.last_error, 'temporary node failure')

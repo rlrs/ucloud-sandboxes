@@ -114,9 +114,12 @@ class RelayLoadBenchmarkTests(unittest.TestCase):
                 '--sandbox-token-file', '/tmp/sandbox-token', '--relay-worker-token-file', '/tmp/worker-token',
                 '--image', 'python@sha256:' + 'a' * 64, '--output', '/tmp/report.json']
         for extra in (['--dirty-mb', '256'], ['--warmup-cycles', '8'], ['--model-seconds', 'nan'], ['--cycles', '0'], ['--fleet-pollers', '0'],
-                      ['--startup-mode', 'rolling', '--start-signal-file', '/tmp/signal']):
+                      ['--startup-mode', 'rolling', '--start-signal-file', '/tmp/signal'],
+                      ['--parking-mode', 'forced']):
             with self.subTest(extra=extra), redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
                 parse_args(base + extra)
+        forced = parse_args(base + ['--parking-mode', 'forced', '--gateway-token-file', '/tmp/control-token'])
+        self.assertEqual(forced.gateway_token_file, Path('/tmp/control-token'))
         self.assertNotIn('secret', safe_error(OSError('http://relay/_relay/secret/chat/completions')))
 
     def test_fast_steady_state_cannot_hide_failed_or_missing_overlap_coverage(self):

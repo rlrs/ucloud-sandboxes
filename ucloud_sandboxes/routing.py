@@ -955,6 +955,7 @@ class RoutingStore:
         accepted_at: str | None = None,
         parked_at: str | None = None,
         response_ready_at: str | None = None,
+        wake_started_at: str | None = None,
         last_error: str = "",
         clear_error: bool = False,
     ) -> tuple[ProgramRequestState, bool]:
@@ -1000,6 +1001,8 @@ class RoutingStore:
                 timestamps["parked_at"] = parked_at
             if response_ready_at and not timestamps["response_ready_at"]:
                 timestamps["response_ready_at"] = response_ready_at
+            if wake_started_at and not timestamps["wake_started_at"]:
+                timestamps["wake_started_at"] = wake_started_at
             transition_field = {
                 "ready_to_wake": "response_ready_at",
                 "waking": "wake_started_at",

@@ -102,6 +102,8 @@ def parse_args(argv=None):
     parser.add_argument("--gateway-url", required=True)
     parser.add_argument("--relay-url", required=True)
     parser.add_argument("--sandbox-token-file", type=Path, required=True)
+    parser.add_argument("--gateway-token-file", type=Path,
+                        help="Gateway control credential; required for explicit forced parking")
     parser.add_argument("--relay-worker-token-file", type=Path, required=True)
     parser.add_argument("--image", required=True, help="Immutable registry image containing Python")
     parser.add_argument("--output", type=Path, required=True)
@@ -131,6 +133,8 @@ def parse_args(argv=None):
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--start-signal-file", help="optional absent file to create after all_agents_ready; pauses before model traffic")
     args = parser.parse_args(argv)
+    if args.parking_mode == 'forced' and args.gateway_token_file is None:
+        parser.error('--parking-mode forced requires --gateway-token-file')
     for name in ("sandboxes", "cycles", "resident_mb", "dirty_mb", "files", "file_kib",
                  "payload_kib", "memory_mb", "disk_mb", "create_concurrency", "fleet_pollers"):
         if getattr(args, name) <= 0:
@@ -234,6 +238,8 @@ async def run(args):
         raise ValueError("start signal file already exists; use a fresh path")
     prefix = "relay-load-" + uuid4().hex[:12]
     token = args.sandbox_token_file.read_text().strip()
+    lifecycle_token = (args.gateway_token_file.read_text().strip()
+                       if args.parking_mode == 'forced' else token)
     worker_token = args.relay_worker_token_file.read_text().strip()
     config = {k: v for k, v in vars(args).items() if not k.endswith("token_file") and k != "output"}
     result = {"run_id": prefix, "started_at": datetime.now(timezone.utc).isoformat(),
@@ -268,7 +274,7 @@ async def run(args):
     inventory = {}
     async with (
         aiohttp.ClientSession(
-            headers={'Authorization': 'Bearer ' + token},
+            headers={'Authorization': 'Bearer ' + lifecycle_token},
             timeout=aiohttp.ClientTimeout(total=180),
         ) as lifecycle,
         AsyncSandboxClient(args.gateway_url, api_token=token, timeout_seconds=180) as operator,

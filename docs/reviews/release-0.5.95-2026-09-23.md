@@ -28,3 +28,17 @@ from 615 to 81 ms and median from 69 to 52 ms. Total throughput decreased
 This is evidence of improved latency isolation, not a throughput win or final
 qualification. The full workload must still measure creation, relay work and
 worker behavior together.
+
+Unprofiled production run `relay-load-42ec8783467e` (00:07–00:12 UTC):
+2,048/2,048 cycles correct. Measured wake p95 1.286 s, response-to-first-usable
+p95 1.900 s, median 0.662 s. Health p95 102 ms, fleet-list p95 171 ms;
+no health, list, workload, or cleanup errors. Guest tool p95 was 63 ms.
+Five existing idle workers were upgraded before this run; provider cold boot
+was not exercised. All 256 guest sandboxes were newly created. There were
+184 cycles overlapping provisioning (including warmup); their p95 was 1.856 s.
+No measured natural cycle was observed parked. This is not an SLO pass.
+
+The initial forced-park run failed before completing a cycle because the
+harness used an SDK credential for a control-only park endpoint. Production
+correctly returned HTTP 403. The harness now requires a separate gateway token
+for forced mode; natural traffic continues to use the least-privileged SDK key.

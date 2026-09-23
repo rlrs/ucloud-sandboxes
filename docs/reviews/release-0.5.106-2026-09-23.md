@@ -39,3 +39,10 @@ including transition overlap, deletion during the wait, retryable pre-exec
 expiry, cold-burst planning and observed working-set replacement. Native storage,
 gVisor, dependencies and SDK are unchanged. Production load qualification is
 still required; neither change establishes the sub-second target on its own.
+
+The subsequent cold 256-agent run completed all 2,048 cycles without correctness,
+health or cleanup failures. Placement was 83/72/57/44 guests on four workers,
+with no compaction in a mid-run sample. Measured wake p95 was 0.356 s and
+externally confirmed tool p95 was 0.818 s. The provisioning-overlap tool phase
+still had p95 1.234 s, so the strict overall qualification remains failed.
+This demonstrates the burst-planning improvement without claiming completion.

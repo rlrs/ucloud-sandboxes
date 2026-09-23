@@ -18,6 +18,26 @@ from ucloud_sandboxes.sandbox_exec import (
 
 
 class SandboxExecProtocolTests(unittest.TestCase):
+    def test_final_event_watermark_requires_both_output_pumps_to_finish(self) -> None:
+        for held_pipe in (False, True):
+            with self.subTest(held_pipe=held_pipe):
+                manager = ExecSessionManager(FakeSandboxManager())
+                session = _install_session(manager, BlockingStdin())
+                process = SimpleNamespace(wait=lambda: 0, stdin=None)
+                threads = (Mock(), Mock())
+                threads[0].is_alive.return_value = held_pipe
+                threads[1].is_alive.return_value = False
+                manager._append_stream_chunk(session.id, "stdout", "all output")
+                manager._wait_process_unobserved(session.id, process, threads)
+                self.assertEqual(session.status, "exited")
+                if held_pipe:
+                    self.assertIsNone(session.to_dict()["final_sequence"])
+                    manager._append_stream_chunk(session.id, "stdout", "late descendant")
+                    self.assertIsNone(session.to_dict()["final_sequence"])
+                else:
+                    self.assertEqual(session.to_dict()["final_sequence"], session.events[-1].sequence)
+                    self.assertEqual(session.events[-1].stream, "exit")
+
     def test_node_returns_safe_admission_response_for_session_capacity(self) -> None:
         from ucloud_sandboxes.node_agent import NodeAgentHandler
         from ucloud_sandboxes.telemetry import Telemetry

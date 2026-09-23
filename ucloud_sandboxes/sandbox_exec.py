@@ -121,6 +121,8 @@ class ExecSession:
     stdin_open: bool = False
     events: deque[ExecEvent] = field(default_factory=deque)
     next_sequence: int = 1
+    output_closed: bool = False
+    final_sequence: int | None = None
     process: subprocess.Popen[str] | None = field(
         default=None, repr=False, compare=False
     )
@@ -143,6 +145,7 @@ class ExecSession:
             "stdin_open": self.stdin_open,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
+            "final_sequence": self.final_sequence,
         }
 
 
@@ -483,6 +486,9 @@ class ExecSessionManager:
                 if self._sessions.get(session_id) is not session:
                     return exit_code
                 session.stdin_open = False
+                # A timed join may leave a descendant holding an output pipe.
+                # Only advertise a final event watermark if both pumps ended.
+                session.output_closed = all(not thread.is_alive() for thread in pump_threads)
             self._complete(session, exit_code)
         return exit_code
 
@@ -615,6 +621,8 @@ class ExecSessionManager:
                 session.exit_code = exit_code
                 session.status = "exited" if exit_code == 0 else "failed"
                 self._append_event_locked(session, "exit", "", exit_code=exit_code)
+                if session.output_closed:
+                    session.final_sequence = session.next_sequence - 1
 
     def _release_capacity_lease(self, capacity_lease: object) -> None:
         release_capacity = getattr(

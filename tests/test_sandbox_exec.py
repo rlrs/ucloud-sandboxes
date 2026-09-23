@@ -49,7 +49,9 @@ class SandboxExecProtocolTests(unittest.TestCase):
         def snapshot():
             entered.set()
             manager.initial_events(session.id, wait_seconds=0.05)
-        thread = Thread(target=snapshot); thread.start(); entered.wait()
+        thread = Thread(target=snapshot)
+        thread.start()
+        entered.wait()
         manager._append_stream_chunk(session.id, "stdout", "concurrent")
         thread.join(timeout=1)
         self.assertFalse(thread.is_alive())

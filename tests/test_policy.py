@@ -490,6 +490,33 @@ class ScalePolicyTests(unittest.TestCase):
         self.assertEqual(decision.resource_deficit, ResourceQuantity())
         self.assertEqual(decision.creates, 0)
 
+    def test_prepared_cold_burst_forecasts_memory_before_pressure_exists(self) -> None:
+        for cpus in (1, 32):
+            with self.subTest(cpus=cpus):
+                decision = evaluate_scale(
+                    [],
+                    SandboxDemand(prepared_placement_requests=(SandboxPlacementRequest(
+                        resources=ResourceQuantity(vcpu=cpus, memory_mb=1024, disk_mb=4096),
+                        count=256,
+                    ),)),
+                    ScalePolicy(max_nodes=10, max_create_per_cycle=10, max_provisioning_nodes=10),
+                )
+                self.assertEqual(decision.creates, 4)
+                self.assertEqual(decision.desired_resources.memory_mb, 327680)
+
+    def test_prepared_burst_accounts_for_observed_existing_guests(self) -> None:
+        resources = ResourceQuantity(vcpu=32, memory_mb=98304, disk_mb=1449984)
+        busy = node(
+            "resident", active=100, total_resources=resources,
+            runtime_metrics=NodeRuntimeMetrics(collected_at=utc_now(), memory_working_set_mb=55000),
+        )
+        prepared = SandboxDemand(prepared_placement_requests=(SandboxPlacementRequest(
+            resources=ResourceQuantity(vcpu=1, memory_mb=1024, disk_mb=4096), count=32,
+        ),))
+        self.assertEqual(evaluate_scale([busy], prepared, ScalePolicy()).creates, 1)
+        # Consumed/expired preparation stops charging hypothetical limits.
+        self.assertEqual(evaluate_scale([busy], SandboxDemand(), ScalePolicy()).creates, 0)
+
     def test_relocation_demand_excludes_the_current_owner(self) -> None:
         requested = ResourceQuantity(disk_mb=8192)
         decision = evaluate_scale(
@@ -584,7 +611,7 @@ class ScalePolicyTests(unittest.TestCase):
                             memory_mb=3072,
                             disk_mb=45_312,
                         ),
-                        count=32,
+                        count=24,
                     ),
                 )
             ),
@@ -675,7 +702,7 @@ class ScalePolicyTests(unittest.TestCase):
                             memory_mb=3072,
                             disk_mb=45_312,
                         ),
-                        count=32,
+                        count=24,
                     ),
                 )
             ),
@@ -1016,7 +1043,7 @@ class ScalePolicyTests(unittest.TestCase):
             decision.desired_resources,
             ResourceQuantity(
                 vcpu=32,
-                memory_mb=98_304,
+                memory_mb=196_608,
                 disk_mb=2_899_968,
             ),
         )
@@ -1106,7 +1133,7 @@ class ScalePolicyTests(unittest.TestCase):
                     SandboxPlacementRequest(
                         resources=ResourceQuantity(
                             vcpu=8,
-                            memory_mb=30_000,
+                            memory_mb=24_000,
                             disk_mb=32768,
                         )
                     ),

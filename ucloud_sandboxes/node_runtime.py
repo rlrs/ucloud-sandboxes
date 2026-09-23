@@ -26,6 +26,7 @@ from .sandbox import (
     SandboxAdmissionClosedError,
     SandboxBusyError,
     SandboxConflictError,
+    SandboxExecAdmissionDeferredError,
     SandboxLifecycleCoordinator,
     SandboxOperation,
     SandboxRecord,
@@ -202,7 +203,18 @@ class DirectLifecycle:
         self._coordinator = SandboxLifecycleCoordinator()
 
     def acquire_shared(self, sandbox_id: str) -> None:
-        self._coordinator.acquire_shared(sandbox_id)
+        # A parked guest can race a tool request with a local deferred park.
+        # Queue before accepting exec/file activity, then re-read registration
+        # and restore under its generation lock. No command has been launched,
+        # so a bounded wait expiring is safe for the gateway to reschedule.
+        try:
+            self._coordinator.acquire_shared(
+                sandbox_id,
+                join_transition=True,
+                transition_timeout_seconds=getattr(self.owner.service, "admission_wait_seconds", 30.0),
+            )
+        except SandboxBusyError as exc:
+            raise SandboxExecAdmissionDeferredError(str(exc)) from exc
         try:
             registration = self.owner.service._require_registration(sandbox_id)
             with self.owner.service._request_lock(

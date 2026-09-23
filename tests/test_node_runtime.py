@@ -1,4 +1,5 @@
 import unittest
+from contextlib import nullcontext
 from threading import Event, Thread
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -7,6 +8,7 @@ from ucloud_sandboxes.node_runtime import DirectNodeRuntime
 from ucloud_sandboxes.sandbox import (
     NodeDrainState,
     SandboxBusyError,
+    SandboxExecAdmissionDeferredError,
 )
 
 
@@ -82,6 +84,64 @@ class _WakeService(_IdleService):
 
 
 class DirectNodeRuntimeTests(unittest.TestCase):
+    def test_tool_joins_transition_before_reading_registration_or_restoring(self) -> None:
+        for deleted in (False, True):
+            with self.subTest(deleted=deleted):
+                service = _WakeService()
+                registration = SimpleNamespace(
+                    sandbox_generation=2, to_direct_sandbox=lambda: "new-generation",
+                )
+                service._require_registration = Mock(return_value=registration)
+                service._request_lock = Mock(side_effect=lambda *_: nullcontext())
+                service.mark_activity = Mock()
+                service.ensure_running_with_timings = Mock(return_value={})
+                manager = DirectNodeRuntime(service)
+                entered, finished = Event(), Event()
+                failures = []
+
+                def tool():
+                    entered.set()
+                    try:
+                        with manager.lifecycle.shared("agent"):
+                            pass
+                    except Exception as exc:
+                        failures.append(exc)
+                    finally:
+                        finished.set()
+
+                with manager.lifecycle._coordinator.exclusive("agent"):
+                    thread = Thread(target=tool)
+                    thread.start()
+                    self.assertTrue(entered.wait(1))
+                    self.assertFalse(finished.wait(.05))
+                    service._require_registration.assert_not_called()
+                    service.ensure_running_with_timings.assert_not_called()
+                    if deleted:
+                        service._require_registration.side_effect = ValueError("sandbox deleted")
+                thread.join(1)
+                self.assertTrue(finished.is_set())
+                if deleted:
+                    self.assertEqual([str(exc) for exc in failures], ["sandbox deleted"])
+                    service.ensure_running_with_timings.assert_not_called()
+                else:
+                    self.assertFalse(failures)
+                    service._request_lock.assert_called_once_with("agent", 2)
+                    service.ensure_running_with_timings.assert_called_once_with("new-generation")
+                with manager.lifecycle._coordinator.exclusive("agent"):
+                    pass  # Neither branch leaks an activity lease.
+
+    def test_tool_transition_timeout_is_retryable_before_exec_acceptance(self) -> None:
+        service = _WakeService()
+        service.admission_wait_seconds = .01
+        service._require_registration = Mock()
+        manager = DirectNodeRuntime(service)
+        with manager.lifecycle._coordinator.exclusive("agent"):
+            with self.assertRaises(SandboxExecAdmissionDeferredError):
+                manager.lifecycle.acquire_shared("agent")
+        service._require_registration.assert_not_called()
+        with manager.lifecycle._coordinator.exclusive("agent"):
+            pass
+
     def test_activity_release_unwinds_coordinator_when_storage_cleanup_fails(self) -> None:
         for failing_step in ("registration", "mark_activity"):
             with self.subTest(failing_step=failing_step):

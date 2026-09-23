@@ -163,6 +163,30 @@ def evaluate_scale(
         ),
         include_disk=True,
     )
+    if demand.prepared_placement_requests:
+        # prepare_capacity promises a concurrent cold burst. Before those
+        # guests exist there is no measured working set to scale from. Forecast
+        # their memory once, using the configured utilization target; do not
+        # assume every future guest can reuse the same RAM simultaneously.
+        # This only provisions capacity: it does not reserve resident limits
+        # or impose an admission cap on create, wake, or execution.
+        target = max(.01, min(1.0, policy.target_memory_utilization))
+        forecast = sum(
+            min(maximum_request.memory_mb, math.ceil(request.resources.memory_mb / target))
+            * request.count
+            for request in demand.prepared_placement_requests
+            if request.resources.fits_within(maximum_request)
+        )
+        # Once a preparation is consumed, live working-set evidence replaces
+        # its forecast. File-backed guest RAM is included in this metric even
+        # when Linux reports it as reclaimable MemAvailable.
+        observed = sum(
+            math.ceil(node.heartbeat.runtime_metrics.memory_working_set_mb / target)
+            for node in ready_nodes
+            if not node.is_idle and node.heartbeat is not None
+            and node.heartbeat.runtime_metrics is not None
+        )
+        prepared_resources = replace(prepared_resources, memory_mb=forecast + observed)
     demand_resources = _add_resources(pending_resources, prepared_resources)
     program_placement_requests: tuple[SandboxPlacementRequest, ...] = ()
     if policy.program_aware_autoscaling_enabled and program_signals is not None:

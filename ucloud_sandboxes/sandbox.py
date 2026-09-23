@@ -870,8 +870,21 @@ class SandboxLifecycleCoordinator:
         self._shared: dict[str, int] = {}
         self._exclusive: set[str] = set()
 
-    def acquire_shared(self, sandbox_id: str) -> None:
+    def acquire_shared(
+        self,
+        sandbox_id: str,
+        *,
+        join_transition: bool = False,
+        transition_timeout_seconds: float | None = None,
+    ) -> None:
         with self._condition:
+            if join_transition and not self._condition.wait_for(
+                lambda: sandbox_id not in self._exclusive,
+                timeout=transition_timeout_seconds,
+            ):
+                raise SandboxBusyError(
+                    f"timed out waiting for sandbox lifecycle transition: {sandbox_id}"
+                )
             if sandbox_id in self._exclusive:
                 raise SandboxBusyError(
                     f"sandbox lifecycle transition is in progress: {sandbox_id}"

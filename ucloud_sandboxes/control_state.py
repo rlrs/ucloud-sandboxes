@@ -14,7 +14,7 @@ from typing import Any, Iterable, Iterator
 import weakref
 
 from .bootstrap import VmBootstrapRecord
-from .models import NodeHeartbeat
+from .models import NODE_RUNTIME_METRIC_DEFAULTS, NodeHeartbeat
 from .registry import (
     HeartbeatReceiptResult,
     _assert_heartbeat_binding,
@@ -513,11 +513,7 @@ def _heartbeat_payload_is_canonical(
         return False
     legacy = dict(encoded)
     legacy_metrics = dict(runtime_metrics)
-    for name, default in (
-        ("storage_ublk_max_devices", 0),
-        ("io_psi_some_avg10", None),
-        ("io_psi_full_avg10", None),
-    ):
+    for name, default in NODE_RUNTIME_METRIC_DEFAULTS.items():
         if name not in raw_metrics and legacy_metrics.get(name) == default:
             legacy_metrics.pop(name)
     legacy["runtime_metrics"] = legacy_metrics

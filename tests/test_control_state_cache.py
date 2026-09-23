@@ -1,5 +1,6 @@
 from dataclasses import replace
 from pathlib import Path
+import json
 import sqlite3
 from tempfile import TemporaryDirectory
 import unittest
@@ -8,10 +9,37 @@ from unittest.mock import patch
 from tests.test_registry import build_heartbeat
 from ucloud_sandboxes import control_state
 from ucloud_sandboxes.control_state import ControlStateStore
-from ucloud_sandboxes.models import SandboxInventoryEntry, utc_now
+from ucloud_sandboxes.models import (
+    NODE_RUNTIME_METRIC_DEFAULTS, NodeRuntimeMetrics, SandboxInventoryEntry, utc_now,
+)
 
 
 class ControlStateCacheTests(unittest.TestCase):
+    def test_persisted_legacy_metrics_survive_upgrade_and_preserve_validation(self):
+        for removed in (("memory_working_set_mb",), tuple(NODE_RUNTIME_METRIC_DEFAULTS)):
+            with self.subTest(removed=removed), TemporaryDirectory() as directory:
+                path = Path(directory) / "control.sqlite"
+                old = ControlStateStore(path)
+                old.upsert_heartbeat(replace(self.heartbeat(), runtime_metrics=NodeRuntimeMetrics(collected_at=utc_now())))
+                with sqlite3.connect(path) as connection:
+                    raw = json.loads(connection.execute("SELECT payload FROM control_records").fetchone()[0])
+                    for name in removed:
+                        raw["runtime_metrics"].pop(name)
+                    payload = control_state._json(raw)
+                    connection.execute("UPDATE control_records SET payload = ?", (payload,))
+                from scripts.verify_heartbeat_upgrade import verify
+                self.assertEqual(verify(path), 1)
+                # Open a fresh store as the upgraded gateway/autoscaler does.
+                reader = ControlStateStore(path)
+                self.assertEqual(reader.load_heartbeats()["job"].runtime_metrics.memory_working_set_mb, 0)
+                self.assertTrue(reader.get_heartbeat("job").inventory_complete)
+                self.assertFalse(reader.get_heartbeat("job", include_inventory=False).inventory_complete)
+                for corrupt in (" " + payload, control_state._json({**raw, "unexpected": True})):
+                    with sqlite3.connect(path) as connection:
+                        connection.execute("UPDATE control_records SET payload = ?", (corrupt,))
+                    with self.assertRaisesRegex(ValueError, "invalid heartbeat"):
+                        reader.load_heartbeats()
+
     def test_header_read_omits_inventory_but_rechecks_external_authority(self):
         with TemporaryDirectory() as directory:
             path = Path(directory) / "control.sqlite"

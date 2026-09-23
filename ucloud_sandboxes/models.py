@@ -316,6 +316,26 @@ class SandboxInventoryEntry:
         return payload
 
 
+# Additive telemetry fields must be accepted consistently on the wire and in
+# canonical persisted heartbeat records during a rolling upgrade.
+NODE_RUNTIME_METRIC_DEFAULTS = {
+    'storage_ublk_max_devices': 0,
+    'memory_working_set_mb': 0,
+    'io_psi_some_avg10': None,
+    'io_psi_full_avg10': None,
+    'storage_publication_active': 0,
+    'storage_publication_waiting': 0,
+    'storage_publication_limit': 0,
+    'storage_publication_queue_wait_ms_total': 0,
+    'storage_publication_queue_wait_ms_max': 0,
+    'storage_publication_duration_ms_total': 0,
+    'storage_publication_duration_ms_max': 0,
+    'storage_snapshot_publications': 0,
+    'storage_snapshot_compactions': 0,
+    'storage_snapshot_uploaded_bytes': 0,
+}
+
+
 @dataclass(frozen=True)
 class NodeRuntimeMetrics:
     collected_at: datetime
@@ -382,20 +402,8 @@ class NodeRuntimeMetrics:
         # A gateway may be upgraded before all workers. Newly introduced
         # storage signals remain optional at that rolling-upgrade boundary.
         raw = dict(raw)
-        raw.setdefault("storage_ublk_max_devices", 0)
-        raw.setdefault("memory_working_set_mb", 0)
-        raw.setdefault("io_psi_some_avg10", None)
-        raw.setdefault("io_psi_full_avg10", None)
-        raw.setdefault("storage_publication_active", 0)
-        raw.setdefault("storage_publication_waiting", 0)
-        raw.setdefault("storage_publication_limit", 0)
-        raw.setdefault("storage_publication_queue_wait_ms_total", 0)
-        raw.setdefault("storage_publication_queue_wait_ms_max", 0)
-        raw.setdefault("storage_publication_duration_ms_total", 0)
-        raw.setdefault("storage_publication_duration_ms_max", 0)
-        raw.setdefault("storage_snapshot_publications", 0)
-        raw.setdefault("storage_snapshot_compactions", 0)
-        raw.setdefault("storage_snapshot_uploaded_bytes", 0)
+        for name, default in NODE_RUNTIME_METRIC_DEFAULTS.items():
+            raw.setdefault(name, default)
         if set(raw) != field_names:
             return None
         collected_at = parse_iso_datetime(raw["collected_at"])

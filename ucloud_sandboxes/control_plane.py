@@ -2501,25 +2501,10 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         self._write_bytes(future.result(), "application/json")
 
     def _sandbox_list_response(self) -> bytes:
-        heartbeats = self.store.load_heartbeats()
-        heartbeats_by_node_id = {
-            heartbeat.node_id: heartbeat for heartbeat in heartbeats.values()
-        }
-        sandboxes = [
-            _route_only_sandbox_record(
-                route,
-                heartbeats_by_node_id.get(route.node_id),
-                heartbeat_ttl_seconds=self.heartbeat_ttl_seconds,
-            )
-            for route in self.routing_store.sandbox_routes_readonly(background=True)
-        ]
-        return json.dumps(
-            {
-                "sandboxes": sandboxes,
-                "cached": True,
-                "refresh_supported": True,
-            }, separators=(",", ":"),
-        ).encode("utf-8")
+        reader = getattr(type(self), "fleet_snapshot_reader", None)
+        if reader is not None:
+            return reader.read()
+        return _sandbox_list_bytes(self.store, self.routing_store, self.heartbeat_ttl_seconds)
 
     def _list_sandboxes_across_nodes(self) -> None:
         sandboxes: list[dict[str, Any]] = []
@@ -7184,6 +7169,7 @@ def build_server(
     image_file: Path,
     metrics_file: Path,
     heartbeat_ttl_seconds: int = 120,
+    isolate_fleet_reads: bool = False,
     registry_url: str | None = None,
     registry_worker_url: str | None = None,
     registry_usage_file: Path | None = None,
@@ -7281,6 +7267,10 @@ def build_server(
     BoundHandler.metrics_response_lock = RLock()
     BoundHandler.fleet_response_lock = RLock()
     BoundHandler.fleet_response_future = None
+    from .fleet_reader import FleetSnapshotReader
+    fleet_reader = (FleetSnapshotReader(control_state_file, routing_file, heartbeat_ttl_seconds)
+                    if isolate_fleet_reads else None)
+    BoundHandler.fleet_snapshot_reader = fleet_reader
     BoundHandler.registry_layer_cache = (
         RegistryLayerMetadataCache(
             registry_url,
@@ -7315,6 +7305,8 @@ def build_server(
             try:
                 super().server_close()
             finally:
+                if fleet_reader is not None:
+                    fleet_reader.close()
                 metrics_store.close()
 
     try:
@@ -7324,6 +7316,28 @@ def build_server(
     except BaseException:
         metrics_store.close()
         raise
+
+
+def _sandbox_list_bytes(store, routing_store, heartbeat_ttl_seconds) -> bytes:
+    heartbeats = store.load_heartbeats()
+    heartbeats_by_node_id = {
+        heartbeat.node_id: heartbeat for heartbeat in heartbeats.values()
+    }
+    sandboxes = [
+        _route_only_sandbox_record(
+            route,
+            heartbeats_by_node_id.get(route.node_id),
+            heartbeat_ttl_seconds=heartbeat_ttl_seconds,
+        )
+        for route in routing_store.sandbox_routes_readonly(background=True)
+    ]
+    return json.dumps(
+        {
+            "sandboxes": sandboxes,
+            "cached": True,
+            "refresh_supported": True,
+        }, separators=(",", ":"),
+    ).encode("utf-8")
 
 
 def _collection_id_from_path(path: str, prefix: str) -> str | None:

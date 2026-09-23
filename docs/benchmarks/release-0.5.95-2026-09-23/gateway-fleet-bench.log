@@ -1,0 +1,6 @@
+ISOLATED False
+SERVER /work/ucloud-sandboxes/release/0.5.95/ucloud_sandboxes-0.5.95-py3-none-any.whl/ucloud_sandboxes/http_server.py
+{"requests": 1280, "elapsed": 5.291691411999636, "rps": 241.8886326397311, "p50": 0.0686350619980658, "p95": 0.6145061089991941, "max": 0.7018438020022586}
+ISOLATED True
+SERVER /work/ucloud-sandboxes/release/0.5.95/ucloud_sandboxes-0.5.95-py3-none-any.whl/ucloud_sandboxes/http_server.py
+{"requests": 1280, "elapsed": 5.651740397002868, "rps": 226.47890916553547, "p50": 0.05199038200044015, "p95": 0.08076297799925669, "max": 3.5072948890010593}

@@ -22,3 +22,16 @@ still compare transport epochs and force the correct reattachment.
 Linux runtime/pressure/admission/relay tests passed (95, one pre-existing skip).
 Real PostgreSQL tests and the next full mixed-load result are recorded alongside
 this review. No subsecond or overall qualification claim is made yet.
+
+The full mixed run completed 2,048 correct cycles. Before profiling, a
+20-second phase sample showed 176 park calls against 173 wakes (previously
+roughly 548 against 100). Worker wake p95 remained 111 ms; gateway wake p95
+was 3.00 s, with each routing write waiting roughly 0.75–1.1 s. The target
+was already missed before CPU profiling.
+
+The 15-second py-spy attachment at 100 Hz introduced heavy interference
+and fell behind its own sampling schedule. Its 976 samples are useful for
+locating CPU work (423 samples in fleet-list rendering), but the resulting
+full-run latency distribution is NOT a valid release performance comparison.
+The recorded measured-cycle p95 was 22.99 s, median 4.04 s; long queued tails
+persisted after attachment. The next qualification must run without a profiler.

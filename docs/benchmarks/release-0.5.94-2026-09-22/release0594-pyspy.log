@@ -1,0 +1,20 @@
+py-spy> Sampling process 100 times a second for 15 seconds. Press Control-C to exit.
+
+py-spy> 1.01s behind in sampling, results may be inaccurate. Try reducing the sampling rate
+py-spy> 1.16s behind in sampling, results may be inaccurate. Try reducing the sampling rate
+py-spy> 1.20s behind in sampling, results may be inaccurate. Try reducing the sampling rate
+py-spy> 1.19s behind in sampling, results may be inaccurate. Try reducing the sampling rate
+py-spy> 1.11s behind in sampling, results may be inaccurate. Try reducing the sampling rate
+py-spy> 1.06s behind in sampling, results may be inaccurate. Try reducing the sampling rate
+py-spy> 1.22s behind in sampling, results may be inaccurate. Try reducing the sampling rate
+py-spy> 1.56s behind in sampling, results may be inaccurate. Try reducing the sampling rate
+py-spy> 1.92s behind in sampling, results may be inaccurate. Try reducing the sampling rate
+py-spy> 2.33s behind in sampling, results may be inaccurate. Try reducing the sampling rate
+py-spy> 2.71s behind in sampling, results may be inaccurate. Try reducing the sampling rate
+py-spy> 3.31s behind in sampling, results may be inaccurate. Try reducing the sampling rate
+py-spy> 3.85s behind in sampling, results may be inaccurate. Try reducing the sampling rate
+py-spy> 4.18s behind in sampling, results may be inaccurate. Try reducing the sampling rate
+py-spy> 4.76s behind in sampling, results may be inaccurate. Try reducing the sampling rate
+py-spy> 5.17s behind in sampling, results may be inaccurate. Try reducing the sampling rate
+py-spy> Wrote raw flamegraph data to '/tmp/release0594-gateway-cpu.txt'. Samples: 976 Errors: 0
+py-spy> You can use the flamegraph.pl script from https://github.com/brendangregg/flamegraph to generate a SVG

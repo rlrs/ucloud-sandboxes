@@ -1,0 +1,6 @@
+ISOLATED False
+SERVER /home/alex-admin/ucloud-live-fixes-20260922/ucloud_sandboxes/http_server.py
+{"requests": 1280, "elapsed": 1.9154450299683958, "rps": 668.2520145311189, "p50": 0.022076254594139755, "p95": 0.21513480506837368, "max": 0.26533935009501874}
+ISOLATED True
+SERVER /home/alex-admin/ucloud-live-fixes-20260922/ucloud_sandboxes/http_server.py
+{"requests": 1280, "elapsed": 1.2859073840081692, "rps": 995.4060579466028, "p50": 0.024988215533085167, "p95": 0.036019579973071814, "max": 0.2164209180045873}

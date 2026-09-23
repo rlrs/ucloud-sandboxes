@@ -170,6 +170,24 @@ class StreamingUploadTests(unittest.TestCase):
                 memory.release(weight=memory.capacity)
                 cold.release(weight=cold.capacity)
 
+    def test_completed_stream_is_closed_without_rejected_body_drain(self):
+        with self.servers() as (gateway, service, runner):
+            consumed = Event()
+            original = gateway.mark_request_body_consumed
+            def mark(sock):
+                original(sock)
+                consumed.set()
+            connection = HTTPConnection(*gateway.server_address, timeout=5)
+            try:
+                with patch.object(gateway, 'mark_request_body_consumed', side_effect=mark):
+                    connection.request('PUT', '/v1/sandboxes/bulk/files?path=/bulk',
+                                       body=b'x' * (TRANSFER_CHUNK_BYTES * 2))
+                    response = connection.getresponse()
+                    self.assertEqual(response.status, 200, response.read())
+                    self.assertTrue(consumed.wait(2), 'complete framed upload entered rejection drain')
+            finally:
+                connection.close()
+
     def test_truncated_upload_never_dispatches_a_file_write(self):
         with self.servers() as (gateway, service, runner):
             connection = HTTPConnection(*gateway.server_address, timeout=5)

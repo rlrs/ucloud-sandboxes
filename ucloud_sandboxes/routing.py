@@ -935,6 +935,25 @@ class RoutingStore:
             ).fetchone()[0]
         return [_sandbox_route_from_row(row) for row in json.loads(payload)]
 
+    def assigned_node_identities(
+        self, *, node_id: str, job_id: str, node_url: str,
+    ) -> list[tuple[str, str, str]]:
+        """Read exact ownership tuples without decoding specs or checkpoints.
+
+        Heartbeat identity validation needs every distinct owner that matches
+        any component. Keep conflicting tuples rather than selecting only the
+        expected triple; a reused IP or mismatched job must still be rejected.
+        """
+        cleaned_url = node_url.strip().rstrip("/")
+        with self._connect() as conn:
+            return [tuple(row) for row in conn.execute(
+                """SELECT DISTINCT node_id, job_id, node_url FROM sandboxes
+                   WHERE node_id = ? OR job_id = ? OR node_url IN (?, ?)
+                   ORDER BY node_id, job_id, node_url""",
+                (node_id.strip(), job_id.strip(), cleaned_url,
+                 cleaned_url + "/" if cleaned_url else ""),
+            )]
+
     def sandbox_routes_matching_node_identity(
         self,
         *,

@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from ucloud_sandboxes.models import ResourceQuantity, SandboxInventoryEntry, utc_now
-from ucloud_sandboxes.routing import RoutingStore, SandboxRoute, ExecRoute, SandboxRouteConflictError
+from ucloud_sandboxes.routing import RoutingStore, SandboxRoute, SandboxRouteAllocation, ExecRoute, SandboxRouteConflictError
 from ucloud_sandboxes.routing_writer import RoutingWriteProcess
 
 
@@ -43,6 +43,30 @@ class RoutingWriterTests(unittest.TestCase):
                 program_transition=dict(request_id='', rollout_id='rollout', state='acting'),
             )
         self.assertEqual(external.get_sandbox_readonly('s').activity_epoch, 2)
+
+    def test_create_confirmation_and_wake_share_durable_writer_fences(self):
+        allocation = SandboxRouteAllocation(
+            sandbox_id='created', node_id='n', job_id='j', node_url='http://node',
+            resources=self.route.resources, spec={'id': 'created'}, node_epoch='boot',
+        )
+        created, pending = self.writer.allocate_sandbox_create_with_pending(
+            allocation, spec_hash='b' * 64,
+        )
+        self.assertIsNone(pending)
+        external = RoutingStore(self.store.path)
+        self.assertEqual(external.get_sandbox_readonly('created'), created)
+        again, _ = self.writer.allocate_sandbox_create_with_pending(allocation, spec_hash='b' * 64)
+        self.assertEqual(again, created)
+        parked = self.writer.upsert_sandbox(replace(created, state='parked'))
+        self.assertEqual(external.get_sandbox_readonly('created'), parked)
+        waking = self.writer.reserve_sandbox_wake(parked, pending_id='wake-created')
+        self.assertEqual(external.get_sandbox_readonly('created'), waking)
+        self.assertEqual(waking.state, 'waking')
+        external.delete_sandbox('created')
+        recreated, _ = self.writer.allocate_sandbox_create_with_pending(allocation, spec_hash='b' * 64)
+        self.assertGreater(recreated.generation, created.generation)
+        self.assertIsNone(self.writer.reserve_sandbox_wake(parked, pending_id='stale'))
+        self.assertEqual(external.get_sandbox_readonly('created'), recreated)
 
     def test_external_generation_change_is_seen_by_child(self):
         self.store.delete_sandbox('s')
@@ -172,6 +196,8 @@ class GatewayRoutingWriterTests(unittest.TestCase):
             return original(*args, **kwargs)
         with patch.object(cases, 'build_server', side_effect=build):
             for name in (
+                'test_gateway_persists_route_before_node_create_finishes',
+                'test_gateway_fences_tool_traffic_until_direct_create_is_owned',
                 'test_relay_lifecycle_persists_program_request_transitions',
                 'test_successful_exec_implicitly_commits_parked_route_wake',
                 'test_gateway_stamps_heartbeat_receipt_time_and_enforces_deployment',

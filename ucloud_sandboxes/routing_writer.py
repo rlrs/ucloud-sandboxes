@@ -13,7 +13,8 @@ import time
 _METHODS = frozenset({
     'confirm_sandbox_wake', 'upsert_exec',
     'upsert_program_request_transition_with_change',
-    'reconcile_sandboxes_for_node',
+    'reconcile_sandboxes_for_node', 'allocate_sandbox_create_with_pending',
+    'upsert_sandbox', 'reserve_sandbox_wakes',
 })
 _store = None
 _identity = None
@@ -162,6 +163,18 @@ class RoutingWriteProcess:
 
     def upsert_program_request_transition_with_change(self, *args, **kwargs):
         return self._write('upsert_program_request_transition_with_change', *args, **kwargs)
+
+    def allocate_sandbox_create_with_pending(self, *args, **kwargs):
+        return self._write('allocate_sandbox_create_with_pending', *args, **kwargs)
+
+    def upsert_sandbox(self, *args, **kwargs):
+        return self._write('upsert_sandbox', *args, **kwargs)
+
+    def reserve_sandbox_wakes(self, requests):
+        return self._write('reserve_sandbox_wakes', list(requests))
+
+    def reserve_sandbox_wake(self, route, *, pending_id):
+        return self.reserve_sandbox_wakes([(route, pending_id)])[route.sandbox_id]
 
     def reconcile_sandboxes_for_node(self, node_url, observations, *, reported_sandbox_ids, **kwargs):
         # Inventory reconciliation owns SQLite's write lock while projecting

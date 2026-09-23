@@ -1102,14 +1102,14 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         if not heartbeat.node_id or not heartbeat.job_id or not heartbeat.node_epoch:
             return "heartbeat node_id, job_id, and node_epoch are required"
 
-        for route in self.routing_store.sandbox_routes_matching_node_identity(
+        for route_node, route_job, route_url in self.routing_store.assigned_node_identities(
             node_id=heartbeat.node_id,
             job_id=heartbeat.job_id,
             node_url=node_url,
         ):
-            same_job = bool(route.job_id) and route.job_id == heartbeat.job_id
-            same_node = bool(route.node_id) and route.node_id == heartbeat.node_id
-            same_node_url = _canonical_node_url(route.node_url) == node_url
+            same_job = bool(route_job) and route_job == heartbeat.job_id
+            same_node = bool(route_node) and route_node == heartbeat.node_id
+            same_node_url = _canonical_node_url(route_url) == node_url
             if not same_job and not same_node and not same_node_url:
                 continue
             if not same_job or not same_node or not same_node_url:
@@ -6930,6 +6930,11 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 finally:
                     if isinstance(body, RequestBodyStream):
                         headers_span.set_attribute("upload.received_bytes", body.length - body.remaining)
+                        if body.remaining == 0:
+                            # The framed upload was consumed even though it did
+                            # not use _read_raw_body. Avoid treating its socket
+                            # as an early rejection that still needs draining.
+                            self._request_body_consumed = True
                 headers_span.set_attribute("http.response.status_code", response.status)
             with response:
                 try:

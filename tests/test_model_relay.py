@@ -252,6 +252,30 @@ async def enqueue_and_poll(
 
 
 class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
+    async def test_maintenance_only_checks_outstanding_caller_incarnations(self):
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+        from ucloud_sandboxes.model_relay import _model_relay_maintenance_loop
+
+        for candidates in (set(), {("current", 2)}):
+            terminal = {("current", 2): "node_lost"}
+            state = SimpleNamespace(
+                maintain=AsyncMock(),
+                pending_caller_incarnations=AsyncMock(return_value=candidates),
+                reconcile_unavailable_callers=AsyncMock(),
+            )
+            lookup = AsyncMock(return_value=terminal)
+            with patch("ucloud_sandboxes.model_relay.asyncio.sleep",
+                       side_effect=asyncio.CancelledError):
+                with self.assertRaises(asyncio.CancelledError):
+                    await _model_relay_maintenance_loop(state, 1, lookup)
+            if candidates:
+                lookup.assert_awaited_once_with(candidates)
+                state.reconcile_unavailable_callers.assert_awaited_once_with(terminal)
+            else:
+                lookup.assert_not_awaited()
+                state.reconcile_unavailable_callers.assert_not_awaited()
+
     async def test_node_loss_retires_pending_and_leased_callers_and_retains_results(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "relay.sqlite3"
@@ -268,8 +292,12 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                     if name == "completed":
                         await state.respond(request_id=delivery.request_id, registration_token=token, lease_id=delivery.lease_id, response=RelayWorkerResponse(200, {"sample": "keep-me"}), defer_delivery=True)
             losses = {("sandbox", 1): "node_lost", ("deleted-sandbox", 1): "sandbox_deleted"}
+            self.assertEqual(await state.pending_caller_incarnations(), {
+                ("sandbox", 1), ("sandbox", 2), ("deleted-sandbox", 1),
+            })
             await state.reconcile_unavailable_callers(losses)
             await state.reconcile_unavailable_callers(losses)
+            self.assertEqual(await state.pending_caller_incarnations(), {("sandbox", 2)})
             for name in ("pending", "leased"):
                 self.assertEqual(requests[name].future.result().status, 410)
                 self.assertEqual(requests[name].future.result().body["error"]["type"], "node_lost")

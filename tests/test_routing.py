@@ -388,12 +388,22 @@ class RoutingStoreTests(unittest.TestCase):
             self.assertEqual(reopened.terminal_sandbox_incarnations(), {
                 ("lost", 1): "node_lost", ("deleted", 4): "sandbox_deleted",
             })
+            # Filter by exact incarnation, including batches larger than the
+            # query parameter budget, without rebuilding all retained history.
+            candidates = {(f"unrelated-{i}", 1) for i in range(450)}
+            candidates.update({("lost", 1), ("deleted", 3), ("deleted", 4)})
+            self.assertEqual(reopened.terminal_sandbox_incarnations(candidates), {
+                ("lost", 1): "node_lost", ("deleted", 4): "sandbox_deleted",
+            })
+            self.assertEqual(reopened.terminal_sandbox_incarnations({("deleted", 3)}), {})
+            self.assertEqual(reopened.terminal_sandbox_incarnations(set()), {})
             with patch(
                 "ucloud_sandboxes.routing.utc_now",
                 return_value=utc_now() + timedelta(days=8),
             ):
                 self.assertIsNone(reopened.get_sandbox_loss("lost"))
                 self.assertEqual(reopened.terminal_sandbox_incarnations(), {})
+                self.assertEqual(reopened.terminal_sandbox_incarnations(candidates), {})
                 reopened.load()
             with sqlite3.connect(store.path) as conn:
                 self.assertEqual(

@@ -1109,6 +1109,16 @@ class ModelRelayState:
             await self._expire_requests_locked(now)
             await self._requeue_expired_leases_locked(now)
 
+    async def pending_caller_incarnations(self) -> set[tuple[str, int]]:
+        """Callers whose work or committed response still needs delivery."""
+        async with self._lock:
+            await self._ensure_loaded_locked()
+            requests = (*self._requests.values(), *(
+                r for r in self._completed.values() if r.delivery_pending
+            ))
+            return {(r.sandbox_id, r.sandbox_generation) for r in requests
+                    if r.sandbox_id is not None and r.sandbox_generation is not None}
+
     async def reconcile_unavailable_callers(self, terminal: dict[tuple[str, int], str]) -> None:
         """Retire terminal incarnations without discarding committed model results."""
         if not terminal:
@@ -2290,7 +2300,7 @@ def create_model_relay_app(
     postgres_storage_budget_bytes: int = 64 * 1024**3,
     accepted_notifier: Callable[[RelayRequest], Awaitable[str | None]] | None = None,
     result_notifier: Callable[[RelayRequest], Awaitable[str | None]] | None = None,
-    unavailable_callers: Callable[[], Awaitable[dict[tuple[str, int], str]]] | None = None,
+    unavailable_callers: Callable[[set[tuple[str, int]]], Awaitable[dict[tuple[str, int], str]]] | None = None,
     telemetry: Telemetry | None = None,
 ) -> web.Application:
     # Base64 expands worker response bodies by 4/3 inside the JSON control API.
@@ -2398,13 +2408,15 @@ def create_model_relay_app(
 async def _model_relay_maintenance_loop(
     state: ModelRelayState,
     interval_seconds: float,
-    unavailable_callers: Callable[[], Awaitable[dict[tuple[str, int], str]]] | None = None,
+    unavailable_callers: Callable[[set[tuple[str, int]]], Awaitable[dict[tuple[str, int], str]]] | None = None,
 ) -> None:
     while True:
         try:
             await state.maintain()
             if unavailable_callers is not None:
-                await state.reconcile_unavailable_callers(await unavailable_callers())
+                candidates = await state.pending_caller_incarnations()
+                if candidates:
+                    await state.reconcile_unavailable_callers(await unavailable_callers(candidates))
         except asyncio.CancelledError:
             raise
         except Exception:

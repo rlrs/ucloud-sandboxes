@@ -1214,8 +1214,8 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
     lifecycle = _RelayLifecycleDispatcher(gateway_url, gateway_token)
     routes = RoutingStore(config.routing_file())
 
-    async def unavailable_callers() -> dict[tuple[str, int], str]:
-        return await asyncio.to_thread(routes.terminal_sandbox_incarnations)
+    async def unavailable_callers(candidates: set[tuple[str, int]]) -> dict[tuple[str, int], str]:
+        return await asyncio.to_thread(routes.terminal_sandbox_incarnations, candidates)
 
     async def accepted_notifier(relay_request: RelayRequest) -> str | None:
         return await lifecycle.notify(relay_request, action="park")

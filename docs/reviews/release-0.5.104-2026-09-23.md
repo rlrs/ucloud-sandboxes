@@ -47,3 +47,25 @@ Raw compatibility, I/O, previous load reports and compaction trace are in
 [the benchmark directory](../benchmarks/positioned-read-advice-2026-09-23/).
 The native artifact SHA is
 `1467ab24852d33d5ad20c0c78855cbf8eb3260c5d4aeda5d761a001e29f94feb`.
+
+## Production result
+
+Deployed commit 1640dad at 02:57:58 UTC. Fresh worker 12399546 verified the
+expected native SHA and 4 KiB device read-ahead. Forced 64 × 4 completed all
+256 cycles correctly: measured wake p95 .889 s, confirmed first tool 1.155 s.
+Immediately reusing that worker, rolling 256 × 8 completed 2,048 correct cycles:
+wake p95 .470 s, first tool p95 1.074 s. After provisioning, tool p95 was .893 s;
+including launch overlap, that phase was 3.357 s. The 20-second diagnostic trace
+found no application-triggered compaction stacks, only background kcompactd.
+This run was profiled after missing the launch-overlap target, so it is not
+a clean latency acceptance run. Placement was 116/106/32/2 over four workers.
+
+A subsequent rolling 512 × 8 run failed after 2,189 cycles with a timeout.
+Cleanup succeeded, but correctness and SLO both failed. Measured wake p95
+2.962 s, confirmed tool p95 8.751 s; guest tool p95 .127 s. Gateway CPU was
+about 92% occupied overall, with gateway and relay processes each near a core.
+A 45-second gateway GIL-switch-interval trial (.005 → .001 seconds) began
+after the scenario failure had stopped most traffic. Its results are invalid
+for comparison; .005 was restored automatically and no tuning was shipped.
+
+Both sizes retain every raw report; neither qualifies the requested target.

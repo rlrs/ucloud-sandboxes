@@ -685,16 +685,47 @@ class RoutingStore:
             ).fetchone()
         return dict(row) if row is not None else None
 
-    def terminal_sandbox_incarnations(self) -> dict[tuple[str, int], str]:
+    def terminal_sandbox_incarnations(
+        self, candidates: set[tuple[str, int]] | None = None,
+    ) -> dict[tuple[str, int], str]:
         """Batch proven worker losses and explicit deletions for relay cleanup."""
+        if candidates is not None and not candidates:
+            return {}
         cutoff = (
             utc_now() - timedelta(seconds=PROGRAM_TERMINAL_RETENTION_SECONDS)
         ).isoformat()
         with self._connect() as conn:
+            if candidates is not None:
+                # Probe current callers through their incarnation indexes. A
+                # long-lived deployment's terminal history is not relay work.
+                terminal: dict[tuple[str, int], str] = {}
+                keys = sorted(candidates)
+                for start in range(0, len(keys), 200):
+                    batch = keys[start:start + 200]
+                    values = ','.join('(?,?)' for _ in batch)
+                    args = tuple(value for key in batch for value in key) + (cutoff,)
+                    prefix = f'WITH candidates(sandbox_id,generation) AS (VALUES {values}) '
+                    for reason, predicate in (
+                        ('sandbox_deleted', "SELECT 1 FROM program_requests p INDEXED BY program_requests_sandbox "
+                         "WHERE p.sandbox_id=c.sandbox_id AND p.sandbox_generation=c.generation "
+                         "AND p.state='terminal' AND p.last_error='sandbox deletion requested' "
+                         "AND p.updated_at > ?"),
+                        ('node_lost', "SELECT 1 FROM sandbox_losses l "
+                         "WHERE l.sandbox_id=c.sandbox_id AND l.generation=c.generation "
+                         "AND l.lost_at > ?"),
+                    ):
+                        terminal.update(
+                            ((str(row[0]), int(row[1])), reason)
+                            for row in conn.execute(
+                                prefix + 'SELECT c.sandbox_id,c.generation FROM candidates c '
+                                f'WHERE EXISTS ({predicate})', args,
+                            )
+                        )
+                return terminal
             terminal = {
                 (str(row[0]), int(row[1])): "sandbox_deleted"
                 for row in conn.execute(
-                    "SELECT sandbox_id, sandbox_generation FROM program_requests "
+                    "SELECT DISTINCT sandbox_id, sandbox_generation FROM program_requests "
                     "WHERE state = 'terminal' AND last_error = 'sandbox deletion requested' "
                     "AND updated_at > ?",
                     (cutoff,),

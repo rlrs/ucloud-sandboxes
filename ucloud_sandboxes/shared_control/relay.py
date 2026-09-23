@@ -1041,6 +1041,16 @@ class PostgresRelayState:
                 (self.deployment, now - self.worker_retention),
             )
 
+    async def pending_caller_incarnations(self):
+        async with self.store.transaction("relay_pending_callers") as conn:
+            rows = await (await conn.execute(
+                "SELECT DISTINCT sandbox_id,sandbox_generation FROM relay_requests "
+                "WHERE deployment_id=%s AND sandbox_id IS NOT NULL "
+                "AND sandbox_generation IS NOT NULL AND (state!='completed' OR delivery_pending)",
+                (self.deployment,),
+            )).fetchall()
+        return {(r['sandbox_id'], r['sandbox_generation']) for r in rows}
+
     async def reconcile_unavailable_callers(self, terminal):
         if not terminal:
             return

@@ -239,17 +239,23 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
         return state
 
     async def test_terminal_history_does_not_amplify_database_work(self):
-        state = await self.bound_state()
+        async def hold_wake(_request):
+            await asyncio.Event().wait()
+        state = await self.bound_state(result_notifier=hold_wake)
         request = await self.enqueue(state)
+        self.assertEqual(await state.pending_caller_incarnations(), {("s1", 1)})
         history = {(f"old-{i}", 1): "node_lost" for i in range(10000)}
         # A previous incarnation must not cancel the current caller.
         history[("s1", 0)] = "node_lost"
         samples = []
-        state.store.observe = samples.append
+        state.store.observe = lambda sample: (
+            samples.append(sample) if sample.operation.startswith("relay_terminal_") else None
+        )
         await state.reconcile_unavailable_callers(history)
         self.assertLessEqual(len(samples), 2)
         (leased,) = await self.poll(state)
         await self.respond(leased, state, defer_delivery=True)
+        self.assertEqual(await state.pending_caller_incarnations(), {("s1", 1)})
         samples.clear()
         history[("s1", 1)] = "node_lost"
         await state.reconcile_unavailable_callers(history)
@@ -259,6 +265,7 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
             b"answer",
         )
         self.assertEqual((await state.stats())["delivery_pending"], 0)
+        self.assertEqual(await state.pending_caller_incarnations(), set())
         samples.clear()
         await state.reconcile_unavailable_callers(history)
         self.assertLessEqual(len(samples), 2)

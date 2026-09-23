@@ -318,6 +318,7 @@ async def run(args):
             rng = random.Random(args.seed + index)
             client = AsyncSandboxClient(args.gateway_url, api_token=token, timeout_seconds=180)
             clients.append(client)
+            stage, cycle = 'create', None
             try:
                 async with create_slots:
                     # Track IDs before the call so timed-out successful creates
@@ -352,10 +353,12 @@ async def run(args):
                     await ready.wait()
                 identity = None
                 for cycle in range(args.cycles):
+                    stage = 'cycle_gate_upload'
                     await handle.upload_file('/workspace/relay-bench/go-' + str(cycle), b'go')
                     deadline = time.monotonic() + 180
                     next_job_check = time.monotonic() + 5
                     while True:
+                        stage = 'relay_claim'
                         def poll_retry(attempt, status):
                             result['control_retries'].append(dict(operation='poll', sandbox_id=sid, cycle=cycle, attempt=attempt, status=status))
                         # A lost poll response may already own a lease. Its
@@ -368,6 +371,7 @@ async def run(args):
                             request = polled.requests[0]
                             break
                         if time.monotonic() >= next_job_check:
+                            stage = 'agent_status'
                             record = await job.refresh()
                             if record.terminal:
                                 logs = await job.logs('stderr', limit=4096)
@@ -402,6 +406,7 @@ async def run(args):
                                 operation='park', sandbox_id=sid, cycle=cycle, attempt=a, status=s,
                             )),
                         )
+                    stage = 'model_wait_and_park'
                     model_ready, parked_after = await with_lease_renewal(response_window(
                         claimed_at=claimed_at, model_seconds=delay, mode=args.parking_mode,
                         sandbox_id=sid, inventory=inventory, inventory_task=inventory_tasks[0],
@@ -411,14 +416,17 @@ async def run(args):
                     # locks, scheduling, storage, restore and retries all count.
                     started = time.monotonic()
                     started_unix = time.time()
+                    stage = 'commit_and_wake'
                     await relay.commit_response_bytes_to(request, request.body_bytes,
                                                          headers={'Content-Type': 'application/json'},
                                                          attempts=120, retry_delay_seconds=.1)
                     committed = time.monotonic()
                     # Same SDK start/wait path as handle.exec(), split only to
                     # distinguish dispatch delay from guest execution/event reads.
+                    stage = 'usable_exec_start'
                     probe_handle = await handle.start_exec(['python', '-c', PROBE, str(cycle), 'usable'])
                     probe_dispatched = time.monotonic()
+                    stage = 'usable_exec_wait'
                     probe = await probe_handle.wait(timeout_seconds=150)
                     finished = time.monotonic()
                     if not probe.success:
@@ -428,6 +436,7 @@ async def run(args):
                         raise RuntimeError('restored agent did not execute its first tool')
                     # Integrity remains a mandatory gate, but scanning the entire
                     # working set is application work after the first usable tool.
+                    stage = 'integrity_exec'
                     probe = await handle.exec(['python', '-c', PROBE, str(cycle), 'result'], timeout_seconds=150)
                     verified = time.monotonic()
                     if not probe.success:
@@ -459,8 +468,8 @@ async def run(args):
                     event('cycle_completed', completed=len(result['cycles']), sandbox_id=sid, cycle=cycle,
                           wake_seconds=committed-started, usable_seconds=finished-started)
             except Exception as exc:
-                result['errors'].append({'sandbox_id': sid, 'error': safe_error(exc)})
-                event('scenario_failed', sandbox_id=sid, error=safe_error(exc))
+                result['errors'].append({'sandbox_id': sid, 'stage': stage, 'cycle': cycle, 'error': safe_error(exc)})
+                event('scenario_failed', sandbox_id=sid, stage=stage, cycle=cycle, error=safe_error(exc))
                 raise
         try:
             await operator.prepare_capacity(count=args.sandboxes, cpus=args.cpus, memory_mb=args.memory_mb,

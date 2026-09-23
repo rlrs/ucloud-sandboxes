@@ -96,7 +96,7 @@ def uploaded_tool_probe(kib):
     source = ("import hashlib,sys\n"
               "assert hashlib.sha256(open(__file__,'rb').read()).hexdigest()==sys.argv[3], 'tool upload corrupted'\n"
               + PROBE + "\n#").encode()
-    return source + b'x' * max(0, kib * 1024 - len(source)) + b'\n'
+    return source + b'x' * max(0, kib * 1024 - len(source) - 1) + b'\n'
 
 
 def summary(values):

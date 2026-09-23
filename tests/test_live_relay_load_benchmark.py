@@ -124,6 +124,7 @@ class RelayLoadBenchmarkTests(unittest.TestCase):
         self.assertNotIn('secret', safe_error(OSError('http://relay/_relay/secret/chat/completions')))
 
     def test_uploaded_tool_executes_and_rejects_corrupt_bytes(self):
+        self.assertEqual(len(uploaded_tool_probe(64)), 64 * 1024)
         with TemporaryDirectory() as directory:
             root = Path(directory)
             (root / 'usable-0.json').write_text('{"tool":"42"}')

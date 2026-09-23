@@ -184,6 +184,33 @@ class ResidentCachePolicyTests(unittest.TestCase):
         self.assertEqual(service.park_calls, [])
         self.assertEqual(self.policy.snapshot()["cache_reclaimed_bytes"], 256 * MIB)
 
+    def test_runtime_action_observation_uses_fresh_file_heap_not_ram_or_dirty_workspace(self):
+        service = _WakeService()
+        service.provisioner.registry.relay_wake_fence = lambda *_: False
+        service.resident_memory_sample = lambda *_: self.sample
+        service.resident_application_reclaim_enabled = lambda *_: True
+        runtime = DirectNodeRuntime(service)
+        runtime._warm_parks = self.policy
+        self.observe_wait_then_sample(runtime)
+        self.sample = replace(self.sample, shared_memory_bytes=100 * MIB,
+                              dirty_bytes=500 * MIB)
+        self.pressure = Pressure(.8, 0, 0, 8 * 1024**3)
+        with self.assertRaises(WarmParkDeferred):
+            runtime.park_with_activity_revision("agent", operation_id="wait", generation=1,
+                                                relay_request_id="request")
+        self.assertEqual(self.policy._application_file_bytes[self.key], 1400 * MIB)
+        service.resident_application_reclaim_enabled = lambda *_: False
+        with self.assertRaises(WarmParkDeferred):
+            runtime.park_with_activity_revision("agent", operation_id="wait", generation=1,
+                                                relay_request_id="request")
+        self.assertEqual(self.policy._application_file_bytes[self.key], 0)
+        service.resident_application_reclaim_enabled = lambda *_: True
+        service.resident_memory_sample = lambda *_: None
+        with self.assertRaises(WarmParkDeferred):
+            runtime.park_with_activity_revision("agent", operation_id="wait", generation=1,
+                                                relay_request_id="request")
+        self.assertEqual(self.policy._application_file_bytes[self.key], 0)
+
     def test_unsupported_or_empty_reclaim_still_progresses_to_checkpoint(self):
         service = _WakeService()
         service.provisioner.registry.relay_wake_fence = lambda *_: False
@@ -199,6 +226,49 @@ class ResidentCachePolicyTests(unittest.TestCase):
         )
         self.assertEqual(record.state, "parked")
         self.assertEqual(service.park_calls, ["agent"])
+
+    def test_busy_cache_precondition_requotes_full_capture_before_dispatch(self):
+        service = _WakeService()
+        service.provisioner.registry.relay_wake_fence = lambda *_: False
+        service.resident_memory_sample = lambda *_: self.sample
+        service.resident_application_reclaim_enabled = lambda *_: True
+        runtime = DirectNodeRuntime(service)
+        runtime._warm_parks = self.policy
+        self.observe_wait_then_sample(runtime)
+        self.sample = replace(self.sample, current_bytes=2048 * MIB,
+                              file_bytes=16 * MIB)
+        original = service.park
+
+        def park(*args, **kwargs):
+            self.assertEqual(self.policy.snapshot()["projected_reclaim_bytes"], 2048 * MIB)
+            return original(*args, **kwargs)
+
+        service.park = park
+        with patch.object(runtime.lifecycle, "is_idle", return_value=False):
+            record, _ = runtime.park_with_activity_revision("agent", operation_id="wait",
+                generation=1, relay_request_id="request")
+        self.assertEqual(record.state, "parked")
+        self.assertEqual(self.policy.snapshot()["cache_reclaim_attempts"], 0)
+
+    def test_full_capture_promotion_cannot_multiply_small_action_credits(self):
+        self.pressure = Pressure(.05, 0, 50, 4 << 30)
+        policy = WarmParkPolicy(lambda: self.pressure,
+                                demand=lambda: MemoryDemand(4 << 30, 0))
+        selected = []
+        with ExitStack() as stack:
+            for index in range(32):
+                key = (str(index), 1, "request")
+                try:
+                    stack.enter_context(policy.defer(key, memory_bytes=2 << 30, ram_bytes=0,
+                        application_file_bytes=16 * MIB, blocking=False))
+                except WarmParkDeferred:
+                    continue
+                if policy.checkpoint_ready(key):
+                    selected.append(key)
+            self.assertEqual(len(selected), 2)
+            self.assertEqual(policy.snapshot()["projected_reclaim_bytes"], 4 << 30)
+            self.assertLess(policy.snapshot()["projected_reclaim_bytes"],
+                            policy.snapshot()["reclaim_target_bytes"] + (2 << 30))
 
     def test_wake_during_reclaim_cancels_the_checkpoint_fallback(self):
         from ucloud_sandboxes.sandbox import SandboxConflictError

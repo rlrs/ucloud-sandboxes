@@ -754,6 +754,29 @@ class DirectSandboxService:
 
 
     def reclaim_resident_wait(
+        self, sandbox_id: str, *, generation: int, relay_request_id: str,
+        target_bytes: int, is_wait_current,
+    ):
+        with self.telemetry.span("sandbox.memory.reclaim", attributes={
+            "sandbox.id": sandbox_id,
+            "sandbox.generation": generation,
+            "reclaim.target_bytes": target_bytes,
+            "reclaim.application_file": self.resident_application_reclaim_enabled(
+                sandbox_id, generation
+            ),
+        }) as span:
+            result = self._reclaim_resident_wait(
+                sandbox_id, generation=generation, relay_request_id=relay_request_id,
+                target_bytes=target_bytes, is_wait_current=is_wait_current,
+            )
+            span.set_attributes({
+                "reclaim.requested_bytes": result.requested_bytes,
+                "reclaim.reclaimed_bytes": result.reclaimed_bytes,
+                "reclaim.reason": result.reason,
+            })
+            return result
+
+    def _reclaim_resident_wait(
         self,
         sandbox_id: str,
         *,

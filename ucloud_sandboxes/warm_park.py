@@ -143,6 +143,7 @@ class WarmParkPolicy:
         self._reclaiming = {}
         self._ram_reclaiming = {}
         self._ram_footprints = {}
+        self._application_file_bytes = {}
         self._backing_reclaim = False
         self._parked = set()
         self._footprints = {}
@@ -290,6 +291,7 @@ class WarmParkPolicy:
                     self._waiting_since,
                     key=lambda key: (
                         key not in self._response_ready_at,
+                        bool(self._file_reclaim_bytes(key)),
                         self._candidate_rank(key, now),
                     ),
                     reverse=True,
@@ -308,11 +310,27 @@ class WarmParkPolicy:
             self._ranking_dirty = False
         return self._ranking
 
-    def _set_footprint(self, key, memory_bytes, ram_bytes):
+    def _file_reclaim_bytes(self, key):
+        # Rank the available action, not the owner's previous full checkpoint.
+        # File eviction cannot satisfy a tmpfs deficit and PSI alone is not a
+        # reason to evict a retained application working set.
+        if (not self._memory_reclaim or self._backing_reclaim
+                or key in self._cache_attempted):
+            return 0
+        measured = self._application_file_bytes.get(key, 0)
+        return measured if measured >= 16 * 1024**2 else 0
+
+    def _set_footprint(self, key, memory_bytes, ram_bytes, application_file_bytes):
         # Byte admission uses this value immediately. Reordering waits for the
         # next cached maintenance interval, avoiding N sorts for N new samples.
         self._footprints[key] = memory_bytes
         self._ram_footprints[key] = ram_bytes
+        measured = max(0, min(memory_bytes, application_file_bytes))
+        if bool(self._application_file_bytes.get(key, 0) >= 16 * 1024**2) != bool(
+            measured >= 16 * 1024**2
+        ):
+            self._ranking_dirty = True
+        self._application_file_bytes[key] = measured
 
     def _needs_reclaim(self, pressure, incoming):
         with self._lock:
@@ -322,6 +340,10 @@ class WarmParkPolicy:
                 memory_reclaim=self._memory_reclaim,
                 psi_reclaim=self._psi_reclaim,
             )
+            if (self._memory_reclaim, self._backing_reclaim) != (
+                decision.memory_reclaim, decision.backing_reclaim
+            ):
+                self._ranking_dirty = True
             self._memory_reclaim = decision.memory_reclaim
             self._psi_reclaim = decision.psi_reclaim
             self._reason = decision.reason
@@ -353,7 +375,8 @@ class WarmParkPolicy:
             ):
                 continue
             footprint = (self._ram_footprints.get(candidate) if self._backing_reclaim
-                         else self._footprints.get(candidate, 0))
+                         else self._file_reclaim_bytes(candidate)
+                         or self._footprints.get(candidate, 0))
             if self._backing_reclaim and footprint == 0:
                 continue  # Known file cache cannot free this tmpfs allocation.
             if candidate == key:
@@ -446,6 +469,7 @@ class WarmParkPolicy:
             if target < 16 * 1024**2:
                 return 0
             self._cache_attempted.add(key)
+            self._ranking_dirty = True
             self._cache_inflight.add(key)
             # This attempt can only reclaim cache, not the full live footprint.
             self._reclaiming[key] = target
@@ -456,9 +480,6 @@ class WarmParkPolicy:
     def record_cache_reclaim(self, key, sample, result):
         with self._lock:
             self._cache_inflight.discard(key)
-            if key in self._reclaiming:
-                self._reclaiming[key] = max(0, self._footprints.get(key, 0))
-                self._ram_reclaiming[key] = self._ram_footprints.get(key)
             if result is None:
                 return
             self._cache_reclaimed_bytes += result.reclaimed_bytes
@@ -487,6 +508,30 @@ class WarmParkPolicy:
             return (decision.memory_reclaim and not decision.backing_reclaim
                     and (pressure.io_stall < 20 or application_file_backed))
 
+    def checkpoint_ready(self, key):
+        """Requote a failed/skipped cache action before a full checkpoint.
+
+        The smaller action reservation cannot authorize a larger capture. This
+        remains disposable scheduling credit; ordinary lifecycle fences follow.
+        """
+        if not self._needs_reclaim(self.pressure(), self.demand()):
+            return False
+        with self._lock:
+            if key not in self._waiting_since or key not in self._reclaiming:
+                return False
+            previous = self._reclaiming.pop(key)
+            previous_ram = self._ram_reclaiming.pop(key)
+            self._application_file_bytes[key] = 0
+            self._ranking_dirty = True
+            selected = self._selected(key, time.monotonic())
+            self._reclaiming[key] = (
+                max(0, self._footprints.get(key, 0)) if selected else previous
+            )
+            self._ram_reclaiming[key] = (
+                self._ram_footprints.get(key) if selected else previous_ram
+            )
+            return selected
+
     def snapshot(self):
         with self._lock:
             return {
@@ -504,9 +549,10 @@ class WarmParkPolicy:
             }
 
     @contextmanager
-    def defer(self, key, *, memory_bytes=0, ram_bytes=None, blocking=True):
+    def defer(self, key, *, memory_bytes=0, ram_bytes=None,
+              application_file_bytes=0, blocking=True):
         with self._lock:
-            self._set_footprint(key, memory_bytes, ram_bytes)
+            self._set_footprint(key, memory_bytes, ram_bytes, application_file_bytes)
             entry = self._pending.get(key)
             if entry is None:
                 started = self._waiting_since.setdefault(key, time.monotonic())
@@ -520,6 +566,7 @@ class WarmParkPolicy:
                     self._retry_after.pop(expired, None)
                     self._footprints.pop(expired, None)
                     self._ram_footprints.pop(expired, None)
+                    self._application_file_bytes.pop(expired, None)
                     self._wait_advice.pop(expired, None)
                     self._response_ready_at.pop(expired, None)
                 entry = [threading.Event(), started, 0]
@@ -537,7 +584,9 @@ class WarmParkPolicy:
                             self._selected(key, time.monotonic())
                             and key not in self._reclaiming
                         ):
-                            self._reclaiming[key] = max(0, memory_bytes)
+                            self._reclaiming[key] = (
+                                self._file_reclaim_bytes(key) or max(0, memory_bytes)
+                            )
                             self._ram_reclaiming[key] = ram_bytes
                             self._transition_started[key] = (
                                 time.monotonic(),
@@ -570,11 +619,11 @@ class WarmParkPolicy:
                 if not entry[2]:
                     self._pending.pop(key, None)
 
-    def ready(self, key, *, memory_bytes=0, ram_bytes=None):
+    def ready(self, key, *, memory_bytes=0, ram_bytes=None, application_file_bytes=0):
         """Cheap local pressure check; it grants no lifecycle authority."""
         with self._lock:
             started = self._waiting_since.get(key)
-            self._set_footprint(key, memory_bytes, ram_bytes)
+            self._set_footprint(key, memory_bytes, ram_bytes, application_file_bytes)
         if started is None or not self._needs_reclaim(
             self.pressure(), self.demand()
         ):
@@ -658,6 +707,7 @@ class WarmParkPolicy:
         self._retry_after.pop(key, None)
         self._footprints.pop(key, None)
         self._ram_footprints.pop(key, None)
+        self._application_file_bytes.pop(key, None)
         self._wait_advice.pop(key, None)
         self._response_ready_at.pop(key, None)
         self._ranking_dirty = True

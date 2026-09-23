@@ -138,3 +138,39 @@ physical work, existing maintenance integration, failed trim, crash after local
 commit, retained readers, reappearing sources, and concurrent delete/reimport
 ([raw log](../benchmarks/resident-demand-2026-09-23/deferred-physical-linux-tests.log)).
 This establishes the cleanup ordering, not a measured production latency gain.
+
+## Action-aware selection after rc20
+
+The rc19 pressure logs contain 113 completed native captures, 104 before the
+failure timestamp. Of the 113, 105 were first captures and eight were subsequent
+captures. Worker 12400716 recorded 24 first captures and no repeat capture; its
+three cache probes reclaimed only 253,952 bytes. Other workers recorded five,
+ten, and seven probes reclaiming 3.85, 5.40, and 6.21 GiB. These totals do not
+explain each probe's result: the retained evidence lacks per-attempt cancellation
+and kernel-reclaim reasons. They do not support claiming that worker 716 repeatedly
+parked file-backed owners.
+
+The policy nevertheless had a concrete action-selection bias. Owners with a
+measured expensive park/wake history could rank below never-parked RAM owners,
+even when their measured file-backed heap could satisfy the physical deficit
+without a checkpoint. The rc21 change ranks that eligible retained-file action
+first within the existing response-ready ordering. It uses the same fresh,
+post-safe-wait cgroup measurements; it does not infer reclaimable bytes from a
+configured limit. Tmpfs deficits and PSI-only probes retain their existing
+selection. Unknown samples, in-flight byte credit, generation/wake fences, and
+one cache probe per wait remain enforced.
+
+A skipped or failed cache action must reselect and reserve its complete measured
+checkpoint footprint before capture. This also covers active-exec preconditions
+that prevent even starting cache reclaim; a small cache reservation cannot admit
+a larger checkpoint. The existing telemetry now records one reclaim span with
+application-file mode, target/requested/achieved bytes, and the bounded result
+reason. There is no new controller, authority, or heartbeat schema.
+
+The focused Linux gate passed **130 tests in 8.747 seconds**, including a 32-owner
+small-cache/full-capture fallback burst, busy preconditions, response-ready
+priority, tmpfs exclusion, stale/unknown measurements, cancellation and growth
+admission. See [the raw log](../benchmarks/resident-demand-2026-09-23/action-ranking-linux-tests.log).
+Independent review found and closed the fallback-credit gap before this gate.
+This source change is outside the frozen rc20 release; production benefit is
+pending a matching pressure run and is not claimed here.

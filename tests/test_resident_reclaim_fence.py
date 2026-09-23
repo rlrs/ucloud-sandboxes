@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import unittest
 
 from tests import test_managed_control_admission as fixture
@@ -75,6 +75,26 @@ class ResidentReclaimFenceTests(unittest.TestCase):
                 is_wait_current=lambda: True)
         self.assertEqual(result.reason, "cgroup_changed")
         reclaim.assert_not_called()
+
+    def test_reclaim_span_records_actual_progress_and_bounded_result_reason(self):
+        from contextlib import nullcontext
+
+        service, _ = self.file_service()
+        span = Mock()
+        service.telemetry = Mock()
+        service.telemetry.span.return_value = nullcontext(span)
+        result = ResidentReclaimResult(32 << 20, 253952, .1, 0, "partial_reclaim")
+        with patch.object(service, "_reclaim_resident_wait", return_value=result):
+            self.assertIs(service.reclaim_resident_wait("s", generation=1,
+                relay_request_id="request", target_bytes=1024 << 20,
+                is_wait_current=lambda: True), result)
+        self.assertEqual(service.telemetry.span.call_args.kwargs["attributes"][
+            "reclaim.application_file"], True)
+        span.set_attributes.assert_called_once_with({
+            "reclaim.requested_bytes": 32 << 20,
+            "reclaim.reclaimed_bytes": 253952,
+            "reclaim.reason": "partial_reclaim",
+        })
 
     def test_reclaim_uses_short_source_fences_and_stops_on_activity_or_wake(self):
         item = fixture.ManagedControlAdmissionTests()

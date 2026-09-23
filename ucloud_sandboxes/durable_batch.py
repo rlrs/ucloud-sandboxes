@@ -75,6 +75,7 @@ class DurableSqliteBatch:
             key: 0.0
             for key in (
                 "queue_wait_ms",
+                "begin_wait_ms",
                 "transaction_ms",
                 "commit_ms",
                 "failed_batches",
@@ -148,7 +149,9 @@ class DurableSqliteBatch:
             if self._connection is None:
                 self._connection = self.connect()
             if self._batch is None:
+                begin_started = time.monotonic()
                 self._connection.execute("BEGIN IMMEDIATE")
+                self._observe("begin_wait_ms", (time.monotonic() - begin_started) * 1000)
                 self._batch = _Batch(time.monotonic() + self.delay)
             batch = self._batch
             connection = self._connection

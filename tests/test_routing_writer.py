@@ -3,9 +3,11 @@ from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import sqlite3
+import time
 import unittest
+from unittest.mock import patch
 
-from ucloud_sandboxes.models import ResourceQuantity
+from ucloud_sandboxes.models import ResourceQuantity, SandboxInventoryEntry, utc_now
 from ucloud_sandboxes.routing import RoutingStore, SandboxRoute, ExecRoute, SandboxRouteConflictError
 from ucloud_sandboxes.routing_writer import RoutingWriteProcess
 
@@ -55,6 +57,21 @@ class RoutingWriterTests(unittest.TestCase):
                 self.route, request_id='request', rollout_id='rollout', state='acting',
             )
 
+    def test_inventory_iterators_reconcile_in_child_and_reject_stale_generations(self):
+        for generation, activity in ((1, 3), (2, 5)):
+            observed = SandboxInventoryEntry(
+                sandbox_id='s', generation=generation, operation_id='create',
+                spec_hash='a' * 64, state='parked', resources=self.route.resources,
+            )
+            removed, stale = self.writer.reconcile_sandboxes_for_node(
+                'http://node', (item for item in [observed]),
+                node_id='n', job_id='j', reported_sandbox_ids=(value for value in ['s']),
+                observed_at=utc_now().isoformat(), node_epoch='boot', activity_epoch=activity,
+            )
+            self.assertEqual((removed, stale), ([], []))
+            stored = RoutingStore(self.store.path).get_sandbox_readonly('s')
+            self.assertEqual((stored.state, stored.generation, stored.activity_epoch), ('parked', 1, 3))
+
     def test_concurrent_exec_writes_survive_one_conflict(self):
         first = ExecRoute(session_id='e0', sandbox_id='s', node_id='n', job_id='j', node_url='http://node')
         self.writer.upsert_exec(first)
@@ -64,6 +81,40 @@ class RoutingWriterTests(unittest.TestCase):
             list(executor.map(lambda i: self.writer.upsert_exec(replace(first, session_id=f'e{i}')), range(32)))
         external = RoutingStore(self.store.path)
         self.assertTrue(all(external.get_exec(f'e{i}').sandbox_id == 's' for i in range(32)))
+
+    def test_queued_writes_share_ipc_without_acknowledging_before_commit(self):
+        first = ExecRoute(session_id='existing', sandbox_id='s', node_id='n', job_id='j', node_url='http://node')
+        self.writer.upsert_exec(first)
+        # Hold SQLite's writer fence so arrivals collect behind one in-flight
+        # command. Neither queuing nor IPC submission may acknowledge a write.
+        with sqlite3.connect(self.store.path) as blocked, patch.object(
+            self.writer._executor, 'submit', wraps=self.writer._executor.submit,
+        ) as submit, ThreadPoolExecutor(max_workers=34) as pool:
+            blocked.execute('BEGIN IMMEDIATE')
+            futures = []
+            try:
+                futures = [pool.submit(self.writer.upsert_exec, replace(first, session_id=f'b{i}')) for i in range(33)]
+                conflict = pool.submit(self.writer.upsert_exec, replace(first, sandbox_id='wrong'))
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline:
+                    with self.writer._guard:
+                        if len(self.writer._pending) >= 2:
+                            break
+                    time.sleep(.005)
+                self.assertFalse(any(f.done() for f in futures))
+                self.assertIsNone(self.store.get_exec('b0'))
+            finally:
+                blocked.rollback()
+            for future in futures:
+                future.result(5)
+            with self.assertRaises(SandboxRouteConflictError):
+                conflict.result(5)
+            envelopes = [call.args[1] for call in submit.call_args_list]
+            self.assertTrue(any(len(batch) > 1 for batch in envelopes))
+            self.assertLess(len(envelopes), 34)
+        external = RoutingStore(self.store.path)
+        self.assertTrue(all(external.get_exec(f'b{i}').sandbox_id == 's' for i in range(33)))
+        self.assertEqual(external.get_exec('existing').sandbox_id, 's')
 
     def test_missing_or_replaced_file_fails_closed(self):
         self.store.path.rename(self.store.path.with_suffix('.saved'))
@@ -87,6 +138,29 @@ class RoutingWriterTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.writer.confirm_sandbox_wake(self.route, node_epoch='boot', activity_epoch=2)
 
+    def test_process_loss_fails_inflight_and_queued_callers_without_replay(self):
+        route = ExecRoute(session_id='lost', sandbox_id='s', node_id='n', job_id='j', node_url='http://node')
+        with sqlite3.connect(self.store.path) as blocked, ThreadPoolExecutor(max_workers=16) as pool:
+            blocked.execute('BEGIN IMMEDIATE')
+            try:
+                futures = [pool.submit(self.writer.upsert_exec, replace(route, session_id=f'lost{i}')) for i in range(16)]
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline:
+                    with self.writer._guard:
+                        if self.writer._pending:
+                            break
+                    time.sleep(.005)
+                child = next(iter(self.writer._executor._processes.values()))
+                child.kill()
+                child.join(5)
+                for future in futures:
+                    with self.assertRaises(sqlite3.DatabaseError):
+                        future.result(5)
+            finally:
+                blocked.rollback()
+        self.assertTrue(self.writer.health_error())
+        self.assertTrue(all(self.store.get_exec(f'lost{i}') is None for i in range(16)))
+
 
 class GatewayRoutingWriterTests(unittest.TestCase):
     def test_gateway_lifecycle_and_exec_with_process_writer(self):
@@ -100,6 +174,8 @@ class GatewayRoutingWriterTests(unittest.TestCase):
             for name in (
                 'test_relay_lifecycle_persists_program_request_transitions',
                 'test_successful_exec_implicitly_commits_parked_route_wake',
+                'test_gateway_stamps_heartbeat_receipt_time_and_enforces_deployment',
+                'test_heartbeat_identity_is_bound_to_authoritative_route',
             ):
                 with self.subTest(name=name):
                     case = cases.ControlPlaneTests(name)

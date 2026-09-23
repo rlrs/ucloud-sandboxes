@@ -28,6 +28,8 @@ if SDK_SRC.is_dir():
 from ucloud_sandboxes_sdk import (  # noqa: E402
     AsyncRelayWorkerClient, AsyncSandboxClient, Image, SandboxSpec, SandboxSecuritySpec, http_tunnel_url,
 )
+import ucloud_sandboxes_sdk as sdk  # noqa: E402
+import ucloud_sandboxes_sdk.client as sdk_client  # noqa: E402
 
 # Incompressible resident memory and rotating dirty pages prevent an empty-agent
 # benchmark from hiding checkpoint/restore costs. Each round changes files and
@@ -246,6 +248,8 @@ async def run(args):
               "configuration": config, "cycles": [], "errors": [], "cleanup_errors": [],
               "health": [], "fleet_polls": [], "placements": {}, "control_retries": [],
               "driver_python": sys.version.split()[0],
+              "sdk_version": sdk.__version__,
+              "sdk_client_sha256": hashlib.sha256(Path(sdk_client.__file__).read_bytes()).hexdigest(),
               "latency_definition": "response ready through guest tool and external exec confirmation; full memory/file integrity is a separate mandatory gate",
               "harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
     args.output.parent.mkdir(parents=True, exist_ok=True)

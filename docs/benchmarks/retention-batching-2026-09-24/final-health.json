@@ -1,0 +1,23 @@
+{
+  "at": "2026-09-24T09:43:17.379337+00:00",
+  "health": {
+    "ok": true,
+    "service": "control-plane",
+    "version": "0.5.114rc26"
+  },
+  "routes": 0,
+  "relay": {
+    "backend": "postgres",
+    "inflight": 0,
+    "delivery_pending": 0
+  },
+  "trace_sample_ratio": 0.1,
+  "max_nodes": 10,
+  "target_memory_utilization": 0.8,
+  "services": {
+    "ucloud-sandbox-gateway": "active",
+    "ucloud-sandbox-relay": "active",
+    "ucloud-sandbox-autoscaler": "active",
+    "ucloud-sandbox-registry": "active"
+  }
+}

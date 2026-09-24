@@ -1,0 +1,12 @@
+{
+  "job_id": "12401454",
+  "health": {
+    "ok": true,
+    "service": "node-agent",
+    "version": "0.5.114rc26"
+  },
+  "files": {
+    "memory_backing.py": "865c059fcf80daad82e4342ddc6434c3dc9aa47e0b6382431fca4b692814b8a0",
+    "storage_native_daemon.py": "0df883baa29136ab3b1c05ddc1102c4f37741f859b96a655bd7cfdac98a8a5a5"
+  }
+}

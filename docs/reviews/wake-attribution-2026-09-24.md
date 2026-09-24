@@ -1,7 +1,7 @@
 # Wake-tail attribution and reconstructible mount inputs
 
-Status: both optimizations qualified for rc26 release. Production deployment
-and post-release verification are recorded below when complete.
+Status: committed, pushed and deployed as rc26. Native post-release verification
+passed; the subsecond latency objective remains unmet.
 
 ## Attribution
 
@@ -122,3 +122,26 @@ This is one matched pair, not a fleet-wide latency guarantee. Required memory
 inode sync remains substantial (about 474 ms p95 after batching). The subsecond
 objective is still unmet. Detailed reports are in
 `docs/benchmarks/retention-batching-2026-09-24/`.
+
+## Deployment receipt
+
+Runtime commit `cf0e17b3f7aa3c014e4aa8f0dc564d799893269c` was pushed to main and
+released as **0.5.114rc26** on 2026-09-24 at 09:40:56 UTC. Gateway package
+verification matched 142 files. Sandbox and builder native/OS/storage closures
+were byte-identical to rc25. Idle profiling workers were retired after verifying
+zero routes and no pending relay deliveries. The comparison's placements confirm
+all guests remained on worker 12401431 despite two unused autoscaler headroom
+workers appearing during the test window.
+
+Fresh worker **12401454** started from the canonical rc26 bundle. Both changed
+source files matched the committed source hashes. `rc26-deployed16` completed
+all 160 cycles with no scenario, cleanup or fleet-health failures. Warm-cycle
+guest-continuation p95 was **1.893 s**, useful-execution p95 **2.240 s**; maximums
+were **5.035 s** and **5.322 s** respectively. This fresh-worker result is a release
+canary, not the controlled same-worker comparison above. The benchmark correctly
+reported `slo_passed=false`.
+
+At 09:43:17 UTC the gateway, relay, autoscaler and registry were active; there
+were zero routes, zero inflight requests and zero pending deliveries. PostgreSQL,
+normal 10% sampling, the ten-worker maximum and 0.8 memory-placement target were
+preserved. SDK 0.4.27 is unchanged; no client upgrade is needed for these fixes.

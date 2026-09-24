@@ -820,11 +820,14 @@ class DirectRunscWarden:
             journal = self._journal(sandbox)
             parked = self._require_state(sandbox, HibernationState.PARKED)
             try:
+                preparation_phase = time.monotonic()
                 self.ensure_workspace_mounted(
                     sandbox,
                     operation_id=f"{operation_id}:storage-mount",
                 )
                 self.rootfs_lifecycle.resume_sandbox(sandbox)
+                timings["prepare_workspace"] = (time.monotonic() - preparation_phase) * 1000
+                preparation_phase = time.monotonic()
                 manifest = self.artifacts.load_complete(
                     sandbox_id=sandbox.sandbox_id,
                     sandbox_generation=sandbox.sandbox_generation,
@@ -843,12 +846,19 @@ class DirectRunscWarden:
                 # Bind that exact rootfs ledger to the checkpoint before runsc is
                 # allowed to construct or resume any workload task.
                 self._require_managed_process_ledger(sandbox, manifest)
+                timings["validate_checkpoint"] = (time.monotonic() - preparation_phase) * 1000
+                preparation_phase = time.monotonic()
                 # Network preparation can overlap storage mounting/validation,
                 # but must succeed before a restore candidate can be started.
                 if before_restore is not None:
                     before_restore()
+                timings["join_network_prepare"] = (time.monotonic() - preparation_phase) * 1000
+                preparation_phase = time.monotonic()
                 self._prepare_restore_memory(sandbox)
+                timings["prepare_memory"] = (time.monotonic() - preparation_phase) * 1000
+                preparation_phase = time.monotonic()
                 self._retain_restore_source(sandbox, manifest)
+                timings["retain_source"] = (time.monotonic() - preparation_phase) * 1000
             except Exception:
                 self._rollback_parked_storage_mount(
                     sandbox,
@@ -1439,6 +1449,11 @@ class DirectRunscWarden:
         sandbox: DirectSandbox,
         manifest: HibernationManifest,
     ) -> None:
+        if self.config.reflink_memory_restore:
+            # RUNNING is durable. The overlap claim retains both immutable
+            # files and physical capacity until existing maintenance finishes.
+            # Even unlink/fsync can take seconds under storage pressure.
+            return
         with self.telemetry.span("sandbox.restore.artifact_unlink"):
             self.artifacts.delete_published(
                 manifest,
@@ -1523,6 +1538,7 @@ class DirectRunscWarden:
             if (registration is None or registration.sandbox_generation != claim.sandbox_generation
                     or registration.memory_reference is None):
                 raise DirectWardenError("retained checkpoint has no matching registry owner")
+            self._retire_restored_generation(registration, claim)
             checkpoint = RetainedCheckpointRef(registration.memory_reference,
                                                claim.hibernation_generation, claim.manifest_sha256)
             checkpoints[checkpoint] = claim
@@ -1543,12 +1559,53 @@ class DirectRunscWarden:
             span.set_attribute("memory.retirement.released", released)
             return released
 
+    def _retire_restored_generation(self, registration, claim) -> None:
+        """Pin one allocation, prove its cutoff, then unlink outside lifecycle."""
+        if registration.phase != "owned":
+            return  # The ordinary deletion owner removes its entire allocation.
+        sandbox = registration.to_direct_sandbox()
+        with self.memory_backing.read_lease(
+            registration.memory_reference, sandbox_id=claim.sandbox_id,
+            sandbox_generation=claim.sandbox_generation,
+        ):
+            with self._locked(sandbox):
+                # The allocation lease prevents deletion/reimport while this
+                # exact immutable generation is touched. It does not block a
+                # later capture or retain the Warden lock during disk I/O.
+                current = self.memory_capacity.get(claim.sandbox_id)
+                if current != registration:
+                    return
+                record = self._journal(sandbox).load()
+                if record is None or not (
+                    record.hibernation_generation > claim.hibernation_generation
+                    or (record.hibernation_generation == claim.hibernation_generation
+                        and record.state == HibernationState.RUNNING
+                        and record.authority == HibernationAuthority.LIVE)
+                ):
+                    return  # Current PARKED/RESTORING source remains authoritative.
+            with self.telemetry.span("sandbox.restore.artifact_unlink", attributes={
+                "sandbox.id": claim.sandbox_id,
+                "sandbox.generation": claim.sandbox_generation,
+                "hibernation.generation": claim.hibernation_generation,
+                "memory.retirement.background": True,
+            }):
+                self.artifacts.delete_retired_generation(
+                    sandbox_id=claim.sandbox_id,
+                    sandbox_generation=claim.sandbox_generation,
+                    hibernation_generation=claim.hibernation_generation,
+                    manifest_sha256=claim.manifest_sha256,
+                )
+
     def _cleanup_running_restore_artifacts(
         self,
         sandbox: DirectSandbox,
         record: HibernationRecord,
     ) -> None:
         """Finish ancillary cleanup after a crash past RUNNING commit."""
+        if self.config.reflink_memory_restore:
+            # Claims survive restart and are the same maintenance worklist.
+            # Inspect/exec/reconcile must never join background artifact I/O.
+            return
         for item in self.artifacts.inventory_incarnation(
             sandbox_id=sandbox.sandbox_id,
             sandbox_generation=sandbox.sandbox_generation,

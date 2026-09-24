@@ -910,6 +910,84 @@ class HibernationArtifactStore:
             raise
         self._fsync_directory(self.root)
 
+    def delete_retired_generation(
+        self, *, sandbox_id: str, sandbox_generation: int,
+        hibernation_generation: int, manifest_sha256: str,
+    ) -> None:
+        """Finish an authorized, immutable retired generation independently.
+
+        The caller must pin the allocation against deletion/reimport and prove
+        that lifecycle authority has advanced beyond this checkpoint. Preserved
+        allocation roots and monotonically increasing generation directories
+        let a new capture proceed while these old files are unlinked. The
+        retirement lock serializes maintenance retries, not live lifecycle work.
+        """
+        if not self.preserve_incarnation_roots:
+            raise HibernationError("retirement requires a preserved allocation root")
+        digest = _validate_digest("manifest_sha256", manifest_sha256)
+        generation = self.generation_path(
+            sandbox_id=sandbox_id, sandbox_generation=sandbox_generation,
+            hibernation_generation=hibernation_generation,
+        )
+        self._ensure_directory(self.root, create=False)
+        root_fd = self._open_directory(self.root)
+        lock_name = ".retire-" + hashlib.sha256(
+            # One maintenance lock per incarnation, not a permanent lock file
+            # for every checkpoint in a long-running sandbox.
+            str(generation.parent.relative_to(self.root)).encode()
+        ).hexdigest() + ".lock"
+        try:
+            with (self._lock_file(root_fd, self.LOCK_NAME, fcntl.LOCK_SH),
+                  self._lock_file(root_fd, lock_name, fcntl.LOCK_EX)):
+                if not os.path.lexists(generation):
+                    return
+                self._require_generation_path(generation)
+                actual = set(os.listdir(generation))
+                if self.MANIFEST_NAME not in actual:
+                    # MANIFEST is removed only after payload unlink + fsync.
+                    # A crash in the final rmdir window leaves an empty folder.
+                    if actual:
+                        raise HibernationValidationError("retired generation lost its manifest")
+                else:
+                    manifest = HibernationManifest.from_dict(self._read_json_at(
+                        generation, self.MANIFEST_NAME, "retired hibernation manifest"))
+                    if (manifest.metadata_sha256 != digest
+                            or manifest.sandbox_id != sandbox_id
+                            or manifest.sandbox_generation != sandbox_generation
+                            or manifest.hibernation_generation != hibernation_generation):
+                        raise HibernationConflictError("retired generation identity changed")
+                    if self.COMPLETE_NAME in actual:
+                        self.load_published_metadata(
+                            sandbox_id=sandbox_id, sandbox_generation=sandbox_generation,
+                            hibernation_generation=hibernation_generation)
+                    expected = {item.artifact.name: item for item in manifest.files}
+                    if actual - set(expected) - {self.MANIFEST_NAME, self.COMPLETE_NAME}:
+                        raise HibernationValidationError("retired generation has unexpected files")
+                    generation_fd = self._open_directory(generation)
+                    try:
+                        for name in actual & set(expected):
+                            item = expected[name]
+                            info = os.stat(name, dir_fd=generation_fd, follow_symlinks=False)
+                            if (not stat.S_ISREG(info.st_mode)
+                                    or (self.require_stable_device and info.st_dev != item.device)
+                                    or info.st_ino != item.inode
+                                    or info.st_size != item.artifact.logical_bytes):
+                                raise HibernationValidationError("retired artifact identity changed")
+                        if self.COMPLETE_NAME in actual:
+                            os.unlink(self.COMPLETE_NAME, dir_fd=generation_fd)
+                            os.fsync(generation_fd)
+                        for name in sorted(actual & set(expected)):
+                            os.unlink(name, dir_fd=generation_fd)
+                        os.fsync(generation_fd)
+                        os.unlink(self.MANIFEST_NAME, dir_fd=generation_fd)
+                        os.fsync(generation_fd)
+                    finally:
+                        os.close(generation_fd)
+                generation.rmdir()
+                self._fsync_directory(generation.parent)
+        finally:
+            os.close(root_fd)
+
     def inventory_incarnation(
         self,
         *,

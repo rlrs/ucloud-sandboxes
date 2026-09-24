@@ -6,6 +6,7 @@ exercise ordering, failure recovery, and exact durable capacity ownership.
 from dataclasses import replace
 from contextlib import closing
 from concurrent.futures import ThreadPoolExecutor
+import os
 import sqlite3
 from threading import Event, Thread
 from types import SimpleNamespace
@@ -63,7 +64,7 @@ class ReflinkRetentionTests(unittest.TestCase):
         planned = self.registry.plan(spec=self.spec, sandbox_generation=1, operation_id='create:1',
                                      runtime_compatibility_sha256='b'*64, split_memory_backing=True)
         self.sandbox = replace(self.sandbox, spec_sha256=planned.spec_sha256)
-        split_fixtures.SplitLifecycleTests.split(self)
+        split_fixtures.SplitLifecycleTests.split(self, planned.memory_reference)
         self.quota = RetentionQuota()
         self.quota.projects.update(self.warden.memory_backing.quota.projects)
         self.warden.memory_backing.quota = self.quota
@@ -153,10 +154,11 @@ class ReflinkRetentionTests(unittest.TestCase):
         self.quota.fail_release = True
         running = self.warden.resume(self.sandbox, operation_id='wake:1')
         self.assertEqual(running.state, HibernationState.RUNNING)
-        self.assertFalse(self.source.parent.exists())
+        self.assertTrue(self.source.parent.exists())
         self.assert_reserved()
         with self.assertRaisesRegex(OSError, 'trim failure'):
             self.warden.reconcile_retired_memory_capacity()
+        self.assertFalse(self.source.parent.exists())
         self.reopen()
         self.quota.fail_release = False
         self.assertEqual(self.warden.reconcile(self.sandbox).state, HibernationState.RUNNING)
@@ -190,6 +192,97 @@ class ReflinkRetentionTests(unittest.TestCase):
                 finish.set()
             self.assertEqual(cleanup.result(3), 1)
         self.assertEqual(self.registry.reflink_overlap_bytes(), 0)
+
+    def test_slow_old_generation_unlink_does_not_block_reconcile_capture_or_wake(self):
+        self.warden.resume(self.sandbox, operation_id='wake:1')
+        self.assert_source()  # Wake did not unlink the immutable generation.
+        old_directory_inode = self.source.parent.stat().st_ino
+        entered, finish = Event(), Event()
+        unlink = os.unlink
+
+        def slow_unlink(name, *, dir_fd=None):
+            if (name == 'application_memory.img' and dir_fd is not None
+                    and os.fstat(dir_fd).st_ino == old_directory_inode):
+                entered.set()
+                self.assertTrue(finish.wait(5))
+            return unlink(name, dir_fd=dir_fd)
+
+        self.quota.before_assignment = lambda: None
+        with ThreadPoolExecutor(2) as threads, patch('ucloud_sandboxes.hibernation.os.unlink', side_effect=slow_unlink):
+            cleanup = threads.submit(self.warden.reconcile_retired_memory_capacity)
+            try:
+                self.assertTrue(entered.wait(2))
+                self.assertEqual(self.warden.reconcile(self.sandbox).state, HibernationState.RUNNING)
+                parked = threads.submit(self.warden.park, self.sandbox, operation_id='park:2').result(2)
+                self.assertEqual(parked.hibernation_generation, 2)
+                # A later restore has independent source files and remains
+                # runnable while old-generation fsync/unlink is stalled.
+                running = threads.submit(self.warden.resume, self.sandbox, operation_id='wake:2').result(2)
+                self.assertEqual(running.state, HibernationState.RUNNING)
+                newer = self.source.parent.parent / 'hibernate-2' / 'application_memory.img'
+                self.assertTrue(newer.exists())
+                self.assertEqual(len(self.registry.list_reflink_overlaps()), 2)
+            finally:
+                finish.set()
+            self.assertEqual(cleanup.result(2), 1)
+        self.assertTrue(newer.exists())
+        self.assertEqual(len(self.registry.list_reflink_overlaps()), 1)
+        self.warden.reconcile_retired_memory_capacity()
+        self.assertEqual(self.registry.reflink_overlap_bytes(), 0)
+
+    def test_current_failed_restore_source_cannot_be_retired(self):
+        self.runner.fail_readiness = True
+        with self.assertRaises(DirectWardenError):
+            self.warden.resume(self.sandbox, operation_id='wake:failed')
+        self.assertEqual(self.warden.reconcile_retired_memory_capacity(), 0)
+        self.assert_source()
+        self.assert_reserved()
+
+    def test_repeated_wakes_reuse_retirement_lock_and_report_preparation(self):
+        self.quota.before_assignment = lambda: None
+        for generation in range(1, 4):
+            timings = {}
+            self.warden.resume(self.sandbox, operation_id=f'wake:{generation}', timings=timings)
+            preparation = ('prepare_workspace', 'validate_checkpoint', 'join_network_prepare',
+                           'prepare_memory', 'retain_source')
+            for phase in preparation:
+                self.assertGreaterEqual(timings[phase], 0)
+            self.assertLessEqual(sum(timings[phase] for phase in preparation),
+                                 timings['validate_artifact'])
+            self.assertEqual(self.warden.reconcile_retired_memory_capacity(), 1)
+            self.assertEqual(len(list(self.warden.artifacts.root.glob('.retire-*.lock'))), 1)
+            if generation < 3:
+                self.warden.park(self.sandbox, operation_id=f'park:{generation + 1}')
+
+    def test_retirement_crash_after_payload_unlink_resumes_from_authenticated_manifest(self):
+        self.warden.resume(self.sandbox, operation_id='wake:1')
+        unlink = os.unlink
+
+        def crash(name, *, dir_fd=None):
+            result = unlink(name, dir_fd=dir_fd)
+            if name == 'application_memory.img':
+                raise OSError('injected retirement crash after unlink')
+            return result
+
+        with patch('ucloud_sandboxes.hibernation.os.unlink', side_effect=crash):
+            with self.assertRaisesRegex(OSError, 'retirement crash'):
+                self.warden.reconcile_retired_memory_capacity()
+        self.assertFalse(self.source.exists())
+        self.assertTrue((self.source.parent / self.warden.artifacts.MANIFEST_NAME).exists())
+        self.assert_reserved()
+        self.reopen()
+        self.assertEqual(self.warden.reconcile(self.sandbox).state, HibernationState.RUNNING)
+        self.assertEqual(self.warden.reconcile_retired_memory_capacity(), 1)
+        self.assertEqual(self.registry.reflink_overlap_bytes(), 0)
+
+    def test_retirement_wrong_manifest_cannot_unlink_source(self):
+        self.warden.resume(self.sandbox, operation_id='wake:1')
+        claim = self.registry.list_reflink_overlaps()[0]
+        with patch.object(self.registry, 'list_reflink_overlaps', return_value=(replace(claim, manifest_sha256='0'*64),)):
+            with self.assertRaisesRegex(Exception, 'identity changed'):
+                self.warden.reconcile_retired_memory_capacity()
+        self.assert_source()
+        self.assert_reserved()
 
     def test_existing_service_reconciliation_loop_finishes_retirement(self):
         self.warden.resume(self.sandbox, operation_id='wake:maintenance')
@@ -228,10 +321,11 @@ class ReflinkRetentionTests(unittest.TestCase):
             with self.source.open('rb') as reader:
                 running = self.warden.resume(self.sandbox, operation_id='wake:1')
                 self.assertEqual(running.state, HibernationState.RUNNING)
-                self.assertFalse(self.source.exists())
+                self.assertTrue(self.source.exists())
                 self.assertEqual(reader.read(), self.source_bytes)
                 self.assert_reserved()
                 self.assertEqual(self.warden.reconcile_retired_memory_capacity(), 0)
+                self.assertFalse(self.source.exists())
         self.warden.reconcile_retired_memory_capacity()
         self.assertEqual(self.registry.reflink_overlap_bytes(), 0)
 

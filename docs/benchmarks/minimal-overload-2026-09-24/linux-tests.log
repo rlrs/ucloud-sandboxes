@@ -1,0 +1,57 @@
+...........................Error handling request from 127.0.0.1
+Traceback (most recent call last):
+  File "/tmp/minimal-overload-fixes-20260924/ucloud_sandboxes/model_relay.py", line 791, in _wait_for_worker_response
+    response = await _state(request).wait_for_response(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+    )
+    ^
+  File "/usr/lib/python3.14/unittest/mock.py", line 2333, in _execute_mock_call
+    raise effect
+TimeoutError
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/work/ucloud-sandboxes/gateway-venv/lib/python3.14/site-packages/aiohttp/web_protocol.py", line 575, in _handle_request
+    resp = await request_handler(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/work/ucloud-sandboxes/gateway-venv/lib/python3.14/site-packages/aiohttp/web_app.py", line 559, in _handle
+    return await handler(request)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/work/ucloud-sandboxes/gateway-venv/lib/python3.14/site-packages/aiohttp/web_middlewares.py", line 117, in impl
+    return await handler(request)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/minimal-overload-fixes-20260924/ucloud_sandboxes/model_relay.py", line 344, in _database_admission_middleware
+    return await handler(request)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/minimal-overload-fixes-20260924/ucloud_sandboxes/model_relay.py", line 670, in openai_responses
+    return await _openai_proxy(request, endpoint="/v1/responses")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/minimal-overload-fixes-20260924/ucloud_sandboxes/model_relay.py", line 754, in _openai_proxy
+    response = await _wait_for_worker_response(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/tmp/minimal-overload-fixes-20260924/ucloud_sandboxes/model_relay.py", line 805, in _wait_for_worker_response
+    persisted = await _state(request).cancel_request(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/usr/lib/python3.14/unittest/mock.py", line 2333, in _execute_mock_call
+    raise effect
+ucloud_sandboxes.shared_control.model.DatabaseAdmissionUnavailable
+.............relay queue readiness failed; durable work retained
+...................................................................................../usr/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 503: 'Service Unavailable'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+./usr/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 403: 'Forbidden'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+./usr/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 400: 'Bad Request'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+.
+----------------------------------------------------------------------
+Ran 128 tests in 140.372s
+
+OK

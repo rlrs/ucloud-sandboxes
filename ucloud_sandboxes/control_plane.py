@@ -983,6 +983,22 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 status=HTTPStatus.FORBIDDEN,
             )
             return
+        except ValueError as exc:
+            # The store preserves SQLite's cause when wrapping storage errors.
+            # A heartbeat can safely retry after lock contention, including an
+            # ambiguous receipt. Do not turn corruption or I/O errors into busy.
+            cause = exc.__cause__
+            if not isinstance(cause, sqlite3.OperationalError) or not str(cause).startswith(
+                ("database is locked", "database table is locked")
+            ):
+                raise
+            self._write_json(
+                {"error": "heartbeat storage is temporarily busy",
+                 "error_code": "heartbeat_storage_busy", "retryable": True},
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+                headers={"Retry-After": "1", "X-UCloud-Retryable": "true"},
+            )
+            return
         stored_heartbeat = receipt.stored
         if receipt.accepted:
             record_node_heartbeat(

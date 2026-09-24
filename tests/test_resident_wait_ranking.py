@@ -47,6 +47,33 @@ class ResidentWaitRankingTests(TestCase):
     def pressure_on(self):
         self.pressure = Pressure(0.04, 0, 0, 4 * self.GIB)
 
+    def test_io_pressure_drains_reclaim_then_allows_progress(self):
+        first = self.retain("first", memory=self.GIB)
+        self.now += 1
+        second = self.retain("second", memory=self.GIB)
+        self.pressure = Pressure(0.01, 20, 50, self.GIB)
+        with self.policy.defer(first, memory_bytes=self.GIB, blocking=False):
+            self.assertTrue(self.policy.ready(first, memory_bytes=self.GIB))
+            self.assertFalse(self.policy.ready(second, memory_bytes=self.GIB))
+            with self.assertRaises(WarmParkDeferred):
+                with self.policy.defer(second, memory_bytes=self.GIB, blocking=False):
+                    self.fail("saturated storage admitted another capture")
+            self.policy.parked(first)
+        self.now += 5  # Allow the existing settle window to expire.
+        with self.policy.defer(second, memory_bytes=self.GIB, blocking=False):
+            self.assertEqual(self.policy.snapshot()["checkpoint_inflight"], 1)
+
+    def test_storage_recovery_restores_byte_based_parallelism(self):
+        first = self.retain("first", memory=self.GIB)
+        self.now += 1
+        second = self.retain("second", memory=self.GIB)
+        self.pressure = Pressure(0.01, 20, 50, self.GIB)
+        with self.policy.defer(first, memory_bytes=self.GIB, blocking=False):
+            self.assertFalse(self.policy.ready(second, memory_bytes=self.GIB))
+            self.pressure = Pressure(0.01, 0, 0, self.GIB)
+            with self.policy.defer(second, memory_bytes=self.GIB, blocking=False):
+                self.assertEqual(self.policy.snapshot()["checkpoint_inflight"], 2)
+
     def test_fresh_long_wait_precedes_old_near_response_wait(self):
         history = self.train("old")
         self.assertEqual(len(history.parks), 1)

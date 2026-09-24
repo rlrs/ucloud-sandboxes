@@ -842,7 +842,9 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
         state = await self.bound_state(accepted_notifier=park, result_notifier=wake)
         req = await self.enqueue(state)
         await asyncio.wait_for(parked.wait(), 3)
-        (leased,) = await self.poll(state)
+        # Callback entry precedes its durable lifecycle completion. Allow the
+        # normal poll to wait for that commit rather than racing it at 100 ms.
+        (leased,) = await self.poll(state, timeout_seconds=2)
         await self.respond(leased, state, defer_delivery=True)
         self.assertEqual(
             (await state.wait_for_response(req, timeout_seconds=5)).body, b"answer"
@@ -1512,7 +1514,7 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
     async def test_pool_exhaustion_is_predispatch_503_and_retry_commits_once(self):
         store = PostgresDatabase(
             DSN, "pool-admission", schema=self.schema,
-            max_connections=1, timeout_seconds=0.1,
+            max_connections=1,
         )
         app = api.create_model_relay_app(
             postgres_store=store, worker_bearer_token="worker",
@@ -1522,6 +1524,9 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
         await client.start_server()
         self.clients.append(client)
         state = app[api.STATE_KEY]
+        # Exercise short acquisition failure after initialization, not a race
+        # between a cold PostgreSQL connection and a 100 ms startup deadline.
+        store.pool.timeout = 0.1
         request, payload = await self.completion_request(state)
         samples = []
         store.observe = samples.append
@@ -1544,9 +1549,28 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(response.status, 503, await response.text())
                 self.assertEqual((await response.json())["error_code"], "relay_database_busy")
                 self.assertEqual(response.headers["Retry-After"], "1")
+            async with client.post(
+                "/worker/renew", json=payload,
+                headers={"Authorization": "Bearer worker"},
+            ) as response:
+                self.assertEqual(response.status, 503, await response.text())
+                self.assertEqual(response.headers["X-UCloud-Retryable"], "true")
+            async with client.delete(
+                "/v1/relay/rollouts/agent",
+                json={"registration_token": payload["registration_token"]},
+                headers={"Authorization": "Bearer worker"},
+            ) as response:
+                self.assertEqual(response.status, 503, await response.text())
+                self.assertEqual((await response.json())["error_code"], "relay_database_busy")
         failed = [sample for sample in samples if not sample.succeeded]
         self.assertTrue(failed)
         self.assertTrue(all(sample.transaction_seconds == 0 for sample in failed))
+        async with client.post(
+            "/worker/renew", json=payload,
+            headers={"Authorization": "Bearer worker"},
+        ) as response:
+            self.assertEqual(response.status, 200, await response.text())
+            self.assertEqual((await response.json())["request"]["lease_id"], payload["lease_id"])
         receipt = await self.post_completion(client, payload)
         self.assertTrue(receipt["committed"])
         self.assertFalse(receipt["duplicate"])
@@ -1554,6 +1578,14 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(duplicate["duplicate"])
         self.assertEqual((await state.wait_for_response(request, timeout_seconds=2)).body,
                          b"accepted-once")
+        for existed in (True, False):
+            async with client.delete(
+                "/v1/relay/rollouts/agent",
+                json={"registration_token": payload["registration_token"]},
+                headers={"Authorization": "Bearer worker"},
+            ) as response:
+                self.assertEqual(response.status, 200, await response.text())
+                self.assertEqual((await response.json())["existed"], existed)
 
     async def test_later_model_transaction_admission_does_not_claim_safe_http_retry(self):
         client, state = await self.completion_client(None)

@@ -1,0 +1,25 @@
+{
+  "tests": 128,
+  "seconds": 140.372,
+  "passed": true,
+  "platform": "Linux; isolated source copy on idle gateway",
+  "database": "Separate temporary PostgreSQL container; production database unused",
+  "sdk_source_commit": "e728daf99aacf9ebf7f6ab1abc8b28a7c77ea9e9",
+  "source_sha256": {
+    "ucloud_sandboxes/control_plane.py": "c5ffdce41654003ee2d636b09c613dcff54d4f301036426c7a6f70ca70609e21",
+    "ucloud_sandboxes/model_relay.py": "509b3eaed308c10ba27d3a353fe8a45925e0f771742ac96ba71ba747c5c65e57",
+    "ucloud_sandboxes/warm_park.py": "5a1629883c2b95f37a3b7b88ea98831f1f2d229c485020c7241f95c84b589dfe",
+    "tests/test_control_plane.py": "be9db27c700df85d0e63da3dc52e848582297922cee3a7a2b79634ee45a85805",
+    "tests/test_postgres_relay.py": "1f5008e44ae016ee0b9ecc7d994565e73ca6eca911e74739372324057b44b77c",
+    "tests/test_resident_wait_ranking.py": "b348b0a29715894964158d0de1e92669c748aad5f9cc0659ff34a3fa6347f338"
+  },
+  "log_sha256": "fc539787520a0b94c9e4addcb72bedc6bcccb4a23b5636d374434f17f70c14ed",
+  "deployed": false,
+  "test_container_removed": true,
+  "scope": "Targeted regressions, not full-suite or loaded performance qualification",
+  "test_setup_corrections": [
+    "Used the released SDK source instead of an older installed SDK.",
+    "Applied the short pool-acquisition timeout after pool initialization.",
+    "Waited for durable lifecycle completion rather than racing callback entry at 100 ms."
+  ]
+}

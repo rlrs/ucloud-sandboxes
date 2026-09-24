@@ -144,6 +144,7 @@ class WarmParkPolicy:
         self._ram_reclaiming = {}
         self._ram_footprints = {}
         self._backing_reclaim = False
+        self._io_backpressure = False
         self._parked = set()
         self._footprints = {}
         self._reclaim_bytes = 0
@@ -326,6 +327,7 @@ class WarmParkPolicy:
             self._psi_reclaim = decision.psi_reclaim
             self._reason = decision.reason
             self._backing_reclaim = decision.backing_reclaim
+            self._io_backpressure = pressure.io_stall >= 20
             self._reclaim_bytes = decision.target_bytes
             return decision.reclaim
 
@@ -335,6 +337,12 @@ class WarmParkPolicy:
         if key in self._reclaiming:
             return True
         if now < self._settle_until:
+            return False
+        # A byte deficit is not evidence that saturated storage can finish more
+        # concurrent captures. Let admitted reclaim drain; when none remains,
+        # one candidate may still make progress despite lagging PSI samples.
+        # Healthy storage retains the ordinary measured-byte parallelism.
+        if self._io_backpressure and self._reclaiming:
             return False
         # A missing/stale footprint is not a one-byte reclaim. Probe it alone
         # and observe the resulting headroom before starting more I/O. This is

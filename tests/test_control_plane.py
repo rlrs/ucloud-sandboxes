@@ -2749,6 +2749,28 @@ class ControlPlaneTests(unittest.TestCase):
         resolve.assert_called_once_with("team/image", digest)
         protect.assert_called_once_with("team/image", digest)
 
+    def test_heartbeat_storage_contention_is_retryable_and_next_receipt_succeeds(self):
+        with _temporary_root() as root:
+            server = _gateway_server(root, deployment_id="prod-a")
+            heartbeat = build_heartbeat(
+                job_id="job-1", node_id="node-1", deployment_id="prod-a",
+            )
+
+            def busy(_heartbeat):
+                raise ValueError("control state is unreadable") from sqlite3.OperationalError(
+                    "database is locked"
+                )
+
+            with _running_server(server) as server_url:
+                endpoint = f"{server_url}/v1/nodes/heartbeat"
+                with patch.object(server.RequestHandlerClass.store, "receive_heartbeat", side_effect=busy):
+                    response = post_heartbeat(endpoint, heartbeat)
+                recovered = post_heartbeat(endpoint, heartbeat)
+            self.assertEqual(response.status, 503)
+            self.assertTrue(response.payload["retryable"])
+            self.assertEqual(response.payload["error_code"], "heartbeat_storage_busy")
+            self.assertEqual(recovered.status, 200)
+
     def test_gateway_stamps_heartbeat_receipt_time_and_enforces_deployment(
         self,
     ) -> None:

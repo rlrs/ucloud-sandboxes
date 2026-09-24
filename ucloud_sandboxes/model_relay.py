@@ -343,11 +343,15 @@ async def _database_admission_middleware(request, handler):
     try:
         return await handler(request)
     except DatabaseAdmissionUnavailable:
-        # These worker operations either have not claimed work yet or retry an
-        # identical fenced response. A model/tunnel HTTP request can already
+        # These control operations either have not entered their transaction
+        # or retry an identical fenced response. Renewal and unregister each
+        # use one transaction, so admission failure cannot have changed a lease
+        # or retired a registration. A model/tunnel HTTP request can already
         # have enqueued work before a later transaction fails; admission of that
         # later transaction is not proof that replaying the HTTP call is safe.
-        if request.match_info.handler not in {worker_poll, worker_respond}:
+        if request.match_info.handler not in {
+            worker_poll, worker_respond, worker_renew, unregister_rollout,
+        }:
             raise
         return web.json_response(
             {"error": "relay database admission is temporarily unavailable",

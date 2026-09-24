@@ -1,0 +1,116 @@
+................................../work/ucloud-sandboxes/release/0.5.114rc28/qualification/venv/lib/python3.14/site-packages/hypothesis/internal/entropy.py:129: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5d320a90>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/venv/lib/python3.14/site-packages/hypothesis/internal/entropy.py:129: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5cde7a60>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/venv/lib/python3.14/site-packages/hypothesis/internal/entropy.py:129: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5cde7b50>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/venv/lib/python3.14/site-packages/hypothesis/internal/entropy.py:129: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5cde7970>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/venv/lib/python3.14/site-packages/hypothesis/internal/entropy.py:129: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5cde7880>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/venv/lib/python3.14/site-packages/hypothesis/internal/entropy.py:129: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5cde7c40>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/venv/lib/python3.14/site-packages/hypothesis/internal/entropy.py:129: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5ddcb3d0>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/venv/lib/python3.14/site-packages/hypothesis/internal/entropy.py:129: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5c388040>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/venv/lib/python3.14/site-packages/hypothesis/internal/entropy.py:129: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5ddcb6a0>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/venv/lib/python3.14/site-packages/hypothesis/internal/entropy.py:129: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5c388130>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/venv/lib/python3.14/site-packages/hypothesis/internal/entropy.py:129: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5c388310>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/venv/lib/python3.14/site-packages/hypothesis/internal/entropy.py:129: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5c388400>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+......................./usr/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 409: 'Conflict'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+../usr/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 400: 'Bad Request'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+...../usr/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 503: 'Service Unavailable'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+../usr/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 401: 'Unauthorized'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+.........../usr/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 502: 'Bad Gateway'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+.................../usr/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 403: 'Forbidden'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+............/usr/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 504: 'Gateway Timeout'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+..../usr/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 410: 'Gone'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+/usr/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 404: 'Not Found'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+..................................................................................................................................................................................................................../work/ucloud-sandboxes/release/0.5.114rc28/qualification/scripts/live_relay_load_benchmark.py:451: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5c22fe20>
+  return await asyncio.wait_for(operation(), max(.001, deadline - time.monotonic()))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/scripts/live_relay_load_benchmark.py:451: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5c0c5300>
+  return await asyncio.wait_for(operation(), max(.001, deadline - time.monotonic()))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/scripts/live_relay_load_benchmark.py:451: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5c8abd30>
+  return await asyncio.wait_for(operation(), max(.001, deadline - time.monotonic()))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/scripts/live_relay_load_benchmark.py:451: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5c8abe20>
+  return await asyncio.wait_for(operation(), max(.001, deadline - time.monotonic()))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/scripts/live_relay_load_benchmark.py:451: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5c8d85e0>
+  return await asyncio.wait_for(operation(), max(.001, deadline - time.monotonic()))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/scripts/live_relay_load_benchmark.py:451: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5c7372e0>
+  return await asyncio.wait_for(operation(), max(.001, deadline - time.monotonic()))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/scripts/live_relay_load_benchmark.py:451: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5c737880>
+  return await asyncio.wait_for(operation(), max(.001, deadline - time.monotonic()))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/scripts/live_relay_load_benchmark.py:451: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5c737970>
+  return await asyncio.wait_for(operation(), max(.001, deadline - time.monotonic()))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/scripts/live_relay_load_benchmark.py:451: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5c8ab010>
+  return await asyncio.wait_for(operation(), max(.001, deadline - time.monotonic()))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/scripts/live_relay_load_benchmark.py:451: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5769bf10>
+  return await asyncio.wait_for(operation(), max(.001, deadline - time.monotonic()))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/scripts/live_relay_load_benchmark.py:451: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5c78b100>
+  return await asyncio.wait_for(operation(), max(.001, deadline - time.monotonic()))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/scripts/live_relay_load_benchmark.py:451: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5c78ac50>
+  return await asyncio.wait_for(operation(), max(.001, deadline - time.monotonic()))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/scripts/live_relay_load_benchmark.py:451: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5d37f3d0>
+  return await asyncio.wait_for(operation(), max(.001, deadline - time.monotonic()))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/scripts/live_relay_load_benchmark.py:451: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5c0e86d0>
+  return await asyncio.wait_for(operation(), max(.001, deadline - time.monotonic()))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/scripts/live_relay_load_benchmark.py:451: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5c78b970>
+  return await asyncio.wait_for(operation(), max(.001, deadline - time.monotonic()))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/scripts/live_relay_load_benchmark.py:451: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5c78b4c0>
+  return await asyncio.wait_for(operation(), max(.001, deadline - time.monotonic()))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/scripts/live_relay_load_benchmark.py:451: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5c78ab60>
+  return await asyncio.wait_for(operation(), max(.001, deadline - time.monotonic()))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/scripts/live_relay_load_benchmark.py:451: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5c789f30>
+  return await asyncio.wait_for(operation(), max(.001, deadline - time.monotonic()))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/work/ucloud-sandboxes/release/0.5.114rc28/qualification/scripts/live_relay_load_benchmark.py:451: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbc5c789d50>
+  return await asyncio.wait_for(operation(), max(.001, deadline - time.monotonic()))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+..........
+----------------------------------------------------------------------
+Ran 334 tests in 55.182s
+
+OK

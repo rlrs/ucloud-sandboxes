@@ -1,0 +1,52 @@
+{
+  "policy": {
+    "create_pressure_enabled": true,
+    "create_pressure_fresh_seconds": 15,
+    "create_pressure_max_headroom_nodes": 1,
+    "create_pressure_min_samples": 2,
+    "create_pressure_window_seconds": 30,
+    "create_target_concurrency_per_node": 8,
+    "live_pressure_enabled": true,
+    "live_pressure_fresh_seconds": 30,
+    "live_pressure_min_samples": 3,
+    "live_pressure_window_seconds": 60,
+    "max_create_per_cycle": 2,
+    "max_memory_psi_full_avg10": 5.0,
+    "max_nodes": 10,
+    "max_provisioning_nodes": 6,
+    "max_stop_per_cycle": 1,
+    "min_nodes": 0,
+    "model_wait_capacity_weight": 0.1,
+    "model_wait_max_headroom_nodes": 1,
+    "pressure_scale_down_cooldown_seconds": 300,
+    "program_aware_autoscaling_enabled": false,
+    "provisioning_capacity_weight": 1.0,
+    "provisioning_latency_lookback_seconds": 604800,
+    "provisioning_scale_down_multiplier": 2.0,
+    "scale_down_idle_seconds": 300,
+    "stale_provisioning_after_seconds": 300,
+    "stale_provisioning_capacity_weight": 0.0,
+    "target_cpu_utilization": 0.7,
+    "target_memory_utilization": 0.8,
+    "target_storage_queue_utilization": 0.75,
+    "unreachable_stop_after_seconds": 180,
+    "warm_resources": {
+      "disk_mb": 0,
+      "memory_mb": 0,
+      "vcpu": 0.0
+    },
+    "parked_wake_consolidation_enabled": true
+  },
+  "version": "0.5.114rc28",
+  "commit": "987598579f16f08646e3531234d78ac7ac177a7e",
+  "installed_at": "2026-09-24T16:48:55.944311+00:00",
+  "matched_package_files": 142,
+  "health": {
+    "ok": true,
+    "service": "control-plane",
+    "version": "0.5.114rc28"
+  },
+  "relay_backend": "postgres",
+  "node_package_root": "/work/ucloud-sandboxes/release/0.5.114rc28",
+  "autoscaler": "active; idle fleet; new workers use rc28 bundles"
+}

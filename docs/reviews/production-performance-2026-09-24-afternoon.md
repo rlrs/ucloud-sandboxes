@@ -215,3 +215,22 @@ to 71 microseconds with eight images, and 168 to 119 microseconds with 32 images
 117 placement, control-plane and wake tests passed, with explicit coverage of
 unknown caches, digest/tag aliases, migration reservations, state counts, and
 per-distinct-image work. Production is unchanged.
+
+### Deployment completed
+
+Runtime 0.5.114rc28 (987598579f16f08646e3531234d78ac7ac177a7e) deployed at
+2026-09-24 16:48:55 UTC after idle-fleet preflight, SQLite backups and the existing
+PostgreSQL backup service. All 142 installed package files matched the wheel.
+334 runtime tests and 14 SDK tests passed on Linux; 334 runtime tests also passed
+locally. Both node bundles include orjson 3.11.9, retain the qualified native/OS
+closure, and are selected for future workers. PostgreSQL and autoscaling policy
+(maximum ten workers) are unchanged.
+
+SDK 0.4.29 (697354658b823942cf94a2486d9dba3628e056fa) is pushed to main and
+published at https://github.com/rlrs/ucloud-sandboxes-sdk/releases/tag/v0.4.29 .
+External runner environments and the separate Verifiers dependency pin have not
+been modified; installing that SDK enables the improved retry diagnostics.
+Deployment/qualification receipts are under the benchmark `deployment` folder.
+Health and empty fleet-list smoke checks are not sustained-load qualification;
+provisioning recovery under realistic concurrent wake traffic remains to be
+measured.

@@ -1,0 +1,15 @@
+{
+  "retained_checkpoints": {
+    "deleted": 308
+  },
+  "allocations": {
+    "deleted": 42
+  },
+  "reflink_overlaps": 0,
+  "registrations": 0,
+  "canonical_rc25_launcher": true,
+  "source_hashes": {
+    "direct_warden.py": "76894637a4c4f22b3f0f48fb9f87485e301685d7d2d5a6483f4e53b6d187b2f5",
+    "hibernation.py": "dd8ab15a9064dcbebc46e555275e63c55aa03e3b29879c3b1910aa6dad636e26"
+  }
+}

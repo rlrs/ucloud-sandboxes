@@ -1,0 +1,22 @@
+.........................................................................could not remove consumed hibernation generation for sandbox-1
+Traceback (most recent call last):
+  File "/tmp/restore-retirement-qualification/ucloud_sandboxes/direct_warden.py", line 956, in resume
+    self._finalize_restore_artifacts(sandbox, manifest)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/unittest/mock.py", line 1176, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/unittest/mock.py", line 1180, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/unittest/mock.py", line 1241, in _execute_mock_call
+    raise effect
+OSError: injected cleanup failure
+........................................................................................................................../work/ucloud-sandboxes/gateway-venv/lib/python3.14/site-packages/attr/_make.py:226: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x759e1e7eae30>
+  bytecode = compile(script, filename, "exec")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+..........
+----------------------------------------------------------------------
+Ran 205 tests in 9.435s
+
+OK

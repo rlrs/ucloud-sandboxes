@@ -6,7 +6,15 @@ statements must be read in the context of their candidate version.
 
 ## Deployed baseline
 
-Production runs **0.5.114rc24**, deployed from `5bc348f` on September 24.
+Production runs **0.5.114rc25**, deployed from `d6aac4b` on September 24.
+It moves restored checkpoint cleanup into existing maintenance and adds detailed
+restore-preparation timers. The native/OS/storage closure is unchanged. All 205
+targeted Linux tests and 368 live park/wake cycles passed. A same-worker comparison
+measured useful-execution p95 1.98 s with old cleanup and 1.93 s with rc25; earlier
+rc25 runs were slower, so no clear end-to-end speedup is established. See the
+[deployment and comparison](restore-retirement-2026-09-24.md).
+
+The preceding **0.5.114rc24** was deployed from `5bc348f` on September 24.
 It removes restore-slot contention from resident growth admission, separates
 cached memory-placement reads from allocator I/O, and replaces unread exec-event
 eviction with output backpressure. SDK **0.4.27** is published from `dc62af7`;
@@ -48,8 +56,8 @@ latency. They do not establish sustained subsecond wake under memory pressure.
 
 ## Deferred work
 
-Changes beyond rc22 to background retirement of restored artifacts, resident
-reclaim action ranking, and reclaim telemetry are recorded separately. They are
+Background retirement was selectively qualified and deployed in rc25 as described
+above. Resident reclaim action ranking and reclaim telemetry remain deferred. They are
 not deployed or qualified by rc22's full-suite or production results. Their
 focused Linux regression results are supporting evidence only; loaded pressure
 qualification remains necessary before deployment. Committing this work does not

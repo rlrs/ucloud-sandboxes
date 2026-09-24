@@ -1,0 +1,20 @@
+{
+  "health": {
+    "ok": true,
+    "service": "control-plane",
+    "version": "0.5.114rc25"
+  },
+  "routes": 0,
+  "relay": {
+    "backend": "postgres",
+    "inflight": 0,
+    "delivery_pending": 0
+  },
+  "services": {
+    "ucloud-sandbox-gateway": "active",
+    "ucloud-sandbox-relay": "active",
+    "ucloud-sandbox-autoscaler": "active",
+    "ucloud-sandbox-registry": "active"
+  },
+  "max_workers": 10
+}

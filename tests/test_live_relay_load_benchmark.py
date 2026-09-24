@@ -188,7 +188,7 @@ class ResponseWindowTests(unittest.IsolatedAsyncioTestCase):
         future = asyncio.get_running_loop().create_future()
         task = asyncio.create_task(asyncio.Event().wait())
         try:
-            with self.assertRaises(TimeoutError):
+            with self.assertRaises(asyncio.TimeoutError):
                 await asyncio.wait_for(
                     observer.wait(future, task, timeout_seconds=1800), .01,
                 )
@@ -217,10 +217,13 @@ class ResponseWindowTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(TimeoutError):
                 await observer.wait(future, task, timeout_seconds=.01)
             self.assertFalse(future.done())
-            receipt = SimpleNamespace(body_bytes=json.dumps({**payload, 'tool': '42'}).encode())
+            receipt = SimpleNamespace(request_id='receipt-1', created_at=100.0, body_bytes=json.dumps({**payload, 'tool': '42', 'response_received_unix': 99.5, 'tool_finished_unix': 99.7, 'receipt_started_unix': 99.8}).encode())
             await queue.put(receipt)
             self.assertGreater(await observer.wait(future, task), 0)
             self.assertEqual(commits, [receipt])
+            self.assertEqual(observer.receipts[('process', 0)]['observer_request_id'], 'receipt-1')
+            self.assertEqual(observer.receipts[('process', 0)]['observer_request_created_unix'], 100.0)
+            self.assertEqual(observer.receipts[('process', 0)]['guest_response_received_unix'], 99.5)
             # Lost receipt ACK may replay the same observation without changing
             # its first observed time or waking another sandbox.
             observed = future.result()

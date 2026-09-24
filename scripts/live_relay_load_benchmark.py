@@ -83,7 +83,7 @@ for cycle in range(config['cycles']):
   except OSError:
    if attempt==119:raise
    time.sleep(min(1,.05*(attempt+1)))
- received=time.monotonic()
+ received=time.monotonic();received_unix=time.time()
  assert reply['cycle']==cycle and reply['nonce']==nonce and reply['digest']==memory_digest
  tool=subprocess.check_output([sys.executable,'-c','print(6*7)'],text=True).strip();assert tool=='42'
  sqlite_rows=0
@@ -91,11 +91,12 @@ for cycle in range(config['cycles']):
   sqlite_rows=writer.execute('SELECT count(*) FROM changes').fetchone()[0]
   assert sqlite_rows==(cycle+1)*transactions,'committed SQLite rows lost during park'
   assert reader.execute('SELECT count(*) FROM changes').fetchone()[0]==0,'SQLite reader snapshot changed during park'
- tool_finished=time.monotonic()
+ tool_finished=time.monotonic();tool_finished_unix=time.time()
  usable={'cycle':cycle,'nonce':nonce,'tool':tool,'pid':os.getpid(),'digest':memory_digest}
  tmp=root/'usable.tmp';tmp.write_text(json.dumps(usable));os.replace(tmp,root/('usable-'+str(cycle)+'.json'))
  # This separate, unbound observation tunnel has no lifecycle authority. The
  # driver must see this continuation before any file/exec probe can cause a wake.
+ usable.update(response_received_unix=received_unix,tool_finished_unix=tool_finished_unix,receipt_started_unix=time.time())
  receipt_id=uuid.uuid4().hex
  for receipt_attempt in range(120):
   receipt=urllib.request.Request(os.environ['OBSERVER_URL'],data=json.dumps(usable).encode(),headers={'Content-Type':'application/json','X-UCloud-Relay-Request-Id':receipt_id},method='POST')
@@ -562,6 +563,7 @@ class ContinuationObserver:
     def __init__(self, relay, rollout_id):
         self.relay, self.rollout_id = relay, rollout_id
         self.expected = {}
+        self.receipts = {}
 
     def expect(self, payload):
         key = (payload['nonce'], payload['cycle'])
@@ -586,6 +588,12 @@ class ContinuationObserver:
                     raise RuntimeError('unexpected guest continuation receipt')
                 future = expected[1]
                 if not future.done():
+                    self.receipts[(payload['nonce'], payload['cycle'])] = {
+                        'observer_request_id': getattr(request, 'request_id', None),
+                        'observer_request_created_unix': getattr(request, 'created_at', None),
+                        **{'guest_' + key: payload.get(key) for key in (
+                            'response_received_unix', 'tool_finished_unix', 'receipt_started_unix')},
+                    }
                     future.set_result(observed)
             # All returned receipts were observed together. Do not add earlier
             # ACK round trips to later timestamps in this same batch. Polling
@@ -615,9 +623,9 @@ async def run(args):
     worker_token = args.relay_worker_token_file.read_text().strip()
     config = {k: v for k, v in vars(args).items() if not k.endswith("token_file") and k != "output"}
     fleet_health = FleetHealthQualification(enabled=args.gateway_token_file is not None)
-    result = {"report_version": 3, "run_id": prefix, "started_at": datetime.now(timezone.utc).isoformat(),
+    result = {"report_version": 4, "run_id": prefix, "started_at": datetime.now(timezone.utc).isoformat(),
               "configuration": config, "cycles": [], "completed_scenarios": [], "errors": [], "cleanup_errors": [],
-              "health": [], "fleet_polls": [], "placements": {}, "control_retries": [],
+              "health": [], "driver_event_loop_lag_seconds": [], "fleet_polls": [], "placements": {}, "control_retries": [],
               "resource_samples": [], "resource_errors": [],
               "fleet_health_checks": fleet_health.checks,
               "fleet_health_failures": fleet_health.failures,
@@ -678,6 +686,12 @@ async def run(args):
                     result['health'].append({'seconds': time.monotonic() - started, 'ok': False, 'error': safe_error(exc)})
                 await asyncio.sleep(2)
         monitor = asyncio.create_task(health_probe())
+        async def measure_driver_lag():
+            while True:
+                due = time.monotonic() + .1
+                await asyncio.sleep(.1)
+                result['driver_event_loop_lag_seconds'].append(max(0, time.monotonic() - due))
+        lag_monitor = asyncio.create_task(measure_driver_lag())
         async def sample_resources():
             admin_token = args.gateway_token_file.read_text().strip()
             headers = {'Authorization': 'Bearer ' + admin_token}
@@ -918,6 +932,7 @@ async def run(args):
                                              'sqlite_rows': ack['sqlite_rows'],
                                              'sqlite_digest': ack['sqlite_digest'],
                                              'pid': ack['pid'], 'delivery_count': request.delivery_count})
+                    result['cycles'][-1].update(observer.receipts[(identity, cycle)])
                     result['cycles'][-1]['park_observed_after_seconds'] = parked_after
                     result['cycles'][-1]['during_provisioning'] = during_provisioning
                     result['cycles'][-1]['agents_started'] = len(jobs)
@@ -952,10 +967,11 @@ async def run(args):
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
             monitor.cancel()
+            lag_monitor.cancel()
             resource_monitor.cancel()
             for task in inventory_tasks:
                 task.cancel()
-            await asyncio.gather(monitor, resource_monitor, *inventory_tasks, return_exceptions=True)
+            await asyncio.gather(monitor, lag_monitor, resource_monitor, *inventory_tasks, return_exceptions=True)
             # Close the final sampling gap before deleting this run's sandboxes.
             # This occurs after all latency measurements, never in their path.
             if args.gateway_token_file is not None:
@@ -991,6 +1007,7 @@ async def run(args):
             for client in clients:
                 await client.close()
         measured = [row for row in result['cycles'] if row['cycle'] >= args.warmup_cycles]
+        result['driver_event_loop_lag_summary'] = summary(result['driver_event_loop_lag_seconds'])
         result['response_commit_seconds'] = summary([r['response_commit_seconds'] for r in measured])
         result['usable_exec_seconds'] = summary([r['usable_exec_seconds'] for r in measured])
         result['response_ready_to_usable_exec_seconds'] = summary([r['response_ready_to_usable_exec_seconds'] for r in measured])

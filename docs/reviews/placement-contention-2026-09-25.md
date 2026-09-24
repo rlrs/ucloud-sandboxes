@@ -99,3 +99,40 @@ An initial full run on local Python 3.10 stalled in the existing idle-poller
 cancellation test; it passed on Python 3.14, matching production's Python series.
 That does not establish Python 3.10 compatibility. All measurements here remain
 local macOS qualification, not a Linux load test or production latency result.
+
+## Deployment
+
+Runtime 0.5.114rc29, commit `0cc648e9249669754ecace9b6669dd5ac4b37585`,
+was committed, pushed to main and deployed at 2026-09-24 22:30:30 UTC
+(September 25 locally). The idle-fleet preflight found no routes, inflight relay
+requests or pending deliveries. A PostgreSQL backup and rollback copies preceded
+installation. All 142 installed package files matched the wheel. Sandbox and
+builder bundles retain the prior native/OS/storage closure. New workers use rc29;
+existing idle workers were not restarted. Autoscaling policy remains unchanged,
+including max_nodes=10 and target_memory_utilization=0.8.
+
+The Linux gateway suite ran 281 tests; two test methods initially lacked the
+uploaded `scripts.verify_heartbeat_upgrade` helper (three errors including
+subtests). After supplying it, all ten control-state-cache tests passed. There
+were no runtime assertion failures. The earlier real PostgreSQL qualification
+was local, as described above.
+
+SDK 0.4.30, commit `5a32754fa9d2567fe30a33c3cda42675026c6bb7`, was pushed to
+its main branch and published with wheel/sdist assets:
+https://github.com/rlrs/ucloud-sandboxes-sdk/releases/tag/v0.4.30 .
+Connection-establishment errors now retry up to five times within the request
+deadline; ambiguous post-dispatch failures and certificate errors do not retry.
+The external runner still needs to install this release.
+
+SDK qualification: all five new connection tests pass. The local full run had
+one failure in the existing 512-upstream test. Linux initially exhausted the test
+shell's descriptor limit; with 8192 descriptors, the concurrency tests and other
+available SDK tests passed. That Linux run had one missing optional inspect-ai
+import and one skip; all 13 Inspect integration tests passed locally. Production
+gateway and relay already have a 65536-descriptor limit. This qualification does
+not establish why the earlier external runner failed to connect.
+
+Post-deployment health and fleet APIs return HTTP 200 and all four services are
+active. Relay inflight, pending deliveries and lifecycle backlog are zero. This
+is idle health verification, not a production-load latency claim. Receipts are
+in `docs/benchmarks/gateway-cpu-2026-09-24/deployment-rc29/`.

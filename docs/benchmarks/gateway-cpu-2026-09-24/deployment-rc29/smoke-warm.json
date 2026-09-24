@@ -1,0 +1,23 @@
+{
+  "/healthz": {
+    "status": 200,
+    "ms": 8.92,
+    "version": "0.5.114rc29"
+  },
+  "/v1/nodes": {
+    "status": 200,
+    "ms": 2.66
+  },
+  "/v1/sandboxes": {
+    "status": 200,
+    "ms": 2.08,
+    "count": 0
+  },
+  "services": {
+    "ucloud-sandbox-gateway": "active",
+    "ucloud-sandbox-relay": "active",
+    "ucloud-sandbox-autoscaler": "active",
+    "ucloud-sandbox-registry": "active"
+  },
+  "orjson": "3.11.9"
+}

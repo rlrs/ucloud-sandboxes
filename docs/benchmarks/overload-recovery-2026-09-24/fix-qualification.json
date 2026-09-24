@@ -1,0 +1,16 @@
+{
+  "tests_passed": 210,
+  "seconds": 10.875,
+  "environment": "Linux isolated /tmp source on idle UCloud gateway, Python 3.14; no deployed files changed",
+  "scope": "unit and assembled service tests with simulated pressure/runtime fixtures; not native workload or production latency qualification",
+  "source_sha256": {
+    "ucloud_sandboxes/warm_park.py": "d5c78d108e7eede0113b375fb0f20b78748bd265fa7e4ed59747c4429a7b7a1d",
+    "ucloud_sandboxes/node_runtime.py": "be29417be4789f2b4d2272187efe60e0ca988b20d86ab57873024d6b497df2c6",
+    "tests/test_managed_growth.py": "cf663bd025d97d238b95e506b41744de1584b09a429c53593a87147f7d74135c",
+    "tests/test_node_runtime.py": "aad9ce60e45d3765fa2335e4bd4465bcb836cd7bcc0c26b9a090aa8cc7f14375",
+    "tests/test_overload_maintenance.py": "282b3b65fc722e2624112432776849863b43009f89132a941e04bf06ef870ba6",
+    "tests/test_resident_cache_policy.py": "65bdd17caba7a779d2936633b992dbd7e661a335d9487f3f9d59cd8d4153be22",
+    "tests/test_resident_wait_ranking.py": "b0e94d4c24144b442ec4cccd5202d8801f31ae83e9c9eb9b5632d314c8485fa1"
+  },
+  "remote_hashes_match": true
+}

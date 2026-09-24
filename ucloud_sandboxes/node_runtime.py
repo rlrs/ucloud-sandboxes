@@ -4,7 +4,7 @@ import json
 import os
 from concurrent.futures import ThreadPoolExecutor
 import time
-from contextlib import contextmanager, nullcontext
+from contextlib import ExitStack, contextmanager, nullcontext
 from dataclasses import replace
 from pathlib import Path
 from threading import Event, Lock, RLock, Thread, local
@@ -615,6 +615,12 @@ class DirectNodeRuntime:
                             raise SandboxConflictError("relay park was superseded by wake")
                         if self.service.provisioner.registry.relay_wake_fence(sandbox_id, generation, relay_request_id):
                             raise SandboxConflictError("relay park was superseded by durable wake")
+                    # Waiting for lifecycle authority can outlast the deficit.
+                    # Recheck before starting irreversible checkpoint work.
+                    if relay_request_id is not None and not self._warm_parks.ready(
+                        key, memory_bytes=memory_bytes, ram_bytes=ram_bytes,
+                    ):
+                        raise WarmParkDeferred(0.25)
                     record = self.service.park(
                         sandbox_id,
                         operation_id=operation_id,
@@ -722,7 +728,10 @@ class DirectNodeRuntime:
             self._warm_parks.response_ready((sandbox_id, generation, relay_request_id))
             continuation = getattr(self.service, "admit_managed_continuation", None)
             if continuation is not None:
-                continuation(sandbox_id, generation, relay_request_id)
+                telemetry = getattr(self.service, "telemetry", None)
+                with (telemetry.span("sandbox.wake.growth_admission")
+                      if telemetry is not None else nullcontext()):
+                    continuation(sandbox_id, generation, relay_request_id)
         wake_observation = None
         if relay_request_id is not None:
             wake_observation = self._warm_parks.wake((sandbox_id, generation, relay_request_id))
@@ -732,12 +741,16 @@ class DirectNodeRuntime:
         # activity is proof that the current runtime is live, not a reason to
         # reject that idempotent result. We still take the exclusive transition
         # fence so a concurrent park completes first and is then re-evaluated.
-        with self.lifecycle.exclusive(
-            sandbox_id,
-            allow_shared=True,
-            join_transition=True,
-            transition_timeout_seconds=60.0,
-        ):
+        with ExitStack() as lifecycle:
+            telemetry = getattr(self.service, "telemetry", None)
+            with (telemetry.span("sandbox.wake.lifecycle_wait")
+                  if telemetry is not None else nullcontext()):
+                lifecycle.enter_context(self.lifecycle.exclusive(
+                    sandbox_id,
+                    allow_shared=True,
+                    join_transition=True,
+                    transition_timeout_seconds=60.0,
+                ))
             if relay_request_id is not None:
                 self.service.provisioner.registry.relay_wake_fence(
                     sandbox_id, generation, relay_request_id, record=True,

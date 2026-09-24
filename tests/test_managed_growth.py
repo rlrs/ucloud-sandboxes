@@ -68,6 +68,40 @@ class ManagedGrowthTests(unittest.TestCase):
             self.assertEqual(second.result(2).job_id, 'primary')
         self.assertEqual(self.service.warm_park_demand().physical_bytes, 4 << 30)
 
+    def test_response_growth_burst_settles_without_parking_or_overadmission(self):
+        from ucloud_sandboxes.background_io import Pressure
+        from ucloud_sandboxes.warm_park import WarmParkDeferred, WarmParkPolicy
+
+        self.service.start_managed_process('one', self.spec)
+        self.service.observe_managed_wait('one', 7, 'request-one')
+        self.service.start_managed_process('two', self.spec)
+        runtime = DirectNodeRuntime(self.service)
+        runtime._warm_parks = WarmParkPolicy(
+            lambda: Pressure(.75, 0, 0, 6 << 30),
+            demand=self.service.warm_park_demand,
+        )
+        with self.assertRaises(WarmParkDeferred):
+            runtime.park_with_activity_revision('one', generation=7,
+                operation_id='park:one', relay_request_id='request-one')
+        with patch.object(self.service, 'park', wraps=self.service.park) as park, \
+                ThreadPoolExecutor(max_workers=1) as pool:
+            wake = pool.submit(runtime.wake_with_activity_revision, 'one', generation=7,
+                               operation_id='wake:one', relay_request_id='request-one')
+            self.wait_for_demand()
+            self.assertFalse(wake.done())
+            self.assertEqual(self.service.warm_park_demand().physical_bytes, 8 << 30)
+            with self.assertRaises(WarmParkDeferred):
+                runtime.park_with_activity_revision('one', generation=7,
+                    operation_id='park:one', relay_request_id='request-one')
+            # The active agent reaches its next safe wait. Admission transfers
+            # its growth headroom to the queued response without checkpoint I/O.
+            self.service.observe_managed_wait('two', 7, 'request-two')
+            record, _ = wake.result(2)
+            self.assertEqual(record.state, 'running')
+            self.assertEqual(self.service.warm_park_demand().physical_bytes, 4 << 30)
+            park.assert_not_called()
+            self.assertTrue(self.registry.relay_wake_fence('one', 7, 'request-one'))
+
     def test_ambiguous_launch_rehydrates_and_changed_job_never_replaces_it(self):
         self.control.side_effect = TimeoutError('ambiguous control RPC')
         with self.assertRaises(TimeoutError):

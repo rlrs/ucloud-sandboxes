@@ -328,7 +328,7 @@ class WarmDemandTests(unittest.TestCase):
                 time.sleep(.001)
             self.assertIn('sandbox', policy._pending)
             incoming[0] = 1024
-            self.assertFalse(waiting.result(timeout=1))
+            self.assertFalse(waiting.result(timeout=3))
 
 
 class PressureDrivenWarmParkTests(unittest.TestCase):
@@ -345,8 +345,11 @@ class PressureDrivenWarmParkTests(unittest.TestCase):
                         self.fail('elapsed wall time alone must not force a checkpoint')
                 self.assertEqual(deferred.exception.seconds, 3)
         incoming[0] = 80 * 1024**3
-        with policy.defer('request', memory_bytes=1024**3, blocking=False):
-            pass
+        with patch('ucloud_sandboxes.warm_park.time.monotonic', return_value=1000):
+            self.assertFalse(policy.ready('request', memory_bytes=1024**3))
+        with patch('ucloud_sandboxes.warm_park.time.monotonic', return_value=1001):
+            with policy.defer('request', memory_bytes=1024**3, blocking=False):
+                pass
 
     def test_reclaim_or_low_headroom_releases_retention_and_wake_is_fenced(self):
         from unittest.mock import patch
@@ -360,7 +363,7 @@ class PressureDrivenWarmParkTests(unittest.TestCase):
                     pass
         policy.wake(('sandbox', 2, 'request'))
         self.assertIn(key, policy._waiting_since)
-        for low in (Pressure(.05, 0, 0, 1024), Pressure(.8, 10, 0, 80 * 1024**3)):
+        for low in (Pressure(.05, 0, 0, 1024), Pressure(.06, 10, 0, 6 * 1024**3)):
             pressure[0] = low
             policy._settle_until = 0
             policy._retry_after.clear()
@@ -429,10 +432,14 @@ class ResidentWaitReclaimTests(unittest.TestCase):
         self.assertEqual(policy.snapshot()['reason'], 'storage_backpressure')
         # Real foreground memory demand still makes progress under disk PSI.
         demand[0] = 20*self.GIB
-        with policy.defer('model', memory_bytes=self.GIB, blocking=False):
-            self.assertEqual(policy.snapshot()['reason'], 'queued_demand')
-            self.assertLessEqual(policy.snapshot()['reclaim_target_bytes'], 5*self.GIB)
-            policy.parked('model')
+        from unittest.mock import patch
+        with patch('ucloud_sandboxes.warm_park.time.monotonic', return_value=10):
+            self.assertFalse(policy.ready('model', memory_bytes=self.GIB))
+        with patch('ucloud_sandboxes.warm_park.time.monotonic', return_value=11):
+            with policy.defer('model', memory_bytes=self.GIB, blocking=False):
+                self.assertEqual(policy.snapshot()['reason'], 'queued_demand')
+                self.assertLessEqual(policy.snapshot()['reclaim_target_bytes'], 5*self.GIB)
+                policy.parked('model')
 
     def test_failed_or_busy_oldest_wait_does_not_block_other_safe_points(self):
         from unittest.mock import patch

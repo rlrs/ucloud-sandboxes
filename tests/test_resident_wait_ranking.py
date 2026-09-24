@@ -47,6 +47,96 @@ class ResidentWaitRankingTests(TestCase):
     def pressure_on(self):
         self.pressure = Pressure(0.04, 0, 0, 4 * self.GIB)
 
+    def test_response_burst_can_settle_without_checkpointing(self):
+        from ucloud_sandboxes.transition_admission import MemoryDemand
+        key = self.retain("agent")
+        demand = [MemoryDemand(79 * self.GIB)]
+        self.policy.demand = lambda: demand[0]
+        self.assertFalse(self.policy.ready(key, memory_bytes=self.GIB))
+        self.now += .9
+        self.assertFalse(self.policy.ready(key, memory_bytes=self.GIB))
+        demand[0] = MemoryDemand()
+        self.assertFalse(self.policy.ready(key, memory_bytes=self.GIB))
+        # A later independent burst gets its own grace, not the first timestamp.
+        self.now += 10
+        demand[0] = MemoryDemand(79 * self.GIB)
+        self.assertFalse(self.policy.ready(key, memory_bytes=self.GIB))
+
+    def test_persistent_forecast_probes_then_rechecks_instead_of_mass_parking(self):
+        from ucloud_sandboxes.transition_admission import MemoryDemand
+        first = self.retain("first", memory=self.GIB)
+        self.now += .1
+        second = self.retain("second", memory=self.GIB)
+        demand = [MemoryDemand(85 * self.GIB)]
+        self.policy.demand = lambda: demand[0]
+        self.assertFalse(self.policy.ready(first, memory_bytes=self.GIB))
+        self.now += 1
+        with self.policy.defer(first, memory_bytes=self.GIB, blocking=False):
+            self.assertTrue(self.policy.ready(first, memory_bytes=self.GIB))
+            self.assertFalse(self.policy.ready(second, memory_bytes=self.GIB))
+            self.policy.parked(first)
+        self.now += .3
+        with self.policy.defer(second, memory_bytes=self.GIB, blocking=False):
+            demand[0] = MemoryDemand()
+            self.assertFalse(self.policy.ready(second, memory_bytes=self.GIB))
+
+    def test_physical_shortage_bypasses_forecast_grace_and_probe_serialization(self):
+        from ucloud_sandboxes.transition_admission import MemoryDemand
+        first = self.retain("first", memory=self.GIB)
+        self.now += .1
+        second = self.retain("second", memory=self.GIB)
+        self.policy.demand = lambda: MemoryDemand(85 * self.GIB)
+        self.assertFalse(self.policy.ready(first, memory_bytes=self.GIB))
+        self.pressure = Pressure(.01, 0, 0, self.GIB)
+        with self.policy.defer(first, memory_bytes=self.GIB, blocking=False):
+            with self.policy.defer(second, memory_bytes=self.GIB, blocking=False):
+                self.assertEqual(self.policy.snapshot()["checkpoint_inflight"], 2)
+
+    def test_synchronized_small_heap_burst_does_not_launch_a_checkpoint_wave(self):
+        from contextlib import ExitStack
+        from ucloud_sandboxes.transition_admission import MemoryDemand
+        # One worker's share of 256 agents on eight workers. Actual heaps fit;
+        # simultaneous continuations temporarily reserve much larger bounds.
+        keys = [self.retain(str(i), memory=self.GIB) for i in range(32)]
+        incoming = [MemoryDemand(90 * self.GIB)]
+        self.policy.demand = lambda: incoming[0]
+        for key in keys:
+            self.assertFalse(self.policy.ready(key, memory_bytes=self.GIB))
+        self.now += 1
+        with ExitStack() as stack:
+            admitted = []
+            for key in keys:
+                try:
+                    stack.enter_context(self.policy.defer(
+                        key, memory_bytes=self.GIB, blocking=False))
+                except WarmParkDeferred:
+                    continue
+                admitted.append(key)
+            self.assertEqual(len(admitted), 1)
+            incoming[0] = MemoryDemand(20 * self.GIB)
+            # The admitted but not yet started capture is also canceled by the
+            # runtime's final check when active agents return to safe waits.
+            self.assertFalse(self.policy.ready(admitted[0], memory_bytes=self.GIB))
+        self.assertEqual(self.policy.snapshot()["checkpoint_inflight"], 0)
+        self.assertEqual(self.policy.snapshot()["checkpoints_completed"], 0)
+
+    def test_backing_shortage_bypasses_forecast_grace(self):
+        from dataclasses import replace
+        from ucloud_sandboxes.resource_evidence import MemoryBackingCapacity
+        from ucloud_sandboxes.transition_admission import MemoryDemand
+        key = self.retain("agent")
+        self.policy.demand = lambda: MemoryDemand(85 * self.GIB)
+        self.assertFalse(self.policy.ready(key, memory_bytes=self.GIB))
+        self.pressure = replace(self.pressure, memory_backing=MemoryBackingCapacity(
+            total_bytes=90 * self.GIB, available_bytes=self.GIB))
+        self.assertTrue(self.policy.ready(key, memory_bytes=self.GIB, ram_bytes=self.GIB))
+
+    def test_memory_psi_with_abundant_headroom_does_not_hibernate(self):
+        key = self.retain("agent")
+        self.pressure = Pressure(.67, 12.52, 7.68, 67 * self.GIB)
+        self.assertFalse(self.policy.ready(key, memory_bytes=self.GIB))
+        self.assertEqual(self.policy.snapshot()["reclaim_target_bytes"], 0)
+
     def test_io_pressure_drains_reclaim_then_allows_progress(self):
         first = self.retain("first", memory=self.GIB)
         self.now += 1

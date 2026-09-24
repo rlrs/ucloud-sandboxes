@@ -327,6 +327,7 @@ class RelayLifecycleFenceTests(unittest.TestCase):
             return (sandbox,generation,request) in seen
         registry.relay_wake_fence.side_effect=fence
         service=Mock()
+        service.telemetry = None
         service.provisioner.registry=registry
         service.wake.side_effect=RuntimeError('restore temporarily blocked')
         manager=DirectNodeRuntime(service)

@@ -61,8 +61,11 @@ def decide_resident_wait(
     memory_reclaim = memory_reclaim or backing_reclaim
     # Reclaim PSI can come from checkpoint I/O. More checkpoints amplify that
     # feedback loop; real memory/demand deficits must still make progress.
-    psi_reclaim = pressure.io_stall < 20 and pressure.memory_stall >= (
-        2 if psi_reclaim else 10
+    # PSI alone with abundant unreserved RAM is not a reason to hibernate.
+    psi_reclaim = (
+        spare <= reserve * 1.5
+        and pressure.io_stall < 20
+        and pressure.memory_stall >= (2 if psi_reclaim else 10)
     )
     reason = (
         "memory_backing_unavailable"
@@ -145,6 +148,8 @@ class WarmParkPolicy:
         self._ram_footprints = {}
         self._backing_reclaim = False
         self._io_backpressure = False
+        self._forecast_only = False
+        self._forecast_since = None
         self._parked = set()
         self._footprints = {}
         self._reclaim_bytes = 0
@@ -329,7 +334,24 @@ class WarmParkPolicy:
             self._backing_reclaim = decision.backing_reclaim
             self._io_backpressure = pressure.io_stall >= 20
             self._reclaim_bytes = decision.target_bytes
-            return decision.reclaim
+            # Growth reservations are guarantees, not allocated pages. Give a
+            # response burst one second to return to safe waits before paying
+            # for hibernation. Admission retains every guarantee meanwhile.
+            # Actual RAM/backing pressure (including unknown backing evidence)
+            # bypasses this grace period completely.
+            physical = decide_resident_wait(
+                pressure, MemoryDemand(), memory_reclaim=self._memory_reclaim,
+                psi_reclaim=self._psi_reclaim,
+            )
+            self._forecast_only = decision.reclaim and not physical.reclaim
+            now = time.monotonic()
+            if not self._forecast_only:
+                self._forecast_since = None
+            elif self._forecast_since is None:
+                self._forecast_since = now
+            return decision.reclaim and (
+                not self._forecast_only or now - self._forecast_since >= 1.0
+            )
 
     def _selected(self, key, now):
         # Called under _lock. Project in-flight releases against the deficit
@@ -342,7 +364,9 @@ class WarmParkPolicy:
         # concurrent captures. Let admitted reclaim drain; when none remains,
         # one candidate may still make progress despite lagging PSI samples.
         # Healthy storage retains the ordinary measured-byte parallelism.
-        if self._io_backpressure and self._reclaiming:
+        # Forecast-only pressure probes one release at a time: re-evaluate
+        # after completion instead of turning a transient burst into an I/O wave.
+        if (self._io_backpressure or self._forecast_only) and self._reclaiming:
             return False
         # A missing/stale footprint is not a one-byte reclaim. Probe it alone
         # and observe the resulting headroom before starting more I/O. This is

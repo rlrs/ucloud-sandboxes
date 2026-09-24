@@ -1,0 +1,76 @@
+{
+  "source": "retained program_state_transition events; unique request_id; wake_started_at to wake_completed_at; incomplete/failed requests excluded; retention starts 23:19:51",
+  "date_utc": "2026-09-23",
+  "windows": [
+    {
+      "start_utc": "23:15",
+      "completed_requests": 65,
+      "p50_s": 0.027966,
+      "p95_s": 0.180432,
+      "p99_s": 1.208281,
+      "max_s": 1.208281,
+      "over_1s": 2,
+      "over_10s": 0
+    },
+    {
+      "start_utc": "23:20",
+      "completed_requests": 2895,
+      "p50_s": 0.126959,
+      "p95_s": 0.517193,
+      "p99_s": 1.781247,
+      "max_s": 2.951471,
+      "over_1s": 95,
+      "over_10s": 0
+    },
+    {
+      "start_utc": "23:25",
+      "completed_requests": 3398,
+      "p50_s": 0.194,
+      "p95_s": 0.491101,
+      "p99_s": 2.525714,
+      "max_s": 4.634301,
+      "over_1s": 89,
+      "over_10s": 0
+    },
+    {
+      "start_utc": "23:30",
+      "completed_requests": 2833,
+      "p50_s": 0.237765,
+      "p95_s": 3.982512,
+      "p99_s": 57.980779,
+      "max_s": 144.384856,
+      "over_1s": 270,
+      "over_10s": 65
+    },
+    {
+      "start_utc": "23:35",
+      "completed_requests": 3348,
+      "p50_s": 0.186891,
+      "p95_s": 0.444148,
+      "p99_s": 3.460059,
+      "max_s": 108.326448,
+      "over_1s": 111,
+      "over_10s": 17
+    },
+    {
+      "start_utc": "23:40",
+      "completed_requests": 2445,
+      "p50_s": 0.222499,
+      "p95_s": 0.479056,
+      "p99_s": 2.672838,
+      "max_s": 3.940425,
+      "over_1s": 34,
+      "over_10s": 0
+    },
+    {
+      "start_utc": "23:45",
+      "completed_requests": 389,
+      "p50_s": 0.295814,
+      "p95_s": 16.264124,
+      "p99_s": 50.694389,
+      "max_s": 66.765153,
+      "over_1s": 80,
+      "over_10s": 24
+    }
+  ]
+}

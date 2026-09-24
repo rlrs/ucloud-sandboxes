@@ -184,6 +184,28 @@ class ResidentCachePolicyTests(unittest.TestCase):
         self.assertEqual(service.park_calls, [])
         self.assertEqual(self.policy.snapshot()["cache_reclaimed_bytes"], 256 * MIB)
 
+    def test_headroom_recovery_while_acquiring_lifecycle_skips_checkpoint(self):
+        from contextlib import contextmanager
+        service = _WakeService()
+        service.provisioner.registry.relay_wake_fence = lambda *_: False
+        runtime = DirectNodeRuntime(service)
+        runtime._warm_parks = self.policy
+        original = runtime.lifecycle.exclusive
+
+        @contextmanager
+        def acquire_after_recovery(*args, **kwargs):
+            with original(*args, **kwargs):
+                self.pressure = Pressure(.8, 0, 0, 8 * 1024**3)
+                yield
+
+        runtime.lifecycle.exclusive = acquire_after_recovery
+        with self.assertRaises(WarmParkDeferred):
+            runtime.park_with_activity_revision(
+                "agent", operation_id="wait", generation=1, relay_request_id="request"
+            )
+        self.assertEqual(service.park_calls, [])
+        self.assertEqual(self.policy.snapshot()["checkpoint_inflight"], 0)
+
     def test_unsupported_or_empty_reclaim_still_progresses_to_checkpoint(self):
         service = _WakeService()
         service.provisioner.registry.relay_wake_fence = lambda *_: False

@@ -59,3 +59,7 @@ All six tested code/test files matched their recorded hashes. The temporary test
 database was removed and production services remained active. See the
 [qualification record](../benchmarks/minimal-overload-2026-09-24/qualification.json).
 These changes have not been deployed or measured under production load.
+
+Deployment update: these corrections were included in `0.5.114rc23`, deployed
+on September 24 at 05:25 UTC with the parking-burst fixes. See the
+[deployment receipt](../benchmarks/overload-recovery-2026-09-24/deployment-result.json).

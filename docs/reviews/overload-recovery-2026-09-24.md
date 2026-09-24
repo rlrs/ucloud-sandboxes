@@ -161,4 +161,26 @@ recovered pressure while acquiring lifecycle authority, memory-growth admission,
 and stale wake/park fences. An assembled-service regression verifies that a queued
 continuation cannot overspend growth headroom and resumes without checkpointing
 when a peer reaches a safe wait. Runtime/pressure fixtures are simulated; this is
-not a native gVisor load run or proof of production p95. The change is not deployed.
+not a native gVisor load run or proof of production p95. The change was subsequently deployed as rc23; see the deployment receipt below.
+
+
+## Deployment
+
+Deployed `0.5.114rc23` from `46df583` to the idle production gateway at
+2026-09-24 05:25 UTC. Both sandbox and builder bundles were rebuilt from rc22,
+with all native/OS/kernel/storage members verified byte-identical. All 142 package
+files matched the committed-source wheel after installation. PostgreSQL remains
+the relay authority; policy and sandbox configuration are unchanged. Gateway,
+relay, registry, and autoscaler are active. See the
+[receipt](../benchmarks/overload-recovery-2026-09-24/deployment-result.json).
+
+The post-deployment SDK 0.4.26 smoke ran four sandboxes through three forced
+park/resume cycles each on freshly provisioned worker 12400891. All 12 cycles and
+primary exits passed, with no operation, cleanup, or fleet-health failures.
+Excluding the first cycle, continuation p95 was 0.634 seconds and useful tool
+completion p95 was 0.883 seconds (eight measurements). The harness correctly
+reported `slo_passed=false`: its fleet-health gate lacked observation beyond the
+30-second placement grace. This short run is correctness evidence, not sustained
+load qualification. After cleanup, routes and relay inflight/delivery-pending
+counts were zero; all four services were active and the worker reported rc23,
+open admission, and zero sandboxes. See the [smoke result](../benchmarks/overload-recovery-2026-09-24/deployment-smoke.json).

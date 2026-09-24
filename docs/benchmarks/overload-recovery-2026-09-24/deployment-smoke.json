@@ -1,0 +1,120 @@
+{
+  "run_id": "relay-load-0374c2890d6d",
+  "started_at": "2026-09-24T05:25:45.646692+00:00",
+  "finished_at": "2026-09-24T05:26:58.258725+00:00",
+  "configuration": {
+    "gateway_url": "https://app-sandboxes.cloud.sdu.dk",
+    "relay_url": "https://app-sandboxes-relay-v2.cloud.sdu.dk",
+    "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+    "sandboxes": 4,
+    "cycles": 3,
+    "startup_mode": "barrier",
+    "resident_mb": 128,
+    "dirty_mb": 16,
+    "files": 8,
+    "file_kib": 64,
+    "payload_kib": 32,
+    "sqlite_transactions": 0,
+    "sqlite_payload_bytes": 4096,
+    "tool_upload_kib": 64,
+    "cpu_ms": 100,
+    "model_seconds": 3.0,
+    "model_jitter": 0.0,
+    "parking_mode": "forced",
+    "cpus": 1,
+    "memory_mb": 2048,
+    "disk_mb": 4096,
+    "create_concurrency": 4,
+    "fleet_pollers": 1,
+    "warmup_cycles": 1,
+    "deadline_seconds": 600.0,
+    "sandbox_request_timeout_seconds": 180,
+    "continuation_timeout_seconds": 180,
+    "useful_action_p95_seconds": 1,
+    "continuation_p95_seconds": 0.8,
+    "seed": 1,
+    "start_signal_file": null
+  },
+  "deployed_health": {
+    "ok": true,
+    "service": "control-plane",
+    "version": "0.5.114rc23"
+  },
+  "sdk_version": "0.4.26",
+  "harness_sha256": "61e85f335ccf2bbc723d6f4605eb8ee18c1feec5d71a128f0a3f3f09a5e3156c",
+  "placements": {
+    "relay-load-0374c2890d6d-0000": "12400891",
+    "relay-load-0374c2890d6d-0001": "12400891",
+    "relay-load-0374c2890d6d-0002": "12400891",
+    "relay-load-0374c2890d6d-0003": "12400891"
+  },
+  "completed_cycles": 12,
+  "completed_scenarios": [
+    {
+      "sandbox_id": "relay-load-0374c2890d6d-0000",
+      "job_id": "job-47f01e69abf44f77970f5cd403d6709a",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-0374c2890d6d-0001",
+      "job_id": "job-51d3c6a4f2284360bb10fb55ce770b17",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-0374c2890d6d-0002",
+      "job_id": "job-977f44582e134d829866bf01a1907c6a",
+      "state": "exited",
+      "exit_code": 0
+    },
+    {
+      "sandbox_id": "relay-load-0374c2890d6d-0003",
+      "job_id": "job-c806ab42108e40b39adda7a0eef25fb4",
+      "state": "exited",
+      "exit_code": 0
+    }
+  ],
+  "correct": true,
+  "slo_passed": false,
+  "errors": [],
+  "cleanup_errors": [],
+  "fleet_health": {
+    "enabled": true,
+    "passed": false,
+    "status": "insufficient_observation",
+    "used_jobs": [
+      "12400891"
+    ],
+    "observed_healthy_jobs": [],
+    "failure_count": 0,
+    "placement_grace_seconds": 30,
+    "freshness_seconds": 30
+  },
+  "fleet_health_failures": [],
+  "measured_park_observed_cycles": 8,
+  "response_ready_to_guest_continuation_seconds": {
+    "count": 8,
+    "p50": 0.5215763739979593,
+    "p95": 0.6336513080022996,
+    "p99": 0.6336513080022996,
+    "max": 0.6336513080022996
+  },
+  "response_ready_to_usable_exec_seconds": {
+    "count": 8,
+    "p50": 0.7653580894984771,
+    "p95": 0.8828803040087223,
+    "p99": 0.8828803040087223,
+    "max": 0.8828803040087223
+  },
+  "scope": "Small post-deploy correctness smoke. Fleet-health gate insufficient_observation because workload ended inside 30-second grace. Not loaded SLO qualification.",
+  "post_cleanup": {
+    "routes": 0,
+    "relay_inflight": 0,
+    "relay_delivery_pending": 0,
+    "services": "gateway relay registry autoscaler active",
+    "worker_job": "12400891",
+    "worker_version": "0.5.114rc23",
+    "worker_active_sandboxes": 0
+  }
+}

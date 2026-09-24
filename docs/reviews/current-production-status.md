@@ -1,4 +1,4 @@
-# Production source and qualification status — 23 September 2026
+# Production source and qualification status — 24 September 2026
 
 This page identifies the current baseline. Earlier candidate reviews and logs
 are retained as historical evidence, including failures; their release-status
@@ -6,7 +6,16 @@ statements must be read in the context of their candidate version.
 
 ## Deployed baseline
 
-Production runs **0.5.114rc22**, with server Python recorded in commit
+Production runs **0.5.114rc23**, deployed from `46df583` on September 24.
+It adds narrowly retryable relay/heartbeat backpressure and parking-burst recovery
+corrections to the rc22 baseline. Gateway and both node-role packages are updated;
+the native runtime, OS/kernel/storage closure, SDK, and eight-worker policy are
+unchanged. See the [investigation and qualification](overload-recovery-2026-09-24.md)
+and [deployment receipt](../benchmarks/overload-recovery-2026-09-24/deployment-result.json).
+The targeted Linux gates passed 210 tests, plus the earlier 128-test PostgreSQL
+backpressure gate. These do not establish a loaded production latency SLO.
+
+The preceding **0.5.114rc22** baseline has server Python recorded in commit
 `62ad20b`. Every staged server Python file was compared byte-for-byte with the
 frozen rc22 package before that commit. The qualified source manifest was also
 verified against the retained test snapshot with no discrepancies. Package and

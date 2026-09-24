@@ -24,7 +24,7 @@ import time
 from typing import Any, Callable, Literal, Protocol
 import weakref
 
-from opentelemetry.trace import SpanKind
+from opentelemetry.trace import SpanKind, get_current_span
 
 from .durable_batch import DurableSqliteBatch
 from .storage_native import (
@@ -1675,7 +1675,7 @@ class StorageNativeNodeService:
                 mount_path = Path(record.mount_path)
                 mount_path.mkdir(mode=0o700)
                 source = Path(record.source_image_config)
-                _atomic_write_json(
+                _write_runtime_source_config(
                     source,
                     {"lowers": [], "resultFile": "", "upper": {}},
                 )
@@ -1769,7 +1769,7 @@ class StorageNativeNodeService:
         try:
             volume_root.mkdir(mode=0o700, parents=True, exist_ok=False)
             Path(record.mount_path).mkdir(mode=0o700)
-            _atomic_write_json(
+            _write_runtime_source_config(
                 Path(record.source_image_config),
                 {
                     "repoBlobUrl": publication.repo_blob_url,
@@ -2016,6 +2016,7 @@ class StorageNativeNodeService:
         expected_revision: int,
         allocation_slot: _DeviceAllocationSlot | None,
     ) -> StorageVolumeRecord:
+        phase_started = time.monotonic()
         pending = self._begin_transition(
             kind="MountSnapshotCow",
             operation_id=operation_id,
@@ -2030,6 +2031,8 @@ class StorageNativeNodeService:
             next_state=StorageVolumeState.ACQUIRING,
             reserve_capacity=True,
         )
+        get_current_span().add_event("storage.mount.begin_transition",
+            {"duration_ms": (time.monotonic() - phase_started) * 1000})
         if isinstance(pending, OperationReplay):
             return pending.record
         if not pending.sealed_layer_paths and not pending.published_layers:
@@ -2050,6 +2053,7 @@ class StorageNativeNodeService:
             updated_ns=time.time_ns(),
         )
         try:
+            phase_started = time.monotonic()
             if self._local_compactor is not None:
                 pending = self._local_compactor.adopt(pending, self.journal.update_pending)
             local_lowers = []
@@ -2069,7 +2073,13 @@ class StorageNativeNodeService:
             cached_paths = tuple(path for path in cached_paths if Path(path).exists())
             if cached_paths != pending.cached_layer_paths:
                 pending = replace(pending, cached_layer_paths=cached_paths)
+            get_current_span().add_event("storage.mount.prepare_lowers",
+                {"duration_ms": (time.monotonic() - phase_started) * 1000})
+            phase_started = time.monotonic()
             self.journal.update_pending(pending)
+            get_current_span().add_event("storage.mount.persist_pending",
+                {"duration_ms": (time.monotonic() - phase_started) * 1000})
+            phase_started = time.monotonic()
             source_config = {
                 "lowers": [
                     *local_lowers,
@@ -2080,7 +2090,10 @@ class StorageNativeNodeService:
             }
             if pending.published_layers:
                 source_config["repoBlobUrl"] = pending.published_repo_blob_url
-            _atomic_write_json(source, source_config)
+            _write_runtime_source_config(source, source_config)
+            get_current_span().add_event("storage.mount.write_source",
+                {"duration_ms": (time.monotonic() - phase_started) * 1000})
+            phase_started = time.monotonic()
             device = self._acquire_runtime_device(
                 source_image_config=source,
                 runtime_dir=runtime_dir,
@@ -2088,6 +2101,8 @@ class StorageNativeNodeService:
                 owner_id=pending.device_owner_id,
                 allocation_slot=allocation_slot,
             )
+            get_current_span().add_event("storage.mount.acquire_device",
+                {"duration_ms": (time.monotonic() - phase_started) * 1000})
             if device.virtual_size != pending.virtual_size:
                 raise StorageNativeTerminalError(
                     "block backend changed the requested virtual size"
@@ -2100,7 +2115,10 @@ class StorageNativeNodeService:
                 updated_ns=time.time_ns(),
             )
             self.journal.update_pending(pending)
+            phase_started = time.monotonic()
             self.host.mount(device.device_path, Path(pending.mount_path))
+            get_current_span().add_event("storage.mount.filesystem",
+                {"duration_ms": (time.monotonic() - phase_started) * 1000})
             record = replace(
                 pending,
                 state=StorageVolumeState.MOUNTED,
@@ -3810,7 +3828,16 @@ def _volume_owner_from_request(request: dict[str, Any]) -> StorageVolumeOwner:
     )
 
 
-def _atomic_write_json(path: Path, payload: Any) -> None:
+def _write_runtime_source_config(path: Path, payload: Any) -> None:
+    """Atomically publish reconstructible input, not a recovery journal.
+
+    The fenced volume record already owns every lower descriptor and mount pin.
+    The backend reads this input synchronously and materializes its own runtime
+    config before returning a device. Recovery uses that device's exact owner
+    or regenerates input from the volume record; it never trusts this file as
+    committed state. Keep readers from seeing partial JSON, without forcing two
+    synchronous durability barriers on every create/import/wake.
+    """
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     descriptor, raw_temp = tempfile.mkstemp(
         prefix=f".{path.name}.",
@@ -3820,13 +3847,6 @@ def _atomic_write_json(path: Path, payload: Any) -> None:
     try:
         with os.fdopen(descriptor, "w", encoding="ascii") as handle:
             handle.write(_canonical_json(payload) + "\n")
-            handle.flush()
-            os.fsync(handle.fileno())
         os.replace(temp, path)
-        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
     finally:
         temp.unlink(missing_ok=True)

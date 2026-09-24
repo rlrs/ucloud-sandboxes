@@ -21,7 +21,10 @@ import subprocess
 from threading import Lock, RLock
 import time
 
+from opentelemetry.trace import get_current_span
+
 from .checkpoint_components import MemoryBackingRef
+from .durable_batch import DurableSqliteBatch
 
 
 @dataclass(frozen=True)
@@ -162,12 +165,16 @@ class XfsMemoryQuota:
 
     def retain_file(self, path: Path, project_id: int, quota_bytes: int) -> None:
         """Move an immutable source's charge off the live application's quota."""
+        phase_started = time.monotonic()
         subprocess.run(
             ["xfs_quota", "-x", "-c",
              f"limit -p bsoft={quota_bytes} bhard={quota_bytes} {project_id}",
              str(self.filesystem_root)],
             check=True, capture_output=True, text=True,
         )
+        get_current_span().add_event("memory.retain.quota_limit",
+            {"duration_ms": (time.monotonic() - phase_started) * 1000})
+        phase_started = time.monotonic()
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
         try:
             info = os.fstat(fd)
@@ -179,7 +186,12 @@ class XfsMemoryQuota:
             actual = struct.unpack("=IIIII8x", fcntl.ioctl(fd, 0x801C581F, bytes(28)))[3]
             if actual != project_id:
                 raise MemoryBackingError("retained memory project assignment failed")
+            get_current_span().add_event("memory.retain.assign_project",
+                {"duration_ms": (time.monotonic() - phase_started) * 1000})
+            phase_started = time.monotonic()
             os.fsync(fd)
+            get_current_span().add_event("memory.retain.sync_inode",
+                {"duration_ms": (time.monotonic() - phase_started) * 1000})
         finally:
             os.close(fd)
 
@@ -302,6 +314,18 @@ class MemoryBackingStore:
             ):
                 self._remember_mode(sandbox_id, generation, mode)
 
+        self._journal_pid = os.getpid()
+        info = self.journal.stat()
+        self._journal_identity = (info.st_dev, info.st_ino)
+        self._write_batches = DurableSqliteBatch(self._connect, self._check_journal_identity)
+
+    def _check_journal_identity(self) -> None:
+        if os.getpid() != self._journal_pid:
+            raise MemoryBackingError("memory journal must be reopened after fork")
+        info = self.journal.stat()
+        if (info.st_dev, info.st_ino) != self._journal_identity:
+            raise MemoryBackingError("memory journal file was replaced")
+
     def _remember_mode(self, sandbox_id: str, generation: int, mode: str) -> None:
         if mode not in {"ram", "file"} or (mode == "ram" and self.active_root is None):
             raise MemoryBackingError("memory allocation has an unsupported active backing mode")
@@ -350,7 +374,7 @@ class MemoryBackingStore:
             conn.commit()
 
     def _connect(self):
-        conn = sqlite3.connect(self.journal, timeout=30)
+        conn = sqlite3.connect(self.journal, timeout=30, check_same_thread=False)
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=FULL")
         return conn
@@ -569,6 +593,7 @@ class MemoryBackingStore:
         """
         if hibernation_generation < 1 or allocated_bytes < 1:
             raise MemoryBackingError("retained checkpoint capacity is invalid")
+        phase_started = time.monotonic()
         lease = self.require(reference, sandbox_id=sandbox_id,
                              sandbox_generation=sandbox_generation)
         path = lease.path / f"hibernate-{hibernation_generation}" / "application_memory.img"
@@ -578,7 +603,13 @@ class MemoryBackingStore:
             if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid()
                     or info.st_mode & 0o077 or info.st_blocks * 512 > allocated_bytes):
                 raise MemoryBackingError("retained checkpoint identity or capacity differs")
-            with self._lock, closing(self._connect()) as conn:
+            get_current_span().add_event("memory.retain.validate",
+                {"duration_ms": (time.monotonic() - phase_started) * 1000})
+            phase_started = time.monotonic()
+            # The per-owner mutation lease fences filesystem side effects.
+            # SQLite serializes counter/row updates; a shared FULL commit lets
+            # independent owners retain concurrently without a node-wide lock.
+            with self._write_batches.transaction() as conn:
                 conn.execute("BEGIN IMMEDIATE")
                 row = conn.execute(
                     "SELECT manifest_sha256,allocated_bytes,device,inode,project_id,state "
@@ -610,14 +641,20 @@ class MemoryBackingStore:
                 else:
                     project = row[4]
                 conn.commit()
+            get_current_span().add_event("memory.retain.prepare_journal",
+                {"duration_ms": (time.monotonic() - phase_started) * 1000})
             # Idempotent through a crash before/after inode reassignment. Only
             # this owner's mutation lease is held over filesystem operations.
             self.quota.retain_file(path, project, allocated_bytes)
-            with self._lock, closing(self._connect()) as conn:
+            phase_started = time.monotonic()
+            with self._write_batches.transaction() as conn:
                 conn.execute("UPDATE retained_checkpoints SET state='ready' "
                              "WHERE allocation_id=? AND hibernation_generation=?",
                              (reference.allocation_id, hibernation_generation))
                 conn.commit()
+
+            get_current_span().add_event("memory.retain.ready_journal",
+                {"duration_ms": (time.monotonic() - phase_started) * 1000})
 
     def release_retained_checkpoint(
         self, reference: MemoryBackingRef, *, hibernation_generation: int,

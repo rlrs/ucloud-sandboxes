@@ -1,0 +1,22 @@
+........................................................./tmp/mount-source-qualification/tests/test_storage_native_compaction.py:119: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x75650bf708b0>
+  gc.collect()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+......................................................could not remove consumed hibernation generation for sandbox-1
+Traceback (most recent call last):
+  File "/tmp/mount-source-qualification/ucloud_sandboxes/direct_warden.py", line 956, in resume
+    self._finalize_restore_artifacts(sandbox, manifest)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/unittest/mock.py", line 1176, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/unittest/mock.py", line 1180, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/unittest/mock.py", line 1241, in _execute_mock_call
+    raise effect
+OSError: injected cleanup failure
+........................................................
+----------------------------------------------------------------------
+Ran 167 tests in 12.195s
+
+OK

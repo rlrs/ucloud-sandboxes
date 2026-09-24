@@ -321,6 +321,33 @@ class FakeHost:
 
 
 class StorageNativeNodeServiceTests(unittest.TestCase):
+    def test_runtime_source_config_is_not_recovery_authority(self):
+        for damage in ("missing", "partial"):
+            with self.subTest(damage=damage), TemporaryDirectory() as raw:
+                service, backend, host = self._service(Path(raw))
+                owner = StorageVolumeOwner("volume-1", "sandbox-1", 1)
+                created = service.converge_volume(
+                    owner, action="prepare", operation_id="create:1", virtual_size=1 << 30)
+                source = Path(created.source_image_config)
+                if damage == "missing":
+                    source.unlink()
+                else:
+                    source.write_text('{"lowers":')
+                restarted = StorageNativeNodeService(
+                    service.config, backend=backend, host=host,
+                    global_config_path=service.global_config_path)
+                self.assertEqual(restarted.reconcile()["terminal_records"], [])
+                self.assertEqual(restarted.journal.load(owner.volume_id).state,
+                                 StorageVolumeState.MOUNTED)
+                released = restarted.converge_volume(
+                    owner, action="release", operation_id="park:1")
+                mounted = restarted.converge_volume(
+                    owner, action="mount", operation_id="wake:1")
+                self.assertEqual(mounted.state, StorageVolumeState.MOUNTED)
+                regenerated = json.loads(Path(mounted.source_image_config).read_text())
+                self.assertEqual(regenerated["lowers"],
+                                 [{"file": path} for path in released.sealed_layer_paths])
+
     def _retired_admission_fixture(self, root):
         service, backend, host = self._service(
             root, pooled=True, capacity=3 << 30, max_ublk_devices=1

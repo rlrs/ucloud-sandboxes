@@ -1,0 +1,32 @@
+{
+  "storage.mount.begin_transition": {
+    "count": 48,
+    "mean_ms": 11.28751293750696,
+    "max_ms": 56.09945499998048
+  },
+  "storage.mount.prepare_lowers": {
+    "count": 48,
+    "mean_ms": 0.12143918750477194,
+    "max_ms": 0.43985299998894334
+  },
+  "storage.mount.persist_pending": {
+    "count": 48,
+    "mean_ms": 8.626537229169173,
+    "max_ms": 57.762283999977626
+  },
+  "storage.mount.persist_source": {
+    "count": 48,
+    "mean_ms": 154.50358706249764,
+    "max_ms": 1071.9039729999622
+  },
+  "storage.mount.acquire_device": {
+    "count": 48,
+    "mean_ms": 2.7109878958479308,
+    "max_ms": 5.887533999953121
+  },
+  "storage.mount.filesystem": {
+    "count": 48,
+    "mean_ms": 10.555420312492458,
+    "max_ms": 19.897324999988086
+  }
+}

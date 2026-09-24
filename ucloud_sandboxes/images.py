@@ -567,6 +567,28 @@ class ImageStore(_ImageStateStore[ImageRecord]):
     _id_field = "id"
     _decode = staticmethod(ImageRecord.from_dict)
 
+    def upsert_if_changed(self, record: ImageRecord) -> bool:
+        """Observe an image without taking a write lock for unchanged polls."""
+        payload = json.dumps(record.to_dict(), separators=(",", ":"), sort_keys=True)
+
+        def unchanged(conn: sqlite3.Connection) -> bool:
+            row = conn.execute(
+                "SELECT record_json FROM image_state_v1_images WHERE record_id = ?",
+                (record.id,),
+            ).fetchone()
+            return row == (payload,)
+
+        with self._transaction(write=False) as conn:
+            if unchanged(conn):
+                return False
+        # Recheck under the writer lock: another observer may have committed
+        # this same result since our read. Deletions must still be observable.
+        with self._transaction(write=True) as conn:
+            if unchanged(conn):
+                return False
+            self._put(conn, record)
+            return True
+
     def delete_by_tags(self, tags: Iterable[str]) -> list[ImageRecord]:
         tag_set = {tag for tag in tags if tag}
         if not tag_set:

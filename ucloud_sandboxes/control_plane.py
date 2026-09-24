@@ -787,6 +787,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     registry_status_cache_at: float
     registry_status_lock: RLock
     registry_manifest_cache: RegistryManifestResolutionCache | None = None
+    image_build_owners: OrderedDict[str, tuple[str, str, str]] = OrderedDict()
+    image_build_owners_lock = RLock()
     image_inventory_cache = ImageInventoryCache(
         ttl_seconds=IMAGE_INVENTORY_CACHE_TTL_SECONDS
     )
@@ -2746,7 +2748,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     def _get_image_build(self, build_key: str) -> None:
         matches = [
             build
-            for build in self._image_build_records_across_nodes()
+            for build in self._image_build_records_for_key(build_key)
             if build.get("build_id") == build_key or build.get("image_id") == build_key
         ]
         if not matches:
@@ -2767,6 +2769,67 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             self.routing_store.clear_pending_image_build(selected_image_id)
         self._record_successful_build_image(selected)
         self._write_json({"build": selected})
+
+    def _image_build_records_for_key(self, build_key: str) -> list[dict[str, Any]]:
+        """Read one build, using an incarnation-checked owner hint for exact IDs.
+
+        Image names deliberately search all builders: a later build can own the
+        same name elsewhere. Hints are disposable and never cache build state.
+        """
+        builders = [
+            h for h in self._ready_heartbeats() if "image-build" in h.capabilities
+        ]
+        with self.image_build_owners_lock:
+            owner = self.image_build_owners.get(build_key)
+
+        def identity(heartbeat: NodeHeartbeat) -> tuple[str, str, str]:
+            return (heartbeat.job_id, heartbeat.node_id, heartbeat.node_epoch)
+
+        def fetch(heartbeat: NodeHeartbeat) -> dict[str, Any] | None:
+            response = self._proxy_request(
+                heartbeat.node_url or "",
+                "/v1/images/builds/" + quote(build_key, safe=""),
+                method="GET",
+                timeout_seconds=NODE_RECONCILE_PROXY_TIMEOUT_SECONDS,
+            )
+            if response.status >= 400:
+                return None
+            raw = response.json().get("build")
+            if not isinstance(raw, dict) or build_key not in (
+                raw.get("build_id"), raw.get("image_id")
+            ):
+                return None
+            build = dict(raw)
+            build.update(location=heartbeat.node_id, node=_node_metadata(heartbeat))
+            if raw.get("build_id") == build_key:
+                with self.image_build_owners_lock:
+                    self.image_build_owners[build_key] = identity(heartbeat)
+                    self.image_build_owners.move_to_end(build_key)
+                    while len(self.image_build_owners) > 4096:
+                        self.image_build_owners.popitem(last=False)
+            return build
+
+        tried = None
+        for heartbeat in builders:
+            if identity(heartbeat) == owner:
+                tried = identity(heartbeat)
+                build = fetch(heartbeat)
+                if build is not None and build.get("build_id") == build_key:
+                    return [build]
+                break
+        builds = [
+            b for b in self._cached_image_build_records()
+            if build_key in (b.get("build_id"), b.get("image_id"))
+        ]
+        for heartbeat in builders:
+            if identity(heartbeat) == tried:
+                continue
+            build = fetch(heartbeat)
+            if build is not None:
+                builds.append(build)
+                if build.get("build_id") == build_key:
+                    return [build]
+        return builds
 
     def _image_build_records_across_nodes(self) -> list[dict[str, Any]]:
         builds = self._cached_image_build_records()
@@ -2868,10 +2931,13 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         raw_image = self._image_record_with_registry_digest(raw_image)
         build["image"] = raw_image
         try:
-            self.image_manager.store.upsert(ImageRecord.from_dict(raw_image))
+            changed = self.image_manager.store.upsert_if_changed(
+                ImageRecord.from_dict(raw_image)
+            )
         except ValueError:
-            pass
-        self._invalidate_image_inventory_cache()
+            return
+        if changed:
+            self._invalidate_image_inventory_cache()
 
     def _managed_registry_manifest_digest(self, image_ref: str) -> str:
         try:
@@ -6830,6 +6896,8 @@ def build_server(
     BoundHandler.deployment_id = deployment_id
     BoundHandler.heartbeat_ttl_seconds = heartbeat_ttl_seconds
     BoundHandler.image_manager = image_manager
+    BoundHandler.image_build_owners = OrderedDict()
+    BoundHandler.image_build_owners_lock = RLock()
     BoundHandler.build_context_store = build_context_store
     BoundHandler.metrics_store = metrics_store
     BoundHandler.registry_url = registry_url

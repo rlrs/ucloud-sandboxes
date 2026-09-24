@@ -916,16 +916,21 @@ class RoutingStore:
             for row in self._sandbox_route_rows_readonly(background=background)
         ]
 
-    def _sandbox_route_rows_readonly(self, *, background: bool = False) -> list[dict[str, Any]]:
+    def _sandbox_route_rows_readonly(
+        self, *, background: bool = False,
+        node_identity: tuple[str, str, str, str] | None = None,
+    ) -> list[dict[str, Any]]:
         """Fresh rows for readers that memoize validation of identical rows."""
         guard = self._fleet_read_lock if background else nullcontext()
+        where = ("WHERE node_id = ? OR job_id = ? OR node_url IN (?, ?)"
+                 if node_identity is not None else "")
         with guard, self._connect() as conn:
             # sqlite3 releases/reacquires the GIL for every stepped result row.
             # During concurrent HTTP work that makes a fleet scan wait behind
             # unrelated Python work once per sandbox. Materialize one SQL JSON
             # result, then decode after returning the reader to its pool.
             payload = conn.execute(
-                """SELECT json_group_array(json_object(
+                f"""SELECT json_group_array(json_object(
                         'sandbox_id', sandbox_id,
                         'node_id', node_id,
                         'job_id', job_id,
@@ -947,7 +952,8 @@ class RoutingStore:
                         'storage_snapshot_json', storage_snapshot_json,
                         'created_at', created_at,
                         'updated_at', updated_at
-                    )) FROM (SELECT * FROM sandboxes ORDER BY sandbox_id)"""
+                    )) FROM (SELECT * FROM sandboxes {where} ORDER BY sandbox_id)""",
+                node_identity or (),
             ).fetchone()[0]
         # This outer envelope contains SQLite integers and strings; nested
         # user JSON remains an opaque string and retains its canonical decoder.
@@ -978,44 +984,16 @@ class RoutingStore:
             )]
 
     def sandbox_routes_matching_node_identity(
-        self,
-        *,
-        node_id: str,
-        job_id: str,
-        node_url: str,
+        self, *, node_id: str, job_id: str, node_url: str,
     ) -> list[SandboxRoute]:
-        cleaned_node_url = node_url.strip().rstrip("/")
-        node_url_with_slash = f"{cleaned_node_url}/" if cleaned_node_url else ""
-        with self._connect() as conn:
-            return [
-                route
-                for route in (
-                    _sandbox_route_from_row(row)
-                    for row in conn.execute(
-                        """
-                        SELECT sandbox_id, node_id, job_id, node_url,
-                               resources_json, spec_json, state, generation,
-                               create_operation_id, spec_hash, delete_operation_id,
-                               node_epoch, activity_epoch, worker_state,
-                               storage_schema,
-                               snapshot_manifest_digest, snapshot_repository,
-                               snapshot_tag, storage_snapshot_json,
-                               created_at, updated_at
-                        FROM sandboxes
-                        WHERE node_id = ? OR job_id = ?
-                           OR node_url IN (?, ?)
-                        ORDER BY sandbox_id
-                        """,
-                        (
-                            node_id.strip(),
-                            job_id.strip(),
-                            cleaned_node_url,
-                            node_url_with_slash,
-                        ),
-                    )
-                )
-                if route is not None
-            ]
+        cleaned_url = node_url.strip().rstrip("/")
+        return [
+            _sandbox_route_from_row(row)
+            for row in self._sandbox_route_rows_readonly(node_identity=(
+                node_id.strip(), job_id.strip(), cleaned_url,
+                f"{cleaned_url}/" if cleaned_url else "",
+            ))
+        ]
 
     def upsert_program_request_transition_with_change(
         self,

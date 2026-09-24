@@ -17,6 +17,7 @@ import time
 from uuid import uuid4
 
 from aiohttp import web
+from opentelemetry import trace
 from psycopg import AsyncConnection, sql
 from psycopg.types.json import Jsonb
 
@@ -970,7 +971,11 @@ class PostgresRelayState:
             payload_bytes=0 WHERE deployment_id=%s AND request_id=%s RETURNING *), payload AS (
             DELETE FROM relay_payloads WHERE deployment_id=%s AND request_id=%s), wake AS (
             INSERT INTO relay_lifecycle(deployment_id,request_id,action)
-            SELECT deployment_id,request_id,'wake' FROM changed WHERE delivery_pending ON CONFLICT DO NOTHING)
+            SELECT deployment_id,request_id,'wake' FROM changed WHERE delivery_pending ON CONFLICT DO NOTHING),
+            obsolete_parks AS (
+            UPDATE relay_lifecycle l SET done=true
+            FROM changed r WHERE (l.deployment_id,l.request_id)=(r.deployment_id,r.request_id)
+            AND l.action='park' AND NOT l.done AND l.claim_token IS NULL)
             SELECT changed.* FROM changed""",
                 (
                     self.deployment,
@@ -1298,7 +1303,17 @@ class PostgresRelayState:
             )["n"]
             lifecycle = await (
                 await conn.execute(
-                    "SELECT action,count(*) AS n,max(attempts) AS max_attempts FROM relay_lifecycle WHERE deployment_id=%s AND NOT done GROUP BY action",
+                    """SELECT action,count(*) AS n,max(attempts) AS max_attempts,
+                    count(*) FILTER(WHERE claim_until > statement_timestamp()) AS claimed,
+                    count(*) FILTER(WHERE (claim_until IS NULL OR claim_until <= statement_timestamp())
+                        AND next_attempt_at <= statement_timestamp()) AS due,
+                    count(*) FILTER(WHERE (claim_until IS NULL OR claim_until <= statement_timestamp())
+                        AND next_attempt_at > statement_timestamp()) AS deferred,
+                    coalesce(max(extract(epoch FROM statement_timestamp()-next_attempt_at))
+                        FILTER(WHERE (claim_until IS NULL OR claim_until <= statement_timestamp())
+                        AND next_attempt_at <= statement_timestamp()),0)::double precision AS oldest_due_seconds,
+                    count(*) FILTER(WHERE last_error IS NOT NULL) AS retrying_after_error
+                    FROM relay_lifecycle WHERE deployment_id=%s AND NOT done GROUP BY action""",
                     (self.deployment,),
                 )
             ).fetchall()
@@ -1342,7 +1357,7 @@ class PostgresRelayState:
                 UPDATE relay_lifecycle l SET claim_token=gen_random_uuid(),claim_until=clock_timestamp()+%s*interval '1 second',attempts=l.attempts+1
                 FROM due JOIN relay_requests r ON (r.deployment_id,r.request_id)=(due.deployment_id,due.request_id)
                 WHERE (l.deployment_id,l.request_id,l.action)=(due.deployment_id,due.request_id,due.action)
-                RETURNING l.*,to_jsonb(r) AS request_record,
+                RETURNING l.*,extract(epoch FROM clock_timestamp())::double precision AS claimed_at,to_jsonb(r) AS request_record,
                 CASE WHEN l.action='park' THEN (SELECT g.metadata->'_ucloud_resource_phase' FROM relay_rollouts g
                  WHERE g.deployment_id=r.deployment_id AND g.rollout_id=r.rollout_id
                  AND g.registration_token=r.registration_token AND g.enabled)
@@ -1443,6 +1458,28 @@ class PostgresRelayState:
                 LOGGER.warning("relay lifecycle renewal failed; durable claims remain fenced")
 
     async def _dispatch(self, work):
+        # Separate time waiting for an eligible claim from the HTTP attempt and
+        # durable completion. This span also parents the gateway/worker trace.
+        dispatched = time.time()
+        claimed = float(work.get("claimed_at", dispatched))
+        attributes = {
+            "relay.lifecycle.dispatch_lag_seconds": max(0.0, dispatched - claimed),
+            "relay.request.id": work["request_id"],
+            "relay.lifecycle.action": work["action"],
+            "relay.lifecycle.attempt": work["attempts"],
+            "relay.lifecycle.due_wait_seconds": max(
+                0.0, claimed - work["next_attempt_at"].timestamp(),
+            ),
+        }
+        completed = work["request_record"].get("completed_at")
+        if completed is not None:
+            attributes["relay.lifecycle.response_age_seconds"] = max(0.0, dispatched - float(completed))
+        with trace.get_tracer(__name__).start_as_current_span(
+            "relay.lifecycle.dispatch", attributes=attributes,
+        ):
+            await self._dispatch_claimed(work)
+
+    async def _dispatch_claimed(self, work):
         request_id, action = work["request_id"], work["action"]
         # The claim hydrates only small request columns, never model bodies.
         request = self._request_value(work["request_record"])
@@ -1472,6 +1509,7 @@ class PostgresRelayState:
                     raise RuntimeError("lifecycle notifier missing")
                 epoch = await notifier(request)
         except api.RelayLifecycleDeferred as exc:
+            trace.get_current_span().set_attribute("relay.lifecycle.retry_delay_seconds", exc.seconds)
             deferred = exc.seconds
             epoch = exc.transport_epoch
         except api.RelayCallerUnavailable:

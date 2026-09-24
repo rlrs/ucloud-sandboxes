@@ -164,7 +164,13 @@ class WakeCapacityTests(unittest.TestCase):
             )
             handler.store.upsert_heartbeat(destination)
             route = handler.routing_store.upsert_sandbox(self.route())
-            selected = handler._select_migration_destination(route, requested_node_id="", require_active_resources=True)
+            with patch.object(control_plane, '_node_available_resources',
+                              wraps=control_plane._node_available_resources) as available:
+                selected = handler._select_migration_destination(
+                    route, requested_node_id="", require_active_resources=True,
+                )
+            self.assertEqual(available.call_count, 1)
+            self.assertEqual(available.call_args.args[1], [])
             self.assertEqual(selected.node_id, "destination")
             # Even if runtime metrics look healthy, a closed admission gate
             # must not be bypassed by reserving a local wake.

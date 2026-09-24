@@ -114,11 +114,21 @@ class ControlStateStore:
         self._secure_files()
 
     def load_heartbeats(self) -> dict[str, NodeHeartbeat]:
-        with self._transaction(write=False) as connection:
-            return {
-                k: _placement_heartbeat(v)
-                for k, v in self._load_heartbeats(connection).items()
-            }
+        # One SELECT is a coherent SQLite snapshot. Return the connection before
+        # decoding inventories, and avoid a GIL handoff for each worker row plus
+        # an explicit read transaction on the placement critical path.
+        with self._connection() as connection:
+            payload = connection.execute(
+                "SELECT json_group_array(json_array(record_id, payload)) FROM "
+                "(SELECT record_id, payload FROM control_records "
+                "WHERE namespace = 'heartbeat' ORDER BY record_id)"
+            ).fetchone()[0]
+        result = {}
+        for job_id, raw in json.loads(payload):
+            heartbeat = self._read_heartbeat(job_id, raw)
+            _assert_heartbeat_binding(result, heartbeat)
+            result[job_id] = _placement_heartbeat(heartbeat)
+        return result
 
     def get_heartbeat(
         self, job_id: str, *, include_inventory: bool = True,

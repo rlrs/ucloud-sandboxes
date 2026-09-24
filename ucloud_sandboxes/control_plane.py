@@ -1623,6 +1623,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 reservations.get(migration.destination_node_id, 0)
                 + route.resources.disk_mb
             )
+        route_index = _placement_route_index(routes)
+        available_by_node: dict[str, ResourceQuantity] = {}
         candidates: list[NodeHeartbeat] = []
         for heartbeat in ready_heartbeats:
             if (
@@ -1640,7 +1642,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 or (requested_node_id and heartbeat.node_id != requested_node_id)
             ):
                 continue
-            available = _node_available_resources(heartbeat, routes)
+            node_routes = route_index.routes_for(heartbeat)
+            available = _node_available_resources(heartbeat, node_routes)
             requested = (
                 source.resources
                 if require_active_resources
@@ -1671,9 +1674,10 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     route.node_id == heartbeat.node_id
                     and route.worker_state != "detached"
                     and route.state in {"creating", "waking", "unknown"}
-                    for route in routes
+                    for route in node_routes
                 ):
                     continue
+            available_by_node[heartbeat.node_id] = available
             candidates.append(heartbeat)
         if not candidates:
             return None
@@ -1685,7 +1689,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             key=lambda heartbeat: (
                 0 if _heartbeat_has_image(heartbeat, image) else 1,
                 reservations.get(heartbeat.node_id, 0),
-                -_node_available_resources(heartbeat, routes).disk_mb,
+                -available_by_node[heartbeat.node_id].disk_mb,
                 heartbeat.node_id,
             ),
         )
@@ -5355,10 +5359,19 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         )
         with observation as span:
             started = time.monotonic()
-            with _GATEWAY_SCHEDULING_LOCK, _gateway_placement_lock(self.routing_store.path):
-                if span is not None:
-                    span.set_attribute("gateway.placement.lock_wait_seconds", time.monotonic() - started)
-                yield span
+            with _GATEWAY_SCHEDULING_LOCK:
+                process_acquired = time.monotonic()
+                with _gateway_placement_lock(self.routing_store.path):
+                    acquired = time.monotonic()
+                    if span is not None:
+                        span.set_attribute("gateway.placement.lock_wait_seconds", acquired - started)
+                        span.set_attribute("gateway.placement.process_lock_wait_seconds", process_acquired - started)
+                        span.set_attribute("gateway.placement.file_lock_wait_seconds", acquired - process_acquired)
+                    try:
+                        yield span
+                    finally:
+                        if span is not None:
+                            span.set_attribute("gateway.placement.lock_hold_seconds", time.monotonic() - acquired)
 
     def _wake_admission(self) -> WakeAdmission:
         return WakeAdmission(
@@ -5715,10 +5728,11 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             raise GatewaySchedulingBusyError(
                 "sandbox placement is already being reserved"
             )
+        acquired = time.monotonic()
         try:
             if self.telemetry is not None:
                 self.telemetry.add_event("gateway.placement.lock", {
-                    "wait_ms": (time.monotonic() - started) * 1000,
+                    "wait_ms": (acquired - started) * 1000,
                 })
             with _gateway_placement_lock(self.routing_store.path, blocking=False):
                 heartbeat = self._select_node(
@@ -5751,7 +5765,12 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     })
                 return heartbeat, route, pending
         finally:
+            held = time.monotonic() - acquired
             _GATEWAY_SCHEDULING_LOCK.release()
+            if self.telemetry is not None:
+                self.telemetry.add_event("gateway.placement.release", {
+                    "hold_ms": held * 1000,
+                })
 
     def _write_image_resolution_error(self, payload: dict[str, Any]) -> None:
         transient = payload.get("error_code") in TRANSIENT_IMAGE_RESOLUTION_ERROR_CODES

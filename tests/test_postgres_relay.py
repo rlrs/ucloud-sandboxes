@@ -145,6 +145,26 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
         self.state._active_claims.update({(r["request_id"], r["action"]): r["claim_token"] for r in rows})
         return rows
 
+    async def test_stats_separate_due_deferred_and_claimed_work(self):
+        await self.seed_renewal_claims(4)
+        async with self.state.store.transaction("arrange_queue_states") as conn:
+            await conn.execute("""UPDATE relay_lifecycle SET claim_token=NULL,claim_until=NULL,
+                next_attempt_at=clock_timestamp()-interval '10 seconds', last_error='TimeoutError'
+                WHERE request_id='renew-1'""")
+            await conn.execute("""UPDATE relay_lifecycle SET claim_token=NULL,claim_until=NULL,
+                next_attempt_at=clock_timestamp()+interval '30 seconds'
+                WHERE request_id='renew-2'""")
+            await conn.execute("""UPDATE relay_lifecycle SET claim_until=clock_timestamp()-interval '1 second',
+                next_attempt_at=clock_timestamp()-interval '5 seconds'
+                WHERE request_id='renew-3'""")
+        lifecycle = (await self.state.stats())["lifecycle"]
+        self.assertEqual(len(lifecycle), 1)
+        row = lifecycle[0]
+        self.assertEqual((row['n'], row['due'], row['deferred'], row['claimed']), (4, 2, 1, 1))
+        self.assertEqual(row['retrying_after_error'], 1)
+        self.assertGreaterEqual(row['oldest_due_seconds'], 10)
+        self.assertLess(row['oldest_due_seconds'], 12)
+
     async def test_512_lifecycle_renewals_share_one_commit_and_fence_lost_owners(self):
         rows = await self.seed_renewal_claims(512)
         lost, done = rows[:2]
@@ -726,6 +746,13 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
 
         (leased,) = await self.poll(state)
         await self.respond(leased, state, defer_delivery=True)
+        async with state.store.transaction("inspect_retired_deferred_park") as conn:
+            retired = await (await conn.execute(
+                "SELECT done,claim_token FROM relay_lifecycle WHERE request_id=%s AND action='park'",
+                (request.request_id,),
+            )).fetchone()
+        self.assertTrue(retired["done"])
+        self.assertIsNone(retired["claim_token"])
         self.assertEqual((await state.wait_for_response(request, timeout_seconds=2)).body, b"answer")
         async with state.store.transaction("test_migrated_deferred_park") as conn:
             observed = await (await conn.execute(
@@ -961,6 +988,13 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
             req = await self.enqueue(state)
             (leased,) = await self.poll(state)
             await self.respond(leased, state, defer_delivery=True)
+            async with state.store.transaction("inspect_obsolete_park") as conn:
+                park = await (await conn.execute(
+                    "SELECT done,attempts FROM relay_lifecycle WHERE request_id=%s AND action='park'",
+                    (req.request_id,),
+                )).fetchone()
+            self.assertTrue(park["done"])
+            self.assertEqual(park["attempts"], 0)
             release.set()
             await state.wait_for_response(req, timeout_seconds=3)
         self.assertEqual(park_calls, [])

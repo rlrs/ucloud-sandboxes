@@ -1,0 +1,3 @@
+{"cpu_competitors": 0, "routes": 320, "selected": 32, "median_ms": {"before": 0.956, "after": 0.981, "heartbeat_before": 0.511, "heartbeat_after": 0.568}}
+{"cpu_competitors": 1, "routes": 320, "selected": 32, "median_ms": {"before": 34.501, "after": 19.228, "heartbeat_before": 36.774, "heartbeat_after": 18.874}}
+{"cpu_competitors": 2, "routes": 320, "selected": 32, "median_ms": {"before": 66.597, "after": 31.183, "heartbeat_before": 70.889, "heartbeat_after": 24.764}}

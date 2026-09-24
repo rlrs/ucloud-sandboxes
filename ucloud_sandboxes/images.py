@@ -567,6 +567,20 @@ class ImageStore(_ImageStateStore[ImageRecord]):
     _id_field = "id"
     _decode = staticmethod(ImageRecord.from_dict)
 
+    def get(self, image_id: str) -> ImageRecord | None:
+        with self._transaction(write=False) as conn:
+            row = conn.execute(
+                "SELECT record_json FROM image_state_v1_images WHERE record_id = ?",
+                (image_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            raw = json.loads(row[0])
+            record = self._decode(raw) if isinstance(raw, dict) else None
+            if record is None or record.id != image_id:
+                raise ValueError("image state contains an invalid record")
+            return record
+
     def upsert_if_changed(self, record: ImageRecord) -> bool:
         """Observe an image without taking a write lock for unchanged polls."""
         payload = json.dumps(record.to_dict(), separators=(",", ":"), sort_keys=True)
@@ -749,7 +763,7 @@ class ImageManager:
         return list(self.store.load().values())
 
     def get_image(self, image_id: str) -> ImageRecord | None:
-        return self.store.load().get(image_id)
+        return self.store.get(image_id)
 
     def list_builds(self) -> list[ImageBuildRecord]:
         with self._build_lock:

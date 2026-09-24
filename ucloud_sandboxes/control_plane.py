@@ -27,7 +27,7 @@ from urllib3.exceptions import HTTPError as Urllib3HTTPError
 from urllib3.exceptions import EmptyPoolError
 
 from .network_policy import SandboxNetworkPolicy
-from .admission import FairCapacity
+from .admission import FairCapacity, FairRLock
 from .capabilities import (
     REQUEST_BODY_KEEPALIVE_CAPABILITY,
     ENVIRONMENT_CONTRACT_CAPABILITY,
@@ -163,7 +163,7 @@ _IMAGE_PULL_LOCKS_GUARD = RLock()
 _IMAGE_PULL_LOCKS: dict[tuple[str, str], RLock] = {}
 _IMAGE_WARMUP_TASKS_GUARD = RLock()
 _IMAGE_WARMUP_TASKS: set[tuple[str, str]] = set()
-_GATEWAY_SCHEDULING_LOCK = RLock()
+_GATEWAY_SCHEDULING_LOCK = FairRLock()
 _MIGRATION_OPERATION_LOCKS_GUARD = RLock()
 _MIGRATION_OPERATION_LOCKS: dict[str, tuple[RLock, int]] = {}
 _REGISTRY_LEASE_COORDINATION_LOCK = RLock()
@@ -172,7 +172,6 @@ DEFAULT_MAX_CONCURRENT_SANDBOX_CREATES = 0
 DEFAULT_MAX_GATEWAY_HTTP_REQUEST_THREADS = 2048
 SANDBOX_CREATE_BUSY_RETRY_AFTER_SECONDS = 2
 SANDBOX_CREATE_IN_PROGRESS_RETRY_AFTER_SECONDS = 5
-SANDBOX_PLACEMENT_LOCK_WAIT_SECONDS = 0.25
 # Build execution is asynchronous. This timeout only covers proxying the build
 # context and enqueueing the build on a builder node.
 IMAGE_BUILD_PROXY_TIMEOUT_SECONDS = 30 * 60
@@ -3245,6 +3244,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                                 "gateway is busy reserving sandbox placement; "
                                 "retry shortly"
                             ),
+                            "error_code": "gateway_placement_busy",
                             "retryable": True,
                         },
                         status=HTTPStatus.SERVICE_UNAVAILABLE,
@@ -5515,11 +5515,15 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         required_capabilities: tuple[str, ...] = (),
         excluded_job_ids: tuple[str, ...] = (),
     ) -> NodeHeartbeat | None:
+        started = time.monotonic()
         routes = self._placement_routes()
         route_index = _placement_route_index(routes)
+        routes_read = time.monotonic()
+        heartbeats = self._ready_sandbox_heartbeats()
+        heartbeats_read = time.monotonic()
         excluded_jobs = frozenset(excluded_job_ids)
         candidate_states: list[tuple[NodeHeartbeat, NodePlacementState]] = []
-        for heartbeat in self._ready_sandbox_heartbeats():
+        for heartbeat in heartbeats:
             if heartbeat.job_id in excluded_jobs:
                 continue
             if not heartbeat.admission_open:
@@ -5543,6 +5547,14 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             ):
                 continue
             candidate_states.append((heartbeat, placement_state))
+        if self.telemetry is not None:
+            self.telemetry.add_event("gateway.placement.scan", {
+                "routes_read_ms": (routes_read - started) * 1000,
+                "heartbeats_read_ms": (heartbeats_read - routes_read) * 1000,
+                "candidate_evaluation_ms": (time.monotonic() - heartbeats_read) * 1000,
+                "route_count": len(routes), "node_count": len(heartbeats),
+                "candidate_count": len(candidate_states),
+            })
         if not candidate_states:
             return None
         candidates = [heartbeat for heartbeat, _state in candidate_states]
@@ -5693,13 +5705,21 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         ]
         | None
     ):
+        started = time.monotonic()
+        # Creates already hold bounded startup admission. Queue fairly with
+        # wakes/migrations rather than abandoning the reservation after 250 ms
+        # and making the client repeat image resolution and HTTP admission.
         if not _GATEWAY_SCHEDULING_LOCK.acquire(
-            timeout=SANDBOX_PLACEMENT_LOCK_WAIT_SECONDS
+            timeout=self.admission_wait_seconds
         ):
             raise GatewaySchedulingBusyError(
                 "sandbox placement is already being reserved"
             )
         try:
+            if self.telemetry is not None:
+                self.telemetry.add_event("gateway.placement.lock", {
+                    "wait_ms": (time.monotonic() - started) * 1000,
+                })
             with _gateway_placement_lock(self.routing_store.path, blocking=False):
                 heartbeat = self._select_node(
                     requested,
@@ -5709,6 +5729,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 )
                 if heartbeat is None:
                     return None
+                reservation_started = time.monotonic()
                 route, pending = (
                     self.routing_store.allocate_sandbox_create_with_pending(
                         SandboxRouteAllocation(
@@ -5724,6 +5745,10 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                         spec_hash=spec_hash,
                     )
                 )
+                if self.telemetry is not None:
+                    self.telemetry.add_event("gateway.placement.reservation", {
+                        "duration_ms": (time.monotonic() - reservation_started) * 1000,
+                    })
                 return heartbeat, route, pending
         finally:
             _GATEWAY_SCHEDULING_LOCK.release()
@@ -5799,8 +5824,19 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 return image, None
             if not _looks_like_image_id_reference(image):
                 return image, None
-        inventory = self._cached_raw_image_inventory_across_nodes()
-        matches = self._enrich_image_inventory_records(
+        # The gateway's published record already wins inventory selection.
+        # Read that exact row before discovering copies across the fleet.
+        local = self.image_manager.get_image(image)
+        local_matches = []
+        if local is not None and _image_record_available_to_sandboxes(local.to_dict()):
+            local_matches = self._enrich_image_inventory_records(
+                ({**local.to_dict(), "location": "control-plane"},), image_id=image,
+            )
+        inventory = (
+            ImageInventorySnapshot.from_records(local_matches, complete=True)
+            if local_matches else self._cached_raw_image_inventory_across_nodes()
+        )
+        matches = local_matches or self._enrich_image_inventory_records(
             inventory.records,
             image_id=image,
         )
@@ -7029,26 +7065,17 @@ def _async_proxy_response(response, transport_error):
     return proxied.status, proxied.headers, proxied.body
 
 
-def _sandbox_list_bytes(store, routing_store, heartbeat_ttl_seconds) -> bytes:
+def _sandbox_list_bytes(store, routing_store, heartbeat_ttl_seconds, *, renderer=None) -> bytes:
+    from .fleet_reader import FleetResponseRenderer
+
     heartbeats = store.load_heartbeats()
     heartbeats_by_node_id = {
         heartbeat.node_id: heartbeat for heartbeat in heartbeats.values()
     }
-    sandboxes = [
-        _route_only_sandbox_record(
-            route,
-            heartbeats_by_node_id.get(route.node_id),
-            heartbeat_ttl_seconds=heartbeat_ttl_seconds,
-        )
-        for route in routing_store.sandbox_routes_readonly(background=True)
-    ]
-    return json.dumps(
-        {
-            "sandboxes": sandboxes,
-            "cached": True,
-            "refresh_supported": True,
-        }, separators=(",", ":"),
-    ).encode("utf-8")
+    return (renderer or FleetResponseRenderer()).render(
+        routing_store._sandbox_route_rows_readonly(background=True),
+        heartbeats_by_node_id, heartbeat_ttl_seconds,
+    )
 
 
 def _collection_id_from_path(path: str, prefix: str) -> str | None:
@@ -7583,49 +7610,52 @@ def _node_placement_state(
     heartbeat: NodeHeartbeat,
     node_routes: list[PlacementRecord],
 ) -> NodePlacementState:
-    inflight_images = frozenset(
-        identity
-        for route in node_routes
-        if route.state.lower() in {"creating", "unknown"}
-        and (identity := _route_image_identity(route))
-        and not _heartbeat_has_image(heartbeat, identity)
-    )
+    # Many sandboxes use the same image. Normalize each reference and inspect
+    # the heartbeat cache once per distinct image, not once per sandbox/pass.
+    image_identities: dict[str, str] = {}
+    inflight_candidates: set[str] = set()
     projected_images = set(heartbeat.cached_images)
-    projected_images.update(
-        identity
-        for route in node_routes
-        if route.state.lower() in {"creating", "unknown", "running"}
-        and (identity := _route_image_identity(route))
+    assigned_cpu: list[float] = []
+    assigned_memory = 0
+    active_creates = 0
+    for route in node_routes:
+        state = route.state.lower()
+        if state not in {"deleted", "failed"}:
+            assigned_cpu.append(route.resources.vcpu)
+            assigned_memory += route.resources.memory_mb
+        if state in {"creating", "planned", "quota_ready", "rootfs_ready", "unknown"}:
+            active_creates += 1
+        if state not in {"creating", "unknown", "running"}:
+            continue
+        image = (
+            str(route.spec.get("image") or "")
+            if isinstance(route, SandboxRoute) else route.image
+        ).strip()
+        if image not in image_identities:
+            image_identities[image] = canonical_image_digest_ref(image) or image
+        identity = image_identities[image]
+        if identity:
+            projected_images.add(identity)
+            if state in {"creating", "unknown"}:
+                inflight_candidates.add(identity)
+    cached_images = set(heartbeat.cached_images)
+    inflight_images = frozenset(
+        identity for identity in inflight_candidates
+        if not heartbeat.cached_images_known
+        or not _requested_image_cache_keys(identity).intersection(cached_images)
     )
-    # Completed creates still own future work, including parked programs.
-    # Their shape is a relative load estimate, not a capacity reservation or
-    # an admission limit. Live pressure alone lags a burst by a heartbeat and
-    # otherwise rewards repeatedly placing onto the same quiet worker.
-    assigned = [r for r in node_routes if r.state.lower() not in {"deleted", "failed"}]
+    # Assigned shapes estimate future load, including parked programs; live
+    # capacity reservations still use the canonical inventory accounting below.
     total = heartbeat.total_resources
-    assigned_pressure = max(
-        sum(r.resources.vcpu for r in assigned) / max(1, total.vcpu),
-        sum(r.resources.memory_mb for r in assigned) / max(1, total.memory_mb),
-    )
     return NodePlacementState(
-        assigned_shape_pressure=assigned_pressure,
+        assigned_shape_pressure=max(
+            sum(assigned_cpu) / max(1, total.vcpu),
+            assigned_memory / max(1, total.memory_mb),
+        ),
         available_resources=_node_available_resources(heartbeat, node_routes),
         inflight_image_identities=inflight_images,
         projected_image_identities=frozenset(projected_images),
-        active_creates=max(
-            heartbeat.active_sandbox_creates,
-            sum(
-                route.state.lower()
-                in {
-                    "creating",
-                    "planned",
-                    "quota_ready",
-                    "rootfs_ready",
-                    "unknown",
-                }
-                for route in node_routes
-            ),
-        ),
+        active_creates=max(heartbeat.active_sandbox_creates, active_creates),
     )
 
 
@@ -7797,15 +7827,6 @@ def _route_targets_node(route: PlacementRecord, heartbeat: NodeHeartbeat) -> boo
             and route.node_url.rstrip("/") == heartbeat.node_url.rstrip("/")
         )
     )
-
-
-def _route_image_identity(route: PlacementRecord) -> str:
-    image = (
-        str(route.spec.get("image") or "")
-        if isinstance(route, SandboxRoute)
-        else route.image
-    ).strip()
-    return canonical_image_digest_ref(image) or image
 
 
 def _placement_identity(route: PlacementRecord) -> tuple[str, ...]:

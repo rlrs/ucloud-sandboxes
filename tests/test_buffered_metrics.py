@@ -1,3 +1,4 @@
+import json
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -5,10 +6,56 @@ from threading import Event
 import unittest
 from unittest.mock import patch
 
-from ucloud_sandboxes.metrics import BufferedMetricsStore, MetricsStore
+from ucloud_sandboxes.metrics import (
+    BufferedMetricsStore, MetricEvent, MetricsStore, _EncodedMetricEvent,
+)
 
 
 class BufferedMetricsTests(unittest.TestCase):
+    def test_encoded_snapshot_preserves_accounting_and_json_values(self):
+        event = MetricEvent('2026-09-24T16:00:00+00:00', 'wake\"é', {
+            'nested': {'values': [None, True, 1.25, 'é\n\"']},
+            'tuple': (1, 2),
+        })
+        encoded = _EncodedMetricEvent.from_event(event)
+        self.assertEqual(encoded.queue_bytes, len(json.dumps(
+            event.to_dict(), sort_keys=True, separators=(',', ':'),
+        ).encode('utf-8')))
+        self.assertEqual(encoded.payload_bytes, len((json.dumps(
+            event.to_dict(), sort_keys=True,
+        ) + '\n').encode('utf-8')))
+        snapshot = json.loads(encoded.data_json)
+        event.data['nested']['values'].append('later')
+        self.assertEqual(json.loads(encoded.data_json), snapshot)
+        self.assertEqual(snapshot['tuple'], [1, 2])
+
+    def test_truncation_and_stored_byte_accounting_are_preserved(self):
+        with TemporaryDirectory() as directory:
+            store = BufferedMetricsStore(
+                Path(directory) / 'metrics.sqlite', max_event_bytes=200,
+            )
+            try:
+                data = {'padding': 'é' * 200}
+                timestamp = '2026-09-24T16:00:00+00:00'
+                original = MetricEvent(timestamp, 'large', data)
+                result = store.append('large', data, timestamp=timestamp)
+                self.assertTrue(store.flush())
+                self.assertEqual(result.data, {
+                    'metrics_payload_truncated': True,
+                    'original_bytes': len(json.dumps(
+                        original.to_dict(), sort_keys=True, separators=(',', ':'),
+                    ).encode('utf-8')),
+                })
+                self.assertEqual(store.load_events()[0], result)
+                row = store._sqlite_connection.execute(
+                    'SELECT payload_bytes FROM metric_events',
+                ).fetchone()
+                self.assertEqual(row[0], len((json.dumps(
+                    result.to_dict(), sort_keys=True,
+                ) + '\n').encode('utf-8')))
+            finally:
+                self.assertTrue(store.close())
+
     def test_blocked_database_does_not_block_callers_and_drain_preserves_snapshots(self):
         with TemporaryDirectory() as directory:
             store = BufferedMetricsStore(Path(directory) / 'metrics.sqlite')

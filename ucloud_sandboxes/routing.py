@@ -15,6 +15,8 @@ from typing import Any, Iterable, Iterator
 from uuid import uuid4
 import weakref
 
+import orjson
+
 from .sqlite_pool import SqliteConnectionPool
 
 from .durable_batch import DurableSqliteBatch
@@ -909,6 +911,13 @@ class RoutingStore:
         return [_object(json.loads(row[0])) for row in rows]
 
     def sandbox_routes_readonly(self, *, background: bool = False) -> list[SandboxRoute]:
+        return [
+            _sandbox_route_from_row(row)
+            for row in self._sandbox_route_rows_readonly(background=background)
+        ]
+
+    def _sandbox_route_rows_readonly(self, *, background: bool = False) -> list[dict[str, Any]]:
+        """Fresh rows for readers that memoize validation of identical rows."""
         guard = self._fleet_read_lock if background else nullcontext()
         with guard, self._connect() as conn:
             # sqlite3 releases/reacquires the GIL for every stepped result row.
@@ -940,7 +949,14 @@ class RoutingStore:
                         'updated_at', updated_at
                     )) FROM (SELECT * FROM sandboxes ORDER BY sandbox_id)"""
             ).fetchone()[0]
-        return [_sandbox_route_from_row(row) for row in json.loads(payload)]
+        # This outer envelope contains SQLite integers and strings; nested
+        # user JSON remains an opaque string and retains its canonical decoder.
+        # Preserve stdlib handling of legacy surrogate/non-finite values rather
+        # than changing the read contract when the native decoder rejects them.
+        try:
+            return orjson.loads(payload)
+        except orjson.JSONDecodeError:
+            return json.loads(payload)
 
     def assigned_node_identities(
         self, *, node_id: str, job_id: str, node_url: str,

@@ -33,6 +33,83 @@ class ImagePollingTests(unittest.TestCase):
             active_sandboxes=0,
         )
 
+    def test_published_local_image_avoids_fleet_scan_and_tracks_replacement(self):
+        with TemporaryDirectory() as directory:
+            store = ImageStore(Path(directory) / "images.sqlite")
+            h = self.handler()
+            h.image_manager = SimpleNamespace(get_image=store.get, store=store)
+            h.registry_url = ""
+            h.registry_worker_url = ""
+            h._cached_raw_image_inventory_across_nodes = Mock(
+                side_effect=AssertionError("fleet scan")
+            )
+            now = utc_now()
+            record = ImageRecord("image", "example:v1", "registry", "ready", now, now)
+            store.upsert(record)
+            store.load = Mock(side_effect=AssertionError("full image scan"))
+            for tag in ("example:v1", "example:v2"):
+                store.upsert(replace(record, tag=tag))
+                self.assertEqual(
+                    h._resolve_sandbox_image_reference("image", reference_kind="name"),
+                    (tag, None),
+                )
+            h._cached_raw_image_inventory_across_nodes.assert_not_called()
+
+    def test_deleted_or_unpublished_local_image_uses_discovery(self):
+        from ucloud_sandboxes.control_plane import ImageInventorySnapshot
+
+        with TemporaryDirectory() as directory:
+            store = ImageStore(Path(directory) / "images.sqlite")
+            h = self.handler()
+            h.image_manager = SimpleNamespace(get_image=store.get, store=store)
+            h.registry_url = ""
+            h.registry_worker_url = ""
+            h._cached_raw_image_inventory_across_nodes = Mock(
+                return_value=ImageInventorySnapshot.from_records([], complete=False)
+            )
+            now = utc_now()
+            record = ImageRecord(
+                "image", "example:v1", "build:local", "ready", now, now
+            )
+            store.upsert(record)
+            for _ in range(2):
+                _, error = h._resolve_sandbox_image_reference(
+                    "image", reference_kind="name"
+                )
+                self.assertEqual(error["error_code"], "image_inventory_incomplete")
+                store.delete_by_tags([record.tag])
+            self.assertEqual(h._cached_raw_image_inventory_across_nodes.call_count, 2)
+
+    def test_local_managed_image_still_requires_digest_protection(self):
+        with TemporaryDirectory() as directory:
+            store = ImageStore(Path(directory) / "images.sqlite")
+            h = self.handler()
+            h.image_manager = SimpleNamespace(get_image=store.get, store=store)
+            h.registry_url = "http://registry.example"
+            h.registry_worker_url = ""
+            h._managed_registry_manifest_digest = Mock(return_value="")
+            h._cached_raw_image_inventory_across_nodes = Mock(
+                side_effect=AssertionError("fleet scan")
+            )
+            now = utc_now()
+            store.upsert(
+                ImageRecord(
+                    "image",
+                    "registry.example/team/image:v1",
+                    "registry",
+                    "ready",
+                    now,
+                    now,
+                )
+            )
+            _, error = h._resolve_sandbox_image_reference(
+                "image", reference_kind="name"
+            )
+            self.assertEqual(
+                error["error_code"], "managed_registry_digest_protection_unavailable"
+            )
+            h._managed_registry_manifest_digest.assert_called_once()
+
     def test_unchanged_observation_has_no_write_transaction(self):
         with TemporaryDirectory() as directory:
             store = ImageStore(Path(directory) / "images.sqlite")

@@ -1,0 +1,3 @@
+{"fields": 8, "before_cpu_us": 25.638499999999983, "after_cpu_us": 16.456500000000013, "reduction_percent": 35.81332761276976}
+{"fields": 32, "before_cpu_us": 83.47550000000003, "after_cpu_us": 50.91649999999992, "reduction_percent": 39.004258734598885}
+{"fields": 128, "before_cpu_us": 314.3175, "after_cpu_us": 183.58950000000007, "reduction_percent": 41.59106635806149}

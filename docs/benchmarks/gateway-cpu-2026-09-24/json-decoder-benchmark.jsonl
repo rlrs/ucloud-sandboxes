@@ -1,0 +1,2 @@
+{"scenario": "unchanged", "routes": 320, "nodes": 10, "iterations": 30, "median_cpu_ms": {"old": 4.131499999999955, "new": 2.960499999999977}, "reduction_percent": 28.34321674936441}
+{"scenario": "ten_percent_changed", "routes": 320, "nodes": 10, "iterations": 30, "median_cpu_ms": {"old": 9.352999999999945, "new": 7.077}, "reduction_percent": 24.3344381481873}

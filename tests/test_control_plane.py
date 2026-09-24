@@ -16,7 +16,7 @@ import sqlite3
 import tarfile
 from urllib import error, request
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from ucloud_sandboxes.agent import (
     build_heartbeat as _agent_build_heartbeat,
@@ -2357,6 +2357,7 @@ class ControlPlaneTests(unittest.TestCase):
             clock=lambda: 0.0,
         )
         handler = object.__new__(CachedHandler)
+        handler.image_manager = Mock(get_image=Mock(return_value=None))
         handler.registry_url = ""
         handler.registry_worker_url = ""
         loads = 0
@@ -2395,6 +2396,9 @@ class ControlPlaneTests(unittest.TestCase):
             pass
 
         class EmptyImageManager:
+            def get_image(self, image_id):
+                return None
+
             @staticmethod
             def list() -> list[ImageRecord]:
                 return []
@@ -2498,6 +2502,7 @@ class ControlPlaneTests(unittest.TestCase):
 
     def test_image_reference_kind_header_controls_bare_resolution(self) -> None:
         handler = object.__new__(control_plane.ControlPlaneHandler)
+        handler.image_manager = Mock(get_image=Mock(return_value=None))
         handler.registry_url = ""
         handler.registry_worker_url = ""
         cache_reads = 0
@@ -2556,6 +2561,7 @@ class ControlPlaneTests(unittest.TestCase):
         self,
     ) -> None:
         handler = object.__new__(control_plane.ControlPlaneHandler)
+        handler.image_manager = Mock(get_image=Mock(return_value=None))
         handler.registry_url = "http://registry.example"
         handler.registry_worker_url = ""
         handler._managed_registry_manifest_digest = lambda _image: ""
@@ -2643,6 +2649,7 @@ class ControlPlaneTests(unittest.TestCase):
             clock=lambda: 0.0,
         )
         handler = object.__new__(CachedHandler)
+        handler.image_manager = Mock(get_image=Mock(return_value=None))
         handler.registry_url = ""
         handler.registry_worker_url = ""
         records = [
@@ -3106,7 +3113,7 @@ class ControlPlaneTests(unittest.TestCase):
             migrations = routing.sandbox_migrations(active_only=True)
 
         self.assertIsNotNone(placement)
-        self.assertLess(elapsed, control_plane.SANDBOX_PLACEMENT_LOCK_WAIT_SECONDS)
+        self.assertLess(elapsed, 0.25)
         self.assertEqual(len(migrations), 1)
         self.assertEqual(migrations[0].destination_node_id, "destination-node")
 
@@ -3906,13 +3913,14 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(unauthorized_metrics["status"], 401)
         self.assertEqual(authorized_metrics["nodes"]["total"], 0)
 
-    def test_gateway_placement_contention_fails_fast_with_retryable_json(self) -> None:
+    def test_gateway_placement_contention_deadline_returns_retryable_json(self) -> None:
         with _temporary_root() as raw_path:
             gateway = _gateway_server(
                 raw_path,
                 routing_file=raw_path / "routes.sqlite",
                 metrics_file=raw_path / "metrics.sqlite",
             )
+            gateway.RequestHandlerClass.admission_wait_seconds = 0.02
             with _running_server(gateway) as base:
                 self.assertTrue(
                     control_plane._GATEWAY_SCHEDULING_LOCK.acquire(blocking=False)

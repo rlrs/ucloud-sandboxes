@@ -1,0 +1,3 @@
+{"routes_per_node": 32, "distinct_images": 1, "before_cpu_us": 163.8839999999999, "after_cpu_us": 55.379499999999915, "reduction_percent": 66.20811061482515}
+{"routes_per_node": 32, "distinct_images": 8, "before_cpu_us": 169.47050000000007, "after_cpu_us": 70.52999999999976, "reduction_percent": 58.38213730413273}
+{"routes_per_node": 32, "distinct_images": 32, "before_cpu_us": 168.1740000000005, "after_cpu_us": 119.28249999999974, "reduction_percent": 29.071973075505486}

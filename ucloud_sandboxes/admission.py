@@ -2,7 +2,7 @@
 
 from collections import deque
 from dataclasses import dataclass, field
-from threading import Condition, Event
+from threading import Condition, Event, get_ident
 import time
 
 
@@ -92,3 +92,42 @@ class FairCapacity:
     def waiting(self) -> int:
         with self._condition:
             return len(self._waiters)
+
+
+class FairRLock:
+    """Reentrant FIFO mutex built on the shared admission queue.
+
+    Returning capacity grants the oldest waiter before a new caller can acquire
+    it. Reentrancy preserves nested reservation helpers without self-deadlock.
+    """
+
+    def __init__(self) -> None:
+        self._capacity = FairCapacity(1)
+        self._owner: int | None = None
+        self._depth = 0
+
+    def acquire(self, blocking: bool = True, timeout: float | None = None) -> bool:
+        owner = get_ident()
+        if self._owner == owner:
+            self._depth += 1
+            return True
+        if not self._capacity.acquire(blocking=blocking, timeout=timeout):
+            return False
+        self._owner = owner
+        self._depth = 1
+        return True
+
+    def release(self) -> None:
+        if self._owner != get_ident():
+            raise RuntimeError("cannot release an unowned reservation lock")
+        self._depth -= 1
+        if not self._depth:
+            self._owner = None
+            self._capacity.release()
+
+    def __enter__(self):
+        self.acquire()
+        return self
+
+    def __exit__(self, *_exc) -> None:
+        self.release()

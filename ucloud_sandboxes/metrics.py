@@ -58,6 +58,32 @@ class MetricEvent:
         }
 
 
+@dataclass(frozen=True)
+class _EncodedMetricEvent:
+    """Immutable queue snapshot, ready for SQLite without a JSON round trip."""
+
+    timestamp: str
+    kind: str
+    data_json: str
+    payload_bytes: int
+    queue_bytes: int
+
+    @classmethod
+    def from_event(cls, event: MetricEvent) -> _EncodedMetricEvent:
+        data_json = json.dumps(event.data, sort_keys=True, separators=(",", ":"))
+        # ensure_ascii is enabled, so character lengths equal UTF-8 lengths.
+        # Preserve both historical accounting formats: compact queue bytes and
+        # spaced, newline-terminated storage bytes used for retention.
+        envelope = json.dumps(
+            {"timestamp": event.timestamp, "kind": event.kind, "data": {}},
+            sort_keys=True, separators=(",", ":"),
+        )
+        return cls(
+            event.timestamp, event.kind, data_json, _metric_event_bytes(event),
+            len(envelope) - 2 + len(data_json),
+        )
+
+
 class MetricsStore:
     def __init__(
         self,
@@ -110,7 +136,7 @@ class MetricsStore:
         self._append_events([event])
         return event
 
-    def _append_events(self, events: list[MetricEvent]) -> None:
+    def _append_events(self, events: list[MetricEvent | _EncodedMetricEvent]) -> None:
         if not events:
             return
         with self._lock:
@@ -129,27 +155,23 @@ class MetricsStore:
                             },
                         ),
                     )
-                for stored in stored_events:
-                    connection.execute(
-                        """
-                        INSERT INTO metric_events(
-                            timestamp, timestamp_epoch, kind, data_json,
-                            payload_bytes
-                        )
-                        VALUES (?, ?, ?, ?, ?)
-                        """,
-                        (
-                            stored.timestamp,
-                            _timestamp_epoch(stored.timestamp),
-                            stored.kind,
-                            json.dumps(
-                                stored.data,
-                                sort_keys=True,
-                                separators=(",", ":"),
-                            ),
-                            _metric_event_bytes(stored),
-                        ),
-                    )
+                encoded = [
+                    event if isinstance(event, _EncodedMetricEvent)
+                    else _EncodedMetricEvent.from_event(event)
+                    for event in stored_events
+                ]
+                connection.executemany(
+                    """
+                    INSERT INTO metric_events(
+                        timestamp, timestamp_epoch, kind, data_json, payload_bytes
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    [
+                        (event.timestamp, _timestamp_epoch(event.timestamp),
+                         event.kind, event.data_json, event.payload_bytes)
+                        for event in encoded
+                    ],
+                )
                 self._prune_sqlite_locked(connection)
                 connection.commit()
                 try:
@@ -488,7 +510,7 @@ class BufferedMetricsStore(MetricsStore):
             raise ValueError("metrics queue bounds must be positive")
         super().__init__(path, **kwargs)
         self._queue_condition = Condition()
-        self._queue: deque[tuple[MetricEvent, int]] = deque()
+        self._queue: deque[tuple[_EncodedMetricEvent, int]] = deque()
         self._queue_bytes = 0
         self._queue_byte_limit, self._queue_event_limit = queue_bytes, queue_events
         self._queue_dropped = 0
@@ -499,16 +521,14 @@ class BufferedMetricsStore(MetricsStore):
 
     def append(self, kind, data=None, *, timestamp=None) -> MetricEvent:
         event = MetricEvent(timestamp or utc_now().isoformat(), kind, data or {})
-        payload = json.dumps(event.to_dict(), sort_keys=True, separators=(",", ":"))
-        if len(payload.encode("utf-8")) > self._max_event_bytes:
+        encoded = _EncodedMetricEvent.from_event(event)
+        if encoded.queue_bytes > self._max_event_bytes:
             event = MetricEvent(event.timestamp, kind, {
                 "metrics_payload_truncated": True,
-                "original_bytes": len(payload.encode("utf-8")),
+                "original_bytes": encoded.queue_bytes,
             })
-            payload = json.dumps(event.to_dict(), sort_keys=True, separators=(",", ":"))
-        size = len(payload.encode("utf-8"))
-        # Snapshot caller-owned containers before handing work to another thread.
-        detached = MetricEvent(**json.loads(payload))
+            encoded = _EncodedMetricEvent.from_event(event)
+        size = encoded.queue_bytes
         with self._queue_condition:
             if self._stopping:
                 raise RuntimeError("metrics writer is closed")
@@ -516,7 +536,7 @@ class BufferedMetricsStore(MetricsStore):
                     or self._queue_bytes + size > self._queue_byte_limit):
                 self._queue_dropped += 1
             else:
-                self._queue.append((detached, size))
+                self._queue.append((encoded, size))
                 self._queue_bytes += size
             self._queue_condition.notify()
         return event

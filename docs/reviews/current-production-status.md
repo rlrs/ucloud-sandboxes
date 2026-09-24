@@ -6,14 +6,24 @@ statements must be read in the context of their candidate version.
 
 ## Deployed baseline
 
-Production runs **0.5.114rc23**, deployed from `46df583` on September 24.
-It adds narrowly retryable relay/heartbeat backpressure and parking-burst recovery
-corrections to the rc22 baseline. Gateway and both node-role packages are updated;
-the native runtime, OS/kernel/storage closure, SDK, and eight-worker policy are
-unchanged. See the [investigation and qualification](overload-recovery-2026-09-24.md)
-and [deployment receipt](../benchmarks/overload-recovery-2026-09-24/deployment-result.json).
-The targeted Linux gates passed 210 tests, plus the earlier 128-test PostgreSQL
-backpressure gate. These do not establish a loaded production latency SLO.
+Production runs **0.5.114rc24**, deployed from `5bc348f` on September 24.
+It removes restore-slot contention from resident growth admission, separates
+cached memory-placement reads from allocator I/O, and replaces unread exec-event
+eviction with output backpressure. SDK **0.4.27** is published from `dc62af7`;
+Verifiers main `9226b1f` pins it. Upgrade client environments before large-stdin
+exec workloads. Production now allows **zero to ten workers**, with the existing
+80% memory-utilization target. Native runtime, OS and storage closure are unchanged.
+
+All 123 targeted Linux server tests and 58 SDK client/duplex tests passed. SDK CI
+passed the complete suite on Python 3.10 and 3.13. The live managed-profile test
+passed 16 concurrent creates and 48 forced park/wake cycles, plus separate large
+stdin/stdout/stderr and delayed-reader checks. This is a correctness result:
+useful-execution p95 was 2.52s, so the subsecond SLO remains unmet. See the
+[release receipt and remaining bottleneck](wake-exec-release-2026-09-24.md).
+
+The preceding **0.5.114rc23** (`46df583`) added narrowly retryable relay/heartbeat
+backpressure and parking-burst recovery corrections. Its historical evidence is
+in [overload recovery](overload-recovery-2026-09-24.md).
 
 The preceding **0.5.114rc22** baseline has server Python recorded in commit
 `62ad20b`. Every staged server Python file was compared byte-for-byte with the
@@ -24,7 +34,7 @@ lock metadata now consistently identify rc22; no final 0.5.114 release is claime
 The assembled changes include PostgreSQL relay authority, asynchronous gateway
 response handling, memory/workspace separation, physical and backing-capacity
 growth admission, and memory-aware autoscaling. Immutable environments remain
-opt-in and disabled in production. Production allows zero to eight workers.
+opt-in and disabled in production. Production allows zero to ten workers.
 
 The frozen baseline passed **1,748 Linux tests against real PostgreSQL**, with
 12 environment skips. See the [qualification record](../benchmarks/autoscaler-memory-2026-09-23/qualification.json)

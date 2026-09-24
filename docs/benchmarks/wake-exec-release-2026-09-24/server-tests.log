@@ -1,0 +1,7 @@
+<frozen site>:107: RuntimeWarning: Unexpected value in sys.prefix, expected /work/ucloud-sandboxes/release/0.5.114rc24/test-venv, got /work/ucloud-sandboxes/release/0.5.114rc24/qualification/../test-venv
+<frozen site>:107: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /work/ucloud-sandboxes/release/0.5.114rc24/test-venv, got /work/ucloud-sandboxes/release/0.5.114rc24/qualification/../test-venv
+...........................................................................................................................
+----------------------------------------------------------------------
+Ran 123 tests in 12.145s
+
+OK

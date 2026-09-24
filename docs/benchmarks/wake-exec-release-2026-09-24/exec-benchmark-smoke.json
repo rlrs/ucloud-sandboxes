@@ -1,0 +1,23 @@
+{
+  "sandbox_id": "exec-backpressure-48496880033b",
+  "checks": [
+    {
+      "mode": "sync_duplex",
+      "seconds": 0.8478768699860666,
+      "bytes_per_stream": 3300000
+    },
+    {
+      "mode": "async_duplex",
+      "seconds": 0.7850896249874495,
+      "bytes_per_stream": 3300000
+    },
+    {
+      "mode": "delayed_reader",
+      "stdout_bytes": 8388608,
+      "sha256": "9f5bc72de6f6780c7ff33ab7f43e17badeb87155dc19363de9a9f037c8128c45"
+    }
+  ],
+  "create_seconds": 0.5711672189936507,
+  "passed": true,
+  "cleanup": "deleted"
+}

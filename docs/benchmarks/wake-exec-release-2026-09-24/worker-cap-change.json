@@ -1,0 +1,7 @@
+{
+  "previous_max_workers": 8,
+  "max_workers": 10,
+  "updated_at": "2026-09-24T08:04:33.063548+00:00",
+  "min_workers": 0,
+  "memory_utilization_target": 0.8
+}

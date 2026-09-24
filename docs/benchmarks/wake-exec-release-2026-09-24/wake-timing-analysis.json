@@ -1,0 +1,210 @@
+{
+  "summary": {
+    "restore_queue": {
+      "min_ms": 3.72,
+      "max_ms": 128.34,
+      "mean_ms": 48.8,
+      "count": 7
+    },
+    "network_prepare": {
+      "min_ms": 22.33,
+      "max_ms": 61.12,
+      "mean_ms": 36.38,
+      "count": 7
+    },
+    "validate_artifact": {
+      "min_ms": 66.8,
+      "max_ms": 622.21,
+      "mean_ms": 307.86,
+      "count": 7
+    },
+    "begin_restore_journal": {
+      "min_ms": 2.15,
+      "max_ms": 10.46,
+      "mean_ms": 6.32,
+      "count": 7
+    },
+    "runsc_restore": {
+      "min_ms": 144.33,
+      "max_ms": 293.72,
+      "mean_ms": 204.98,
+      "count": 7
+    },
+    "runsc_state": {
+      "min_ms": 15.28,
+      "max_ms": 123.29,
+      "mean_ms": 50.03,
+      "count": 7
+    },
+    "candidate_fence": {
+      "min_ms": 0.96,
+      "max_ms": 36.1,
+      "mean_ms": 7.61,
+      "count": 7
+    },
+    "candidate_journal": {
+      "min_ms": 2.65,
+      "max_ms": 51.48,
+      "mean_ms": 14.03,
+      "count": 7
+    },
+    "candidate_resume": {
+      "min_ms": 24.64,
+      "max_ms": 56.05,
+      "mean_ms": 38.61,
+      "count": 7
+    },
+    "readiness_exec": {
+      "min_ms": 22.62,
+      "max_ms": 52.48,
+      "mean_ms": 29.73,
+      "count": 7
+    },
+    "commit_running_journal": {
+      "min_ms": 7.16,
+      "max_ms": 29.17,
+      "mean_ms": 15.74,
+      "count": 7
+    },
+    "artifact_cleanup": {
+      "min_ms": 21.67,
+      "max_ms": 289.72,
+      "mean_ms": 151.99,
+      "count": 7
+    },
+    "warden_total": {
+      "min_ms": 354.25,
+      "max_ms": 1177.56,
+      "mean_ms": 827.31,
+      "count": 7
+    }
+  },
+  "traces": [
+    {
+      "trace_id": "9b489e967eacaecd1418f5ff38c8f1fc",
+      "timings_ms": {
+        "restore_queue": 20.185057999995593,
+        "network_prepare": 26.123096000006285,
+        "validate_artifact": 622.2097090000034,
+        "begin_restore_journal": 3.5891230000117957,
+        "runsc_restore": 192.6551399999994,
+        "runsc_state": 21.32338600000594,
+        "candidate_fence": 5.028963000000886,
+        "candidate_journal": 5.456506000001582,
+        "candidate_resume": 25.053009999993492,
+        "readiness_exec": 28.518388000009054,
+        "commit_running_journal": 26.25351100000728,
+        "artifact_cleanup": 247.1202100000056,
+        "warden_total": 1177.557452000002
+      }
+    },
+    {
+      "trace_id": "8b0e4b2427d56f0f077bffa0682c0d5c",
+      "timings_ms": {
+        "restore_queue": 3.720311000002141,
+        "network_prepare": 22.699068999997962,
+        "validate_artifact": 139.11091099999595,
+        "begin_restore_journal": 4.929183999998088,
+        "runsc_restore": 293.72174499999915,
+        "runsc_state": 15.277606999994475,
+        "candidate_fence": 3.875383000000454,
+        "candidate_journal": 4.385286999998073,
+        "candidate_resume": 42.11285000000231,
+        "readiness_exec": 25.323395999997445,
+        "commit_running_journal": 8.272790999996005,
+        "artifact_cleanup": 61.70444800000752,
+        "warden_total": 598.8629570000014
+      }
+    },
+    {
+      "trace_id": "5eb6ef425ea1220a134bf2adb4216953",
+      "timings_ms": {
+        "restore_queue": 128.3446529999992,
+        "network_prepare": 48.604738999998176,
+        "validate_artifact": 481.0133189999988,
+        "begin_restore_journal": 8.926610999999696,
+        "runsc_restore": 199.374198000001,
+        "runsc_state": 92.22601300000122,
+        "candidate_fence": 4.927080999998168,
+        "candidate_journal": 5.004976999998689,
+        "candidate_resume": 31.962966999998343,
+        "readiness_exec": 52.47651700000233,
+        "commit_running_journal": 7.156995000002553,
+        "artifact_cleanup": 289.7248790000049,
+        "warden_total": 1173.1528660000024
+      }
+    },
+    {
+      "trace_id": "253990084c5bf7ba11feaec88df39e60",
+      "timings_ms": {
+        "restore_queue": 100.42357999999751,
+        "network_prepare": 40.60372700000414,
+        "validate_artifact": 478.35132599999497,
+        "begin_restore_journal": 7.703465000005849,
+        "runsc_restore": 144.33440799999886,
+        "runsc_state": 123.29075099999898,
+        "candidate_fence": 1.1491540000037048,
+        "candidate_journal": 10.23479299999508,
+        "candidate_resume": 40.491910000000075,
+        "readiness_exec": 23.906891999999402,
+        "commit_running_journal": 21.9442770000029,
+        "artifact_cleanup": 278.7331299999991,
+        "warden_total": 1131.4380319999984
+      }
+    },
+    {
+      "trace_id": "4dc07b4665a24909015573cb72721a24",
+      "timings_ms": {
+        "restore_queue": 79.49057899999445,
+        "network_prepare": 61.11790899999647,
+        "validate_artifact": 190.39647099999968,
+        "begin_restore_journal": 10.464777999999342,
+        "runsc_restore": 201.7471389999983,
+        "runsc_state": 48.385320000001286,
+        "candidate_fence": 1.2614930000012237,
+        "candidate_journal": 51.47723800000392,
+        "candidate_resume": 49.99240100000435,
+        "readiness_exec": 27.153050000002565,
+        "commit_running_journal": 7.928442000000757,
+        "artifact_cleanup": 102.18915800000161,
+        "warden_total": 691.3244730000017
+      }
+    },
+    {
+      "trace_id": "6f9c2ab5139ebde40efbd5a79e8aeaed",
+      "timings_ms": {
+        "restore_queue": 5.434821999998007,
+        "network_prepare": 33.16216399999661,
+        "validate_artifact": 177.1391950000023,
+        "begin_restore_journal": 6.5089630000017,
+        "runsc_restore": 220.9813010000019,
+        "runsc_state": 34.08261500000265,
+        "candidate_fence": 36.0973380000047,
+        "candidate_journal": 18.990977000001408,
+        "candidate_resume": 56.04802500000261,
+        "readiness_exec": 22.621052000005193,
+        "commit_running_journal": 29.16834300000204,
+        "artifact_cleanup": 62.7639579999979,
+        "warden_total": 664.5611579999979
+      }
+    },
+    {
+      "trace_id": "5aa351fb2c4218cc012bcafc4178735b",
+      "timings_ms": {
+        "restore_queue": 3.9994790000008607,
+        "network_prepare": 22.334021999995457,
+        "validate_artifact": 66.80269699999997,
+        "begin_restore_journal": 2.1493639999974334,
+        "runsc_restore": 182.03178399999587,
+        "runsc_state": 15.594122999999627,
+        "candidate_fence": 0.9647869999938052,
+        "candidate_journal": 2.650565999999799,
+        "candidate_resume": 24.639239999999063,
+        "readiness_exec": 28.137477000001354,
+        "commit_running_journal": 9.444967999996834,
+        "artifact_cleanup": 21.666099999997357,
+        "warden_total": 354.2477960000028
+      }
+    }
+  ]
+}

@@ -1,0 +1,730 @@
+[
+  {
+    "trace_id": "9b489e967eacaecd1418f5ff38c8f1fc",
+    "spans": [
+      {
+        "name": "storage.server.EnsureMounted",
+        "seconds": 0.115861266,
+        "attributes": {
+          "sandbox.id": "relay-load-2019cd889668-0014",
+          "storage.admission.class": "lifecycle",
+          "ucloud.span.thread_cpu.duration": 0.0071061810000000005
+        }
+      },
+      {
+        "name": "storage.server.GetVolume",
+        "seconds": 0.000437576,
+        "attributes": {
+          "storage.admission.class": "metadata"
+        }
+      },
+      {
+        "name": "gateway.wake.await_admission",
+        "seconds": 0.007505998,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.00016524700000000725
+        }
+      },
+      {
+        "name": "gateway.node_response_headers",
+        "seconds": 1.271147259,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.000259038000000017
+        }
+      },
+      {
+        "name": "gateway.node_response_body",
+        "seconds": 0.000109085,
+        "attributes": {}
+      },
+      {
+        "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+        "seconds": 1.301372884,
+        "attributes": {
+          "sandbox.id": "relay-load-2019cd889668-0014",
+          "ucloud.span.thread_cpu.duration": 0.007370851999999983
+        }
+      },
+      {
+        "name": "sandbox.wake.growth_admission",
+        "seconds": 0.046309807,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.01325197699999997
+        }
+      },
+      {
+        "name": "sandbox.wake.lifecycle_wait",
+        "seconds": 0.000176775,
+        "attributes": {}
+      },
+      {
+        "name": "sandbox.wake.ensure_network",
+        "seconds": 0.025904878,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.006273141
+        }
+      },
+      {
+        "name": "storage.client.EnsureMounted",
+        "seconds": 0.118523719,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.0005791480000000293
+        }
+      },
+      {
+        "name": "storage.client.GetVolume",
+        "seconds": 0.00214713,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.000438777999999973
+        }
+      },
+      {
+        "name": "sandbox.restore.artifact_unlink",
+        "seconds": 0.246890665,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.014871393999999982
+        }
+      },
+      {
+        "name": "sandbox.wake",
+        "seconds": 1.18357522,
+        "attributes": {
+          "sandbox.id": "relay-load-2019cd889668-0014",
+          "ucloud.span.thread_cpu.duration": 0.061777075999999986
+        }
+      },
+      {
+        "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+        "seconds": 1.268222835,
+        "attributes": {
+          "sandbox.id": "relay-load-2019cd889668-0014",
+          "ucloud.span.thread_cpu.duration": 0.09380966300000004
+        }
+      }
+    ]
+  },
+  {
+    "trace_id": "8b0e4b2427d56f0f077bffa0682c0d5c",
+    "spans": [
+      {
+        "name": "storage.server.EnsureMounted",
+        "seconds": 0.098782186,
+        "attributes": {
+          "sandbox.id": "relay-load-2019cd889668-0012",
+          "storage.admission.class": "lifecycle",
+          "ucloud.span.thread_cpu.duration": 0.006540344
+        }
+      },
+      {
+        "name": "storage.server.GetVolume",
+        "seconds": 0.000619269,
+        "attributes": {
+          "storage.admission.class": "metadata"
+        }
+      },
+      {
+        "name": "gateway.wake.await_admission",
+        "seconds": 0.008593105,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 4.045999999999217e-05
+        }
+      },
+      {
+        "name": "gateway.node_response_headers",
+        "seconds": 0.62020367,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.00023862699999999126
+        }
+      },
+      {
+        "name": "gateway.node_response_body",
+        "seconds": 7.1799e-05,
+        "attributes": {}
+      },
+      {
+        "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+        "seconds": 0.649174054,
+        "attributes": {
+          "sandbox.id": "relay-load-2019cd889668-0012",
+          "ucloud.span.thread_cpu.duration": 0.006867239999999997
+        }
+      },
+      {
+        "name": "sandbox.wake.growth_admission",
+        "seconds": 0.006737907,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.005262084
+        }
+      },
+      {
+        "name": "sandbox.wake.lifecycle_wait",
+        "seconds": 6.8502e-05,
+        "attributes": {}
+      },
+      {
+        "name": "sandbox.wake.ensure_network",
+        "seconds": 0.022474743,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.0040000700000000005
+        }
+      },
+      {
+        "name": "storage.client.EnsureMounted",
+        "seconds": 0.100495157,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.00035225899999999366
+        }
+      },
+      {
+        "name": "storage.client.GetVolume",
+        "seconds": 0.002141833,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.0002104259999999858
+        }
+      },
+      {
+        "name": "sandbox.restore.artifact_unlink",
+        "seconds": 0.061463167,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.011592829999999998
+        }
+      },
+      {
+        "name": "sandbox.wake",
+        "seconds": 0.601704891,
+        "attributes": {
+          "sandbox.id": "relay-load-2019cd889668-0012",
+          "ucloud.span.thread_cpu.duration": 0.03837110000000002
+        }
+      },
+      {
+        "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+        "seconds": 0.616265042,
+        "attributes": {
+          "sandbox.id": "relay-load-2019cd889668-0012",
+          "ucloud.span.thread_cpu.duration": 0.051591101
+        }
+      }
+    ]
+  },
+  {
+    "trace_id": "5eb6ef425ea1220a134bf2adb4216953",
+    "spans": [
+      {
+        "name": "storage.server.EnsureMounted",
+        "seconds": 0.071773653,
+        "attributes": {
+          "sandbox.id": "relay-load-2019cd889668-0014",
+          "storage.admission.class": "lifecycle",
+          "ucloud.span.thread_cpu.duration": 0.00775603
+        }
+      },
+      {
+        "name": "storage.server.GetVolume",
+        "seconds": 0.000614792,
+        "attributes": {
+          "storage.admission.class": "metadata"
+        }
+      },
+      {
+        "name": "gateway.wake.await_admission",
+        "seconds": 0.006315104,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 8.94540000000001e-05
+        }
+      },
+      {
+        "name": "gateway.node_response_headers",
+        "seconds": 1.451512462,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.00023047599999999856
+        }
+      },
+      {
+        "name": "gateway.node_response_body",
+        "seconds": 6.4497e-05,
+        "attributes": {}
+      },
+      {
+        "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+        "seconds": 1.474981458,
+        "attributes": {
+          "sandbox.id": "relay-load-2019cd889668-0014",
+          "ucloud.span.thread_cpu.duration": 0.006923611999999999
+        }
+      },
+      {
+        "name": "sandbox.wake.growth_admission",
+        "seconds": 0.105059334,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.011273075
+        }
+      },
+      {
+        "name": "sandbox.wake.lifecycle_wait",
+        "seconds": 0.00012644,
+        "attributes": {}
+      },
+      {
+        "name": "sandbox.wake.ensure_network",
+        "seconds": 0.048393041,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.008757797
+        }
+      },
+      {
+        "name": "storage.client.EnsureMounted",
+        "seconds": 0.073926804,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.000494383000000001
+        }
+      },
+      {
+        "name": "storage.client.GetVolume",
+        "seconds": 0.005498067,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.0007239059999999964
+        }
+      },
+      {
+        "name": "sandbox.restore.artifact_unlink",
+        "seconds": 0.289535835,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.01031443700000001
+        }
+      },
+      {
+        "name": "sandbox.wake",
+        "seconds": 1.185527488,
+        "attributes": {
+          "sandbox.id": "relay-load-2019cd889668-0014",
+          "ucloud.span.thread_cpu.duration": 0.054424921000000015
+        }
+      },
+      {
+        "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+        "seconds": 1.449147599,
+        "attributes": {
+          "sandbox.id": "relay-load-2019cd889668-0014",
+          "ucloud.span.thread_cpu.duration": 0.09436297699999999
+        }
+      }
+    ]
+  },
+  {
+    "trace_id": "253990084c5bf7ba11feaec88df39e60",
+    "spans": [
+      {
+        "name": "storage.server.EnsureMounted",
+        "seconds": 0.046609455,
+        "attributes": {
+          "sandbox.id": "relay-load-2019cd889668-0011",
+          "storage.admission.class": "lifecycle",
+          "ucloud.span.thread_cpu.duration": 0.006240528
+        }
+      },
+      {
+        "name": "storage.server.GetVolume",
+        "seconds": 0.000451838,
+        "attributes": {
+          "storage.admission.class": "metadata"
+        }
+      },
+      {
+        "name": "gateway.wake.await_admission",
+        "seconds": 0.00582776,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 4.7751999999999864e-05
+        }
+      },
+      {
+        "name": "gateway.node_response_headers",
+        "seconds": 1.475220527,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.00021467200000000082
+        }
+      },
+      {
+        "name": "gateway.node_response_body",
+        "seconds": 7.1879e-05,
+        "attributes": {}
+      },
+      {
+        "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+        "seconds": 1.500286198,
+        "attributes": {
+          "sandbox.id": "relay-load-2019cd889668-0011",
+          "ucloud.span.thread_cpu.duration": 0.005200967999999999
+        }
+      },
+      {
+        "name": "sandbox.wake.growth_admission",
+        "seconds": 0.114866123,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.010834861000000001
+        }
+      },
+      {
+        "name": "sandbox.wake.lifecycle_wait",
+        "seconds": 9.8217e-05,
+        "attributes": {}
+      },
+      {
+        "name": "sandbox.wake.ensure_network",
+        "seconds": 0.040363667,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.008908831
+        }
+      },
+      {
+        "name": "storage.client.EnsureMounted",
+        "seconds": 0.049080432,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.0005213750000000184
+        }
+      },
+      {
+        "name": "storage.client.GetVolume",
+        "seconds": 0.007025739,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.0008804010000000029
+        }
+      },
+      {
+        "name": "sandbox.restore.artifact_unlink",
+        "seconds": 0.278527111,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.0070473200000000236
+        }
+      },
+      {
+        "name": "sandbox.wake",
+        "seconds": 1.141520265,
+        "attributes": {
+          "sandbox.id": "relay-load-2019cd889668-0011",
+          "ucloud.span.thread_cpu.duration": 0.058248841999999995
+        }
+      },
+      {
+        "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+        "seconds": 1.473305626,
+        "attributes": {
+          "sandbox.id": "relay-load-2019cd889668-0011",
+          "ucloud.span.thread_cpu.duration": 0.10069931800000001
+        }
+      }
+    ]
+  },
+  {
+    "trace_id": "4dc07b4665a24909015573cb72721a24",
+    "spans": [
+      {
+        "name": "gateway.node_response_headers",
+        "seconds": 0.90359687,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.00016751099999998131
+        }
+      },
+      {
+        "name": "gateway.node_response_body",
+        "seconds": 6.3386e-05,
+        "attributes": {}
+      },
+      {
+        "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+        "seconds": 0.929047342,
+        "attributes": {
+          "sandbox.id": "relay-load-2019cd889668-0010",
+          "ucloud.span.thread_cpu.duration": 0.005175732000000016
+        }
+      },
+      {
+        "name": "gateway.wake.await_admission",
+        "seconds": 0.008310479,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 5.978999999997625e-05
+        }
+      },
+      {
+        "name": "storage.server.EnsureMounted",
+        "seconds": 0.054174784,
+        "attributes": {
+          "sandbox.id": "relay-load-2019cd889668-0010",
+          "storage.admission.class": "lifecycle",
+          "ucloud.span.thread_cpu.duration": 0.00865152
+        }
+      },
+      {
+        "name": "storage.server.GetVolume",
+        "seconds": 0.000464516,
+        "attributes": {
+          "storage.admission.class": "metadata"
+        }
+      },
+      {
+        "name": "sandbox.wake.growth_admission",
+        "seconds": 0.051117398,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.009035155999999989
+        }
+      },
+      {
+        "name": "sandbox.wake.lifecycle_wait",
+        "seconds": 0.000130145,
+        "attributes": {}
+      },
+      {
+        "name": "sandbox.wake.ensure_network",
+        "seconds": 0.060970027,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.010858835
+        }
+      },
+      {
+        "name": "storage.client.EnsureMounted",
+        "seconds": 0.05818508,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.0006403710000000007
+        }
+      },
+      {
+        "name": "storage.client.GetVolume",
+        "seconds": 0.003679469,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.0005636639999999915
+        }
+      },
+      {
+        "name": "sandbox.restore.artifact_unlink",
+        "seconds": 0.102005913,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.009085450999999967
+        }
+      },
+      {
+        "name": "sandbox.wake",
+        "seconds": 0.700756181,
+        "attributes": {
+          "sandbox.id": "relay-load-2019cd889668-0010",
+          "ucloud.span.thread_cpu.duration": 0.05517667800000001
+        }
+      },
+      {
+        "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+        "seconds": 0.901735078,
+        "attributes": {
+          "sandbox.id": "relay-load-2019cd889668-0010",
+          "ucloud.span.thread_cpu.duration": 0.08509283399999998
+        }
+      }
+    ]
+  },
+  {
+    "trace_id": "6f9c2ab5139ebde40efbd5a79e8aeaed",
+    "spans": [
+      {
+        "name": "storage.server.EnsureMounted",
+        "seconds": 0.036619059,
+        "attributes": {
+          "sandbox.id": "relay-load-2019cd889668-0004",
+          "storage.admission.class": "lifecycle",
+          "ucloud.span.thread_cpu.duration": 0.0060680560000000005
+        }
+      },
+      {
+        "name": "storage.server.GetVolume",
+        "seconds": 0.000467662,
+        "attributes": {
+          "storage.admission.class": "metadata"
+        }
+      },
+      {
+        "name": "gateway.wake.await_admission",
+        "seconds": 0.008119593,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.00025792699999999114
+        }
+      },
+      {
+        "name": "gateway.node_response_headers",
+        "seconds": 0.735419919,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.0002246870000000012
+        }
+      },
+      {
+        "name": "gateway.node_response_body",
+        "seconds": 6.0963e-05,
+        "attributes": {}
+      },
+      {
+        "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+        "seconds": 0.763805871,
+        "attributes": {
+          "sandbox.id": "relay-load-2019cd889668-0004",
+          "ucloud.span.thread_cpu.duration": 0.007449224000000004
+        }
+      },
+      {
+        "name": "sandbox.wake.growth_admission",
+        "seconds": 0.005389834,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.004024016
+        }
+      },
+      {
+        "name": "sandbox.wake.lifecycle_wait",
+        "seconds": 7.996e-05,
+        "attributes": {}
+      },
+      {
+        "name": "sandbox.wake.ensure_network",
+        "seconds": 0.03295267,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.006135967
+        }
+      },
+      {
+        "name": "storage.client.EnsureMounted",
+        "seconds": 0.03872617,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.0005398299999999981
+        }
+      },
+      {
+        "name": "storage.client.GetVolume",
+        "seconds": 0.003117005,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.0005035869999999998
+        }
+      },
+      {
+        "name": "sandbox.restore.artifact_unlink",
+        "seconds": 0.06257174,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.008377678
+        }
+      },
+      {
+        "name": "sandbox.wake",
+        "seconds": 0.674670031,
+        "attributes": {
+          "sandbox.id": "relay-load-2019cd889668-0004",
+          "ucloud.span.thread_cpu.duration": 0.059253876000000004
+        }
+      },
+      {
+        "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+        "seconds": 0.733976915,
+        "attributes": {
+          "sandbox.id": "relay-load-2019cd889668-0004",
+          "ucloud.span.thread_cpu.duration": 0.07816084599999999
+        }
+      }
+    ]
+  },
+  {
+    "trace_id": "5aa351fb2c4218cc012bcafc4178735b",
+    "spans": [
+      {
+        "name": "storage.server.EnsureMounted",
+        "seconds": 0.034010047,
+        "attributes": {
+          "sandbox.id": "relay-load-2019cd889668-0015",
+          "storage.admission.class": "lifecycle",
+          "ucloud.span.thread_cpu.duration": 0.006360411
+        }
+      },
+      {
+        "name": "storage.server.GetVolume",
+        "seconds": 0.000517656,
+        "attributes": {
+          "storage.admission.class": "metadata"
+        }
+      },
+      {
+        "name": "gateway.wake.await_admission",
+        "seconds": 0.006158668,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 7.05250000000001e-05
+        }
+      },
+      {
+        "name": "gateway.node_response_headers",
+        "seconds": 0.407363727,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.000211036999999999
+        }
+      },
+      {
+        "name": "gateway.node_response_body",
+        "seconds": 7.2008e-05,
+        "attributes": {}
+      },
+      {
+        "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+        "seconds": 0.432458881,
+        "attributes": {
+          "sandbox.id": "relay-load-2019cd889668-0015",
+          "ucloud.span.thread_cpu.duration": 0.007117286
+        }
+      },
+      {
+        "name": "sandbox.wake.growth_admission",
+        "seconds": 0.0070665,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.005436076000000012
+        }
+      },
+      {
+        "name": "sandbox.wake.lifecycle_wait",
+        "seconds": 0.000100991,
+        "attributes": {}
+      },
+      {
+        "name": "sandbox.wake.ensure_network",
+        "seconds": 0.022096686,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.0039303770000000005
+        }
+      },
+      {
+        "name": "storage.client.EnsureMounted",
+        "seconds": 0.036040322,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.00036025100000000587
+        }
+      },
+      {
+        "name": "storage.client.GetVolume",
+        "seconds": 0.00192674,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.00022851299999998576
+        }
+      },
+      {
+        "name": "sandbox.restore.artifact_unlink",
+        "seconds": 0.021424698,
+        "attributes": {
+          "ucloud.span.thread_cpu.duration": 0.008482586000000014
+        }
+      },
+      {
+        "name": "sandbox.wake",
+        "seconds": 0.364695779,
+        "attributes": {
+          "sandbox.id": "relay-load-2019cd889668-0015",
+          "ucloud.span.thread_cpu.duration": 0.037356030999999984
+        }
+      },
+      {
+        "name": "POST /v1/sandboxes/{sandbox_id}/wake",
+        "seconds": 0.405946947,
+        "attributes": {
+          "sandbox.id": "relay-load-2019cd889668-0015",
+          "ucloud.span.thread_cpu.duration": 0.056955729999999996
+        }
+      }
+    ]
+  }
+]

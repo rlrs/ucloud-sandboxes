@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, nullcontext
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
 from dataclasses import dataclass
@@ -1651,11 +1651,11 @@ class DirectSandboxService:
                     # its old park must be revoked in the same durable order.
                     self.provisioner.registry.relay_wake_fence(*key, request_id, record=True)
                 return
-        # Existing queues and exact owner tokens remain the only admission
-        # mechanism. Pending intent cannot allocate; active is durable before
-        # this method returns and remains counted after the short permit ends.
+        # Growth reserves bytes, not restore I/O. A resident continuation must
+        # not queue behind disk restores; actual restores acquire their permit
+        # in _restore_admission. Activation remains durable before returning.
         with self._transition_demand(key, current_cost()):
-            slot = self.startup_admission(owner=key) if startup else self._restore_slot(owner=key, deadline=deadline)
+            slot = self.startup_admission(owner=key) if startup else nullcontext()
             with slot:
                 with self._active_admission_guard(
                     ResourceQuantity(memory_mb=registration.spec.memory_mb), check_shape=True,

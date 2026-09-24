@@ -255,6 +255,7 @@ class MemoryBackingStore:
         self.hard_capacity_bytes = hard_capacity_bytes
         self.quota = quota or XfsMemoryQuota()
         self._lock = RLock()
+        self._active_modes_lock = RLock()
         self._active_modes: dict[tuple[str, int], str] = {}
         self.lease_root = journal.parent / (journal.name + ".leases")
         self.lease_root.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -304,7 +305,12 @@ class MemoryBackingStore:
     def _remember_mode(self, sandbox_id: str, generation: int, mode: str) -> None:
         if mode not in {"ram", "file"} or (mode == "ram" and self.active_root is None):
             raise MemoryBackingError("memory allocation has an unsupported active backing mode")
-        self._active_modes[(sandbox_id, generation)] = mode
+        with self._active_modes_lock:
+            self._active_modes[(sandbox_id, generation)] = mode
+
+    def _forget_mode(self, sandbox_id: str, generation: int) -> None:
+        with self._active_modes_lock:
+            self._active_modes.pop((sandbox_id, generation), None)
 
     def active_mode(self, sandbox_id: str, generation: int) -> str | None:
         """Cached placement evidence, never permission to change a live runtime.
@@ -313,7 +319,9 @@ class MemoryBackingStore:
         overlapping reader can only retain the more conservative RAM forecast;
         create/restore revalidate durable ownership before launching a runtime.
         """
-        with self._lock:
+        # Admission reads this while holding its node-wide capacity guard.
+        # Never make that guard wait for allocator filesystem or journal I/O.
+        with self._active_modes_lock:
             return self._active_modes.get((sandbox_id, generation))
 
     def configure_reflink_restore(self, enabled: bool) -> None:
@@ -750,7 +758,7 @@ class MemoryBackingStore:
                 ):
                     raise MemoryBackingError("memory deletion identity conflicts")
                 if row[5] == "deleted":
-                    self._active_modes.pop((sandbox_id, sandbox_generation), None)
+                    self._forget_mode(sandbox_id, sandbox_generation)
                     return
                 lease = MemoryBackingLease(
                     reference,
@@ -800,7 +808,7 @@ class MemoryBackingStore:
                         (reference.allocation_id,),
                     )
                     conn.commit()
-                    self._active_modes.pop((sandbox_id, sandbox_generation), None)
+                    self._forget_mode(sandbox_id, sandbox_generation)
 
     @contextmanager
     def _mutation_lock(self, reference: MemoryBackingRef):

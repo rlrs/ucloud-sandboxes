@@ -1,6 +1,6 @@
 """Assembled managed admission keeps future heap growth visible until a safe wait."""
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import closing
+from contextlib import ExitStack, closing
 from dataclasses import replace
 from pathlib import Path
 import sqlite3
@@ -55,6 +55,53 @@ class ManagedGrowthTests(unittest.TestCase):
         while not service._transitions.foreground_waiting and time.monotonic() < deadline:
             time.sleep(.005)
         self.assertTrue(service._transitions.foreground_waiting)
+
+    def test_resident_continuation_does_not_require_a_restore_slot(self):
+        self.service.start_managed_process('one', self.spec)
+        self.service.observe_managed_wait('one', 7, 'request-one')
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            with ExitStack() as held:
+                for index in range(self.service._restore_slots.capacity):
+                    held.enter_context(self.service._restore_slot(owner=(f'restore-{index}', 1)))
+                wake = pool.submit(self.service.admit_managed_continuation,
+                                   'one', 7, 'request-one')
+                wake.result(1)
+                self.assertEqual(self.service._restore_slots.waiting, 0)
+                self.assertTrue(self.registry.relay_wake_fence('one', 7, 'request-one'))
+                self.assertEqual(self.service.get('one').state, 'running')
+
+    def test_memory_blocked_continuation_does_not_occupy_restore_slot(self):
+        self.service.start_managed_process('one', self.spec)
+        self.service.observe_managed_wait('one', 7, 'request-one')
+        self.service.start_managed_process('two', self.spec)
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            wake = pool.submit(self.service.admit_managed_continuation,
+                               'one', 7, 'request-one')
+            try:
+                self.wait_for_demand()
+                self.assertFalse(wake.done())
+                self.assertFalse(self.registry.relay_wake_fence('one', 7, 'request-one'))
+                # Every I/O permit remains usable while growth waits for RAM.
+                with ExitStack() as held:
+                    for index in range(self.service._restore_slots.capacity):
+                        held.enter_context(self.service._restore_slot(
+                            owner=(f'restore-{index}', 1), deadline=time.monotonic() + .5))
+            finally:
+                self.service.observe_managed_wait('two', 7, 'request-two')
+            wake.result(2)
+            self.assertTrue(self.registry.relay_wake_fence('one', 7, 'request-one'))
+
+    def test_duplicate_continuations_share_one_growth_reservation(self):
+        self.service.start_managed_process('one', self.spec)
+        self.service.observe_managed_wait('one', 7, 'request-one')
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            wakes = [pool.submit(self.service.admit_managed_continuation,
+                                 'one', 7, 'request-one') for _ in range(8)]
+            for wake in wakes:
+                wake.result(2)
+        self.assertEqual(self.service.warm_park_demand().physical_bytes, 4 << 30)
+        self.assertFalse(self.service._transitions.foreground_waiting)
+        self.assertTrue(self.registry.relay_wake_fence('one', 7, 'request-one'))
 
     def test_managed_burst_waits_after_runtime_create_until_first_safe_wait(self):
         self.service.start_managed_process('one', self.spec)

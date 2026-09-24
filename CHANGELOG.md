@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.114rc24
+
+Resident continuations no longer occupy restore I/O permits. Cached backing placement reads no longer wait for allocator I/O. Exec output applies bounded cursor-acknowledged backpressure instead of evicting unread events; stalled consumers fail explicitly and completion waits for buffered output. Pair large-stdin exec workloads with SDK 0.4.27.
+
 ## 0.5.86 - 2026-09-22
 
 - Let scheduling scans bypass the public fleet-poll queue, avoiding placement

@@ -1,0 +1,9 @@
+{
+  "runtime_state": "running",
+  "available_memory_mib": 6144,
+  "growth_needed_bytes": 4294967296,
+  "restore_slots": 8,
+  "queued_behind_restore_slots": 1,
+  "resident_wake_blocked_despite_fitting_memory": true,
+  "completed_when_restore_slots_released": true
+}

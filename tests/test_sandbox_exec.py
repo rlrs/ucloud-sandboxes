@@ -39,6 +39,10 @@ class SandboxExecProtocolTests(unittest.TestCase):
         self.assertGreaterEqual(first["capacity_ms"], 30)
         self.assertLess(first["capacity_cpu_ms"], first["capacity_ms"])
         manager.initial_events(session.id, wait_seconds=2)
+        # The initial snapshot waits at most 50 ms, not until child completion.
+        with session.condition:
+            self.assertTrue(session.condition.wait_for(
+                lambda: session.final_sequence is not None, timeout=2))
         self.assertEqual(session.start_timings, first)
         self.assertNotIn("start_timings", session.to_dict())
         self.assertEqual(owner.capacity_released, ["capacity:timed"])
@@ -677,7 +681,7 @@ def _install_session(
         updated_at=now,
         condition=Condition(manager._lock),  # noqa: SLF001
         stdin_open=True,
-        events=deque(maxlen=32),
+        events=deque(),
         process=SimpleNamespace(stdin=pipe),
     )
     with manager._lock:  # noqa: SLF001

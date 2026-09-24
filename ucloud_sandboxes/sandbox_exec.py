@@ -144,6 +144,10 @@ class ExecSession:
     stdin_open: bool = False
     events: deque[ExecEvent] = field(default_factory=deque)
     next_sequence: int = 1
+    acknowledged_sequence: int = 0
+    output_waiters: int = 0
+    output_aborted: bool = False
+    output_progress_at: float = field(default_factory=time.monotonic)
     output_closed: bool = False
     final_sequence: int | None = None
     process: subprocess.Popen[str] | None = field(
@@ -181,12 +185,14 @@ class ExecSessionManager:
         max_sessions: int = 1024,
         max_events_per_session: int = 512,
         completed_retention_seconds: float = 30.0,
+        output_idle_timeout_seconds: float = 300.0,
         telemetry: Telemetry | None = None,
     ) -> None:
         self.sandbox_manager = sandbox_manager
         self.max_sessions = max(1, max_sessions)
         self.max_events_per_session = max(1, max_events_per_session)
         self.completed_retention_seconds = max(0.0, completed_retention_seconds)
+        self.output_idle_timeout_seconds = max(0.01, output_idle_timeout_seconds)
         self.telemetry = telemetry or Telemetry.disabled("exec-session-manager")
         self._sessions: dict[str, ExecSession] = {}
         self._lock = RLock()
@@ -231,7 +237,7 @@ class ExecSessionManager:
             updated_at=now,
             condition=Condition(self._lock),
             stdin_open=spec.stdin,
-            events=deque(maxlen=self.max_events_per_session),
+            events=deque(),
             activity_lease=True,
             capacity_lease=capacity_lease,
             start_timings=timings,
@@ -272,6 +278,13 @@ class ExecSessionManager:
         with self._lock:
             session = self._require_session_locked(session_id)
         with session.condition:
+            # Advancing the cursor acknowledges the previous response. Merely
+            # returning a response is not an ACK: it may be lost in transit.
+            acknowledged = min(max(0, after), session.next_sequence - 1)
+            if acknowledged > session.acknowledged_sequence:
+                session.acknowledged_sequence = acknowledged
+                session.output_progress_at = time.monotonic()
+                session.condition.notify_all()
             while True:
                 events = [event for event in session.events if event.sequence > after]
                 if (
@@ -492,8 +505,44 @@ class ExecSessionManager:
             session = self._sessions.get(session_id)
             if session is None:
                 return False
-            self._append_event_locked(session, stream, chunk)
-            return True
+            started_wait = time.monotonic()
+            while len(session.events) >= self.max_events_per_session:
+                if self._sessions.get(session_id) is not session:
+                    return False
+                if session.events[0].sequence <= session.acknowledged_sequence:
+                    session.events.popleft()
+                    continue
+                if session.output_aborted:
+                    return False
+                remaining = self.output_idle_timeout_seconds - (
+                    time.monotonic() - max(started_wait, session.output_progress_at)
+                )
+                if remaining <= 0:
+                    # An abandoned reader must not pin a process/lease forever.
+                    # Keep already-buffered output and report failure explicitly.
+                    session.output_aborted = True
+                    self._append_event_locked(session, "error",
+                        "exec output consumer stopped advancing; output backpressure timed out")
+                    process = session.process
+                    session.condition.notify_all()
+                    break
+                session.output_waiters += 1
+                try:
+                    session.condition.wait(timeout=remaining)
+                finally:
+                    session.output_waiters -= 1
+            else:
+                if session.output_aborted or self._sessions.get(session_id) is not session:
+                    return False
+                self._append_event_locked(session, stream, chunk)
+                return True
+        # Process operations must never hold the manager-wide event lock.
+        if process is not None:
+            try:
+                process.kill()
+            except OSError:
+                pass
+        return False
 
     def _wait_process(
         self,
@@ -528,8 +577,25 @@ class ExecSessionManager:
         pump_threads: tuple[Thread, Thread],
     ) -> int:
         exit_code = process.wait()
-        for thread in pump_threads:
-            thread.join(timeout=2.0)
+        # A full output buffer is not EOF. Keep completion fenced while the
+        # reader drains it, even if the child has already exited. Preserve the
+        # existing idle-pipe grace for descendants that retain an output fd.
+        quiet_since = time.monotonic()
+        observed_sequence = None
+        while pump_threads:
+            for thread in pump_threads:
+                thread.join(timeout=0.05)
+            if all(not thread.is_alive() for thread in pump_threads):
+                break
+            with self._lock:
+                session = self._sessions.get(session_id)
+                if session is None:
+                    break
+                if (session.output_waiters or session.next_sequence != observed_sequence):
+                    quiet_since = time.monotonic()
+                    observed_sequence = session.next_sequence
+            if time.monotonic() - quiet_since >= 2.0:
+                break
         with self._lock:
             session = self._sessions.get(session_id)
         if session is None:
@@ -544,6 +610,8 @@ class ExecSessionManager:
                 # A timed join may leave a descendant holding an output pipe.
                 # Only advertise a final event watermark if both pumps ended.
                 session.output_closed = all(not thread.is_alive() for thread in pump_threads)
+            if session.output_aborted:
+                exit_code = 1
             self._complete(session, exit_code)
         return exit_code
 
@@ -617,6 +685,7 @@ class ExecSessionManager:
         )
         for session in terminal:
             self._sessions.pop(session.id, None)
+            session.condition.notify_all()
             if len(self._sessions) < self.max_sessions:
                 return
         # A just-finished command may still be waiting for its caller to read

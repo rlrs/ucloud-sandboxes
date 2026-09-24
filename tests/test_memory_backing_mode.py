@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 from contextlib import closing
 from dataclasses import replace
 from pathlib import Path
@@ -30,6 +32,49 @@ class MemoryBackingModeTests(unittest.TestCase):
             return MemoryBackingStore(self.root / 'disk', self.root / 'memory.sqlite',
                                       hard_capacity_bytes=8192, quota=self.quota,
                                       active_root=self.ram)
+
+    def test_cached_mode_read_does_not_wait_for_allocator_io(self):
+        self.store.prepare(self.ref, **self.owner)
+        entered, release = Event(), Event()
+        validate = self.quota.validate_project
+        def blocked_validate(*args, **kwargs):
+            entered.set()
+            if not release.wait(3):
+                raise TimeoutError('test failed to release allocator I/O')
+            return validate(*args, **kwargs)
+        with patch.object(self.quota, 'validate_project', side_effect=blocked_validate), \
+                ThreadPoolExecutor(max_workers=2) as pool:
+            allocation = pool.submit(self.store.require, self.ref, **self.owner)
+            try:
+                self.assertTrue(entered.wait(1))
+                read = pool.submit(self.store.active_mode, 'guest', 1)
+                self.assertEqual(read.result(1), 'ram')
+            finally:
+                release.set()
+            allocation.result(2)
+
+    def test_file_mode_is_published_only_after_commit(self):
+        self.store.prepare(self.ref, **self.owner)
+        entered, release = Event(), Event()
+        class SlowCommit(sqlite3.Connection):
+            def commit(self):
+                entered.set()
+                if not release.wait(3):
+                    raise TimeoutError('test failed to release commit')
+                return super().commit()
+        def connect():
+            return sqlite3.connect(self.store.journal, factory=SlowCommit)
+        with patch.object(self.store, '_connect', side_effect=connect), \
+                ThreadPoolExecutor(max_workers=2) as pool:
+            selection = pool.submit(self.store.prepare_file_restore, self.ref, **self.owner)
+            try:
+                self.assertTrue(entered.wait(1))
+                read = pool.submit(self.store.active_mode, 'guest', 1)
+                self.assertEqual(read.result(1), 'ram')
+            finally:
+                release.set()
+            self.assertEqual(selection.result(2).active_mode, 'file')
+        self.assertEqual(self.store.active_mode('guest', 1), 'file')
 
     def test_selection_survives_restart_without_reversing_reimport(self):
         lease = self.store.prepare(self.ref, **self.owner)

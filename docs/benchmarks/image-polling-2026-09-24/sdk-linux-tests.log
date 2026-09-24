@@ -1,0 +1,6 @@
+Executing <Task finished name='Task-2' coro=<AsyncImagePollRetries.test_async_deadline_and_retry_after() done, defined at /work/ucloud-sandboxes/release/0.5.114rc27/qualification/ucloud-sandboxes-sdk/tests/test_image_poll_retries.py:114> result=None created at /usr/lib/python3.14/asyncio/runners.py:109> took 0.322 seconds
+........
+----------------------------------------------------------------------
+Ran 8 tests in 0.338s
+
+OK

@@ -116,3 +116,20 @@ builds and lint pass. The full suite ran 144 tests with one error in the existin
 512-upstream keepalive test (local connection failures followed by a readiness
 timeout). That same error reproduced with the committed, unmodified client in
 an isolated baseline package. These changes have not been released or deployed.
+
+## Deployment
+
+Released 24 September at 11:48 UTC: runtime **0.5.114rc27** (`757fe04`)
+and SDK **0.4.28** (`85a65c6`), both pushed to main. SDK wheel and source
+artifacts are published at https://github.com/rlrs/ucloud-sandboxes-sdk/releases/tag/v0.4.28.
+The workload runner must upgrade its SDK to receive polling retries.
+
+All 116 gateway/image tests and eight SDK polling regressions also passed on
+Linux against the release wheels. The native and OS bundle closure is unchanged.
+Deployment rechecked zero routes and zero relay inflight/pending work before
+restart, retained PostgreSQL, sampling and capacity policy (max 10 workers), and
+verified all 142 installed package files. Gateway, relay, registry and autoscaler
+are active. Live health/node reads succeeded; an unknown build correctly returned
+404. New workers use rc27 bundles. No production load test was run, so latency
+improvement remains to be measured. Receipts are in
+`docs/benchmarks/image-polling-2026-09-24/`.

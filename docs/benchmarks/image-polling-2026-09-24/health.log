@@ -1,0 +1,7 @@
+{"path": "/healthz", "status": 200, "seconds": 0.0128}
+{"path": "/v1/nodes", "status": 200, "seconds": 0.0019}
+{"path": "/v1/images/builds/not-a-real-release-smoke-build", "status": 404, "seconds": 0.0018}
+gateway active
+relay active
+autoscaler active
+registry active

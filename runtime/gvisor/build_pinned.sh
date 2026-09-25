@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# The pinned patched-files digest hashes a sorted path list; collation must not
+# depend on the caller's locale (en_US.UTF-8 sorts differently from C).
+export LC_ALL=C
 
 readonly EXPECTED_COMMIT="50e1502a95d36ad2faf2c7ef33b8bf21fe975293"
 readonly EXPECTED_PATCH_SERIES_SHA256="ce8e0979e7604b369b922f5819624fec2bd88f7eae0b0bbdf0817d5c8968755b"

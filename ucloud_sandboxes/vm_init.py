@@ -1052,7 +1052,14 @@ install_bundled_runtime() {{
   for package_file in "${{local_packages[@]}}"; do
     package_name="$(dpkg-deb -f "$package_file" Package)"
     if [ "$(dpkg-query -W -f='${{db:Status-Abbrev}}' "$package_name" 2>/dev/null || true)" = "ii " ]; then
-      continue
+      # An older base image can carry a library that a newly bundled package
+      # needs at the bundled version (eject 2.2 -> libmount1 2.2). Supply
+      # newer bundled versions of installed packages; never downgrade.
+      installed_version="$(dpkg-query -W -f='${{Version}}' "$package_name")"
+      bundled_version="$(dpkg-deb -f "$package_file" Version)"
+      if ! dpkg --compare-versions "$bundled_version" gt "$installed_version"; then
+        continue
+      fi
     fi
     missing_local_packages+=("$package_file")
   done

@@ -269,6 +269,61 @@ class VmInitTests(unittest.TestCase):
             script.index("apt-get install --no-install-recommends"),
         )
 
+    def test_offline_install_upgrades_older_image_packages_but_never_downgrades(self) -> None:
+        """A newly bundled package may need a newer version of an image library."""
+        script = render_vm_init_script(self._options())
+        start = script.index('  for package_file in "${local_packages[@]}"; do')
+        end = script.index("  done", start) + len("  done")
+        loop = script[start:end]
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            stubs = {
+                # Bundled .deb files are "<name> <version>" text fixtures.
+                "dpkg-deb": 'read -r name version < "$2"; [ "$3" = Package ] && echo "$name" || echo "$version"',
+                "dpkg-query": (
+                    'name="${@: -1}"; installed="$(grep "^$name " "$INSTALLED" | cut -d" " -f2)"; '
+                    'case "$2" in *Status*) [ -n "$installed" ] && printf "ii " || exit 1;; '
+                    '*) echo "$installed";; esac'
+                ),
+                "dpkg": (
+                    '[ "$1" = --compare-versions ] && [ "$3" = gt ] || exit 2; '
+                    '[ "$2" != "$4" ] && [ "$(printf "%s\\n%s\\n" "$2" "$4" | sort -V | tail -n1)" = "$2" ]'
+                ),
+            }
+            for name, body in stubs.items():
+                path = bin_dir / name
+                path.write_text("#!/usr/bin/env bash\n" + body + "\n", encoding="utf-8")
+                path.chmod(0o755)
+            installed = root / "installed"
+            installed.write_text(
+                "libmount1 2.41.3-3ubuntu2\niproute2 6.14.0-1\nnftables 1.1.3-2\n",
+                encoding="utf-8",
+            )
+            bundled = {
+                "eject": "2.41.3-3ubuntu2.2",  # absent from the image
+                "libmount1": "2.41.3-3ubuntu2.2",  # image carries an older build
+                "iproute2": "6.14.0-1",  # identical: already satisfied
+                "nftables": "1.1.3-1",  # older than the image: never downgrade
+            }
+            for name, version in bundled.items():
+                (root / f"{name}.deb").write_text(f"{name} {version}\n", encoding="utf-8")
+            harness = (
+                "set -eu\n"
+                f"local_packages=({' '.join(str(root / f'{name}.deb') for name in bundled)})\n"
+                "missing_local_packages=()\n"
+                + loop.replace("${{", "${").replace("}}", "}")
+                + '\nfor item in "${missing_local_packages[@]}"; do basename "$item" .deb; done\n'
+            )
+            result = subprocess.run(
+                ["bash", "-c", harness],
+                env={**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "INSTALLED": str(installed)},
+                capture_output=True, text=True, check=False,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.split(), ["eject", "libmount1"])
+
     def test_explicit_state_dir_avoids_shared_work_mount(self) -> None:
         script = render_vm_init_script(
             self._options(

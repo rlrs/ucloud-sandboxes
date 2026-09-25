@@ -347,6 +347,11 @@ bootcmd:
       test -n "$fabric_gateway"
       test -n "$private_interface"
       ip -4 route replace default via "$fabric_gateway" dev "$private_interface"
+      # networkd drops routes it does not own when it restarts (for example
+      # when node init upgrades systemd). Persist the default route with it.
+      dropin="/etc/systemd/network/10-netplan-$private_interface.network.d"
+      mkdir -p "$dropin"
+      printf '[Route]\\nGateway=%s\\nGatewayOnLink=yes\\n' "$fabric_gateway" > "$dropin/50-ucloud-private-egress.conf"
       rm -f /etc/resolv.conf
       printf '%s\\n' {resolvers} > /etc/resolv.conf
       chmod 0644 /etc/resolv.conf

@@ -182,6 +182,24 @@ install -m 0644 -o ucloud -g ucloud \
   "$init_public_key" "$data_root/ssh/gateway-init.pub"
 
 python3 -m venv "$venv_dir"
+# pip requires a wheel filename that encodes its distribution and version.
+wheel_name="$(python3 - "$wheel" <<'PY'
+import sys
+import zipfile
+
+with zipfile.ZipFile(sys.argv[1]) as archive:
+    metadata = next(name for name in archive.namelist() if name.endswith(".dist-info/METADATA"))
+    fields = dict(
+        line.split(": ", 1)
+        for line in archive.read(metadata).decode().splitlines()
+        if ": " in line
+    )
+print(f"{fields['Name'].replace('-', '_')}-{fields['Version']}-py3-none-any.whl")
+PY
+)"
+wheel_dir="$(mktemp -d)"
+cp "$wheel" "$wheel_dir/$wheel_name"
+wheel="$wheel_dir/$wheel_name"
 relay_extra="$(python3 -c 'import json,sys; print("[postgres]" if json.load(open(sys.argv[1])).get("relay_postgres") else "")' "$deployment")"
 "$venv_dir/bin/pip" install --disable-pip-version-check --force-reinstall "$wheel$relay_extra"
 
@@ -194,8 +212,8 @@ for name in \
   relay-worker-token; do
   token_path="$data_root/$name"
   if [[ ! -s "$token_path" ]]; then
-    umask 077
-    openssl rand -hex 32 >"$token_path"
+    # Subshell: a leaked umask 077 made later webroots unreadable to nginx.
+    (umask 077 && openssl rand -hex 32 >"$token_path")
   fi
   chown ucloud:ucloud "$token_path"
   chmod 0600 "$token_path"
@@ -209,6 +227,7 @@ PY
 for unit in \
   ucloud-sandbox-autoscaler.service \
   ucloud-sandbox-gateway.service \
+  ucloud-sandbox-placement.service \
   ucloud-sandbox-registry-gc.service \
   ucloud-sandbox-registry-gc.timer \
   ucloud-sandbox-snapshot-gc.service \

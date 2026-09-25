@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager, nullcontext
 from contextvars import ContextVar
+from dataclasses import replace
 from functools import wraps
 from importlib.resources import files
 import json
@@ -236,16 +237,40 @@ class PostgresRoutingStore(RoutingStore):
     def _fence_route(self, conn, route):
         self._capacity_fence(conn, (route.node_id, route.job_id, route.node_url))
 
+    @staticmethod
+    def _same_capacity_projection(previous, route):
+        if previous is None:
+            return False
+        # Running receipts refresh one row's inventory proof. No aggregate
+        # admission or cold-detach predicate consumes that activity epoch.
+        # Parked proofs still fence because cold offload observes their epoch.
+        activity_epoch = (
+            route.activity_epoch
+            if previous.state == route.state == "running"
+            else previous.activity_epoch
+        )
+        return (
+            replace(
+                previous, updated_at=route.updated_at, activity_epoch=activity_epoch
+            )
+            == route
+        )
+
     def _write_sandbox(self, conn, route):
         previous = self._get_sandbox_unlocked(conn, route.sandbox_id)
         identities = [(route.node_id, route.job_id, route.node_url)]
         if previous is not None:
             identities.append((previous.node_id, previous.job_id, previous.node_url))
-        self._capacity_fence(conn, *identities)
+        if not self._same_capacity_projection(previous, route):
+            self._capacity_fence(conn, *identities)
         return super()._write_sandbox(conn, route)
 
     def _write_sandbox_lifecycle(self, conn, route):
-        self._fence_route(conn, route)
+        previous = self._get_sandbox_unlocked(conn, route.sandbox_id)
+        # Persist freshness without serializing an unchanged running owner with
+        # all other sandboxes. New domain fields remain fenced by default.
+        if not self._same_capacity_projection(previous, route):
+            self._fence_route(conn, route)
         return super()._write_sandbox_lifecycle(conn, route)
 
     def _write_sandbox_migration(self, conn, migration):
@@ -292,10 +317,23 @@ class PostgresRoutingStore(RoutingStore):
 
     def upsert_program_request_transition_with_change(self, route, **kwargs):
         with self._transaction() as conn:
-            self._fence_route(conn, route)
-            return super().upsert_program_request_transition_with_change(
+            previous = self.program_request_readonly(kwargs["request_id"].strip())
+            kwargs["_connection"] = conn
+            current, changed = super().upsert_program_request_transition_with_change(
                 route, **kwargs
             )
+            # Live admission reads only nonterminal program membership, in the
+            # cold-detach predicate. Wake shadow plans are observational. State
+            # progress, timestamps and retries within that membership cannot
+            # invalidate another sandbox's capacity decision on this worker.
+            was_active = previous is not None and previous.state != "terminal"
+            is_active = current.state != "terminal"
+            if was_active != is_active:
+                # A program receipt may name the source owner after migration;
+                # the generation check is canonical, so fence its current owner.
+                owner = self._get_sandbox_unlocked(conn, route.sandbox_id)
+                self._fence_route(conn, owner)
+            return current, changed
 
     @contextmanager
     def command_execution(self, command_id, claim_token, path, body):
@@ -473,7 +511,9 @@ class PostgresRoutingStore(RoutingStore):
         started = time.monotonic()
         try:
             conn.execute("SELECT pg_advisory_lock(hashtextextended(%s,0))", (key,))
-            span.set_attribute("routing.worker_wait_seconds", time.monotonic() - started)
+            span.set_attribute(
+                "routing.worker_wait_seconds", time.monotonic() - started
+            )
             yield
         finally:
             try:

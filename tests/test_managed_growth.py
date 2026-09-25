@@ -299,16 +299,17 @@ class ManagedGrowthTests(unittest.TestCase):
             self.service._resident_memory._samples[('one', 7)] = self.sample(
                 current=1 << 30, peak=3 << 29)
             demand = self.service.warm_park_demand()
-            # Physical: back to the 1.5 GiB peak. Unswappable RAM backing keeps
-            # the whole 4 GiB bound, where overshoot would be SIGBUS.
+            # Both projections expect a return to the 1.5 GiB peak, not the
+            # whole 4 GiB bound.
             self.assertEqual(demand.physical_bytes, 1 << 29)
-            self.assertEqual(demand.ram_backing_bytes, 3 << 30)
+            self.assertEqual(demand.ram_backing_bytes, 1 << 29)
             # A launch has no safe wait yet and keeps its whole bound.
             self.service.start_managed_process('two', self.spec)
             self.service._resident_memory._samples[('two', 7)] = self.sample(
                 current=1 << 30, peak=3 << 29)
             demand = self.service.warm_park_demand()
             self.assertEqual(demand.physical_bytes, (1 << 29) + (3 << 30))
+            self.assertEqual(demand.ram_backing_bytes, (1 << 29) + (3 << 30))
 
     def test_growth_credit_survives_a_slow_refresh_pass(self):
         self.service.start_managed_process('one', self.spec)

@@ -27,6 +27,17 @@ terminates. The worker records that same immutable launch identity.
   forecast. The running guest's actual allocation is already reflected in host
   memory and backing-space measurements. Advisory phase messages do not release
   the forecast.
+- A relay continuation's forecast is its return to the runtime's demonstrated
+  high-water mark (cgroup `memory.peak`, capped at the bound) minus its current
+  footprint, for both physical memory and RAM backing. The bound is a maximum, not
+  a reservation: charging every active continuation its whole bound held relay
+  responses for 20–30 s at ~180 sandboxes per node while most memory was free
+  (see [the density runs](benchmarks/density-rc38-2026-09-26/README.md)). Accepted
+  risk: a guest that grows past its previous peak while RAM backing is nearly full
+  can SIGBUS before pressure parking frees space. A launch keeps its whole bound
+  until its first safe wait, and a runtime without an observation is charged the
+  whole bound. Observations of the current runtime count for 30 s; park and restore
+  discard them.
 - A relay continuation reacquires its growth forecast before the worker acknowledges
   the wake. While it queues, its current model wait remains eligible for ordinary
   pressure parking. The grant and that request's durable wake fence commit together;

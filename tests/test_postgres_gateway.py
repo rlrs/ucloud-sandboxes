@@ -18,6 +18,7 @@ class PostgresGatewayContracts(ControlPlaneTests):
         )
 
         PostgresRoutingContracts.setUp(self)
+        self.gateway_stores = {}
         self.factory = lambda path: self.store(path)
         # The original HTTP fault-injection test patches this domain method on
         # its constructor. Forward that patch to the actual PostgreSQL instance.
@@ -32,23 +33,33 @@ class PostgresGatewayContracts(ControlPlaneTests):
             item.start()
 
     def store(self, path):
-        store = PostgresRoutingContracts.store(self, path)
-        store.allocate_sandbox_create_with_pending = lambda *args, **kwargs: (
-            self.factory.allocate_sandbox_create_with_pending(store, *args, **kwargs)
-        )
-        if not path.exists() and path.parent.exists():
-            dsn = path.with_suffix(".dsn")
-            dsn.write_text(DSN)
-            path.write_text(
-                json.dumps(
-                    {
-                        "format": "ucloud-postgres-routing-v1",
-                        "schema": store.schema,
-                        "dsn_file": str(dsn.resolve()),
-                    }
+        # Match production's process-local authority factory. HTTP contracts
+        # repeatedly resolve the same path, often concurrently; each lookup
+        # must reuse its pool rather than create another connection budget.
+        path = Path(path).resolve()
+        with self.guard:
+            store = self.gateway_stores.get(path)
+            if store is None:
+                store = PostgresRoutingContracts._store(self, path)
+                store.allocate_sandbox_create_with_pending = lambda *args, **kwargs: (
+                    self.factory.allocate_sandbox_create_with_pending(
+                        store, *args, **kwargs
+                    )
                 )
-            )
-        return store
+                self.gateway_stores[path] = store
+            if not path.exists() and path.parent.exists():
+                dsn = path.with_suffix(".dsn")
+                dsn.write_text(DSN)
+                path.write_text(
+                    json.dumps(
+                        {
+                            "format": "ucloud-postgres-routing-v1",
+                            "schema": store.schema,
+                            "dsn_file": str(dsn),
+                        }
+                    )
+                )
+            return store
 
     _store = PostgresRoutingContracts._store
 
@@ -76,6 +87,15 @@ class PostgresGatewayContracts(ControlPlaneTests):
                     spec_hash="a" * 64,
                 ).result(timeout=0.5)
                 self.assertIsNone(result)
+
+    def test_gateway_factory_reuses_pool_for_concurrent_path_lookups(self):
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory() as directory, ThreadPoolExecutor(12) as executor:
+            path = Path(directory) / "routes.sqlite"
+            stores = list(executor.map(self.store, [path] * 48))
+            self.assertTrue(all(store is stores[0] for store in stores))
+            self.assertEqual(len(self.stores), 1)
 
     def tearDown(self):
         for item in self.gateway_patches:

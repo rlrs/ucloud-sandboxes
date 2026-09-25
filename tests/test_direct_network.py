@@ -77,7 +77,7 @@ class DirectNetworkManagerTests(unittest.TestCase):
             manager.runner = Mock()
             checks = []
             with patch.object(manager, "_iptables_snapshot", return_value=set()), patch.object(
-                manager, "_ensure_iptables", side_effect=lambda check, _install, **_kwargs: checks.append(check)
+                manager, "_ensure_iptables", side_effect=lambda check, _install, **_kwargs: bool(checks.append(check))
             ):
                 manager._ensure_host_rules()
             all_rules = {manager._iptables_rule_key(check) for check in checks}

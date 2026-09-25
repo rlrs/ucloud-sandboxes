@@ -11,7 +11,11 @@ from ucloud_sandboxes.direct_network import DirectNetworkError, DirectNetworkMan
 from ucloud_sandboxes.direct_oci import DirectOciConfigBuilder, DirectOciConfigError
 from ucloud_sandboxes.direct_provisioner import DirectSandboxProvisioner
 from ucloud_sandboxes.network_policy import SandboxNetworkPolicy
-from ucloud_sandboxes.relay_network import NetworkRelay, relay_policy_rules
+from ucloud_sandboxes.relay_network import (
+    NetworkRelay,
+    relay_policy_rules,
+    relay_table_rules,
+)
 from ucloud_sandboxes.sandbox import (
     SandboxSpec,
     SandboxSshSpec,
@@ -181,7 +185,9 @@ class RelayNetworkLifecycleTests(unittest.TestCase):
         self.manager.refresh_tcp_egress()
         blocked = self.nft.call_args.args[0]
         self.assertNotIn("dnat ip to", blocked)
-        self.assertIn(f'iifname "{lease.host_interface}" drop', blocked)
+        self.assertNotIn("accept", blocked)
+        self.assertIn(f"add rule inet ucloud_relay s{lease.slot}_guard drop", blocked)
+        self.assertIn(f'relay_interfaces {{ "{lease.host_interface}" }}', blocked)
         self.addresses = ["10.36.0.4"]
         self.manager.refresh_tcp_egress()
         self.assertIn("dnat ip to 10.36.0.4:443", self.nft.call_args.args[0])
@@ -215,8 +221,11 @@ class RelayNetworkLifecycleTests(unittest.TestCase):
         self.assertIsNotNone(self.manager.lease("test", 1))
         self.manager.release("test", 1)
         self.assertIsNone(self.manager.lease("test", 1))
+        removal = self.nft.call_args.args[0]
+        self.assertIn(f"delete chain inet ucloud_relay s{lease.slot}_guard", removal)
         self.assertIn(
-            f"delete table inet ucloud_relay_{lease.slot}", self.nft.call_args.args[0]
+            f'delete element inet ucloud_relay relay_interfaces {{ "{lease.host_interface}" }}',
+            removal,
         )
         self.manager._ensure_kernel_lease.side_effect = None
         other = self.manager.ensure("other", 1)
@@ -244,7 +253,10 @@ class RelayNetworkLifecycleTests(unittest.TestCase):
         other = DirectNetworkManager(
             self.root / "state.json", nft_runner=self.nft, runner=Mock()
         )
-        with self.assertRaisesRegex(DirectNetworkError, "missing"):
+        with (
+            patch.object(other, "_command_ok", return_value=False),
+            self.assertRaisesRegex(DirectNetworkError, "missing"),
+        ):
             other.reconcile()
         self.assertNotIn("dnat ip to", self.nft.call_args.args[0])
         self.assertIsNotNone(other.lease("test", 1))
@@ -254,13 +266,86 @@ class RelayNetworkLifecycleTests(unittest.TestCase):
         rules = relay_policy_rules(
             lease, NetworkRelay.parse("default", "relay.example:443"), ["10.36.0.2"]
         )
-        self.assertIn("table inet", rules)
-        self.assertIn("hook prerouting priority -150", rules)
+        table = relay_table_rules()
+        self.assertIn("table inet ucloud_relay {", table)
+        self.assertIn("hook prerouting priority -150", table)
+        self.assertIn("iifname @relay_interfaces drop", table)
+        self.assertIn("hook input", table)
+        self.assertIn("oifname @relay_interfaces drop", table)
+        self.assertIn("hook output", table)
         self.assertIn(f"ip saddr {lease.guest_ip}", rules)
-        self.assertIn(f'iifname "{lease.host_interface}" drop', rules)
-        self.assertIn("hook input", rules)
-        self.assertIn("hook output", rules)
-        self.assertNotIn("udp", rules)
+        self.assertIn(f"add rule inet ucloud_relay s{lease.slot}_guard drop", rules)
+        self.assertIn(f"add rule inet ucloud_relay s{lease.slot}_egress drop", rules)
+        self.assertNotIn("udp", table + rules)
+
+    def test_relay_free_node_never_touches_nftables(self):
+        nft = Mock()
+        manager = DirectNetworkManager(
+            self.root / "plain.json", nft_runner=nft, runner=Mock()
+        )
+        with patch.object(manager, "_ensure_host_rules"):
+            manager.reconcile()
+            manager.refresh_tcp_egress()
+        nft.assert_not_called()
+
+    def test_packet_path_is_constant_in_the_number_of_sandboxes(self):
+        for index in range(3):
+            self.manager.ensure(f"test-{index}", 1, network_policy=RELAY)
+        self.nft.reset_mock()
+        self.manager._refresh_relay_policies(force=True)
+        rebuild = self.nft.call_args.args[0]
+        # Five hooked base chains in total; sandboxes add only regular chains
+        # reached through interface-keyed maps.
+        self.assertEqual(rebuild.count(" hook "), 5)
+        self.assertEqual(rebuild.count("add element inet ucloud_relay guard_by_iif"), 3)
+        self.assertNotIn(" hook ", relay_policy_rules(
+            self.manager.lease("test-0", 1),
+            self.manager.relays["default"],
+            self.addresses,
+        ))
+
+    def test_failed_delta_rebuilds_the_whole_table(self):
+        lease = self.create()
+        self.assertIn("table inet ucloud_relay {", self.nft.call_args.args[0])
+        failures = [DirectNetworkError("No such file or directory")]
+
+        def fail_once(_script):
+            if failures:
+                raise failures.pop()
+
+        self.nft.side_effect = fail_once
+        self.nft.reset_mock()
+        self.manager.ensure("second", 1, network_policy=RELAY)
+        delta, rebuild = (call.args[0] for call in self.nft.call_args_list)
+        self.assertNotIn("table inet ucloud_relay {", delta)
+        self.assertIn("table inet ucloud_relay {", rebuild)
+        self.assertIn(f"s{lease.slot}_guard", rebuild)
+        self.assertIn(f"s{self.manager.lease('second', 1).slot}_guard", rebuild)
+
+    def test_rebuild_retires_per_sandbox_tables_and_interface_accepts(self):
+        lease = self.create()
+        runner = self.manager.runner
+        runner.reset_mock()
+        legacy = ("FORWARD", "-i", lease.host_interface, "-j", "ACCEPT")
+        with (
+            patch.object(
+                self.manager, "_iptables_snapshot", return_value={("filter", "-A", *legacy)}
+            ),
+            patch.object(self.manager, "_command_ok", return_value=False),
+        ):
+            self.manager._refresh_relay_policies(force=True)
+        rebuild = self.nft.call_args.args[0]
+        self.assertIn(f"delete table inet ucloud_relay_{lease.slot}\n", rebuild)
+        # Legacy tables go in the same transaction as the shared table.
+        self.assertLess(rebuild.index("table inet ucloud_relay {"),
+                        rebuild.index(f"delete table inet ucloud_relay_{lease.slot}"))
+        commands = [call.args[0] for call in runner.call_args_list]
+        accept = next(i for i, c in enumerate(commands) if "mark" in c)
+        self.assertEqual(
+            commands[accept][:4], ("iptables", "-I", "FORWARD", "1")
+        )
+        self.assertIn("0x1000000/0x1000000", commands[accept])
+        self.assertEqual(commands[accept + 1], ("iptables", "-D", *legacy))
 
 
 class RelayNetworkFilesTests(unittest.TestCase):

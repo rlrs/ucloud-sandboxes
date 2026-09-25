@@ -1,0 +1,4 @@
+{"tree": "new", "n": 0, "ensure_ms_median_last50": 0.0, "ensure_ms_first": null, "refresh_ms": 0.4, "reconcile_ms": 43.0, "ping_avg_us": 11.0, "ping_100k_ms": 1491, "nft_ruleset_lines": 72, "iptables_forward_rules": 10}
+{"tree": "new", "n": 500, "ensure_ms_median_last50": 42.6, "ensure_ms_first": 35.7, "refresh_ms": 17.9, "reconcile_ms": 442.7, "ping_avg_us": 10.0, "ping_100k_ms": 1427, "nft_ruleset_lines": 12072, "iptables_forward_rules": 10}
+{"tree": "old", "n": 0, "ensure_ms_median_last50": 0.0, "ensure_ms_first": null, "refresh_ms": 0.5, "reconcile_ms": 19.2, "ping_avg_us": 9.0, "ping_100k_ms": 1344, "nft_ruleset_lines": 24, "iptables_forward_rules": 9}
+{"tree": "old", "n": 500, "ensure_ms_median_last50": 238.8, "ensure_ms_first": 44.2, "refresh_ms": 17.8, "reconcile_ms": 198417.3, "ping_avg_us": 638.0, "ping_100k_ms": 64501, "nft_ruleset_lines": 15524, "iptables_forward_rules": 509}

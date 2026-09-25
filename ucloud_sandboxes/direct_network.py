@@ -19,13 +19,16 @@ from typing import Callable, Mapping, Sequence
 
 from .network_policy import SandboxNetworkPolicy
 from .relay_network import (
+    RELAY_FORWARD_MARK,
     NetworkRelay,
     apply_nft,
+    legacy_relay_policy_table,
     parse_network_relays,
     relay_hosts,
     relay_ipv4_addresses,
+    relay_policy_removal,
     relay_policy_rules,
-    relay_policy_table,
+    relay_table_rules,
 )
 
 
@@ -152,7 +155,10 @@ class DirectNetworkManager:
         )
         self.nft_runner = nft_runner or apply_nft
         self._relay_resolution: dict[str, tuple[float, tuple[str, ...]]] = {}
+        # Per-sandbox statements last applied by this process, keyed by slot.
+        # Deltas are only attempted once this process has rebuilt the table.
         self._relay_applied: dict[int, str] = {}
+        self._relay_table_ready = False
         self.runner = runner or self._run
         self.ip_batch_runner = ip_batch_runner or (self._run_ip_batch if runner is None else None)
         self._host_rules_observed_at = float("-inf")
@@ -176,6 +182,7 @@ class DirectNetworkManager:
             self.nft_runner(
                 f"add table inet {probe}\n"
                 f"add chain inet {probe} nat {{ type nat hook prerouting priority -110; }}\n"
+                f"add map inet {probe} m {{ type ifname : verdict; }}\n"
                 f"delete table inet {probe}\n"
             )
         # Restore restrictions before any broad legacy forwarding rules.
@@ -251,9 +258,7 @@ class DirectNetworkManager:
                     self._host_rules_observed_at = observed_at
                 if network_policy.egress == "relay":
                     addresses = self._resolve_relay(network_policy.relay)
-                    self._install_relay_policy(
-                        lease, network_policy, addresses, force=True
-                    )
+                    self._install_relay_policy(lease, network_policy, addresses, state)
                     if not addresses:
                         raise DirectNetworkError(
                             "relay has no usable IPv4 address; egress is blocked"
@@ -284,7 +289,7 @@ class DirectNetworkManager:
                         raise DirectNetworkError(
                             "cannot release relay policy while interface exists"
                         )
-                    self._remove_relay_policy(lease)
+                    self._remove_relay_policy(lease, key, state)
                     del state["policies"][key]
                 del state["leases"][key]
                 self._store(state)
@@ -342,65 +347,166 @@ class DirectNetworkManager:
         lease: DirectNetworkLease,
         policy: SandboxNetworkPolicy,
         addresses: tuple[str, ...],
-        *,
-        force: bool = False,
+        state: dict,
     ) -> None:
         script = relay_policy_rules(lease, self.relays[policy.relay], addresses)
-        if not force and self._relay_applied.get(lease.slot) == script:
-            return
-        self.nft_runner(script)
-        # The nft prerouting and forward guards have already constrained every
-        # packet. This scoped exception permits that traffic past legacy
-        # private-address denies and Docker's FORWARD default DROP.
-        rule = ("-i", lease.host_interface, "-j", "ACCEPT")
-        if self._command_ok(("iptables", "-C", "FORWARD", *rule)):
-            self.runner(("iptables", "-D", "FORWARD", *rule))
-        self.runner(("iptables", "-I", "FORWARD", "1", *rule))
-        self._relay_applied[lease.slot] = script
+        if self._apply_relay_delta(script, state):
+            self._relay_applied[lease.slot] = script
+        self._ensure_relay_forward_accept()
+
+    def _remove_relay_policy(
+        self, lease: DirectNetworkLease, key: str, state: dict
+    ) -> None:
+        remaining = {
+            **state,
+            "policies": {
+                other: raw
+                for other, raw in state.get("policies", {}).items()
+                if other != key
+            },
+        }
+        if self._apply_relay_delta(relay_policy_removal(lease), remaining):
+            self._relay_applied.pop(lease.slot, None)
+        # An interface ACCEPT from an earlier release must never outlive the
+        # relay policy: a reused slot would bypass private-destination denies.
+        legacy = ("FORWARD", "-i", lease.host_interface, "-j", "ACCEPT")
+        if self._command_ok(("iptables", "-C", *legacy)):
+            self.runner(("iptables", "-D", *legacy))
+
+    def _apply_relay_delta(self, script: str, state: dict) -> bool:
+        """Apply per-sandbox statements, else rebuild from durable state.
+
+        Returns whether the delta applied; a rebuild records everything itself.
+        """
+        if self._relay_table_ready:
+            try:
+                self.nft_runner(script)
+                return True
+            except DirectNetworkError as exc:
+                # A failed transaction changed nothing. The table may have
+                # been removed underneath us, so rebuild it in full.
+                _LOG.warning("relay firewall delta failed; rebuilding: %s", exc)
+        resolved = {name: self._resolve_relay(name) for name in self.relays}
+        fragments, leases, _missing = self._relay_fragments(state, resolved)
+        self._rebuild_relay_table(fragments, leases)
+        return False
+
+    def _relay_fragments(
+        self, state: dict, resolved: Mapping[str, tuple[str, ...]]
+    ) -> tuple[dict[int, str], list[DirectNetworkLease], set[str]]:
+        fragments: dict[int, str] = {}
+        leases: list[DirectNetworkLease] = []
+        missing: set[str] = set()
+        for key, raw in sorted(state.get("policies", {}).items()):
+            policy = SandboxNetworkPolicy.from_dict(raw)
+            sandbox_id, generation = key.split("\0")
+            lease = self._lease(sandbox_id, int(generation), state["leases"][key])
+            leases.append(lease)
+            if policy.relay not in self.relays:
+                # Configuration removal revokes access, even if a sentry
+                # survived the node-agent restart. Keep the durable lease
+                # so startup can recover once its relay is restored.
+                fragments[lease.slot] = relay_policy_rules(
+                    lease, NetworkRelay(policy.relay, "0.0.0.0", 1), ()
+                )
+                missing.add(policy.relay)
+                continue
+            fragments[lease.slot] = relay_policy_rules(
+                lease, self.relays[policy.relay], resolved[policy.relay]
+            )
+        return fragments, leases, missing
+
+    def _rebuild_relay_table(
+        self, fragments: Mapping[int, str], leases: Sequence[DirectNetworkLease]
+    ) -> None:
+        # One transaction replaces the shared table and retires any per-sandbox
+        # tables from earlier releases, so there is no unguarded moment.
+        legacy = "".join(
+            f"add table inet {table}\ndelete table inet {table}\n"
+            for table in (legacy_relay_policy_table(lease.slot) for lease in leases)
+        )
+        self._relay_table_ready = False
+        self.nft_runner(relay_table_rules() + "".join(fragments.values()) + legacy)
+        self._relay_applied = dict(fragments)
+        self._relay_table_ready = True
+        if leases:
+            self._ensure_relay_forward_accept()
+            self._remove_legacy_relay_accepts(leases)
 
     def _refresh_relay_policies(self, *, force: bool = False) -> None:
         # Share the durable lease lock with create/delete so DNS refresh cannot
         # reinstall rules after a slot has been released or reassigned.
         with self._locked():
             state = self._load()
-            policies = state.get("policies", {})
+            if not self.relays and not state.get("policies"):
+                return  # relay-free nodes never need nftables
             resolved = {
                 name: self._resolve_relay(name, force=True) for name in self.relays
             }
-            missing = set()
-            for key, raw in policies.items():
-                policy = SandboxNetworkPolicy.from_dict(raw)
-                sandbox_id, generation = key.split("\0")
-                lease = self._lease(sandbox_id, int(generation), state["leases"][key])
-                if policy.relay not in self.relays:
-                    # Configuration removal revokes access, even if a sentry
-                    # survived the node-agent restart. Keep the durable lease
-                    # so startup can recover once its relay is restored.
-                    self.nft_runner(
-                        relay_policy_rules(
-                            lease,
-                            NetworkRelay(policy.relay, "0.0.0.0", 1),
-                            (),
-                        )
-                    )
-                    self._relay_applied.pop(lease.slot, None)
-                    missing.add(policy.relay)
-                    continue
-                self._install_relay_policy(
-                    lease, policy, resolved[policy.relay], force=force
-                )
+            fragments, leases, missing = self._relay_fragments(state, resolved)
+            changed = {
+                slot: script
+                for slot, script in fragments.items()
+                if self._relay_applied.get(slot) != script
+            }
+            if force or not self._relay_table_ready:
+                self._rebuild_relay_table(fragments, leases)
+            elif changed:
+                try:
+                    # Every changed sandbox in one atomic transaction.
+                    self.nft_runner("".join(changed.values()))
+                    self._relay_applied.update(changed)
+                except DirectNetworkError as exc:
+                    _LOG.warning("relay firewall refresh failed; rebuilding: %s", exc)
+                    self._rebuild_relay_table(fragments, leases)
             if missing:
                 raise DirectNetworkError(
                     f"active network relays are missing: {sorted(missing)}"
                 )
 
-    def _remove_relay_policy(self, lease: DirectNetworkLease) -> None:
-        rule = ("-i", lease.host_interface, "-j", "ACCEPT")
-        if self._command_ok(("iptables", "-C", "FORWARD", *rule)):
-            self.runner(("iptables", "-D", "FORWARD", *rule))
-        table = relay_policy_table(lease)
-        self.nft_runner(f"add table inet {table}\ndelete table inet {table}\n")
-        self._relay_applied.pop(lease.slot, None)
+    @staticmethod
+    def _relay_forward_accept() -> tuple[str, ...]:
+        # The nft prerouting and forward guards have already constrained every
+        # packet and marked what they authorized. This one exception permits
+        # that traffic past legacy private-address denies and Docker's FORWARD
+        # default DROP, independent of the number of sandboxes.
+        mark = f"{RELAY_FORWARD_MARK:#x}"
+        return (
+            "FORWARD", "-s", str(NETWORK_CIDR),
+            "-m", "mark", "--mark", f"{mark}/{mark}", "-j", "ACCEPT",
+        )
+
+    def _ensure_relay_forward_accept(
+        self,
+        *,
+        snapshot: set[tuple[str, ...]] | None = None,
+        move_to_top: bool = False,
+    ) -> None:
+        rule = self._relay_forward_accept()
+        if move_to_top:
+            # A DROP was just inserted above it; restore precedence.
+            self._run_best_effort(("iptables", "-D", *rule))
+            snapshot = None
+        self._ensure_iptables(
+            ("iptables", "-C", *rule),
+            ("iptables", "-I", rule[0], "1", *rule[1:]),
+            snapshot=snapshot,
+        )
+
+    def _remove_legacy_relay_accepts(
+        self, leases: Sequence[DirectNetworkLease]
+    ) -> None:
+        # Earlier releases installed one FORWARD ACCEPT per relay interface.
+        snapshot = self._iptables_snapshot()
+        for lease in leases:
+            rule = ("FORWARD", "-i", lease.host_interface, "-j", "ACCEPT")
+            present = (
+                ("filter", "-A", *rule) in snapshot
+                if snapshot is not None
+                else self._command_ok(("iptables", "-C", *rule))
+            )
+            if present:
+                self.runner(("iptables", "-D", *rule))
 
     def _ensure_host_rules(self) -> None:
         # Read a fresh kernel snapshot for this reconciliation, never a cached
@@ -412,8 +518,9 @@ class DirectNetworkManager:
             ("iptables", "-I", "INPUT", "1", "-s", str(NETWORK_CIDR), "-j", "DROP"),
             snapshot=snapshot,
         )
+        reordered = False
         for destination in DENIED_DESTINATIONS:
-            self._ensure_iptables(
+            reordered |= self._ensure_iptables(
                 (
                     "iptables", "-C", "FORWARD", "-s", str(NETWORK_CIDR),
                     "-d", destination, "-j", "DROP",
@@ -425,6 +532,10 @@ class DirectNetworkManager:
                 snapshot=snapshot,
             )
         self._reconcile_tcp_egress(snapshot=snapshot)
+        if self.relays:
+            self._ensure_relay_forward_accept(
+                snapshot=snapshot, move_to_top=reordered
+            )
         self._ensure_iptables(
             ("iptables", "-C", "FORWARD", "-s", str(NETWORK_CIDR), "-j", "ACCEPT"),
             ("iptables", "-A", "FORWARD", "-s", str(NETWORK_CIDR), "-j", "ACCEPT"),
@@ -681,18 +792,14 @@ class DirectNetworkManager:
         install: Sequence[str],
         *,
         snapshot: set[tuple[str, ...]] | None = None,
-    ) -> None:
+    ) -> bool:
+        """Install a missing rule; returns whether it was installed."""
         if snapshot is not None and self._iptables_rule_key(check) in snapshot:
-            return
-        result = subprocess.run(
-            tuple(check),
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=False,
-        )
-        if result.returncode != 0:
-            self.runner(tuple(install))
+            return False
+        if self._command_ok(check):
+            return False
+        self.runner(tuple(install))
+        return True
 
     def _ensure_kernel_lease(self, lease: DirectNetworkLease) -> None:
         namespace_exists = lease.namespace_path.exists()

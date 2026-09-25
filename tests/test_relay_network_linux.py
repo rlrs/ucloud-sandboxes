@@ -286,7 +286,7 @@ while True: time.sleep(1)
             # Invalid atomic update must retain the previous working guard.
             bad = subprocess.run(
                 ["nft", "-f", "-"],
-                input=f"delete table inet ucloud_relay_{lease.slot}\ninvalid syntax\n",
+                input="delete table inet ucloud_relay\ninvalid syntax\n",
                 text=True,
                 capture_output=True,
             )
@@ -295,11 +295,29 @@ while True: time.sleep(1)
             assert probe(lease.namespace, target)
             # The network wiring consumed by checkpoint/restore is reconstructed
             # under the same immutable policy and lease.
+            # A table removed underneath the manager is rebuilt in full.
             run("ip", "link", "delete", lease.host_interface)
             run("ip", "netns", "delete", lease.namespace)
+            run("nft", "delete", "table", "inet", "ucloud_relay")
             restored = manager.ensure("restricted", 1, network_policy=policy)
             assert probe(restored.namespace, target), "restore wiring failed"
             assert not probe(restored.namespace, "203.0.113.2")
+            assert probe(direct.namespace, "203.0.113.2"), "rebuild lost direct egress"
+            # Upgrade: per-sandbox tables and interface ACCEPTs from earlier
+            # releases are retired; a stale guard must not outlive the restart.
+            legacy = f"ucloud_relay_{lease.slot}"
+            subprocess.run(
+                ["nft", "-f", "-"],
+                input=(
+                    f"table inet {legacy} {{ chain guard {{ type filter hook prerouting "
+                    f'priority -150; policy accept; iifname "{lease.host_interface}" drop; }}; }}\n'
+                ),
+                text=True,
+                check=True,
+            )
+            interface_accept = ("FORWARD", "-i", lease.host_interface, "-j", "ACCEPT")
+            run("iptables", "-I", *interface_accept)
+            assert not probe(restored.namespace, target), "legacy fixture inactive"
             fresh = DirectNetworkManager(
                 Path(raw) / "slots.json",
                 network_relays={"default": "relay.test:8000"},
@@ -307,6 +325,13 @@ while True: time.sleep(1)
             )
             fresh.reconcile()
             assert probe(restored.namespace, target), "daemon restart failed"
+            assert subprocess.run(
+                ["nft", "list", "table", "inet", legacy], capture_output=True
+            ).returncode != 0, "legacy relay table survived"
+            assert subprocess.run(
+                ["iptables", "-C", *interface_accept], capture_output=True
+            ).returncode != 0, "legacy interface ACCEPT survived"
+            assert not probe(restored.namespace, "203.0.113.2")
             manager.release("restricted", 1)
             reused = manager.ensure("reused", 1)
             assert reused.slot == lease.slot

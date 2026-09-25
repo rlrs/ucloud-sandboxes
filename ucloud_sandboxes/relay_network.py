@@ -64,8 +64,68 @@ def parse_network_relays(raw: object) -> dict[str, NetworkRelay]:
     return {name: NetworkRelay.parse(name, endpoint) for name, endpoint in raw.items()}
 
 
-def relay_policy_table(lease: DirectNetworkLease) -> str:
-    return f"ucloud_relay_{lease.slot}"
+# One shared table: every packet pays a constant number of hash lookups keyed
+# by interface, however many relay-only sandboxes the node hosts. Per-sandbox
+# base chains made each packet walk one guard per sandbox.
+RELAY_TABLE = "ucloud_relay"
+# Set on forwarded packets the transit guard authorized, so a single iptables
+# ACCEPT can let them past legacy private-address and Docker DROP rules. The
+# kernel scrubs skb marks when a packet crosses from the sandbox netns.
+RELAY_FORWARD_MARK = 0x01000000
+_RELAY_CHAIN_KINDS = ("guard", "nat", "egress", "ingress")
+_RELAY_MAPS = (
+    ("guard_by_iif", "guard"),
+    ("nat_by_iif", "nat"),
+    ("egress_by_iif", "egress"),
+    ("ingress_by_oif", "ingress"),
+)
+
+
+def legacy_relay_policy_table(slot: int) -> str:
+    """Per-sandbox table name used before the shared table."""
+    return f"ucloud_relay_{int(slot)}"
+
+
+def relay_table_rules() -> str:
+    """Replace the shared table's skeleton; callers append every sandbox.
+
+    The pre-DNAT guard runs after defragmentation and before destination NAT.
+    Its DROP verdict is final even when Docker or legacy rules later ACCEPT.
+    Post-DNAT checks also revoke old conntrack routes after a DNS handoff.
+    """
+    t = RELAY_TABLE
+    return (
+        f"add table inet {t}\ndelete table inet {t}\n"
+        f"table inet {t} {{\n"
+        " set relay_interfaces { type ifname; }\n"
+        + "".join(f" map {name} {{ type ifname : verdict; }}\n" for name, _ in _RELAY_MAPS)
+        + " chain guard {\n  type filter hook prerouting priority -150; policy accept;\n"
+        "  iifname vmap @guard_by_iif\n }\n"
+        " chain destination {\n  type nat hook prerouting priority -110; policy accept;\n"
+        "  iifname vmap @nat_by_iif\n }\n"
+        " chain local {\n  type filter hook input priority -150; policy accept;\n"
+        "  iifname @relay_interfaces drop\n }\n"
+        " chain transit {\n  type filter hook forward priority -150; policy accept;\n"
+        "  iifname vmap @egress_by_iif\n"
+        "  oifname vmap @ingress_by_oif\n }\n"
+        " chain host_output {\n  type filter hook output priority -150; policy accept;\n"
+        "  oifname @relay_interfaces drop\n }\n"
+        "}\n"
+    )
+
+
+def _relay_chain(lease: DirectNetworkLease, kind: str) -> str:
+    return f"s{int(lease.slot)}_{kind}"
+
+
+def _relay_elements(lease: DirectNetworkLease, verb: str) -> str:
+    t = RELAY_TABLE
+    interface = lease.host_interface  # generated from a validated numeric slot
+    lines = [f'{verb} element inet {t} relay_interfaces {{ "{interface}" }}\n']
+    for name, kind in _RELAY_MAPS:
+        value = f' : jump {_relay_chain(lease, kind)}' if verb == "add" else ""
+        lines.append(f'{verb} element inet {t} {name} {{ "{interface}"{value} }}\n')
+    return "".join(lines)
 
 
 def relay_ipv4_addresses(addresses: Sequence[str]) -> tuple[str, ...]:
@@ -90,69 +150,64 @@ def relay_policy_rules(
     relay: NetworkRelay,
     addresses: Sequence[str],
 ) -> str:
-    """One atomic nft transaction, including replacement of an existing table.
+    """Idempotent statements that replace one sandbox's rules in the table.
 
-    The pre-DNAT guard runs after defragmentation and before destination NAT.
-    Its DROP verdict is final even when Docker or legacy rules later ACCEPT.
-    Post-DNAT checks also revoke old conntrack routes after a DNS handoff.
+    They apply atomically in one nft transaction, whatever that sandbox's
+    previous rules were, and fail without effect if the table is missing.
+    Without addresses the sandbox keeps only its DROP rules.
     """
-    table = relay_policy_table(lease)
-    interface = lease.host_interface  # generated from a validated numeric slot
+    t = RELAY_TABLE
     guest = str(ipaddress.IPv4Address(lease.guest_ip))
     resolved = relay_ipv4_addresses(addresses)
-    allow_original = (
-        (
-            f'  iifname "{interface}" ip saddr {guest} ip daddr {relay.virtual_ip} '
-            f"tcp dport {relay.port} accept\n"
-        )
-        if resolved
-        else ""
-    )
-    allow_forward = (
-        (
-            f'  iifname "{interface}" ip saddr {guest} ip daddr {{ {", ".join(resolved)} }} '
-            f"tcp dport {relay.port} accept\n"
-        )
-        if resolved
-        else ""
-    )
-    allow_reply = (
-        (
-            f'  oifname "{interface}" ip saddr {{ {", ".join(resolved)} }} '
-            f"tcp sport {relay.port} ct state established accept\n"
-        )
-        if resolved
-        else ""
-    )
-    # Pick deterministically from the current A records. Existing flows retain
-    # their conntrack translation while their endpoint remains authorized.
-    dnat = (
-        (
-            f'  iifname "{interface}" ip daddr {relay.virtual_ip} tcp dport {relay.port} '
-            f"dnat ip to {resolved[0]}:{relay.port}\n"
-        )
-        if resolved
-        else ""
-    )
+    targets = ", ".join(resolved)
+    port = int(relay.port)
+    rules = {
+        "guard": [
+            f"ip saddr {guest} ip daddr {relay.virtual_ip} tcp dport {port} accept",
+            "drop",
+        ],
+        # Pick deterministically from the current A records. Existing flows
+        # retain their conntrack translation while their endpoint remains
+        # authorized.
+        "nat": [
+            f"ip daddr {relay.virtual_ip} tcp dport {port} dnat ip to {resolved[0]}:{port}"
+        ] if resolved else [],
+        "egress": [
+            f"ip saddr {guest} ip daddr {{ {targets} }} tcp dport {port} "
+            f"meta mark set meta mark or {RELAY_FORWARD_MARK:#x} accept",
+            "drop",
+        ],
+        "ingress": [
+            f"ip saddr {{ {targets} }} tcp sport {port} ct state established accept",
+            "drop",
+        ],
+    }
+    if not resolved:
+        for kind in ("guard", "egress", "ingress"):
+            rules[kind] = ["drop"]
+    script = []
+    for kind in _RELAY_CHAIN_KINDS:
+        chain = _relay_chain(lease, kind)
+        script.append(f"add chain inet {t} {chain}\nflush chain inet {t} {chain}\n")
+        script.extend(f"add rule inet {t} {chain} {rule}\n" for rule in rules[kind])
+    return "".join(script) + _relay_elements(lease, "add")
+
+
+def relay_policy_removal(lease: DirectNetworkLease) -> str:
+    """Idempotently remove one sandbox; fails without effect if the table is missing."""
+    t = RELAY_TABLE
+    chains = [_relay_chain(lease, kind) for kind in _RELAY_CHAIN_KINDS]
+    legacy = legacy_relay_policy_table(lease.slot)
+    # Create before deleting so the transaction succeeds whatever is present.
     return (
-        f"add table inet {table}\ndelete table inet {table}\n"
-        f"table inet {table} {{\n"
-        " chain guard {\n  type filter hook prerouting priority -150; policy accept;\n"
-        + allow_original
-        + f'  iifname "{interface}" drop\n }}\n'
-        + " chain destination {\n  type nat hook prerouting priority -110; policy accept;\n"
-        + dnat
-        + " }\n"
-        + " chain local {\n  type filter hook input priority -150; policy accept;\n"
-        + f'  iifname "{interface}" drop\n }}\n'
-        + " chain transit {\n  type filter hook forward priority -150; policy accept;\n"
-        + allow_forward
-        + f'  iifname "{interface}" drop\n'
-        + allow_reply
-        + f'  oifname "{interface}" drop\n }}\n'
-        + " chain host_output {\n  type filter hook output priority -150; policy accept;\n"
-        + f'  oifname "{interface}" drop\n }}\n'
-        + "}\n"
+        f"add table inet {legacy}\ndelete table inet {legacy}\n"
+        "".join(f"add chain inet {t} {chain}\n" for chain in chains)
+        + _relay_elements(lease, "add")
+        + _relay_elements(lease, "delete")
+        + "".join(
+            f"flush chain inet {t} {chain}\ndelete chain inet {t} {chain}\n"
+            for chain in chains
+        )
     )
 
 

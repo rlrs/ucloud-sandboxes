@@ -193,7 +193,7 @@ Final cleanup left zero sandbox routes, queued commands and pending demand.
 Gateway, private placement and relay health returned HTTP 200 in approximately
 12 ms, 2 ms and 2 ms respectively. Temporary test credentials and capacity
 reservations were removed; the isolated local and remote qualification databases
-were stopped. Production remains on rc35, with the ten-worker cap unchanged.
+were stopped. At this closeout, production ran rc35 with the ten-worker cap unchanged.
 
 ## Remaining architecture boundaries
 
@@ -204,3 +204,14 @@ those sequences safe across processes. Moving those mutations behind a single
 coordinator or giving them cross-process ownership is required before enabling
 multiple public request processes. Connection and upload budgets also need to be
 allocated across processes rather than multiplied accidentally.
+
+## Opus follow-up: rc36
+
+Commit `1020d45` (Opus) deployed rc36 at 11:29:53 UTC. It adds a direct warm-wake
+path with generation fencing and queue fallback, isolated placement queue I/O,
+single-statement enqueue/results, per-worker turns before connection acquisition,
+and in-flight create ranking plus reuse of unchanged placement data. All 475
+selected Linux tests passed. All four services are active; a missing-sandbox wake
+traversed the durable queue and returned its expected 404 in 70 ms, leaving no
+queued work. This is an idle functional smoke test, not a new load-performance
+result. SDK remains 0.4.30. [Deployment receipt](deployment-rc36.json).

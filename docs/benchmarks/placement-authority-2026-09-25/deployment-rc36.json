@@ -1,0 +1,42 @@
+{
+  "version": "0.5.114rc36",
+  "commit": "1020d4543d3f6f18b14c122e6a156c91fdd6384e",
+  "routing_backend": "postgres",
+  "schema": "ucloud_routing_live_20260824a",
+  "deployed_at": "2026-09-25T11:29:53.738038+00:00",
+  "services": "healthy",
+  "authority_changed": false,
+  "verification": {
+    "smoke": "nonexistent generation-fenced wake traversed isolated queue and completed with expected404",
+    "smoke_seconds": 0.06977165100397542,
+    "health": {
+      "8090": {
+        "status": 200,
+        "version": "0.5.114rc36"
+      },
+      "8091": {
+        "status": 200,
+        "version": "0.5.114rc36"
+      },
+      "8092": {
+        "status": 200,
+        "version": "0.5.114rc36"
+      }
+    },
+    "services": [
+      "active",
+      "active",
+      "active",
+      "active"
+    ],
+    "counts": {
+      "sandboxes": 0,
+      "pending": 0,
+      "queued_commands": 0
+    },
+    "linux_tests": 475,
+    "linux_test_seconds": 198.439
+  },
+  "attribution": "Opus",
+  "native_load_benchmark_repeated": false
+}

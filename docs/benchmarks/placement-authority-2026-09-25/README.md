@@ -215,3 +215,15 @@ selected Linux tests passed. All four services are active; a missing-sandbox wak
 traversed the durable queue and returned its expected 404 in 70 ms, leaving no
 queued work. This is an idle functional smoke test, not a new load-performance
 result. SDK remains 0.4.30. [Deployment receipt](deployment-rc36.json).
+
+## Opus follow-up: rc37
+
+Commit `6e99d19` (Opus) deployed rc37 at 13:18:31 UTC. It isolates relay delivery
+and lifecycle transactions, shortens heartbeat row-lock ownership, reduces exec
+lookup round trips and removes growth commits from the worker-wide capacity guard.
+Provisional growth remains charged while commits finish. A race correction keeps
+the covered-growth check and wake fence ordered against per-sandbox safe waits.
+All 577 selected Linux tests passed, including the new race regression. Production
+health and a queued-wake smoke check passed; the relay delivery pool is active.
+There were no live workers to upgrade; new workers use the rc37 bundle. No native
+load benchmark was repeated. [Deployment receipt](deployment-rc37.json).

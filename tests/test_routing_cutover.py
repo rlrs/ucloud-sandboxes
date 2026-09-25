@@ -80,6 +80,34 @@ class RoutingCutoverTests(unittest.TestCase):
         with self.assertRaises(sqlite3.DatabaseError):
             self.old.upsert_pending("stale", ResourceQuantity(memory_mb=1))
 
+    def test_import_hash_order_is_independent_of_database_collation(self):
+        from ucloud_sandboxes.shared_control.routing_cutover import cutover
+
+        identities = [
+            "a-1",
+            "a1",
+            "A1",
+            "a_1",
+            "z",
+            "Z",
+            "alpha:2",
+            "alpha-2",
+            "é",
+            "e",
+        ]
+        for identity in identities:
+            self.old.upsert_pending(identity, ResourceQuantity(memory_mb=1))
+        receipt = cutover(self.path, dsn_file=self.dsn, schema=self.schema)
+        self.assertEqual(receipt["tables"]["pending"]["rows"], len(identities))
+        with open_routing_store(self.path)._connect() as conn:
+            self.assertEqual(
+                {
+                    r["sandbox_id"]
+                    for r in conn.execute("SELECT sandbox_id FROM pending")
+                },
+                set(identities),
+            )
+
     def test_active_fleet_refuses_cutover(self):
         from ucloud_sandboxes.shared_control.routing_cutover import cutover
 

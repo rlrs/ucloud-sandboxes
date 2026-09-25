@@ -78,7 +78,10 @@ def cutover(path: Path, *, dsn_file: Path, schema: str):
                         (schema,),
                     )
                 }
-                if set(tables) != expected - {"gateway_commands", "worker_capacity_revisions"}:
+                if set(tables) != expected - {
+                    "gateway_commands",
+                    "worker_capacity_revisions",
+                }:
                     raise ValueError(
                         "routing table set differs; refusing partial import"
                     )
@@ -115,14 +118,16 @@ def cutover(path: Path, *, dsn_file: Path, schema: str):
                     expected_digest = source_digest.hexdigest()
                     with conn.cursor(name="verify_" + table) as cursor:
                         cursor.execute(
-                            sql.SQL("SELECT {} FROM {} ORDER BY {}").format(
+                            sql.SQL('SELECT {} FROM {} ORDER BY {} COLLATE "C"').format(
                                 sql.SQL(",").join(map(sql.Identifier, columns)),
                                 sql.Identifier(table),
                                 sql.Identifier(columns[0]),
                             )
                         )
                         if _digest(row.values() for row in cursor) != expected_digest:
-                            raise ValueError("routing import verification failed")
+                            raise ValueError(
+                                f"routing import verification failed for {table}"
+                            )
                     receipt[table] = {"rows": count, "sha256": expected_digest}
         # Publishing this descriptor is the only authority switch. Old binaries
         # reject its format; old open SQLite writers detect the inode change.

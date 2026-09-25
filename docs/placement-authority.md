@@ -72,7 +72,7 @@ scoped to the relevant destination or sandbox IDs.
 3. Run `python -m ucloud_sandboxes.shared_control.routing_cutover --routing-file
    PATH --dsn-file SECRET_FILE --schema ucloud_routing_DEPLOYMENT` as the service
    user. The command refuses active routes or incomplete migrations, snapshots
-   the SQLite WAL, imports every routing table, and verifies ordered row hashes.
+   the SQLite WAL, imports every routing table, and verifies ordered row hashes using explicit bytewise collation on both sides.
 4. The command atomically replaces the routing file with a private descriptor.
    It records the retained SQLite backup. Old open stores detect inode replacement;
    old binaries reject the non-SQLite format. There is no fallback on PG failure.

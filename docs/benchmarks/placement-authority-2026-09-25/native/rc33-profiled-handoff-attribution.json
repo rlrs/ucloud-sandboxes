@@ -1,0 +1,25 @@
+{
+  "runtime": "0.5.114rc33",
+  "run_prefix": "relay-load-1c19030665c7",
+  "fleet": "warm repeat; eight workers approximately64 sandboxes each; 12402656/657/658/659/660/661/662/682",
+  "matched_wakes": 2560,
+  "join": "gateway_commands body.request_id = ucloud_shared.relay_requests.request_id",
+  "stages_seconds": {
+    "relay_completed_to_command_created": {
+      "p50": 0.4448883533477783,
+      "p95": 4.589212501049031,
+      "max": 9.498045921325684
+    },
+    "command_created_to_completed": {
+      "p50": 0.3440165,
+      "p95": 1.1025775999999998
+    },
+    "command_completed_to_relay_wake_notified": {
+      "p50": 0.44043588638305664,
+      "p95": 5.076556789875028,
+      "max": 14.374481201171875
+    }
+  },
+  "interpretation": "Largest observed tail is after durable placement command completion, before relay wake acknowledgment. These stages alone cannot distinguish gateway result polling/socket delivery from relay completion transaction scheduling.",
+  "query": "WITH timings AS (SELECT extract(epoch from c.created_at)-r.completed_at AS before_queue, extract(epoch from c.completed_at-c.created_at) AS in_queue, r.wake_notified_at-extract(epoch from c.completed_at) AS after_queue FROM gateway_commands c JOIN ucloud_shared.relay_requests r ON r.request_id=convert_from(c.body,'UTF8')::jsonb->>'request_id' WHERE c.kind='wake' AND c.sandbox_id LIKE 'relay-load-1c19030665c7-%' AND c.state='done' AND r.wake_notified_at IS NOT NULL) SELECT count(*),percentile_cont(.5) within group(order by before_queue),percentile_cont(.95) within group(order by before_queue),percentile_cont(.5) within group(order by in_queue),percentile_cont(.95) within group(order by in_queue),percentile_cont(.5) within group(order by after_queue),percentile_cont(.95) within group(order by after_queue),max(before_queue),max(after_queue) FROM timings"
+}

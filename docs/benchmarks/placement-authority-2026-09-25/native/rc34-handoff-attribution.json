@@ -1,0 +1,542 @@
+{
+  "runtime": "0.5.114rc34",
+  "observed_at_epoch": 1790328059.7619898,
+  "metrics_window_seconds": 60,
+  "run_prefix": "relay-load-f58cde6850ce",
+  "fleet": [
+    [
+      "12402728",
+      4
+    ],
+    [
+      "12402729",
+      2
+    ],
+    [
+      "12402733",
+      3
+    ],
+    [
+      "12402738",
+      12
+    ],
+    [
+      "12402743",
+      56
+    ]
+  ],
+  "queue": [],
+  "matched_wakes": 2560,
+  "query": "WITH timings AS (\n SELECT extract(epoch from c.created_at)-r.completed_at AS before_queue,extract(epoch from c.completed_at-c.created_at) AS in_queue,r.wake_notified_at-extract(epoch from c.completed_at) AS after_queue\n FROM gateway_commands c JOIN ucloud_shared.relay_requests r ON r.request_id=convert_from(c.body,'UTF8')::jsonb->>'request_id'\n WHERE c.kind='wake' AND c.sandbox_id LIKE %s AND c.state='done' AND r.wake_notified_at IS NOT NULL)\n SELECT count(*),percentile_cont(.5) within group(order by before_queue),percentile_cont(.95) within group(order by before_queue),percentile_cont(.5) within group(order by in_queue),percentile_cont(.95) within group(order by in_queue),percentile_cont(.5) within group(order by after_queue),percentile_cont(.95) within group(order by after_queue),max(before_queue),max(after_queue) FROM timings",
+  "stages_seconds": {
+    "relay_completed_to_command_created": {
+      "p50": 0.18929457664489746,
+      "p95": 2.2294542551040646,
+      "max": 3.127835988998413
+    },
+    "command_created_to_completed": {
+      "p50": 0.3323545,
+      "p95": 1.0636554499999997
+    },
+    "command_completed_to_relay_wake_notified": {
+      "p50": 0.22385704517364502,
+      "p95": 3.2305812835693333,
+      "max": 4.970802068710327
+    }
+  },
+  "db_waits": [
+    [
+      "Lock",
+      "transactionid",
+      1,
+      0.005051
+    ],
+    [
+      null,
+      null,
+      2,
+      0.022711
+    ]
+  ],
+  "dispatch_backlog": [],
+  "metric_queries": {
+    "pg_mean_60s": "sum by (operation,phase) (increase(ucloud_platform_postgres_duration_seconds_sum{service_version=\"0.5.114rc34\",operation=~\"placement_enqueue|placement_results|relay_dispatch_complete\"}[60s])) / sum by (operation,phase) (increase(ucloud_platform_postgres_duration_seconds_count{service_version=\"0.5.114rc34\",operation=~\"placement_enqueue|placement_results|relay_dispatch_complete\"}[60s]))",
+    "pg_p95_60s": "histogram_quantile(.95,sum by (operation,phase,le) (increase(ucloud_platform_postgres_duration_seconds_bucket{service_version=\"0.5.114rc34\",operation=~\"placement_enqueue|placement_results|relay_dispatch_complete\"}[60s])))",
+    "wake_http_mean_60s": "sum(increase(ucloud_platform_operation_duration_seconds_sum{service_version=\"0.5.114rc34\",operation=\"relay.lifecycle.wake.http\"}[60s])) / sum(increase(ucloud_platform_operation_duration_seconds_count{service_version=\"0.5.114rc34\",operation=\"relay.lifecycle.wake.http\"}[60s]))",
+    "wake_http_p95_60s": "histogram_quantile(.95,sum by(le) (increase(ucloud_platform_operation_duration_seconds_bucket{service_version=\"0.5.114rc34\",operation=\"relay.lifecycle.wake.http\"}[60s])))"
+  },
+  "metrics": {
+    "pg_mean_60s": [
+      {
+        "labels": {
+          "operation": "placement_enqueue",
+          "phase": "commit"
+        },
+        "value": "0.07681403462977292"
+      },
+      {
+        "labels": {
+          "operation": "placement_enqueue",
+          "phase": "lock_query"
+        },
+        "value": "0"
+      },
+      {
+        "labels": {
+          "operation": "placement_enqueue",
+          "phase": "pool_wait"
+        },
+        "value": "0.4717182684301093"
+      },
+      {
+        "labels": {
+          "operation": "placement_enqueue",
+          "phase": "transaction"
+        },
+        "value": "0.17614542072052145"
+      },
+      {
+        "labels": {
+          "operation": "placement_results",
+          "phase": "commit"
+        },
+        "value": "0.005197608822609393"
+      },
+      {
+        "labels": {
+          "operation": "placement_results",
+          "phase": "lock_query"
+        },
+        "value": "0"
+      },
+      {
+        "labels": {
+          "operation": "placement_results",
+          "phase": "pool_wait"
+        },
+        "value": "0.000047507731125017175"
+      },
+      {
+        "labels": {
+          "operation": "placement_results",
+          "phase": "transaction"
+        },
+        "value": "0.025376074925887743"
+      },
+      {
+        "labels": {
+          "operation": "relay_dispatch_complete",
+          "phase": "commit"
+        },
+        "value": "0.003980074781416204"
+      },
+      {
+        "labels": {
+          "operation": "relay_dispatch_complete",
+          "phase": "lock_query"
+        },
+        "value": "0"
+      },
+      {
+        "labels": {
+          "operation": "relay_dispatch_complete",
+          "phase": "pool_wait"
+        },
+        "value": "0.037449754094351854"
+      },
+      {
+        "labels": {
+          "operation": "relay_dispatch_complete",
+          "phase": "transaction"
+        },
+        "value": "0.0193277773075"
+      }
+    ],
+    "pg_p95_60s": [
+      {
+        "labels": {
+          "operation": "placement_enqueue",
+          "phase": "commit"
+        },
+        "value": "0.388251879699248"
+      },
+      {
+        "labels": {
+          "operation": "placement_enqueue",
+          "phase": "lock_query"
+        },
+        "value": "0.00095"
+      },
+      {
+        "labels": {
+          "operation": "placement_enqueue",
+          "phase": "pool_wait"
+        },
+        "value": "2.24056420233463"
+      },
+      {
+        "labels": {
+          "operation": "placement_enqueue",
+          "phase": "transaction"
+        },
+        "value": "0.8339385474860335"
+      },
+      {
+        "labels": {
+          "operation": "placement_results",
+          "phase": "commit"
+        },
+        "value": "0.01740217391304342"
+      },
+      {
+        "labels": {
+          "operation": "placement_results",
+          "phase": "lock_query"
+        },
+        "value": "0.0009499999999999999"
+      },
+      {
+        "labels": {
+          "operation": "placement_results",
+          "phase": "pool_wait"
+        },
+        "value": "0.0009510894495412843"
+      },
+      {
+        "labels": {
+          "operation": "placement_results",
+          "phase": "transaction"
+        },
+        "value": "0.03455357142857127"
+      },
+      {
+        "labels": {
+          "operation": "relay_dispatch_complete",
+          "phase": "commit"
+        },
+        "value": "0.0115"
+      },
+      {
+        "labels": {
+          "operation": "relay_dispatch_complete",
+          "phase": "lock_query"
+        },
+        "value": "0.00095"
+      },
+      {
+        "labels": {
+          "operation": "relay_dispatch_complete",
+          "phase": "pool_wait"
+        },
+        "value": "0.2143059490084986"
+      },
+      {
+        "labels": {
+          "operation": "relay_dispatch_complete",
+          "phase": "transaction"
+        },
+        "value": "0.049526515151515155"
+      }
+    ],
+    "wake_http_mean_60s": [
+      {
+        "labels": {},
+        "value": "1.8136705504777328"
+      }
+    ],
+    "wake_http_p95_60s": [
+      {
+        "labels": {},
+        "value": "4.882159904534606"
+      }
+    ]
+  },
+  "peak_sample": {
+    "runtime": "0.5.114rc34",
+    "observed_at_epoch": 1790328028.7376387,
+    "metrics_window_seconds": 60,
+    "run_prefix": "relay-load-f58cde6850ce",
+    "fleet": [
+      [
+        "12402726",
+        48
+      ],
+      [
+        "12402728",
+        51
+      ],
+      [
+        "12402729",
+        54
+      ],
+      [
+        "12402731",
+        48
+      ],
+      [
+        "12402733",
+        49
+      ],
+      [
+        "12402734",
+        46
+      ],
+      [
+        "12402736",
+        53
+      ],
+      [
+        "12402738",
+        57
+      ],
+      [
+        "12402741",
+        50
+      ],
+      [
+        "12402743",
+        56
+      ]
+    ],
+    "queue": [
+      [
+        "wake",
+        "running",
+        1,
+        0.040046
+      ]
+    ],
+    "matched_wakes": 2496,
+    "query": "WITH timings AS (\n SELECT extract(epoch from c.created_at)-r.completed_at AS before_queue,extract(epoch from c.completed_at-c.created_at) AS in_queue,r.wake_notified_at-extract(epoch from c.completed_at) AS after_queue\n FROM gateway_commands c JOIN ucloud_shared.relay_requests r ON r.request_id=convert_from(c.body,'UTF8')::jsonb->>'request_id'\n WHERE c.kind='wake' AND c.sandbox_id LIKE %s AND c.state='done' AND r.wake_notified_at IS NOT NULL)\n SELECT count(*),percentile_cont(.5) within group(order by before_queue),percentile_cont(.95) within group(order by before_queue),percentile_cont(.5) within group(order by in_queue),percentile_cont(.95) within group(order by in_queue),percentile_cont(.5) within group(order by after_queue),percentile_cont(.95) within group(order by after_queue),max(before_queue),max(after_queue) FROM timings",
+    "stages_seconds": {
+      "relay_completed_to_command_created": {
+        "p50": 0.20241189002990723,
+        "p95": 2.236816644668579,
+        "max": 3.127835988998413
+      },
+      "command_created_to_completed": {
+        "p50": 0.335531,
+        "p95": 1.06383725
+      },
+      "command_completed_to_relay_wake_notified": {
+        "p50": 0.2341594696044922,
+        "p95": 3.2485896944999695,
+        "max": 4.970802068710327
+      }
+    },
+    "db_waits": [
+      [
+        null,
+        null,
+        1,
+        0.001274
+      ]
+    ],
+    "dispatch_backlog": [
+      [
+        "park",
+        60,
+        0,
+        1
+      ],
+      [
+        "wake",
+        1,
+        1,
+        1
+      ]
+    ],
+    "metric_queries": {
+      "pg_mean_60s": "sum by (operation,phase) (increase(ucloud_platform_postgres_duration_seconds_sum{service_version=\"0.5.114rc34\",operation=~\"placement_enqueue|placement_results|relay_dispatch_complete\"}[60s])) / sum by (operation,phase) (increase(ucloud_platform_postgres_duration_seconds_count{service_version=\"0.5.114rc34\",operation=~\"placement_enqueue|placement_results|relay_dispatch_complete\"}[60s]))",
+      "pg_p95_60s": "histogram_quantile(.95,sum by (operation,phase,le) (increase(ucloud_platform_postgres_duration_seconds_bucket{service_version=\"0.5.114rc34\",operation=~\"placement_enqueue|placement_results|relay_dispatch_complete\"}[60s])))",
+      "wake_http_mean_60s": "sum(increase(ucloud_platform_operation_duration_seconds_sum{service_version=\"0.5.114rc34\",operation=\"relay.lifecycle.wake.http\"}[60s])) / sum(increase(ucloud_platform_operation_duration_seconds_count{service_version=\"0.5.114rc34\",operation=\"relay.lifecycle.wake.http\"}[60s]))",
+      "wake_http_p95_60s": "histogram_quantile(.95,sum by(le) (increase(ucloud_platform_operation_duration_seconds_bucket{service_version=\"0.5.114rc34\",operation=\"relay.lifecycle.wake.http\"}[60s])))"
+    },
+    "metrics": {
+      "pg_mean_60s": [
+        {
+          "labels": {
+            "operation": "placement_enqueue",
+            "phase": "commit"
+          },
+          "value": "0.10126442434991734"
+        },
+        {
+          "labels": {
+            "operation": "placement_enqueue",
+            "phase": "lock_query"
+          },
+          "value": "0"
+        },
+        {
+          "labels": {
+            "operation": "placement_enqueue",
+            "phase": "pool_wait"
+          },
+          "value": "0.47955892530812033"
+        },
+        {
+          "labels": {
+            "operation": "placement_enqueue",
+            "phase": "transaction"
+          },
+          "value": "0.2357973699491171"
+        },
+        {
+          "labels": {
+            "operation": "placement_results",
+            "phase": "commit"
+          },
+          "value": "0.023860127880624183"
+        },
+        {
+          "labels": {
+            "operation": "placement_results",
+            "phase": "lock_query"
+          },
+          "value": "0"
+        },
+        {
+          "labels": {
+            "operation": "placement_results",
+            "phase": "pool_wait"
+          },
+          "value": "0.00008002757414369282"
+        },
+        {
+          "labels": {
+            "operation": "placement_results",
+            "phase": "transaction"
+          },
+          "value": "0.1160141711205098"
+        },
+        {
+          "labels": {
+            "operation": "relay_dispatch_complete",
+            "phase": "commit"
+          },
+          "value": "0.005960360022558379"
+        },
+        {
+          "labels": {
+            "operation": "relay_dispatch_complete",
+            "phase": "lock_query"
+          },
+          "value": "0"
+        },
+        {
+          "labels": {
+            "operation": "relay_dispatch_complete",
+            "phase": "pool_wait"
+          },
+          "value": "0.07704520145587393"
+        },
+        {
+          "labels": {
+            "operation": "relay_dispatch_complete",
+            "phase": "transaction"
+          },
+          "value": "0.02926239391819484"
+        }
+      ],
+      "pg_p95_60s": [
+        {
+          "labels": {
+            "operation": "placement_enqueue",
+            "phase": "commit"
+          },
+          "value": "0.40366492146596844"
+        },
+        {
+          "labels": {
+            "operation": "placement_enqueue",
+            "phase": "lock_query"
+          },
+          "value": "0.0009499999999999999"
+        },
+        {
+          "labels": {
+            "operation": "placement_enqueue",
+            "phase": "pool_wait"
+          },
+          "value": "2.196999999999999"
+        },
+        {
+          "labels": {
+            "operation": "placement_enqueue",
+            "phase": "transaction"
+          },
+          "value": "0.8705660377358488"
+        },
+        {
+          "labels": {
+            "operation": "placement_results",
+            "phase": "commit"
+          },
+          "value": "0.12124999999999986"
+        },
+        {
+          "labels": {
+            "operation": "placement_results",
+            "phase": "lock_query"
+          },
+          "value": "0.00095"
+        },
+        {
+          "labels": {
+            "operation": "placement_results",
+            "phase": "pool_wait"
+          },
+          "value": "0.0009562500000000001"
+        },
+        {
+          "labels": {
+            "operation": "placement_results",
+            "phase": "transaction"
+          },
+          "value": "0.6699999999999988"
+        },
+        {
+          "labels": {
+            "operation": "relay_dispatch_complete",
+            "phase": "commit"
+          },
+          "value": "0.01998657718120806"
+        },
+        {
+          "labels": {
+            "operation": "relay_dispatch_complete",
+            "phase": "lock_query"
+          },
+          "value": "0.00095"
+        },
+        {
+          "labels": {
+            "operation": "relay_dispatch_complete",
+            "phase": "pool_wait"
+          },
+          "value": "0.24784492588369442"
+        },
+        {
+          "labels": {
+            "operation": "relay_dispatch_complete",
+            "phase": "transaction"
+          },
+          "value": "0.08130434782608698"
+        }
+      ],
+      "wake_http_mean_60s": [
+        {
+          "labels": {},
+          "value": "2.2999724350772945"
+        }
+      ],
+      "wake_http_p95_60s": [
+        {
+          "labels": {},
+          "value": "4.946294559099437"
+        }
+      ]
+    }
+  }
+}

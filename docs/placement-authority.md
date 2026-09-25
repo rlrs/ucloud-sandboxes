@@ -24,6 +24,10 @@ flowchart LR
 
 Public creates and explicit wakes enter a durable queue. The gateway transfers
 waiting sockets to asynchronous response I/O; they do not retain request threads.
+One batched completion reader has its own database connection so enqueue bursts
+cannot strand replies behind new submissions. Both pools use the same authority;
+no cache or notification becomes a source of truth. Pool wait, transaction and
+commit timings use the shared PostgreSQL metrics.
 The placement service uses the existing gateway lifecycle implementation on a
 private loopback listener at gateway port + 1. Its separate create and wake
 execution budgets bound active work, not accepted demand. Queued creates remain
@@ -44,13 +48,26 @@ existing domain methods. Database-only operations can retry a proven rollback;
 network calls and ambiguous COMMIT failures are never replayed by that wrapper.
 Worker RPCs run outside database transactions.
 
+Exact-owner reads outside a transaction execute one autocommit query. Reads
+inside placement reuse its connection and snapshot. Multi-query readers retain
+an explicit repeatable-read snapshot, including snapshot-GC completeness checks;
+the optimization does not weaken their consistency.
+
 Placement uses a repeatable snapshot and durable worker revision writes. Every
-capacity-changing route, inventory, wake batch, program transition, deletion, and
+capacity-changing route, inventory, wake batch, program membership, deletion, and
 migration mutation advances the relevant worker revision. Migration updates
 include both source and destination. Revision identities match accounting's
 node ID, job ID, and normalized URL aliases. Concurrent admissions sharing an
 owner therefore conflict precisely, without PostgreSQL SSI predicate conflicts
 between unrelated sandbox IDs. Other domain mutations retain SERIALIZABLE.
+
+Observations do not automatically change capacity. Program timestamps and state
+progress within nonterminal membership avoid worker revision writes; entering or
+leaving that membership remains fenced for cold detach. Running confirmations
+that change only activity epoch and freshness also avoid a worker-wide write.
+Ownership, incarnation, resources, parked activity, snapshots and migration
+changes remain fenced. Race tests enforce both correctness and progress while an
+unrelated operation holds the worker revision row.
 
 Known-owner create and local-wake batches additionally take a worker-specific
 PostgreSQL advisory turn **before opening the snapshot**. This suppresses wasteful
@@ -101,8 +118,8 @@ p95 83.8 ms, no retries or overbooking. The initial blanket SERIALIZABLE version
 took 5.62 s, p95 1.22 s, with 3,742 retries. Linux and native workload results must
 be recorded separately before claiming production wake latency improvements.
 
-Linux qualification on the 4-vCPU gateway host: 512 admissions / 8 workers
-completed in 2.176 s, p95 200 ms, zero retries or overbooking. The 475 selected
-Linux tests passed, including three rerun after supplying missing test scripts
-and the coordinated SDK wheel. Native production workload qualification follows
-the authority cutover and is recorded in a separate deployment report.
+Linux rc32 qualification on the 4-vCPU gateway host: 512 admissions / 8 workers
+completed in 2.145 s, p95 201 ms, zero retries or overbooking. The final rc32
+candidate passed 319 selected Linux tests. Native production measurements,
+failed latency gates and subsequent refinements are recorded in the
+[deployment and load qualification report](benchmarks/placement-authority-2026-09-25/README.md).

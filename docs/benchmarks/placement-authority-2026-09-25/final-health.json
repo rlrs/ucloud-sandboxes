@@ -1,0 +1,29 @@
+{
+  "observed_at": "2026-09-25T09:34:35.927597+00:00",
+  "counts": {
+    "sandboxes": 0,
+    "pending": 0,
+    "queued_commands": 0,
+    "test_capacity_reservations": 0
+  },
+  "health": {
+    "8090": {
+      "status": 200,
+      "version": "0.5.114rc35"
+    },
+    "8091": {
+      "status": 200,
+      "version": "0.5.114rc35"
+    },
+    "8092": {
+      "status": 200,
+      "version": "0.5.114rc35"
+    }
+  },
+  "services": [
+    "active",
+    "active",
+    "active",
+    "active"
+  ]
+}

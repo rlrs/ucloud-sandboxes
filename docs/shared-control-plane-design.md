@@ -1,18 +1,20 @@
 # Shared control plane and overload handling
 
-Status: implementation in progress, 22 September 2026. The relay backend is
-implemented; the gateway/scheduler migration is outstanding. An isolated
-PostgreSQL relay namespace has been qualified with real sandboxes on production
-workers; normal relay registrations and gateway authority remain on SQLite.
-See the [live qualification results](benchmarks/relay-load-2026-09-22/README.md). This follows the
+Status: production routing and relay authority use PostgreSQL as of 25 September
+2026. The [implemented placement architecture](placement-authority.md) describes
+the canonical repository, durable lifecycle queue, worker capacity fences and
+cutover. The design below records the rationale and broader direction; it is not
+a claim that every proposed component or optimization has shipped.
+See the earlier [relay qualification results](benchmarks/relay-load-2026-09-22/README.md). This follows the
 [measured load investigation](benchmarks/relay-load-2026-09-21/README.md) and
 [database options assessment](reviews/gateway-database-scaling-2026-09-21.md).
 
-The relay now has a selectable [PostgreSQL backend](postgres-relay.md), durable
-park/wake dispatch and an idle cutover command. Gateway placement and provider
-journals remain on their existing authority. The separate
-[scheduling qualification slice](shared-control-qualification.md) remains a
-prototype; it must not be enabled as a second sandbox owner authority.
+The relay has a selectable [PostgreSQL backend](postgres-relay.md), durable
+park/wake dispatch and an idle cutover command. Routing moved as one authority;
+provider journals remain separate. The earlier
+[scheduling qualification slice](shared-control-qualification.md) is historical;
+its separate ownership prototype was removed in favor of the existing routing
+domain backed by PostgreSQL.
 
 ## Decision
 

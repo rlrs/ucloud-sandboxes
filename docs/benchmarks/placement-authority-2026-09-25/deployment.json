@@ -1,0 +1,9 @@
+{
+  "version": "0.5.114rc32",
+  "commit": "8e5bda9e712e199b5785aa82bb3ee16719f78f7a",
+  "routing_backend": "postgres",
+  "schema": "ucloud_routing_live_20260824a",
+  "deployed_at": "2026-09-25T08:25:25.781114+00:00",
+  "services": "healthy",
+  "cutover_receipt": "/work/ucloud-sandboxes/release/0.5.114rc32/routing-cutover.json"
+}

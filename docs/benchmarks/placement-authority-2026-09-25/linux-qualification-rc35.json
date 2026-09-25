@@ -1,0 +1,25 @@
+{
+  "version": "0.5.114rc35",
+  "commit": "42b6b78d5726bc3b78ad68efff7e19f6e327ca5c",
+  "platform": "Linux gateway host, separate PostgreSQL 17 instance on loopback port 55441",
+  "tests": 413,
+  "seconds": 211.553,
+  "result": "OK",
+  "test_modules": [
+    "tests.test_routing_single_statement_reads",
+    "tests.test_placement_completion_reads",
+    "tests.test_postgres_relay",
+    "tests.test_program_capacity_fences",
+    "tests.test_placement_queue_http",
+    "tests.test_placement_queue",
+    "tests.test_placement_capacity_concurrency",
+    "tests.test_routing_cutover",
+    "tests.test_routing",
+    "tests.test_routing_writer",
+    "tests.test_control_plane",
+    "tests.test_postgres_gateway.PostgresGatewayContracts",
+    "tests.test_postgres_routing.PostgresRoutingContracts",
+    "tests.test_postgres_routing_snapshot"
+  ],
+  "qualification_database_stopped_before_native_load": true
+}

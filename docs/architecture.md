@@ -3,11 +3,15 @@
 The crash-safe generation, operation-id, inventory, and drain invariants are
 specified in [Distributed sandbox state protocol](distributed-state-protocol.md).
 
-The proposed [shared control-plane design](shared-control-plane-design.md)
-describes PostgreSQL-backed scheduling and overload recovery. It is a future
-design, not the currently deployed architecture described below.
-The [PostgreSQL relay backend](postgres-relay.md) is now selectable separately;
-it replaces relay state only and does not create a second sandbox owner authority.
+Production uses a [PostgreSQL routing authority and durable placement queue](placement-authority.md).
+Public lifecycle requests wait asynchronously while a private placement service
+executes the canonical routing operations. Worker-specific capacity transactions
+replace the gateway-wide placement process lock. Standalone deployments can
+still select SQLite; both backends use the same lifecycle domain methods.
+The [PostgreSQL relay backend](postgres-relay.md) stores relay state separately
+and does not create a second sandbox owner authority. The earlier
+[shared control-plane design](shared-control-plane-design.md) records the broader
+design rationale; the placement-authority document describes what is implemented.
 
 ## Runtime ownership
 

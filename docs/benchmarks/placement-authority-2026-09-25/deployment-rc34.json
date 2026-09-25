@@ -1,0 +1,9 @@
+{
+  "version": "0.5.114rc34",
+  "commit": "fdd7b55958644a1d64befbb8672f0ab82ffa9e22",
+  "routing_backend": "postgres",
+  "schema": "ucloud_routing_live_20260824a",
+  "deployed_at": "2026-09-25T09:14:24.582956+00:00",
+  "services": "healthy",
+  "authority_changed": false
+}

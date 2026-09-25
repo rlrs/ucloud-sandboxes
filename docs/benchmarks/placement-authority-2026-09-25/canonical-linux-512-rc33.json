@@ -1,0 +1,14 @@
+{
+  "backend": "canonical PostgresRoutingStore",
+  "sandboxes": 512,
+  "nodes": 8,
+  "seconds": 1.8826340480009094,
+  "transactions_per_second": 271.95938612906286,
+  "latency_seconds": {
+    "p50": 0.11878211700241081,
+    "p95": 0.1669981570157688,
+    "p99": 0.17678694101050496
+  },
+  "overbooking": false,
+  "serialization_retries": 0
+}

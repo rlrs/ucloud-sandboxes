@@ -40,7 +40,7 @@ DIRECT_REGISTRATION_PHASES = _ROOTFS_PHASES | {
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 _CONTAINER_ID = re.compile(r"[0-9a-f]{64}\Z")
 _DIRECT_REGISTRY_APPLICATION_ID = 0x55435247
-_DIRECT_REGISTRY_SCHEMA_VERSION = 6
+_DIRECT_REGISTRY_SCHEMA_VERSION = 7
 _DIRECT_REGISTRY_IDENTITY = (
     _DIRECT_REGISTRY_APPLICATION_ID,
     _DIRECT_REGISTRY_SCHEMA_VERSION,
@@ -382,6 +382,12 @@ class DirectSandboxRegistry:
             ),
             PRIMARY KEY (sandbox_id, sandbox_generation, hibernation_generation)
         ) STRICT;
+        CREATE TABLE workspace_capacity (
+            sandbox_id TEXT PRIMARY KEY,
+            sandbox_generation INTEGER NOT NULL CHECK (sandbox_generation > 0),
+            mount_epoch INTEGER NOT NULL CHECK (mount_epoch >= 0),
+            released_mb INTEGER NOT NULL CHECK (released_mb >= 0)
+        ) STRICT;
         INSERT INTO registry_metadata VALUES (
             1,
             0,
@@ -466,10 +472,82 @@ class DirectSandboxRegistry:
             "WHERE json_extract(record_json, '$.quota_total_mb') IS NULL"
         ):
             reserved_mb += cls._decode(row).spec.requested_resources().disk_mb
+        # A published, unmounted workspace no longer occupies local disk; the
+        # storage daemon stopped charging it. Every mount re-reserves it first.
+        reserved_mb -= connection.execute(
+            "SELECT COALESCE(SUM(w.released_mb),0) FROM workspace_capacity w "
+            "JOIN registrations r ON r.sandbox_id=w.sandbox_id "
+            "AND json_extract(r.record_json, '$.sandbox_generation')=w.sandbox_generation"
+        ).fetchone()[0]
         overlap = connection.execute(
             "SELECT COALESCE(SUM(allocated_bytes),0) FROM reflink_overlaps"
         ).fetchone()[0]
         return reserved_mb * 1024**2 + overlap
+
+    def workspace_mount_epoch(self, sandbox_id: str, sandbox_generation: int) -> int:
+        """Fence for a publication: capture before publishing, release with it."""
+        with self._transaction(write=False) as connection:
+            row = connection.execute(
+                "SELECT sandbox_generation,mount_epoch FROM workspace_capacity WHERE sandbox_id=?",
+                (sandbox_id,),
+            ).fetchone()
+            return row[1] if row is not None and row[0] == sandbox_generation else 0
+
+    def release_published_workspace(self, sandbox_id: str, sandbox_generation: int, *,
+                                    workspace_mb: int, expected_mount_epoch: int) -> bool:
+        """Stop charging a workspace the storage daemon has published.
+
+        The caller proves PUBLISHED after capturing ``expected_mount_epoch``.
+        Any mount since then re-reserved and advanced the epoch; a late
+        publisher must not un-charge that live workspace, so it is refused.
+        """
+        if type(workspace_mb) is not int or workspace_mb <= 0:
+            raise ValueError("invalid released workspace size")
+        with self._transaction(write=True) as connection:
+            owner = self._require(connection, sandbox_id)
+            if owner.sandbox_generation != sandbox_generation or owner.phase != "owned":
+                raise DirectRegistryConflictError("workspace release lost incarnation ownership")
+            row = connection.execute(
+                "SELECT sandbox_generation,mount_epoch FROM workspace_capacity WHERE sandbox_id=?",
+                (sandbox_id,),
+            ).fetchone()
+            epoch = row[1] if row is not None and row[0] == sandbox_generation else 0
+            if epoch != expected_mount_epoch:
+                return False
+            connection.execute(
+                "INSERT OR REPLACE INTO workspace_capacity VALUES (?,?,?,?)",
+                (sandbox_id, sandbox_generation, epoch, workspace_mb),
+            )
+            self._bump_activity(connection)
+            return True
+
+    def reserve_workspace_for_mount(self, sandbox_id: str, sandbox_generation: int) -> None:
+        """Re-charge a released workspace before any mount; always fence publishers.
+
+        Refusal is retryable: the sandbox stays parked and published, so the
+        wake can be placed on another worker.
+        """
+        with self._transaction(write=True) as connection:
+            owner = self._require(connection, sandbox_id)
+            if owner.sandbox_generation != sandbox_generation:
+                raise DirectRegistryConflictError("workspace mount lost incarnation ownership")
+            row = connection.execute(
+                "SELECT sandbox_generation,mount_epoch,released_mb FROM workspace_capacity WHERE sandbox_id=?",
+                (sandbox_id,),
+            ).fetchone()
+            epoch, released = (row[1], row[2]) if row is not None and row[0] == sandbox_generation else (0, 0)
+            if released and self.hard_disk_capacity_mb and (
+                self._reserved_disk_bytes(connection) + released * 1024**2
+                > self.hard_disk_capacity_mb * 1024**2
+            ):
+                raise DirectRegistryCapacityUnavailable(
+                    "workspace remount physical disk capacity exhausted"
+                )
+            connection.execute(
+                "INSERT OR REPLACE INTO workspace_capacity VALUES (?,?,?,0)",
+                (sandbox_id, sandbox_generation, epoch + 1),
+            )
+            self._bump_activity(connection)
 
     def reserve_reflink_overlap(self, sandbox_id: str, sandbox_generation: int,
                                hibernation_generation: int, allocated_bytes: int, *,
@@ -868,6 +946,7 @@ class DirectSandboxRegistry:
             )
             if record.migration_id:
                 self._retire(connection, sandbox_id, record.migration_id)
+            connection.execute("DELETE FROM workspace_capacity WHERE sandbox_id=?", (sandbox_id,))
             connection.execute("DELETE FROM managed_growth WHERE sandbox_id=? AND generation=?",
                                (sandbox_id, sandbox_generation))
             connection.execute(
@@ -1120,7 +1199,7 @@ class DirectSandboxRegistry:
                     + candidate.spec.requested_resources().disk_mb * 1024**2
                     > self.hard_disk_capacity_mb * 1024**2
                 ):
-                    raise DirectRegistryConflictError(
+                    raise DirectRegistryCapacityUnavailable(
                         "combined workspace and memory backing capacity exhausted"
                     )
             self._write(connection, candidate, insert=True)
@@ -1492,9 +1571,11 @@ class DirectSandboxRegistry:
                 "SELECT 1 FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' LIMIT 1"
             ).fetchone()
             version = cls._versions(connection)
-            if version in {(_DIRECT_REGISTRY_APPLICATION_ID, old) for old in (3, 4, 5)}:
+            if version in {(_DIRECT_REGISTRY_APPLICATION_ID, old) for old in (3, 4, 5, 6)}:
                 cls._validate_schema(connection, legacy_version=version[1])
-                missing = {"reflink_overlaps"}
+                missing = {"workspace_capacity"}
+                if version[1] < 6:
+                    missing.add("reflink_overlaps")
                 if version[1] < 5:
                     missing.add("managed_growth")
                 if version[1] == 3:
@@ -1552,7 +1633,9 @@ class DirectSandboxRegistry:
             if (statement := raw.strip()).startswith("CREATE ")
         }
         if legacy_version is not None:
-            expected.pop("reflink_overlaps")
+            expected.pop("workspace_capacity")
+            if legacy_version < 6:
+                expected.pop("reflink_overlaps")
             if legacy_version < 5:
                 expected.pop("managed_growth")
             if legacy_version == 3:

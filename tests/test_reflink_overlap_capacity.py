@@ -127,9 +127,10 @@ class ReflinkOverlapCapacityTests(unittest.TestCase):
         original = self.registry.get('one')
         with closing(sqlite3.connect(self.registry.path)) as conn:
             conn.execute('DROP TABLE reflink_overlaps')
+            conn.execute('DROP TABLE workspace_capacity')
             conn.execute('PRAGMA user_version=5')
         reopened = DirectSandboxRegistry(self.registry.path, hard_disk_capacity_mb=self.base+100)
         self.assertEqual(reopened.get('one'), original)
         self.reserve(registry=reopened)
         with closing(sqlite3.connect(self.registry.path)) as conn:
-            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0], 6)
+            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0], 7)

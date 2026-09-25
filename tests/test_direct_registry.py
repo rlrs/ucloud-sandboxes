@@ -584,6 +584,7 @@ class RelayWakeFenceTests(unittest.TestCase):
                 conn.execute('DROP TABLE relay_wake_fences')
                 conn.execute('DROP TABLE managed_growth')
                 conn.execute('DROP TABLE reflink_overlaps')
+                conn.execute('DROP TABLE workspace_capacity')
                 conn.execute('PRAGMA user_version=3')
             reopened=DirectSandboxRegistry(path)
             self.assertEqual(reopened.get('sandbox'),original)

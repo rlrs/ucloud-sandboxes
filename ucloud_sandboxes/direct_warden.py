@@ -367,8 +367,12 @@ class DirectRunscWarden:
         telemetry: Telemetry | None = None,
         memory_backing: MemoryBackingStore | None = None,
         memory_capacity: DirectSandboxRegistry | None = None,
+        disk_capacity: DirectSandboxRegistry | None = None,
     ) -> None:
         self.config = config
+        # Split mode's shared physical-disk ledger. A published workspace stops
+        # being charged there; every mount re-reserves it first.
+        self.disk_capacity = disk_capacity
         self.runner = runner or SubprocessCommandRunner()
         self.fencer = fencer or LinuxPidfdFencer(proc_root=config.proc_root)
         self.storage = storage
@@ -567,7 +571,10 @@ class DirectRunscWarden:
                     "only a parked sandbox can publish storage authority"
                 )
             record = self.workspace_record(sandbox)
+            # Mounts re-reserve under this lock, so the epoch fences a late publisher.
+            mount_epoch = self._workspace_mount_epoch(sandbox)
             if record.state == StorageVolumeState.PUBLISHED:
+                self._release_published_workspace_capacity(sandbox, record, mount_epoch)
                 return record
             if record.state in {StorageVolumeState.MOUNTED, StorageVolumeState.SEALED}:
                 # Imported checkpoints can be logically parked while metadata
@@ -588,7 +595,28 @@ class DirectRunscWarden:
             raise DirectWardenError(
                 "storage-native publication returned an invalid record"
             )
+        self._release_published_workspace_capacity(sandbox, record, mount_epoch)
         return record
+
+    def _workspace_mount_epoch(self, sandbox: DirectSandbox) -> int:
+        if self.disk_capacity is None or sandbox.memory is None:
+            return 0
+        return self.disk_capacity.workspace_mount_epoch(
+            sandbox.sandbox_id, sandbox.sandbox_generation
+        )
+
+    def _release_published_workspace_capacity(
+        self, sandbox: DirectSandbox, record: StorageVolumeRecord, mount_epoch: int,
+    ) -> None:
+        if self.disk_capacity is None or sandbox.memory is None:
+            return
+        # Release exactly what the storage daemon stopped charging. A refused
+        # (stale) release keeps the charge, which is the conservative outcome.
+        self.disk_capacity.release_published_workspace(
+            sandbox.sandbox_id, sandbox.sandbox_generation,
+            workspace_mb=(record.virtual_size + 1024**2 - 1) // 1024**2,
+            expected_mount_epoch=mount_epoch,
+        )
 
     def running_process_alive(self, sandbox: DirectSandbox) -> bool:
         """Prove that a RUNNING journal still owns the recorded sentry."""
@@ -2225,6 +2253,11 @@ class DirectRunscWarden:
         caller retains its lifecycle fence; rootfs preparation and execution
         handoff remain separate steps owned by the existing journal.
         """
+        if self.disk_capacity is not None and sandbox.memory is not None:
+            # A retryable refusal leaves the sandbox parked and published.
+            self.disk_capacity.reserve_workspace_for_mount(
+                sandbox.sandbox_id, sandbox.sandbox_generation
+            )
         record = self.storage.ensure_mounted(
             self._storage_owner(sandbox),
             operation_id=operation_id,
@@ -2368,6 +2401,11 @@ class DirectRunscWarden:
         }:
             raise DirectWardenError(
                 "storage-native restore rollback returned invalid authority"
+            )
+        if record.state == StorageVolumeState.PUBLISHED:
+            # The attempted mount re-reserved the workspace; it is off-node again.
+            self._release_published_workspace_capacity(
+                sandbox, record, self._workspace_mount_epoch(sandbox)
             )
 
     def _journal(self, sandbox: DirectSandbox) -> HibernationJournal:

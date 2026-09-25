@@ -224,6 +224,7 @@ def build_direct_runtime_service(
         storage=storage_client,
         memory_backing=memory_backing,
         memory_capacity=registry if reflink_memory_restore else None,
+        disk_capacity=registry if split_memory_backing else None,
         rootfs_lifecycle=overlays,
         telemetry=telemetry,
     )

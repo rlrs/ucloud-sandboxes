@@ -581,7 +581,7 @@ class DirectSandboxService:
                     sandbox_generation=operation.generation,
                     operation_id=operation.operation_id,
                 )
-            except StorageNativeCapacityError as exc:
+            except (StorageNativeCapacityError, DirectRegistryCapacityUnavailable) as exc:
                 # Capacity rejection is safe to place on another node only
                 # after this worker has rolled back every partial owner.
                 try:

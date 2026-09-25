@@ -2621,7 +2621,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                             )
                             continue
                         try:
-                            stored_route = self.routing_store.upsert_sandbox(
+                            stored_route = self.routing_store.confirm_sandbox_observation(
                                 confirmed,
                                 allow_node_epoch_adoption=False,
                             )
@@ -2644,6 +2644,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                             confirmed,
                             keep_route=stored_route,
                         )
+                if stored_route is None:
+                    continue
                 sandboxes.append(_enrich_sandbox_record(record, heartbeat))
                 self._ensure_registry_route_reference(stored_route, touch=True)
         for route in self.routing_store.sandbox_routes_readonly():
@@ -3547,7 +3549,10 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                         status=HTTPStatus.BAD_GATEWAY,
                     )
                     return
-                self.routing_store.upsert_sandbox(route)
+                confirmed=self._confirm_sandbox_observation(route)
+                if confirmed is None:
+                    return
+                route=confirmed
                 record_sandbox_scheduled(
                     self.metrics_store,
                     sandbox_id=spec.id,
@@ -3623,6 +3628,13 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             failure_reason=failure_reason,
         )
 
+    def _confirm_sandbox_observation(self,route):
+        confirmed=self.routing_store.confirm_sandbox_observation(route)
+        if confirmed is None:
+            self._write_json({'error':'sandbox ownership ended before worker confirmation',
+                'error_code':'sandbox_observation_superseded','retryable':False},status=HTTPStatus.GONE)
+        return confirmed
+
     def _send_existing_sandbox_response(
         self,
         route: SandboxRoute,
@@ -3641,8 +3653,9 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         ):
             return False
         route = _route_with_sandbox_record(route, record)
-        self.routing_store.upsert_sandbox(route)
-        route = self.routing_store.get_sandbox_readonly(spec.id) or route
+        route=self._confirm_sandbox_observation(route)
+        if route is None:
+            return True
         self._ensure_registry_route_reference(route, touch=True)
         if pending is not None:
             record_sandbox_scheduled(
@@ -3705,9 +3718,9 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     status=HTTPStatus.BAD_GATEWAY,
                 )
                 return
-            stored = self.routing_store.upsert_sandbox(
-                _route_with_sandbox_record(route, record)
-            )
+            stored = self._confirm_sandbox_observation(_route_with_sandbox_record(route, record))
+            if stored is None:
+                return
             self._ensure_registry_route_reference(stored, touch=True)
             self._record_registry_image_used(spec.image)
             self._write_json(
@@ -4278,6 +4291,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
 
     def _route_sandbox_request(self, sandbox_id: str, path: str) -> None:
         action = match_sandbox_http_route(self.command, path)
+        if action and action.action=='delete' and self.routing_store.distributed:
+            self.routing_store.cancel_create_commands(sandbox_id)
         if action and action.action=='wake' and getattr(self,'placement_queue',None) is not None:
             try:
                 body=self._read_raw_body(max_bytes=DEFAULT_MAX_JSON_BODY_BYTES)
@@ -4591,9 +4606,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         ):
             self._write_create_in_progress_response(route.sandbox_id)
             return None
-        return self.routing_store.upsert_sandbox(
-            _route_with_sandbox_record(route, record)
-        )
+        return self._confirm_sandbox_observation(_route_with_sandbox_record(route, record))
 
     def _prepare_program_lifecycle(
         self,

@@ -14,7 +14,7 @@ _METHODS = frozenset({
     'confirm_sandbox_wake', 'upsert_exec',
     'upsert_program_request_transition_with_change',
     'reconcile_sandboxes_for_node', 'allocate_sandbox_create_with_pending',
-    'upsert_sandbox', 'reserve_sandbox_wakes',
+    'upsert_sandbox', 'confirm_sandbox_observation', 'reserve_sandbox_wakes',
 })
 _store = None
 _identity = None
@@ -169,6 +169,9 @@ class RoutingWriteProcess:
 
     def upsert_sandbox(self, *args, **kwargs):
         return self._write('upsert_sandbox', *args, **kwargs)
+
+    def confirm_sandbox_observation(self,*args,**kwargs):
+        return self._write('confirm_sandbox_observation',*args,**kwargs)
 
     def reserve_sandbox_wakes(self, requests):
         return self._write('reserve_sandbox_wakes', list(requests))

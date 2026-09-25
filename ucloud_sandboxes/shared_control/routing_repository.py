@@ -353,6 +353,46 @@ class PostgresRoutingStore(RoutingStore):
                     (route.generation, row["command_id"]),
                 )
 
+    def delete_sandbox_if_current(self, sandbox_id, **kwargs):
+        with self._transaction() as conn:
+            command = (
+                self._command_row(conn) if self._command.get() is not None else None
+            )
+            removed = super().delete_sandbox_if_current(sandbox_id, **kwargs)
+            if removed is not None and command is not None:
+                if command["kind"] != "create" or command["sandbox_id"] != sandbox_id:
+                    raise PlacementCommandRejected(
+                        "placement command cannot release this route"
+                    )
+                # Canonical create releases a provisional route only after a
+                # proven rejection/absence. This command may then re-place it;
+                # an external DELETE has no command context and cannot grant
+                # that permission. Release and permission commit together.
+                conn.execute(
+                    "UPDATE gateway_commands SET generation=NULL WHERE command_id=?",
+                    (command["command_id"],),
+                )
+            return removed
+
+    @_transactional
+    def cancel_create_commands(self, sandbox_id):
+        with self._transaction() as conn:
+            rows = conn.execute(
+                """UPDATE gateway_commands SET state='done',claim_token=NULL,claim_until=NULL,
+                result_status=410,result_headers=?::jsonb,result_body=?,completed_at=clock_timestamp()
+                WHERE sandbox_id=? AND kind='create' AND state!='done' RETURNING command_id""",
+                (
+                    json.dumps({"Content-Type": "application/json"}),
+                    b'{"error":"sandbox creation was cancelled by deletion","error_code":"sandbox_create_cancelled","retryable":false}',
+                    sandbox_id,
+                ),
+            ).fetchall()
+            if rows:
+                conn.execute(
+                    "DELETE FROM pending WHERE sandbox_id=? AND operation_id=ANY(?) AND failure_reason='queued_create'",
+                    (sandbox_id, [str(row["command_id"]) for row in rows]),
+                )
+
     def allocate_sandbox_create_with_pending(self, allocation, **kwargs):
         with self._transaction() as conn:
             command = self._command_row(conn)
@@ -431,9 +471,9 @@ class PostgresRoutingStore(RoutingStore):
         # pooled connection. Unrelated workers never share this lock.
         key = self.schema + "/placement/" + worker
         started = time.monotonic()
-        conn.execute("SELECT pg_advisory_lock(hashtextextended(%s,0))", (key,))
-        span.set_attribute("routing.worker_wait_seconds", time.monotonic() - started)
         try:
+            conn.execute("SELECT pg_advisory_lock(hashtextextended(%s,0))", (key,))
+            span.set_attribute("routing.worker_wait_seconds", time.monotonic() - started)
             yield
         finally:
             try:
@@ -520,6 +560,7 @@ TRANSACTIONAL_METHODS = (
     "upsert_program_request_transition_with_change",
     "set_sandbox_state_if_current",
     "confirm_sandbox_wake",
+    "confirm_sandbox_observation",
     "reserve_sandbox_wake",
     "reserve_sandbox_wakes",
     "begin_sandbox_detach",

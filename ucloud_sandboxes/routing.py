@@ -1500,15 +1500,29 @@ class RoutingStore:
                 )
             return stored
 
+    def confirm_sandbox_observation(self,route: SandboxRoute,*,allow_node_epoch_adoption=True) -> SandboxRoute | None:
+        """Apply a worker receipt only to the still-owned, non-deleting route.
+
+        A late create/list response is an observation, never authority to insert
+        a route after deletion or replace a newer incarnation.
+        """
+        with self._lock:
+            with self._transaction() as conn:
+                current=self._get_sandbox_unlocked(conn,route.sandbox_id)
+                if current is None or current.delete_operation_id or not _same_sandbox_route_incarnation(current,route):
+                    return None
+                return self.upsert_sandbox(route,allow_node_epoch_adoption=allow_node_epoch_adoption,_connection=conn)
+
     def upsert_sandbox(
         self,
         route: SandboxRoute,
         *,
         allow_node_epoch_adoption: bool = True,
+        _connection=None,
     ) -> SandboxRoute:
         with self._lock:
             now = utc_now().isoformat()
-            with self._transaction() as conn:
+            with (self._transaction() if _connection is None else nullcontext(_connection)) as conn:
                 existing = self._get_sandbox_unlocked(conn, route.sandbox_id)
                 if existing is not None and not _route_update_is_current(
                     existing,

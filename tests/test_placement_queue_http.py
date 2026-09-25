@@ -47,13 +47,24 @@ class PlacementQueueHTTPTests(TestCase):
         self.created = Event()
         self.release = Event()
         self.woken = Event()
+        self.execution_finished = Event()
         self.create_calls = []
         self.wake_calls = []
+        self.reject_first_node = False
+        self.rejected = []
         fixture = self
 
         class Node(BaseHTTPRequestHandler):
             def log_message(self, *_args):
                 pass
+
+            def do_DELETE(self):
+                raw = b'{"ok":true}'
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
 
             def do_POST(self):
                 payload = json.loads(
@@ -61,6 +72,21 @@ class PlacementQueueHTTPTests(TestCase):
                 )
                 if self.path == "/v1/sandboxes":
                     operation = payload.pop("_ucloud_operation")
+                    if fixture.reject_first_node and self.server is fixture.node:
+                        fixture.rejected.append(operation)
+                        raw = json.dumps(
+                            {
+                                "error": "direct node admission is closed",
+                                "error_code": "node_admission_closed",
+                                "retryable": True,
+                            }
+                        ).encode()
+                        self.send_response(503)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_header("Content-Length", str(len(raw)))
+                        self.end_headers()
+                        self.wfile.write(raw)
+                        return
                     fixture.create_calls.append(operation)
                     fixture.created.set()
                     if not fixture.release.wait(10):
@@ -86,6 +112,7 @@ class PlacementQueueHTTPTests(TestCase):
                 self.end_headers()
                 self.wfile.write(raw)
 
+        self.node_handler = Node
         self.node = ThreadingHTTPServer(("127.0.0.1", 0), Node)
 
     def tearDown(self):
@@ -149,6 +176,16 @@ class PlacementQueueHTTPTests(TestCase):
                     token="test-gateway-secret",
                     create_concurrency=create_concurrency,
                 )
+                execute = worker.execute
+
+                async def observed_execute(session, command):
+                    try:
+                        return await execute(session, command)
+                    finally:
+                        self.execution_finished.set()
+
+                worker.execute = observed_execute
+                self.queue_worker = worker
                 errors = []
 
                 def run():
@@ -379,3 +416,119 @@ class PlacementQueueHTTPTests(TestCase):
                 await queue.close()
 
         asyncio.run(run())
+
+    def test_closed_admission_reselects_alternate_worker_with_new_generation(self):
+        self.reject_first_node = True
+        self.release.set()
+        alternate = ThreadingHTTPServer(("127.0.0.1", 0), self.node_handler)
+        with self.pipeline() as public, _running_server(alternate) as alternate_url:
+            heartbeat = build_heartbeat(
+                job_id="job-2",
+                node_id="node-2",
+                node_url=alternate_url,
+                node_epoch="boot-2",
+                activity_epoch=1,
+                capabilities=("sandbox", "image-cache", "disk-quota"),
+                cached_images=("busybox",),
+                total_resources=ResourceQuantity(
+                    vcpu=16, memory_mb=16384, disk_mb=65536
+                ),
+            )
+            self.assertEqual(
+                post_heartbeat(public + "/v1/nodes/heartbeat", heartbeat).status, 200
+            )
+            status, body = self.request(
+                public + "/v1/sandboxes", self.spec("reselected")
+            )
+            self.assertEqual(status, 201)
+            self.assertEqual(len(self.rejected), 1)
+            self.assertEqual(len(self.create_calls), 1)
+            route = self.routing.get_sandbox("reselected")
+            self.assertEqual(route.job_id, "job-2")
+            self.assertGreater(route.generation, self.rejected[0]["generation"])
+            self.assertEqual(body["sandbox"]["generation"], route.generation)
+            self.assertIsNone(self.routing.get_pending("reselected"))
+
+    def delete(self, public, sandbox_id):
+        with urlopen(
+            Request(public + "/v1/sandboxes/" + sandbox_id, method="DELETE"), timeout=5
+        ) as response:
+            self.assertEqual(response.status, 200)
+            return json.loads(response.read())
+
+    def wait_for_command(self, sandbox_id):
+        from time import sleep
+
+        deadline = monotonic() + 5
+        while monotonic() < deadline:
+            with self.routing.pool.connection() as conn:
+                row = conn.execute(
+                    "SELECT * FROM gateway_commands WHERE sandbox_id=%s", (sandbox_id,)
+                ).fetchone()
+            if row:
+                return row
+            sleep(0.01)
+        self.fail("public request was not durably queued")
+
+    def test_delete_queued_unbound_create_prevents_future_dispatch(self):
+        from urllib.error import HTTPError
+
+        with (
+            self.pipeline(create_concurrency=0) as public,
+            ThreadPoolExecutor(1) as requests,
+        ):
+            result = requests.submit(
+                self.request, public + "/v1/sandboxes", self.spec("delete-queued")
+            )
+            command = self.wait_for_command("delete-queued")
+            self.assertIsNone(command["generation"])
+            self.assertEqual(command["state"], "queued")
+            self.delete(public, "delete-queued")
+            self.queue_worker.budgets["create"] = 1
+            self.release.set()
+            with self.assertRaises(HTTPError) as cancelled:
+                result.result(5)
+            self.assertIn(cancelled.exception.code, (409, 410))
+            cancelled.exception.close()
+            with self.routing.pool.connection() as conn:
+                after = conn.execute(
+                    "SELECT state FROM gateway_commands WHERE command_id=%s",
+                    (command["command_id"],),
+                ).fetchone()
+            self.assertEqual(after["state"], "done")
+            self.assertIsNone(self.routing.get_sandbox("delete-queued"))
+            self.assertIsNone(self.routing.get_pending("delete-queued"))
+            self.assertFalse(self.create_calls)
+
+    def test_delete_bound_create_does_not_authorize_replay_as_new_incarnation(self):
+        from urllib.error import HTTPError
+
+        with self.pipeline() as public, ThreadPoolExecutor(1) as requests:
+            try:
+                result = requests.submit(
+                    self.request, public + "/v1/sandboxes", self.spec("delete-bound")
+                )
+                self.assertTrue(self.created.wait(5))
+                generation = self.routing.get_sandbox("delete-bound").generation
+                self.delete(public, "delete-bound")
+            finally:
+                self.release.set()
+            with self.assertRaises(HTTPError) as cancelled:
+                result.result(5)
+            self.assertIn(cancelled.exception.code, (409, 410))
+            cancelled.exception.close()
+            self.assertTrue(
+                self.execution_finished.wait(5),
+                "cancelled in-flight create did not finish",
+            )
+            self.assertIsNone(self.routing.get_sandbox("delete-bound"))
+            self.assertEqual(
+                [call["generation"] for call in self.create_calls], [generation]
+            )
+            with self.routing.pool.connection() as conn:
+                row = conn.execute(
+                    "SELECT state,generation FROM gateway_commands WHERE sandbox_id=%s",
+                    ("delete-bound",),
+                ).fetchone()
+            self.assertEqual(row["state"], "done")
+            self.assertEqual(row["generation"], generation)

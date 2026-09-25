@@ -145,6 +145,18 @@ def seed_routing_state(store: RoutingStore, state: RoutingState) -> None:
 
 
 class RoutingStoreTests(unittest.TestCase):
+    def test_observation_cannot_recreate_deleted_or_deleting_incarnation(self):
+        with routing_store() as store:
+            route=store.upsert_sandbox(sandbox_route(sandbox_id='late-create',node_id='n',job_id='j',node_url='http://n'))
+            store.prepare_sandbox_delete(route.sandbox_id)
+            self.assertIsNone(store.confirm_sandbox_observation(route))
+            store.delete_sandbox(route.sandbox_id)
+            self.assertIsNone(store.confirm_sandbox_observation(route))
+            newer=allocate_sandbox_create(store,sandbox_allocation(sandbox_id=route.sandbox_id,node_id='n2',job_id='j2',node_url='http://n2'),spec_hash='b'*64)
+            self.assertGreater(newer.generation,route.generation)
+            self.assertIsNone(store.confirm_sandbox_observation(route))
+            self.assertEqual(store.get_sandbox(route.sandbox_id),newer)
+
     def test_writer_handoff_rolls_back_failure_and_keeps_reads_independent(self):
         with routing_store() as store, ThreadPoolExecutor(max_workers=2) as executor:
             peer = RoutingStore(store.path)

@@ -3548,17 +3548,17 @@ class ControlPlaneTests(unittest.TestCase):
 
                     gateway.RequestHandlerClass._proxy_request = parked_inventory
                     gateway_routing = gateway.RequestHandlerClass.routing_store
-                    real_upsert = gateway_routing.upsert_sandbox
+                    real_confirmation = gateway_routing.confirm_sandbox_observation
 
-                    def ambiguous_upsert(*args, **kwargs):
+                    def ambiguous_confirmation(*args, **kwargs):
                         if durable_snapshot:
-                            real_upsert(*args, **kwargs)
+                            real_confirmation(*args, **kwargs)
                         raise sqlite3.OperationalError(
                             "refresh commit acknowledgement lost"
                         )
 
-                    gateway_routing.upsert_sandbox = (  # type: ignore[method-assign]
-                        ambiguous_upsert
+                    gateway_routing.confirm_sandbox_observation = (  # type: ignore[method-assign]
+                        ambiguous_confirmation
                     )
                     with _running_server(gateway) as base:
                         response = self._json_request(

@@ -131,6 +131,27 @@ class PlacementQueueTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(repeated.generation, route.generation)
         self.assertEqual(repeated.create_operation_id, route.create_operation_id)
 
+    async def test_proven_create_rejection_can_reallocate_but_external_delete_cancels(
+        self,
+    ):
+        command = await self.claimed()
+        with self.execution(command):
+            first = self.allocate()
+            removed = self.routing.delete_sandbox_if_current(
+                first.sandbox_id,
+                generation=first.generation,
+                create_operation_id=first.create_operation_id,
+            )
+            self.assertIsNotNone(removed)
+            self.assertIsNone((await self.row(command))["generation"])
+            second = self.allocate()
+        self.assertEqual(second.generation, first.generation + 1)
+        self.routing.cancel_create_commands(second.sandbox_id)
+        with self.assertRaises(PlacementCommandRejected):
+            with self.execution(command):
+                self.allocate()
+        self.assertEqual((await self.row(command))["result_status"], 410)
+
     async def test_failed_allocation_rolls_back_route_and_command_binding(self):
         command = await self.claimed()
         with self.execution(command):

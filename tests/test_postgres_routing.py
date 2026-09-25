@@ -56,6 +56,7 @@ class PostgresRoutingContracts(unittest.TestCase):
 # SQLite file-format, process-writer and filesystem-permission tests remain in
 # the standalone suite. The domain rules below are identical on both backends.
 CONTRACTS = (
+    "observation_cannot_recreate_deleted_or_deleting_incarnation",
     "active_migration_lookup_is_scoped_to_sandbox",
     "lifecycle_proof_fences_pre_mutation_heartbeats",
     "exec_route_requires_exact_worker_identity",

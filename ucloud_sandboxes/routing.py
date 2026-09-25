@@ -659,6 +659,17 @@ class PlacementCommandRejected(ValueError):
     """A durable placement claim no longer authorizes this incarnation."""
 
 
+_SANDBOX_ROUTE_BY_ID_SQL = """
+            SELECT sandbox_id, node_id, job_id, node_url, resources_json, spec_json, state,
+                   generation, create_operation_id, spec_hash, delete_operation_id,
+                   node_epoch, activity_epoch, worker_state, storage_schema,
+                   snapshot_manifest_digest, snapshot_repository,
+                   snapshot_tag, storage_snapshot_json, created_at, updated_at
+            FROM sandboxes
+            WHERE sandbox_id = ?
+            """
+
+
 class RoutingStore:
     # Dialect-specific bulk reads stay at the persistence boundary; lifecycle
     # and ownership rules are shared by the standalone and PostgreSQL stores.
@@ -715,8 +726,13 @@ class RoutingStore:
         return self.get_sandbox_readonly(sandbox_id)
 
     def get_sandbox_readonly(self, sandbox_id: str) -> SandboxRoute | None:
+        row = self._fetchone_readonly(_SANDBOX_ROUTE_BY_ID_SQL, (sandbox_id,))
+        return _sandbox_route_from_row(row) if row is not None else None
+
+    def _fetchone_readonly(self, query, parameters=()):
+        """Fetch one statement; callers needing coherent multiple reads use _connect."""
         with self._connect() as conn:
-            return self._get_sandbox_unlocked(conn, sandbox_id)
+            return conn.execute(query, parameters).fetchone()
 
     def get_sandbox_loss(self, sandbox_id: str) -> dict[str, Any] | None:
         """Return terminal loss only for the latest, still-absent incarnation."""
@@ -3950,15 +3966,7 @@ class RoutingStore:
         sandbox_id: str,
     ) -> SandboxRoute | None:
         row = conn.execute(
-            """
-            SELECT sandbox_id, node_id, job_id, node_url, resources_json, spec_json, state,
-                   generation, create_operation_id, spec_hash, delete_operation_id,
-                   node_epoch, activity_epoch, worker_state, storage_schema,
-                   snapshot_manifest_digest, snapshot_repository,
-                   snapshot_tag, storage_snapshot_json, created_at, updated_at
-            FROM sandboxes
-            WHERE sandbox_id = ?
-            """,
+            _SANDBOX_ROUTE_BY_ID_SQL,
             (sandbox_id,),
         ).fetchone()
         return _sandbox_route_from_row(row) if row is not None else None

@@ -479,6 +479,20 @@ class PostgresRoutingStore(RoutingStore):
             if row is None or row["version"] != 1:
                 raise ValueError("unsupported PostgreSQL routing schema")
 
+    def _fetchone_readonly(self, query, parameters=()):
+        current = self._current.get()
+        if current is not None:
+            # Placement must keep its exact snapshot and uncommitted writes.
+            return current.execute(query, parameters).fetchone()
+        self.validate_authority()
+        try:
+            # One SQL statement has one coherent snapshot under autocommit;
+            # do not pay BEGIN/SET/COMMIT for each exact-owner lookup.
+            with self.pool.connection() as conn:
+                return _Connection(conn).execute(query, parameters).fetchone()
+        except psycopg.Error as exc:
+            raise sqlite3.DatabaseError("PostgreSQL routing read failed") from exc
+
     @contextmanager
     def _connect(self):
         current = self._current.get()

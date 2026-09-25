@@ -1,4 +1,4 @@
-"""Live relay database facilities; no sandbox scheduling or runtime authority."""
+"""PostgreSQL pool and transaction facilities shared by durable control domains."""
 from __future__ import annotations
 
 import asyncio
@@ -37,10 +37,10 @@ def postgres_transaction_observer(telemetry):
 
 
 class PostgresDatabase:
-    """Bounded connections, observed transactions, and explicit relay migration.
+    """Bounded connections, observed transactions, and explicit schema migration.
 
-    The qualification store reuses these facilities with its own schema; the
-    live service never constructs that scheduling prototype.
+    Relay and placement queue stores share these facilities, with each store
+    selecting its own schema and version contract.
     """
 
     version_table = "relay_schema_version"

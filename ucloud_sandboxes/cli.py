@@ -1362,6 +1362,11 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
         await lifecycle.close()
         await asyncio.to_thread(telemetry.shutdown)
 
+    async def observe_loop_lag(_app: object) -> None:
+        if telemetry.enabled:
+            telemetry.observe_event_loop_lag(asyncio.get_running_loop(), "relay")
+
+    app.on_startup.append(observe_loop_lag)
     app.on_cleanup.append(shutdown_telemetry)
     print(f"Serving model relay on http://{args.host}:{config.relay_port}")
     web.run_app(app, host=args.host, port=config.relay_port, print=None)

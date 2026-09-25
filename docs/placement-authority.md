@@ -22,9 +22,14 @@ flowchart LR
   Gateway -->|tool and file traffic| Worker
 ```
 
-Public creates and explicit wakes enter a durable queue. The gateway transfers
+Public creates and explicit wakes that need placement enter a durable queue.
+A running or waking attached owner receives its generation-fenced wake directly;
+admission rechecks the route and falls back to the queue if it is no longer warm.
+The relay still owns its durable wake intent and retries interrupted delivery.
+The gateway transfers
 waiting sockets to asynchronous response I/O; they do not retain request threads.
-One batched completion reader has its own database connection so enqueue bursts
+Placement queue I/O runs on its own event-loop thread, isolated from worker proxy
+and event-stream callbacks. One batched completion reader has its own database connection so enqueue bursts
 cannot strand replies behind new submissions. Both pools use the same authority;
 no cache or notification becomes a source of truth. Pool wait, transaction and
 commit timings use the shared PostgreSQL metrics.
@@ -71,7 +76,11 @@ unrelated operation holds the worker revision row.
 
 Known-owner create and local-wake batches additionally take a worker-specific
 PostgreSQL advisory turn **before opening the snapshot**. This suppresses wasteful
-same-worker retries; revision checks remain the correctness mechanism. No
+same-worker retries; revision checks remain the correctness mechanism. A local
+per-worker turn is acquired before borrowing a database connection, so waiters
+for a busy worker do not consume the pool needed by other workers. In-flight
+create selections steer ranking away from the same worker; only the committed
+reservation transaction determines admission. No
 fleet-wide application mutex or SQLite writer process participates in PostgreSQL
 placement. Local wakes batch by worker rather than across the whole fleet.
 

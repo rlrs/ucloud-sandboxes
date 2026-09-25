@@ -12,6 +12,7 @@ from uuid import uuid4
 from ucloud_sandboxes.shared_control.database import postgres_transaction_observer
 from ucloud_sandboxes.shared_control.model import TransactionSample
 from ucloud_sandboxes.shared_control.placement_queue import (
+    IsolatedPlacementResponses,
     PlacementQueue,
     PlacementQueueClient,
 )
@@ -130,6 +131,85 @@ class CompletionReaderLifecycleTests(unittest.IsolatedAsyncioTestCase):
             telemetry.meter.create_histogram.call_args.args[0],
             "ucloud.platform.postgres.duration",
         )
+
+
+class IsolatedPlacementResponsesTests(unittest.IsolatedAsyncioTestCase):
+    @staticmethod
+    def client():
+        client = Mock()
+        client.close = AsyncMock()
+        return client
+
+    async def test_response_runs_on_dedicated_loop_thread(self):
+        import threading
+
+        client = self.client()
+        caller = threading.current_thread()
+        seen = []
+
+        async def response(*args):
+            seen.append((threading.current_thread(), asyncio.get_running_loop(), args))
+            return 200, {}, b"{}"
+
+        client.response = response
+        started = []
+        isolated = IsolatedPlacementResponses(client, on_loop_started=started.append)
+        try:
+            self.assertEqual(
+                await isolated.response("wake", "s", "/wake", {}, b"{}"),
+                (200, {}, b"{}"),
+            )
+        finally:
+            await isolated.close()
+        thread, loop, args = seen[0]
+        self.assertIsNot(thread, caller)
+        self.assertEqual(thread.name, "placement-queue-io")
+        self.assertIsNot(loop, asyncio.get_running_loop())
+        self.assertEqual(started, [loop])
+        self.assertEqual(args, ("wake", "s", "/wake", {}, b"{}"))
+        client.close.assert_awaited_once()
+        self.assertFalse(isolated._thread.is_alive())
+
+    async def test_caller_cancellation_cancels_owned_waiter(self):
+        client = self.client()
+        waiting, cancelled = asyncio.Event(), []
+        caller_loop = asyncio.get_running_loop()
+
+        async def response(*_args):
+            caller_loop.call_soon_threadsafe(waiting.set)
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancelled.append(True)
+                raise
+
+        client.response = response
+        isolated = IsolatedPlacementResponses(client)
+        try:
+            task = asyncio.create_task(isolated.response("wake", "s", "/w", {}, b"{}"))
+            await waiting.wait()
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+            for _ in range(100):
+                if cancelled:
+                    break
+                await asyncio.sleep(0.01)
+            self.assertEqual(cancelled, [True])
+        finally:
+            await isolated.close()
+
+    async def test_close_is_terminal_and_never_starts_a_loop(self):
+        client = self.client()
+        client.response = AsyncMock()
+        isolated = IsolatedPlacementResponses(client)
+        await isolated.close()
+        client.close.assert_awaited_once()
+        status, _headers, body = await isolated.response("wake", "s", "/w", {}, b"{}")
+        self.assertEqual(status, 503)
+        self.assertTrue(json.loads(body)["retryable"])
+        client.response.assert_not_called()
+        self.assertIsNone(isolated._thread)
 
 
 @unittest.skipUnless(DSN, "requires isolated PostgreSQL")

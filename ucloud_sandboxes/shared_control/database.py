@@ -181,6 +181,41 @@ class PostgresDatabase:
                 except Exception:
                     LOGGER.exception("shared-control metrics callback failed")
 
+    @asynccontextmanager
+    async def statement(self, operation: str):
+        """One autocommit statement: no BEGIN/COMMIT round trips.
+
+        Use only where a single SQL statement is the complete unit of work.
+        Its commit is part of execution, so the commit phase is reported as 0.
+        A failure after dispatch has the same ambiguous outcome as COMMIT.
+        """
+        started = time.monotonic()
+        acquired = ended = None
+        succeeded = False
+        try:
+            async with self.pool.connection() as conn:
+                acquired = time.monotonic()
+                yield conn
+                ended = time.monotonic()
+                succeeded = True
+        except PoolTimeout as exc:
+            if acquired is None:
+                raise DatabaseAdmissionUnavailable(
+                    "relay database admission is temporarily unavailable"
+                ) from exc
+            raise
+        finally:
+            if self.observe is not None:
+                now = time.monotonic()
+                sample = TransactionSample(
+                    operation, (acquired or now) - started,
+                    (ended or now) - (acquired or now), 0, succeeded, 0,
+                )
+                try:
+                    self.observe(sample)
+                except Exception:
+                    LOGGER.exception("shared-control metrics callback failed")
+
     def after_commit(self, callback):
         callbacks = self._commit_callbacks.get()
         if callbacks is None:

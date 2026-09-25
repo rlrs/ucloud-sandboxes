@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections import OrderedDict
 from concurrent.futures import Future, TimeoutError as FutureTimeoutError
 from contextlib import contextmanager, nullcontext
@@ -139,7 +140,7 @@ from .program_scheduler import (
     plan_shadow_wake_queue,
 )
 from .resource_admission import node_accepts_dynamic_request
-from .control_state import ControlStateStore, QUARANTINE_REASON
+from .control_state import ControlStateStore, QUARANTINE_REASON, detached_heartbeat
 from .wake_admission import WakeAdmission
 from .wake_placement import (
     BlockedOwnerRefresh, WakePlaced, WakePlacement, WakePlacementPorts,
@@ -282,6 +283,17 @@ def _sandbox_required_capabilities(spec: dict[str, Any]) -> tuple[str, ...]:
     return tuple(capabilities)
 
 
+def _is_warm_wake_route(route: SandboxRoute | None, generation: int | None = None) -> bool:
+    """A resident owner needs no placement; its worker fences the wake itself."""
+    return bool(
+        route is not None
+        and not route.delete_operation_id
+        and route.worker_state == "attached"
+        and (route.state or "").lower() in {"running", "waking"}
+        and (generation is None or route.generation == generation)
+    )
+
+
 def _sandbox_supports_managed_lifecycle(spec: dict[str, Any]) -> bool:
     """Return whether request-bound relay park/wake is valid for this spec."""
 
@@ -332,6 +344,66 @@ class NodePlacementState:
     projected_image_identities: frozenset[str]
     active_creates: int
     assigned_shape_pressure: float = 0.0
+    assigned_vcpu: float = 0.0
+    assigned_memory_mb: int = 0
+
+
+class InflightCreatePlacements:
+    """Selections made by this process whose reservation has not committed.
+
+    Concurrent creates rank workers from the same committed snapshot, so they
+    would all choose the same least-assigned worker and queue behind its
+    placement turn. Ranking and claiming under one short in-process lock lets
+    each selection observe its predecessors. This only steers ranking: fit
+    checks and the reservation transaction still use committed routes.
+    """
+
+    def __init__(self):
+        self._lock = RLock()
+        self._claims: dict[str, dict[str, ResourceQuantity]] = {}
+
+    @contextmanager
+    def ranking(self):
+        with self._lock:
+            yield
+
+    def adjusted(
+        self,
+        heartbeat: NodeHeartbeat,
+        state: NodePlacementState,
+        committed_ids: frozenset[str] | set[str],
+    ) -> NodePlacementState:
+        claims = [
+            resources for sandbox_id, resources
+            in self._claims.get(heartbeat.job_id, {}).items()
+            if sandbox_id not in committed_ids
+        ]
+        if not claims:
+            return state
+        total = heartbeat.total_resources
+        vcpu = state.assigned_vcpu + sum(item.vcpu for item in claims)
+        memory_mb = state.assigned_memory_mb + sum(item.memory_mb for item in claims)
+        return replace(
+            state,
+            assigned_vcpu=vcpu,
+            assigned_memory_mb=memory_mb,
+            assigned_shape_pressure=max(
+                vcpu / max(1, total.vcpu), memory_mb / max(1, total.memory_mb),
+            ),
+            active_creates=state.active_creates + len(claims),
+        )
+
+    def claim(self, job_id: str, sandbox_id: str, resources: ResourceQuantity) -> None:
+        with self._lock:
+            self._claims.setdefault(job_id, {})[sandbox_id] = resources
+
+    def release(self, job_id: str, sandbox_id: str) -> None:
+        with self._lock:
+            claims = self._claims.get(job_id)
+            if claims is not None:
+                claims.pop(sandbox_id, None)
+                if not claims:
+                    del self._claims[job_id]
 
 
 class RegistryLayerMetadataCache:
@@ -4302,8 +4374,15 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             except (ValueError,TypeError) as exc:
                 self._write_json({'error':str(exc)},status=400)
                 return
-            self._defer_placement('wake',sandbox_id,path,body)
-            return
+            if not self._warm_wake_route(sandbox_id,int(raw['generation'])):
+                self._defer_placement('wake',sandbox_id,path,body)
+                return
+            # A running owner already holds its capacity: there is no placement
+            # to serialize. Forward the worker-fenced wake directly instead of
+            # paying the durable queue round trip. Admission re-reads the route
+            # and returns to the queue if it parked in between.
+            self._placement_request_body=body
+            self._warm_wake_fallback=(path,body)
         try:
             weight = max(1, int(self.headers.get("Content-Length", "0")))
             if weight > DEFAULT_MAX_PROXY_BODY_BYTES:
@@ -4322,6 +4401,14 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     self._route_sandbox_request_admitted(sandbox_id, path)
         else:
             self._route_sandbox_request_admitted(sandbox_id, path)
+
+    def _warm_wake_route(self, sandbox_id: str, generation: int) -> bool:
+        try:
+            return _is_warm_wake_route(
+                self.routing_store.get_sandbox_readonly(sandbox_id), generation,
+            )
+        except sqlite3.DatabaseError:
+            return False  # The durable queue owns availability errors.
 
     def _write_missing_sandbox_route(self, sandbox_id: str) -> None:
         loss = self.routing_store.get_sandbox_loss(sandbox_id)
@@ -4344,6 +4431,12 @@ class ControlPlaneHandler(BuildContextHttpHandler):
 
     def _route_sandbox_request_admitted(self, sandbox_id: str, path: str) -> None:
         route = self.routing_store.get_sandbox(sandbox_id)
+        fallback, self._warm_wake_fallback = getattr(self, "_warm_wake_fallback", None), None
+        if fallback is not None and not _is_warm_wake_route(route):
+            # Placement belongs to the durable queue; never reserve it here.
+            self._placement_request_body = None
+            self._defer_placement("wake", sandbox_id, *fallback)
+            return
         if route is None:
             if self.command == "DELETE":
                 pending_before = self.routing_store.get_pending(sandbox_id)
@@ -4720,7 +4813,10 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         }
         if payload.get("durable_lifecycle"):
             from .capabilities import RELAY_WAKE_FENCE_CAPABILITY
-            owner = self._heartbeat_for_route(job_id=route.job_id)
+            # Only capabilities are read; skip copying the full inventory.
+            owner = self._heartbeat_for_route(
+                job_id=route.job_id, include_inventory=False,
+            )
             if owner is None or RELAY_WAKE_FENCE_CAPABILITY not in owner.capabilities:
                 self._write_json(
                     {"error": "worker upgrade required for durable relay lifecycle", "retryable": True},
@@ -5563,12 +5659,18 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         image: str | None = None,
         required_capabilities: tuple[str, ...] = (),
         excluded_job_ids: tuple[str, ...] = (),
+        claim_sandbox_id: str | None = None,
     ) -> NodeHeartbeat | None:
+        """Rank candidates; optionally claim the choice for an in-flight create.
+
+        A claim must be released by the caller once its reservation settles.
+        """
         started = time.monotonic()
         routes = self._placement_routes()
         route_index = _placement_route_index(routes)
         routes_read = time.monotonic()
-        heartbeats = self._ready_sandbox_heartbeats()
+        # Ranking only reads inventories; skip per-entry defensive copies.
+        heartbeats = self._ready_sandbox_heartbeats(shared=True)
         heartbeats_read = time.monotonic()
         excluded_jobs = frozenset(excluded_job_ids)
         candidate_states: list[tuple[NodeHeartbeat, NodePlacementState]] = []
@@ -5624,6 +5726,31 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         target_manifest = (
             layer_cache.get(image or "") if layer_cache is not None else None
         )
+        inflight = getattr(self, "inflight_create_placements", None)
+        if inflight is None:
+            return detached_heartbeat(self._rank_candidates(
+                candidate_states, requested, image, image_node_ids,
+                inflight_image_node_ids, target_manifest, layer_cache,
+            ))
+        committed_ids = {
+            route.sandbox_id for route in routes if isinstance(route, SandboxRoute)
+        }
+        with inflight.ranking():
+            chosen = self._rank_candidates(
+                [(heartbeat, inflight.adjusted(heartbeat, state, committed_ids))
+                 for heartbeat, state in candidate_states],
+                requested, image, image_node_ids, inflight_image_node_ids,
+                target_manifest, layer_cache,
+            )
+            if claim_sandbox_id is not None:
+                inflight.claim(chosen.job_id, claim_sandbox_id, requested)
+        # The winner leaves ranking; never hand out the shared cached object.
+        return detached_heartbeat(chosen)
+
+    def _rank_candidates(
+        self, candidate_states, requested, image, image_node_ids,
+        inflight_image_node_ids, target_manifest, layer_cache,
+    ) -> NodeHeartbeat:
         return min(
             candidate_states,
             key=lambda item: (
@@ -5669,7 +5796,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     def _placement_routes(self) -> list[PlacementRecord]:
         """Include in-flight destination imports in normal node admission."""
 
-        routes = list(self.routing_store.sandbox_routes_readonly())
+        routes: list[PlacementRecord] = list(self.routing_store.placement_routes_readonly())
         routes_by_id = {route.sandbox_id: route for route in routes}
         for migration in self.routing_store.sandbox_migrations(active_only=True):
             source = routes_by_id.get(migration.sandbox_id)
@@ -5764,7 +5891,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 # the transaction. Admission rechecks only the chosen worker.
                 heartbeat = self._select_node(requested, image=image,
                     required_capabilities=_sandbox_required_capabilities(spec),
-                    excluded_job_ids=tuple(excluded))
+                    excluded_job_ids=tuple(excluded), claim_sandbox_id=sandbox_id)
                 if heartbeat is None:
                     return None
                 def reserve():
@@ -5784,7 +5911,12 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     if owner is None:
                         raise GatewaySchedulingBusyError('reserved worker is unavailable')
                     return owner,route,pending
-                reserved = self._atomic_placement(reserve,worker_id=heartbeat.job_id)
+                try:
+                    reserved = self._atomic_placement(reserve,worker_id=heartbeat.job_id)
+                finally:
+                    inflight = getattr(self, "inflight_create_placements", None)
+                    if inflight is not None:
+                        inflight.release(heartbeat.job_id, sandbox_id)
                 if reserved is not None:
                     return reserved
                 excluded.add(heartbeat.job_id)
@@ -6568,21 +6700,27 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             self._invalidate_image_inventory_cache()
         return response
 
-    def _ready_heartbeats(self) -> list[NodeHeartbeat]:
+    def _ready_heartbeats(self, *, shared: bool = False) -> list[NodeHeartbeat]:
         now = utc_now()
         return [
             heartbeat
-            for heartbeat in self.store.load_heartbeats().values()
+            for heartbeat in (
+                self.store.load_heartbeats(shared=True) if shared
+                else self.store.load_heartbeats()
+            ).values()
             if heartbeat.node_url
             and not heartbeat.draining
             and heartbeat.admission_open
             and heartbeat.is_fresh(now, self.heartbeat_ttl_seconds)
         ]
 
-    def _ready_sandbox_heartbeats(self) -> list[NodeHeartbeat]:
+    def _ready_sandbox_heartbeats(self, *, shared: bool = False) -> list[NodeHeartbeat]:
         return [
             heartbeat
-            for heartbeat in self._ready_heartbeats()
+            for heartbeat in (
+                self._ready_heartbeats(shared=True) if shared
+                else self._ready_heartbeats()
+            )
             if "sandbox" in heartbeat.capabilities
         ]
 
@@ -7024,11 +7162,16 @@ def build_server(
     if queue_placement and routing_store.distributed:
         if not async_proxy_responses or placement_worker:
             raise ValueError('queued placement requires asynchronous public responses')
-        from .shared_control.placement_queue import PlacementQueue, PlacementQueueClient
+        from .shared_control.placement_queue import (
+            IsolatedPlacementResponses, PlacementQueue, PlacementQueueClient)
         from .shared_control.database import postgres_transaction_observer
-        placement_queue=PlacementQueueClient(PlacementQueue(routing_store.pool.conninfo,
-            deployment_id,schema=routing_store.schema,
-            observe=postgres_transaction_observer(resolved_telemetry)))
+        placement_queue=IsolatedPlacementResponses(
+            PlacementQueueClient(PlacementQueue(routing_store.pool.conninfo,
+                deployment_id,schema=routing_store.schema,
+                observe=postgres_transaction_observer(resolved_telemetry))),
+            on_loop_started=(
+                (lambda loop: resolved_telemetry.observe_event_loop_lag(loop, "placement-queue-io"))
+                if resolved_telemetry.enabled else None))
     BoundHandler.placement_queue=placement_queue
     BoundHandler.routing_write_process = routing_writer
     BoundHandler.gateway_bearer_token = gateway_bearer_token
@@ -7098,6 +7241,7 @@ def build_server(
     BoundHandler.upload_memory_limiter = FairCapacity(DEFAULT_MAX_PROXY_BODY_BYTES)
     BoundHandler.sandbox_create_busy_sampler = GatewayBusySampler(metrics_store)
     BoundHandler.create_image_pull_tasks = CreateImagePullTasks()
+    BoundHandler.inflight_create_placements = InflightCreatePlacements()
     BoundHandler.telemetry = resolved_telemetry
     from .gateway_response_proxy import AsyncGatewayResponses
     async_responses = (AsyncGatewayResponses(
@@ -7107,6 +7251,10 @@ def build_server(
         connect_timeout=NODE_CONNECT_TIMEOUT_SECONDS,
     ) if async_proxy_responses else None)
     BoundHandler.async_responses = async_responses
+    if resolved_telemetry.enabled:
+        from .node_http_async import node_http_pool
+        node_http_pool.call_soon(lambda: resolved_telemetry.observe_event_loop_lag(
+            asyncio.get_running_loop(), "node-http-io"))
     class GatewayHTTPServer(HighBacklogThreadingHTTPServer):
         def __init__(self, *args, **kwargs):
             self._detached_proxy_requests = {}
@@ -7631,6 +7779,8 @@ def _node_placement_state(
             sum(assigned_cpu) / max(1, total.vcpu),
             assigned_memory / max(1, total.memory_mb),
         ),
+        assigned_vcpu=sum(assigned_cpu),
+        assigned_memory_mb=assigned_memory,
         available_resources=_node_available_resources(heartbeat, node_routes),
         inflight_image_identities=inflight_images,
         projected_image_identities=frozenset(projected_images),

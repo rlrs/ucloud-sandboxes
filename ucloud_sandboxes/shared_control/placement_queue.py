@@ -9,10 +9,12 @@ Wake commands already carry the worker's durable generation/operation fence.
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 from datetime import datetime, timedelta
 from hashlib import sha256
 import json
 import logging
+import threading
 from uuid import UUID, uuid4
 from typing import NamedTuple
 
@@ -26,6 +28,13 @@ from .database import PostgresDatabase
 LOGGER = logging.getLogger(__name__)
 COMMAND_HEADER = "X-UCloud-Placement-Command"
 CLAIM_HEADER = "X-UCloud-Placement-Claim"
+
+
+_ENQUEUE_SQL = """INSERT INTO gateway_commands(command_id,kind,sandbox_id,path,headers,body,deadline,command_key)
+    VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+    ON CONFLICT(command_key) WHERE state!='done'
+    DO UPDATE SET command_key=EXCLUDED.command_key
+    RETURNING command_id,deadline"""
 
 
 class PlacementSubmission(NamedTuple):
@@ -91,51 +100,51 @@ class PlacementQueue(PostgresDatabase):
             spec.validate()
             if spec.id != sandbox_id:
                 raise ValueError("placement command sandbox identity differs")
-        async with self.transaction("placement_enqueue") as conn:
-            row = await (
-                await conn.execute(
-                    """INSERT INTO gateway_commands(command_id,kind,sandbox_id,path,headers,body,deadline,command_key)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-                ON CONFLICT(command_key) WHERE state!='done'
-                DO UPDATE SET command_key=EXCLUDED.command_key
-                RETURNING command_id,deadline""",
-                    (
-                        command_id,
-                        kind,
-                        sandbox_id,
-                        path,
-                        Jsonb(headers),
-                        body,
-                        utc_now() + timedelta(seconds=timeout_seconds),
-                        command_key,
-                    ),
-                )
-            ).fetchone()
-            command_id = row["command_id"]
-            if spec is not None:
+        command = (
+            command_id,
+            kind,
+            sandbox_id,
+            path,
+            Jsonb(headers),
+            body,
+            utc_now() + timedelta(seconds=timeout_seconds),
+            command_key,
+        )
+        # One autocommit statement per submission: under a burst every extra
+        # BEGIN/COMMIT round trip holds a pooled connection for another loop turn.
+        async with self.statement("placement_enqueue") as conn:
+            if spec is None:
+                row = await (await conn.execute(_ENQUEUE_SQL, command)).fetchone()
+            else:
                 now = utc_now().isoformat()
-                await conn.execute(
-                    """INSERT INTO pending(sandbox_id,resources_json,created_at,updated_at,
-                    attempts,generation,operation_id,spec_hash,failure_reason)
-                    SELECT %s,%s,%s,%s,1,0,%s,%s,'queued_create'
-                    WHERE NOT EXISTS(SELECT 1 FROM sandboxes WHERE sandbox_id=%s)
-                    ON CONFLICT(sandbox_id) DO NOTHING""",
-                    (
-                        sandbox_id,
-                        json.dumps(spec.requested_resources().to_dict()),
-                        now,
-                        now,
-                        str(command_id),
-                        sandbox_spec_fingerprint(spec),
-                        sandbox_id,
-                    ),
-                )
-        return PlacementSubmission(command_id, row["deadline"])
+                # A coalesced submission records demand under the command it
+                # joined, exactly as the separate statements previously did.
+                row = await (
+                    await conn.execute(
+                        "WITH command AS (" + _ENQUEUE_SQL + """), demand AS (
+                        INSERT INTO pending(sandbox_id,resources_json,created_at,updated_at,
+                        attempts,generation,operation_id,spec_hash,failure_reason)
+                        SELECT %s,%s,%s,%s,1,0,command.command_id::text,%s,'queued_create'
+                        FROM command WHERE NOT EXISTS(SELECT 1 FROM sandboxes WHERE sandbox_id=%s)
+                        ON CONFLICT(sandbox_id) DO NOTHING)
+                        SELECT command_id,deadline FROM command""",
+                        (
+                            *command,
+                            sandbox_id,
+                            json.dumps(spec.requested_resources().to_dict()),
+                            now,
+                            now,
+                            sandbox_spec_fingerprint(spec),
+                            sandbox_id,
+                        ),
+                    )
+                ).fetchone()
+        return PlacementSubmission(row["command_id"], row["deadline"])
 
     async def results(self, ids):
         if not ids:
             return []
-        async with self.transaction("placement_results") as conn:
+        async with self.statement("placement_results") as conn:
             return await (
                 await conn.execute(
                     """SELECT command_id,result_status,result_headers,result_body
@@ -347,6 +356,102 @@ class PlacementQueueClient:
                         await self.store.close()
                     finally:
                         self._opened = False
+
+
+class IsolatedPlacementResponses:
+    """Run a PlacementQueueClient on its own event loop thread.
+
+    The gateway's shared worker-RPC loop also carries every asynchronous proxy
+    response and event long-poll. Enqueue pool waits and database round trips
+    queued behind that traffic inflated submission latency far beyond the
+    database's own commit time. Callers on any loop await the same coroutine
+    contract; cancellation of a caller cancels its task on this loop.
+    """
+
+    def __init__(self, client, *, name="placement-queue-io", on_loop_started=None):
+        self.client = client
+        self._name = name
+        self._on_loop_started = on_loop_started
+        self._guard = threading.Lock()
+        self._loop = None
+        self._thread = None
+        self._closed = False
+
+    def _running_loop(self):
+        with self._guard:
+            if self._closed:
+                raise RuntimeError("placement response owner is closed")
+            if self._loop is None:
+                ready = concurrent.futures.Future()
+
+                def run(loop):
+                    asyncio.set_event_loop(loop)
+                    loop.call_soon(ready.set_result, None)
+                    loop.run_forever()
+
+                loop = asyncio.new_event_loop()
+                thread = threading.Thread(
+                    target=run, args=(loop,), name=self._name, daemon=True
+                )
+                thread.start()
+                ready.result()
+                self._loop, self._thread = loop, thread
+                if self._on_loop_started is not None:
+                    try:
+                        self._on_loop_started(loop)
+                    except Exception:
+                        LOGGER.warning("placement loop observer unavailable")
+            return self._loop
+
+    async def open(self):
+        loop = self._running_loop()
+        await asyncio.wrap_future(
+            asyncio.run_coroutine_threadsafe(self.client.open(), loop)
+        )
+
+    async def response(self, kind, sandbox_id, path, headers, body):
+        try:
+            loop = self._running_loop()
+        except RuntimeError:
+            # Nothing was submitted: shutdown precedes any durable command.
+            return (
+                503,
+                {"Content-Type": "application/json"},
+                b'{"error":"placement submission unavailable; retry the same sandbox identity","retryable":true}',
+            )
+        return await asyncio.wrap_future(
+            asyncio.run_coroutine_threadsafe(
+                self.client.response(kind, sandbox_id, path, headers, body), loop
+            )
+        )
+
+    async def close(self):
+        with self._guard:
+            self._closed = True
+            loop, thread = self._loop, self._thread
+        if loop is None:
+            await self.client.close()
+            return
+        async def shutdown():
+            try:
+                await self.client.close()
+            finally:
+                # Background probes (loop lag) end with their loop.
+                current = asyncio.current_task()
+                pending = [t for t in asyncio.all_tasks() if t is not current]
+                for task in pending:
+                    task.cancel()
+                await asyncio.gather(*pending, return_exceptions=True)
+
+        try:
+            await asyncio.wrap_future(
+                asyncio.run_coroutine_threadsafe(shutdown(), loop)
+            )
+        finally:
+            loop.call_soon_threadsafe(loop.stop)
+            await asyncio.get_running_loop().run_in_executor(None, thread.join, 10)
+            if not thread.is_alive():
+                loop.close()
 
 
 class PlacementQueueWorker:

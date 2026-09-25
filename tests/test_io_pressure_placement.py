@@ -22,13 +22,13 @@ class IoPressurePlacementTests(unittest.TestCase):
                        runtime_metrics=replace(quiet.runtime_metrics, memory_working_set_mb=88000))
         handler = object.__new__(control_plane.ControlPlaneHandler)
         handler._placement_routes = lambda: []
-        handler._ready_sandbox_heartbeats = lambda: [busy, quiet]
+        handler._ready_sandbox_heartbeats = lambda **_kwargs: [busy, quiet]
         handler._nodes_with_image = lambda *_args, **_kwargs: {"busy", "quiet"}
         handler.registry_layer_cache = None
         handler.create_target_concurrency_per_node = 4
         requested = ResourceQuantity(1, 1024, 4096)
         self.assertEqual(handler._select_node(requested, image="image").node_id, "quiet")
-        handler._ready_sandbox_heartbeats = lambda: [busy]
+        handler._ready_sandbox_heartbeats = lambda **_kwargs: [busy]
         self.assertEqual(handler._select_node(requested, image="image").node_id, "busy")
 
     def heartbeat(self, node, *, io=0, memory=0, used_disk=0):
@@ -51,7 +51,7 @@ class IoPressurePlacementTests(unittest.TestCase):
         handler = object.__new__(control_plane.ControlPlaneHandler)
         routes = []
         handler._placement_routes = lambda: routes
-        handler._ready_sandbox_heartbeats = lambda: [busy, quiet]
+        handler._ready_sandbox_heartbeats = lambda **_kwargs: [busy, quiet]
         handler._nodes_with_image = lambda *_args, **_kwargs: {"busy", "quiet"}
         handler.registry_layer_cache = None
         handler.create_target_concurrency_per_node = 4
@@ -70,7 +70,7 @@ class IoPressurePlacementTests(unittest.TestCase):
         self.assertEqual(counts["quiet"], counts["busy"])
         self.assertGreater(counts["busy"], 0)
         # Even extreme I/O PSI only affects ranking; it cannot close admission.
-        handler._ready_sandbox_heartbeats = lambda: [self.heartbeat("busy", io=99)]
+        handler._ready_sandbox_heartbeats = lambda **_kwargs: [self.heartbeat("busy", io=99)]
         self.assertIsNotNone(handler._select_node(requested, image="image"))
 
     def test_completed_creates_remain_visible_to_load_balancing(self):
@@ -78,7 +78,7 @@ class IoPressurePlacementTests(unittest.TestCase):
         routes = []
         nodes = [self.heartbeat(str(n), io=40 if n == 3 else 0) for n in range(4)]
         handler._placement_routes = lambda: routes
-        handler._ready_sandbox_heartbeats = lambda: nodes
+        handler._ready_sandbox_heartbeats = lambda **_kwargs: nodes
         handler._nodes_with_image = lambda *_args, **_kwargs: {n.node_id for n in nodes}
         handler.registry_layer_cache = None
         handler.create_target_concurrency_per_node = 4
@@ -115,7 +115,7 @@ class IoPressurePlacementTests(unittest.TestCase):
             for node, count in zip(nodes, (35, 36, 37, 38)) for i in range(count)
         ]
         handler._placement_routes = lambda: routes
-        handler._ready_sandbox_heartbeats = lambda: nodes
+        handler._ready_sandbox_heartbeats = lambda **_kwargs: nodes
         handler._nodes_with_image = lambda *_args, **_kwargs: {n.node_id for n in nodes}
         handler.registry_layer_cache = None
         handler.create_target_concurrency_per_node = 4
@@ -148,7 +148,7 @@ class IoPressurePlacementTests(unittest.TestCase):
         quiet = replace(self.heartbeat("quiet"), cached_images=())
         handler = object.__new__(control_plane.ControlPlaneHandler)
         handler._placement_routes = lambda: []
-        handler._ready_sandbox_heartbeats = lambda: [busy, quiet]
+        handler._ready_sandbox_heartbeats = lambda **_kwargs: [busy, quiet]
         handler._nodes_with_image = lambda *_args, **_kwargs: {"busy"}
         handler.registry_layer_cache = None
         handler.create_target_concurrency_per_node = 4

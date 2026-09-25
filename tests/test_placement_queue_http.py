@@ -11,6 +11,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Event, Thread
 from time import monotonic
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from unittest import TestCase, skipUnless
 from unittest.mock import patch
@@ -143,7 +144,7 @@ class PlacementQueueHTTPTests(TestCase):
             public = _gateway_server(
                 self.root, routing_file=self.routing_file, queue_placement=True
             )
-            self.public_queue = public.RequestHandlerClass.placement_queue
+            self.public_queue = public.RequestHandlerClass.placement_queue.client
             private = _gateway_server(
                 self.root, routing_file=self.routing_file, placement_worker=True
             )
@@ -256,8 +257,9 @@ class PlacementQueueHTTPTests(TestCase):
             self.release.set()
             self.request(public + "/v1/sandboxes", self.spec("warm-one"))
             route = self.routing.get_sandbox("warm-one")
-            self.routing.upsert_sandbox(
-                replace(route, node_epoch="boot-1", activity_epoch=20)
+            # A parked owner needs placement, so this wake uses the queue lane.
+            route = self.routing.upsert_sandbox(
+                replace(route, node_epoch="boot-1", activity_epoch=20, state="parked")
             )
             self.release.clear()
             self.created.clear()
@@ -286,6 +288,82 @@ class PlacementQueueHTTPTests(TestCase):
             finally:
                 self.release.set()
             self.assertEqual(create.result(8)[0], 201)
+
+    def wake_commands(self):
+        with self.routing.pool.connection() as conn:
+            return conn.execute(
+                "SELECT sandbox_id,state FROM gateway_commands WHERE kind='wake'"
+            ).fetchall()
+
+    def running_route(self, public, name):
+        self.release.set()
+        self.request(public + "/v1/sandboxes", self.spec(name))
+        route = self.routing.get_sandbox(name)
+        return self.routing.upsert_sandbox(
+            replace(route, node_epoch="boot-1", activity_epoch=20)
+        )
+
+    def test_warm_wake_bypasses_durable_queue(self):
+        with self.pipeline() as public:
+            route = self.running_route(public, "resident-one")
+            status, body = self.request(
+                public + "/v1/sandboxes/resident-one/wake",
+                {"generation": route.generation, "operation_id": "wake-warm-1"},
+            )
+            self.assertEqual(status, 200)
+            self.assertTrue(body["ok"])
+            self.assertEqual(self.wake_calls[0]["operation_id"], "wake-warm-1")
+            self.assertEqual(self.wake_calls[0]["generation"], route.generation)
+            self.assertEqual(self.wake_commands(), [])
+
+    def test_stale_generation_warm_wake_is_left_to_durable_queue(self):
+        with self.pipeline() as public:
+            route = self.running_route(public, "stale-one")
+            with self.assertRaises(HTTPError) as rejected:
+                self.request(
+                    public + "/v1/sandboxes/stale-one/wake",
+                    {"generation": route.generation + 1, "operation_id": "wake-stale"},
+                )
+            self.assertEqual(rejected.exception.code, 409)
+            rejected.exception.close()
+            self.assertEqual(self.wake_calls, [])
+            self.assertEqual(
+                [(row["sandbox_id"], row["state"]) for row in self.wake_commands()],
+                [("stale-one", "done")],
+            )
+
+    def test_parked_wake_still_uses_durable_queue(self):
+        with self.pipeline() as public:
+            route = self.running_route(public, "parked-one")
+            route = self.routing.upsert_sandbox(replace(route, state="parked"))
+            status, _body = self.request(
+                public + "/v1/sandboxes/parked-one/wake",
+                {"generation": route.generation, "operation_id": "wake-parked-1"},
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(self.wake_calls[0]["operation_id"], "wake-parked-1")
+            self.assertEqual(
+                [(row["sandbox_id"], row["state"]) for row in self.wake_commands()],
+                [("parked-one", "done")],
+            )
+
+    def test_route_parked_after_warm_check_returns_to_durable_queue(self):
+        from ucloud_sandboxes.control_plane import ControlPlaneHandler
+
+        with self.pipeline() as public:
+            route = self.running_route(public, "racing-one")
+            parked = self.routing.upsert_sandbox(replace(route, state="parked"))
+            # The warm read observed "running"; admission then sees "parked".
+            with patch.object(ControlPlaneHandler, "_warm_wake_route", return_value=True):
+                status, _body = self.request(
+                    public + "/v1/sandboxes/racing-one/wake",
+                    {"generation": parked.generation, "operation_id": "wake-race-1"},
+                )
+            self.assertEqual(status, 200)
+            self.assertEqual(
+                [(row["sandbox_id"], row["state"]) for row in self.wake_commands()],
+                [("racing-one", "done")],
+            )
 
     def test_client_disconnect_does_not_cancel_durable_create(self):
         import socket

@@ -83,6 +83,8 @@ class WakeOwnerAdmissionTests(unittest.TestCase):
                 with (
                     patch.object(handler.routing_store, "sandbox_routes_readonly",
                                  side_effect=AssertionError("whole fleet route read")),
+                    patch.object(handler.routing_store, "placement_routes_readonly",
+                                 side_effect=AssertionError("whole fleet route read")),
                     patch.object(handler.store, "load_heartbeats",
                                  side_effect=AssertionError("whole fleet heartbeat read")),
                 ):
@@ -147,7 +149,7 @@ class WakeOwnerAdmissionTests(unittest.TestCase):
                     )
                     handler = object.__new__(control_plane.ControlPlaneHandler)
                     handler.routing_store = Mock()
-                    handler.routing_store.sandbox_routes_readonly.return_value = [local, incoming]
+                    handler.routing_store.placement_routes_readonly.return_value = [local, incoming]
                     handler.routing_store.sandbox_routes_matching_node_identity.return_value = [local]
                     handler.routing_store.sandbox_migrations.return_value = [migration]
                     handler.routing_store.get_sandbox_readonly.return_value = incoming

@@ -51,7 +51,7 @@ class MigrationRuntimeEligibilityTests(unittest.TestCase):
         handler.heartbeat_ttl_seconds = 120
         handler._placement_routes = lambda: [route]
         handler.routing_store = SimpleNamespace(sandbox_migrations=lambda **_: [])
-        handler._ready_sandbox_heartbeats = lambda: destinations
+        handler._ready_sandbox_heartbeats = lambda **_kwargs: destinations
         handler._heartbeat_for_route = lambda **_: owner
         return handler._select_migration_destination(route, requested_node_id="")
 

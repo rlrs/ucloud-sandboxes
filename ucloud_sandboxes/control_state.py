@@ -47,6 +47,31 @@ def _placement_heartbeat(heartbeat: NodeHeartbeat) -> NodeHeartbeat:
     )
 
 
+def detached_heartbeat(
+    heartbeat: NodeHeartbeat, *, include_inventory: bool = True,
+) -> NodeHeartbeat:
+    """Copy a cached heartbeat's mutable labels and snapshot descriptors."""
+    # Frozen dataclasses still contain mutable labels/snapshot descriptors.
+    # Never expose cached dictionaries to a caller. Immutable scalar and
+    # resource fields can be shared without revalidating the inventory.
+    return replace(
+        heartbeat,
+        labels=dict(heartbeat.labels),
+        inventory=tuple(
+            replace(
+                entry,
+                storage_snapshot=_copy_json_value(entry.storage_snapshot),
+                storage_dependency=_copy_json_value(entry.storage_dependency),
+            )
+            for entry in heartbeat.inventory
+        ) if include_inventory else (),
+        # A header-only read must never be interpreted as proof that the
+        # worker has no sandboxes. Validation above still covers the full
+        # durable row, including inventory and canonical encoding.
+        inventory_complete=heartbeat.inventory_complete if include_inventory else False,
+    )
+
+
 def _controller_labels(heartbeat: NodeHeartbeat, previous: NodeHeartbeat | None):
     labels = {k: v for k, v in heartbeat.labels.items() if k not in _QUARANTINE_KEYS}
     if previous is not None:
@@ -113,7 +138,13 @@ class ControlStateStore:
                 raise ValueError("unsupported control state schema")
         self._secure_files()
 
-    def load_heartbeats(self) -> dict[str, NodeHeartbeat]:
+    def load_heartbeats(self, *, shared: bool = False) -> dict[str, NodeHeartbeat]:
+        """Load every heartbeat.
+
+        ``shared=True`` returns the validated cached objects without copying
+        each inventory entry. Placement ranking reads the whole fleet per
+        create; such callers must not mutate labels or snapshot descriptors.
+        """
         # One SELECT is a coherent SQLite snapshot. Return the connection before
         # decoding inventories, and avoid a GIL handoff for each worker row plus
         # an explicit read transaction on the placement critical path.
@@ -125,7 +156,7 @@ class ControlStateStore:
             ).fetchone()[0]
         result = {}
         for job_id, raw in json.loads(payload):
-            heartbeat = self._read_heartbeat(job_id, raw)
+            heartbeat = self._read_heartbeat(job_id, raw, shared=shared)
             _assert_heartbeat_binding(result, heartbeat)
             result[job_id] = _placement_heartbeat(heartbeat)
         return result
@@ -319,6 +350,7 @@ class ControlStateStore:
 
     def _read_heartbeat(
         self, job_id: str, payload: str, *, include_inventory: bool = True,
+        shared: bool = False,
     ) -> NodeHeartbeat:
         with self._heartbeat_cache_lock:
             cached = self._heartbeat_cache.get(job_id)
@@ -344,25 +376,9 @@ class ControlStateStore:
                     ):
                         _, (evicted, _) = self._heartbeat_cache.popitem(last=False)
                         self._heartbeat_cache_bytes -= len(evicted)
-        # Frozen dataclasses still contain mutable labels/snapshot descriptors.
-        # Never expose cached dictionaries to a caller. Immutable scalar and
-        # resource fields can be shared without revalidating the inventory.
-        return replace(
-            heartbeat,
-            labels=dict(heartbeat.labels),
-            inventory=tuple(
-                replace(
-                    entry,
-                    storage_snapshot=_copy_json_value(entry.storage_snapshot),
-                    storage_dependency=_copy_json_value(entry.storage_dependency),
-                )
-                for entry in heartbeat.inventory
-            ) if include_inventory else (),
-            # A header-only read must never be interpreted as proof that the
-            # worker has no sandboxes. Validation above still covers the full
-            # durable row, including inventory and canonical encoding.
-            inventory_complete=heartbeat.inventory_complete if include_inventory else False,
-        )
+        if shared and include_inventory:
+            return heartbeat  # Read-only contract: see load_heartbeats.
+        return detached_heartbeat(heartbeat, include_inventory=include_inventory)
 
     @staticmethod
     def _decode_heartbeat(job_id: str, payload: str) -> NodeHeartbeat:

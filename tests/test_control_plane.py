@@ -2880,7 +2880,7 @@ class ControlPlaneTests(unittest.TestCase):
         handler._nodes_with_image = lambda *_args, **_kwargs: set()
         handler.registry_layer_cache = None
         handler.create_target_concurrency_per_node = 4
-        handler._ready_sandbox_heartbeats = lambda: [old_worker, current_worker]
+        handler._ready_sandbox_heartbeats = lambda **_kwargs: [old_worker, current_worker]
         requested = ResourceQuantity(vcpu=1, memory_mb=512)
         parkable_capabilities = control_plane._sandbox_required_capabilities(  # noqa: SLF001
             {"parkable": True}
@@ -2896,7 +2896,7 @@ class ControlPlaneTests(unittest.TestCase):
         assert selected is not None
         self.assertEqual(selected.node_id, current_worker.node_id)
 
-        handler._ready_sandbox_heartbeats = lambda: [old_worker]
+        handler._ready_sandbox_heartbeats = lambda **_kwargs: [old_worker]
         self.assertIsNone(
             handler._select_node(
                 requested,
@@ -5843,7 +5843,7 @@ class ControlPlaneTests(unittest.TestCase):
             handler = object.__new__(control_plane.ControlPlaneHandler)
             handler.routing_store = store
             handler._managed_image_requires_digest_cache_identity = lambda _image: False
-            handler._ready_sandbox_heartbeats = lambda: []
+            handler._ready_sandbox_heartbeats = lambda **_kwargs: []
             handler._placement_routes = lambda: []
             requested = ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024)
             with control_plane._IMAGE_WARMUP_TASKS_GUARD:

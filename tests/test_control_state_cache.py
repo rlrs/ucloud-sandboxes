@@ -142,6 +142,28 @@ class ControlStateCacheTests(unittest.TestCase):
             ),),
         )
 
+    def test_shared_fleet_read_reuses_cached_objects_until_payload_changes(self):
+        with TemporaryDirectory() as directory:
+            store = ControlStateStore(Path(directory) / "control.sqlite")
+            store.upsert_heartbeat(self.heartbeat())
+            first = store.load_heartbeats(shared=True)["job"]
+            self.assertIs(store.load_heartbeats(shared=True)["job"], first)
+            # The default read still isolates callers from the cached object.
+            copied = store.load_heartbeats()["job"]
+            self.assertIsNot(copied, first)
+            self.assertEqual(copied, first)
+            self.assertIsNot(
+                copied.inventory[0].storage_dependency,
+                first.inventory[0].storage_dependency,
+            )
+            detached = control_state.detached_heartbeat(first)
+            detached.labels["pool"] = "changed"
+            self.assertEqual(first.labels["pool"], "workers")
+            store.upsert_heartbeat(replace(self.heartbeat(), node_epoch="boot-2"))
+            refreshed = store.load_heartbeats(shared=True)["job"]
+            self.assertIsNot(refreshed, first)
+            self.assertEqual(refreshed.node_epoch, "boot-2")
+
     def test_reuses_decode_but_returns_isolated_mutable_inventory(self):
         with TemporaryDirectory() as directory:
             store = ControlStateStore(Path(directory) / "control.sqlite")

@@ -21,6 +21,7 @@ from pathlib import Path
 import random
 import re
 import sqlite3
+from threading import Lock
 import time
 
 import psycopg
@@ -141,6 +142,8 @@ class PostgresRoutingStore(RoutingStore):
         self._current = ContextVar("routing_connection", default=None)
         self._placement_snapshot = ContextVar("placement_snapshot", default=False)
         self._placement_worker = ContextVar("placement_worker", default=None)
+        self._worker_turns = {}
+        self._worker_turns_guard = Lock()
         self._capacity_touched = ContextVar("capacity_touched", default=None)
         self._command = ContextVar("placement_command", default=None)
         self._lock = nullcontext()
@@ -513,6 +516,37 @@ class PostgresRoutingStore(RoutingStore):
             raise sqlite3.DatabaseError("PostgreSQL routing read failed") from exc
 
     @contextmanager
+    def _local_worker_turn(self, span):
+        """Queue same-worker placements in-process before borrowing a connection.
+
+        A session blocked in pg_advisory_lock still owns its pooled connection.
+        Waiting here instead keeps a hot worker's queue from exhausting the pool
+        and stalling unrelated routing transactions. The advisory lock remains
+        the cross-process turn; revision fences remain the correctness check.
+        """
+        worker = self._placement_worker.get()
+        if worker is None:
+            yield
+            return
+        with self._worker_turns_guard:
+            turn = self._worker_turns.get(worker)
+            if turn is None:
+                turn = self._worker_turns[worker] = [Lock(), 0]
+            turn[1] += 1
+        started = time.monotonic()
+        try:
+            with turn[0]:
+                span.set_attribute(
+                    "routing.worker_local_wait_seconds", time.monotonic() - started
+                )
+                yield
+        finally:
+            with self._worker_turns_guard:
+                turn[1] -= 1
+                if not turn[1]:
+                    self._worker_turns.pop(worker, None)
+
+    @contextmanager
     def _worker_turn(self, conn, span):
         worker = self._placement_worker.get()
         if worker is None:
@@ -547,7 +581,7 @@ class PostgresRoutingStore(RoutingStore):
         self.validate_authority()
         with self.telemetry.span(
             "routing.transaction", attributes={"routing.backend": "postgres"}
-        ) as span:
+        ) as span, self._local_worker_turn(span):
             started = time.monotonic()
             acquired = body_done = committed = None
             try:

@@ -282,7 +282,7 @@ class WakeCapacityTests(unittest.TestCase):
             capabilities = self.heartbeat().capabilities + ("sandbox-migrate-storage-native-v1",)
             source_node = replace(self.heartbeat(), capabilities=capabilities)
             destination = replace(source_node, node_id="destination", job_id="dest-job", node_url="http://dest:8090")
-            handler._ready_sandbox_heartbeats = lambda: [source_node, destination]
+            handler._ready_sandbox_heartbeats = lambda **_kwargs: [source_node, destination]
             # Parked owners themselves need no new device until a wake is reserved.
             self.assertTrue(control_plane._node_has_storage_device_capacity(source_node, [source]))
             self.assertIsNotNone(handler._select_migration_destination(another, requested_node_id=""))

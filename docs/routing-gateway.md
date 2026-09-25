@@ -58,8 +58,8 @@ intent against authenticated node inventory.
 
 `GET /v1/sandboxes` is served from the gateway route index. The canonical routing
 store is the durable recovery and pending-demand authority: PostgreSQL in
-production, or SQLite for standalone deployments. Public create and explicit
-wake requests use the [durable placement queue](placement-authority.md), with
+production, or SQLite for standalone deployments. Public creates and wakes
+requiring placement use the [durable placement queue](placement-authority.md), with
 worker RPCs outside routing transactions. An explicit
 `?refresh=true` request fans out to nodes and reconciles their inventories.
 

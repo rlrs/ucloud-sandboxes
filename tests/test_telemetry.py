@@ -162,3 +162,37 @@ class TelemetryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EventLoopLagTests(unittest.IsolatedAsyncioTestCase):
+    async def test_blocked_loop_records_late_wakeup(self):
+        import asyncio
+        from unittest.mock import Mock
+
+        telemetry = Telemetry.disabled()
+        telemetry.meter = Mock()
+        record = telemetry.meter.create_histogram.return_value.record
+        telemetry.observe_event_loop_lag(
+            asyncio.get_running_loop(), "test-loop", interval_seconds=0.01,
+        )
+        await asyncio.sleep(0)  # Start the probe.
+        await asyncio.sleep(0)
+        time.sleep(0.1)  # Block the loop past the probe's deadline.
+        for _ in range(100):
+            if record.call_args_list:
+                break
+            await asyncio.sleep(0.01)
+        lag, attributes = record.call_args_list[0].args
+        self.assertGreaterEqual(lag, 0.05)
+        self.assertEqual(attributes, {"loop": "test-loop"})
+        self.assertEqual(
+            telemetry.meter.create_histogram.call_args.args[0],
+            "ucloud.platform.event_loop.lag",
+        )
+        with self.assertRaises(ValueError):
+            telemetry.observe_event_loop_lag(
+                asyncio.get_running_loop(), "bad", interval_seconds=0,
+            )
+        for task in asyncio.all_tasks():
+            if task.get_name() == "event-loop-lag-test-loop":
+                task.cancel()

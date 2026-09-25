@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -32,6 +33,9 @@ DEFAULT_MAX_QUEUE_SIZE = 4_096
 DEFAULT_MAX_EXPORT_BATCH_SIZE = 512
 _SHUTDOWN_JOIN_SECONDS = 5.0
 _MIN_THREAD_CPU_SPAN_DURATION_SECONDS = 0.001
+# Strong references keep background probes alive; loops own their lifetime.
+_LOOP_LAG_TASKS: set[asyncio.Task[None]] = set()
+
 OPERATION_DURATION_BUCKET_BOUNDARIES_SECONDS = (
     0.001,
     0.0025,
@@ -319,6 +323,8 @@ class Telemetry:
             "ucloud.platform.operation.count",
             description="Completed platform operations",
         )
+        self._loop_lag = None
+        self._loop_lag_guard = Lock()
 
     @classmethod
     def create(
@@ -393,7 +399,13 @@ class Telemetry:
                     aggregation=ExplicitBucketHistogramAggregation(
                         boundaries=OPERATION_DURATION_BUCKET_BOUNDARIES_SECONDS
                     ),
-                )
+                ),
+                View(
+                    instrument_name="ucloud.platform.event_loop.lag",
+                    aggregation=ExplicitBucketHistogramAggregation(
+                        boundaries=OPERATION_DURATION_BUCKET_BOUNDARIES_SECONDS
+                    ),
+                ),
             ],
         )
         return cls(
@@ -419,6 +431,41 @@ class Telemetry:
     @property
     def enabled(self) -> bool:
         return self._processor is not None
+
+    def observe_event_loop_lag(
+        self, loop: asyncio.AbstractEventLoop, name: str, *,
+        interval_seconds: float = 0.25,
+    ) -> None:
+        """Record how late a periodic callback runs on ``loop``.
+
+        Pool and transaction timings include time spent waiting for the loop
+        to resume a coroutine. This separates that scheduling delay (loop
+        saturation or GIL contention) from database or network latency.
+        Callable from any thread; the probe ends when the loop is closed.
+        """
+        if interval_seconds <= 0:
+            raise ValueError("event loop lag interval must be positive")
+        with self._loop_lag_guard:
+            if self._loop_lag is None:
+                self._loop_lag = self.meter.create_histogram(
+                    "ucloud.platform.event_loop.lag", unit="s",
+                    description="Delay between a scheduled and actual event loop wakeup",
+                )
+            histogram = self._loop_lag
+        attributes = {"loop": name}
+
+        async def probe() -> None:
+            while True:
+                expected = time.monotonic() + interval_seconds
+                await asyncio.sleep(interval_seconds)
+                histogram.record(max(0.0, time.monotonic() - expected), attributes)
+
+        def start() -> None:
+            task = loop.create_task(probe(), name=f"event-loop-lag-{name}")
+            _LOOP_LAG_TASKS.add(task)
+            task.add_done_callback(_LOOP_LAG_TASKS.discard)
+
+        loop.call_soon_threadsafe(start)
 
     @contextmanager
     def span(

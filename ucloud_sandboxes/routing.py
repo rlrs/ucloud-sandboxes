@@ -8,6 +8,7 @@ from enum import Enum
 import json
 import os
 from pathlib import Path
+import re
 import sqlite3
 import stat
 from threading import Lock, RLock
@@ -102,6 +103,9 @@ class SandboxRouteConflictError(RuntimeError):
     pass
 
 
+_SPEC_HASH_RE = re.compile(r"[0-9a-f]{64}")
+
+
 def _validate_sandbox_route_identity(route: "SandboxRoute") -> None:
     if (
         not route.sandbox_id
@@ -124,9 +128,7 @@ def _validate_sandbox_route_identity(route: "SandboxRoute") -> None:
         route.delete_operation_id
     ):
         raise ValueError("sandbox route delete_operation_id is invalid")
-    if len(route.spec_hash) != 64 or any(
-        character not in "0123456789abcdef" for character in route.spec_hash
-    ):
+    if not _SPEC_HASH_RE.fullmatch(route.spec_hash):
         raise ValueError("sandbox route spec_hash must be a lowercase SHA-256 digest")
     if route.activity_epoch < 0:
         raise ValueError("sandbox route activity_epoch must be non-negative")
@@ -675,6 +677,8 @@ class RoutingStore:
     # and ownership rules are shared by the standalone and PostgreSQL stores.
     _program_index_hint = 'INDEXED BY program_requests_sandbox'
     distributed = False
+    # Replaced (never mutated) by placement_routes_readonly.
+    _placement_route_memo: dict[str, tuple[tuple[Any, ...], "SandboxRoute"]] = {}
     _json_values_query = 'SELECT value FROM json_each(?)'
     _expired_signal_predicate = """
         COALESCE(NULLIF(updated_at, ''), created_at) != ''
@@ -989,6 +993,32 @@ class RoutingStore:
             _sandbox_route_from_row(row)
             for row in self._sandbox_route_rows_readonly(background=background)
         ]
+
+    def placement_routes_readonly(self) -> list[SandboxRoute]:
+        """Fresh fleet routes for create ranking, reusing decodes of unchanged rows.
+
+        Every create ranks the whole fleet, and decoding each route's JSON and
+        validating its identity costs several times the query itself. A row
+        whose complete column values are identical to the previous scan yields
+        the same immutable route object. Callers must treat the returned
+        routes' ``spec`` and ``storage_snapshot`` mappings as read-only.
+        """
+        previous = self._placement_route_memo
+        current: dict[str, tuple[tuple[Any, ...], SandboxRoute]] = {}
+        routes = []
+        for row in self._sandbox_route_rows_readonly():
+            key = tuple(row.values())
+            sandbox_id = row["sandbox_id"]
+            cached = previous.get(sandbox_id)
+            route = (
+                cached[1] if cached is not None and cached[0] == key
+                else _sandbox_route_from_row(row)
+            )
+            current[sandbox_id] = (key, route)
+            routes.append(route)
+        # Readers may race; each publishes a complete snapshot-derived memo.
+        self._placement_route_memo = current
+        return routes
 
     def _sandbox_route_rows_readonly(
         self, *, background: bool = False,

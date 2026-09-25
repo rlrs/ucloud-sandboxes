@@ -98,6 +98,46 @@ class PlacementQueueTests(unittest.IsolatedAsyncioTestCase):
                 (command["command_id"],),
             )
 
+    async def pending(self):
+        async with self.queue.transaction("test_pending") as conn:
+            return await (
+                await conn.execute(
+                    "SELECT sandbox_id,operation_id,failure_reason,spec_hash FROM pending"
+                )
+            ).fetchall()
+
+    async def test_single_statement_create_enqueue_records_coalesced_demand(self):
+        samples = []
+        self.queue.observe = samples.append
+        first = await self.submit()
+        # A concurrent duplicate joins the live command and its demand row.
+        self.assertEqual(await self.submit(), first)
+        self.assertEqual(
+            await self.pending(),
+            [{
+                "sandbox_id": self.spec.id,
+                "operation_id": str(first),
+                "failure_reason": "queued_create",
+                "spec_hash": sandbox_spec_fingerprint(self.spec),
+            }],
+        )
+        enqueues = [s for s in samples if s.operation == "placement_enqueue"]
+        self.assertEqual(len(enqueues), 2)
+        self.assertTrue(all(s.succeeded and s.commit_seconds == 0 for s in enqueues))
+
+    async def test_enqueue_does_not_record_demand_for_existing_route_or_wake(self):
+        self.allocate()
+        await self.submit()
+        await self.queue.submit(
+            "wake", "other", "/v1/sandboxes/other/wake", {},
+            json.dumps({"generation": 1, "operation_id": "w"}).encode(),
+        )
+        self.assertEqual(
+            [row["failure_reason"] for row in await self.pending()
+             if row["failure_reason"] == "queued_create"],
+            [],
+        )
+
     async def test_reclaimed_command_fences_old_completion_renewal_and_execution(self):
         first = await self.claimed()
         await self.expire_claim(first)

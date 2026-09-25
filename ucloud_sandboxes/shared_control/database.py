@@ -19,6 +19,23 @@ from .model import DatabaseAdmissionUnavailable, TransactionSample, positive_sec
 LOGGER = logging.getLogger(__name__)
 
 
+def postgres_transaction_observer(telemetry):
+    """Use the shared PostgreSQL phase metric for each database domain."""
+    duration = telemetry.meter.create_histogram(
+        "ucloud.platform.postgres.duration", unit="s",
+        description="PostgreSQL pool wait, transaction body and durable commit time",
+    )
+
+    def observe(sample):
+        for phase in ("pool_wait", "transaction", "commit", "lock_query"):
+            duration.record(getattr(sample, phase + "_seconds"), {
+                "operation": sample.operation, "phase": phase,
+                "status": "ok" if sample.succeeded else "error",
+            })
+
+    return observe
+
+
 class PostgresDatabase:
     """Bounded connections, observed transactions, and explicit relay migration.
 

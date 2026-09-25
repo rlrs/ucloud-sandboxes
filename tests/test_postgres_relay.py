@@ -111,7 +111,9 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
             dispatch = next(s for s in spans if s.name == "relay.lifecycle.dispatch"
                             and s.attributes["relay.lifecycle.action"] == "wake")
             child = next(s for s in spans if s.name == "test.worker.wake")
-            self.assertEqual(child.parent.span_id, dispatch.context.span_id)
+            transport = next(s for s in spans if s.name == "relay.lifecycle.wake.http")
+            self.assertEqual(transport.parent.span_id, dispatch.context.span_id)
+            self.assertEqual(child.parent.span_id, transport.context.span_id)
             self.assertIn("relay.lifecycle.response_age_seconds", dispatch.attributes)
             self.assertIn("relay.lifecycle.due_wait_seconds", dispatch.attributes)
         finally:

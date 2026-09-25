@@ -1333,17 +1333,8 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
         max_connections=config.relay_postgres.max_connections,
     )
     postgres_store.expected_relay_import_digest = cutover['source_digest'] if cutover else None
-    duration = telemetry.meter.create_histogram(
-        "ucloud.platform.postgres.duration", unit="s",
-        description="PostgreSQL pool wait, transaction body and durable commit time",
-    )
-    def observe_transaction(sample):
-        for phase in ("pool_wait", "transaction", "commit", "lock_query"):
-            duration.record(getattr(sample, phase + "_seconds"), {
-                "operation": sample.operation, "phase": phase,
-                "status": "ok" if sample.succeeded else "error",
-            })
-    postgres_store.observe = observe_transaction
+    from .shared_control.database import postgres_transaction_observer
+    postgres_store.observe = postgres_transaction_observer(telemetry)
     app = create_model_relay_app(
         sandbox_bearer_token=read_required_token_file(
             config.relay_sandbox_token_file(), "sandbox bearer token"

@@ -7025,8 +7025,10 @@ def build_server(
         if not async_proxy_responses or placement_worker:
             raise ValueError('queued placement requires asynchronous public responses')
         from .shared_control.placement_queue import PlacementQueue, PlacementQueueClient
+        from .shared_control.database import postgres_transaction_observer
         placement_queue=PlacementQueueClient(PlacementQueue(routing_store.pool.conninfo,
-            deployment_id,schema=routing_store.schema))
+            deployment_id,schema=routing_store.schema,
+            observe=postgres_transaction_observer(resolved_telemetry)))
     BoundHandler.placement_queue=placement_queue
     BoundHandler.routing_write_process = routing_writer
     BoundHandler.gateway_bearer_token = gateway_bearer_token

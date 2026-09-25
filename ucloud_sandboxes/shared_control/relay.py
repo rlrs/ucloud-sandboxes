@@ -1510,7 +1510,11 @@ class PostgresRelayState:
                 notifier = self.notifiers[action]
                 if notifier is None:
                     raise RuntimeError("lifecycle notifier missing")
-                epoch = await notifier(request)
+                # Keep transport acknowledgment separate from the subsequent
+                # durable completion transaction (measured by PostgresDatabase).
+                # This also records HTTP duration when traces are not sampled.
+                with self.telemetry.span(f"relay.lifecycle.{action}.http"):
+                    epoch = await notifier(request)
         except api.RelayLifecycleDeferred as exc:
             trace.get_current_span().set_attribute("relay.lifecycle.retry_delay_seconds", exc.seconds)
             deferred = exc.seconds

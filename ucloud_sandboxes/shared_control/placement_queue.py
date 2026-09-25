@@ -38,6 +38,23 @@ class PlacementQueue(PostgresDatabase):
     schema_file = "routing_schema.sql"
     version_table = "routing_schema_version"
 
+    def fresh(self, *, max_connections=None):
+        """Construct unopened connections to the same durable authority."""
+        return PlacementQueue(
+            self.pool.conninfo,
+            self.deployment_id,
+            schema=self.schema,
+            max_connections=self.pool.max_size
+            if max_connections is None
+            else max_connections,
+            timeout_seconds=self.timeout,
+            observe=self.observe,
+        )
+
+    def completion_reader(self):
+        """Give batched completion reads one connection outside enqueue admission."""
+        return self.fresh(max_connections=1)
+
     async def submit(
         self, kind, sandbox_id, path, headers, body, *, timeout_seconds=600
     ):
@@ -206,17 +223,43 @@ class PlacementQueueClient:
     not become 512 independent polling loops. The durable rows own the work.
     """
 
-    def __init__(self, store):
+    def __init__(self, store, *, results_store=None):
         self.store = store
+        self.results_store = (
+            store.completion_reader() if results_store is None else results_store
+        )
         self.waiters = {}
         self._ready = asyncio.Lock()
         self._opened = False
+        self._closed = False
+        self._replace_failed_pools = False
         self._poller = None
 
     async def open(self):
         async with self._ready:
+            if self._closed:
+                raise RuntimeError("placement response owner is closed")
             if not self._opened:
-                await self.store.open()
+                if self._replace_failed_pools:
+                    # psycopg pools cannot reopen after close. Nothing was
+                    # accepted before both initial pools opened, so replace
+                    # only these failed startup resources, never live work.
+                    self.store = self.store.fresh()
+                    self.results_store = self.results_store.fresh()
+                    self._replace_failed_pools = False
+                try:
+                    await self.store.open()
+                    await self.results_store.open()
+                    if self._closed:
+                        raise RuntimeError("placement response owner is closed")
+                except BaseException:
+                    self._replace_failed_pools = True
+                    await asyncio.gather(
+                        self.results_store.close(),
+                        self.store.close(),
+                        return_exceptions=True,
+                    )
+                    raise
                 self._opened = True
 
     async def response(self, kind, sandbox_id, path, headers, body):
@@ -228,6 +271,15 @@ class PlacementQueueClient:
                 503,
                 {"Content-Type": "application/json"},
                 b'{"error":"placement submission unavailable; retry the same sandbox identity","retryable":true}',
+            )
+        if self._closed:
+            # Shutdown may finish while submit is committing. The durable
+            # command still owns the work; never resurrect an HTTP waiter or
+            # poller against closed pools, or imply that nothing was accepted.
+            return (
+                503,
+                {"Content-Type": "application/json"},
+                b'{"error":"placement completion is unknown after shutdown; retry the same sandbox identity","error_code":"placement_outcome_unknown","retryable":true}',
             )
         future = asyncio.get_running_loop().create_future()
         command_id = submission.command_id
@@ -257,7 +309,7 @@ class PlacementQueueClient:
     async def _poll(self):
         while self.waiters:
             try:
-                results = await self.store.results(self.waiters)
+                results = await self.results_store.results(self.waiters)
                 for row in results:
                     for future in self.waiters.get(row["command_id"], ()):
                         if not future.done():
@@ -277,15 +329,24 @@ class PlacementQueueClient:
             await asyncio.sleep(0.025)
 
     async def close(self):
-        if self._poller is not None:
-            self._poller.cancel()
-            await asyncio.gather(self._poller, return_exceptions=True)
-        for waiters in self.waiters.values():
-            for future in waiters:
-                future.cancel()
-        self.waiters.clear()
-        if self._opened:
-            await self.store.close()
+        self._closed = True
+        # Wait for startup ownership to settle before closing its pools.
+        async with self._ready:
+            if self._poller is not None:
+                self._poller.cancel()
+                await asyncio.gather(self._poller, return_exceptions=True)
+            for waiters in self.waiters.values():
+                for future in waiters:
+                    future.cancel()
+            self.waiters.clear()
+            if self._opened:
+                try:
+                    await self.results_store.close()
+                finally:
+                    try:
+                        await self.store.close()
+                    finally:
+                        self._opened = False
 
 
 class PlacementQueueWorker:

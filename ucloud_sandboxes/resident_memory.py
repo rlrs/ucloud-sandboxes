@@ -28,6 +28,8 @@ class ResidentMemorySample:
     sentry_start_time_ticks: int
     sampled_at: float
     shared_memory_bytes: int = 0
+    # memory.peak: this runtime's high-water mark (0 when the kernel lacks it).
+    peak_bytes: int = 0
 
     @property
     def clean_file_bytes(self) -> int:
@@ -128,6 +130,10 @@ class ResidentMemorySampler:
                 raise ValueError("runtime cgroup escaped its trusted root")
             identity = path.stat()
             current = int((path / "memory.current").read_text().strip())
+            try:
+                peak = int((path / "memory.peak").read_text().strip())
+            except FileNotFoundError:
+                peak = 0
             counters = {}
             for line in (path / "memory.stat").read_text().splitlines():
                 name, value = line.split()
@@ -163,6 +169,7 @@ class ResidentMemorySampler:
                 start_time_ticks,
                 time.monotonic(),
                 counters["shmem"],
+                max(peak, current) if peak else 0,
             )
         except (OSError, ValueError, KeyError):
             with self._guard:

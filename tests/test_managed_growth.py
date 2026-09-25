@@ -283,6 +283,40 @@ class ManagedGrowthTests(unittest.TestCase):
         self.service._resident_memory._samples[('one', 8)] = sample
         self.assertEqual(self.service.warm_park_demand().physical_bytes, 4 << 30)
 
+    def sample(self, *, current, peak=0, shared=None, age=0.0):
+        return ResidentMemorySample(current_bytes=current, anonymous_bytes=0, file_bytes=current,
+            dirty_bytes=0, writeback_bytes=0, refault_file_pages=0, cgroup_path='/owned',
+            cgroup_device=1, cgroup_inode=2, sentry_pid=10, sentry_start_time_ticks=20,
+            sampled_at=time.monotonic() - age,
+            shared_memory_bytes=current if shared is None else shared, peak_bytes=peak)
+
+    def test_continuation_forecasts_physical_growth_to_its_demonstrated_peak(self):
+        self.available = 8192  # room for the second launch's whole bound
+        with patch.object(self.service.warden, 'application_memory_mode', return_value='ram'):
+            self.service.start_managed_process('one', self.spec)
+            self.service.observe_managed_wait('one', 7, 'wait-1')
+            self.service.admit_managed_continuation('one', 7, 'wait-1')
+            self.service._resident_memory._samples[('one', 7)] = self.sample(
+                current=1 << 30, peak=3 << 29)
+            demand = self.service.warm_park_demand()
+            # Physical: back to the 1.5 GiB peak. Unswappable RAM backing keeps
+            # the whole 4 GiB bound, where overshoot would be SIGBUS.
+            self.assertEqual(demand.physical_bytes, 1 << 29)
+            self.assertEqual(demand.ram_backing_bytes, 3 << 30)
+            # A launch has no safe wait yet and keeps its whole bound.
+            self.service.start_managed_process('two', self.spec)
+            self.service._resident_memory._samples[('two', 7)] = self.sample(
+                current=1 << 30, peak=3 << 29)
+            demand = self.service.warm_park_demand()
+            self.assertEqual(demand.physical_bytes, (1 << 29) + (3 << 30))
+
+    def test_growth_credit_survives_a_slow_refresh_pass(self):
+        self.service.start_managed_process('one', self.spec)
+        self.service._resident_memory._samples[('one', 7)] = self.sample(current=3 << 30, age=10)
+        self.assertEqual(self.service.warm_park_demand().physical_bytes, 1 << 30)
+        self.service._resident_memory._samples[('one', 7)] = self.sample(current=3 << 30, age=40)
+        self.assertEqual(self.service.warm_park_demand().physical_bytes, 4 << 30)
+
     def test_terminal_and_delete_release_only_matching_primary_generation(self):
         record = self.service.start_managed_process('one', self.spec)
         self.service._observe_managed_terminal(replace(record, state='exited', job_id='old-job'))

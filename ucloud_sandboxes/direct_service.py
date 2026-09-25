@@ -78,6 +78,8 @@ _CPU_ADMISSION_DEADLINE_SECONDS = 1.0
 # safe retry response. This bounds one wait, not the number of admitted tools.
 _FILE_ADMISSION_RETRY_WINDOW_SECONDS = 5.0
 _MANAGED_CONTROL_DEADLINE_SECONDS = 15.0
+# Growth credit may use an observation this old; see _growth_sample.
+_GROWTH_OBSERVATION_MAX_AGE_SECONDS = 30.0
 
 
 class DirectExecTimeoutError(DirectWardenError):
@@ -1522,10 +1524,21 @@ class DirectSandboxService:
         self._observe_managed_terminal(result)
         return result
 
+    def _growth_sample(self, owner):
+        # Park and restore forget samples, so any sample is this runtime's.
+        # Headroom is sampled fresh: growth since the sample is double-charged
+        # (conservative) and release is bounded by the age fence. The 2.5 s
+        # live fence made every sandbox look empty whenever one refresh pass
+        # over a dense node took longer, charging each its whole memory bound.
+        sample = self._resident_memory.historical(owner)
+        if sample is None or time.monotonic() - sample.sampled_at > _GROWTH_OBSERVATION_MAX_AGE_SECONDS:
+            return None
+        return sample
+
     def _growth_remaining(self, owner, bound):
-        sample = self._resident_memory.get(owner)
-        # Credit only currently observed resident pages. On RAM backing shmem
-        # is the common charge shared by physical memory and tmpfs capacity;
+        sample = self._growth_sample(owner)
+        # Credit only observed resident pages. On RAM backing shmem is the
+        # common charge shared by physical memory and tmpfs capacity;
         # filesystem page cache cannot buy future tmpfs allocation space.
         observed = 0 if sample is None else (
             min(sample.current_bytes, sample.shared_memory_bytes)
@@ -1533,10 +1546,29 @@ class DirectSandboxService:
             else sample.current_bytes)
         return max(0, bound - observed)
 
-    def _transition_memory_cost(self, kind, owner, memory_bytes, **kwargs):
+    def _continuation_physical_growth(self, owner, bound):
+        """Physical growth a continuation is expected to need: back to its peak.
+
+        The memory bound is a maximum, not a reservation. After a safe wait the
+        runtime has shown its working set; charging every active continuation
+        its full bound held relay responses for tens of seconds on nodes with
+        most memory free. Physical overshoot is recoverable pressure (parking,
+        reclaim, later admissions wait on fresh MemAvailable). Unswappable RAM
+        backing, where overshoot is SIGBUS, keeps the full bound.
+        """
+        sample = self._growth_sample(owner)
+        if sample is None or not sample.peak_bytes:
+            return self._growth_remaining(owner, bound)
+        return max(0, min(bound, sample.peak_bytes) - sample.current_bytes)
+
+    def _transition_memory_cost(self, kind, owner, memory_bytes, *, ram_backing_bytes=None, **kwargs):
+        ram_mode = self.warden.application_memory_mode(*owner) == "ram"
         return TransitionCost(
             kind, memory_bytes,
-            ram_backing_bytes=(memory_bytes if self.warden.application_memory_mode(*owner) == "ram" else 0),
+            ram_backing_bytes=(
+                (memory_bytes if ram_backing_bytes is None else ram_backing_bytes)
+                if ram_mode else 0
+            ),
             **kwargs,
         )
 
@@ -1546,9 +1578,18 @@ class DirectSandboxService:
         # refaulted. They are not permanent unswappable growth debt. Private
         # runtime growth is unknown, not a fictional zero-cost bound. Keep the
         # initial launch bound until the first authoritative safe wait.
-        memory = None if file_backed and request_id else self._growth_remaining(owner, bound)
-        return self._transition_memory_cost(kind, owner, memory,
-            provenance="reclaimable-file-growth" if memory is None else "primary-process-growth-forecast")
+        if file_backed and request_id:
+            return self._transition_memory_cost(kind, owner, None,
+                provenance="reclaimable-file-growth")
+        remaining = self._growth_remaining(owner, bound)
+        if not request_id:
+            # Launches keep the whole bound until their first safe wait.
+            return self._transition_memory_cost(kind, owner, remaining,
+                provenance="primary-process-growth-forecast")
+        return self._transition_memory_cost(
+            kind, owner, self._continuation_physical_growth(owner, bound),
+            ram_backing_bytes=remaining,
+            provenance="primary-process-growth-forecast")
 
     def _refresh_growth_forecasts_locked(self):
         forecasts = {

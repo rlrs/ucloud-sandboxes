@@ -349,6 +349,11 @@ class DirectSandboxService:
             (item.sandbox_id, item.generation): item
             for item in self.provisioner.registry.growth_intents()
         }
+        # Admitted growth whose durable commit is still in flight: charged to
+        # the ledger exactly like an active intent until the commit settles.
+        self._provisional_growth: dict[tuple[str, int], TransitionCost] = {}
+        self._growth_turns: dict[tuple[str, int], list] = {}
+        self._growth_turns_guard = threading.Lock()
 
     def configure_active_capacity(
         self,
@@ -652,10 +657,7 @@ class DirectSandboxService:
         assert deleted
         self._restore_slots.cancel_waiters(key)
         self._startup_slots.cancel_waiters(key)
-        with self._capacity_guard:
-            self._growth_intents.pop(key, None)
-            self._refresh_growth_forecasts_locked()
-            self._admission_changed.notify_all()
+        self._forget_growth(key)
         with self._activity_guard:
             self._last_activity.pop(key, None)
         self._forget_published_snapshot(*key)
@@ -679,10 +681,7 @@ class DirectSandboxService:
             self.provisioner.delete(sandbox_id, generation=generation)
         self._restore_slots.cancel_waiters(key)
         self._startup_slots.cancel_waiters(key)
-        with self._capacity_guard:
-            self._growth_intents.pop(key, None)
-            self._refresh_growth_forecasts_locked()
-            self._admission_changed.notify_all()
+        self._forget_growth(key)
         with self._activity_guard:
             self._last_activity.pop(key, None)
         self._forget_published_snapshot(*key)
@@ -1502,11 +1501,9 @@ class DirectSandboxService:
         # Match the supervisor's one-primary-per-generation invariant before
         # reserving future growth. Commit active BEFORE the ambiguous RPC.
         digest = hashlib.sha256(control_request_bytes(payload)).hexdigest()
-        with self._capacity_guard:
-            intent = self.provisioner.registry.growth_intent(
-                sandbox_id, registration.sandbox_generation, action="launch",
-                job_id=spec.job_id, launch_sha256=digest)
-            self._growth_intents[(sandbox_id, registration.sandbox_generation)] = intent
+        intent = self._record_growth_intent(
+            (sandbox_id, registration.sandbox_generation), action="launch",
+            job_id=spec.job_id, launch_sha256=digest)
         if intent.phase == "queued":
             try:
                 self._admit_managed_growth(registration, request_id="", startup=True)
@@ -1519,11 +1516,9 @@ class DirectSandboxService:
         result = ManagedProcessRecord.from_control_response(
             raw, sandbox_id=sandbox_id, sandbox_generation=registration.sandbox_generation)
         if not intent.job_id:
-            with self._capacity_guard:
-                bound = self.provisioner.registry.growth_intent(
-                    sandbox_id, registration.sandbox_generation, action="bind",
-                    job_id=result.job_id, launch_sha256=digest)
-                self._growth_intents[(sandbox_id, registration.sandbox_generation)] = bound
+            self._record_growth_intent(
+                (sandbox_id, registration.sandbox_generation), action="bind",
+                job_id=result.job_id, launch_sha256=digest)
         self._observe_managed_terminal(result)
         return result
 
@@ -1556,45 +1551,78 @@ class DirectSandboxService:
             provenance="reclaimable-file-growth" if memory is None else "primary-process-growth-forecast")
 
     def _refresh_growth_forecasts_locked(self):
-        self._transitions.set_growth_forecasts({
+        forecasts = {
             key: self._growth_cost(key, item.memory_bytes, request_id=item.request_id)
             for key, item in self._growth_intents.items() if item.phase == "active"
-        })
+        }
+        for key, cost in self._provisional_growth.items():
+            forecasts.setdefault(key, cost)
+        self._transitions.set_growth_forecasts(forecasts)
+
+    @contextmanager
+    def _growth_turn(self, key):
+        """Order one sandbox's durable growth writes without the node-wide guard.
+
+        Registry commits fsync. Holding _capacity_guard across them made every
+        exec, upload and wake admission on the worker wait for another
+        sandbox's disk sync, which is slowest exactly while creates dirty the
+        page cache. This turn keeps one sandbox's durable row and in-memory
+        forecast changing in the same order. Take it before, never under, the
+        capacity guard.
+        """
+        with self._growth_turns_guard:
+            turn = self._growth_turns.get(key)
+            if turn is None:
+                turn = self._growth_turns[key] = [threading.Lock(), 0]
+            turn[1] += 1
+        try:
+            with turn[0]:
+                yield
+        finally:
+            with self._growth_turns_guard:
+                turn[1] -= 1
+                if not turn[1]:
+                    self._growth_turns.pop(key, None)
+
+    def _record_growth_intent(self, key, **kwargs):
+        """Commit a growth transition, then publish it to admission accounting."""
+        with self._growth_turn(key):
+            intent = self.provisioner.registry.growth_intent(*key, **kwargs)
+            with self._capacity_guard:
+                if intent is not None:
+                    self._growth_intents[key] = intent
+                self._refresh_growth_forecasts_locked()
+                self._admission_changed.notify_all()
+            return intent
+
+    def _forget_growth(self, key):
+        # Wait for an in-flight commit so it cannot republish a deleted owner.
+        with self._growth_turn(key), self._capacity_guard:
+            self._growth_intents.pop(key, None)
+            self._provisional_growth.pop(key, None)
+            self._refresh_growth_forecasts_locked()
+            self._admission_changed.notify_all()
 
     def _observe_managed_park(self, registration):
         if not registration.spec.managed_process:
             return
         key = (registration.sandbox_id, registration.sandbox_generation)
         self._resident_memory.forget(key)
-        with self._capacity_guard:
-            intent = self.provisioner.registry.growth_intent(*key, action="park")
-            if intent is not None:
-                self._growth_intents[key] = intent
-            self._refresh_growth_forecasts_locked()
-            self._admission_changed.notify_all()
+        self._record_growth_intent(key, action="park")
 
     def observe_managed_wait(self, sandbox_id, generation, request_id):
         registration = self._require_registration(sandbox_id)
         if not registration.spec.managed_process:
             return
-        with self._capacity_guard:
-            intent = self.provisioner.registry.growth_intent(
-                sandbox_id, generation, action="wait", request_id=request_id)
-            self._growth_intents[(sandbox_id, generation)] = intent
-            self._refresh_growth_forecasts_locked()
-            self._admission_changed.notify_all()
+        self._record_growth_intent(
+            (sandbox_id, generation), action="wait", request_id=request_id)
 
     def _observe_managed_terminal(self, record):
         if not record.terminal:
             return
-        with self._capacity_guard:
-            intent = self.provisioner.registry.growth_intent(
-                record.sandbox_id, record.sandbox_generation,
-                action="terminal", job_id=record.job_id)
-            if intent is not None:
-                self._growth_intents[(record.sandbox_id, record.sandbox_generation)] = intent
-            self._refresh_growth_forecasts_locked()
-            self._admission_changed.notify_all()
+        self._record_growth_intent(
+            (record.sandbox_id, record.sandbox_generation),
+            action="terminal", job_id=record.job_id)
 
     def admit_managed_continuation(self, sandbox_id, generation, request_id):
         """Before acknowledging a relay wake, reserve the next growth exposure.
@@ -1641,11 +1669,16 @@ class DirectSandboxService:
             if current.sandbox_generation != key[1] or current.phase != "owned":
                 raise SandboxConflictError("queued primary growth lost incarnation")
 
-        with self._capacity_guard:
-            previous = self._growth_intents.get(key)
-            if previous is not None and (previous.phase in {"active", "terminal"} or (
+        # Serialize the covered check with wait/park updates as well as the
+        # fence. Otherwise a safe wait can release this exposure between the
+        # check and its wake fence, acknowledging growth that is no longer charged.
+        with self._growth_turn(key):
+            with self._capacity_guard:
+                previous = self._growth_intents.get(key)
+                covered = previous is not None and (previous.phase in {"active", "terminal"} or (
                     not startup and previous.phase == "safe" and previous.request_id
-                    and previous.request_id != request_id)):
+                    and previous.request_id != request_id))
+            if covered:
                 if request_id:
                     # The existing exposure already covers a fast response, but
                     # its old park must be revoked in the same durable order.
@@ -1661,10 +1694,18 @@ class DirectSandboxService:
                     ResourceQuantity(memory_mb=registration.spec.memory_mb), check_shape=True,
                     check_cpu=False, transition_cost=current_cost(), transition_owner=key,
                     transition_cost_provider=current_cost, validate_owner=validate_owner, deadline=deadline):
-                    intent = self.provisioner.registry.growth_intent(
-                        *key, action="activate", request_id=request_id)
-                    self._growth_intents[key] = intent
+                    # Charge the admitted bytes before releasing the guard, so a
+                    # concurrent admission cannot spend the same headroom while
+                    # this commit fsyncs outside the node-wide lock.
+                    self._provisional_growth[key] = current_cost()
                     self._refresh_growth_forecasts_locked()
+                try:
+                    self._record_growth_intent(key, action="activate", request_id=request_id)
+                finally:
+                    with self._capacity_guard:
+                        self._provisional_growth.pop(key, None)
+                        self._refresh_growth_forecasts_locked()
+                        self._admission_changed.notify_all()
 
     @staticmethod
     def _managed_workload_credentials(
@@ -2301,10 +2342,7 @@ class DirectSandboxService:
                     raise
                 if registration.spec.managed_process:
                     key = (registration.sandbox_id, registration.sandbox_generation)
-                    with self._capacity_guard:
-                        intent = self.provisioner.registry.growth_intent(*key, action="activate")
-                        self._growth_intents[key] = intent
-                        self._refresh_growth_forecasts_locked()
+                    self._record_growth_intent(key, action="activate")
                 return restored
 
     def ensure_running_with_timings(self, sandbox) -> dict[str, float]:

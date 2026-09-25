@@ -74,6 +74,21 @@ class SingleStatementRoutingTests(unittest.TestCase):
         self.assertTrue(statements[0].strip().startswith("SELECT"))
         self.assertEqual(transactions, [])
 
+        from ucloud_sandboxes.routing import ExecRoute
+
+        exec_route = ExecRoute(
+            session_id="exec-single", sandbox_id="single", node_id="n",
+            job_id="j", node_url="http://node",
+        )
+        self.store.upsert_exec(exec_route)
+        statements.clear()
+        with patch.object(self.store.pool, "connection", observed):
+            stored = self.store.get_exec("exec-single")
+            self.assertIsNone(self.store.get_exec("absent"))
+        self.assertEqual(stored.sandbox_id, "single")
+        self.assertEqual(len(statements), 2)  # One per exec poll lookup.
+        self.assertEqual(transactions, [])
+
     def test_nested_read_reuses_uncommitted_transaction_and_snapshot(self):
         with self.store._transaction() as conn:
             conn.execute(

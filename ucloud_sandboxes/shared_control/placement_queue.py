@@ -47,19 +47,6 @@ class PlacementQueue(PostgresDatabase):
     schema_file = "routing_schema.sql"
     version_table = "routing_schema_version"
 
-    def fresh(self, *, max_connections=None):
-        """Construct unopened connections to the same durable authority."""
-        return PlacementQueue(
-            self.pool.conninfo,
-            self.deployment_id,
-            schema=self.schema,
-            max_connections=self.pool.max_size
-            if max_connections is None
-            else max_connections,
-            timeout_seconds=self.timeout,
-            observe=self.observe,
-        )
-
     def completion_reader(self):
         """Give batched completion reads one connection outside enqueue admission."""
         return self.fresh(max_connections=1)

@@ -1,6 +1,6 @@
 """Assembled managed admission keeps future heap growth visible until a safe wait."""
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import ExitStack, closing
+from contextlib import ExitStack, closing, contextmanager
 from dataclasses import replace
 from pathlib import Path
 import sqlite3
@@ -102,6 +102,91 @@ class ManagedGrowthTests(unittest.TestCase):
         self.assertEqual(self.service.warm_park_demand().physical_bytes, 4 << 30)
         self.assertFalse(self.service._transitions.foreground_waiting)
         self.assertTrue(self.registry.relay_wake_fence('one', 7, 'request-one'))
+
+    def test_growth_commits_do_not_hold_node_capacity_guard(self):
+        """Every exec/upload admission shares the guard; fsyncs must not."""
+        observed = []
+        original = self.registry.growth_intent
+
+        def committing(*args, **kwargs):
+            observed.append((kwargs['action'], self.service._capacity_guard.locked()))
+            return original(*args, **kwargs)
+
+        with patch.object(self.registry, 'growth_intent', side_effect=committing):
+            self.service.start_managed_process('one', self.spec)
+            self.service.observe_managed_wait('one', 7, 'request-one')
+            self.service.admit_managed_continuation('one', 7, 'request-one')
+        # launch, startup admission, safe wait, continuation admission
+        self.assertEqual([action for action, _ in observed], ['launch', 'activate', 'wait', 'activate'])
+        self.assertEqual([held for _, held in observed], [False] * 4)
+        self.assertTrue(self.registry.relay_wake_fence('one', 7, 'request-one'))
+        self.assertEqual(self.service.warm_park_demand().physical_bytes, 4 << 30)
+
+    def test_admitted_growth_stays_charged_while_its_commit_is_in_flight(self):
+        self.service.start_managed_process('one', self.spec)
+        self.service.observe_managed_wait('one', 7, 'request-one')
+        self.service.start_managed_process('two', self.spec)
+        self.service.observe_managed_wait('two', 7, 'request-two')
+        committing, release = Event(), Event()
+        original = self.registry.growth_intent
+
+        def slow_activate(*args, **kwargs):
+            if kwargs['action'] == 'activate' and args[0] == 'one':
+                committing.set()
+                self.assertTrue(release.wait(5))
+            return original(*args, **kwargs)
+
+        with patch.object(self.registry, 'growth_intent', side_effect=slow_activate), \
+                ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(self.service.admit_managed_continuation, 'one', 7, 'request-one')
+            self.assertTrue(committing.wait(2))
+            # The guard is free during the commit, yet the headroom is spent:
+            # only one 4 GiB continuation fits in 6 GiB available.
+            self.assertFalse(self.service._capacity_guard.locked())
+            self.assertEqual(self.service.warm_park_demand().physical_bytes, 4 << 30)
+            second = pool.submit(self.service.admit_managed_continuation, 'two', 7, 'request-two')
+            self.wait_for_demand()
+            self.assertFalse(second.done())
+            release.set()
+            first.result(2)
+            self.assertFalse(second.done())
+            self.service.observe_managed_wait('one', 7, 'request-one-next')
+            second.result(2)
+        self.assertEqual(self.service._provisional_growth, {})
+        self.assertEqual(self.service._growth_turns, {})
+
+    def test_wait_winning_before_covered_check_requires_growth_admission(self):
+        self.service.start_managed_process('one', self.spec)
+        original = self.service._growth_turn
+        intercepted = False
+
+        @contextmanager
+        def wait_first(key):
+            nonlocal intercepted
+            if not intercepted:
+                intercepted = True
+                # Simulate the wait taking the same-sandbox turn just before
+                # this wake. It must not use an earlier "active" observation.
+                self.service.observe_managed_wait('one', 7, 'request-race')
+            with original(key):
+                yield
+
+        with patch.object(self.service, '_growth_turn', side_effect=wait_first):
+            self.service.admit_managed_continuation('one', 7, 'request-race')
+        self.assertTrue(intercepted)
+        self.assertEqual(self.service._growth_intents[('one', 7)].phase, 'active')
+        self.assertEqual(self.service.warm_park_demand().physical_bytes, 4 << 30)
+        self.assertTrue(self.registry.relay_wake_fence('one', 7, 'request-race'))
+
+    def test_existing_wake_fence_does_not_take_registry_writer(self):
+        self.service.start_managed_process('one', self.spec)
+        self.registry.relay_wake_fence('one', 7, 'request-one', record=True)
+        with patch.object(self.registry, '_transaction', wraps=self.registry._transaction) as tx:
+            self.assertTrue(self.registry.relay_wake_fence('one', 7, 'request-one', record=True))
+        self.assertEqual([call.kwargs['write'] for call in tx.call_args_list], [False])
+        with patch.object(self.registry, '_transaction', wraps=self.registry._transaction) as tx:
+            self.assertTrue(self.registry.relay_wake_fence('one', 7, 'request-two', record=True))
+        self.assertEqual([call.kwargs['write'] for call in tx.call_args_list], [False, True])
 
     def test_managed_burst_waits_after_runtime_create_until_first_safe_wait(self):
         self.service.start_managed_process('one', self.spec)

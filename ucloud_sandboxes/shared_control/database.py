@@ -76,6 +76,23 @@ class PostgresDatabase:
         await conn.execute("SET synchronous_commit = on")
         await conn.execute("SELECT set_config('statement_timeout', %s, false)", (str(max(1, int(self.timeout * 1000))),))
 
+    def fresh(self, *, max_connections=None):
+        """Construct unopened connections to the same durable authority."""
+        return type(self)(
+            self.pool.conninfo,
+            self.deployment_id,
+            schema=self.schema,
+            max_connections=self.pool.max_size
+            if max_connections is None
+            else max_connections,
+            timeout_seconds=self.timeout,
+            observe=self.observe,
+        )
+
+    def in_transaction(self) -> bool:
+        """Whether this task is inside one of this store's transactions."""
+        return self._commit_callbacks.get() is not None
+
     async def open(self) -> None:
         await self.pool.open(wait=True, timeout=self.timeout)
         try:

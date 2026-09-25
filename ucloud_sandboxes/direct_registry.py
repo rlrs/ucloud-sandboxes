@@ -894,6 +894,15 @@ class DirectSandboxRegistry:
         """
         if generation < 1 or not OPERATION_ID_RE.fullmatch(request_id):
             raise ValueError("invalid relay lifecycle identity")
+        # Fences are insert-only for a generation, so an existing fence is
+        # already durable. A warm wake usually committed it with its growth
+        # admission; do not queue behind create commits for the writer lock.
+        present = self._relay_wake_fence(sandbox_id, generation, request_id, record=False)
+        if present or not record:
+            return present
+        return self._relay_wake_fence(sandbox_id, generation, request_id, record=True)
+
+    def _relay_wake_fence(self, sandbox_id, generation, request_id, *, record):
         with self._transaction(write=record) as connection:
             owner = self._require(connection, sandbox_id)
             if owner.sandbox_generation != generation:

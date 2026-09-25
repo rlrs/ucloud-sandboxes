@@ -661,6 +661,12 @@ class PlacementCommandRejected(ValueError):
     """A durable placement claim no longer authorizes this incarnation."""
 
 
+_EXEC_ROUTE_BY_ID_SQL = """
+            SELECT session_id, sandbox_id, node_id, job_id, node_url,
+                   created_at, updated_at
+            FROM exec_sessions
+            WHERE session_id = ?
+            """
 _SANDBOX_ROUTE_BY_ID_SQL = """
             SELECT sandbox_id, node_id, job_id, node_url, resources_json, spec_json, state,
                    generation, create_operation_id, spec_hash, delete_operation_id,
@@ -2354,12 +2360,6 @@ class RoutingStore:
                         # Preserve per-entry ordering if a malformed inventory
                         # repeats an identity with different snapshot metadata.
                         write_dependencies()
-            if touched_ids:
-                conn.execute(
-                    f"""UPDATE sandboxes SET activity_epoch = ?, updated_at = ?
-                    WHERE sandbox_id IN ({self._json_values_query})""",
-                    (max(0, activity_epoch), observed_at, json.dumps(sorted(touched_ids))),
-                )
             write_dependencies()
             if accepted_ids:
                 conn.execute(
@@ -2434,6 +2434,15 @@ class RoutingStore:
                     continue
                 removed_routes.append(route)
                 removed_sandbox_ids.append(sandbox_id)
+            if touched_ids:
+                # Last statement: these row locks conflict with wake and
+                # placement writes, so hold them only until commit. Absence
+                # processing above never reads a reported (touched) route.
+                conn.execute(
+                    f"""UPDATE sandboxes SET activity_epoch = ?, updated_at = ?
+                    WHERE sandbox_id IN ({self._json_values_query})""",
+                    (max(0, activity_epoch), observed_at, json.dumps(sorted(touched_ids))),
+                )
         return removed_routes, stale_snapshot_routes
 
     def delete_sandbox(self, sandbox_id: str) -> None:
@@ -2719,9 +2728,10 @@ class RoutingStore:
         # The autoscaler retires routes in another process. Its commit cannot
         # invalidate this process's cache, so routing must read the indexed
         # durable row. Do not serialize these independent reads on the writer
-        # lock: SQLite WAL supplies a consistent snapshot.
-        with self._connect() as conn:
-            return self._get_exec_unlocked(conn, session_id)
+        # lock: SQLite WAL supplies a consistent snapshot. One statement is
+        # one snapshot, so PostgreSQL needs no BEGIN/SET/COMMIT per exec poll.
+        row = self._fetchone_readonly(_EXEC_ROUTE_BY_ID_SQL, (session_id,))
+        return _exec_route_from_row(row) if row is not None else None
 
     def get_pending(self, sandbox_id: str) -> PendingSandboxDemand | None:
         with self._connect() as conn:
@@ -4006,15 +4016,7 @@ class RoutingStore:
         conn: sqlite3.Connection,
         session_id: str,
     ) -> ExecRoute | None:
-        row = conn.execute(
-            """
-            SELECT session_id, sandbox_id, node_id, job_id, node_url,
-                   created_at, updated_at
-            FROM exec_sessions
-            WHERE session_id = ?
-            """,
-            (session_id,),
-        ).fetchone()
+        row = conn.execute(_EXEC_ROUTE_BY_ID_SQL, (session_id,)).fetchone()
         return _exec_route_from_row(row) if row is not None else None
 
     def _get_sandbox_migration_unlocked(

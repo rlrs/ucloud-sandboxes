@@ -75,6 +75,57 @@ class PlacementWorkerTurnTests(unittest.TestCase):
         self.assertEqual(sorted(order[1:]), [0, 1, 2])
         self.assertEqual(self.store._worker_turns, {})
 
+    def test_heartbeat_reconcile_locks_worker_rows_only_at_commit(self):
+        import psycopg
+        from unittest.mock import patch
+        from tests.test_routing import sandbox_route
+        from ucloud_sandboxes.models import SandboxInventoryEntry, utc_now
+
+        route = self.store.upsert_sandbox(sandbox_route(
+            sandbox_id="resident", node_id="node-1", job_id="job-1",
+            node_url="http://node-1:8090", state="running",
+            node_epoch="boot-1", activity_epoch=10,
+        ))
+        observation = SandboxInventoryEntry(
+            sandbox_id=route.sandbox_id, generation=route.generation,
+            operation_id=route.create_operation_id, spec_hash=route.spec_hash,
+            state="running", resources=route.resources,
+        )
+        probes = []
+        absence_scan = self.store._sandbox_routes_for_node_url_unlocked
+
+        def probe(conn, *args, **kwargs):
+            # Mid-body: an overlapping placement must be able to lock both the
+            # worker revision row and the resident's route row.
+            with psycopg.connect(DSN, autocommit=True) as other:
+                other.execute(
+                    psycopg.sql.SQL("SET search_path TO {}").format(
+                        psycopg.sql.Identifier(self.schema)))
+                other.execute("SET lock_timeout = '200ms'")
+                with other.transaction():
+                    probes.append(other.execute(
+                        "SELECT identity FROM worker_capacity_revisions"
+                        " WHERE identity='job:job-1' FOR UPDATE").fetchall())
+                    probes.append(other.execute(
+                        "SELECT sandbox_id FROM sandboxes WHERE sandbox_id='resident'"
+                        " FOR UPDATE").fetchall())
+            return absence_scan(conn, *args, **kwargs)
+
+        with patch.object(self.store, "_sandbox_routes_for_node_url_unlocked", side_effect=probe):
+            self.store.reconcile_sandboxes_for_node(
+                route.node_url, [observation], node_id=route.node_id,
+                job_id=route.job_id, reported_sandbox_ids={route.sandbox_id},
+                observed_at=utc_now().isoformat(), node_epoch="boot-1",
+                activity_epoch=12,
+            )
+        self.assertEqual(probes, [[("job:job-1",)], [("resident",)]])
+        # The accepted inventory still advanced the revision and watermark.
+        with self.store.pool.connection() as conn:
+            self.assertEqual(conn.execute(
+                "SELECT revision FROM worker_capacity_revisions WHERE identity='job:job-1'"
+            ).fetchone()["revision"], 2)
+        self.assertEqual(self.store.get_sandbox_readonly("resident").activity_epoch, 12)
+
 
 if __name__ == "__main__":
     unittest.main()

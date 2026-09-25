@@ -303,10 +303,15 @@ class PostgresRoutingStore(RoutingStore):
         self, node_url, observations, *, node_id, job_id, **kwargs
     ):
         with self._transaction() as conn:
-            self._capacity_fence(conn, (node_id, job_id, node_url))
-            return super().reconcile_sandboxes_for_node(
+            result = super().reconcile_sandboxes_for_node(
                 node_url, observations, node_id=node_id, job_id=job_id, **kwargs
             )
+            # An accepted inventory changes admission inputs, so it still
+            # advances the worker revision. Do it last: an overlapping
+            # placement conflicts either way (first updater wins), but it now
+            # waits only for this commit instead of the whole reconcile body.
+            self._capacity_fence(conn, (node_id, job_id, node_url))
+            return result
 
     def _delete_sandbox_unlocked(self, conn, route, **kwargs):
         existing = (

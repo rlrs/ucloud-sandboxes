@@ -227,7 +227,8 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_batch_renewal_cancellation_and_uncertain_commit_never_complete_work(self):
         rows = await self.seed_renewal_claims(4)
-        store = self.state.store
+        # Lifecycle renewal runs on the dedicated lifecycle/delivery pool.
+        store = self.state._delivery_store
         original = store.transaction
         for cancel_before_commit in (True, False):
             @asynccontextmanager
@@ -639,6 +640,39 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             (await state.wait_for_response(req, timeout_seconds=1)).body, b"answer"
         )
+
+    async def test_wake_release_and_delivery_progress_while_shared_pool_is_saturated(self):
+        saturated = asyncio.Event()
+
+        async def wake(_request):
+            # Complete only once polls/enqueues hold every shared connection.
+            await saturated.wait()
+
+        state = await self.bound_state(result_notifier=wake)
+        request = await self.enqueue(state)
+        (leased,) = await self.poll(state)
+        waiter = asyncio.create_task(state.wait_for_response(request, timeout_seconds=5))
+        await self.respond(leased, state, defer_delivery=True)
+        release, entered = asyncio.Event(), []
+
+        async def occupy():
+            async with state.store.transaction("occupy_shared_pool"):
+                entered.append(True)
+                await release.wait()
+
+        occupants = [asyncio.create_task(occupy()) for _ in range(state.store.pool.max_size)]
+        try:
+            async with asyncio.timeout(2):
+                while len(entered) < state.store.pool.max_size:
+                    await asyncio.sleep(0.005)
+            saturated.set()
+            response = await asyncio.wait_for(asyncio.shield(waiter), 3)
+            self.assertEqual(response.body, b"answer")
+        finally:
+            release.set()
+            await asyncio.gather(*occupants, return_exceptions=True)
+            waiter.cancel()
+            await asyncio.gather(waiter, return_exceptions=True)
 
     async def bound_state(self, **kwargs):
         self.deployment = "bound"
@@ -1398,7 +1432,8 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
         cancelled.cancel()
         await asyncio.gather(cancelled, return_exceptions=True)
         self.assertNotIn(cancelled_request.request_id, self.state._response_waiters)
-        transaction = self.state.store.transaction
+        # Delivery reads run on the dedicated lifecycle/delivery pool.
+        transaction = self.state._delivery_store.transaction
         failed = False
 
         @asynccontextmanager
@@ -1410,7 +1445,7 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
             async with transaction(operation) as conn:
                 yield conn
 
-        with patch.object(self.state.store, "transaction", fail_once):
+        with patch.object(self.state._delivery_store, "transaction", fail_once):
             with self.assertLogs("ucloud_sandboxes.shared_control.relay", "WARNING"):
                 response = await self.state.wait_for_response(request, timeout_seconds=2)
         self.assertTrue(failed)

@@ -67,14 +67,21 @@ class PostgresRelayState:
         accepted_notifier=None,
         result_notifier=None,
         telemetry=None,
+        lifecycle_connections=4,
     ):
         if (
             storage_budget_bytes < RESPONSE_RESERVATION
             or lifecycle_concurrency < 1
             or lifecycle_lease_seconds <= 0
+            or lifecycle_connections < 0
         ):
             raise ValueError("invalid relay storage or dispatch budget")
         self.store = store
+        # Wake/park dispatch and response delivery release waiting guests.
+        # Worker polls and enqueues can saturate the shared pool; these short
+        # transactions get their own connections to the same authority.
+        self._lifecycle_connections = lifecycle_connections
+        self._lifecycle_store = None
         self.telemetry = telemetry or Telemetry.disabled("model-relay")
         self.deployment = store.deployment_id
         self.request_timeout = request_timeout_seconds
@@ -103,6 +110,10 @@ class PostgresRelayState:
         self._notify_event = asyncio.Event()
         self._pending_notifications: set[str] = set()
         self._poll_waiters: dict[asyncio.Event, tuple[str, str]] = {}
+
+    @property
+    def _delivery_store(self):
+        return self._lifecycle_store or self.store
 
     async def open(self):
         await self.store.open()
@@ -154,6 +165,18 @@ class PostgresRelayState:
                     raise ValueError(
                         "relay processes disagree about lifecycle configuration"
                     )
+            fresh = getattr(self.store, "fresh", None)
+            if self._lifecycle_connections and fresh is not None:
+                lifecycle_store = fresh(max_connections=self._lifecycle_connections)
+
+                def observe(sample):
+                    # One metric stream: follow the shared store's observer.
+                    if self.store.observe is not None:
+                        self.store.observe(sample)
+
+                lifecycle_store.observe = observe
+                await lifecycle_store.open()
+                self._lifecycle_store = lifecycle_store
             self._tasks = [asyncio.create_task(self._listen())]
             if any(self.notifiers.values()):
                 self._tasks.append(asyncio.create_task(self._dispatch_loop()))
@@ -162,6 +185,9 @@ class PostgresRelayState:
             self._tasks.append(asyncio.create_task(self._reconcile_poll_waiters()))
             self._tasks.append(asyncio.create_task(self._notify_loop()))
         except BaseException:
+            if self._lifecycle_store is not None:
+                await self._lifecycle_store.close()
+                self._lifecycle_store = None
             await self.store.close()
             raise
 
@@ -180,7 +206,11 @@ class PostgresRelayState:
             # does not consume cancellation; transaction rollback is shielded.
             _, pending = await asyncio.wait(pending, timeout=0.1)
         await asyncio.gather(*tasks, return_exceptions=True)
-        await self.store.close()
+        try:
+            if self._lifecycle_store is not None:
+                await self._lifecycle_store.close()
+        finally:
+            await self.store.close()
 
     def _signal(self, key):
         if key.startswith("r:") and (
@@ -212,7 +242,9 @@ class PostgresRelayState:
             self._pending_notifications.update(keys)
             self._notify_event.set()
 
-        self.store.after_commit(committed)
+        lifecycle = self._lifecycle_store
+        store = lifecycle if lifecycle is not None and lifecycle.in_transaction() else self.store
+        store.after_commit(committed)
 
     async def _notify_loop(self):
         while not self._closing:
@@ -1084,7 +1116,7 @@ class PostgresRelayState:
             if not ids:
                 continue
             try:
-                async with self.store.transaction("relay_delivery_status") as conn:
+                async with self._delivery_store.transaction("relay_delivery_status") as conn:
                     rows = await (
                         await conn.execute(
                             "SELECT request_id,state,delivery_pending,completed_bytes,completed_at FROM relay_requests WHERE deployment_id=%s AND request_id=ANY(%s)",
@@ -1122,7 +1154,7 @@ class PostgresRelayState:
                         row = ready.pop()
                         batch.append(row["request_id"])
                         size += row["completed_bytes"]
-                    async with self.store.transaction("relay_delivery_bodies") as conn:
+                    async with self._delivery_store.transaction("relay_delivery_bodies") as conn:
                         results = await (
                             await conn.execute(
                                 "SELECT request_id,body,encoding,status,headers FROM relay_results WHERE deployment_id=%s AND request_id=ANY(%s)",
@@ -1340,6 +1372,10 @@ class PostgresRelayState:
             "lifecycle": lifecycle,
             "reserved_storage_bytes": quota["reserved_bytes"] if quota else 0,
             "database_pool": self.store.pool.get_stats(),
+            "lifecycle_database_pool": (
+                self._lifecycle_store.pool.get_stats()
+                if self._lifecycle_store is not None else None
+            ),
             "limits": {"storage_budget_bytes": self.storage_budget},
             "counters": {},
             "timers": {},
@@ -1347,7 +1383,7 @@ class PostgresRelayState:
         }
 
     async def _claim_lifecycle(self, limit, *, action=None):
-        async with self.store.transaction("relay_claim_lifecycle") as conn:
+        async with self._delivery_store.transaction("relay_claim_lifecycle") as conn:
             # Requests are always locked before operations by mutation paths.
             # Claim only operation rows here and COMMIT before touching requests.
             rows = await (
@@ -1424,7 +1460,7 @@ class PostgresRelayState:
         owned = tuple(self._active_claims.items())
         if not owned:
             return
-        async with self.store.transaction("relay_renew_lifecycle") as conn:
+        async with self._delivery_store.transaction("relay_renew_lifecycle") as conn:
             rows = await (await conn.execute(
                 """WITH owned AS (
                     SELECT * FROM unnest(%s::text[],%s::text[],%s::uuid[])
@@ -1530,7 +1566,7 @@ class PostgresRelayState:
                 self._active_parks.pop(request_id, None)
             if self._active_claims.get(claim_key) == work["claim_token"]:
                 self._active_claims.pop(claim_key)
-        async with self.store.transaction("relay_dispatch_complete") as conn:
+        async with self._delivery_store.transaction("relay_dispatch_complete") as conn:
             row = await self._request_lock(conn, request_id)
             current = await (
                 await conn.execute(

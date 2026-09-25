@@ -19,6 +19,7 @@ class QualificationControlStore(PostgresDatabase):
 
     version_table = "schema_version"
     schema_file = "schema.sql"
+    additive_ddl = ()
 
     async def _lock_owner(self, conn, sandbox_id: str, node_id: str):
         node = await (await self._lock_query(conn,

@@ -19,11 +19,13 @@ from uuid import UUID, uuid4
 from typing import NamedTuple
 
 import aiohttp
+from psycopg import AsyncConnection, sql
 from psycopg.types.json import Jsonb
 
 from ..models import utc_now
 from ..sandbox import SandboxSpec, sandbox_spec_fingerprint
 from .database import PostgresDatabase
+from .routing_repository import ROUTING_ADDITIVE_DDL
 
 LOGGER = logging.getLogger(__name__)
 COMMAND_HEADER = "X-UCloud-Placement-Command"
@@ -37,6 +39,94 @@ _ENQUEUE_SQL = """INSERT INTO gateway_commands(command_id,kind,sandbox_id,path,h
     RETURNING command_id,deadline"""
 
 
+class PlacementHints:
+    """LISTEN/NOTIFY wakeups for queue and result readers; polling stays authoritative.
+
+    NOTIFY runs after commit on its own coalesced statement, as in the relay:
+    inside a transaction its queue lock serializes concurrent commits. A lost
+    hint costs one fallback interval, never a command or a result.
+    """
+
+    def __init__(self, store, *, wake_on, fallback_seconds):
+        self.store = store
+        self.channel = f"placement_{store.schema}"[:63]
+        self.wake_on = frozenset(wake_on)
+        self.fallback = fallback_seconds
+        self._wake = asyncio.Event()
+        self._send = asyncio.Event()
+        self._pending: set[str] = set()
+        self._tasks: tuple[asyncio.Task, ...] = ()
+
+    def start(self):
+        if not self._tasks:
+            self._tasks = (
+                asyncio.create_task(self._listen()),
+                asyncio.create_task(self._notify_loop()),
+            )
+
+    def notify(self, key):
+        self._pending.add(key)
+        self._send.set()
+
+    def poke(self):
+        """Wake this process's waiter, e.g. when local capacity frees up."""
+        self._wake.set()
+
+    async def wait(self):
+        """Return on a relevant hint or after the fallback interval."""
+        try:
+            await asyncio.wait_for(self._wake.wait(), self.fallback)
+        except asyncio.TimeoutError:
+            pass
+        # No await since the wait returned: a hint arriving during the
+        # caller's next read sets the event again instead of being lost.
+        self._wake.clear()
+
+    async def close(self):
+        tasks, self._tasks = self._tasks, ()
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _notify_loop(self):
+        while True:
+            await self._send.wait()
+            self._send.clear()
+            await asyncio.sleep(0.002)  # coalesce a burst into one statement
+            keys = sorted(self._pending)
+            self._pending.clear()
+            try:
+                async with self.store.statement("placement_notify") as conn:
+                    await conn.execute(
+                        "SELECT pg_notify(%s,key) FROM unnest(%s::text[]) AS key",
+                        (self.channel, keys),
+                    )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                LOGGER.warning("placement hint failed; fallback polling continues")
+
+    async def _listen(self):
+        while True:
+            try:
+                # A dedicated connection; LISTEN never holds a pooled one.
+                async with await AsyncConnection.connect(
+                    self.store.pool.conninfo, autocommit=True
+                ) as conn:
+                    await conn.execute(
+                        sql.SQL("LISTEN {}").format(sql.Identifier(self.channel))
+                    )
+                    self._wake.set()  # recover anything sent while disconnected
+                    async for notification in conn.notifies():
+                        if notification.payload in self.wake_on:
+                            self._wake.set()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                LOGGER.warning("placement hint connection lost; reconnecting")
+                await asyncio.sleep(0.5)
+
+
 class PlacementSubmission(NamedTuple):
     command_id: UUID
     deadline: datetime
@@ -46,6 +136,7 @@ class PlacementQueue(PostgresDatabase):
     schema_prefix = "ucloud_routing"
     schema_file = "routing_schema.sql"
     version_table = "routing_schema_version"
+    additive_ddl = ROUTING_ADDITIVE_DDL
 
     def completion_reader(self):
         """Give batched completion reads one connection outside enqueue admission."""
@@ -205,11 +296,23 @@ class PlacementQueue(PostgresDatabase):
             )
             return True
 
-    async def prune(self):
-        async with self.transaction("placement_prune_commands") as conn:
-            await conn.execute("""DELETE FROM gateway_commands WHERE command_id IN (
-                SELECT command_id FROM gateway_commands WHERE state='done'
-                AND completed_at<clock_timestamp()-interval '1 hour' LIMIT 1000)""")
+    async def prune(self, *, batch=1000, max_batches=20):
+        """Delete expired results in short batches until caught up.
+
+        One batch a minute capped retention at ~17 commands/s; beyond that the
+        table (bodies up to 1 MiB, results up to 16 MiB) grew without bound.
+        """
+        deleted = 0
+        for _ in range(max_batches):
+            async with self.transaction("placement_prune_commands") as conn:
+                cursor = await conn.execute("""DELETE FROM gateway_commands WHERE command_id IN (
+                    SELECT command_id FROM gateway_commands WHERE state='done'
+                    AND completed_at<clock_timestamp()-interval '1 hour' LIMIT %s)""",
+                    (batch,))
+            deleted += cursor.rowcount
+            if cursor.rowcount < batch:
+                break
+        return deleted
 
 
 class PlacementQueueClient:
@@ -230,6 +333,7 @@ class PlacementQueueClient:
         self._closed = False
         self._replace_failed_pools = False
         self._poller = None
+        self._hints = None
 
     async def open(self):
         async with self._ready:
@@ -256,12 +360,17 @@ class PlacementQueueClient:
                         return_exceptions=True,
                     )
                     raise
+                self._hints = PlacementHints(
+                    self.store, wake_on={"done"}, fallback_seconds=0.25
+                )
+                self._hints.start()
                 self._opened = True
 
     async def response(self, kind, sandbox_id, path, headers, body):
         try:
             await self.open()
             submission = await self.store.submit(kind, sandbox_id, path, headers, body)
+            self._hints.notify(kind)
         except Exception:
             return (
                 503,
@@ -322,7 +431,7 @@ class PlacementQueueClient:
                 LOGGER.warning(
                     "placement result read unavailable; durable work retained"
                 )
-            await asyncio.sleep(0.025)
+            await self._hints.wait()
 
     async def close(self):
         self._closed = True
@@ -335,6 +444,8 @@ class PlacementQueueClient:
                 for future in waiters:
                     future.cancel()
             self.waiters.clear()
+            if self._hints is not None:
+                await self._hints.close()
             if self._opened:
                 try:
                     await self.results_store.close()
@@ -455,6 +566,13 @@ class PlacementQueueWorker:
         self.store, self.origin, self.token = store, origin.rstrip("/"), token
         self.budgets = {"create": create_concurrency, "wake": wake_concurrency}
         self.lease = lease_seconds
+        self.hints = None
+
+    async def _complete(self, command, status, headers, body):
+        completed = await self.store.complete(command, status, headers, body)
+        if self.hints is not None:
+            self.hints.notify("done")
+        return completed
 
     async def execute(self, session, command):
         async def renew():
@@ -484,7 +602,7 @@ class PlacementQueueWorker:
                 return response.status, dict(response.headers), bytes(body)
 
         if command["deadline"] <= utc_now() and command["generation"] is None:
-            await self.store.complete(
+            await self._complete(
                 command,
                 504,
                 {"Content-Type": "application/json"},
@@ -507,12 +625,12 @@ class PlacementQueueWorker:
                         command, delay=min(2, 0.05 * 2 ** min(command["attempts"], 5))
                     )
                     return
-            await self.store.complete(command, status, headers, body)
+            await self._complete(command, status, headers, body)
         except (aiohttp.ClientError, OSError, TimeoutError):
             # Replay only these generation/operation-fenced lifecycle commands.
             # Exec, upload, model inference and arbitrary mutations never enter.
             if command["deadline"] <= utc_now():
-                await self.store.complete(
+                await self._complete(
                     command,
                     504,
                     {"Content-Type": "application/json"},
@@ -524,9 +642,17 @@ class PlacementQueueWorker:
             rpc.cancel()
             lease.cancel()
             await asyncio.gather(rpc, lease, return_exceptions=True)
+            if self.hints is not None:
+                self.hints.poke()  # a budget slot is free for queued work
 
     async def run(self, stop):
         await self.store.open()
+        # Submissions wake the claim loop at once; the fallback only bounds
+        # recovery of lost hints and deferred retries.
+        self.hints = PlacementHints(
+            self.store, wake_on=set(self.budgets), fallback_seconds=0.1
+        )
+        self.hints.start()
         tasks = {kind: set() for kind in self.budgets}
         next_prune = 0
         try:
@@ -569,10 +695,11 @@ class PlacementQueueWorker:
                             LOGGER.warning("placement queue retention deferred")
                         next_prune = now + 60
                     if not changed:
-                        await asyncio.sleep(0.025)
+                        await self.hints.wait()
         finally:
             pending = set().union(*tasks.values())
             for task in pending:
                 task.cancel()
             await asyncio.gather(*pending, return_exceptions=True)
+            await self.hints.close()
             await self.store.close()

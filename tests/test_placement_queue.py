@@ -14,6 +14,7 @@ from ucloud_sandboxes.models import ResourceQuantity, utc_now
 from ucloud_sandboxes.routing import SandboxRouteAllocation
 from ucloud_sandboxes.sandbox import SandboxSpec, sandbox_spec_fingerprint
 from ucloud_sandboxes.shared_control.placement_queue import (
+    PlacementHints,
     PlacementQueue,
     PlacementQueueWorker,
 )
@@ -56,6 +57,24 @@ class PlacementQueueTests(unittest.IsolatedAsyncioTestCase):
         return (
             await self.queue.submit("create", self.spec.id, self.path, {}, self.body)
         ).command_id
+
+    async def test_hints_cross_connections_well_before_fallback(self):
+        listener = PlacementHints(self.queue, wake_on={"done"}, fallback_seconds=30)
+        sender = PlacementHints(self.queue, wake_on=(), fallback_seconds=30)
+        listener.start()
+        sender.start()
+        try:
+            await asyncio.wait_for(listener.wait(), 5)  # the LISTEN is connected
+            sender.notify("create")  # not a payload this waiter wants
+            with self.assertRaises(asyncio.TimeoutError):
+                await asyncio.wait_for(listener.wait(), 0.3)
+            started = asyncio.get_running_loop().time()
+            sender.notify("done")
+            await asyncio.wait_for(listener.wait(), 5)
+            self.assertLess(asyncio.get_running_loop().time() - started, 1)
+        finally:
+            await listener.close()
+            await sender.close()
 
     async def claimed(self):
         await self.submit()

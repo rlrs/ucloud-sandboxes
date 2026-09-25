@@ -63,8 +63,9 @@ class MemoryBackingModeTests(unittest.TestCase):
                     raise TimeoutError('test failed to release commit')
                 return super().commit()
         def connect():
-            return sqlite3.connect(self.store.journal, factory=SlowCommit)
-        with patch.object(self.store, '_connect', side_effect=connect), \
+            return sqlite3.connect(self.store.journal, factory=SlowCommit, check_same_thread=False)
+        self.store._write_batches.close()
+        with patch.object(self.store._write_batches, 'connect', side_effect=connect), \
                 ThreadPoolExecutor(max_workers=2) as pool:
             selection = pool.submit(self.store.prepare_file_restore, self.ref, **self.owner)
             try:
@@ -137,8 +138,9 @@ class MemoryBackingModeTests(unittest.TestCase):
             def commit(self):
                 raise sqlite3.OperationalError('injected durability failure')
         def failed_connect():
-            return sqlite3.connect(self.store.journal, factory=FailedSelection)
-        with patch.object(self.store, '_connect', side_effect=failed_connect):
+            return sqlite3.connect(self.store.journal, factory=FailedSelection, check_same_thread=False)
+        self.store._write_batches.close()
+        with patch.object(self.store._write_batches, 'connect', side_effect=failed_connect):
             with self.assertRaisesRegex(sqlite3.OperationalError, 'durability'):
                 self.store.prepare_file_restore(self.ref, **self.owner)
         self.assertEqual(self.store.active_mode('guest', 1), 'ram')

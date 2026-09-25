@@ -93,6 +93,13 @@ class DurableSqliteBatch:
                 }.items()
             }
 
+    def close(self):
+        """Close an idle writer connection; the next operation reconnects."""
+        with self._condition:
+            if self._batch is None and self._connection is not None:
+                self._connection.close()
+                self._connection = None
+
     def _observe(self, key, value):
         with self._stats_guard:
             self._stats[key] += value

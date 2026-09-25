@@ -40,7 +40,7 @@ DIRECT_REGISTRATION_PHASES = _ROOTFS_PHASES | {
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 _CONTAINER_ID = re.compile(r"[0-9a-f]{64}\Z")
 _DIRECT_REGISTRY_APPLICATION_ID = 0x55435247
-_DIRECT_REGISTRY_SCHEMA_VERSION = 7
+_DIRECT_REGISTRY_SCHEMA_VERSION = 8
 _DIRECT_REGISTRY_IDENTITY = (
     _DIRECT_REGISTRY_APPLICATION_ID,
     _DIRECT_REGISTRY_SCHEMA_VERSION,
@@ -388,6 +388,11 @@ class DirectSandboxRegistry:
             mount_epoch INTEGER NOT NULL CHECK (mount_epoch >= 0),
             released_mb INTEGER NOT NULL CHECK (released_mb >= 0)
         ) STRICT;
+        CREATE TABLE registration_disk (
+            sandbox_id TEXT PRIMARY KEY,
+            sandbox_generation INTEGER NOT NULL CHECK (sandbox_generation > 0),
+            reserved_mb INTEGER NOT NULL CHECK (reserved_mb >= 0)
+        ) STRICT;
         INSERT INTO registry_metadata VALUES (
             1,
             0,
@@ -405,6 +410,13 @@ class DirectSandboxRegistry:
         self.hard_disk_capacity_mb = hard_disk_capacity_mb
         self._connections: list[_RegistryConnection] = []
         self._connections_guard = Lock()
+        # In-process writers queue here rather than in SQLite's busy handler,
+        # which polls with sleeps of up to 100 ms and admits in no order.
+        self._writer_turn = Lock()
+        # Validated records keyed by their exact stored encoding. Identical
+        # text decodes to an identical record, so snapshots decode only rows
+        # that changed instead of the whole inventory on every loop.
+        self._decoded: dict[str, tuple[str, str, DirectSandboxRegistration]] = {}
         self._file_identity: tuple[int, int] | None = None
         self._connection_pid = os.getpid()
         self._connection_finalizer = weakref.finalize(
@@ -464,20 +476,17 @@ class DirectSandboxRegistry:
     def _reserved_disk_bytes(cls, connection):
         # Plans and both component allocators share this transaction authority.
         # Allocator metrics are observations, never an independent free budget.
+        # registration_disk mirrors each registration's claim in the same
+        # transaction, so this runs under the writer lock without decoding JSON.
         reserved_mb = connection.execute(
-            "SELECT COALESCE(SUM(json_extract(record_json, '$.quota_total_mb')),0) FROM registrations"
+            "SELECT COALESCE(SUM(reserved_mb),0) FROM registration_disk"
         ).fetchone()[0]
-        for row in connection.execute(
-            "SELECT sandbox_id,image_id,record_json FROM registrations "
-            "WHERE json_extract(record_json, '$.quota_total_mb') IS NULL"
-        ):
-            reserved_mb += cls._decode(row).spec.requested_resources().disk_mb
         # A published, unmounted workspace no longer occupies local disk; the
         # storage daemon stopped charging it. Every mount re-reserves it first.
         reserved_mb -= connection.execute(
             "SELECT COALESCE(SUM(w.released_mb),0) FROM workspace_capacity w "
-            "JOIN registrations r ON r.sandbox_id=w.sandbox_id "
-            "AND json_extract(r.record_json, '$.sandbox_generation')=w.sandbox_generation"
+            "JOIN registration_disk d ON d.sandbox_id=w.sandbox_id "
+            "AND d.sandbox_generation=w.sandbox_generation"
         ).fetchone()[0]
         overlap = connection.execute(
             "SELECT COALESCE(SUM(allocated_bytes),0) FROM reflink_overlaps"
@@ -953,6 +962,9 @@ class DirectSandboxRegistry:
                 "DELETE FROM relay_wake_fences WHERE sandbox_id=? AND generation=?",
                 (sandbox_id, sandbox_generation),
             )
+            connection.execute(
+                "DELETE FROM registration_disk WHERE sandbox_id = ?", (sandbox_id,)
+            )
             if (
                 connection.execute(
                     "DELETE FROM registrations WHERE sandbox_id = ?",
@@ -1100,15 +1112,23 @@ class DirectSandboxRegistry:
 
         with self._transaction(write=False) as connection:
             activity_revision = self._metadata(connection)[0]
-            records = tuple(
-                self._decode(row)
-                for row in connection.execute(
-                    """
-                    SELECT sandbox_id, image_id, record_json
-                    FROM registrations ORDER BY sandbox_id
-                    """
-                )
-            )
+            rows = connection.execute(
+                """
+                SELECT sandbox_id, image_id, record_json
+                FROM registrations ORDER BY sandbox_id
+                """
+            ).fetchall()
+        previous = self._decoded
+        decoded: dict[str, tuple[str, str, DirectSandboxRegistration]] = {}
+        for row in rows:
+            cached = previous.get(row[0]) if isinstance(row, tuple) and len(row) == 3 else None
+            if cached is not None and cached[:2] == row[1:]:
+                record = cached[2]
+            else:
+                record = self._decode(row)
+            decoded[record.sandbox_id] = (row[1], row[2], record)
+        self._decoded = decoded
+        records = tuple(entry[2] for entry in decoded.values())
         if activity_revision < max((record.revision for record in records), default=0):
             raise DirectRegistryError("direct registry activity revision is invalid")
         by_id = {record.sandbox_id: record for record in records}
@@ -1296,6 +1316,9 @@ class DirectSandboxRegistry:
             if retire:
                 assert fence is not None
                 self._retire(connection, sandbox_id, fence[0])
+            connection.execute(
+                "DELETE FROM registration_disk WHERE sandbox_id = ?", (sandbox_id,)
+            )
             if (
                 connection.execute(
                     "DELETE FROM registrations WHERE sandbox_id = ?",
@@ -1383,6 +1406,21 @@ class DirectSandboxRegistry:
             != 1
         ):
             raise DirectRegistryError("direct registration disappeared")
+        cls._write_disk_claim(connection, record)
+
+    @staticmethod
+    def _write_disk_claim(
+        connection: sqlite3.Connection, record: DirectSandboxRegistration
+    ) -> None:
+        reserved_mb = (
+            record.quota_total_mb
+            if record.quota_total_mb is not None
+            else record.spec.requested_resources().disk_mb
+        )
+        connection.execute(
+            "INSERT OR REPLACE INTO registration_disk VALUES (?, ?, ?)",
+            (record.sandbox_id, record.sandbox_generation, reserved_mb),
+        )
 
     @staticmethod
     def _retire(
@@ -1447,6 +1485,7 @@ class DirectSandboxRegistry:
     ) -> Iterator[sqlite3.Connection]:
         entry: _RegistryConnection | None = None
         reusable = False
+        writing = False
         try:
             self._prepare_file()
             info = self.path.lstat()
@@ -1479,6 +1518,9 @@ class DirectSandboxRegistry:
             if entry.schema_stamp is None:
                 self._ensure_schema(connection)
                 entry.schema_stamp = self._schema_stamp(connection)
+            if write:
+                self._writer_turn.acquire()
+                writing = True
             connection.execute("BEGIN IMMEDIATE" if write else "BEGIN")
             stamp = self._schema_stamp(connection)
             if stamp != entry.schema_stamp:
@@ -1498,6 +1540,8 @@ class DirectSandboxRegistry:
                 raise DirectRegistryError("direct registry is unreadable") from exc
             raise
         finally:
+            if writing:
+                self._writer_turn.release()
             if entry is not None:
                 # This only bounds idle handles, never admitted operations.
                 with self._connections_guard:
@@ -1571,9 +1615,11 @@ class DirectSandboxRegistry:
                 "SELECT 1 FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' LIMIT 1"
             ).fetchone()
             version = cls._versions(connection)
-            if version in {(_DIRECT_REGISTRY_APPLICATION_ID, old) for old in (3, 4, 5, 6)}:
+            if version in {(_DIRECT_REGISTRY_APPLICATION_ID, old) for old in (3, 4, 5, 6, 7)}:
                 cls._validate_schema(connection, legacy_version=version[1])
-                missing = {"workspace_capacity"}
+                missing = {"registration_disk"}
+                if version[1] < 7:
+                    missing.add("workspace_capacity")
                 if version[1] < 6:
                     missing.add("reflink_overlaps")
                 if version[1] < 5:
@@ -1584,6 +1630,10 @@ class DirectSandboxRegistry:
                     statement = raw.strip()
                     if statement.startswith("CREATE TABLE ") and statement.split()[2] in missing:
                         connection.execute(statement)
+                for row in connection.execute(
+                    "SELECT sandbox_id, image_id, record_json FROM registrations"
+                ).fetchall():
+                    cls._write_disk_claim(connection, cls._decode(row))
                 connection.execute(f"PRAGMA user_version = {_DIRECT_REGISTRY_SCHEMA_VERSION}")
             if cls._versions(connection) == (0, 0) and not has_schema:
                 for statement in cls._SCHEMA.split(";"):
@@ -1633,6 +1683,8 @@ class DirectSandboxRegistry:
             if (statement := raw.strip()).startswith("CREATE ")
         }
         if legacy_version is not None:
+            expected.pop("registration_disk")
+        if legacy_version is not None and legacy_version < 7:
             expected.pop("workspace_capacity")
             if legacy_version < 6:
                 expected.pop("reflink_overlaps")

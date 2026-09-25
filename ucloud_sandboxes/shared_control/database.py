@@ -47,6 +47,13 @@ class PostgresDatabase:
     schema_file = "relay_schema.sql"
     schema_version = 1
     schema_prefix = "ucloud_shared"
+    # Idempotent, compatible statements applied by migrate() to an existing
+    # schema without changing its version. Relay maintenance runs every
+    # second; these keep its compaction and caller scans off full table scans.
+    additive_ddl: tuple[str, ...] = (
+        "CREATE INDEX IF NOT EXISTS relay_compaction ON relay_requests(deployment_id, request_id) WHERE state='completed' AND reserved_bytes>completed_bytes+65536",
+        "CREATE INDEX IF NOT EXISTS relay_outstanding_callers ON relay_requests(deployment_id, sandbox_id, sandbox_generation) WHERE state!='completed' OR delivery_pending",
+    )
 
     def __init__(
         self, dsn: str, deployment_id: str, *, schema: str = "ucloud_shared",
@@ -75,6 +82,11 @@ class PostgresDatabase:
         # A synchronous standby is a separate deployment requirement.
         await conn.execute("SET synchronous_commit = on")
         await conn.execute("SELECT set_config('statement_timeout', %s, false)", (str(max(1, int(self.timeout * 1000))),))
+        # An abandoned transaction must not hold locks or old snapshots.
+        await conn.execute(
+            "SELECT set_config('idle_in_transaction_session_timeout', %s, false)",
+            (str(int(max(60, 2 * self.timeout) * 1000)),),
+        )
 
     def fresh(self, *, max_connections=None):
         """Construct unopened connections to the same durable authority."""
@@ -128,6 +140,8 @@ class PostgresDatabase:
             )).fetchone()
             if row["name"] is None:
                 await conn.execute(files(__package__).joinpath(self.schema_file).read_text())
+            for statement in self.additive_ddl:
+                await conn.execute(statement)
             await self._check_version(conn)
 
     @asynccontextmanager

@@ -87,6 +87,8 @@ CREATE TABLE IF NOT EXISTS exec_sessions (
                     updated_at TEXT NOT NULL
                 );
 
+CREATE INDEX IF NOT EXISTS exec_sessions_sandbox ON exec_sessions(sandbox_id);
+
 CREATE TABLE IF NOT EXISTS managed_processes (
                     sandbox_id TEXT PRIMARY KEY,
                     sandbox_generation BIGINT NOT NULL,

@@ -1284,7 +1284,12 @@ class RoutingStore:
         include_terminal: bool = False,
         limit: int = 100_000,
     ) -> list[ProgramRequestState]:
-        clauses = "" if include_terminal else "WHERE state != 'terminal'"
+        # Name the open states: `state != 'terminal'` cannot use the state
+        # index and scanned a week of terminal history on every snapshot.
+        open_states = ", ".join(
+            f"'{state}'" for state in PROGRAM_REQUEST_STATES if state != "terminal"
+        )
+        clauses = "" if include_terminal else f"WHERE state IN ({open_states})"
         bounded_limit = max(1, min(1_000_000, int(limit)))
         with self._connect() as conn:
             return [
@@ -3582,6 +3587,9 @@ class RoutingStore:
                     updated_at TEXT NOT NULL
                 )
                 """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS exec_sessions_sandbox ON exec_sessions(sandbox_id)"
             )
             conn.execute(
                 """

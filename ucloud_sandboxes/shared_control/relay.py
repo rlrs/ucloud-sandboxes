@@ -1205,7 +1205,7 @@ class PostgresRelayState:
                 await conn.execute(
                     """SELECT request_id,reserved_bytes,completed_bytes
                 FROM relay_requests WHERE deployment_id=%s AND state='completed'
-                AND reserved_bytes>completed_bytes+65536 ORDER BY request_id LIMIT 256
+                AND reserved_bytes>completed_bytes+65536 ORDER BY request_id LIMIT 2048
                 FOR UPDATE SKIP LOCKED""",
                     (self.deployment,),
                 )
@@ -1222,10 +1222,13 @@ class PostgresRelayState:
             expired = await (
                 await conn.execute(
                     """SELECT request_id,reserved_bytes FROM relay_requests r WHERE deployment_id=%s
-                AND state='completed' AND NOT delivery_pending AND greatest(completed_at,coalesce(delivery_released_at,completed_at))<%s
+                AND state='completed' AND NOT delivery_pending AND completed_at<%s
+                AND coalesce(delivery_released_at,completed_at)<%s
                 AND NOT EXISTS(SELECT 1 FROM relay_lifecycle l WHERE l.deployment_id=r.deployment_id AND l.request_id=r.request_id AND NOT l.done)
-                ORDER BY request_id LIMIT 128 FOR UPDATE SKIP LOCKED""",
-                    (self.deployment, now - self.retention),
+                ORDER BY request_id LIMIT 1024 FOR UPDATE SKIP LOCKED""",
+                    # greatest(a,b)<x split into a<x AND b<x: the same rows,
+                    # but completed_at can range-scan relay_retention.
+                    (self.deployment, now - self.retention, now - self.retention),
                 )
             ).fetchall()
             if expired:

@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import sqlite3
 from tempfile import TemporaryDirectory
-from threading import Barrier
+from threading import Barrier, Event
 import unittest
 
 from ucloud_sandboxes.checkpoint_components import MemoryBackingRef
@@ -50,13 +50,42 @@ class MemoryRetentionBatchTests(unittest.TestCase):
 
         self.quota.retain_file = assign
         self.store._write_batches.delay = .05
+        operations = self.store._write_batches.operations
+        commits = self.store._write_batches.commits
         with ThreadPoolExecutor(2) as pool:
             list(pool.map(self.retain, range(2)))
         rows = self.rows()
         self.assertEqual([state for _, state in rows], ['ready', 'ready'])
         self.assertEqual(len({project for project, _ in rows}), 2)
-        self.assertEqual(self.store._write_batches.operations, 4)
-        self.assertLess(self.store._write_batches.commits, 4)
+        self.assertEqual(self.store._write_batches.operations - operations, 4)
+        self.assertLess(self.store._write_batches.commits - commits, 4)
+
+    def test_slow_quota_setup_does_not_stall_other_owners(self):
+        # xfs_quota runs while one owner prepares; other owners' wake reads
+        # and journal writes must not queue behind that subprocess.
+        entered, release = Event(), Event()
+        original = self.quota.provision
+
+        def slow_provision(*args):
+            entered.set()
+            self.assertTrue(release.wait(5))
+            original(*args)
+
+        self.quota.provision = slow_provision
+        ref = MemoryBackingRef('sandbox-9.sandbox-1', 1 << 20)
+        with ThreadPoolExecutor(2) as pool:
+            creating = pool.submit(self.store.prepare, ref, sandbox_id='sandbox-9',
+                                   sandbox_generation=1)
+            try:
+                self.assertTrue(entered.wait(5))
+                woken = pool.submit(self.store.require, self.refs[0],
+                                    sandbox_id='sandbox-0', sandbox_generation=1)
+                self.assertEqual(woken.result(2).sandbox_id, 'sandbox-0')
+                retained = pool.submit(self.retain, 1)
+                retained.result(2)
+            finally:
+                release.set()
+            self.assertEqual(creating.result(5).sandbox_id, 'sandbox-9')
 
     def test_commit_failures_preserve_recoverable_ownership(self):
         for failed_commit in (1, 2):

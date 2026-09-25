@@ -18,7 +18,7 @@ import sqlite3
 import stat
 import struct
 import subprocess
-from threading import Lock, RLock
+from threading import Lock, RLock, local
 import time
 
 from opentelemetry.trace import get_current_span
@@ -266,7 +266,10 @@ class MemoryBackingStore:
         self.journal = journal
         self.hard_capacity_bytes = hard_capacity_bytes
         self.quota = quota or XfsMemoryQuota()
-        self._lock = RLock()
+        # SQLite serializes journal writers and each owner's flock fences its
+        # filesystem side effects. No node-wide lock spans subprocesses or
+        # fsyncs, so one create cannot stall unrelated wakes and reclaims.
+        self._readers = local()
         self._active_modes_lock = RLock()
         self._active_modes: dict[tuple[str, int], str] = {}
         self.lease_root = journal.parent / (journal.name + ".leases")
@@ -354,7 +357,7 @@ class MemoryBackingStore:
         Placement and checkpoint ownership must never silently revert to the
         old destructive restore semantics when a deployment flag is removed.
         """
-        with self._lock, closing(self._connect()) as conn:
+        with self._write_batches.transaction() as conn:
             conn.execute("BEGIN IMMEDIATE")
             previous = conn.execute(
                 "SELECT 1 FROM features WHERE name='reflink-restore-v1'"
@@ -379,6 +382,19 @@ class MemoryBackingStore:
         conn.execute("PRAGMA synchronous=FULL")
         return conn
 
+    def _reader(self) -> sqlite3.Connection:
+        """This thread's long-lived read connection; statements autocommit.
+
+        Reopening per call made the last close checkpoint and delete the WAL,
+        and the next open recreate it, on every lifecycle read.
+        """
+        self._check_journal_identity()
+        conn = getattr(self._readers, "connection", None)
+        if conn is None:
+            conn = sqlite3.connect(self.journal, timeout=30)
+            self._readers.connection = conn
+        return conn
+
     @staticmethod
     def _private_directory(path: Path) -> None:
         info = path.lstat()
@@ -395,11 +411,70 @@ class MemoryBackingStore:
         expected_id = f"{sandbox_id}.sandbox-{sandbox_generation}"
         if reference.allocation_id != expected_id or sandbox_generation < 1:
             raise MemoryBackingError("memory allocation belongs to another incarnation")
-        with (
-            self._mutation_lock(reference),
-            self._lock,
-            closing(self._connect()) as conn,
-        ):
+        with self._mutation_lock(reference):
+            row, created = self._claim_allocation(
+                reference, sandbox_id=sandbox_id, sandbox_generation=sandbox_generation
+            )
+            if not created and (
+                row[1:3] != (sandbox_id, sandbox_generation)
+                or row[4] != reference.quota_bytes
+                or row[5] == "deleted"
+            ):
+                raise MemoryBackingError(
+                    "memory allocation identity/claim conflicts"
+                )
+            lease = MemoryBackingLease(
+                reference,
+                sandbox_id,
+                sandbox_generation,
+                row[3],
+                self.root / reference.allocation_id,
+                row[6],
+            )
+            if row[5] == "deleting":
+                raise MemoryBackingError("memory allocation is being deleted")
+            if row[5] == "ready":
+                self._validate(lease)
+                return lease
+            lease.path.mkdir(mode=0o700, exist_ok=True)
+            self._private_directory(lease.path)
+            marker = lease.path / self.MARKER
+            data = self._marker(lease)
+            if marker.exists():
+                if marker.is_symlink() or json.loads(marker.read_text()) != data:
+                    raise MemoryBackingError("memory allocation marker conflicts")
+            else:
+                # A crash between mkdir and marker is recoverable only while empty.
+                if any(lease.path.iterdir()):
+                    raise MemoryBackingError("unmarked memory allocation is not empty")
+                fd = os.open(
+                    marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600
+                )
+                with os.fdopen(fd, "w") as stream:
+                    json.dump(data, stream, sort_keys=True)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                self._sync(lease.path)
+                self._sync(self.root)
+            self.quota.provision(
+                self.root, lease.path, lease.project_id, reference.quota_bytes
+            )
+            with self._write_batches.transaction() as conn:
+                conn.execute(
+                    "UPDATE allocations SET state='ready' WHERE allocation_id=? AND state='preparing'",
+                    (reference.allocation_id,),
+                )
+                conn.commit()
+            self._prepare_active(lease)
+            self._remember_mode(sandbox_id, sandbox_generation, lease.active_mode)
+            return lease
+
+    def _claim_allocation(
+        self, reference: MemoryBackingRef, *, sandbox_id: str, sandbox_generation: int
+    ) -> tuple[tuple, bool]:
+        """Reserve capacity and a project ID in one durable journal commit."""
+        created = False
+        with self._write_batches.transaction() as conn:
             conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
                 "SELECT * FROM allocations WHERE allocation_id=?",
@@ -444,71 +519,16 @@ class MemoryBackingStore:
                     active_mode,
                 )
                 conn.execute("INSERT INTO allocations VALUES (?,?,?,?,?,?,?)", row)
-                conn.commit()
-            else:
-                conn.commit()
-                if (
-                    row[1:3] != (sandbox_id, sandbox_generation)
-                    or row[4] != reference.quota_bytes
-                    or row[5] == "deleted"
-                ):
-                    raise MemoryBackingError(
-                        "memory allocation identity/claim conflicts"
-                    )
-            lease = MemoryBackingLease(
-                reference,
-                sandbox_id,
-                sandbox_generation,
-                row[3],
-                self.root / reference.allocation_id,
-                row[6],
-            )
-            if row[5] == "deleting":
-                raise MemoryBackingError("memory allocation is being deleted")
-            if row[5] == "ready":
-                self._validate(lease)
-                return lease
-            lease.path.mkdir(mode=0o700, exist_ok=True)
-            self._private_directory(lease.path)
-            marker = lease.path / self.MARKER
-            data = self._marker(lease)
-            if marker.exists():
-                if marker.is_symlink() or json.loads(marker.read_text()) != data:
-                    raise MemoryBackingError("memory allocation marker conflicts")
-            else:
-                # A crash between mkdir and marker is recoverable only while empty.
-                if any(lease.path.iterdir()):
-                    raise MemoryBackingError("unmarked memory allocation is not empty")
-                fd = os.open(
-                    marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600
-                )
-                with os.fdopen(fd, "w") as stream:
-                    json.dump(data, stream, sort_keys=True)
-                    stream.flush()
-                    os.fsync(stream.fileno())
-                self._sync(lease.path)
-                self._sync(self.root)
-            self.quota.provision(
-                self.root, lease.path, lease.project_id, reference.quota_bytes
-            )
-            conn.execute(
-                "UPDATE allocations SET state='ready' WHERE allocation_id=? AND state='preparing'",
-                (reference.allocation_id,),
-            )
+                created = True
             conn.commit()
-            self._prepare_active(lease)
-            self._remember_mode(sandbox_id, sandbox_generation, lease.active_mode)
-            return lease
+        return row, created
+
 
     def require(
         self, reference: MemoryBackingRef, *, sandbox_id: str, sandbox_generation: int
     ) -> MemoryBackingLease:
-        with (
-            self._mutation_lock(reference),
-            self._lock,
-            closing(self._connect()) as conn,
-        ):
-            row = conn.execute(
+        with self._mutation_lock(reference):
+            row = self._reader().execute(
                 "SELECT * FROM allocations WHERE allocation_id=?",
                 (reference.allocation_id,),
             ).fetchone()
@@ -558,9 +578,9 @@ class MemoryBackingStore:
         it neither checkpoints nor moves a live mapping. The selection survives
         candidate failure and restart, so recovery chooses the same backing.
         """
-        with self._mutation_lock(reference), self._lock, closing(self._connect()) as conn:
-            conn.execute("BEGIN IMMEDIATE")
-            row = conn.execute(
+        with self._mutation_lock(reference):
+            # The owner's mutation lock keeps this row stable until the update.
+            row = self._reader().execute(
                 "SELECT * FROM allocations WHERE allocation_id=?", (reference.allocation_id,)
             ).fetchone()
             if (row is None or row[1:3] != (sandbox_id, sandbox_generation)
@@ -573,9 +593,10 @@ class MemoryBackingStore:
                 active = self.active_root / reference.allocation_id
                 if any(active.iterdir()):
                     raise MemoryBackingError("file restore cannot abandon live RAM backing")
-                conn.execute("UPDATE allocations SET active_mode='file' WHERE allocation_id=?",
-                             (reference.allocation_id,))
-            conn.commit()
+                with self._write_batches.transaction() as conn:
+                    conn.execute("UPDATE allocations SET active_mode='file' WHERE allocation_id=?",
+                                 (reference.allocation_id,))
+                    conn.commit()
             self._remember_mode(sandbox_id, sandbox_generation, "file")
             return MemoryBackingLease(reference, sandbox_id, sandbox_generation,
                                       row[3], lease.path, "file")
@@ -665,12 +686,11 @@ class MemoryBackingStore:
             path = self.root / reference.allocation_id / f"hibernate-{hibernation_generation}"
             if os.path.lexists(path):
                 return False
-            with self._lock, closing(self._connect()) as conn:
-                row = conn.execute(
-                    "SELECT manifest_sha256,project_id,state FROM retained_checkpoints "
-                    "WHERE allocation_id=? AND hibernation_generation=?",
-                    (reference.allocation_id, hibernation_generation),
-                ).fetchone()
+            row = self._reader().execute(
+                "SELECT manifest_sha256,project_id,state FROM retained_checkpoints "
+                "WHERE allocation_id=? AND hibernation_generation=?",
+                (reference.allocation_id, hibernation_generation),
+            ).fetchone()
             if row is None:
                 # A crash may follow the global claim but precede project setup.
                 return True
@@ -678,7 +698,7 @@ class MemoryBackingStore:
                 raise MemoryBackingError("retained checkpoint release identity conflicts")
             if row[2] != "deleted":
                 self.quota.release(self.root, row[1])
-                with self._lock, closing(self._connect()) as conn:
+                with self._write_batches.transaction() as conn:
                     conn.execute("UPDATE retained_checkpoints SET state='deleted' "
                                  "WHERE allocation_id=? AND hibernation_generation=?",
                                  (reference.allocation_id, hibernation_generation))
@@ -702,7 +722,7 @@ class MemoryBackingStore:
                     path = self.root / ref.allocation_id / f"hibernate-{checkpoint.hibernation_generation}"
                     if os.path.lexists(path):
                         continue
-                    with self._lock, closing(self._connect()) as conn:
+                    with self._write_batches.transaction() as conn:
                         conn.execute("BEGIN IMMEDIATE")
                         row = conn.execute(
                             "SELECT manifest_sha256,allocated_bytes,device,inode,project_id,state "
@@ -732,7 +752,7 @@ class MemoryBackingStore:
                     path = self.root / ref.allocation_id / f"hibernate-{checkpoint.hibernation_generation}"
                     if os.path.lexists(path):
                         continue
-                    with self._lock, closing(self._connect()) as conn:
+                    with self._write_batches.transaction() as conn:
                         conn.execute("BEGIN IMMEDIATE")
                         current = conn.execute(
                             "SELECT manifest_sha256,allocated_bytes,device,inode,project_id,state "
@@ -777,52 +797,53 @@ class MemoryBackingStore:
     ) -> None:
         """Called only after the lifecycle owner has fenced every runtime."""
         with self._mutation_lock(reference):
-            with self._lock, closing(self._connect()) as conn:
-                row = conn.execute(
-                    "SELECT * FROM allocations WHERE allocation_id=?",
-                    (reference.allocation_id,),
-                ).fetchone()
-                if row is None:
-                    # A planned registration may fail before allocation starts.
-                    if os.path.lexists(self.root / reference.allocation_id):
-                        raise MemoryBackingError(
-                            "unregistered memory allocation path exists"
-                        )
-                    return
-                if (
-                    row[1:3] != (sandbox_id, sandbox_generation)
-                    or row[4] != reference.quota_bytes
-                ):
-                    raise MemoryBackingError("memory deletion identity conflicts")
-                if row[5] == "deleted":
-                    self._forget_mode(sandbox_id, sandbox_generation)
-                    return
-                lease = MemoryBackingLease(
-                    reference,
-                    sandbox_id,
-                    sandbox_generation,
-                    row[3],
-                    self.root / reference.allocation_id,
-                    row[6],
-                )
-                if row[5] != "deleting":
-                    if row[5] == "preparing":
-                        if os.path.lexists(lease.path):
-                            self._private_directory(lease.path)
-                            marker = lease.path / self.MARKER
-                            if os.path.lexists(marker):
-                                if marker.is_symlink() or json.loads(
-                                    marker.read_text()
-                                ) != self._marker(lease):
-                                    raise MemoryBackingError(
-                                        "memory allocation marker conflicts"
-                                    )
-                            elif any(lease.path.iterdir()):
+            # The owner's mutation lock keeps this row stable until the update.
+            row = self._reader().execute(
+                "SELECT * FROM allocations WHERE allocation_id=?",
+                (reference.allocation_id,),
+            ).fetchone()
+            if row is None:
+                # A planned registration may fail before allocation starts.
+                if os.path.lexists(self.root / reference.allocation_id):
+                    raise MemoryBackingError(
+                        "unregistered memory allocation path exists"
+                    )
+                return
+            if (
+                row[1:3] != (sandbox_id, sandbox_generation)
+                or row[4] != reference.quota_bytes
+            ):
+                raise MemoryBackingError("memory deletion identity conflicts")
+            if row[5] == "deleted":
+                self._forget_mode(sandbox_id, sandbox_generation)
+                return
+            lease = MemoryBackingLease(
+                reference,
+                sandbox_id,
+                sandbox_generation,
+                row[3],
+                self.root / reference.allocation_id,
+                row[6],
+            )
+            if row[5] != "deleting":
+                if row[5] == "preparing":
+                    if os.path.lexists(lease.path):
+                        self._private_directory(lease.path)
+                        marker = lease.path / self.MARKER
+                        if os.path.lexists(marker):
+                            if marker.is_symlink() or json.loads(
+                                marker.read_text()
+                            ) != self._marker(lease):
                                 raise MemoryBackingError(
-                                    "unmarked memory allocation is not empty"
+                                    "memory allocation marker conflicts"
                                 )
-                    else:
-                        self._validate(lease)
+                        elif any(lease.path.iterdir()):
+                            raise MemoryBackingError(
+                                "unmarked memory allocation is not empty"
+                            )
+                else:
+                    self._validate(lease)
+                with self._write_batches.transaction() as conn:
                     conn.execute(
                         "UPDATE allocations SET state='deleting' WHERE allocation_id=?",
                         (reference.allocation_id,),
@@ -839,13 +860,13 @@ class MemoryBackingStore:
                         self._private_directory(active)
                         shutil.rmtree(active)
                 self.quota.release(self.root, lease.project_id)
-                with self._lock, closing(self._connect()) as conn:
+                with self._write_batches.transaction() as conn:
                     conn.execute(
                         "UPDATE allocations SET state='deleted' WHERE allocation_id=? AND state='deleting'",
                         (reference.allocation_id,),
                     )
                     conn.commit()
-                    self._forget_mode(sandbox_id, sandbox_generation)
+                self._forget_mode(sandbox_id, sandbox_generation)
 
     @contextmanager
     def _mutation_lock(self, reference: MemoryBackingRef):
@@ -892,10 +913,9 @@ class MemoryBackingStore:
             yield lease
 
     def metrics(self) -> dict[str, int]:
-        with closing(self._connect()) as conn:
-            count, reserved = conn.execute(
-                "SELECT COUNT(*),COALESCE(SUM(quota_bytes),0) FROM allocations WHERE state!='deleted'"
-            ).fetchone()
+        count, reserved = self._reader().execute(
+            "SELECT COUNT(*),COALESCE(SUM(quota_bytes),0) FROM allocations WHERE state!='deleted'"
+        ).fetchone()
         return {
             "memory_backing_allocations": count,
             "memory_backing_hard_reserved_bytes": reserved,

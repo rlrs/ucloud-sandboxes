@@ -35,6 +35,8 @@ CREATE INDEX relay_leases ON relay_requests(deployment_id, lease_expires_at) WHE
 CREATE INDEX relay_expiry ON relay_requests(deployment_id, expires_at) WHERE state!='completed';
 CREATE INDEX relay_retention ON relay_requests(deployment_id, completed_at) WHERE state='completed' AND NOT delivery_pending;
 CREATE INDEX relay_incarnation ON relay_requests(deployment_id, sandbox_id, sandbox_generation);
+CREATE INDEX IF NOT EXISTS relay_compaction ON relay_requests(deployment_id, request_id) WHERE state='completed' AND reserved_bytes>completed_bytes+65536;
+CREATE INDEX IF NOT EXISTS relay_outstanding_callers ON relay_requests(deployment_id, sandbox_id, sandbox_generation) WHERE state!='completed' OR delivery_pending;
 CREATE TABLE relay_payloads (
  deployment_id text NOT NULL, request_id text NOT NULL, body bytea NOT NULL,
  encoding text NOT NULL CHECK(encoding IN ('json','base64')), headers jsonb NOT NULL,

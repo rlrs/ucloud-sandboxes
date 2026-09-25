@@ -237,6 +237,7 @@ def create_model_relay_app(
 
     app[STATE_KEY] = PostgresRelayState(
         postgres_store,
+        telemetry=resolved_telemetry,
         request_timeout_seconds=request_timeout_seconds,
         completed_request_retention_seconds=completed_request_retention_seconds,
         worker_retention_seconds=worker_retention_seconds,

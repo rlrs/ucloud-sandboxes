@@ -88,6 +88,35 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
             **kwargs,
         )
 
+    async def test_lifecycle_dispatch_uses_configured_exporter(self):
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+        from ucloud_sandboxes.telemetry import Telemetry
+        exporter = InMemorySpanExporter()
+        provider = TracerProvider()
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+        telemetry = Telemetry.disabled("relay-test")
+        telemetry.tracer = provider.get_tracer("relay-test")
+        async def wake(_request):
+            with telemetry.span("test.worker.wake"):
+                return "epoch"
+        try:
+            state = await self.bound_state(result_notifier=wake, telemetry=telemetry)
+            request = await self.enqueue(state)
+            (leased,) = await self.poll(state)
+            await self.respond(leased, state, defer_delivery=True)
+            await state.wait_for_response(request, timeout_seconds=2)
+            spans = exporter.get_finished_spans()
+            dispatch = next(s for s in spans if s.name == "relay.lifecycle.dispatch"
+                            and s.attributes["relay.lifecycle.action"] == "wake")
+            child = next(s for s in spans if s.name == "test.worker.wake")
+            self.assertEqual(child.parent.span_id, dispatch.context.span_id)
+            self.assertIn("relay.lifecycle.response_age_seconds", dispatch.attributes)
+            self.assertIn("relay.lifecycle.due_wait_seconds", dispatch.attributes)
+        finally:
+            provider.shutdown()
+
     async def test_registration_precheck_is_read_only_without_transaction_id(self):
         store = self.state.store
         original = store.transaction

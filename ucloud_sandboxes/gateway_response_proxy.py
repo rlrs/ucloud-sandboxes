@@ -37,8 +37,20 @@ class AsyncGatewayResponses:
         self._pending = {}
         self._closed = False
 
-    def start(self, client_socket, *, url, headers, trace_headers, telemetry,
-              method="GET", body=None, event_poll=True, release=None):
+    def start(
+        self,
+        client_socket,
+        *,
+        url=None,
+        headers=None,
+        trace_headers,
+        telemetry,
+        method="GET",
+        body=None,
+        event_poll=True,
+        release=None,
+        response_provider=None,
+    ):
         # Takes ownership even when submission fails; the caller must not close.
         owned = client_socket
         completion = Future()
@@ -67,6 +79,7 @@ class AsyncGatewayResponses:
                     method=method,
                     body=body,
                     event_poll=event_poll,
+                    response_provider=response_provider,
                 )
             )
             return completion
@@ -106,27 +119,47 @@ class AsyncGatewayResponses:
 
         task.add_done_callback(completed)
 
-    async def _respond(self, owned, *, url, headers, trace_headers, telemetry,
-                       method, body, event_poll):
+    async def _respond(
+        self,
+        owned,
+        *,
+        url=None,
+        headers=None,
+        trace_headers,
+        telemetry,
+        method,
+        body,
+        event_poll,
+        response_provider,
+    ):
         try:
-            operation = "gateway.exec_events.response" if event_poll else "gateway.file_upload.response"
+            operation = (
+                "gateway.exec_events.response"
+                if event_poll
+                else "gateway.file_upload.response"
+            )
+            if response_provider is not None:
+                operation = "gateway.placement.response"
             with telemetry.span(
                 operation,
                 metric_operation=operation,
                 parent_context=telemetry.extracted_context(trace_headers),
             ) as span:
                 try:
-                    response = await self.pool.request_async(
-                        method,
-                        url,
-                        headers=headers,
-                        body=body,
-                        timeout=self.timeout,
-                        connect_timeout=self.connect_timeout,
-                        response_limit=self.response_limit,
-                        event_poll=event_poll,
-                    )
-                    result = self.response_policy(response, None)
+                    if response_provider is not None:
+                        result = await response_provider()
+                    else:
+                        response = await self.pool.request_async(
+                            method,
+                            url,
+                            headers=headers,
+                            body=body,
+                            timeout=self.timeout,
+                            connect_timeout=self.connect_timeout,
+                            response_limit=self.response_limit,
+                            event_poll=event_poll,
+                        )
+                        result = self.response_policy(response, None)
                 except URLError as exc:
                     result = self.response_policy(None, exc.reason)
                 status, response_headers, body = result

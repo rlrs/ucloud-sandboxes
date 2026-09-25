@@ -70,7 +70,9 @@ class WakeAdmission:
         decisions = []
         active_migrations = {
             migration.sandbox_id
-            for migration in self.routes.sandbox_migrations(active_only=True)
+            for migration in self.routes.sandbox_migrations(
+                active_only=True, sandbox_ids=(route.sandbox_id for route in requested_routes),
+            )
         }
         for requested in requested_routes:
             if requested.job_id not in views:

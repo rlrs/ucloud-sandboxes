@@ -31,6 +31,7 @@ DEFAULT_INSTALL_ROOT = "/work/ucloud-sandboxes"
 DEFAULT_PROJECT_MOUNT_DIR = "/work/data"
 SYSTEMD_UNIT_NAMES = (
     "ucloud-sandbox-gateway.service",
+    "ucloud-sandbox-placement.service",
     "ucloud-sandbox-relay.service",
     "ucloud-sandbox-registry.service",
     "ucloud-sandbox-registry-prune.service",
@@ -43,6 +44,7 @@ SYSTEMD_UNIT_NAMES = (
 )
 PERSISTENT_STATE_SYSTEMD_UNITS = (
     "ucloud-sandbox-gateway.service",
+    "ucloud-sandbox-placement.service",
     "ucloud-sandbox-relay.service",
     "ucloud-sandbox-registry-prune.service",
     "ucloud-sandbox-autoscaler.service",
@@ -772,6 +774,7 @@ def render_remote_deploy_script(
         "  ucloud-sandbox-snapshot-gc.timer \\",
         "  ucloud-sandbox-autoscaler.service \\",
         "  ucloud-sandbox-gateway.service \\",
+        "  ucloud-sandbox-placement.service \\",
         "  ucloud-sandbox-relay.service \\",
         "  ucloud-sandbox-registry-prune.service \\",
         "  ucloud-sandbox-registry-gc.service \\",

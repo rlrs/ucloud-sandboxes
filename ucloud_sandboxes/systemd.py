@@ -143,6 +143,7 @@ def reconcile_gateway_services(
             check=False,
         )
     for service in (
+        "ucloud-sandbox-placement.service",
         "ucloud-sandbox-gateway.service",
         "ucloud-sandbox-relay.service",
         "ucloud-sandbox-autoscaler.service",
@@ -152,6 +153,7 @@ def reconcile_gateway_services(
     systemctl("restart", "ucloud-sandbox-registry.service")
     wait_for("registry", f"http://127.0.0.1:{config.registry_port}/v2/")
     for service in (
+        "ucloud-sandbox-placement.service",
         "ucloud-sandbox-gateway.service",
         "ucloud-sandbox-relay.service",
         "ucloud-sandbox-autoscaler.service",

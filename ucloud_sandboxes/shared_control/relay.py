@@ -22,6 +22,7 @@ from psycopg import AsyncConnection, sql
 from psycopg.types.json import Jsonb
 
 from .. import model_relay as api
+from ..telemetry import Telemetry
 from ..relay_phase import METADATA_KEY as PHASE_METADATA_KEY, current_phase, phase_update
 from .database import PostgresDatabase
 
@@ -65,6 +66,7 @@ class PostgresRelayState:
         lifecycle_lease_seconds=30,
         accepted_notifier=None,
         result_notifier=None,
+        telemetry=None,
     ):
         if (
             storage_budget_bytes < RESPONSE_RESERVATION
@@ -73,6 +75,7 @@ class PostgresRelayState:
         ):
             raise ValueError("invalid relay storage or dispatch budget")
         self.store = store
+        self.telemetry = telemetry or Telemetry.disabled("model-relay")
         self.deployment = store.deployment_id
         self.request_timeout = request_timeout_seconds
         self.retention = completed_request_retention_seconds
@@ -1474,7 +1477,7 @@ class PostgresRelayState:
         completed = work["request_record"].get("completed_at")
         if completed is not None:
             attributes["relay.lifecycle.response_age_seconds"] = max(0.0, dispatched - float(completed))
-        with trace.get_tracer(__name__).start_as_current_span(
+        with self.telemetry.span(
             "relay.lifecycle.dispatch", attributes=attributes,
         ):
             await self._dispatch_claimed(work)

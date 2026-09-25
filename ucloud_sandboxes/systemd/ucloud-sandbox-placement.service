@@ -1,0 +1,18 @@
+[Unit]
+Description=UCloud Sandbox durable placement executor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ucloud
+Group=ucloud
+WorkingDirectory=/work/ucloud-sandboxes
+ExecCondition=/work/ucloud-sandboxes/gateway-venv/bin/ucloud-sandboxes serve-control-plane --check-placement-enabled --config /etc/ucloud-sandboxes/deployment.json
+ExecStart=/work/ucloud-sandboxes/gateway-venv/bin/ucloud-sandboxes serve-control-plane --placement-worker --config /etc/ucloud-sandboxes/deployment.json
+Restart=always
+RestartSec=2
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

@@ -159,9 +159,9 @@ from .registry import (
     merge_jobs_and_heartbeats,
 )
 from .routing import (
+    open_routing_store,
     cold_offload_fence,
     ProgramRequestState,
-    RoutingStore,
     SandboxOwnerLossDisposition,
     SandboxRoute,
     is_portable_parked_route,
@@ -371,6 +371,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     add_config_args(serve)
     serve.add_argument("--host", default="0.0.0.0", help="Bind host.")
+    serve.add_argument("--placement-worker", action="store_true", help="Run the private durable placement executor.")
+    serve.add_argument("--check-placement-enabled", action="store_true", help=argparse.SUPPRESS)
     add_environment_registry_args(serve)
     serve.set_defaults(func=cmd_serve_control_plane)
 
@@ -1081,10 +1083,15 @@ def cmd_serve_environment_io(args: argparse.Namespace) -> int:
 def cmd_serve_control_plane(args: argparse.Namespace) -> int:
     from .environment_config import environment_registry_from_args, environment_registry_from_deployment
     config = load_config(args)
-    telemetry = telemetry_from_config(config, "ucloud-sandboxes-gateway")
+    if getattr(args,'check_placement_enabled',False):
+        return 0 if open_routing_store(config.routing_file()).distributed else 1
+    placement_role=getattr(args,'placement_worker',False)
+    if placement_role and (config.gateway_port>=65535 or config.gateway_port+1 in {config.registry_port,config.relay_port}):
+        raise ValueError('private placement port conflicts with configured services')
+    telemetry = telemetry_from_config(config, "ucloud-sandboxes-placement" if placement_role else "ucloud-sandboxes-gateway")
     server = build_server(
-        args.host,
-        config.gateway_port,
+        '127.0.0.1' if placement_role else args.host,
+        config.gateway_port+1 if placement_role else config.gateway_port,
         config.control_state_file(),
         routing_file=config.routing_file(),
         gateway_bearer_token=read_required_token_file(
@@ -1103,6 +1110,8 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         heartbeat_ttl_seconds=config.gateway_heartbeat_ttl_seconds,
         isolate_fleet_reads=True,
         isolate_routing_writes=True,
+        queue_placement=not placement_role,
+        placement_worker=placement_role,
         image_file=config.image_file(),
         metrics_file=config.metrics_path(),
         registry_url=config.registry_url,
@@ -1120,11 +1129,26 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
     )
     host, port = server.server_address
     print(f"Serving gateway on http://{host}:{port}")
+    placement_task=None
+    placement_stop=None
+    if placement_role:
+        import asyncio
+        from .node_http_async import node_http_pool
+        from .shared_control.placement_queue import PlacementQueue,PlacementQueueWorker
+        routing=server.RequestHandlerClass.routing_store
+        placement_store=PlacementQueue(routing.pool.conninfo,config.deployment_id,schema=routing.schema)
+        placement_stop=asyncio.Event()
+        worker=PlacementQueueWorker(placement_store,origin=f'http://127.0.0.1:{port}',
+            token=server.RequestHandlerClass.gateway_bearer_token)
+        placement_task=node_http_pool.submit(worker.run(placement_stop))
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("Stopping gateway.")
     finally:
+        if placement_task is not None:
+            node_http_pool.call_soon(placement_stop.set)
+            placement_task.result(timeout=15)
         server.server_close()
         telemetry.shutdown()
     return 0
@@ -1288,7 +1312,7 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
         config.gateway_token_file(), "gateway bearer token"
     )
     lifecycle = RelayLifecycleDispatcher(gateway_url, gateway_token)
-    routes = RoutingStore(config.routing_file())
+    routes = open_routing_store(config.routing_file())
 
     async def unavailable_callers(candidates: set[tuple[str, int]]) -> dict[tuple[str, int], str]:
         return await asyncio.to_thread(routes.terminal_sandbox_incarnations, candidates)
@@ -2297,7 +2321,7 @@ def cmd_autoscaler(args: argparse.Namespace) -> int:
                     "another local autoscaler process holds the controller lock"
                 )
             controller_active = bool(process_lock is not None and process_lock.held)
-            routing_store = RoutingStore(route_file)
+            routing_store = open_routing_store(route_file)
             orphaned_migrations_terminalized = []
             if controller_active and execution_requested:
                 assert_process_fence()

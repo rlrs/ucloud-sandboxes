@@ -68,7 +68,7 @@ def _serve(connection, control_path, routing_path, ttl, identities):
     # Spawn, never fork a multithreaded gateway or inherit SQLite connections.
     from .control_plane import _sandbox_list_bytes
     from .control_state import ControlStateStore
-    from .routing import RoutingStore
+    from .routing import open_routing_store
 
     try:
         paths = (control_path, routing_path)
@@ -76,7 +76,7 @@ def _serve(connection, control_path, routing_path, ttl, identities):
             connection.send_bytes(b'error')
             return
         control = ControlStateStore(Path(control_path))
-        routing = RoutingStore(Path(routing_path))
+        routing = open_routing_store(Path(routing_path))
         renderer = FleetResponseRenderer()
         while connection.recv_bytes() == b'read':
             try:

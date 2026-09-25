@@ -78,6 +78,7 @@ class WakePlacementPorts:
     decode_publication: Callable[[SandboxRoute, dict[str, Any]], SandboxRoute | None]
     observe_owner: Callable[[NodeHeartbeat | None, Sequence[PlacementOccupant]], None]
     observe_consolidation: Callable[[SandboxRoute, SandboxMigration | None], None]
+    atomic: Callable[[Callable[[], Any]], Any] | None = None
 
 
 class WakePlacement:
@@ -85,6 +86,12 @@ class WakePlacement:
         self, routes: RoutingStore, admission: WakeAdmission, ports: WakePlacementPorts
     ):
         self.routes, self.admission, self.ports = routes, admission, ports
+
+    def _atomic(self, operation):
+        if self.ports.atomic is not None:
+            return self.ports.atomic(operation)
+        with self.ports.reservation():
+            return operation()
 
     @staticmethod
     def changed() -> WakePlacementStopped:
@@ -165,7 +172,7 @@ class WakePlacement:
         observed = self.ports.decode_publication(route, payload)
         if observed is None or not is_portable_parked_route(observed):
             return None
-        with self.ports.reservation():
+        def accept():
             current = self.routes.get_sandbox_readonly(route.sandbox_id)
             if (
                 current is None
@@ -207,6 +214,8 @@ class WakePlacement:
                 return None
             return accepted
 
+        return self._atomic(accept)
+
     def mark_waking(self, route: SandboxRoute) -> SandboxRoute:
         waking = self.admission.reserve_current(route)
         if waking is None:
@@ -239,7 +248,7 @@ class WakePlacement:
             if not self.admission.same_incarnation(detached, route):
                 raise self.changed()
             route = detached
-        with self.ports.reservation():
+        def plan(route=route):
             route = self.current(route)
             if route.state in {"waking", "running"}:
                 return route
@@ -325,8 +334,14 @@ class WakePlacement:
                     destination_job_id=destination.job_id,
                     destination_node_url=destination.node_url or "",
                 )
-                if consolidation is not None:
-                    self.ports.observe_consolidation(route, active_migration)
+            return active_migration
+
+        planned = self._atomic(plan)
+        if isinstance(planned, SandboxRoute):
+            return planned
+        active_migration = planned
+        if active_migration.migration_id.startswith("consolidate-wake-"):
+            self.ports.observe_consolidation(route, active_migration)
         # The durable migration is the destination claim; global placement may
         # now progress during image preparation, transfer, import and activation.
         self.routes.clear_pending(wake_pending_demand_id(route.sandbox_id))

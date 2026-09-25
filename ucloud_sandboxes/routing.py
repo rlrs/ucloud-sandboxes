@@ -36,12 +36,55 @@ from .storage_native_registry import StorageSnapshotPublication
 _ROUTE_LOCKS_GUARD = RLock()
 _ROUTE_LOCKS: defaultdict[Path, RLock] = defaultdict(RLock)
 _ROUTE_WRITE_BATCHES: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
+_POSTGRES_ROUTING_STORES: dict[tuple[int, Path], Any] = {}
 PENDING_DEMAND_TTL_SECONDS = 300
 # SQLite stores the durable demand count as a signed 64-bit integer. This is a
 # representation bound, not an admission limit; fleet policy governs capacity.
 MAX_PREPARED_CAPACITY_COUNT = (1 << 63) - 1
 PROGRAM_TERMINAL_RETENTION_SECONDS = 7 * 24 * 60 * 60
 ROUTING_SCHEMA_VERSION = 3
+
+
+def open_routing_store(path: Path):
+    """Resolve the one deployment authority, failing closed after cutover.
+
+    Offline migration replaces the SQLite file with a small descriptor. Older
+    binaries reject that non-SQLite file and cannot accidentally resume writes
+    to a stale ownership database. Every gateway/autoscaler/GC reader uses this
+    same boundary; PostgreSQL failure never falls back to the retired file.
+    """
+    path = Path(path)
+    if not path.exists():
+        return RoutingStore(path)
+    with path.open('rb') as stream:
+        prefix = stream.read(16)
+    if prefix == b'SQLite format 3\x00' or not prefix:
+        return RoutingStore(path)
+    try:
+        descriptor = json.loads(path.read_text())
+        if descriptor.get('format') != 'ucloud-postgres-routing-v1':
+            raise ValueError('unrecognized routing authority')
+        from .shared_control.routing_repository import PostgresRoutingStore
+        dsn_path = Path(descriptor['dsn_file'])
+        if not dsn_path.is_absolute():
+            raise ValueError('routing DSN file must be absolute')
+        key = (os.getpid(),path.resolve())
+        with _ROUTE_LOCKS_GUARD:
+            cached = _POSTGRES_ROUTING_STORES.get(key)
+            if cached is not None:
+                cached.validate_authority()
+                return cached
+            store = PostgresRoutingStore(path,dsn=dsn_path.read_text().strip(),schema=descriptor['schema'])
+            try:
+                store.check_schema()
+                store.bind_authority()
+            except BaseException:
+                store.close()
+                raise
+            _POSTGRES_ROUTING_STORES[key] = store
+            return store
+    except Exception as exc:
+        raise sqlite3.DatabaseError('routing authority is unavailable or invalid') from exc
 SANDBOX_WORKER_STATES = ("attached", "detaching", "detached")
 PROGRAM_REQUEST_STATES = (
     "model_wait",
@@ -612,7 +655,22 @@ class RoutingState:
     image_warmups: dict[str, PendingImageWarmup] = field(default_factory=dict)
 
 
+class PlacementCommandRejected(ValueError):
+    """A durable placement claim no longer authorizes this incarnation."""
+
+
 class RoutingStore:
+    # Dialect-specific bulk reads stay at the persistence boundary; lifecycle
+    # and ownership rules are shared by the standalone and PostgreSQL stores.
+    _program_index_hint = 'INDEXED BY program_requests_sandbox'
+    distributed = False
+    _json_values_query = 'SELECT value FROM json_each(?)'
+    _expired_signal_predicate = """
+        COALESCE(NULLIF(updated_at, ''), created_at) != ''
+        AND julianday(COALESCE(NULLIF(updated_at, ''), created_at)) IS NOT NULL
+        AND julianday(COALESCE(NULLIF(updated_at, ''), created_at)) <= julianday(?)
+    """
+
     def __init__(self, path: Path) -> None:
         self.path = path
         self._reader_pool = SqliteConnectionPool()
@@ -715,7 +773,7 @@ class RoutingStore:
                     args = tuple(value for key in batch for value in key) + (cutoff,)
                     prefix = f'WITH candidates(sandbox_id,generation) AS (VALUES {values}) '
                     for reason, predicate in (
-                        ('sandbox_deleted', "SELECT 1 FROM program_requests p INDEXED BY program_requests_sandbox "
+                        ('sandbox_deleted', f"SELECT 1 FROM program_requests p {self._program_index_hint} "
                          "WHERE p.sandbox_id=c.sandbox_id AND p.sandbox_generation=c.generation "
                          "AND p.state='terminal' AND p.last_error='sandbox deletion requested' "
                          "AND p.updated_at > ?"),
@@ -1706,12 +1764,27 @@ class RoutingStore:
         *,
         active_only: bool = False,
         sandbox_id: str | None = None,
+        sandbox_ids: Iterable[str] | None = None,
+        destination_identity: tuple[str, str, str] | None = None,
     ) -> list[SandboxMigration]:
         clauses = ["phase != 'complete'"] if active_only else []
         parameters: list[str] = []
         if sandbox_id is not None:
             clauses.append("sandbox_id = ?")
             parameters.append(sandbox_id)
+        if sandbox_ids is not None:
+            ids = sorted(set(sandbox_ids))
+            if not ids:
+                return []
+            clauses.append(f"sandbox_id IN ({self._json_values_query})")
+            parameters.append(json.dumps(ids))
+        if destination_identity is not None:
+            node_id, job_id, node_url = destination_identity
+            cleaned_url = node_url.strip().rstrip("/")
+            clauses.append("(destination_node_id = ? OR destination_job_id = ? "
+                           "OR destination_node_url IN (?, ?))")
+            parameters.extend((node_id.strip(), job_id.strip(), cleaned_url,
+                               cleaned_url + "/" if cleaned_url else ""))
         where = "WHERE " + " AND ".join(clauses) if clauses else ""
         with self._connect() as conn:
             return [
@@ -2090,7 +2163,7 @@ class RoutingStore:
             existing_by_id = {
                 route.sandbox_id: route
                 for row in conn.execute(
-                    "SELECT * FROM sandboxes WHERE sandbox_id IN (SELECT value FROM json_each(?))",
+                    f"SELECT * FROM sandboxes WHERE sandbox_id IN ({self._json_values_query})",
                     (json.dumps([item.sandbox_id for item in observed]),),
                 )
                 if (route := _sandbox_route_from_row(row)) is not None
@@ -2103,16 +2176,7 @@ class RoutingStore:
             def write_dependencies():
                 if not dependencies:
                     return
-                conn.execute(
-                    """INSERT INTO sandbox_storage_dependencies
-                    SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]'),
-                           json_extract(value, '$[2]') FROM json_each(?) WHERE true
-                    ON CONFLICT(sandbox_id) DO UPDATE SET
-                        generation = excluded.generation,
-                        storage_snapshot_json = excluded.storage_snapshot_json
-                    WHERE excluded.storage_snapshot_json != '{}'""",
-                    (json.dumps(dependencies),),
-                )
+                self._write_storage_dependencies(conn, dependencies)
                 dependencies.clear()
 
             for item in observed:
@@ -2232,14 +2296,14 @@ class RoutingStore:
                         write_dependencies()
             if touched_ids:
                 conn.execute(
-                    """UPDATE sandboxes SET activity_epoch = ?, updated_at = ?
-                    WHERE sandbox_id IN (SELECT value FROM json_each(?))""",
+                    f"""UPDATE sandboxes SET activity_epoch = ?, updated_at = ?
+                    WHERE sandbox_id IN ({self._json_values_query})""",
                     (max(0, activity_epoch), observed_at, json.dumps(sorted(touched_ids))),
                 )
             write_dependencies()
             if accepted_ids:
                 conn.execute(
-                    "DELETE FROM pending WHERE sandbox_id IN (SELECT value FROM json_each(?))",
+                    f"DELETE FROM pending WHERE sandbox_id IN ({self._json_values_query})",
                     (json.dumps(sorted(accepted_ids)),),
                 )
 
@@ -2478,10 +2542,11 @@ class RoutingStore:
         # sandbox snapshot survives. Never redirect or replay an accepted exec.
         conn.execute(
             """
-            INSERT OR IGNORE INTO exec_losses
+            INSERT INTO exec_losses
                 (session_id, sandbox_id, generation, job_id, lost_at)
             SELECT session_id, sandbox_id, ?, job_id, ?
             FROM exec_sessions WHERE sandbox_id = ? AND job_id = ?
+            ON CONFLICT(session_id) DO NOTHING
             """,
             (route.generation, utc_now().isoformat(), route.sandbox_id, route.job_id),
         )
@@ -3193,26 +3258,8 @@ class RoutingStore:
         pending_cutoff = (
             now - timedelta(seconds=PENDING_DEMAND_TTL_SECONDS)
         ).isoformat()
-        conn.execute(
-            """
-            DELETE FROM pending
-            WHERE COALESCE(NULLIF(updated_at, ''), created_at) != ''
-              AND julianday(COALESCE(NULLIF(updated_at, ''), created_at)) IS NOT NULL
-              AND julianday(COALESCE(NULLIF(updated_at, ''), created_at))
-                  <= julianday(?)
-            """,
-            (pending_cutoff,),
-        )
-        conn.execute(
-            """
-            DELETE FROM image_builds
-            WHERE COALESCE(NULLIF(updated_at, ''), created_at) != ''
-              AND julianday(COALESCE(NULLIF(updated_at, ''), created_at)) IS NOT NULL
-              AND julianday(COALESCE(NULLIF(updated_at, ''), created_at))
-                  <= julianday(?)
-            """,
-            (pending_cutoff,),
-        )
+        for table in ('pending','image_builds'):
+            conn.execute(f'DELETE FROM {table} WHERE {self._expired_signal_predicate}',(pending_cutoff,))
         timestamp = now.isoformat()
         conn.execute(
             "DELETE FROM prepared_capacity WHERE expires_at <= ?",
@@ -3449,7 +3496,8 @@ class RoutingStore:
                 INSERT INTO sandbox_generation_hwm (sandbox_id, generation)
                 SELECT sandbox_id, MAX(generation) FROM sandboxes GROUP BY sandbox_id
                 ON CONFLICT(sandbox_id) DO UPDATE SET generation =
-                    MAX(sandbox_generation_hwm.generation, excluded.generation)
+                    CASE WHEN sandbox_generation_hwm.generation > excluded.generation
+                    THEN sandbox_generation_hwm.generation ELSE excluded.generation END
                 """
             )
             conn.execute(
@@ -3862,7 +3910,7 @@ class RoutingStore:
             for route in (
                 _sandbox_route_from_row(row)
                 for row in conn.execute(
-                    """
+                    f"""
                     SELECT sandbox_id, node_id, job_id, node_url,
                            resources_json, spec_json, state, generation,
                            create_operation_id, spec_hash, delete_operation_id,
@@ -3873,7 +3921,7 @@ class RoutingStore:
                            created_at, updated_at
                     FROM sandboxes
                     WHERE node_url = ?
-                      AND sandbox_id NOT IN (SELECT value FROM json_each(?))
+                      AND sandbox_id NOT IN ({self._json_values_query})
                     ORDER BY sandbox_id
                     """,
                     (node_url, json.dumps(sorted(excluded_ids))),
@@ -4054,6 +4102,18 @@ class RoutingStore:
         ).fetchone()
         return _image_warmup_from_row(row) if row is not None else None
 
+    def _write_storage_dependencies(self, conn, dependencies):
+        conn.execute(
+            """INSERT INTO sandbox_storage_dependencies
+            SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]'),
+                   json_extract(value, '$[2]') FROM json_each(?) WHERE true
+            ON CONFLICT(sandbox_id) DO UPDATE SET
+                generation = excluded.generation,
+                storage_snapshot_json = excluded.storage_snapshot_json
+            WHERE excluded.storage_snapshot_json != '{}'""",
+            (json.dumps(dependencies),),
+        )
+
     def _write_sandbox_lifecycle(self, conn, route: SandboxRoute) -> None:
         # The caller already checked an existing incarnation under this writer
         # transaction. State changes do not rewrite its spec or generation HWM.
@@ -4154,7 +4214,8 @@ class RoutingStore:
             INSERT INTO sandbox_generation_hwm (sandbox_id, generation)
             VALUES (?, ?)
             ON CONFLICT(sandbox_id) DO UPDATE SET generation =
-                MAX(sandbox_generation_hwm.generation, excluded.generation)
+                CASE WHEN sandbox_generation_hwm.generation > excluded.generation
+                    THEN sandbox_generation_hwm.generation ELSE excluded.generation END
             """,
             (route.sandbox_id, route.generation),
         )

@@ -29,13 +29,14 @@ class PostgresDatabase:
     version_table = "relay_schema_version"
     schema_file = "relay_schema.sql"
     schema_version = 1
+    schema_prefix = "ucloud_shared"
 
     def __init__(
         self, dsn: str, deployment_id: str, *, schema: str = "ucloud_shared",
         max_connections: int = 16, timeout_seconds: float = 10,
         observe: Callable[[TransactionSample], None] | None = None,
     ) -> None:
-        if not re.fullmatch(r"ucloud_shared(?:_[a-z0-9_]+)?", schema) or len(schema) > 63:
+        if not re.fullmatch(self.schema_prefix+r"(?:_[a-z0-9_]+)?", schema) or len(schema) > 63:
             raise ValueError("invalid shared-control schema")
         if not deployment_id.strip() or max_connections < 1:
             raise ValueError("deployment identity and positive connection budget required")

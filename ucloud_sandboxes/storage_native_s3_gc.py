@@ -11,7 +11,7 @@ import time
 from typing import Callable, Iterable
 
 from .config import DeploymentConfig
-from .routing import RoutingStore
+from .routing import open_routing_store
 from .storage_native_registry import StorageSnapshotPublication
 from .storage_native_s3 import Boto3S3ObjectClient, S3ObjectClient, S3ObjectStat
 
@@ -281,7 +281,7 @@ def main(argv: list[str] | None = None) -> int:
         },
     )
     expected_repository = f"{store.bucket}/{store.prefix}"
-    routing_store = RoutingStore(config.routing_file())
+    routing_store = open_routing_store(config.routing_file())
 
     def current_publications() -> list[StorageSnapshotPublication]:
         publications: dict[tuple[str, str], StorageSnapshotPublication] = {}

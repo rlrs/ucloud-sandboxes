@@ -6,6 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import sqlite3
 import unittest
+from unittest.mock import patch
 
 from tests.test_control_plane import _sandbox_route
 from ucloud_sandboxes.models import NodeHeartbeat, ResourceQuantity, utc_now
@@ -140,6 +141,31 @@ class WakeAdmissionTests(unittest.TestCase):
         self.assertEqual(
             self.store.get_sandbox_readonly(route.sandbox_id).state, "parked"
         )
+
+    def test_unrelated_migration_is_not_decoded_for_local_admission(self):
+        from ucloud_sandboxes import routing
+
+        other = self.store.upsert_sandbox(
+            replace(
+                self.routes[0],
+                sandbox_id="unrelated",
+                spec={**self.routes[0].spec, "id": "unrelated"},
+            )
+        )
+        self.store.begin_sandbox_migration(
+            other,
+            migration_id="other-migration",
+            destination_node_id="other",
+            destination_job_id="other",
+            destination_node_url="http://other",
+        )
+        with patch(
+            "ucloud_sandboxes.routing._sandbox_migration_from_row",
+            wraps=routing._sandbox_migration_from_row,
+        ) as decode:
+            result = self.admission.reserve_batch([self.routes[0]])
+            self.assertEqual(result[0].route.state, "waking")
+            self.assertEqual(decode.call_count, 0)
 
     def test_delete_racing_inventory_read_is_fenced_by_atomic_commit(self):
         route = self.routes[0]

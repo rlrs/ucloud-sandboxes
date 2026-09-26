@@ -113,6 +113,8 @@ if __name__ == "__main__":
                firewall_ids=[11457260], primary_ipv4=ip["id"])
     elif command == "server":
         name, server_type, image, private_ip, public = args
+        # A snapshot is addressed by its numeric image ID.
+        image = int(image) if image.isdigit() else image
         server(name, server_type, image, private_ip=private_ip,
                firewall_ids=[11454113], public_ipv4=public == "public")
     elif command == "snapshot":

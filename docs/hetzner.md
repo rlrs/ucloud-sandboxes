@@ -102,7 +102,7 @@ transactional backups. Put the much larger immutable registry blob tree on a
 Hetzner Volume; network-storage latency should not sit under SQLite commits or
 worker sandbox COW.
 
-## Production deployment (2026-09-26, 0.5.114rc48)
+## Production deployment (2026-09-26, 0.5.114rc49)
 
 The Hetzner production deployment is scripted in `scripts/hetzner_prod/`. It
 writes generated state to the git-ignored `build/hetzner-prod/`, and its
@@ -116,8 +116,9 @@ secrets come from `.env`.
   `ucloud-sandboxes-prod-20260926`), the relay, NAT and 3 gateway processes.
 
 **Workers:**
-- CCX63, autoscaled 0–3, booting golden snapshot `436465822`: Ubuntu 26.04,
-  **pinned kernel 7.0.0-30**, the rc48 node bundle.
+- CCX63, autoscaled 0–3, booting golden snapshot `436475184`: Ubuntu 26.04,
+  **pinned kernel 7.0.0-30**, the rc49 node bundle. Builders (CCX33) boot the
+  same snapshot.
 - The plain `ubuntu-26.04` image boots whatever kernel it currently carries
   (7.0.0-29/30/31 have all been seen), and a bundle's kernel modules only
   match one. Always boot workers from a snapshot.
@@ -139,15 +140,22 @@ secrets come from `.env`.
    routing cutover), then `install_hetzner_gateway.sh`. Rerunning it
    upgrades in place and keeps the tokens.
 3. **New snapshot:**
-   1. Create a CPX32 source.
+   1. Create a CPX32 source. Booting it from the previous snapshot
+      (`hz.py server <name> cpx32 <image-id> 10.42.0.40 public`) keeps the
+      pinned kernel and skips step 2.
    2. Install and hold the bundle's kernel, and disable unattended upgrades.
-   3. Run `node-init.sh <server-id>` from the gateway.
+   3. Copy `node-init.sh` to the gateway with `gscp` and run
+      `node-init.sh <server-id>` there.
    4. Canary a park/wake.
-   5. Run `prepare_hetzner_snapshot.sh "$(hostname)" 64 sandbox` from
+   5. Remove any older package directory under
+      `/var/cache/ucloud-sandboxes/init-packages/`: the script accepts
+      exactly one runtime.
+   6. Run `prepare_hetzner_snapshot.sh "$(hostname)" 64 sandbox` from
       `/var/tmp`, after stopping the node services and unmounting the
       `/run`, `/var/lib` and `/work` ucloud-sandboxes mounts.
-   6. `hz.py snapshot <name> <description>`.
-   7. `make_config.py <image-id>`.
+   7. `hz.py snapshot <name> <description>`, then `hz.py delete-server <name>`.
+   8. `make_config.py <image-id>`, then rerun `upgrade-gateway.sh <version>`
+      to install the new deployment.
 
 **Result:** 540 sandboxes ran correctly on one CCX63, with
 steady-state usable-exec p95 under 0.6 s. See

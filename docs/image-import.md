@@ -38,3 +38,25 @@ immediately and read only the files they touch.
 The builder's allowlist entry `*` publishes every top-level path of an image
 except the runtime mounts `dev`, `proc`, `sys` and `run`. Imported and task
 images keep content in places a fixed list cannot know.
+
+## Hetzner canary (2026-09-26, rc53): the chunk store is the blocker
+
+The first Hetzner canary built `FROM python:3.12` plus a pip install. EROFS
+publication then failed after about 6 minutes. Each 256 KiB chunk upload to the
+S3-backed registry took over a second. One commit ran past the client timeout,
+and the cleanup DELETE then failed on S3 ("append to zero-size path"), which
+masked the original error.
+
+Measured on the gateway, with `registry:3.1.1` and monolithic blob uploads:
+
+| Storage | 256 KiB upload (sequential) | 256 KiB uploads (32 parallel) | 256 KiB read p50 / max |
+|---|---:|---:|---:|
+| Hetzner Object Storage (S3 driver) | 1.26 s | 3.8/s | 319 / 1,785 ms |
+| Gateway local disk (filesystem driver) | 0.01 s | 334/s | 2 / 7 ms |
+
+With S3, a 1 GB image (about 4,000 chunks) would take roughly 17 minutes to
+publish, and a cold start that reads a few hundred chunks would wait seconds to
+minutes. DSec's on-demand loading relies on 3FS, an RDMA SSD cluster. Chunks
+need a comparably low-latency store before immutable workers are enabled on
+Hetzner. `IMMUTABLE_WORKERS` in `scripts/hetzner_prod/make_config.py` therefore
+stays off, and the producer key is already provisioned.

@@ -83,10 +83,10 @@ sandbox.update({
     "disk_gb": disk_gib,
     "default_vcpu": 48.0,
     "default_memory_mb": 180 * GIB,  # ~4 GiB host margin below the visible 188,669 MiB
-    # Immutable-environment workers read image content on demand from signed
-    # EROFS components (docs/immutable-environments.md); Docker pulls nothing
-    # large. Their chunk cache lives in the disk headroom below.
-    "docker_quota_image_gb": 32,
+    # Docker image store; sandbox rootfs mount its overlay2 layers directly.
+    # Pulled images are kept and evicted least recently used above 85%
+    # (docs/image-placement.md). 64 GB filled during an agentic test.
+    "docker_quota_image_gb": 256,
     "swap_gb": 0,
     "direct_runsc_commit": GVISOR_COMMIT,
     "direct_network_allow_tcp": ["10.42.0.2:8092"],
@@ -95,8 +95,7 @@ sandbox.update({
     "storage_native_cache_gb": 32,
     # Unlimited, as on UCloud: 128 capped the first 540-sandbox run at 128.
     "storage_native_max_ublk_devices": 0,
-    # Half the headroom (128 GiB) is the verified chunk cache for image data.
-    "direct_disk_headroom_mb": 256 * GIB,
+    "direct_disk_headroom_mb": 24 * GIB,
     "direct_idle_park_seconds": 1.0,
     "direct_split_memory_backing": True,
     "direct_ram_memory_backing": True,
@@ -105,10 +104,13 @@ sandbox.update({
     "direct_reflink_memory_restore": False,
     "direct_workspace_initial_grant_mb": 512,
 })
-# Workers run immutable environments; the builder publishes them, and the
-# gateway imports external images through it (docs/image-import.md).
+# Immutable-environment (EROFS) workers need a low-latency chunk store. The
+# S3-backed registry measured 1.3 s per 256 KiB chunk upload and ~320 ms per
+# read (docs/image-import.md), so they stay off until chunks have a faster
+# home. Set IMMUTABLE_WORKERS to enable them; the producer key is provisioned.
+IMMUTABLE_WORKERS = False
 PRODUCER_KEYS = "/var/lib/ucloud-sandboxes/state/environment-producer"
-raw["immutable_environments"] = {
+immutable_environments = {
     "trusted_keys_file": f"{PRODUCER_KEYS}/producers.json",
     "signing_key_file": f"{PRODUCER_KEYS}/producer.pem",
     "repository": "environments",
@@ -119,6 +121,11 @@ raw["immutable_environments"] = {
     "allow_paths": ["*"],
     "cache_bytes": 128 * 1024**3,
 }
+if IMMUTABLE_WORKERS:
+    raw["immutable_environments"] = immutable_environments
+    # Workers pull nothing large; half the headroom is the chunk cache.
+    sandbox["docker_quota_image_gb"] = 32
+    sandbox["direct_disk_headroom_mb"] = 256 * GIB
 builder = raw["builder"]
 builder.update({"product_id": "ccx33", "disk_gb": 223, "docker_quota_image_gb": 160, "max_nodes": 1,
                 "scale_down_idle_seconds": 300})

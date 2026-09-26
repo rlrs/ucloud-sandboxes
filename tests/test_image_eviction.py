@@ -42,12 +42,16 @@ class FakeStore:
 
 
 def evictor(store: FakeStore, *, referenced=(), now=10_000.0) -> ImageCacheEvictor:
-    return ImageCacheEvictor(
+    # The agent started long before the sweep, outside the restart grace.
+    clock = [0.0]
+    subject = ImageCacheEvictor(
         store,
         is_referenced=lambda image_id: image_id in referenced,
-        clock=lambda: now,
+        clock=lambda: clock[0],
         statvfs=store.statvfs,
     )
+    clock[0] = now
+    return subject
 
 
 class ImageCacheEvictorTests(unittest.TestCase):
@@ -99,6 +103,20 @@ class ImageCacheEvictorTests(unittest.TestCase):
 
         store.evict_image = evict
         self.assertEqual(evictor(store).evict_if_needed(), (image(2), image(3), image(4)))
+
+    def test_nothing_is_evicted_within_the_grace_period_after_a_restart(self):
+        store = FakeStore({image(n): 10 for n in range(1, 10)},
+                          {image(n): float(n) for n in range(1, 10)})
+        restarted = ImageCacheEvictor(store, is_referenced=lambda _: False,
+                                      clock=lambda: 10_000.0, statvfs=store.statvfs)
+        self.assertEqual(restarted.evict_if_needed(), ())
+
+    def test_docker_times_in_both_formats(self):
+        from ucloud_sandboxes.image_rootfs import _docker_time_seconds
+        self.assertEqual(_docker_time_seconds("2026-09-26T18:40:01.5Z"), 1790448001.5)
+        self.assertEqual(_docker_time_seconds("2026-09-26 18:40:01.5 +0000 UTC"), 1790448001.5)
+        self.assertEqual(_docker_time_seconds("0001-01-01T00:00:00Z"), 0.0)
+        self.assertEqual(_docker_time_seconds("garbage"), 0.0)
 
     def test_rejects_inverted_watermarks(self):
         store = FakeStore({}, {})

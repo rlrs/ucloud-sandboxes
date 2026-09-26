@@ -37,6 +37,8 @@ class EvictableImageStore(Protocol):
 
     def image_tag_times(self, image_ids: Iterable[str]) -> dict[str, float]: ...
 
+    def image_content_id(self, image_ref: str) -> str | None: ...
+
     def evict_image(
         self, image_id: str, *, is_referenced: Callable[[str], bool]
     ) -> bool: ...
@@ -67,6 +69,9 @@ class ImageCacheEvictor:
         # advertising them in heartbeats.
         self.after_eviction: list[Callable[[tuple[str, ...]], None]] = []
         self._last_used: dict[str, float] = {}
+        # Pull times are not known after a restart (Docker records tag times,
+        # not pulls), so every image present at start gets the grace period.
+        self._started_at = clock()
         self._guard = threading.Lock()
         self._sweep = threading.Lock()
         self.evicted = 0
@@ -113,7 +118,7 @@ class ImageCacheEvictor:
         for image_id in sorted(image_ids, key=lambda item: (last_used[item], item)):
             if self.usage() < self.low_watermark:
                 break
-            if now - last_used[image_id] < self.grace_seconds:
+            if now - max(last_used[image_id], self._started_at) < self.grace_seconds:
                 continue
             try:
                 if self.store.evict_image(image_id, is_referenced=self.is_referenced):

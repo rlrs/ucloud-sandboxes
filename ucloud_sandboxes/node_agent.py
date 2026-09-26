@@ -1481,6 +1481,10 @@ class NodeAgentHandler(BuildContextHttpHandler):
                     pull_started = time.monotonic()
                     record, result = self.image_manager.pull(image, image_id=image_id)
                 pull_finished = time.monotonic()
+                if image_evictor is not None:
+                    content_id = image_evictor.store.image_content_id(record.tag)
+                    if content_id:
+                        image_evictor.note_used(content_id)
                 materialize_ms: int | None = None
                 if self.image_materializer is not None:
                     failed_phase = "rootfs_materialize"

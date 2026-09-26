@@ -47,13 +47,21 @@ def _mount_present(path: Path, runner: CommandRunner, binary: str) -> bool:
     )
 
 
-def _docker_time_seconds(day: str, clock: str) -> float:
-    """Parse Docker's ``2026-09-26 18:40:01.123456789 +0000 UTC`` time, else 0."""
+def _docker_time_seconds(value: str) -> float:
+    """Parse a Docker UTC time, else 0.
+
+    Accepts ``2026-09-26T18:40:01.123456789Z`` and the older
+    ``2026-09-26 18:40:01.123456789 +0000 UTC``. Docker reports year 1 for an
+    image that was never tagged locally.
+    """
 
     from datetime import datetime, timezone
 
+    text = value.strip().replace("T", " ", 1)
+    day, _, rest = text.partition(" ")
+    clock = rest.split(" ")[0].rstrip("Z")
+    whole, _, fraction = clock.partition(".")
     try:
-        whole, _, fraction = clock.partition(".")
         stamp = datetime.strptime(f"{day} {whole}", "%Y-%m-%d %H:%M:%S")
     except ValueError:
         return 0.0
@@ -683,18 +691,21 @@ class DockerOverlay2RootfsStore:
         )
         times: dict[str, float] = {}
         for line in result.stdout.splitlines():
-            fields = line.split()
-            if len(fields) < 3 or fields[0] not in ids:
-                continue
-            times[fields[0]] = _docker_time_seconds(fields[1], fields[2])
+            image_id, _, stamp = line.strip().partition(" ")
+            if image_id in ids:
+                times[image_id] = _docker_time_seconds(stamp)
         return times
 
     def image_present(self, image_ref: str) -> bool:
+        return self.image_content_id(image_ref) is not None
+
+    def image_content_id(self, image_ref: str) -> str | None:
         result = self.runner.run(
             (self.docker_binary, "image", "inspect", "--format={{.Id}}", image_ref),
             timeout=60,
         )
-        return result.returncode == 0
+        image_id = result.stdout.strip()
+        return image_id if result.returncode == 0 and image_id.startswith("sha256:") else None
 
     def evict_image(
         self,

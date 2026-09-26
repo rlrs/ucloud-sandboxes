@@ -102,7 +102,7 @@ transactional backups. Put the much larger immutable registry blob tree on a
 Hetzner Volume; network-storage latency should not sit under SQLite commits or
 worker sandbox COW.
 
-## Production deployment (2026-09-26, 0.5.114rc49)
+## Production deployment (2026-09-26, 0.5.114rc52)
 
 The Hetzner production deployment is scripted in `scripts/hetzner_prod/`. It
 writes generated state to the git-ignored `build/hetzner-prod/`, and its
@@ -130,8 +130,9 @@ UCLOUD_RELAY_WORKER_TOKEN=<gateway: /var/lib/ucloud-sandboxes/state/relay-worker
 
 **Workers:**
 - CCX63, autoscaled 0–3 (idle workers and the builder are released after
-  5 minutes), booting golden snapshot `436475184`: Ubuntu 26.04,
-  **pinned kernel 7.0.0-30**, the rc49 node bundle. Builders (CCX33) boot the
+  5 minutes), booting golden snapshot `436539326`: Ubuntu 26.04,
+  **pinned kernel 7.0.0-30**, the rc52 node bundle. A cold worker serves its
+  first sandbox about 70 s after the create. Builders (CCX33) boot the
   same snapshot.
 - The plain `ubuntu-26.04` image boots whatever kernel it currently carries
   (7.0.0-29/30/31 have all been seen), and a bundle's kernel modules only
@@ -166,7 +167,12 @@ UCLOUD_RELAY_WORKER_TOKEN=<gateway: /var/lib/ucloud-sandboxes/state/relay-worker
       pinned kernel and skips step 2.
    2. Install and hold the bundle's kernel, and disable unattended upgrades.
    3. Copy `node-init.sh` to the gateway with `gscp` and run
-      `node-init.sh <server-id>` there.
+      `node-init.sh <server-id>` there. Before that:
+      - Clear the gateway's stale host key for the source address
+        (`ssh-keygen -f /root/.ssh/known_hosts -R 10.42.0.40`).
+      - On a CPX32 (160 GB), point init at a copy of the deployment with
+        `sandbox.docker_quota_image_gb` set to 64. Init checks the real disk.
+        Workers grow the store to the configured size when they boot.
    4. Canary a park/wake.
    5. Remove any older package directory under
       `/var/cache/ucloud-sandboxes/init-packages/`: the script accepts

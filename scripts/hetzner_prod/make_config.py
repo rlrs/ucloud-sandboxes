@@ -83,7 +83,9 @@ sandbox.update({
     "disk_gb": disk_gib,
     "default_vcpu": 48.0,
     "default_memory_mb": 180 * GIB,  # ~4 GiB host margin below the visible 188,669 MiB
-    "docker_quota_image_gb": 64,
+    # Image store for pulled images and their rootfs cache (each image is held
+    # about twice). 64 GB filled during an agentic test with 2.5-12.6 GB images.
+    "docker_quota_image_gb": 256,
     "swap_gb": 0,
     "direct_runsc_commit": GVISOR_COMMIT,
     "direct_network_allow_tcp": ["10.42.0.2:8092"],
@@ -102,7 +104,7 @@ sandbox.update({
     "direct_workspace_initial_grant_mb": 512,
 })
 builder = raw["builder"]
-builder.update({"product_id": "ccx33", "disk_gb": 223, "docker_quota_image_gb": 64, "max_nodes": 1})
+builder.update({"product_id": "ccx33", "disk_gb": 223, "docker_quota_image_gb": 160, "max_nodes": 1})
 policy = raw["policy"]
 policy.update({
     "min_nodes": 0,

@@ -1290,14 +1290,24 @@ if [ "$UCLOUD_DOCKER_QUOTA_IMAGE_GB" -gt 0 ]; then
     exit 1
   fi
   $SUDO mkdir -p "$UCLOUD_DOCKER_QUOTA_ROOT"
+  docker_quota_grown=0
   if [ ! -f "$UCLOUD_DOCKER_QUOTA_IMAGE" ]; then
     $SUDO truncate -s "${{UCLOUD_DOCKER_QUOTA_IMAGE_GB}}G" "$UCLOUD_DOCKER_QUOTA_IMAGE"
+  elif [ "$($SUDO stat -c %s "$UCLOUD_DOCKER_QUOTA_IMAGE")" -lt "$((UCLOUD_DOCKER_QUOTA_IMAGE_GB * 1073741824))" ]; then
+    # A snapshot may carry a smaller store than this deployment configures.
+    # Grow the sparse image and its filesystem online; never shrink it.
+    $SUDO truncate -s "${{UCLOUD_DOCKER_QUOTA_IMAGE_GB}}G" "$UCLOUD_DOCKER_QUOTA_IMAGE"
+    docker_quota_grown=1
   fi
   if ! $SUDO blkid "$UCLOUD_DOCKER_QUOTA_IMAGE" >/dev/null 2>&1; then
     $SUDO mkfs.xfs -f -m reflink=1 "$UCLOUD_DOCKER_QUOTA_IMAGE"
   fi
   if ! findmnt -M "$UCLOUD_DOCKER_QUOTA_ROOT" >/dev/null 2>&1; then
     $SUDO mount -o loop,pquota "$UCLOUD_DOCKER_QUOTA_IMAGE" "$UCLOUD_DOCKER_QUOTA_ROOT"
+  fi
+  if [ "$docker_quota_grown" -eq 1 ]; then
+    $SUDO losetup -c "$(findmnt -n -o SOURCE -M "$UCLOUD_DOCKER_QUOTA_ROOT")"
+    $SUDO xfs_growfs "$UCLOUD_DOCKER_QUOTA_ROOT" >/dev/null
   fi
   if ! grep -F " $UCLOUD_DOCKER_QUOTA_ROOT xfs " /etc/fstab >/dev/null 2>&1; then
     echo "$UCLOUD_DOCKER_QUOTA_IMAGE $UCLOUD_DOCKER_QUOTA_ROOT xfs loop,pquota,nofail 0 0" | $SUDO tee -a /etc/fstab >/dev/null

@@ -2476,8 +2476,29 @@ class DirectProvisionerTests(unittest.TestCase):
             self.assertFalse(
                 service.try_delete(created.spec.id, generation=created.generation)
             )
+            with self.assertRaisesRegex(SandboxCapacityUnavailableError, "lifecycle is busy"):
+                with service._request_lock(created.spec.id, created.generation):
+                    pass
+            with self.assertRaisesRegex(SandboxCapacityUnavailableError, "lifecycle is busy"):
+                with service._request_lock(
+                    created.spec.id, created.generation, wait_seconds=0.05,
+                ):
+                    pass
+            queued = Event()
+
+            def queue_for_lifecycle_lock() -> None:
+                with service._request_lock(
+                    created.spec.id, created.generation, wait_seconds=5,
+                ):
+                    queued.set()
+
+            waiter = Thread(target=queue_for_lifecycle_lock)
+            waiter.start()
+            self.assertFalse(queued.wait(timeout=0.1))
             release.set()
             holder.join(timeout=5)
+            waiter.join(timeout=5)
+            self.assertTrue(queued.is_set())
 
             self.assertFalse(holder.is_alive())
             self.assertEqual(service._locks, {})

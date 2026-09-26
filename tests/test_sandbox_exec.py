@@ -153,6 +153,24 @@ class SandboxExecProtocolTests(unittest.TestCase):
         self.assertTrue(response.args[0]["retryable"])
         self.assertEqual(response.kwargs["headers"]["Retry-After"], "1")
 
+    def test_capacity_evicts_least_recently_updated_terminal_session(self) -> None:
+        manager = ExecSessionManager(FakeSandboxManager(), max_sessions=3)
+        first = _install_session(manager, BlockingStdin())
+        second = _install_session(manager, BlockingStdin())
+        running = _install_session(manager, BlockingStdin())
+        for session in (first, second):
+            session.status = "exited"
+            manager._append_stream_chunk(session.id, "stdout", "done")
+        # Late output makes the first session the most recently updated.
+        manager._append_stream_chunk(first.id, "stdout", "late")
+        for session in (first, second):
+            session.updated_at -= timedelta(seconds=31)
+        with manager._lock:
+            manager._make_session_room_locked()
+        self.assertIsNone(manager.get(second.id))
+        self.assertIs(manager.get(first.id), first)
+        self.assertIs(manager.get(running.id), running)
+
     def test_capacity_preserves_recent_completed_results(self) -> None:
         manager = ExecSessionManager(FakeSandboxManager(), max_sessions=2)
         running = _install_session(manager, BlockingStdin())

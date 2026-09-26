@@ -1756,6 +1756,7 @@ EnvironmentFile={env_file}
 WorkingDirectory={work_dir}
 {node_service_exec_start_pre}
 ExecStart={direct_agent_command}
+LimitNOFILE=65536
 Restart=always
 RestartSec=5
 

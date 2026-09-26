@@ -1291,11 +1291,35 @@ def cmd_serve_builder_agent(args: argparse.Namespace) -> int:
     return 0
 
 
+# Descriptors the node agent needs at density: three pipes per running
+# exec, pooled SQLite handles and one read connection per request thread.
+NODE_AGENT_OPEN_FILES = 65536
+
+
+def raise_open_file_limit(target: int = NODE_AGENT_OPEN_FILES) -> int:
+    """Raise the soft descriptor limit toward ``target``; return the result.
+
+    Service managers commonly start processes at a soft limit of 1024.
+    """
+    import resource
+
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    wanted = target if hard == resource.RLIM_INFINITY else min(target, hard)
+    if soft != resource.RLIM_INFINITY and soft < wanted:
+        try:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (wanted, hard))
+        except (OSError, ValueError):
+            return soft
+        return wanted
+    return soft
+
+
 def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
     from .environment_config import environment_registry_from_args
     from .direct_runtime import build_direct_runtime_service
     from .node_agent import build_direct_node_agent_server
 
+    raise_open_file_limit()
     job_id = args.job_id or detect_job_id()
     if not job_id:
         raise ValueError("job id is required via --job-id or UCLOUD_JOB_ID.")

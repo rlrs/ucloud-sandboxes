@@ -49,7 +49,9 @@ class ExecBackpressureTests(unittest.TestCase):
                                      max_events_per_session=1)
         session = _install_session(manager, BlockingStdin())
         manager._append_stream_chunk(session.id, 'stdout', 'retained')
-        session.status = 'exited'
+        with manager._lock:
+            session.status = 'exited'
+            manager._touch_locked(session)
         with ThreadPoolExecutor(max_workers=1) as pool:
             late = pool.submit(manager._append_stream_chunk, session.id, 'stdout', 'late')
             self.wait_for(lambda: session.output_waiters)

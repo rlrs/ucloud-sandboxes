@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import codecs
-from collections import deque
+from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from datetime import datetime
 import subprocess
@@ -195,6 +195,9 @@ class ExecSessionManager:
         self.output_idle_timeout_seconds = max(0.01, output_idle_timeout_seconds)
         self.telemetry = telemetry or Telemetry.disabled("exec-session-manager")
         self._sessions: dict[str, ExecSession] = {}
+        # Terminal sessions, least recently updated first, so eviction at
+        # capacity pops expired sessions instead of sorting every session.
+        self._terminal: OrderedDict[str, ExecSession] = OrderedDict()
         self._lock = RLock()
 
     def start(self, spec: SandboxExecSpec) -> ExecSession:
@@ -342,11 +345,11 @@ class ExecSessionManager:
                 with self._lock:
                     if self._sessions.get(session_id) is session:
                         session.stdin_open = False
-                        session.updated_at = utc_now()
+                        self._touch_locked(session)
                 raise ValueError("stdin pipe is closed for this exec session.") from exc
             with self._lock:
                 if self._sessions.get(session_id) is session:
-                    session.updated_at = utc_now()
+                    self._touch_locked(session)
             return session
 
     def close_stdin(self, session_id: str) -> ExecSession:
@@ -359,7 +362,7 @@ class ExecSessionManager:
                 if not session.stdin_open:
                     return session
                 session.stdin_open = False
-                session.updated_at = utc_now()
+                self._touch_locked(session)
                 process = session.process
                 if process is None:
                     self._append_event_locked(session, "stdin_closed", "")
@@ -673,17 +676,11 @@ class ExecSessionManager:
         if len(self._sessions) < self.max_sessions:
             return
         now = utc_now()
-        terminal = sorted(
-            (
-                session
-                for session in self._sessions.values()
-                if session.status in {"exited", "failed"}
-                and (now - session.updated_at).total_seconds()
-                >= self.completed_retention_seconds
-            ),
-            key=lambda session: (session.updated_at, session.id),
-        )
-        for session in terminal:
+        while self._terminal:
+            session = next(iter(self._terminal.values()))
+            if (now - session.updated_at).total_seconds() < self.completed_retention_seconds:
+                break
+            self._terminal.popitem(last=False)
             self._sessions.pop(session.id, None)
             session.condition.notify_all()
             if len(self._sessions) < self.max_sessions:
@@ -710,8 +707,14 @@ class ExecSessionManager:
             )
         )
         session.next_sequence += 1
-        session.updated_at = utc_now()
+        self._touch_locked(session)
         session.condition.notify_all()
+
+    def _touch_locked(self, session: ExecSession) -> None:
+        session.updated_at = utc_now()
+        if session.status in {"exited", "failed"} and self._sessions.get(session.id) is session:
+            self._terminal[session.id] = session
+            self._terminal.move_to_end(session.id)
 
     def _complete(self, session: ExecSession, exit_code: int) -> None:
         # Lease release can access storage. Serialize completion for this

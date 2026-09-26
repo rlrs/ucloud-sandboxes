@@ -58,6 +58,9 @@ _STAMPED_SELECT = (
     "pragma_journal_mode JOIN registry_metadata AS m ON m.singleton = 1{joins}"
 )
 _STAMPED_METADATA = _STAMPED_SELECT.format(columns="", joins="")
+# Idle handles kept for reuse. Exec starts borrow concurrently from many
+# request threads; a smaller pool closes and reopens connections under load.
+_IDLE_CONNECTIONS = 64
 
 
 class DirectRegistryError(RuntimeError):
@@ -462,6 +465,7 @@ class DirectSandboxRegistry:
         self.hard_disk_capacity_mb = hard_disk_capacity_mb
         self._connections: list[_RegistryConnection] = []
         self._connections_guard = Lock()
+        self._validated_stamp: tuple[Any, ...] | None = None
         # In-process writers queue here rather than in SQLite's busy handler,
         # which polls with sleeps of up to 100 ms and admits in no order.
         self._writer_turn = Lock()
@@ -1745,9 +1749,16 @@ class DirectSandboxRegistry:
             # A retained connection caches SQLite's parsed schema/statements.
             # Its schema cookie and durable identity are checked on every use;
             # changed DDL goes through full validation before any row access.
+            # Every use compares the live stamp, so a new connection to the
+            # checked file may start from the last validated one; a mismatch
+            # still validates before any row is read.
             if entry.schema_stamp is None:
-                self._ensure_schema(entry.connection)
-                entry.schema_stamp = self._schema_stamp(entry.connection)
+                validated = self._validated_stamp
+                if validated is None:
+                    self._ensure_schema(entry.connection)
+                    validated = self._schema_stamp(entry.connection)
+                    self._validated_stamp = validated
+                entry.schema_stamp = validated
             yield entry
             reusable = True
         except BaseException as exc:
@@ -1762,7 +1773,7 @@ class DirectSandboxRegistry:
             if entry is not None:
                 # This only bounds idle handles, never admitted operations.
                 with self._connections_guard:
-                    if reusable and len(self._connections) < 16:
+                    if reusable and len(self._connections) < _IDLE_CONNECTIONS:
                         self._connections.append(entry)
                         entry = None
                 if entry is not None:
@@ -1814,6 +1825,7 @@ class DirectSandboxRegistry:
                 if row is None or tuple(row[:4]) != entry.schema_stamp:
                     self._validate_schema(connection)
                     entry.schema_stamp = self._schema_stamp(connection)
+                    self._validated_stamp = entry.schema_stamp
                 else:
                     self._checked_metadata(row[4:7])
                 yield connection

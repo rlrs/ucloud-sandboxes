@@ -214,19 +214,23 @@ class DirectLifecycle:
         # Queue before accepting exec/file activity, then re-read registration
         # and restore under its generation lock. No command has been launched,
         # so a bounded wait expiring is safe for the gateway to reschedule.
+        wait_seconds = getattr(self.owner.service, "admission_wait_seconds", 30.0)
         try:
             self._coordinator.acquire_shared(
                 sandbox_id,
                 join_transition=True,
-                transition_timeout_seconds=getattr(self.owner.service, "admission_wait_seconds", 30.0),
+                transition_timeout_seconds=wait_seconds,
             )
         except SandboxBusyError as exc:
             raise SandboxExecAdmissionDeferredError(str(exc)) from exc
         try:
             registration = self.owner.service._require_registration(sandbox_id)
+            # Concurrent commands for one sandbox queue here for the same
+            # bounded wait. Rejecting them made each one retry a second later.
             with self.owner.service._request_lock(
                 sandbox_id,
                 registration.sandbox_generation,
+                wait_seconds=wait_seconds,
             ):
                 self.owner.service.mark_activity(
                     sandbox_id,

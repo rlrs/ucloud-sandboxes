@@ -99,7 +99,7 @@ class DirectNodeRuntimeTests(unittest.TestCase):
                     sandbox_generation=2, to_direct_sandbox=lambda: "new-generation",
                 )
                 service._require_registration = Mock(return_value=registration)
-                service._request_lock = Mock(side_effect=lambda *_: nullcontext())
+                service._request_lock = Mock(side_effect=lambda *_, **__: nullcontext())
                 service.mark_activity = Mock()
                 service.ensure_running_with_timings = Mock(return_value={})
                 manager = DirectNodeRuntime(service)
@@ -132,7 +132,9 @@ class DirectNodeRuntimeTests(unittest.TestCase):
                     service.ensure_running_with_timings.assert_not_called()
                 else:
                     self.assertFalse(failures)
-                    service._request_lock.assert_called_once_with("agent", 2)
+                    service._request_lock.assert_called_once_with(
+                        "agent", 2, wait_seconds=getattr(service, "admission_wait_seconds", 30.0),
+                    )
                     service.ensure_running_with_timings.assert_called_once_with("new-generation")
                 with manager.lifecycle._coordinator.exclusive("agent"):
                     pass  # Neither branch leaks an activity lease.

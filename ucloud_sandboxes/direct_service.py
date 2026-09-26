@@ -2820,8 +2820,14 @@ class DirectSandboxService:
                 self._locks.pop(key)
 
     @contextmanager
-    def _request_lock(self, sandbox_id: str, generation: int) -> Iterator[None]:
-        with self._try_lock(sandbox_id, generation) as acquired:
+    def _request_lock(
+        self,
+        sandbox_id: str,
+        generation: int,
+        *,
+        wait_seconds: float = 0.0,
+    ) -> Iterator[None]:
+        with self._try_lock(sandbox_id, generation, wait_seconds=wait_seconds) as acquired:
             if not acquired:
                 raise SandboxStartupBusyError("sandbox lifecycle is busy")
             yield
@@ -2861,11 +2867,21 @@ class DirectSandboxService:
             self._release_lock_entry(key, entry)
 
     @contextmanager
-    def _try_lock(self, sandbox_id: str, generation: int) -> Iterator[bool]:
+    def _try_lock(
+        self,
+        sandbox_id: str,
+        generation: int,
+        *,
+        wait_seconds: float = 0.0,
+    ) -> Iterator[bool]:
         key, entry = self._retain_lock(sandbox_id, generation)
         acquired = False
         try:
-            acquired = entry.lock.acquire(blocking=False)
+            acquired = (
+                entry.lock.acquire(timeout=wait_seconds)
+                if wait_seconds > 0
+                else entry.lock.acquire(blocking=False)
+            )
             if acquired:
                 self._track_lifecycle_lock(key, entry)
             yield acquired

@@ -144,6 +144,11 @@ UCLOUD_RELAY_WORKER_TOKEN=<gateway: /var/lib/ucloud-sandboxes/state/relay-worker
 - `storage_native_max_ublk_devices=0`: the rc37 value of 128 capped a node
   at 128 sandboxes.
 - `gateway_processes=3`.
+- Docker image store: 256 GB on workers, 160 GB on the builder. It holds
+  pulled images and their rootfs cache, about twice each image. The
+  earlier 64 GB filled during an agentic test with 2.5–12.6 GB images, and
+  creates hung on `no space left on device`. VM init grows a snapshot's
+  smaller store to the configured size.
 
 **Bring-up from an empty project** (network, firewalls and SSH key exist):
 1. `hz.py gateway`

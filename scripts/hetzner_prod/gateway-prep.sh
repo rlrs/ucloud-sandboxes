@@ -2,8 +2,8 @@
 # PostgreSQL, service user, venv and database schemas before install_hetzner_gateway.sh.
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -q >/dev/null
-apt-get install -y -q postgresql python3-venv >/dev/null
+apt-get -o DPkg::Lock::Timeout=600 update -q >/dev/null
+apt-get -o DPkg::Lock::Timeout=600 install -y -q postgresql python3-venv >/dev/null
 id ucloud >/dev/null 2>&1 || useradd --system --create-home --home-dir /var/lib/ucloud-sandboxes --shell /usr/sbin/nologin ucloud
 PGV=$(ls /etc/postgresql | sort -n | tail -1)
 cat > /etc/postgresql/$PGV/main/conf.d/ucloud.conf <<CONF

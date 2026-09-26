@@ -123,8 +123,8 @@ if [[ "$host_kind" == dns ]]; then
 fi
 
 export DEBIAN_FRONTEND=noninteractive
-apt-get update
-apt-get install -y --no-install-recommends \
+apt-get -o DPkg::Lock::Timeout=600 update
+apt-get -o DPkg::Lock::Timeout=600 install -y --no-install-recommends \
   ca-certificates nginx python3-venv
 
 certbot_root=/opt/ucloud-sandboxes-certbot

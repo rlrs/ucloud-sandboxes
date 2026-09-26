@@ -126,8 +126,8 @@ if [[ "$registry_store_kind" == filesystem && \
 fi
 
 export DEBIAN_FRONTEND=noninteractive
-apt-get update
-apt-get install -y --no-install-recommends \
+apt-get -o DPkg::Lock::Timeout=600 update
+apt-get -o DPkg::Lock::Timeout=600 install -y --no-install-recommends \
   ca-certificates curl docker.io nftables openssl python3-venv
 systemctl enable --now docker.service
 

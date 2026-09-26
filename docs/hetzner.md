@@ -129,7 +129,8 @@ UCLOUD_RELAY_WORKER_TOKEN=<gateway: /var/lib/ucloud-sandboxes/state/relay-worker
 ```
 
 **Workers:**
-- CCX63, autoscaled 0–3, booting golden snapshot `436475184`: Ubuntu 26.04,
+- CCX63, autoscaled 0–3 (idle workers and the builder are released after
+  5 minutes), booting golden snapshot `436475184`: Ubuntu 26.04,
   **pinned kernel 7.0.0-30**, the rc49 node bundle. Builders (CCX33) boot the
   same snapshot.
 - The plain `ubuntu-26.04` image boots whatever kernel it currently carries
@@ -144,9 +145,11 @@ UCLOUD_RELAY_WORKER_TOKEN=<gateway: /var/lib/ucloud-sandboxes/state/relay-worker
 - `storage_native_max_ublk_devices=0`: the rc37 value of 128 capped a node
   at 128 sandboxes.
 - `gateway_processes=3`.
-- Docker image store: 256 GB on workers, 160 GB on the builder. It holds
-  pulled images and their rootfs cache, about twice each image. The
-  earlier 64 GB filled during an agentic test with 2.5–12.6 GB images, and
+- Docker image store: 256 GB on workers, 160 GB on the builder. Sandbox
+  root filesystems mount Docker's overlay2 layers directly, so it holds the
+  distinct images of a worker's live sandboxes, with shared layers stored
+  once; an image is removed when its last sandbox is deleted. The earlier
+  64 GB filled during an agentic test with 2.5–12.6 GB images, and
   creates hung on `no space left on device`. VM init grows a snapshot's
   smaller store to the configured size.
 

@@ -83,8 +83,9 @@ sandbox.update({
     "disk_gb": disk_gib,
     "default_vcpu": 48.0,
     "default_memory_mb": 180 * GIB,  # ~4 GiB host margin below the visible 188,669 MiB
-    # Image store for pulled images and their rootfs cache (each image is held
-    # about twice). 64 GB filled during an agentic test with 2.5-12.6 GB images.
+    # Docker image store; sandbox rootfs mount its overlay2 layers directly.
+    # It holds the distinct images of a worker's live sandboxes (shared layers
+    # once). 64 GB filled during an agentic test with 2.5-12.6 GB images.
     "docker_quota_image_gb": 256,
     "swap_gb": 0,
     "direct_runsc_commit": GVISOR_COMMIT,
@@ -104,14 +105,16 @@ sandbox.update({
     "direct_workspace_initial_grant_mb": 512,
 })
 builder = raw["builder"]
-builder.update({"product_id": "ccx33", "disk_gb": 223, "docker_quota_image_gb": 160, "max_nodes": 1})
+builder.update({"product_id": "ccx33", "disk_gb": 223, "docker_quota_image_gb": 160, "max_nodes": 1,
+                "scale_down_idle_seconds": 300})
 policy = raw["policy"]
 policy.update({
     "min_nodes": 0,
     "max_nodes": 3,
     "max_create_per_cycle": 2,
     "max_provisioning_nodes": 3,
-    "scale_down_idle_seconds": 900,
+    # Idle workers are released after 5 minutes.
+    "scale_down_idle_seconds": 300,
     # Plain Ubuntu 26.04 private-only boots open SSH after ~130 s; the golden
     # snapshot removes that delay. Do not evict nodes before init can finish.
     "unreachable_stop_after_seconds": 900,

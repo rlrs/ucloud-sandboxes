@@ -88,9 +88,11 @@ class DiskClaimPolicy:
 def capture_claim_mb(*, ceiling_mb: int, demand_bytes: int | None) -> int:
     """Checkpoint space to reserve at park admission.
 
-    ``demand_bytes`` is the sandbox cgroup's memory.current plus swap. Every
-    captured page is resident (or swapped) at capture time; unknown demand
-    falls back to the conservative formula ceiling.
+    ``demand_bytes`` is the RAM-backed application memory file's allocated
+    bytes plus the cgroup's resident memory (capped at the memory limit) for
+    private pages. Unknown demand falls back to the formula ceiling; an
+    underestimate fails inside the project quota and the next park of that
+    incarnation reserves the ceiling.
     """
     if demand_bytes is None or demand_bytes < 0:
         return ceiling_mb

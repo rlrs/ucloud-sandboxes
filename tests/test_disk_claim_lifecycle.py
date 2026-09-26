@@ -154,8 +154,21 @@ class DemonstratedMemoryClaimTests(unittest.TestCase):
         # Nothing to lower: a running RAM owner writes nothing to its directory.
         self.assertEqual(self.warden.settle_idle_memory_claims(), 0)
 
+    def test_capture_estimate_adds_the_ram_memory_file_to_resident_private_pages(self):
+        self.ram_split()
+        active = self.config.application_memory_root / self.sandbox.memory.allocation_id
+        (active / "application_memory.active").write_bytes(b"x" * (8 * MIB))
+        allocated = (active / "application_memory.active").stat().st_blocks * 512
+        # Resident memory above the 1 GiB limit is capped at the limit.
+        with patch("ucloud_sandboxes.disk_claims.cgroup_memory_demand", return_value=5 * GIB):
+            demand = self.warden._capture_demand_bytes(self.sandbox, 1)
+        self.assertEqual(demand, allocated + GIB)
+        with patch("ucloud_sandboxes.disk_claims.cgroup_memory_demand", return_value=None):
+            self.assertIsNone(self.warden._capture_demand_bytes(self.sandbox, 1))
+
     def test_refused_capture_space_keeps_the_sandbox_running_and_unchanged(self):
-        self.ram_split(capacity_mb=1024 + 64 + 2)
+        self.ram_split()
+        self.registry.hard_disk_capacity_mb = self.claim().total_mb + 2
         with self.assertRaises(DirectRegistryCapacityUnavailable):
             self.park()
         self.assertEqual(self.warden.inspect(self.sandbox).state, HibernationState.RUNNING)

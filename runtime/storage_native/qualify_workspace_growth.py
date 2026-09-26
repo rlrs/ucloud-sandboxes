@@ -130,7 +130,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         config = StorageNativeNodeConfig(
             journal_path=root / "journal" / "storage.sqlite",
             runtime_root=root / "volumes", mount_root=root / "mounts",
-            hard_capacity_bytes=16 * GIB, upper_mode=args.upper_mode,
+            hard_capacity_bytes=64 * GIB, upper_mode=args.upper_mode,
         )
         service = StorageNativeNodeService(config, backend=backend_client,
                                            global_config_path=global_config)
@@ -232,7 +232,15 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         granted = [streamed.granted_size]
         started = time.monotonic()
 
+        monitor_errors: list[str] = []
+
         def monitor():
+            try:
+                poll()
+            except BaseException as exc:
+                monitor_errors.append(f"{type(exc).__name__}: {exc}")
+
+        def poll():
             while not stop.wait(args.poll_seconds):
                 info = os.statvfs(stream_mount)
                 target = next_grant(granted=granted[0], free=info.f_bavail * info.f_frsize,
@@ -249,10 +257,14 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         poller.join(timeout=10)
         result["monitor_stream"] = {"written": written, "early_enospc": early,
                                     "seconds": elapsed, "mb_per_second": written / MIB / elapsed,
-                                    "growths": growths}
+                                    "growths": growths, "monitor_errors": monitor_errors}
         result["final_metrics"] = client.get_metrics()
         result["status"] = "passed" if result["churn_upper_bound_ok"] else "upper-exceeded-grant"
         return result
+    except BaseException as exc:
+        import traceback
+        result["error"] = traceback.format_exc()
+        raise
     finally:
         if server is not None and thread is not None:
             with contextlib.suppress(Exception):
@@ -264,7 +276,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             try:
                 backend_process.wait(timeout=10)
             except subprocess.TimeoutExpired:
-                backend_process.terminate()
+                backend_process.kill()
                 backend_process.wait(timeout=10)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n",

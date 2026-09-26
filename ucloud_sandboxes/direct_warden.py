@@ -438,7 +438,7 @@ class DirectRunscWarden:
                     sandbox.container_id,
                 )
                 pid, ticks = self._state_identity(sandbox)
-                return self._journal(sandbox).initialize_running(
+                running = self._journal(sandbox).initialize_running(
                     sandbox_id=sandbox.sandbox_id,
                     sandbox_generation=sandbox.sandbox_generation,
                     spec_sha256=sandbox.spec_sha256,
@@ -449,6 +449,13 @@ class DirectRunscWarden:
             except Exception:
                 self._best_effort_delete(sandbox)
                 raise
+            if sandbox.memory is not None:
+                # Hand a granted workspace to the growth monitor.
+                try:
+                    self._sync_workspace_claim(sandbox, self.workspace_record(sandbox))
+                except Exception:
+                    _LOG.exception("could not track the workspace of %s", sandbox.sandbox_id)
+            return running
 
     def _readiness_command(self, sandbox: DirectSandbox) -> tuple[str, ...]:
         try:
@@ -2710,8 +2717,7 @@ class DirectRunscWarden:
             if self._capture_refused_until.get(key, 0.0) > now:
                 # Idle parking retries every tick; a full node answers cheaply.
                 raise DirectRegistryCapacityUnavailable("capture space was just refused")
-        demand = None if overflowed else disk_claims.cgroup_memory_demand(
-            sentry_pid, proc_root=self.config.proc_root)
+        demand = None if overflowed else self._capture_demand_bytes(sandbox, sentry_pid)
         target_mb = max(claim.memory_mb,
                         disk_claims.capture_claim_mb(ceiling_mb=ceiling_mb, demand_bytes=demand))
         previous = self.memory_backing.limit_bytes(sandbox.memory)
@@ -2740,6 +2746,36 @@ class DirectRunscWarden:
             "memory.ceiling_mb": ceiling_mb,
         })
         return previous
+
+    def _capture_demand_bytes(self, sandbox: DirectSandbox, sentry_pid: int) -> int | None:
+        """What a capture will write: the RAM memory file plus private pages.
+
+        The application memory image is the tmpfs file's allocated blocks,
+        known exactly. Private pages (kernel page cache and other sentry
+        memory files) are bounded by the cgroup's resident memory, itself
+        at most the memory limit; they are not part of that tmpfs file.
+        """
+        resident = disk_claims.cgroup_memory_demand(sentry_pid, proc_root=self.config.proc_root)
+        if resident is None:
+            return None
+        try:
+            active = (self._active_memory_root(sandbox) / _ACTIVE_APPLICATION_MEMORY).stat()
+        except FileNotFoundError:
+            application = 0
+        except OSError:
+            return None
+        else:
+            application = active.st_blocks * 512
+        memory_limit = self._memory_limit_bytes(sandbox)
+        return application + (resident if memory_limit is None else min(resident, memory_limit))
+
+    def _memory_limit_bytes(self, sandbox: DirectSandbox) -> int | None:
+        if self.disk_capacity is None:
+            return None
+        registration = self.disk_capacity.get(sandbox.sandbox_id)
+        if registration is None or registration.spec.memory_mb is None:
+            return None
+        return registration.spec.memory_mb * disk_claims.MIB
 
     def _settle_capture_space(self, sandbox: DirectSandbox, reserved: int | None) -> None:
         """Shrink the capture reservation to what the checkpoint allocated."""

@@ -2020,8 +2020,16 @@ class HibernationJournal:
                 payload.extend(block)
             if len(payload) > MAX_HIBERNATION_JSON_BYTES:
                 raise HibernationError("hibernation journal is too large")
-            raw = json.loads(bytes(payload).decode("utf-8"))
-            return HibernationRecord.from_dict(raw)
+            payload = bytes(payload)
+            key = str(self.path)
+            cached = _DECODED_JOURNALS.get(key)
+            if cached is not None and cached[0] == payload:
+                return cached[1]
+            record = HibernationRecord.from_dict(json.loads(payload.decode("utf-8")))
+            if len(_DECODED_JOURNALS) >= 8192:
+                _DECODED_JOURNALS.clear()
+            _DECODED_JOURNALS[key] = (payload, record)
+            return record
         except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
             raise HibernationError("hibernation journal is invalid") from exc
         finally:
@@ -2354,6 +2362,12 @@ class HibernationJournalStore:
                 os.fsync(directory_fd)
             finally:
                 os.close(directory_fd)
+
+
+# Validated journal records keyed by path and exact file bytes. Identical
+# bytes decode to an identical frozen record; the file is still opened,
+# checked and read on every load.
+_DECODED_JOURNALS: dict[str, tuple[bytes, HibernationRecord]] = {}
 
 
 def linux_process_start_time_ticks(

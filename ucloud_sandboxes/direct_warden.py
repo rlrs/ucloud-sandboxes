@@ -385,6 +385,8 @@ class DirectRunscWarden:
         self.rootfs_lifecycle = rootfs_lifecycle
         self.telemetry = telemetry or Telemetry.disabled("direct-runsc-warden")
         self.journals = HibernationJournalStore(config.journal_root)
+        # Sentries fully verified for (container, bundle, pid, start ticks).
+        self._verified_sentries: dict[tuple[str, str, int, int], None] = {}
         self.artifacts = HibernationArtifactStore(
             config.memory_root,
             preserve_incarnation_roots=True,
@@ -629,6 +631,7 @@ class DirectRunscWarden:
                     sandbox,
                     record.sentry_pid,
                     record.sentry_start_time_ticks,
+                    reuse_verified=True,
                 )
             )
 
@@ -1833,15 +1836,27 @@ class DirectRunscWarden:
         sandbox: DirectSandbox,
         pid: int | None,
         ticks: int | None,
+        *,
+        reuse_verified: bool = False,
     ) -> bool:
         if not hibernation_process_identity_matches(
             pid, ticks, proc_root=self.config.proc_root
         ):
             return False
+        key = (sandbox.container_id, str(sandbox.bundle), pid, ticks)
+        # The liveness probe runs on every exec and wake. A PID keeps its start
+        # time for its whole life, so the check above already rules out reuse
+        # for a process fully verified here before. Fences, deletes and
+        # reconciliation never reuse this; they re-verify ownership each time.
+        if reuse_verified and key in self._verified_sentries:
+            return True
         try:
             self._sentry_identity(sandbox, pid, ticks)
         except ProcessLookupError:
             return False
+        if len(self._verified_sentries) >= 8192:
+            self._verified_sentries.clear()
+        self._verified_sentries[key] = None
         return True
 
     def _current_process_boot(self, sandbox: DirectSandbox) -> str:

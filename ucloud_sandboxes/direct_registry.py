@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
+from functools import lru_cache
 import json
 import os
 from pathlib import Path
@@ -45,6 +46,18 @@ _DIRECT_REGISTRY_IDENTITY = (
     _DIRECT_REGISTRY_APPLICATION_ID,
     _DIRECT_REGISTRY_SCHEMA_VERSION,
 )
+# The directory walk and create probe repeat at most this often. Every use
+# still compares the file's own identity, owner and mode.
+_FILE_RECHECK_SECONDS = 1.0
+# Schema stamp and metadata row in one statement, optionally with the read
+# itself, so one SQLite snapshot answers all three.
+_STAMPED_SELECT = (
+    "SELECT schema_version, application_id, user_version, journal_mode, "
+    "m.activity_revision, m.runtime_compatibility_sha256, m.drain_json{columns} "
+    "FROM pragma_schema_version, pragma_application_id, pragma_user_version, "
+    "pragma_journal_mode JOIN registry_metadata AS m ON m.singleton = 1{joins}"
+)
+_STAMPED_METADATA = _STAMPED_SELECT.format(columns="", joins="")
 
 
 class DirectRegistryError(RuntimeError):
@@ -418,6 +431,7 @@ class DirectSandboxRegistry:
         # that changed instead of the whole inventory on every loop.
         self._decoded: dict[str, tuple[str, str, DirectSandboxRegistration]] = {}
         self._file_identity: tuple[int, int] | None = None
+        self._file_checked_at = float("-inf")
         self._connection_pid = os.getpid()
         self._connection_finalizer = weakref.finalize(
             self,
@@ -1091,8 +1105,16 @@ class DirectSandboxRegistry:
             return intent
 
     def get(self, sandbox_id: str) -> DirectSandboxRegistration | None:
-        with self._transaction(write=False) as connection:
-            return self._get(connection, sandbox_id)
+        read = self._stamped_read(
+            ", r.sandbox_id, r.image_id, r.record_json",
+            " LEFT JOIN registrations AS r ON r.sandbox_id = ?",
+            (sandbox_id,),
+        )
+        if read is None:
+            with self._transaction(write=False) as connection:
+                return self._get(connection, sandbox_id)
+        row = read[1]
+        return self._decode_cached(row) if row[0] is not None else None
 
     def list(self) -> tuple[DirectSandboxRegistration, ...]:
         return self.snapshot().records
@@ -1104,8 +1126,11 @@ class DirectSandboxRegistry:
         heartbeat snapshots still validate their records independently.
         """
 
-        with self._transaction(write=False) as connection:
-            return self._metadata(connection)[0]
+        read = self._stamped_read()
+        if read is None:
+            with self._transaction(write=False) as connection:
+                return self._metadata(connection)[0]
+        return read[0][0]
 
     def snapshot(self) -> DirectRegistrySnapshot:
         """Return records, indexes, roots, and revision from one durable read."""
@@ -1121,12 +1146,9 @@ class DirectSandboxRegistry:
         previous = self._decoded
         decoded: dict[str, tuple[str, str, DirectSandboxRegistration]] = {}
         for row in rows:
-            cached = previous.get(row[0]) if isinstance(row, tuple) and len(row) == 3 else None
-            if cached is not None and cached[:2] == row[1:]:
-                record = cached[2]
-            else:
-                record = self._decode(row)
+            record = self._decode_cached(row, previous)
             decoded[record.sandbox_id] = (row[1], row[2], record)
+        # Rebuilding from the live inventory drops deleted owners' entries.
         self._decoded = decoded
         records = tuple(entry[2] for entry in decoded.values())
         if activity_revision < max((record.revision for record in records), default=0):
@@ -1153,7 +1175,7 @@ class DirectSandboxRegistry:
                 (image_id,),
             ).fetchone()
             if row is not None:
-                self._decode(row)
+                self._decode_cached(row)
             return row is not None
 
     def _plan(
@@ -1355,9 +1377,22 @@ class DirectSandboxRegistry:
             raise DirectRegistryError("direct registration encoding is invalid")
         return record
 
-    @classmethod
+    def _decode_cached(self, row: object, cache=None) -> DirectSandboxRegistration:
+        """Decode a row, reusing the validated record for identical stored text.
+
+        Identical text decodes to an identical frozen record, so the stored
+        encoding is the whole cache key; external writers only cause misses.
+        """
+        cache = self._decoded if cache is None else cache
+        cached = cache.get(row[0]) if isinstance(row, tuple) and len(row) == 3 else None
+        if cached is not None and cached[:2] == row[1:]:
+            return cached[2]
+        record = self._decode(row)
+        cache[record.sandbox_id] = (row[1], row[2], record)
+        return record
+
     def _get(
-        cls,
+        self,
         connection: sqlite3.Connection,
         sandbox_id: str,
     ) -> DirectSandboxRegistration | None:
@@ -1368,28 +1403,26 @@ class DirectSandboxRegistry:
             """,
             (sandbox_id,),
         ).fetchone()
-        return cls._decode(row) if row else None
+        return self._decode_cached(row) if row else None
 
-    @classmethod
     def _require(
-        cls,
+        self,
         connection: sqlite3.Connection,
         sandbox_id: str,
     ) -> DirectSandboxRegistration:
-        record = cls._get(connection, sandbox_id)
+        record = self._get(connection, sandbox_id)
         if record is None:
             raise DirectRegistryConflictError("direct registration is absent")
         return record
 
-    @classmethod
     def _write(
-        cls,
+        self,
         connection: sqlite3.Connection,
         record: DirectSandboxRegistration,
         *,
         insert: bool = False,
     ) -> None:
-        encoded = cls._encode(record)
+        encoded = self._encode(record)
         if insert:
             connection.execute(
                 "INSERT INTO registrations VALUES (?, ?, ?)",
@@ -1406,7 +1439,7 @@ class DirectSandboxRegistry:
             != 1
         ):
             raise DirectRegistryError("direct registration disappeared")
-        cls._write_disk_claim(connection, record)
+        self._write_disk_claim(connection, record)
 
     @staticmethod
     def _write_disk_claim(
@@ -1438,10 +1471,18 @@ class DirectSandboxRegistry:
         cls,
         connection: sqlite3.Connection,
     ) -> tuple[int, str | None, NodeDrainState]:
-        row = connection.execute(
-            "SELECT activity_revision, runtime_compatibility_sha256, drain_json "
-            "FROM registry_metadata WHERE singleton = 1"
-        ).fetchone()
+        return cls._checked_metadata(
+            connection.execute(
+                "SELECT activity_revision, runtime_compatibility_sha256, drain_json "
+                "FROM registry_metadata WHERE singleton = 1"
+            ).fetchone()
+        )
+
+    @classmethod
+    def _checked_metadata(
+        cls,
+        row: tuple[Any, ...] | None,
+    ) -> tuple[int, str | None, NodeDrainState]:
         if (
             row is None
             or type(row[0]) is not int
@@ -1455,7 +1496,9 @@ class DirectSandboxRegistry:
         return row[0], row[1], cls._decode_drain(row[2])
 
     @staticmethod
+    @lru_cache(maxsize=8)
     def _decode_drain(encoded: str) -> NodeDrainState:
+        # Every transaction checks this row; it changes only on drain moves.
         try:
             drain = NodeDrainState.from_dict(json.loads(encoded))
             if _canonical_json(drain.to_dict()) != encoded:
@@ -1477,27 +1520,48 @@ class DirectSandboxRegistry:
         ):
             raise DirectRegistryError("direct registry metadata is invalid")
 
+    def _check_file(self) -> None:
+        """Validate the registry file before lending a connection.
+
+        Replacement, owner and mode changes of the file itself are caught on
+        every use. The directory walk and create probe cost several syscalls
+        and two raised exceptions, so they repeat at most once a second.
+        """
+        now = time.monotonic()
+        if self._file_identity is not None and now - self._file_checked_at < _FILE_RECHECK_SECONDS:
+            try:
+                info = os.lstat(self.path)
+            except OSError:
+                info = None
+            if (
+                info is not None
+                and stat.S_ISREG(info.st_mode)
+                and info.st_uid == os.geteuid()
+                and not info.st_mode & 0o077
+                and (info.st_dev, info.st_ino) == self._file_identity
+            ):
+                return
+        self._prepare_file()
+        info = self.path.lstat()
+        identity = (info.st_dev, info.st_ino)
+        with self._connections_guard:
+            if self._file_identity is not None and self._file_identity != identity:
+                raise DirectRegistryError(
+                    "direct registry file was replaced; reopen it"
+                )
+            self._file_identity = identity
+        self._file_checked_at = now
+
     @contextmanager
-    def _transaction(
-        self,
-        *,
-        write: bool,
-    ) -> Iterator[sqlite3.Connection]:
+    def _borrow(self) -> Iterator[_RegistryConnection]:
+        """Lend one pooled connection with a validated file and schema."""
         entry: _RegistryConnection | None = None
         reusable = False
-        writing = False
         try:
-            self._prepare_file()
-            info = self.path.lstat()
-            identity = (info.st_dev, info.st_ino)
+            if os.getpid() != self._connection_pid:
+                raise DirectRegistryError("reopen direct registry after fork")
+            self._check_file()
             with self._connections_guard:
-                if os.getpid() != self._connection_pid:
-                    raise DirectRegistryError("reopen direct registry after fork")
-                if self._file_identity is not None and self._file_identity != identity:
-                    raise DirectRegistryError(
-                        "direct registry file was replaced; reopen it"
-                    )
-                self._file_identity = identity
                 if self._connections:
                     entry = self._connections.pop()
             if entry is None:
@@ -1511,25 +1575,13 @@ class DirectSandboxRegistry:
                 )
                 entry.connection.execute("PRAGMA trusted_schema = OFF")
                 entry.connection.execute("PRAGMA synchronous = FULL")
-            connection = entry.connection
             # A retained connection caches SQLite's parsed schema/statements.
             # Its schema cookie and durable identity are checked on every use;
             # changed DDL goes through full validation before any row access.
             if entry.schema_stamp is None:
-                self._ensure_schema(connection)
-                entry.schema_stamp = self._schema_stamp(connection)
-            if write:
-                self._writer_turn.acquire()
-                writing = True
-            connection.execute("BEGIN IMMEDIATE" if write else "BEGIN")
-            stamp = self._schema_stamp(connection)
-            if stamp != entry.schema_stamp:
-                self._validate_schema(connection)
-                entry.schema_stamp = stamp
-            else:
-                self._metadata(connection)
-            yield connection
-            connection.commit()
+                self._ensure_schema(entry.connection)
+                entry.schema_stamp = self._schema_stamp(entry.connection)
+            yield entry
             reusable = True
         except BaseException as exc:
             if entry is not None:
@@ -1540,8 +1592,6 @@ class DirectSandboxRegistry:
                 raise DirectRegistryError("direct registry is unreadable") from exc
             raise
         finally:
-            if writing:
-                self._writer_turn.release()
             if entry is not None:
                 # This only bounds idle handles, never admitted operations.
                 with self._connections_guard:
@@ -1550,6 +1600,64 @@ class DirectSandboxRegistry:
                         entry = None
                 if entry is not None:
                     entry.connection.close()
+
+    def _stamped_read(
+        self,
+        columns: str = "",
+        joins: str = "",
+        parameters: tuple[Any, ...] = (),
+    ) -> tuple[tuple[int, str | None, NodeDrainState], tuple[Any, ...]] | None:
+        """Answer a read with one autocommit statement, or None to fall back.
+
+        The statement carries the schema stamp and metadata row, so the checks
+        and the read see one snapshot. A changed stamp or an unreadable
+        metadata row returns None; the caller's validating transaction then
+        reports it. Returns the checked metadata and the extra columns.
+        """
+        with self._borrow() as entry:
+            try:
+                rows = entry.connection.execute(
+                    _STAMPED_SELECT.format(columns=columns, joins=joins), parameters
+                ).fetchall()
+            except sqlite3.OperationalError:
+                return None
+            stamp = entry.schema_stamp
+        if len(rows) != 1 or tuple(rows[0][:4]) != stamp:
+            return None
+        return self._checked_metadata(rows[0][4:7]), tuple(rows[0][7:])
+
+    @contextmanager
+    def _transaction(
+        self,
+        *,
+        write: bool,
+    ) -> Iterator[sqlite3.Connection]:
+        with self._borrow() as entry:
+            connection = entry.connection
+            writing = False
+            try:
+                if write:
+                    self._writer_turn.acquire()
+                    writing = True
+                connection.execute("BEGIN IMMEDIATE" if write else "BEGIN")
+                try:
+                    row = connection.execute(_STAMPED_METADATA).fetchone()
+                except sqlite3.OperationalError:
+                    row = None  # Changed DDL: full validation reports it.
+                if row is None or tuple(row[:4]) != entry.schema_stamp:
+                    self._validate_schema(connection)
+                    entry.schema_stamp = self._schema_stamp(connection)
+                else:
+                    self._checked_metadata(row[4:7])
+                yield connection
+                connection.commit()
+            except BaseException:
+                # Roll back before the next in-process writer may BEGIN.
+                connection.rollback()
+                raise
+            finally:
+                if writing:
+                    self._writer_turn.release()
 
     @staticmethod
     def _schema_stamp(connection: sqlite3.Connection) -> tuple[Any, ...]:

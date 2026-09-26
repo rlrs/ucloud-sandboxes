@@ -7,6 +7,7 @@ Unknown/stale data stays unknown rather than crediting a fictional reclaim.
 
 from dataclasses import dataclass
 from pathlib import Path
+import stat
 from threading import Lock
 import time
 
@@ -57,6 +58,10 @@ class ResidentMemorySampler:
         self.proc_root = proc_root
         self.max_age_seconds = max_age_seconds
         self._samples: dict[tuple[str, int], ResidentMemorySample] = {}
+        # (cgroup path, dev, inode) whose containment resolve() already
+        # proved. Symlink resolution walks every component, once a second
+        # for every live sandbox; an unchanged directory needs it only once.
+        self._contained: dict[tuple[str, int], tuple[str, int, int]] = {}
         self._guard = Lock()
 
     def get(self, key: tuple[str, int]) -> ResidentMemorySample | None:
@@ -81,12 +86,16 @@ class ResidentMemorySampler:
     def forget(self, key) -> None:
         with self._guard:
             self._samples.pop(key, None)
+            self._contained.pop(key, None)
 
     def retain(self, keys) -> None:
         keys = set(keys)
         with self._guard:
             self._samples = {
                 key: sample for key, sample in self._samples.items() if key in keys
+            }
+            self._contained = {
+                key: proof for key, proof in self._contained.items() if key in keys
             }
 
     def sample(
@@ -126,9 +135,13 @@ class ResidentMemorySampler:
                 # its exact immutable container ID, never a shared parent cgroup.
                 raise ValueError("runtime cgroup is not incarnation-specific")
             path = self.cgroup_root / relative
-            if path.resolve() != path or not path.is_dir():
-                raise ValueError("runtime cgroup escaped its trusted root")
             identity = path.stat()
+            with self._guard:
+                proof = self._contained.get(key)
+            if proof != (raw, identity.st_dev, identity.st_ino) or not stat.S_ISDIR(identity.st_mode):
+                if path.resolve() != path or not path.is_dir():
+                    raise ValueError("runtime cgroup escaped its trusted root")
+                identity = path.stat()
             current = int((path / "memory.current").read_text().strip())
             try:
                 peak = int((path / "memory.peak").read_text().strip())
@@ -174,9 +187,11 @@ class ResidentMemorySampler:
         except (OSError, ValueError, KeyError):
             with self._guard:
                 self._samples.pop(key, None)
+                self._contained.pop(key, None)
             return None
         with self._guard:
             self._samples[key] = result
+            self._contained[key] = (raw, identity.st_dev, identity.st_ino)
         return result
 
 

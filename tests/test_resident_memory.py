@@ -49,6 +49,26 @@ class ResidentMemoryTests(unittest.TestCase):
         ):
             self.assertIsNone(self.sampler.get(("s", 1)))
 
+    def test_containment_is_resolved_once_per_unchanged_cgroup(self):
+        expected = "/ucloud-sandboxes/" + self.container
+        with patch.object(Path, "resolve", autospec=True, side_effect=Path.resolve) as resolve:
+            for _ in range(3):
+                self.assertIsNotNone(self.sample(expected_path=expected))
+            self.assertEqual(resolve.call_count, 1)
+            # A replaced directory is a new identity: prove containment again.
+            moved = self.path.with_name("old")
+            self.path.rename(moved)
+            self.path.mkdir()
+            for name in ("memory.current", "memory.stat"):
+                (self.path / name).write_bytes((moved / name).read_bytes())
+            self.assertIsNotNone(self.sample(expected_path=expected))
+            self.assertEqual(resolve.call_count, 2)
+            for child in self.path.iterdir():
+                child.unlink()
+            self.path.rmdir()
+            self.path.symlink_to(self.root, target_is_directory=True)
+            self.assertIsNone(self.sample(expected_path=expected))
+
     def test_pid_reuse_invalidates_observation_and_no_configured_limit_fallback(self):
         self.assertIsNotNone(self.sample())
         self.stat.write_text("123 (sentry) S " + "0 " * 18 + "999 0")

@@ -716,6 +716,19 @@ class HibernationTests(unittest.TestCase):
                     sentry_start_time_ticks=1002,
                 )
 
+    def test_journal_reuses_decoded_record_only_for_identical_bytes(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = (Path(raw_dir) / "journal.json").resolve()
+            journal = HibernationJournal(path)
+            self._initialize_running(journal)
+            first = journal.load()
+            self.assertIs(HibernationJournal(path).load_snapshot(), first)
+            journal._save_unlocked(replace(first, revision=first.revision + 1))
+            self.assertEqual(journal.load().revision, first.revision + 1)
+            path.write_text("{not-json", encoding="utf-8")
+            with self.assertRaisesRegex(Exception, "journal is invalid"):
+                journal.load()
+
     def test_journal_rejects_corruption_and_unsafe_parent(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)

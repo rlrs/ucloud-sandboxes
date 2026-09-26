@@ -9,7 +9,7 @@ import sqlite3
 import unittest
 from unittest.mock import patch
 
-from ucloud_sandboxes.direct_registry import DirectSandboxRegistry
+from ucloud_sandboxes.direct_registry import DirectRegistryError, DirectSandboxRegistry
 from tests import test_published_workspace_capacity as published
 
 
@@ -75,6 +75,44 @@ class RegistryHotPathTests(unittest.TestCase):
         self.assertEqual(calls.call_count, 1)
         self.assertIn("two", second.by_sandbox_id)
         self.assertIs(second.get("one"), first.get("one"))
+
+    def test_point_reads_use_one_statement_and_see_external_commits(self):
+        first = self.registry.get("one")
+        decode = patch.object(
+            DirectSandboxRegistry, "_decode", wraps=DirectSandboxRegistry._decode
+        )
+        traced = []
+        with self.registry._borrow() as entry:
+            entry.connection.set_trace_callback(traced.append)
+        try:
+            with decode as calls:
+                self.assertIs(self.registry.get("one"), first)
+                self.assertIsNone(self.registry.get("absent"))
+            calls.assert_not_called()
+        finally:
+            entry.connection.set_trace_callback(None)
+        # One top-level statement per read: no BEGIN, stamp or metadata query.
+        # Table-valued pragmas trace their own nested "--" statements.
+        self.assertEqual(len([sql for sql in traced if not sql.startswith("--")]), 2)
+        external = DirectSandboxRegistry(self.registry.path)
+        deleting = external.begin_delete("one", expected_revision=first.revision)
+        with decode as calls:
+            self.assertEqual(self.registry.get("one"), deleting)
+            self.assertEqual(self.registry.activity_revision(), external.activity_revision())
+        self.assertEqual(calls.call_count, 1)
+
+    def test_changed_schema_or_metadata_falls_back_to_validation(self):
+        self.registry.get("one")
+        with closing(sqlite3.connect(self.registry.path)) as conn:
+            conn.execute("PRAGMA ignore_check_constraints = ON")
+            conn.execute("UPDATE registry_metadata SET activity_revision = -1")
+            conn.commit()
+        with self.assertRaisesRegex(DirectRegistryError, "metadata"):
+            self.registry.get("one")
+        with closing(sqlite3.connect(self.registry.path)) as conn:
+            conn.execute("DROP TABLE registry_metadata")
+        with self.assertRaisesRegex(DirectRegistryError, "schema"):
+            self.registry.get("one")
 
 
 if __name__ == "__main__":

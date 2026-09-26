@@ -561,6 +561,15 @@ class DirectRunscWardenTests(unittest.TestCase):
                 operation(self.sandbox)
         self.assertTrue((self.proc_root / str(self.runner.pid) / "stat").exists())
 
+    def test_liveness_probe_reuses_verified_sentry_until_its_pid_is_reused(self):
+        self.warden.create(self.sandbox, operation_id="create:1")
+        self.assertTrue(self.warden.running_process_alive(self.sandbox))
+        with patch.object(self.warden, "_sentry_identity", side_effect=AssertionError("reverified")):
+            self.assertTrue(self.warden.running_process_alive(self.sandbox))
+        # Same PID with another start time is a different process.
+        write_process(self.proc_root, self.runner.pid, self.runner.ticks + 1)
+        self.assertFalse(self.warden.running_process_alive(self.sandbox))
+
     def test_process_identity_is_bound_to_the_original_boot(self):
         self.warden.create(self.sandbox, operation_id="create:1")
         (self.proc_root / "sys/kernel/random/boot_id").write_text(

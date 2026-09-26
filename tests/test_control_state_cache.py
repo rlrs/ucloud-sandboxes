@@ -237,6 +237,7 @@ class ControlStateCacheTests(unittest.TestCase):
                 return original(path, *args, **kwargs)
             held = store._connection()
             held.__enter__()
+            store._connection_checked_at = float('-inf')  # force the reader's recheck
             def read():
                 try:
                     store.load_heartbeats()

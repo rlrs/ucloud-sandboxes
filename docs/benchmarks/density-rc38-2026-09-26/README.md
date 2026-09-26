@@ -146,3 +146,46 @@ The three gateway processes together used ~1.0 core at peak, less than the singl
 process's 1.14: the single process was limited by GIL contention and thread
 handoffs, not raw CPU. Peak host CPU averaged ~3.1 of 4 cores with one 2 s interval
 at 4.0; PostgreSQL (0.82) and the relay (0.57) are now the next-largest consumers.
+
+## Worker node agent GIL (rc42 profile, rc43)
+
+With the gateway fixed, the slowest decile of rc42 turns spent ~1.4 s in the
+worker's `sandbox.wake.growth_admission`. Sampling one worker's node agent with
+py-spy during the ramp showed:
+
+- 88% of growth-admission time waiting for the direct registry's single writer
+  turn, while the holder sat in trivial SELECT/INSERT statements, not in commit:
+  it was waiting to reacquire the GIL while holding the turn.
+- The agent process pinned at ~1.5 cores for the whole ~55 s burst while the
+  32-core host was ~10 cores busy (`worker-agent-cpu-rc42.txt`,
+  columns: unix time, utime, stime, threads, host busy/idle/iowait jiffies).
+- GIL holders: direct registry 35% (point `get()` alone 22.6%: a full
+  transaction with file checks, schema stamp, metadata JSON and record decode per
+  call), then `/proc` sentry identity checks, hibernation journal JSON decodes and
+  the once-a-second resident memory sampler.
+
+rc43 (`c5353bf`) makes registry point reads one autocommit statement that also
+carries the schema stamp and metadata, reuses decoded records for identical
+stored text, rate-limits the registry directory walk (the file's own identity is
+still checked on every use), reuses a fully verified sentry in the per-exec
+liveness probe, reuses decoded journals for identical bytes, and proves cgroup
+containment once per unchanged directory. Locally `get()` fell from ~198 µs to
+~24 µs and a growth-intent write from ~285 µs to ~98 µs. Identical rerun
+(`*-rc43*`), all 540 scenarios correct:
+
+| | rc42 | rc43 |
+|---|---|---|
+| response ready → usable exec p50 | 1.00 s | 1.02 s |
+| p95 | 3.29 s | 2.47 s |
+| p99 | 3.75 s | 3.12 s |
+| max | 4.04 s | 3.65 s |
+| relay delivery (commit → guest) p95 | 1.78 s | 1.25 s |
+| post-continuation exec p95 | 1.22 s | 0.99 s |
+| sampled wakes with growth admission > 500 ms | 24% | 7% |
+| worker agent CPU for the run (one worker) | 122 core-s | 62 core-s |
+
+The worker agent now idles at a median ~0.6 cores during the ramp instead of a
+flat 1.5. The remaining slow admissions all fell on one worker in one 7 s window
+where its agent briefly reached ~1.5 cores again. The gateway host is also near
+its 4 vCPUs at peak (~3.2 cores averaged over the 30 busiest intervals, some
+intervals above 4; `host-cpu-rc43.txt`).

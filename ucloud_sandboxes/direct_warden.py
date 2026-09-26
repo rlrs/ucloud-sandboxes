@@ -309,6 +309,22 @@ class DirectRunscWardenConfig:
             raise ValueError("readiness_command cannot be empty")
 
 
+def _allocated_tree_bytes(root: Path) -> int:
+    """Allocated bytes below a checkpoint generation, counting each inode once."""
+    seen: set[tuple[int, int]] = set()
+    total = 0
+    for directory, _names, files in os.walk(root):
+        for name in files:
+            try:
+                info = os.lstat(os.path.join(directory, name))
+            except FileNotFoundError:
+                continue
+            if (info.st_dev, info.st_ino) not in seen:
+                seen.add((info.st_dev, info.st_ino))
+                total += info.st_blocks * 512
+    return total
+
+
 @dataclass(frozen=True)
 class WorkspaceMount:
     """A mounted workspace whose filesystem may still grow toward its ceiling."""
@@ -740,6 +756,8 @@ class DirectRunscWarden:
                             "--hibernate",
                             f"--image-path={generation}",
                             sandbox.container_id,
+                            timeout=self._transfer_timeout_seconds(
+                                self._capture_bound_bytes(sandbox)),
                         )
                     if not handle.alive():
                         raise DirectWardenError(
@@ -970,6 +988,7 @@ class DirectRunscWarden:
                     f"--image-path={generation}",
                     f"--bundle={sandbox.bundle}",
                     sandbox.container_id,
+                    timeout=self._transfer_timeout_seconds(_allocated_tree_bytes(generation)),
                 )
                 timings["runsc_restore"] = (time.monotonic() - phase) * 1000
                 phase = time.monotonic()
@@ -2055,10 +2074,10 @@ class DirectRunscWarden:
             f"--root={self.config.runtime_root}",
         )
 
-    def _checked(self, *argv: str) -> CommandResult:
+    def _checked(self, *argv: str, timeout: float | None = None) -> CommandResult:
         result = self.runner.run(
             argv,
-            timeout=self.config.command_timeout_seconds,
+            timeout=self.config.command_timeout_seconds if timeout is None else timeout,
         )
         if result.returncode != 0:
             raise DirectWardenError(
@@ -2760,6 +2779,28 @@ class DirectRunscWarden:
             "memory.filestore_bytes": filestore,
         })
         return floor_mb
+
+    # A hibernate capture frees runtime state as it writes: killing it part-way
+    # can lose the sandbox. Size its deadline for a slow disk and a busy CPU
+    # (checkpoint pages are compressed) instead of the short command timeout.
+    TRANSFER_TIMEOUT_BASE_SECONDS = 120.0
+    TRANSFER_MIN_BYTES_PER_SECOND = 8 * 1024**2
+
+    def _transfer_timeout_seconds(self, transfer_bytes: int) -> float:
+        return max(
+            self.config.command_timeout_seconds,
+            self.TRANSFER_TIMEOUT_BASE_SECONDS
+            + transfer_bytes / self.TRANSFER_MIN_BYTES_PER_SECOND,
+        )
+
+    def _capture_bound_bytes(self, sandbox: DirectSandbox) -> int:
+        """What this capture may write: the reserved limit, else formula + filestore."""
+        filestore = self._filestore_bytes(sandbox) if self.disk_capacity is not None else 0
+        if sandbox.memory is None:
+            return filestore
+        limit = (self.memory_backing.limit_bytes(sandbox.memory)
+                 if self.memory_backing is not None else None)
+        return sandbox.memory.quota_bytes + filestore if limit is None else limit
 
     def _filestore_bytes(self, sandbox: DirectSandbox) -> int:
         """Allocated bytes of the gVisor filestore holding the guest's rootfs writes."""

@@ -196,6 +196,32 @@ class DemonstratedMemoryClaimTests(unittest.TestCase):
         self.warden._settle_capture_space(self.sandbox, floor)
         self.assertEqual(self.claim().memory_mb, formula)
 
+    def test_capture_and_restore_deadlines_scale_with_the_bytes_they_move(self):
+        self.ram_split()
+        rootfs = self.sandbox.bundle / "rootfs"
+        rootfs.mkdir(exist_ok=True)
+        (rootfs / f".gvisor.filestore.{self.sandbox.container_id}").write_bytes(b"f" * (8 * MIB))
+        timeouts = {}
+        run = self.runner.run
+
+        def recording(argv, *, timeout):
+            verb = next((item for item in argv if item in {"checkpoint", "restore"}), None)
+            if verb:
+                timeouts[verb] = timeout
+            return run(argv, timeout=timeout)
+
+        self.runner.run = recording
+        self.park()
+        base = self.warden.TRANSFER_TIMEOUT_BASE_SECONDS
+        rate = self.warden.TRANSFER_MIN_BYTES_PER_SECOND
+        # The capture's deadline covers its reservation, filestore included.
+        self.assertGreater(timeouts["checkpoint"], base + 8 * MIB / rate)
+        self.warden.resume(self.sandbox, operation_id="wake")
+        self.assertGreaterEqual(timeouts["restore"], base)
+        self.assertGreaterEqual(self.warden._transfer_timeout_seconds(3 * GIB), base + 3 * GIB / rate)
+        self.assertEqual(self.warden._transfer_timeout_seconds(0),
+                         max(self.config.command_timeout_seconds, base))
+
     def test_refused_capture_space_keeps_the_sandbox_running_and_unchanged(self):
         self.ram_split()
         self.registry.hard_disk_capacity_mb = self.claim().total_mb + 2

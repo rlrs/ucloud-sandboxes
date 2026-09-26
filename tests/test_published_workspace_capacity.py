@@ -9,6 +9,7 @@ from contextlib import closing
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import sqlite3
+import threading
 import unittest
 from unittest.mock import MagicMock
 
@@ -120,7 +121,7 @@ class PublishedWorkspaceCapacityTests(unittest.TestCase):
         reopened = DirectSandboxRegistry(self.registry.path, hard_disk_capacity_mb=self.claim)
         self.assertEqual(reopened.workspace_mount_epoch("one", 1), 0)
         with closing(sqlite3.connect(self.registry.path)) as conn:
-            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 8)
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 9)
         self.assertTrue(reopened.release_published_workspace(
             "one", 1, workspace_mb=self.workspace, expected_mount_epoch=0))
 
@@ -130,6 +131,8 @@ class WardenWorkspaceCapacityWiringTests(unittest.TestCase):
 
     def warden(self, capacity):
         warden = object.__new__(DirectRunscWarden)
+        warden._claims_guard = threading.Lock()
+        warden._workspace_mounts = {}
         warden.disk_capacity = capacity
         warden.storage = MagicMock()
         warden._storage_owner = MagicMock(return_value="owner")
@@ -146,7 +149,7 @@ class WardenWorkspaceCapacityWiringTests(unittest.TestCase):
         order = []
         capacity.reserve_workspace_for_mount.side_effect = lambda *a: order.append("reserve")
         warden = self.warden(capacity)
-        warden.storage.ensure_mounted.side_effect = lambda *a, **k: order.append("mount")
+        warden.storage.ensure_mounted.side_effect = lambda *a, **k: order.append("mount") or MagicMock()
         warden.ensure_workspace_mounted(self.sandbox(), operation_id="op")
         self.assertEqual(order, ["reserve", "mount"])
         capacity.reserve_workspace_for_mount.side_effect = DirectRegistryCapacityUnavailable("full")

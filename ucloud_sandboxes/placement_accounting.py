@@ -5,7 +5,7 @@ until the corresponding worker observation includes them. No I/O or locks live
 in this module.
 """
 
-from dataclasses import dataclass
+from dataclasses import replace, dataclass
 from typing import Any
 
 from .capabilities import STORAGE_NATIVE_CAPABILITY
@@ -178,7 +178,7 @@ def _node_reserved_route_resources(
                 and (matching_inventory.state or "unknown").lower() == "parked"
             ):
                 storage_disk = (
-                    route.resources.disk_mb
+                    _route_workspace_claim_mb(route, heartbeat)
                     if route.storage_schema
                     in SUPPORTED_STORAGE_NATIVE_MIGRATION_SCHEMAS
                     and bool(route.snapshot_manifest_digest)
@@ -198,8 +198,48 @@ def _node_reserved_route_resources(
             and route.snapshot_manifest_digest
         ):
             continue
-        resources = resources + route.resources
+        resources = resources + replace(
+            route.resources, disk_mb=_route_initial_claim_mb(route, heartbeat)
+        )
     return resources
+
+
+def _dynamic_split_spec(route, heartbeat) -> tuple[int, int] | None:
+    """(disk_mb, memory_mb) when the node charges this route dynamically."""
+    metrics = heartbeat.runtime_metrics
+    if metrics is None or not (
+        metrics.storage_workspace_grant_mb or metrics.storage_memory_idle_claim_mb
+    ):
+        return None
+    spec = route.spec if isinstance(route.spec, dict) else {}
+    disk_mb, memory_mb = spec.get("disk_mb"), spec.get("memory_mb")
+    if spec.get("parkable") is not True or type(disk_mb) is not int or type(memory_mb) is not int:
+        return None
+    return disk_mb, memory_mb
+
+
+def _route_initial_claim_mb(route, heartbeat) -> int:
+    """What a create not yet in the heartbeat will charge the worker registry.
+
+    A node that advertises dynamic claims (docs/disk-density.md) charges a new
+    parkable sandbox its initial workspace grant plus an idle memory claim,
+    not the 2x-memory-plus-disk maximum.
+    """
+    full = route.resources.disk_mb
+    split = _dynamic_split_spec(route, heartbeat)
+    if split is None:
+        return full
+    disk_mb, _memory_mb = split
+    metrics = heartbeat.runtime_metrics
+    workspace = min(disk_mb, metrics.storage_workspace_grant_mb or disk_mb)
+    memory = metrics.storage_memory_idle_claim_mb or max(0, full - disk_mb)
+    return min(full, workspace + memory)
+
+
+def _route_workspace_claim_mb(route, heartbeat) -> int:
+    """A woken published workspace: at most its ceiling, never the full claim."""
+    split = _dynamic_split_spec(route, heartbeat)
+    return route.resources.disk_mb if split is None else min(route.resources.disk_mb, split[0])
 
 
 def _placement_route_index(routes: list[PlacementRecord]) -> PlacementRouteIndex:

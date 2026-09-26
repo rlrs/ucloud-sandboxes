@@ -66,6 +66,8 @@ from .sandbox import (
 from .telemetry import Telemetry
 from .upload_spool import UploadSpool
 from .transition_admission import MemoryDemand, TransitionCost, TransitionKind, TransitionLedger
+from .warm_park import WarmParkDeferred
+from .disk_claims import next_grant
 
 
 _LOG = logging.getLogger(__name__)
@@ -340,6 +342,9 @@ class DirectSandboxService:
         self._stop_event = threading.Event()
         self._network_thread: threading.Thread | None = None
         self._deletion_thread: threading.Thread | None = None
+        self._growth_thread: threading.Thread | None = None
+        self._workspace_growths = 0
+        self._workspace_growth_refusals = 0
         self._publication_threads: dict[tuple[str, int], threading.Thread] = {}
         self._publication_errors: dict[tuple[str, int], BaseException] = {}
         self._publication_guard = threading.Lock()
@@ -409,6 +414,15 @@ class DirectSandboxService:
                 daemon=True,
             )
             self._snapshot_hydration_thread.start()
+        if self.provisioner.disk_claim_policy.workspace_grant_mb and (
+            self._growth_thread is None or not self._growth_thread.is_alive()
+        ):
+            self._growth_thread = threading.Thread(
+                target=self._workspace_growth_loop,
+                name="ucloud-workspace-growth",
+                daemon=True,
+            )
+            self._growth_thread.start()
         network_manager = self.provisioner.network_manager
         if network_manager is not None:
             if network_manager.has_dynamic_tcp_egress and (
@@ -430,6 +444,10 @@ class DirectSandboxService:
                 timeout=max(2.0, self._deletion_reconcile_interval_seconds * 2)
             )
         self._deletion_thread = None
+        growth_thread = self._growth_thread
+        if growth_thread is not None:
+            growth_thread.join(timeout=2.0)
+        self._growth_thread = None
         network_thread = self._network_thread
         if network_thread is not None:
             interval = self.provisioner.network_manager.resolve_interval_seconds
@@ -490,6 +508,70 @@ class DirectSandboxService:
         with self._published_snapshots_guard:
             self._published_snapshots.pop((sandbox_id, generation), None)
 
+    WORKSPACE_GROWTH_INTERVAL_SECONDS = 0.5
+    WORKSPACE_GROWTH_RETRY_SECONDS = 5.0
+
+    def workspace_growth_metrics(self) -> dict[str, int]:
+        return {
+            "workspace_growths": self._workspace_growths,
+            "workspace_growth_refusals": self._workspace_growth_refusals,
+        }
+
+    def _workspace_growth_loop(self) -> None:
+        """Grow mounted workspace filesystems before their guests fill them.
+
+        One statvfs per mounted workspace per tick. Growth is admitted
+        against physical capacity; a busy or refused owner is retried later.
+        """
+        seeded = False
+        retry_at: dict[tuple[str, int], float] = {}
+        while not self._stop_event.wait(self.WORKSPACE_GROWTH_INTERVAL_SECONDS):
+            if not seeded:
+                try:
+                    self.warden.track_workspace_mounts(tuple(
+                        item.to_direct_sandbox()
+                        for item in self.provisioner.registry.snapshot().records
+                        if item.phase == "owned" and item.has_direct_sandbox
+                        and item.memory_reference is not None
+                    ))
+                    seeded = True
+                except Exception as exc:
+                    _LOG.warning("could not seed workspace growth: %s", exc)
+                    continue
+            now = time.monotonic()
+            mounts = self.warden.workspace_mounts()
+            live = {key for key, _mount in mounts}
+            for key in retry_at.keys() - live:
+                retry_at.pop(key, None)
+            for key, mount in mounts:
+                if retry_at.get(key, 0.0) > now:
+                    continue
+                try:
+                    info = os.statvfs(mount.mount_path)
+                except FileNotFoundError:
+                    self.warden.forget_workspace_mount(key)  # deleted
+                    continue
+                except OSError:
+                    continue
+                target = next_grant(granted=mount.granted_size,
+                                    free=info.f_bavail * info.f_frsize,
+                                    ceiling=mount.virtual_size)
+                if target is None:
+                    continue
+                try:
+                    grown = self.warden.grow_workspace(mount.sandbox, target)
+                except DirectRegistryCapacityUnavailable:
+                    self._workspace_growth_refusals += 1
+                    retry_at[key] = now + self.WORKSPACE_GROWTH_RETRY_SECONDS
+                    _LOG.warning("workspace growth of %s refused: node disk is fully claimed", key[0])
+                    continue
+                except Exception as exc:
+                    retry_at[key] = now + self.WORKSPACE_GROWTH_RETRY_SECONDS
+                    _LOG.warning("could not grow the workspace of %s: %s", key[0], exc)
+                    continue
+                if grown is not None and grown.granted_size >= target:
+                    self._workspace_growths += 1
+
     def _deletion_reconciliation_loop(self) -> None:
         while not self._stop_event.wait(self._deletion_reconcile_interval_seconds):
             failures: list[tuple[str, Exception]] = []
@@ -530,6 +612,10 @@ class DirectSandboxService:
                 self.warden.reconcile_retired_memory_capacity()
             except Exception as exc:
                 _LOG.warning("could not retire restored memory capacity: %s", exc)
+            try:
+                self.warden.settle_idle_memory_claims()
+            except Exception as exc:
+                _LOG.warning("could not return memory claims to idle: %s", exc)
             for registration in registrations:
                 if registration.phase != "deleting":
                     continue
@@ -893,7 +979,12 @@ class DirectSandboxService:
                     (sandbox_id, registration.sandbox_generation),
                     TransitionCost(TransitionKind.CAPTURE, None, provenance="native-bounded-capture"),
                 ):
-                    self.warden.park(sandbox, operation_id=operation_id)
+                    try:
+                        self.warden.park(sandbox, operation_id=operation_id)
+                    except DirectRegistryCapacityUnavailable as exc:
+                        # No disk for this capture right now. The sandbox keeps
+                        # running; relief (publication, offload) frees space.
+                        raise WarmParkDeferred(5.0) from exc
                 self._observe_managed_park(registration)
             if background:
                 self._start_storage_publication(

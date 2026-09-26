@@ -58,7 +58,7 @@ class RegistryHotPathTests(unittest.TestCase):
         with reopened._transaction(write=False) as connection:
             self.assertEqual(reopened._reserved_disk_bytes(connection) // 1024**2, expected)
         with closing(sqlite3.connect(self.registry.path)) as conn:
-            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 8)
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 9)
 
     def test_snapshots_decode_only_changed_rows(self):
         first = self.registry.snapshot()

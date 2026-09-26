@@ -134,4 +134,4 @@ class ReflinkOverlapCapacityTests(unittest.TestCase):
         self.assertEqual(reopened.get('one'), original)
         self.reserve(registry=reopened)
         with closing(sqlite3.connect(self.registry.path)) as conn:
-            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0], 8)
+            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0], 9)

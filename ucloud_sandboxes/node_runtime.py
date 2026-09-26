@@ -979,6 +979,10 @@ class DirectNodeRuntime:
         storage_dependencies: dict[str, dict] = {}
         used = ResourceQuantity()
         reserved = ResourceQuantity()
+        # The registry's per-registration claims are the admission authority:
+        # dynamic claims follow demonstrated usage (docs/disk-density.md) and
+        # already exclude a published workspace.
+        claims = self._registry.disk_claims_mb()
         for item in inventory.items:
             record = item.record
             registration = item.registration
@@ -988,14 +992,15 @@ class DirectNodeRuntime:
                 else record.spec.disk_mb or 0
             )
             storage_dependencies[record.spec.id] = {}
-            charged_disk_mb = quota_disk
+            claim = claims.get((registration.sandbox_id, registration.sandbox_generation))
+            charged_disk_mb = quota_disk if claim is None else claim
             # Planned and quota-ready registrations are valid, durable create
             # reservations but do not own a runsc sandbox yet. They remain
             # visible in heartbeat capacity accounting while a cold image is
             # materialized.
             if registration.has_direct_sandbox:
                 storage = storage_records[registration.workspace_volume_id]
-                if storage.state.value == "published":
+                if claim is None and storage.state.value == "published":
                     # Publication releases the workspace volume only. Split
                     # checkpoint memory retains its local quota until deletion.
                     memory = registration.memory_reference

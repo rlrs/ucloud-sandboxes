@@ -277,6 +277,9 @@ class SandboxPoolConfig:
     direct_split_memory_backing: bool = False
     direct_ram_memory_backing: bool = False
     direct_reflink_memory_restore: bool = False
+    # Split workspaces start with an XFS filesystem this large and grow online
+    # toward disk_mb (docs/disk-density.md). 0 formats full-size workspaces.
+    direct_workspace_initial_grant_mb: int = 1024
     max_concurrent_image_pulls: int = 8
 
     @property
@@ -299,7 +302,9 @@ class SandboxPoolConfig:
         if isinstance(raw, dict):
             raw = {"network_relays": {}, "direct_split_memory_backing": False,
                    "direct_ram_memory_backing": False,
-                   "direct_reflink_memory_restore": False, **raw}
+                   "direct_reflink_memory_restore": False,
+                   "direct_workspace_initial_grant_mb": cls.direct_workspace_initial_grant_mb,
+                   **raw}
         values = _exact_dataclass_values("sandbox", raw, cls())
         values["direct_network_allow_tcp"] = _string_tuple(
             "sandbox.direct_network_allow_tcp",
@@ -363,6 +368,9 @@ class SandboxPoolConfig:
             raise ValueError("sandbox.direct_reflink_memory_restore must be a boolean")
         if result.direct_reflink_memory_restore and not result.direct_split_memory_backing:
             raise ValueError("reflink memory restore requires split memory backing")
+        grant = result.direct_workspace_initial_grant_mb
+        if isinstance(grant, bool) or not isinstance(grant, int) or (grant and grant < 512):
+            raise ValueError("sandbox.direct_workspace_initial_grant_mb must be 0 or at least 512")
         _require_sha1("sandbox.direct_runsc_commit", result.direct_runsc_commit)
         _require_repository(
             "sandbox.storage_native_repository", result.storage_native_repository

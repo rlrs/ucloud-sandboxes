@@ -419,6 +419,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--reflink-memory-restore", action="store_true",
         help="Use the qualified file-backed reflink restore capability with split checkpoints.",
     )
+    direct_node_agent.add_argument(
+        "--workspace-initial-grant-mb", type=int, default=0,
+        help="Format split workspaces at this size and grow them online toward disk_mb (0: full size).",
+    )
     direct_node_agent.add_argument("--checkpoint-registry-url", default="")
     direct_node_agent.add_argument("--checkpoint-registry-repository", default="")
     add_environment_registry_args(direct_node_agent)
@@ -1326,6 +1330,7 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
         storage_native_socket=args.storage_native_socket.absolute(),
         split_memory_backing=args.split_memory_backing,
         reflink_memory_restore=args.reflink_memory_restore,
+        workspace_initial_grant_mb=args.workspace_initial_grant_mb,
         application_memory_root=(args.application_memory_root.absolute()
                                  if args.application_memory_root is not None else None),
         memory_backing_hard_capacity_bytes=args.memory_backing_hard_capacity_bytes,
@@ -6447,6 +6452,9 @@ def vm_init_options_for_job(
         direct_reflink_memory_restore=(
             role == "sandbox" and config.sandbox.direct_reflink_memory_restore
         ),
+        direct_workspace_initial_grant_mb=(
+            config.sandbox.direct_workspace_initial_grant_mb if role == "sandbox" else 0
+        ),
         max_concurrent_image_pulls=(
             config.builder.max_concurrent_image_pulls
             if role == "builder"
@@ -6497,6 +6505,7 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         "directSplitMemoryBacking": options.direct_split_memory_backing,
         "directRamMemoryBacking": options.direct_ram_memory_backing,
         "directReflinkMemoryRestore": options.direct_reflink_memory_restore,
+        "directWorkspaceInitialGrantMb": options.direct_workspace_initial_grant_mb,
         "storageNativeRegistryUrl": options.storage_native_registry_url,
         "storageNativeRepository": options.storage_native_repository,
         "storageNativeSnapshotBackend": options.storage_native_snapshot_backend,

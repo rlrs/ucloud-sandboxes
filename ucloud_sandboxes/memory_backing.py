@@ -150,6 +150,14 @@ class XfsMemoryQuota:
             )
         self.validate_project(path, project_id)
 
+    def set_limit(self, project_id: int, quota_bytes: int) -> None:
+        subprocess.run(
+            ["xfs_quota", "-x", "-c",
+             f"limit -p bsoft={quota_bytes} bhard={quota_bytes} {project_id}",
+             str(self.filesystem_root)],
+            check=True, capture_output=True, text=True,
+        )
+
     def validate_project(self, path: Path, project_id: int) -> None:
         fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
@@ -281,7 +289,7 @@ class MemoryBackingStore:
         self.quota.validate_root(root)
         with closing(self._connect()) as conn:
             conn.execute("BEGIN IMMEDIATE")
-            if conn.execute("PRAGMA user_version").fetchone()[0] not in {0, 1, 2}:
+            if conn.execute("PRAGMA user_version").fetchone()[0] not in {0, 1, 2, 3}:
                 raise MemoryBackingError("unsupported memory backing journal version")
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS allocations ("
@@ -306,11 +314,16 @@ class MemoryBackingStore:
                 conn.execute("ALTER TABLE allocations ADD COLUMN active_mode TEXT NOT NULL DEFAULT 'file'")
                 if active_root is not None:
                     conn.execute("UPDATE allocations SET active_mode='ram'")
+            if "limit_bytes" not in columns:
+                # quota_bytes is the incarnation's identity-bearing ceiling.
+                # limit_bytes is its current project bhard and ledger charge.
+                conn.execute("ALTER TABLE allocations ADD COLUMN limit_bytes INTEGER NOT NULL DEFAULT -1")
+                conn.execute("UPDATE allocations SET limit_bytes=quota_bytes WHERE limit_bytes<0")
             if conn.execute("SELECT COUNT(*) FROM counter").fetchone()[0] == 0:
                 conn.execute("INSERT INTO counter VALUES (600000)")
-            # Old readers cannot interpret per-owner placement. Fence them
-            # before any allocation can transition away from their RAM root.
-            conn.execute("PRAGMA user_version=2")
+            # Old readers cannot interpret per-owner placement or a limit
+            # below the ceiling. Fence them before either can change.
+            conn.execute("PRAGMA user_version=3")
             conn.commit()
             for sandbox_id, generation, mode in conn.execute(
                 "SELECT sandbox_id,generation,active_mode FROM allocations WHERE state!='deleted'"
@@ -406,14 +419,24 @@ class MemoryBackingStore:
             raise MemoryBackingError("memory backing directory is not privately owned")
 
     def prepare(
-        self, reference: MemoryBackingRef, *, sandbox_id: str, sandbox_generation: int
+        self, reference: MemoryBackingRef, *, sandbox_id: str, sandbox_generation: int,
+        limit_bytes: int | None = None,
     ) -> MemoryBackingLease:
+        """Claim an allocation; ``limit_bytes`` starts its bhard below the ceiling.
+
+        RAM-backed owners write nothing here until they park, so they start
+        with a small limit that park admission raises (see ``set_limit``).
+        """
         expected_id = f"{sandbox_id}.sandbox-{sandbox_generation}"
         if reference.allocation_id != expected_id or sandbox_generation < 1:
             raise MemoryBackingError("memory allocation belongs to another incarnation")
+        limit = reference.quota_bytes if limit_bytes is None else limit_bytes
+        if not 0 < limit <= reference.quota_bytes:
+            raise MemoryBackingError("memory allocation limit exceeds its ceiling")
         with self._mutation_lock(reference):
             row, created = self._claim_allocation(
-                reference, sandbox_id=sandbox_id, sandbox_generation=sandbox_generation
+                reference, sandbox_id=sandbox_id, sandbox_generation=sandbox_generation,
+                limit_bytes=limit,
             )
             if not created and (
                 row[1:3] != (sandbox_id, sandbox_generation)
@@ -456,9 +479,7 @@ class MemoryBackingStore:
                     os.fsync(stream.fileno())
                 self._sync(lease.path)
                 self._sync(self.root)
-            self.quota.provision(
-                self.root, lease.path, lease.project_id, reference.quota_bytes
-            )
+            self.quota.provision(self.root, lease.path, lease.project_id, row[7])
             with self._write_batches.transaction() as conn:
                 conn.execute(
                     "UPDATE allocations SET state='ready' WHERE allocation_id=? AND state='preparing'",
@@ -470,7 +491,8 @@ class MemoryBackingStore:
             return lease
 
     def _claim_allocation(
-        self, reference: MemoryBackingRef, *, sandbox_id: str, sandbox_generation: int
+        self, reference: MemoryBackingRef, *, sandbox_id: str, sandbox_generation: int,
+        limit_bytes: int,
     ) -> tuple[tuple, bool]:
         """Reserve capacity and a project ID in one durable journal commit."""
         created = False
@@ -503,9 +525,9 @@ class MemoryBackingStore:
                 row = None
             if row is None:
                 reserved = conn.execute(
-                    "SELECT COALESCE(SUM(quota_bytes),0) FROM allocations WHERE state!='deleted'"
+                    "SELECT COALESCE(SUM(limit_bytes),0) FROM allocations WHERE state!='deleted'"
                 ).fetchone()[0]
-                if reserved + reference.quota_bytes > self.hard_capacity_bytes:
+                if reserved + limit_bytes > self.hard_capacity_bytes:
                     raise MemoryBackingError("memory backing hard capacity exhausted")
                 project = conn.execute("SELECT value FROM counter").fetchone()[0]
                 conn.execute("UPDATE counter SET value=value+1")
@@ -517,8 +539,9 @@ class MemoryBackingStore:
                     reference.quota_bytes,
                     "preparing",
                     active_mode,
+                    limit_bytes,
                 )
-                conn.execute("INSERT INTO allocations VALUES (?,?,?,?,?,?,?)", row)
+                conn.execute("INSERT INTO allocations VALUES (?,?,?,?,?,?,?,?)", row)
                 created = True
             conn.commit()
         return row, created
@@ -551,6 +574,83 @@ class MemoryBackingStore:
             )
             self._validate(lease)
             return lease
+
+    def limit_bytes(self, reference: MemoryBackingRef) -> int | None:
+        row = self._reader().execute(
+            "SELECT limit_bytes FROM allocations WHERE allocation_id=? AND state!='deleted'",
+            (reference.allocation_id,),
+        ).fetchone()
+        return None if row is None else row[0]
+
+    def set_limit(
+        self, reference: MemoryBackingRef, *, sandbox_id: str, sandbox_generation: int,
+        limit_bytes: int,
+    ) -> int:
+        """Move an allocation's bhard and ledger charge; returns the old limit.
+
+        The caller owns lifecycle authority and has already charged any
+        increase in the canonical registry. Raising journals before the
+        kernel limit; lowering applies the kernel limit first, so the journal
+        never charges less than the project may hold. The caller keeps any
+        lowered limit at or above the bytes already allocated.
+        """
+        if not 0 < limit_bytes <= reference.quota_bytes:
+            raise MemoryBackingError("memory allocation limit exceeds its ceiling")
+        with self._mutation_lock(reference):
+            row = self._reader().execute(
+                "SELECT * FROM allocations WHERE allocation_id=?", (reference.allocation_id,)
+            ).fetchone()
+            if (row is None or row[1:3] != (sandbox_id, sandbox_generation)
+                    or row[4] != reference.quota_bytes or row[5] != "ready"):
+                raise MemoryBackingError("memory allocation is not retained by this incarnation")
+            previous = row[7]
+            if limit_bytes == previous:
+                return previous
+            if limit_bytes > previous:
+                with self._write_batches.transaction() as conn:
+                    conn.execute("BEGIN IMMEDIATE")
+                    reserved = conn.execute(
+                        "SELECT COALESCE(SUM(limit_bytes),0) FROM allocations WHERE state!='deleted'"
+                    ).fetchone()[0]
+                    if reserved - previous + limit_bytes > self.hard_capacity_bytes:
+                        raise MemoryBackingError("memory backing hard capacity exhausted")
+                    conn.execute("UPDATE allocations SET limit_bytes=? WHERE allocation_id=?",
+                                 (limit_bytes, reference.allocation_id))
+                    conn.commit()
+                self.quota.set_limit(row[3], limit_bytes)
+            else:
+                self.quota.set_limit(row[3], limit_bytes)
+                with self._write_batches.transaction() as conn:
+                    conn.execute("UPDATE allocations SET limit_bytes=? WHERE allocation_id=?",
+                                 (limit_bytes, reference.allocation_id))
+                    conn.commit()
+            return previous
+
+    def allocated_bytes(self, reference: MemoryBackingRef) -> int:
+        """Blocks the allocation directory holds, as its project quota counts them."""
+        root = self.root / reference.allocation_id
+        seen: set[tuple[int, int]] = set()
+        total = 0
+        for directory, names, files in os.walk(root):
+            for name in (".", *names, *files):
+                try:
+                    info = os.lstat(os.path.join(directory, name))
+                except FileNotFoundError:
+                    continue
+                identity = (info.st_dev, info.st_ino)
+                if identity not in seen:
+                    seen.add(identity)
+                    total += info.st_blocks * 512
+        return total
+
+    def trim(self) -> None:
+        """Wait until unlinked extents reach the parent disk (loop images only)."""
+        source = subprocess.run(
+            ["findmnt", "-n", "-o", "SOURCE", "--target", str(self.quota.filesystem_root)],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        if source.startswith("/dev/loop"):
+            self.quota._trim.release()
 
     def _validate(self, lease: MemoryBackingLease) -> None:
         self._private_directory(lease.path)
@@ -914,7 +1014,7 @@ class MemoryBackingStore:
 
     def metrics(self) -> dict[str, int]:
         count, reserved = self._reader().execute(
-            "SELECT COUNT(*),COALESCE(SUM(quota_bytes),0) FROM allocations WHERE state!='deleted'"
+            "SELECT COUNT(*),COALESCE(SUM(limit_bytes),0) FROM allocations WHERE state!='deleted'"
         ).fetchone()
         return {
             "memory_backing_allocations": count,

@@ -12,6 +12,7 @@ from .memory_backing import MemoryBackingStore
 from .direct_network import DirectNetworkManager
 from .direct_oci import DirectOciConfigBuilder
 from .direct_provisioner import DirectSandboxProvisioner
+from .disk_claims import DiskClaimPolicy
 from .direct_registry import DirectSandboxRegistry
 from .direct_service import DirectSandboxService
 from .direct_warden import DirectRunscWarden, DirectRunscWardenConfig
@@ -46,6 +47,7 @@ def build_direct_runtime_service(
     storage_native_socket: Path,
     split_memory_backing: bool = False,
     reflink_memory_restore: bool = False,
+    workspace_initial_grant_mb: int = 0,
     application_memory_root: Path | None = None,
     memory_backing_hard_capacity_bytes: int = 0,
     checkpoint_registry_url: str = "",
@@ -239,6 +241,14 @@ def build_direct_runtime_service(
         warden=warden,
         network_manager=network_manager,
         checkpoint_store=checkpoint_store,
+        # docs/disk-density.md: claims follow demonstrated usage. Reflink
+        # restore turns owners file-backed at their first park, so their
+        # memory keeps the formula claim.
+        disk_claim_policy=DiskClaimPolicy(
+            workspace_grant_mb=workspace_initial_grant_mb if split_memory_backing else 0,
+            demonstrated_memory=bool(split_memory_backing and application_memory_root is not None
+                                     and not reflink_memory_restore),
+        ),
     )
     return DirectSandboxService(
         provisioner,

@@ -19,6 +19,7 @@ from .storage_native_migration import (
 from .checkpoint_registry import RegistryCheckpointStore
 from .direct_network import DirectNetworkManager
 from .direct_oci import DirectOciConfigBuilder
+from .disk_claims import DiskClaimPolicy
 from .direct_registry import (
     DirectRegistryError,
     DirectSandboxRegistration,
@@ -53,8 +54,10 @@ class DirectSandboxProvisioner:
         network_manager: DirectNetworkManager | None = None,
         storage_migrations: StorageNativeMigrationStore | None = None,
         checkpoint_store: RegistryCheckpointStore | None = None,
+        disk_claim_policy: DiskClaimPolicy | None = None,
     ) -> None:
         self.registry = registry
+        self.disk_claim_policy = disk_claim_policy or DiskClaimPolicy()
         self.overlays = overlays
         self.oci = oci
         self.warden = warden
@@ -149,12 +152,14 @@ class DirectSandboxProvisioner:
         # Resolve immutable image metadata and validate the full OCI translation
         # before persisting an operation or reserving node capacity.
         with self.overlays.resolve(spec.image) as image:
+            split = self.warden.memory_backing is not None and spec.parkable
             registration = self.registry.plan(
                 spec=spec,
                 sandbox_generation=sandbox_generation,
                 operation_id=operation_id,
                 runtime_compatibility_sha256=self.runtime_compatibility_sha256,
-                split_memory_backing=self.warden.memory_backing is not None and spec.parkable,
+                split_memory_backing=split,
+                initial_claim=self.disk_claim_policy.initial_claim(spec) if split else None,
             )
             if registration.phase == "planned":
                 registration = self._prepare_quota(registration)
@@ -795,16 +800,27 @@ class DirectSandboxProvisioner:
         registration: DirectSandboxRegistration,
     ) -> DirectSandboxRegistration:
         total_mb = self._quota_total_mb(registration)
+        # A dynamic claim starts both allocations at what it charges; the
+        # spec's maximums remain the device and project ceilings.
+        claim = (
+            self.registry.disk_claim(registration.sandbox_id, registration.sandbox_generation)
+            if registration.memory_reference is not None else None
+        )
         if registration.memory_reference is not None:
             if self.warden.memory_backing is None:
                 raise DirectWardenError("split memory allocator is unavailable")
             self.warden.memory_backing.prepare(registration.memory_reference,
                 sandbox_id=registration.sandbox_id,
-                sandbox_generation=registration.sandbox_generation)
+                sandbox_generation=registration.sandbox_generation,
+                limit_bytes=(min(claim.memory_mb * _MIB, registration.memory_reference.quota_bytes)
+                             if claim is not None else None))
+        virtual_size = self._workspace_quota_mb(registration) * _MIB
         record = self.warden.storage.prepare_volume(
             self._storage_owner(registration),
             operation_id=registration.operation_id,
-            virtual_size=self._workspace_quota_mb(registration) * _MIB,
+            virtual_size=virtual_size,
+            **({"granted_size": claim.workspace_mb * _MIB}
+               if claim is not None and claim.workspace_mb * _MIB < virtual_size else {}),
         )
         expected = self._require_storage_record(
             registration,

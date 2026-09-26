@@ -18,9 +18,12 @@ import signal
 import stat
 import subprocess
 import tempfile
+import threading
 import time
 from uuid import UUID
 from typing import TYPE_CHECKING, Callable, Iterator, Protocol, Sequence
+
+from opentelemetry.trace import get_current_span
 
 if TYPE_CHECKING:
     from .direct_registry import DirectSandboxRegistry
@@ -42,6 +45,7 @@ from .hibernation import (
     linux_process_start_time_ticks,
 )
 from .storage_native_daemon import (
+    StorageNativeCapacityError,
     StorageNativeNodeClient,
     StorageVolumeOwner,
     StorageVolumeRecord,
@@ -50,6 +54,7 @@ from .storage_native_daemon import (
 )
 from .telemetry import Telemetry
 from .runtime_process import RuntimeProcessIdentityError, owned_runtime_process_ticks
+from . import disk_claims
 
 
 _SAFE_COMPONENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z")
@@ -305,6 +310,16 @@ class DirectRunscWardenConfig:
 
 
 @dataclass(frozen=True)
+class WorkspaceMount:
+    """A mounted workspace whose filesystem may still grow toward its ceiling."""
+
+    sandbox: "DirectSandbox"
+    mount_path: Path
+    granted_size: int
+    virtual_size: int
+
+
+@dataclass(frozen=True)
 class DirectSandbox:
     sandbox_id: str
     sandbox_generation: int
@@ -387,6 +402,15 @@ class DirectRunscWarden:
         self.journals = HibernationJournalStore(config.journal_root)
         # Sentries fully verified for (container, bundle, pid, start ticks).
         self._verified_sentries: dict[tuple[str, str, int, int], None] = {}
+        # Dynamic disk claims (docs/disk-density.md). Mounted workspaces the
+        # growth monitor polls, owners whose memory claim can return to idle,
+        # and incarnations whose demonstrated capture reservation failed.
+        self._claims_guard = threading.Lock()
+        self._workspace_mounts: dict[tuple[str, int], WorkspaceMount] = {}
+        self._idle_memory_pending: dict[tuple[str, int], DirectSandbox] = {}
+        self._idle_memory_scanned = False
+        self._capture_overflows: set[tuple[str, int]] = set()
+        self._capture_refused_until: dict[tuple[str, int], float] = {}
         self.artifacts = HibernationArtifactStore(
             config.memory_root,
             preserve_incarnation_roots=True,
@@ -684,7 +708,13 @@ class DirectRunscWarden:
                 running.sentry_pid,
                 running.sentry_start_time_ticks,
             )
+            captured = reserving = False
             try:
+                # Refuses (retryably) before any lifecycle change when the node
+                # lacks physical space for this sandbox's demonstrated capture.
+                reserving = True
+                reserved = self._reserve_capture_space(sandbox, running.sentry_pid)
+                reserving = False
                 with self.telemetry.span("sandbox.park.prepare"):
                     hibernating = journal.begin_hibernate(
                         operation_id=operation_id,
@@ -740,6 +770,7 @@ class DirectRunscWarden:
                         handle=handle,
                     )
                     raise
+                captured = True
 
                 # COMPLETE is now authoritative. Never resume this backend.
                 with self.telemetry.span("sandbox.park.stop_runtime"):
@@ -763,7 +794,15 @@ class DirectRunscWarden:
                         expected_revision=pending.revision,
                     )
                     self._prepare_restore_memory(sandbox)
-                    return parked
+                self._settle_capture_space(sandbox, reserved)
+                return parked
+            except Exception:
+                if not captured:
+                    # After a failed capture the next park of this incarnation
+                    # reserves the ceiling. Maintenance returns a still-running
+                    # owner's claim to idle either way.
+                    self._capture_failed(sandbox, overflow=not reserving)
+                raise
             finally:
                 handle.close()
 
@@ -1492,6 +1531,7 @@ class DirectRunscWarden:
             )
         if not self.config.reflink_memory_restore:
             self._release_retired_memory_capacity(sandbox)
+        self._queue_idle_memory(sandbox)
 
     def _retain_restore_source(
         self, sandbox: DirectSandbox, manifest: HibernationManifest,
@@ -2278,6 +2318,7 @@ class DirectRunscWarden:
             operation_id=operation_id,
         )
         self._validate_storage_record(sandbox, record)
+        self._sync_workspace_claim(sandbox, record)
         return record
 
     def _require_memory_allocation(self, sandbox: DirectSandbox) -> None:
@@ -2385,10 +2426,12 @@ class DirectRunscWarden:
                 return
         elif record.state == StorageVolumeState.MOUNTED:
             self.rootfs_lifecycle.park_sandbox(sandbox)
-        self.storage.ensure_released(
+        released = self.storage.ensure_released(
             self._storage_owner(sandbox),
             operation_id=f"{operation_seed}:storage-release",
         )
+        # The capture sealed the upper into a local layer: charge it.
+        self._sync_workspace_claim(sandbox, released)
 
     def _rollback_parked_storage_mount(
         self,
@@ -2417,6 +2460,7 @@ class DirectRunscWarden:
             raise DirectWardenError(
                 "storage-native restore rollback returned invalid authority"
             )
+        self._sync_workspace_claim(sandbox, record)
         if record.state == StorageVolumeState.PUBLISHED:
             # The attempted mount re-reserved the workspace; it is off-node again.
             self._release_published_workspace_capacity(
@@ -2558,6 +2602,256 @@ class DirectRunscWarden:
             raise DirectWardenError(
                 f"{label} must be owned and not group/world writable"
             )
+
+    # -- Dynamic disk claims (docs/disk-density.md) -------------------------
+
+    def _demonstrated_memory(self, sandbox: DirectSandbox) -> bool:
+        return bool(
+            self.config.application_memory_root is not None
+            and not self.config.reflink_memory_restore
+            and sandbox.memory is not None
+            and self.memory_backing is not None
+            and self.disk_capacity is not None
+            and self.application_memory_mode(sandbox.sandbox_id, sandbox.sandbox_generation) == "ram"
+        )
+
+    def _sync_workspace_claim(self, sandbox: DirectSandbox, record: StorageVolumeRecord) -> None:
+        """Charge the workspace what the daemon says it may occupy."""
+        key = (sandbox.sandbox_id, sandbox.sandbox_generation)
+        with self._claims_guard:
+            if record.state == StorageVolumeState.MOUNTED and record.granted_size < record.virtual_size:
+                self._workspace_mounts[key] = WorkspaceMount(
+                    sandbox, Path(record.mount_path), record.granted_size, record.virtual_size)
+            else:
+                self._workspace_mounts.pop(key, None)
+        if self.disk_capacity is None or sandbox.memory is None:
+            return
+        if record.state in {StorageVolumeState.PUBLISHED, StorageVolumeState.DELETED}:
+            return  # release_published_workspace owns the published charge
+        self.disk_capacity.update_disk_claim(
+            sandbox.sandbox_id, sandbox.sandbox_generation,
+            workspace_mb=-(-record.charged_bytes // disk_claims.MIB),
+        )
+
+    def track_workspace_mounts(self, sandboxes: Sequence[DirectSandbox]) -> None:
+        """Seed the growth monitor and resync claims after a restart."""
+        wanted = {sandbox.workspace_volume_id: sandbox for sandbox in sandboxes}
+        for record in self.storage.list_volumes():
+            sandbox = wanted.get(record.volume_id)
+            if sandbox is None or record.owner != self._storage_owner(sandbox):
+                continue
+            try:
+                self._sync_workspace_claim(sandbox, record)
+            except Exception:
+                _LOG.exception("could not resync the workspace claim of %s", sandbox.sandbox_id)
+
+    def workspace_mounts(self) -> tuple[tuple[tuple[str, int], WorkspaceMount], ...]:
+        with self._claims_guard:
+            return tuple(self._workspace_mounts.items())
+
+    def forget_workspace_mount(self, key: tuple[str, int]) -> None:
+        with self._claims_guard:
+            self._workspace_mounts.pop(key, None)
+
+    def grow_workspace(self, sandbox: DirectSandbox, granted_size: int) -> StorageVolumeRecord | None:
+        """Admit and apply one online growth step; None when the owner is busy.
+
+        The registry reserves the larger claim first. Refusal
+        (``DirectRegistryCapacityUnavailable``) leaves the filesystem as it
+        is; the guest sees ENOSPC at its current grant, never the node.
+        """
+        with self._try_locked(sandbox) as acquired:
+            if not acquired:
+                return None
+            record = self.workspace_record(sandbox)
+            if record.state != StorageVolumeState.MOUNTED or granted_size <= record.granted_size:
+                self._sync_workspace_claim(sandbox, record)
+                return record
+            if self.disk_capacity is not None and sandbox.memory is not None:
+                self.disk_capacity.update_disk_claim(
+                    sandbox.sandbox_id, sandbox.sandbox_generation,
+                    workspace_mb=-(-(granted_size + record.local_layer_bytes) // disk_claims.MIB),
+                    require_capacity=True,
+                )
+            try:
+                with self.telemetry.span("sandbox.workspace.grow", attributes={
+                    "sandbox.id": sandbox.sandbox_id,
+                    "storage.granted_bytes": granted_size,
+                    "storage.previous_granted_bytes": record.granted_size,
+                }):
+                    record = self.storage.grow_volume(
+                        self._storage_owner(sandbox), granted_size=granted_size)
+            except StorageNativeCapacityError:
+                self._sync_workspace_claim(sandbox, self.workspace_record(sandbox))
+                raise
+            self._sync_workspace_claim(sandbox, record)
+            return record
+
+    def _reserve_capture_space(self, sandbox: DirectSandbox, sentry_pid: int) -> int | None:
+        """Raise a RAM-backed owner's memory claim to its demonstrated capture.
+
+        Returns the previous limit in bytes, or None when the owner keeps a
+        fixed or formula claim. Refusal raises DirectRegistryCapacityUnavailable
+        before any lifecycle change; the sandbox simply keeps running.
+        """
+        from .direct_registry import DirectRegistryCapacityUnavailable  # imports the Warden
+
+        if not self._demonstrated_memory(sandbox):
+            return None
+        assert sandbox.memory is not None and self.memory_backing is not None
+        claim = self.disk_capacity.disk_claim(sandbox.sandbox_id, sandbox.sandbox_generation)
+        if claim is None:
+            return None
+        key = (sandbox.sandbox_id, sandbox.sandbox_generation)
+        ceiling_mb = -(-sandbox.memory.quota_bytes // disk_claims.MIB)
+        now = time.monotonic()
+        with self._claims_guard:
+            overflowed = key in self._capture_overflows
+            if self._capture_refused_until.get(key, 0.0) > now:
+                # Idle parking retries every tick; a full node answers cheaply.
+                raise DirectRegistryCapacityUnavailable("capture space was just refused")
+        demand = None if overflowed else disk_claims.cgroup_memory_demand(
+            sentry_pid, proc_root=self.config.proc_root)
+        target_mb = max(claim.memory_mb,
+                        disk_claims.capture_claim_mb(ceiling_mb=ceiling_mb, demand_bytes=demand))
+        previous = self.memory_backing.limit_bytes(sandbox.memory)
+        if target_mb > claim.memory_mb:
+            try:
+                self.disk_capacity.update_disk_claim(
+                    sandbox.sandbox_id, sandbox.sandbox_generation,
+                    memory_mb=target_mb, require_capacity=True,
+                )
+            except DirectRegistryCapacityUnavailable:
+                with self._claims_guard:
+                    if len(self._capture_refused_until) > 8192:
+                        self._capture_refused_until.clear()
+                    self._capture_refused_until[key] = now + 5.0
+                raise
+        with self._claims_guard:
+            self._capture_refused_until.pop(key, None)
+        target = min(sandbox.memory.quota_bytes, target_mb * disk_claims.MIB)
+        if previous is None or target > previous:
+            self.memory_backing.set_limit(
+                sandbox.memory, sandbox_id=sandbox.sandbox_id,
+                sandbox_generation=sandbox.sandbox_generation, limit_bytes=target,
+            )
+        get_current_span().add_event("sandbox.park.capture_reservation", {
+            "memory.claim_mb": target_mb, "memory.demand_bytes": demand if demand is not None else -1,
+            "memory.ceiling_mb": ceiling_mb,
+        })
+        return previous
+
+    def _settle_capture_space(self, sandbox: DirectSandbox, reserved: int | None) -> None:
+        """Shrink the capture reservation to what the checkpoint allocated."""
+        if reserved is None:
+            return
+        assert sandbox.memory is not None and self.memory_backing is not None
+        try:
+            allocated = self.memory_backing.allocated_bytes(sandbox.memory)
+            settled_mb = disk_claims.settled_claim_mb(allocated)
+            limit = self.memory_backing.limit_bytes(sandbox.memory)
+            settled = min(sandbox.memory.quota_bytes, settled_mb * disk_claims.MIB)
+            if limit is not None and settled < limit:
+                self.memory_backing.set_limit(
+                    sandbox.memory, sandbox_id=sandbox.sandbox_id,
+                    sandbox_generation=sandbox.sandbox_generation, limit_bytes=settled,
+                )
+                self.disk_capacity.update_disk_claim(
+                    sandbox.sandbox_id, sandbox.sandbox_generation,
+                    memory_mb=-(-settled // disk_claims.MIB),
+                )
+        except Exception:
+            # The park committed; the larger reservation is merely conservative.
+            _LOG.exception("could not settle the capture claim of %s", sandbox.sandbox_id)
+
+    def _capture_failed(self, sandbox: DirectSandbox, *, overflow: bool) -> None:
+        if not self._demonstrated_memory(sandbox):
+            return
+        if overflow:
+            with self._claims_guard:
+                self._capture_overflows.add((sandbox.sandbox_id, sandbox.sandbox_generation))
+                if len(self._capture_overflows) > 8192:
+                    self._capture_overflows.clear()
+        self._queue_idle_memory(sandbox)
+
+    def _queue_idle_memory(self, sandbox: DirectSandbox) -> None:
+        if self._demonstrated_memory(sandbox):
+            with self._claims_guard:
+                self._idle_memory_pending[(sandbox.sandbox_id, sandbox.sandbox_generation)] = sandbox
+
+    def settle_idle_memory_claims(self) -> int:
+        """Return running RAM-backed owners' memory claims to idle.
+
+        Runs from maintenance, off the wake path. The FITRIM barrier first
+        returns their unlinked checkpoint extents to the parent disk.
+        """
+        if self.disk_capacity is None or self.memory_backing is None:
+            return 0
+        if not self._idle_memory_scanned:
+            self._idle_memory_scanned = True
+            for registration in self.disk_capacity.list():
+                if registration.phase == "owned" and registration.memory_reference is not None:
+                    sandbox = registration.to_direct_sandbox()
+                    claim = self.disk_capacity.disk_claim(sandbox.sandbox_id, sandbox.sandbox_generation)
+                    if claim is not None and claim.memory_mb > disk_claims.IDLE_MEMORY_CLAIM_MB:
+                        self._queue_idle_memory(sandbox)
+        with self._claims_guard:
+            pending, self._idle_memory_pending = self._idle_memory_pending, {}
+        if not pending:
+            return 0
+        self.memory_backing.trim()
+        idle = disk_claims.IDLE_MEMORY_CLAIM_MB * disk_claims.MIB
+        settled = 0
+        for key, sandbox in pending.items():
+            try:
+                with self._try_locked(sandbox) as acquired:
+                    if not acquired:
+                        self._queue_idle_memory(sandbox)
+                        continue
+                    record = self._journal(sandbox).load()
+                    if record is None or record.state != HibernationState.RUNNING:
+                        continue  # a park settles its own claim
+                    if self.memory_backing.allocated_bytes(sandbox.memory) > idle:
+                        continue
+                    claim = self.disk_capacity.disk_claim(*key)
+                    if claim is None or claim.memory_mb <= disk_claims.IDLE_MEMORY_CLAIM_MB:
+                        continue
+                    self.memory_backing.set_limit(
+                        sandbox.memory, sandbox_id=sandbox.sandbox_id,
+                        sandbox_generation=sandbox.sandbox_generation,
+                        limit_bytes=min(idle, sandbox.memory.quota_bytes),
+                    )
+                    self.disk_capacity.update_disk_claim(
+                        *key, memory_mb=disk_claims.IDLE_MEMORY_CLAIM_MB)
+                    settled += 1
+            except Exception:
+                _LOG.exception("could not return the memory claim of %s to idle", key[0])
+        return settled
+
+    @contextmanager
+    def _try_locked(self, sandbox: DirectSandbox) -> Iterator[bool]:
+        lock_path = (
+            self.config.runtime_root
+            / "warden-locks"
+            / f".{sandbox.sandbox_id}.sandbox-{sandbox.sandbox_generation}.warden.lock"
+        )
+        descriptor = os.open(
+            lock_path,
+            os.O_RDWR | os.O_CREAT | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+        )
+        try:
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                yield False
+                return
+            try:
+                yield True
+            finally:
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+        finally:
+            os.close(descriptor)
 
     @contextmanager
     def _locked(self, sandbox: DirectSandbox) -> Iterator[None]:

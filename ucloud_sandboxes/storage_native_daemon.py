@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass, fields, replace
 from enum import Enum
 from functools import wraps
 import errno
+import fcntl
 import hashlib
 import json
 import logging
@@ -46,7 +47,9 @@ LOGGER = logging.getLogger(__name__)
 _SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,239}\Z")
 _PROTOCOL_SCHEMA = 4
 _JOURNAL_APPLICATION_ID = 0x55435342
-_JOURNAL_SCHEMA_VERSION = 3
+_JOURNAL_SCHEMA_VERSION = 4
+# Current xfsprogs refuses filesystems below 300 MB; grants stay well above.
+MIN_WORKSPACE_GRANT_BYTES = 512 * 1024**2
 _PROTOCOL_MAX_BYTES = 1024 * 1024
 _OWNER_REQUEST_FIELDS = ("sandbox_generation", "sandbox_id", "volume_id")
 _PROTOCOL_EXTRA_FIELDS = {
@@ -62,6 +65,7 @@ _PROTOCOL_EXTRA_FIELDS = {
     "GetVolume": ("volume_id",),
     "ListVolumesPage": ("after_volume_id",),
     "PrepareVolume": (*_OWNER_REQUEST_FIELDS, "operation_id", "virtual_size"),
+    "GrowVolume": (*_OWNER_REQUEST_FIELDS, "granted_size"),
     "PrepareImport": (*_OWNER_REQUEST_FIELDS, "operation_id", "publication"),
     **{
         operation: (*_OWNER_REQUEST_FIELDS, "operation_id")
@@ -258,8 +262,15 @@ class StorageVolumeRecord:
     accounting_id: int = 0
     error: str = ""
     updated_ns: int = 0
+    # The XFS data section size. The ublk device keeps ``virtual_size`` (the
+    # ceiling); the filesystem grows online toward it. 0 means the ceiling.
+    granted_size: int = 0
+    # Allocated bytes of local sealed layers, excluding published-cache pins.
+    local_layer_bytes: int = 0
 
     def __post_init__(self) -> None:
+        if self.granted_size == 0:
+            object.__setattr__(self, "granted_size", self.virtual_size)
         for label, value in (
             ("volume_id", self.volume_id),
             ("sandbox_id", self.sandbox_id),
@@ -273,6 +284,10 @@ class StorageVolumeRecord:
             )
         if self.virtual_size <= 0:
             raise ValueError("storage-native virtual size must be positive")
+        if not 0 < self.granted_size <= self.virtual_size:
+            raise ValueError("storage-native granted size must be within the virtual size")
+        if self.local_layer_bytes < 0:
+            raise ValueError("local_layer_bytes must be non-negative")
         for label, raw in (
             ("runtime_dir", self.runtime_dir),
             ("mount_path", self.mount_path),
@@ -330,6 +345,15 @@ class StorageVolumeRecord:
         return payload
 
     @property
+    def charged_bytes(self) -> int:
+        """Physical bytes this volume may occupy while it holds local state.
+
+        The live upper can reach the filesystem size; every local sealed
+        layer is additional. Callers apply the active-state predicate.
+        """
+        return self.granted_size + self.local_layer_bytes
+
+    @property
     def owner(self) -> StorageVolumeOwner:
         return StorageVolumeOwner(
             volume_id=self.volume_id,
@@ -373,6 +397,9 @@ class StorageVolumeRecord:
         expected = {field.name for field in fields(cls)}
         if "capture_id" not in raw:
             raw = {**raw, "capture_id": ""}
+        if "granted_size" not in raw and "local_layer_bytes" not in raw:
+            # Records before workspace grants: formatted at full size.
+            raw = {**raw, "granted_size": raw.get("virtual_size", 0), "local_layer_bytes": 0}
         if set(raw) == expected - {"published_backend"}:
             raw = {
                 **raw,
@@ -468,9 +495,13 @@ class StorageSnapshotPublisher(Protocol):
 class StorageHostOperations(Protocol):
     def device_is_unused(self, device: Path) -> bool: ...
 
-    def format_xfs(self, device: Path) -> None: ...
+    def format_xfs(self, device: Path, *, size_bytes: int | None = None) -> None: ...
 
     def mount(self, device: Path, target: Path) -> None: ...
+
+    def grow_xfs(self, target: Path, size_bytes: int) -> None: ...
+
+    def filesystem_bytes(self, target: Path) -> int: ...
 
     def sync(self, target: Path) -> None: ...
 
@@ -528,7 +559,9 @@ class LinuxStorageHostOperations:
         finally:
             os.close(fd)
 
-    def format_xfs(self, device: Path) -> None:
+    def format_xfs(self, device: Path, *, size_bytes: int | None = None) -> None:
+        # A grant smaller than the device bounds the blocks XFS can ever
+        # write, and therefore the overlaybd upper, until it is grown online.
         self._run(
             "mkfs.xfs",
             "-f",
@@ -536,9 +569,31 @@ class LinuxStorageHostOperations:
             "reflink=1",
             "-n",
             "ftype=1",
+            *(("-d", f"size={size_bytes}") if size_bytes is not None else ()),
             *self._workspace_log_options(),
             str(device),
         )
+
+    def grow_xfs(self, target: Path, size_bytes: int) -> None:
+        block_size = os.statvfs(target).f_frsize
+        if block_size <= 0 or size_bytes % block_size:
+            raise StorageNativeNodeError("grant is not a whole number of filesystem blocks")
+        self._run("xfs_growfs", "-D", str(size_bytes // block_size), str(target))
+
+    @staticmethod
+    def filesystem_bytes(target: Path) -> int:
+        """XFS data section size, from the kernel's live geometry."""
+        fd = os.open(target, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+        try:
+            # XFS_IOC_FSGEOMETRY_V1: struct xfs_fsop_geom_v1 (112 bytes).
+            payload = fcntl.ioctl(fd, 0x80705864, bytes(112))
+        finally:
+            os.close(fd)
+        block_size = struct.unpack_from("=I", payload, 0)[0]
+        data_blocks = struct.unpack_from("=Q", payload, 32)[0]
+        if block_size <= 0 or data_blocks <= 0:
+            raise StorageNativeNodeError("workspace filesystem geometry is invalid")
+        return block_size * data_blocks
 
     def mount(self, device: Path, target: Path) -> None:
         # These writable volumes also back guest RAM. Speculative XFS read-ahead
@@ -624,6 +679,13 @@ class StorageNativeJournal:
             virtual_size INTEGER NOT NULL CHECK(virtual_size > 0)
         );
     """
+    # Version 4 charges each active volume its grant plus local sealed layers
+    # instead of its virtual size. Older rows were formatted at full size and
+    # had no layer measurement, so their charge stays at the virtual size.
+    _CHARGE_MIGRATION = """
+        ALTER TABLE volumes ADD COLUMN charged_bytes INTEGER NOT NULL DEFAULT 0;
+        UPDATE volumes SET charged_bytes = virtual_size;
+    """
     _SCHEMA = f"""
         BEGIN IMMEDIATE;
         CREATE TABLE volumes (
@@ -631,7 +693,8 @@ class StorageNativeJournal:
             state TEXT NOT NULL,
             virtual_size INTEGER NOT NULL,
             accounting_id INTEGER NOT NULL UNIQUE CHECK(accounting_id > 0),
-            record_json TEXT NOT NULL
+            record_json TEXT NOT NULL,
+            charged_bytes INTEGER NOT NULL DEFAULT 0
         );
         CREATE TABLE operations (
             operation_id TEXT PRIMARY KEY,
@@ -699,12 +762,13 @@ class StorageNativeJournal:
                         raise StorageNativeNodeError(
                             "storage-native journal initialization failed"
                         ) from exc
-            elif application_id == _JOURNAL_APPLICATION_ID and schema_version == 2:
-                self._require_schema(connection, legacy=True)
+            elif application_id == _JOURNAL_APPLICATION_ID and schema_version in {2, 3}:
+                self._require_schema(connection, legacy=schema_version == 2, charged=False)
                 self._require_data(connection)
                 connection.executescript(
                     "BEGIN IMMEDIATE;"
-                    + self._RETIREMENT_SCHEMA
+                    + (self._RETIREMENT_SCHEMA if schema_version == 2 else "")
+                    + self._CHARGE_MIGRATION
                     + f"PRAGMA user_version = {_JOURNAL_SCHEMA_VERSION}; COMMIT;"
                 )
             elif (
@@ -720,9 +784,10 @@ class StorageNativeJournal:
                 "CREATE INDEX IF NOT EXISTS volumes_live_inventory "
                 "ON volumes(volume_id) WHERE state != 'deleted'"
             )
+            connection.execute("DROP INDEX IF EXISTS volumes_live_capacity")
             connection.execute(
-                "CREATE INDEX IF NOT EXISTS volumes_live_capacity "
-                "ON volumes(state, volume_id, virtual_size) WHERE state != 'deleted'"
+                "CREATE INDEX IF NOT EXISTS volumes_live_charges "
+                "ON volumes(state, volume_id, charged_bytes) WHERE state != 'deleted'"
             )
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS retired_devices_volume "
@@ -776,7 +841,7 @@ class StorageNativeJournal:
 
     @staticmethod
     def _require_schema(
-        connection: sqlite3.Connection, *, legacy: bool = False
+        connection: sqlite3.Connection, *, legacy: bool = False, charged: bool = True
     ) -> None:
         expected = {
             "volumes": (
@@ -785,6 +850,7 @@ class StorageNativeJournal:
                 "virtual_size",
                 "accounting_id",
                 "record_json",
+                *(("charged_bytes",) if charged else ()),
             ),
             "operations": (
                 "operation_id",
@@ -878,7 +944,7 @@ class StorageNativeJournal:
                 raise StorageNativeConflictError("volume_id already exists")
             reserved = self._active_reserved_bytes(connection)
             if (
-                int(reserved) + self._retired_bytes(connection) + record.virtual_size
+                int(reserved) + self._retired_bytes(connection) + record.charged_bytes
                 > hard_capacity_bytes
             ):
                 raise StorageNativeCapacityError(
@@ -987,7 +1053,7 @@ class StorageNativeJournal:
                 if (
                     int(reserved)
                     + self._retired_bytes(connection)
-                    + record.virtual_size
+                    + record.charged_bytes
                     > hard_capacity_bytes
                 ):
                     raise StorageNativeCapacityError(
@@ -1016,6 +1082,42 @@ class StorageNativeJournal:
                 )
             connection.commit()
         return pending
+
+    def grow_granted(
+        self,
+        owner: StorageVolumeOwner,
+        *,
+        granted_size: int,
+        hard_capacity_bytes: int,
+    ) -> tuple[StorageVolumeRecord, bool]:
+        """Charge a larger filesystem before it exists; never shrink a grant.
+
+        Only an idle mounted volume grows. The revision is unchanged: growth
+        does not transfer ownership, and a concurrent transition either sees
+        the new grant or has already left MOUNTED and refuses the growth.
+        """
+        with self._write_connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            record = self._load(connection, owner.volume_id)
+            if record.owner != owner:
+                raise StorageNativeConflictError(
+                    "storage-native volume belongs to another sandbox incarnation"
+                )
+            if record.state != StorageVolumeState.MOUNTED:
+                raise StorageNativeConflictError(
+                    f"storage volume is {record.state.value}, not mounted"
+                )
+            if granted_size > record.virtual_size:
+                raise ValueError("workspace grant exceeds its virtual size")
+            if granted_size <= record.granted_size:
+                return record, False
+            grown = replace(record, granted_size=granted_size, updated_ns=time.time_ns())
+            reserved = self._active_reserved_bytes(connection, exclude_volume_id=record.volume_id)
+            if reserved + self._retired_bytes(connection) + grown.charged_bytes > hard_capacity_bytes:
+                raise StorageNativeCapacityError("storage-native hard capacity is exhausted")
+            self._upsert_record(connection, grown)
+            connection.commit()
+            return grown, True
 
     def update_pending(
         self,
@@ -1291,13 +1393,15 @@ class StorageNativeJournal:
         connection.execute(
             """
             INSERT INTO volumes (
-                volume_id, state, virtual_size, accounting_id, record_json
-            ) VALUES (?, ?, ?, ?, ?)
+                volume_id, state, virtual_size, accounting_id, record_json,
+                charged_bytes
+            ) VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(volume_id) DO UPDATE SET
                 state = excluded.state,
                 virtual_size = excluded.virtual_size,
                 accounting_id = excluded.accounting_id,
-                record_json = excluded.record_json
+                record_json = excluded.record_json,
+                charged_bytes = excluded.charged_bytes
             """,
             (
                 record.volume_id,
@@ -1305,6 +1409,7 @@ class StorageNativeJournal:
                 record.virtual_size,
                 record.accounting_id,
                 _canonical_json(record.to_json()),
+                record.charged_bytes,
             ),
         )
 
@@ -1367,7 +1472,7 @@ class StorageNativeJournal:
         # The explicit deleted predicate lets SQLite use the covering partial
         # index even though the active state values are bound parameters.
         return int(connection.execute(
-            "SELECT COALESCE(SUM(virtual_size), 0) FROM volumes "
+            "SELECT COALESCE(SUM(charged_bytes), 0) FROM volumes "
             "WHERE state != 'deleted' "
             f"AND state IN ({','.join('?' for _ in _ACTIVE_CAPACITY_STATES)}) "
             "AND volume_id != ?",
@@ -1392,7 +1497,8 @@ class StorageNativeJournal:
                     owner.owner_id,
                     owner.device_id,
                     record.volume_id,
-                    record.virtual_size,
+                    # The retained runtime upper is bounded by the filesystem.
+                    record.granted_size,
                 ),
             )
 
@@ -1559,7 +1665,7 @@ class StorageNativeNodeService:
         self._published_local_cache.maintain()
         records, volume_count = self.journal.metrics_inventory()
         reserved = sum(
-            record.virtual_size
+            record.charged_bytes
             for record in records
             if record.state.value in _ACTIVE_CAPACITY_STATES
         )
@@ -1629,6 +1735,7 @@ class StorageNativeNodeService:
         volume_id: str,
         operation_id: str,
         virtual_size: int,
+        granted_size: int | None = None,
     ) -> StorageVolumeRecord:
         request = {
             "kind": "CreateVolume",
@@ -1638,6 +1745,12 @@ class StorageNativeNodeService:
             "virtual_size": virtual_size,
             "volume_id": volume_id,
         }
+        if granted_size is not None and granted_size < virtual_size:
+            if granted_size < MIN_WORKSPACE_GRANT_BYTES or granted_size % 1024**2:
+                raise ValueError("workspace grant must be whole MiB of at least 512 MiB")
+            request["granted_size"] = granted_size
+        else:
+            granted_size = virtual_size
         volume_root = self._volume_root(volume_id)
         record = StorageVolumeRecord(
             volume_id=volume_id,
@@ -1655,6 +1768,7 @@ class StorageNativeNodeService:
                 revision=1,
                 operation_id=operation_id,
             ),
+            granted_size=granted_size,
             updated_ns=time.time_ns(),
         )
 
@@ -1698,7 +1812,10 @@ class StorageNativeNodeService:
                     updated_ns=time.time_ns(),
                 )
                 self.journal.update_pending(record)
-                self.host.format_xfs(device.device_path)
+                if record.granted_size < record.virtual_size:
+                    self.host.format_xfs(device.device_path, size_bytes=record.granted_size)
+                else:
+                    self.host.format_xfs(device.device_path)
                 self.host.mount(device.device_path, mount_path)
                 record = replace(
                     record,
@@ -1926,6 +2043,7 @@ class StorageNativeNodeService:
             )
             self.host.unfreeze(mount_path)
             frozen = False
+            record = replace(record, local_layer_bytes=_local_layer_bytes(record))
             self.journal.finish(record)
             return record
         except BaseException as exc:
@@ -1937,6 +2055,32 @@ class StorageNativeNodeService:
                 frozen = False
             self.journal.fail(pending, f"{type(exc).__name__}: {exc}")
             raise
+
+    @_storage_mutation
+    def grow_volume(
+        self, *, sandbox_id: str, sandbox_generation: int, volume_id: str,
+        granted_size: int,
+    ) -> StorageVolumeRecord:
+        """Grow a mounted workspace filesystem online toward its ceiling.
+
+        The journal charges the new size first, so the charge never trails
+        the filesystem. A failed xfs_growfs keeps the larger charge; the next
+        mount reads the real size back from the superblock.
+        """
+        if granted_size % 1024**2:
+            raise ValueError("workspace grant must be whole MiB")
+        owner = StorageVolumeOwner(volume_id, sandbox_id, sandbox_generation)
+        record, grown = self.journal.grow_granted(
+            owner, granted_size=granted_size,
+            hard_capacity_bytes=self.config.hard_capacity_bytes,
+        )
+        mount_path = Path(record.mount_path)
+        if self.host.filesystem_bytes(mount_path) < record.granted_size:
+            self.host.grow_xfs(mount_path, record.granted_size)
+        get_current_span().add_event("storage.volume.grown", {
+            "storage.granted_bytes": record.granted_size, "storage.journal_changed": grown,
+        })
+        return record
 
     @_storage_mutation
     def commit_capture(
@@ -2119,9 +2263,21 @@ class StorageNativeNodeService:
             self.host.mount(device.device_path, Path(pending.mount_path))
             get_current_span().add_event("storage.mount.filesystem",
                 {"duration_ms": (time.monotonic() - phase_started) * 1000})
+            # The grant travels inside the layers (the XFS superblock). Read it
+            # back so imports and interrupted growth charge the real size.
+            try:
+                granted = self.host.filesystem_bytes(Path(pending.mount_path))
+            except OSError:
+                # Keep the journaled (never smaller) grant rather than fail a wake.
+                LOGGER.warning("workspace geometry unavailable for %s", volume_id, exc_info=True)
+                granted = pending.granted_size
+            if granted > pending.virtual_size:
+                raise StorageNativeTerminalError("workspace filesystem exceeds its device")
             record = replace(
                 pending,
                 state=StorageVolumeState.MOUNTED,
+                granted_size=granted,
+                local_layer_bytes=_local_layer_bytes(pending),
                 updated_ns=time.time_ns(),
             )
             self.journal.finish(record)
@@ -2320,6 +2476,7 @@ class StorageNativeNodeService:
                 pending,
                 state=StorageVolumeState.PUBLISHED,
                 sealed_layer_paths=(),
+                local_layer_bytes=0,
                 cached_layer_paths=(
                     *pending.cached_layer_paths,
                     *(str(path) for path in local_paths),
@@ -2416,6 +2573,7 @@ class StorageNativeNodeService:
         expected_accounting_id: int | None = None,
         capture_id: str = "",
         expected_revision: int | None = None,
+        granted_size: int | None = None,
     ) -> StorageVolumeRecord:
         if action not in {
             "delete",
@@ -2439,6 +2597,7 @@ class StorageNativeNodeService:
                     "prepare-create",
                 ),
                 virtual_size=virtual_size,
+                granted_size=granted_size,
             )
         if action == "import" and (
             record is None or record.state == StorageVolumeState.DELETED
@@ -3159,13 +3318,20 @@ class StorageNativeNodeClient:
         *,
         operation_id: str,
         virtual_size: int,
+        granted_size: int | None = None,
     ) -> StorageVolumeRecord:
         return self._record_call(
             "PrepareVolume",
             owner,
             operation_id=operation_id,
             virtual_size=virtual_size,
+            **({"granted_size": granted_size} if granted_size is not None else {}),
         )
+
+    def grow_volume(
+        self, owner: StorageVolumeOwner, *, granted_size: int,
+    ) -> StorageVolumeRecord:
+        return self._record_call("GrowVolume", owner, granted_size=granted_size)
 
     def prepare_import(
         self,
@@ -3451,6 +3617,11 @@ class _StorageNativeRequestHandler(socketserver.BaseRequestHandler):
             if operation == "EnsurePublished":
                 span.set_attribute("storage.admission.class", "publication")
                 return {"status": "ok", "result": self.server.dispatch(request)}
+            # A guest is about to run out of space. Growth is one journal
+            # commit plus xfs_growfs; it must not queue behind device work.
+            if operation == "GrowVolume":
+                span.set_attribute("storage.admission.class", "growth")
+                return {"status": "ok", "result": self.server.dispatch(request)}
             span.set_attribute("storage.admission.class", "lifecycle")
             waiting_started = time.monotonic()
             self.server.operation_waiting()
@@ -3545,6 +3716,8 @@ class _StorageNativeUnixServer(
             expected_fields.add("capture_id")
         if operation == "EnsurePublished" and "expected_revision" in request:
             expected_fields.add("expected_revision")
+        if operation == "PrepareVolume" and "granted_size" in request:
+            expected_fields.add("granted_size")
         if set(request) != expected_fields:
             raise ValueError("storage-native request has an invalid schema")
         if operation == "GetFeatures":
@@ -3574,8 +3747,15 @@ class _StorageNativeUnixServer(
                     action="prepare",
                     operation_id=_string_field(request, "operation_id"),
                     virtual_size=_positive_int_field(request, "virtual_size"),
+                    granted_size=_optional_positive_int_field(request, "granted_size"),
                 )
             )
+        if operation == "GrowVolume":
+            owner = _volume_owner_from_request(request)
+            return self.service._record_result(self.service.grow_volume(
+                **owner.request_fields(),
+                granted_size=_positive_int_field(request, "granted_size"),
+            ))
         if operation == "PrepareImport":
             publication = request.get("publication")
             if not isinstance(publication, dict):
@@ -3742,6 +3922,28 @@ def _canonical_json(payload: Any) -> str:
         separators=(",", ":"),
         sort_keys=True,
     )
+
+
+def _local_layer_bytes(record: StorageVolumeRecord) -> int:
+    """Allocated bytes of sealed layers still owned locally by this volume.
+
+    Published-cache pins are charged by the cache. Hard links are counted once.
+    """
+    cached = set(record.cached_layer_paths)
+    seen: set[tuple[int, int]] = set()
+    total = 0
+    for raw in record.sealed_layer_paths:
+        if raw in cached:
+            continue
+        try:
+            info = os.stat(raw)
+        except FileNotFoundError:
+            continue
+        identity = (info.st_dev, info.st_ino)
+        if identity not in seen:
+            seen.add(identity)
+            total += info.st_blocks * 512
+    return total
 
 
 def _request_sha256(request: dict[str, Any]) -> str:

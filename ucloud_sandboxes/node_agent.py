@@ -1970,6 +1970,15 @@ def build_direct_node_agent_server(
         except (OSError, RuntimeError, sqlite3.Error):
             return metrics
         mib = 1024 * 1024
+        claim_metrics = {}
+        policy = getattr(getattr(service, "provisioner", None), "disk_claim_policy", None)
+        if policy is not None:
+            growth = service.workspace_growth_metrics()
+            claim_metrics = {
+                **policy.advertised(),
+                "storage_workspace_growths": growth["workspace_growths"],
+                "storage_workspace_growth_refusals": growth["workspace_growth_refusals"],
+            }
         return replace(
             metrics,
             storage_hard_capacity_mb=(int(raw.get("hard_capacity_bytes", 0)) // mib),
@@ -2022,6 +2031,7 @@ def build_direct_node_agent_server(
             ),
             storage_device_pool_releases=int(raw.get("device_pool_releases", 0)),
             storage_device_pool_discards=int(raw.get("device_pool_discards", 0)),
+            **claim_metrics,
         )
 
     DirectBoundHandler.runtime_metrics_provider = staticmethod(direct_runtime_metrics)

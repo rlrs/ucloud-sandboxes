@@ -144,6 +144,7 @@ class FakeBlockBackend:
         self.release_calls: list[int] = []
         self.fail_next_release = False
         self.owners: dict[str, StorageNativeDeviceOwner] = {}
+        self.device_sizes: dict[Path, int] = {}
 
     def create_runtime_device(
         self,
@@ -157,6 +158,7 @@ class FakeBlockBackend:
     ) -> StorageNativeDevice:
         existing = self.owners.get(owner_id)
         if existing is not None:
+            self.device_sizes[existing.device_path] = virtual_size
             return StorageNativeDevice(
                 device_id=existing.device_id,
                 device_path=existing.device_path,
@@ -180,6 +182,7 @@ class FakeBlockBackend:
             virtual_size=virtual_size,
             image_config_path=image,
         )
+        self.device_sizes[device.device_path] = virtual_size
         self.owners[owner_id] = StorageNativeDeviceOwner(
             owner_id=owner_id,
             device_id=device.device_id,
@@ -283,15 +286,38 @@ class FakeHost:
         self.fail_next_unmount = False
         self.detached: list[Path] = []
         self.busy_devices: set[Path] = set()
+        self.formatted_sizes: dict[Path, int | None] = {}
+        self.filesystem_sizes: dict[Path, int] = {}
+        self.mount_devices: dict[Path, Path] = {}
+        self.grown: list[tuple[Path, int]] = []
+        self.format_sizes: list[int | None] = []
 
     def device_is_unused(self, device: Path) -> bool:
         return device not in self.busy_devices
 
-    def format_xfs(self, device: Path) -> None:
+    def format_xfs(self, device: Path, *, size_bytes: int | None = None) -> None:
         self.formatted.append(device)
+        self.formatted_sizes[device] = size_bytes
+        self.format_sizes.append(size_bytes)
 
     def mount(self, device: Path, target: Path) -> None:
         self.mounted.add(target)
+        if device in self.formatted_sizes:
+            size = self.formatted_sizes.pop(device)
+            self.filesystem_sizes[target] = size or self.backend.device_sizes[device]
+        self.mount_devices[target] = device
+
+    def filesystem_bytes(self, target: Path) -> int:
+        if target in self.filesystem_sizes:
+            return self.filesystem_sizes[target]
+        # A snapshot mount inherits its filesystem; fakes carry no superblock.
+        return self.backend.device_sizes[self.mount_devices[target]]
+
+    def grow_xfs(self, target: Path, size_bytes: int) -> None:
+        if target not in self.mounted or size_bytes < self.filesystem_bytes(target):
+            raise RuntimeError("cannot grow")
+        self.grown.append((target, size_bytes))
+        self.filesystem_sizes[target] = size_bytes
 
     def sync(self, target: Path) -> None:
         if target not in self.mounted:
@@ -534,8 +560,9 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
 
     def test_quarantine_capacity_and_recycled_device_identity(self):
         with TemporaryDirectory() as raw:
+            # Two grants plus the sealed layer's few allocated blocks.
             service, backend, host = self._service(
-                Path(raw), pooled=True, capacity=2 << 30
+                Path(raw), pooled=True, capacity=(2 << 30) + (1 << 20)
             )
             owner = StorageVolumeOwner("vol", "sandbox", 1)
             created = service.converge_volume(
@@ -573,11 +600,103 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
             )
             with sqlite3.connect(service.journal.path) as connection:
                 connection.executescript(
+                    "DROP INDEX volumes_live_charges;"
+                    "ALTER TABLE volumes DROP COLUMN charged_bytes;"
                     "DROP TABLE retired_devices; PRAGMA user_version=2;"
                 )
             migrated = StorageNativeJournal(service.journal.path)
             self.assertEqual(migrated.load("vol"), record)
             self.assertEqual(migrated.retired_devices(), [])
+
+    def test_journal_v3_records_keep_their_full_size_charge(self):
+        with TemporaryDirectory() as raw:
+            service, _, _ = self._service(Path(raw))
+            owner = StorageVolumeOwner("vol", "sandbox", 1)
+            service.converge_volume(owner, action="prepare", operation_id="create",
+                                    virtual_size=4 << 30, granted_size=1 << 30)
+            with sqlite3.connect(service.journal.path) as connection:
+                raw_json = json.loads(connection.execute(
+                    "SELECT record_json FROM volumes").fetchone()[0])
+                raw_json.pop("granted_size")
+                raw_json.pop("local_layer_bytes")
+                connection.execute("UPDATE volumes SET record_json = ?",
+                                   (json.dumps(raw_json, sort_keys=True),))
+                connection.executescript(
+                    "DROP INDEX volumes_live_charges;"
+                    "ALTER TABLE volumes DROP COLUMN charged_bytes; PRAGMA user_version=3;"
+                )
+            migrated = StorageNativeJournal(service.journal.path)
+            # A pre-grant record was formatted at full size: charge it so.
+            self.assertEqual(migrated.load("vol").granted_size, 4 << 30)
+            with migrated._connection() as connection:
+                self.assertEqual(migrated._active_reserved_bytes(connection), 4 << 30)
+
+    def test_workspace_grant_bounds_filesystem_and_charge_until_grown(self):
+        with TemporaryDirectory() as raw:
+            service, _, host = self._service(Path(raw), capacity=(3 << 30) + (1 << 20))
+            owner = StorageVolumeOwner("vol", "sandbox", 1)
+            created = service.converge_volume(owner, action="prepare", operation_id="create",
+                                              virtual_size=4 << 30, granted_size=1 << 30)
+            self.assertEqual((created.virtual_size, created.granted_size), (4 << 30, 1 << 30))
+            self.assertEqual(host.filesystem_bytes(Path(created.mount_path)), 1 << 30)
+            self.assertEqual(host.format_sizes, [1 << 30])
+            self.assertEqual(service.metrics()["hard_reserved_bytes"], 1 << 30)
+            # Another volume may use the headroom a full-size charge used to hold.
+            service.converge_volume(StorageVolumeOwner("other", "other", 1), action="prepare",
+                                    operation_id="other", virtual_size=4 << 30, granted_size=1 << 30)
+            grown = service.grow_volume(**owner.request_fields(), granted_size=2 << 30)
+            self.assertEqual((grown.granted_size, grown.revision), (2 << 30, created.revision))
+            self.assertEqual(host.grown, [(Path(created.mount_path), 2 << 30)])
+            # Growth never shrinks, and repeats are idempotent.
+            self.assertEqual(service.grow_volume(**owner.request_fields(), granted_size=1 << 30), grown)
+            with self.assertRaises(StorageNativeCapacityError):
+                service.grow_volume(**owner.request_fields(), granted_size=3 << 30)
+            self.assertEqual(service.journal.load("vol").granted_size, 2 << 30)
+            with self.assertRaises(ValueError):
+                service.grow_volume(**owner.request_fields(), granted_size=5 << 30)
+            with self.assertRaises(StorageNativeConflictError):
+                service.grow_volume(sandbox_id="sandbox", sandbox_generation=2,
+                                    volume_id="vol", granted_size=3 << 30)
+            released = service.converge_volume(owner, action="release", operation_id="park")
+            self.assertGreater(released.local_layer_bytes, 0)
+            self.assertEqual(released.charged_bytes, (2 << 30) + released.local_layer_bytes)
+            with self.assertRaisesRegex(StorageNativeConflictError, "not mounted"):
+                service.grow_volume(**owner.request_fields(), granted_size=3 << 30)
+            # The next mount reads the grant back from the filesystem itself.
+            host.filesystem_sizes[Path(created.mount_path)] = (2 << 30) + (1 << 20)
+            mounted = service.converge_volume(owner, action="mount", operation_id="wake")
+            self.assertEqual(mounted.granted_size, (2 << 30) + (1 << 20))
+            self.assertEqual(mounted.local_layer_bytes, released.local_layer_bytes)
+
+    def test_interrupted_growth_is_completed_by_a_retry(self):
+        with TemporaryDirectory() as raw:
+            service, _, host = self._service(Path(raw))
+            owner = StorageVolumeOwner("vol", "sandbox", 1)
+            created = service.converge_volume(owner, action="prepare", operation_id="create",
+                                              virtual_size=4 << 30, granted_size=1 << 30)
+            original = host.grow_xfs
+            host.grow_xfs = lambda target, size: (_ for _ in ()).throw(RuntimeError("crash"))
+            with self.assertRaises(RuntimeError):
+                service.grow_volume(**owner.request_fields(), granted_size=2 << 30)
+            # The charge was taken first and is kept; the filesystem lags.
+            self.assertEqual(service.journal.load("vol").granted_size, 2 << 30)
+            host.grow_xfs = original
+            service.grow_volume(**owner.request_fields(), granted_size=2 << 30)
+            self.assertEqual(host.filesystem_bytes(Path(created.mount_path)), 2 << 30)
+
+    def test_small_or_unaligned_grants_are_refused_and_full_grants_format_whole_device(self):
+        with TemporaryDirectory() as raw:
+            service, _, host = self._service(Path(raw))
+            for granted in (256 << 20, (1 << 30) + 1):
+                with self.assertRaises(ValueError):
+                    service.converge_volume(StorageVolumeOwner("vol", "sandbox", 1), action="prepare",
+                                            operation_id="create", virtual_size=4 << 30,
+                                            granted_size=granted)
+            whole = service.converge_volume(StorageVolumeOwner("whole", "sandbox", 1),
+                                            action="prepare", operation_id="whole",
+                                            virtual_size=1 << 30, granted_size=4 << 30)
+            self.assertEqual(whole.granted_size, 1 << 30)
+            self.assertEqual(host.format_sizes, [None])
 
     def test_capture_abort_retains_live_stack_and_fences_decisions(self):
         with TemporaryDirectory() as raw:
@@ -1496,7 +1615,8 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
     def test_versioned_unix_socket_protocol(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw)
-            service, backend, _ = self._service(root, capacity=2 << 30)
+            # Two 1 GiB grants plus volume-1's sealed layer blocks.
+            service, backend, _ = self._service(root, capacity=(2 << 30) + (1 << 20))
             socket_path = root / "service" / "storage.sock"
             server = StorageNativeNodeServer(
                 socket_path,
@@ -1526,6 +1646,7 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
             )
             self.assertEqual(created.state, StorageVolumeState.MOUNTED)
             owner = StorageVolumeOwner("volume-1", "sandbox-1", 4)
+            self.assertEqual(client.grow_volume(owner, granted_size=1 << 30), created)
             prepared = client.prepare_capture(owner, operation_id="capture", expected_revision=created.revision)
             self.assertEqual(prepared.state, StorageVolumeState.CAPTURE_PREPARED)
             aborted = client.abort_capture(owner, operation_id="abort", expected_revision=prepared.revision)
@@ -1550,7 +1671,10 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
                     virtual_size=1 << 30,
                 )
             metrics = client.get_metrics()
-            self.assertEqual(metrics["hard_reserved_bytes"], 2 << 30)
+            self.assertEqual(
+                metrics["hard_reserved_bytes"],
+                (2 << 30) + service.journal.load("volume-1").local_layer_bytes,
+            )
             self.assertEqual(metrics["active_operations"], 0)
             self.assertEqual(metrics["waiting_operations"], 0)
             self.assertEqual(

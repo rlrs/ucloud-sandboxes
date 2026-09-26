@@ -41,7 +41,7 @@ DIRECT_REGISTRATION_PHASES = _ROOTFS_PHASES | {
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 _CONTAINER_ID = re.compile(r"[0-9a-f]{64}\Z")
 _DIRECT_REGISTRY_APPLICATION_ID = 0x55435247
-_DIRECT_REGISTRY_SCHEMA_VERSION = 8
+_DIRECT_REGISTRY_SCHEMA_VERSION = 9
 _DIRECT_REGISTRY_IDENTITY = (
     _DIRECT_REGISTRY_APPLICATION_ID,
     _DIRECT_REGISTRY_SCHEMA_VERSION,
@@ -70,6 +70,42 @@ class DirectRegistryConflictError(DirectRegistryError):
 
 class DirectRegistryCapacityUnavailable(DirectRegistryConflictError):
     """No disk claim was granted; the caller may wait for physical capacity."""
+
+
+@dataclass(frozen=True)
+class DiskClaim:
+    """A registration's current physical promise, in MiB.
+
+    ``workspace_mb`` is the workspace grant plus its local sealed layers;
+    ``memory_mb`` is the memory allocation's project limit. Specs remain
+    maximums; these follow what the sandbox has demonstrated.
+    """
+
+    workspace_mb: int
+    memory_mb: int
+
+    def __post_init__(self) -> None:
+        for value in (self.workspace_mb, self.memory_mb):
+            if type(value) is not int or value < 0:
+                raise ValueError("disk claim components must be non-negative integers")
+
+    @property
+    def total_mb(self) -> int:
+        return self.workspace_mb + self.memory_mb
+
+
+# One registration's current claim. Fixed rows carry reserved_mb (their
+# lifetime claim) less any published workspace; dynamic rows carry a
+# workspace claim, dropped while published, plus a memory claim.
+_ROW_CLAIM_MB = (
+    "d.reserved_mb + d.memory_mb + CASE WHEN COALESCE(w.released_mb, 0) > 0 "
+    "THEN CASE WHEN d.dynamic = 1 THEN 0 ELSE -w.released_mb END "
+    "ELSE d.workspace_mb END"
+)
+_CLAIM_JOIN = (
+    "registration_disk AS d LEFT JOIN workspace_capacity AS w "
+    "ON w.sandbox_id = d.sandbox_id AND w.sandbox_generation = d.sandbox_generation"
+)
 
 
 @dataclass(frozen=True)
@@ -404,7 +440,10 @@ class DirectSandboxRegistry:
         CREATE TABLE registration_disk (
             sandbox_id TEXT PRIMARY KEY,
             sandbox_generation INTEGER NOT NULL CHECK (sandbox_generation > 0),
-            reserved_mb INTEGER NOT NULL CHECK (reserved_mb >= 0)
+            reserved_mb INTEGER NOT NULL CHECK (reserved_mb >= 0),
+            workspace_mb INTEGER NOT NULL CHECK (workspace_mb >= 0),
+            memory_mb INTEGER NOT NULL CHECK (memory_mb >= 0),
+            dynamic INTEGER NOT NULL CHECK (dynamic IN (0, 1))
         ) STRICT;
         INSERT INTO registry_metadata VALUES (
             1,
@@ -492,15 +531,10 @@ class DirectSandboxRegistry:
         # Allocator metrics are observations, never an independent free budget.
         # registration_disk mirrors each registration's claim in the same
         # transaction, so this runs under the writer lock without decoding JSON.
-        reserved_mb = connection.execute(
-            "SELECT COALESCE(SUM(reserved_mb),0) FROM registration_disk"
-        ).fetchone()[0]
         # A published, unmounted workspace no longer occupies local disk; the
         # storage daemon stopped charging it. Every mount re-reserves it first.
-        reserved_mb -= connection.execute(
-            "SELECT COALESCE(SUM(w.released_mb),0) FROM workspace_capacity w "
-            "JOIN registration_disk d ON d.sandbox_id=w.sandbox_id "
-            "AND d.sandbox_generation=w.sandbox_generation"
+        reserved_mb = connection.execute(
+            f"SELECT COALESCE(SUM({_ROW_CLAIM_MB}),0) FROM {_CLAIM_JOIN}"
         ).fetchone()[0]
         overlap = connection.execute(
             "SELECT COALESCE(SUM(allocated_bytes),0) FROM reflink_overlaps"
@@ -537,6 +571,13 @@ class DirectSandboxRegistry:
             epoch = row[1] if row is not None and row[0] == sandbox_generation else 0
             if epoch != expected_mount_epoch:
                 return False
+            claim = connection.execute(
+                "SELECT dynamic, workspace_mb FROM registration_disk WHERE sandbox_id=?",
+                (sandbox_id,),
+            ).fetchone()
+            if claim is not None and claim[0]:
+                # The remount re-reserves exactly the grant it will mount.
+                workspace_mb = max(1, claim[1])
             connection.execute(
                 "INSERT OR REPLACE INTO workspace_capacity VALUES (?,?,?,?)",
                 (sandbox_id, sandbox_generation, epoch, workspace_mb),
@@ -571,6 +612,87 @@ class DirectSandboxRegistry:
                 (sandbox_id, sandbox_generation, epoch + 1),
             )
             self._bump_activity(connection)
+
+    def disk_claim(self, sandbox_id: str, sandbox_generation: int) -> DiskClaim | None:
+        """The current dynamic claim, or None for a fixed (legacy) claim."""
+        with self._transaction(write=False) as connection:
+            row = connection.execute(
+                "SELECT workspace_mb, memory_mb, dynamic FROM registration_disk "
+                "WHERE sandbox_id=? AND sandbox_generation=?",
+                (sandbox_id, sandbox_generation),
+            ).fetchone()
+        return DiskClaim(row[0], row[1]) if row is not None and row[2] else None
+
+    def disk_claims_mb(self) -> dict[tuple[str, int], int]:
+        """Every registration's current charge, as heartbeat accounting uses it."""
+        with self._transaction(write=False) as connection:
+            return {
+                (row[0], row[1]): max(0, row[2])
+                for row in connection.execute(
+                    f"SELECT d.sandbox_id, d.sandbox_generation, {_ROW_CLAIM_MB} FROM {_CLAIM_JOIN}"
+                )
+            }
+
+    def update_disk_claim(
+        self,
+        sandbox_id: str,
+        sandbox_generation: int,
+        *,
+        workspace_mb: int | None = None,
+        memory_mb: int | None = None,
+        require_capacity: bool = False,
+    ) -> DiskClaim | None:
+        """Move a dynamic claim. Fixed claims are left unchanged (returns None).
+
+        ``require_capacity`` admits an increase that will create physical
+        bytes (grant growth, park capture space); refusal is retryable and
+        changes nothing. Without it the update records bytes that already
+        exist, such as a sealed layer or a committed checkpoint, and always
+        succeeds: the node then refuses new work until relief frees space.
+        """
+        for value in (workspace_mb, memory_mb):
+            if value is not None and (type(value) is not int or value < 0):
+                raise ValueError("disk claim components must be non-negative integers")
+        with self._transaction(write=True) as connection:
+            row = connection.execute(
+                "SELECT d.workspace_mb, d.memory_mb, d.dynamic, COALESCE(w.released_mb, 0) "
+                "FROM registration_disk AS d LEFT JOIN workspace_capacity AS w "
+                "ON w.sandbox_id = d.sandbox_id AND w.sandbox_generation = d.sandbox_generation "
+                "WHERE d.sandbox_id=? AND d.sandbox_generation=?",
+                (sandbox_id, sandbox_generation),
+            ).fetchone()
+            if row is None:
+                raise DirectRegistryConflictError("disk claim lost incarnation ownership")
+            if not row[2]:
+                return None
+            old = DiskClaim(row[0], row[1])
+            new = DiskClaim(old.workspace_mb if workspace_mb is None else workspace_mb,
+                            old.memory_mb if memory_mb is None else memory_mb)
+            if new == old:
+                return new
+            published = row[3] > 0
+            delta_mb = (new.memory_mb - old.memory_mb) + (
+                0 if published else new.workspace_mb - old.workspace_mb
+            )
+            if require_capacity and delta_mb > 0 and (
+                not self.hard_disk_capacity_mb
+                or self._reserved_disk_bytes(connection) + delta_mb * 1024**2
+                > self.hard_disk_capacity_mb * 1024**2
+            ):
+                raise DirectRegistryCapacityUnavailable("physical disk capacity exhausted")
+            connection.execute(
+                "UPDATE registration_disk SET workspace_mb=?, memory_mb=? "
+                "WHERE sandbox_id=? AND sandbox_generation=?",
+                (new.workspace_mb, new.memory_mb, sandbox_id, sandbox_generation),
+            )
+            if published:
+                connection.execute(
+                    "UPDATE workspace_capacity SET released_mb=? "
+                    "WHERE sandbox_id=? AND sandbox_generation=? AND released_mb > 0",
+                    (max(1, new.workspace_mb), sandbox_id, sandbox_generation),
+                )
+            self._bump_activity(connection)
+            return new
 
     def reserve_reflink_overlap(self, sandbox_id: str, sandbox_generation: int,
                                hibernation_generation: int, allocated_bytes: int, *,
@@ -664,9 +786,12 @@ class DirectSandboxRegistry:
         operation_id: str,
         runtime_compatibility_sha256: str,
         split_memory_backing: bool = False,
+        initial_claim: DiskClaim | None = None,
     ) -> DirectSandboxRegistration:
         if sandbox_generation <= 0:
             raise ValueError("sandbox generation must be positive")
+        if initial_claim is not None and not split_memory_backing:
+            raise ValueError("dynamic disk claims require split memory backing")
         now = time.time_ns()
         return self._plan(
             DirectSandboxRegistration(
@@ -687,6 +812,7 @@ class DirectSandboxRegistry:
                 updated_ns=now,
             ),
             imported=False,
+            initial_claim=initial_claim,
         )
 
     def plan_import(
@@ -1183,6 +1309,7 @@ class DirectSandboxRegistry:
         candidate: DirectSandboxRegistration,
         *,
         imported: bool,
+        initial_claim: DiskClaim | None = None,
     ) -> DirectSandboxRegistration:
         with self._transaction(write=True) as connection:
             _activity, compatibility, _drain = self._metadata(connection)
@@ -1235,16 +1362,27 @@ class DirectSandboxRegistry:
                 error = "direct registration is fenced by a tombstone"
             if fenced:
                 raise DirectRegistryConflictError(error)
+            claim_mb = (
+                initial_claim.total_mb
+                if initial_claim is not None
+                else candidate.spec.requested_resources().disk_mb
+            )
             if self.hard_disk_capacity_mb:
                 if (
                     self._reserved_disk_bytes(connection)
-                    + candidate.spec.requested_resources().disk_mb * 1024**2
+                    + claim_mb * 1024**2
                     > self.hard_disk_capacity_mb * 1024**2
                 ):
                     raise DirectRegistryCapacityUnavailable(
                         "combined workspace and memory backing capacity exhausted"
                     )
             self._write(connection, candidate, insert=True)
+            if initial_claim is not None:
+                connection.execute(
+                    "UPDATE registration_disk SET reserved_mb=0, workspace_mb=?, memory_mb=?, "
+                    "dynamic=1 WHERE sandbox_id=?",
+                    (initial_claim.workspace_mb, initial_claim.memory_mb, candidate.sandbox_id),
+                )
             self._bump_activity(connection)
         return candidate
 
@@ -1450,8 +1588,12 @@ class DirectSandboxRegistry:
             if record.quota_total_mb is not None
             else record.spec.requested_resources().disk_mb
         )
+        # Dynamic claims are maintained explicitly by update_disk_claim.
         connection.execute(
-            "INSERT OR REPLACE INTO registration_disk VALUES (?, ?, ?)",
+            "INSERT INTO registration_disk VALUES (?, ?, ?, 0, 0, 0) "
+            "ON CONFLICT (sandbox_id) DO UPDATE SET "
+            "sandbox_generation=excluded.sandbox_generation, reserved_mb=excluded.reserved_mb "
+            "WHERE registration_disk.dynamic = 0",
             (record.sandbox_id, record.sandbox_generation, reserved_mb),
         )
 
@@ -1723,8 +1865,12 @@ class DirectSandboxRegistry:
                 "SELECT 1 FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' LIMIT 1"
             ).fetchone()
             version = cls._versions(connection)
-            if version in {(_DIRECT_REGISTRY_APPLICATION_ID, old) for old in (3, 4, 5, 6, 7)}:
+            if version in {(_DIRECT_REGISTRY_APPLICATION_ID, old) for old in (3, 4, 5, 6, 7, 8)}:
                 cls._validate_schema(connection, legacy_version=version[1])
+                if version[1] == 8:
+                    # Rebuilt below with dynamic-claim columns. Existing
+                    # registrations keep their fixed lifetime claim.
+                    connection.execute("DROP TABLE registration_disk")
                 missing = {"registration_disk"}
                 if version[1] < 7:
                     missing.add("workspace_capacity")
@@ -1790,7 +1936,15 @@ class DirectSandboxRegistry:
             for raw in cls._SCHEMA.split(";")
             if (statement := raw.strip()).startswith("CREATE ")
         }
-        if legacy_version is not None:
+        if legacy_version == 8:
+            expected["registration_disk"] = (
+                "CREATE TABLE registration_disk (\n"
+                "            sandbox_id TEXT PRIMARY KEY,\n"
+                "            sandbox_generation INTEGER NOT NULL CHECK (sandbox_generation > 0),\n"
+                "            reserved_mb INTEGER NOT NULL CHECK (reserved_mb >= 0)\n"
+                "        ) STRICT"
+            )
+        elif legacy_version is not None:
             expected.pop("registration_disk")
         if legacy_version is not None and legacy_version < 7:
             expected.pop("workspace_capacity")

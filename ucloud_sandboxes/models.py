@@ -422,6 +422,10 @@ NODE_RUNTIME_METRIC_DEFAULTS = {
     "storage_snapshot_publications": 0,
     "storage_snapshot_compactions": 0,
     "storage_snapshot_uploaded_bytes": 0,
+    "storage_workspace_grant_mb": 0,
+    "storage_memory_idle_claim_mb": 0,
+    "storage_workspace_growths": 0,
+    "storage_workspace_growth_refusals": 0,
 }
 
 
@@ -476,6 +480,12 @@ class NodeRuntimeMetrics:
     storage_device_pool_new_acquires: int = 0
     storage_device_pool_releases: int = 0
     storage_device_pool_discards: int = 0
+    # Dynamic disk claims (docs/disk-density.md). A zero grant means new
+    # workspaces are full size; a zero idle claim means the formula applies.
+    storage_workspace_grant_mb: int = 0
+    storage_memory_idle_claim_mb: int = 0
+    storage_workspace_growths: int = 0
+    storage_workspace_growth_refusals: int = 0
     image_materialization_active_operations: int = 0
     image_materialization_waiting_operations: int = 0
     image_materialization_max_concurrent_operations: int = 0

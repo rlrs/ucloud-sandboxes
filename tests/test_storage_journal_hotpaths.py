@@ -62,7 +62,9 @@ class StorageJournalHotpathTests(unittest.TestCase):
                 steps = 0
                 woke = service.converge_volume(owner, action="mount", operation_id="wake")
                 self.assertEqual(woke.state, StorageVolumeState.MOUNTED)
-            self.assertEqual(service.metrics()["hard_reserved_bytes"], 2 << 30)
+            # Two grants plus the sealed layer the park left behind.
+            self.assertEqual(service.metrics()["hard_reserved_bytes"],
+                             (2 << 30) + service.journal.load("live").local_layer_bytes)
 
     def test_metrics_preserve_history_count_without_decoding_tombstones(self):
         with TemporaryDirectory() as raw:
@@ -118,7 +120,7 @@ class StorageJournalHotpathTests(unittest.TestCase):
             journal = service.journal
             before = journal.load(owner.volume_id)
             with closing(journal._connect()) as connection:
-                connection.execute("DROP INDEX volumes_live_capacity")
+                connection.execute("DROP INDEX volumes_live_charges")
                 connection.execute("DROP INDEX retired_devices_volume")
             reopened = StorageNativeJournal(journal.path)
             self.assertEqual(reopened.load(owner.volume_id), before)

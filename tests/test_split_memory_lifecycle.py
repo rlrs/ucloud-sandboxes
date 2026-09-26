@@ -26,6 +26,7 @@ from ucloud_sandboxes.storage_native_daemon import (
 class FakeQuota:
     def __init__(self):
         self.projects = {}
+        self.limits = {}
         self.fail = False
 
     def validate_root(self, root):
@@ -35,6 +36,12 @@ class FakeQuota:
         if self.fail:
             raise OSError("quota failed")
         self.projects[path] = (project_id, quota_bytes)
+        self.limits[project_id] = quota_bytes
+
+    def set_limit(self, project_id, quota_bytes):
+        if self.fail:
+            raise OSError("quota failed")
+        self.limits[project_id] = quota_bytes
 
     def validate_project(self, path, project_id):
         if self.projects.get(path, (None,))[0] != project_id:

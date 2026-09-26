@@ -113,6 +113,45 @@ class MemoryBackingModeTests(unittest.TestCase):
             self.store.prepare_file_restore(self.ref, **self.owner)
         self.assertEqual(self.open_store().active_mode('guest', 1), 'ram')
 
+    def test_limit_starts_small_and_moves_within_ceiling_and_capacity(self):
+        ref = MemoryBackingRef('guest.sandbox-1', 6144)
+        lease = self.store.prepare(ref, **self.owner, limit_bytes=1024)
+        self.assertEqual(self.quota.limits[lease.project_id], 1024)
+        self.assertEqual(self.store.metrics()['memory_backing_hard_reserved_bytes'], 1024)
+        other = MemoryBackingRef('other.sandbox-1', 4096)
+        self.store.prepare(other, sandbox_id='other', sandbox_generation=1, limit_bytes=4096)
+        # 1024 + 4096 of 8192: raising to the ceiling would overcommit.
+        with self.assertRaisesRegex(MemoryBackingError, 'capacity'):
+            self.store.set_limit(ref, **self.owner, limit_bytes=6144)
+        self.assertEqual(self.quota.limits[lease.project_id], 1024)
+        self.assertEqual(self.store.set_limit(ref, **self.owner, limit_bytes=4096), 1024)
+        self.assertEqual((self.quota.limits[lease.project_id], self.store.limit_bytes(ref)),
+                         (4096, 4096))
+        # Lowering changes the kernel limit before the journal charge.
+        self.quota.fail = True
+        with self.assertRaises(OSError):
+            self.store.set_limit(ref, **self.owner, limit_bytes=512)
+        self.assertEqual(self.store.limit_bytes(ref), 4096)
+        self.quota.fail = False
+        self.store.set_limit(ref, **self.owner, limit_bytes=512)
+        self.assertEqual(self.store.metrics()['memory_backing_hard_reserved_bytes'], 4608)
+        with self.assertRaisesRegex(MemoryBackingError, 'ceiling'):
+            self.store.set_limit(ref, **self.owner, limit_bytes=8192)
+        with self.assertRaisesRegex(MemoryBackingError, 'retained'):
+            self.store.set_limit(ref, sandbox_id='guest', sandbox_generation=2, limit_bytes=512)
+
+    def test_allocated_bytes_counts_every_block_once(self):
+        self.store.prepare(self.ref, **self.owner, limit_bytes=1024)
+        generation = self.root / 'disk' / self.ref.allocation_id / 'hibernate-1'
+        generation.mkdir()
+        (generation / 'pages.img').write_bytes(b'x' * 10000)
+        (generation / 'link.img').hardlink_to(generation / 'pages.img')
+        allocated = self.store.allocated_bytes(self.ref)
+        self.assertGreaterEqual(allocated, 10000)
+        before = allocated
+        (generation / 'more.img').write_bytes(b'y' * 5000)
+        self.assertGreater(self.store.allocated_bytes(self.ref), before)
+
     def test_legacy_journal_migrates_worker_layout_transactionally(self):
         # An old six-column allocation is the actual input to the migration.
         journal = self.root / 'memory.sqlite'
@@ -127,8 +166,10 @@ class MemoryBackingModeTests(unittest.TestCase):
         reopened = self.open_store()
         self.assertEqual(reopened.active_mode('guest', 1), 'ram')
         with closing(sqlite3.connect(journal)) as conn:
-            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0], 2)
+            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0], 3)
             self.assertEqual(conn.execute('SELECT active_mode FROM allocations').fetchone()[0], 'ram')
+            # Existing allocations keep their full ceiling as their limit.
+            self.assertEqual(conn.execute('SELECT limit_bytes FROM allocations').fetchone()[0], 4096)
         self.assertEqual(self.open_store().active_mode('guest', 1), 'ram')
 
     def test_selection_failure_does_not_publish_file_mode(self):

@@ -215,6 +215,7 @@ class VmInitOptions:
     direct_split_memory_backing: bool = False
     direct_ram_memory_backing: bool = False
     direct_reflink_memory_restore: bool = False
+    direct_workspace_initial_grant_mb: int = 0
     environment_registry_url: str = ""
     environment_repository: str = ""
     environment_trusted_keys_json: str = ""
@@ -381,6 +382,10 @@ def render_vm_init_script(options: VmInitOptions) -> str:
             split_memory_flags += " --application-memory-root ${UCLOUD_APPLICATION_MEMORY_ROOT}"
         if options.direct_reflink_memory_restore:
             split_memory_flags += " --reflink-memory-restore"
+        if options.direct_split_memory_backing and options.direct_workspace_initial_grant_mb:
+            split_memory_flags += (
+                f" --workspace-initial-grant-mb {options.direct_workspace_initial_grant_mb}"
+            )
         direct_agent_command = (
             f"{agent_bin} serve-direct-node-agent"
             " --job-id ${UCLOUD_JOB_ID}"
@@ -1860,6 +1865,9 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         raise ValueError("direct_reflink_memory_restore must be a boolean")
     if options.direct_reflink_memory_restore and not options.direct_split_memory_backing:
         raise ValueError("reflink memory restore requires split memory backing")
+    grant = options.direct_workspace_initial_grant_mb
+    if isinstance(grant, bool) or not isinstance(grant, int) or (grant and grant < 512):
+        raise ValueError("direct_workspace_initial_grant_mb must be 0 or at least 512")
     if options.role == "sandbox":
         if not re.fullmatch(r"[0-9a-f]{40}", options.direct_runsc_commit):
             raise ValueError(

@@ -1,0 +1,56 @@
+{
+  "version": "0.5.114rc38",
+  "commit": "c9bc2a9de7778199dd4504fb03608e71507738ec",
+  "routing_backend": "postgres",
+  "schema": "ucloud_routing_live_20260824a",
+  "deployed_at": "2026-09-25T21:52:15.140866+00:00",
+  "services": "healthy",
+  "authority_changed": false,
+  "verification": {
+    "smoke": "missing-sandbox wake traversed durable queue and completed with 404",
+    "smoke_seconds": 0.06482215295545757,
+    "health": {
+      "8090": {
+        "status": 200,
+        "version": "0.5.114rc38"
+      },
+      "8091": {
+        "status": 200,
+        "version": "0.5.114rc38"
+      },
+      "8092": {
+        "status": 200,
+        "version": "0.5.114rc38"
+      }
+    },
+    "services": [
+      "active",
+      "active",
+      "active",
+      "active"
+    ],
+    "counts": {
+      "sandboxes": 0,
+      "pending": 0,
+      "queued_commands": 0
+    },
+    "node_package_version": "0.5.114rc38",
+    "linux_tests": 730,
+    "relay_netns_packet_test": "passed",
+    "canonical_placement_512": {
+      "transactions_per_second": 249.0,
+      "p50_ms": 129.6,
+      "p99_ms": 169.7,
+      "overbooking": false,
+      "serialization_retries": 0
+    }
+  },
+  "indexes_created_concurrently": [
+    "exec_sessions_sandbox",
+    "relay_compaction",
+    "relay_outstanding_callers"
+  ],
+  "attribution": "Opus",
+  "native_load_benchmark_repeated": false,
+  "live_workers_at_deployment": 0
+}

@@ -227,3 +227,17 @@ All 577 selected Linux tests passed, including the new race regression. Producti
 health and a queued-wake smoke check passed; the relay delivery pool is active.
 There were no live workers to upgrade; new workers use the rc37 bundle. No native
 load benchmark was repeated. [Deployment receipt](deployment-rc37.json).
+
+## Opus follow-up: rc38
+
+Commit `c9bc2a9` (Opus) deployed rc38 at 21:52:15 UTC. It replaces per-sandbox
+relay nftables tables with one shared table, removes the node-wide memory-journal
+lock and the registry's JSON capacity scan from worker lifecycle paths, wakes the
+placement queue with LISTEN/NOTIFY, and makes the program-request metrics query,
+relay maintenance and exec-session deletes use indexes. All 730 selected Linux
+tests and the root relay packet test passed; the node bundle's native/OS/storage
+closure is byte-identical to rc37. Production health and a queued-wake smoke check
+(404 in 65 ms) passed. The three new indexes were created concurrently on the live
+database. There were no live workers to upgrade; new workers use the rc38 bundle,
+whose first start upgrades the worker registry to schema v8. No native load
+benchmark was repeated. [Deployment receipt](deployment-rc38.json).

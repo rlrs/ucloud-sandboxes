@@ -1,0 +1,1952 @@
+{
+  "report_version": 4,
+  "run_id": "relay-load-e5c6e26daede",
+  "started_at": "2026-09-25T22:48:40.905028+00:00",
+  "configuration": {
+    "gateway_url": "https://app-sandboxes.cloud.sdu.dk",
+    "relay_url": "https://app-sandboxes-relay-v2.cloud.sdu.dk",
+    "image": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+    "sandboxes": 540,
+    "cycles": 3,
+    "startup_mode": "rolling",
+    "resident_mb": 128,
+    "dirty_mb": 16,
+    "files": 64,
+    "file_kib": 64,
+    "payload_kib": 32,
+    "sqlite_transactions": 0,
+    "sqlite_payload_bytes": 4096,
+    "tool_upload_kib": 64,
+    "cpu_ms": 100.0,
+    "model_seconds": 10.0,
+    "model_jitter": 5.0,
+    "parking_mode": "natural",
+    "cpus": 1.0,
+    "memory_mb": 1024,
+    "disk_mb": 4096,
+    "create_concurrency": 32,
+    "fleet_pollers": 24,
+    "warmup_cycles": 1,
+    "deadline_seconds": 900.0,
+    "sandbox_request_timeout_seconds": 180,
+    "continuation_timeout_seconds": 180,
+    "useful_action_p95_seconds": 1,
+    "continuation_p95_seconds": 0.8,
+    "seed": 1,
+    "start_signal_file": null
+  },
+  "cycles": "1620 items, see density540-rc39.json.gz",
+  "completed_scenarios": "540 items, see density540-rc39.json.gz",
+  "errors": [],
+  "cleanup_errors": [],
+  "health": [
+    {
+      "seconds": 0.3736676670087036,
+      "ok": true
+    },
+    {
+      "seconds": 0.03679941699374467,
+      "ok": true
+    },
+    {
+      "seconds": 0.03456545900553465,
+      "ok": true
+    },
+    {
+      "seconds": 0.03293304200633429,
+      "ok": true
+    },
+    {
+      "seconds": 0.032428500009700656,
+      "ok": true
+    },
+    {
+      "seconds": 0.03853566700126976,
+      "ok": true
+    },
+    {
+      "seconds": 0.03453108301619068,
+      "ok": true
+    },
+    {
+      "seconds": 0.03720254200743511,
+      "ok": true
+    },
+    {
+      "seconds": 0.033270000014454126,
+      "ok": true
+    },
+    {
+      "seconds": 0.03486870799679309,
+      "ok": true
+    },
+    {
+      "seconds": 0.03633279199129902,
+      "ok": true
+    },
+    {
+      "seconds": 0.04254754199064337,
+      "ok": true
+    },
+    {
+      "seconds": 0.039490874973125756,
+      "ok": true
+    },
+    {
+      "seconds": 0.04083929202170111,
+      "ok": true
+    },
+    {
+      "seconds": 0.0355410419870168,
+      "ok": true
+    },
+    {
+      "seconds": 0.033528166997712106,
+      "ok": true
+    },
+    {
+      "seconds": 0.03892616700613871,
+      "ok": true
+    },
+    {
+      "seconds": 0.033937707979930565,
+      "ok": true
+    },
+    {
+      "seconds": 0.03413154199370183,
+      "ok": true
+    },
+    {
+      "seconds": 0.03574012502213009,
+      "ok": true
+    },
+    {
+      "seconds": 0.035038833011640236,
+      "ok": true
+    },
+    {
+      "seconds": 0.03463129099691287,
+      "ok": true
+    },
+    {
+      "seconds": 0.036902082996675745,
+      "ok": true
+    },
+    {
+      "seconds": 0.03038358298363164,
+      "ok": true
+    },
+    {
+      "seconds": 0.03390754200518131,
+      "ok": true
+    },
+    {
+      "seconds": 0.03415891600889154,
+      "ok": true
+    },
+    {
+      "seconds": 0.03450195799814537,
+      "ok": true
+    },
+    {
+      "seconds": 0.03666250000242144,
+      "ok": true
+    },
+    {
+      "seconds": 0.03370666698901914,
+      "ok": true
+    },
+    {
+      "seconds": 0.03676612497656606,
+      "ok": true
+    },
+    {
+      "seconds": 0.034087958018062636,
+      "ok": true
+    },
+    {
+      "seconds": 0.03339425000012852,
+      "ok": true
+    },
+    {
+      "seconds": 0.03344687499338761,
+      "ok": true
+    },
+    {
+      "seconds": 0.03262225000071339,
+      "ok": true
+    },
+    {
+      "seconds": 0.032818792009493336,
+      "ok": true
+    },
+    {
+      "seconds": 0.032478292006999254,
+      "ok": true
+    },
+    {
+      "seconds": 0.03841395897325128,
+      "ok": true
+    },
+    {
+      "seconds": 0.03703754098387435,
+      "ok": true
+    },
+    {
+      "seconds": 0.03414258299744688,
+      "ok": true
+    },
+    {
+      "seconds": 0.03583245899062604,
+      "ok": true
+    },
+    {
+      "seconds": 0.03456612501759082,
+      "ok": true
+    },
+    {
+      "seconds": 0.042642542015528306,
+      "ok": true
+    },
+    {
+      "seconds": 0.03553512500366196,
+      "ok": true
+    },
+    {
+      "seconds": 0.034774792002281174,
+      "ok": true
+    },
+    {
+      "seconds": 0.033233791997190565,
+      "ok": true
+    },
+    {
+      "seconds": 0.03330370900221169,
+      "ok": true
+    },
+    {
+      "seconds": 0.04401658399729058,
+      "ok": true
+    },
+    {
+      "seconds": 0.04363008399377577,
+      "ok": true
+    },
+    {
+      "seconds": 0.07273620800697245,
+      "ok": true
+    },
+    {
+      "seconds": 0.04717058301321231,
+      "ok": true
+    },
+    {
+      "seconds": 0.04665158299030736,
+      "ok": true
+    },
+    {
+      "seconds": 0.18701449999934994,
+      "ok": true
+    },
+    {
+      "seconds": 0.22253812497365288,
+      "ok": true
+    },
+    {
+      "seconds": 0.5862189579929691,
+      "ok": true
+    },
+    {
+      "seconds": 0.4395526250009425,
+      "ok": true
+    },
+    {
+      "seconds": 0.5267455830180552,
+      "ok": true
+    },
+    {
+      "seconds": 0.5047272089868784,
+      "ok": true
+    },
+    {
+      "seconds": 0.8857321249961387,
+      "ok": true
+    },
+    {
+      "seconds": 0.4811589579912834,
+      "ok": true
+    },
+    {
+      "seconds": 0.6868019579851534,
+      "ok": true
+    },
+    {
+      "seconds": 0.5080762500001583,
+      "ok": true
+    },
+    {
+      "seconds": 0.3301782919734251,
+      "ok": true
+    },
+    {
+      "seconds": 0.6362811250146478,
+      "ok": true
+    },
+    {
+      "seconds": 0.23567795898998156,
+      "ok": true
+    },
+    {
+      "seconds": 0.6292925000016112,
+      "ok": true
+    },
+    {
+      "seconds": 0.5134666670055594,
+      "ok": true
+    },
+    {
+      "seconds": 0.09672391699859872,
+      "ok": true
+    },
+    {
+      "seconds": 0.15816495899343863,
+      "ok": true
+    },
+    {
+      "seconds": 0.193717749993084,
+      "ok": true
+    },
+    {
+      "seconds": 0.09762229199986905,
+      "ok": true
+    },
+    {
+      "seconds": 0.1585559580125846,
+      "ok": true
+    },
+    {
+      "seconds": 0.21154804099933244,
+      "ok": true
+    },
+    {
+      "seconds": 0.3223056249844376,
+      "ok": true
+    },
+    {
+      "seconds": 0.21332608300144784,
+      "ok": true
+    },
+    {
+      "seconds": 0.25931741698877886,
+      "ok": true
+    },
+    {
+      "seconds": 0.17894250000244938,
+      "ok": true
+    },
+    {
+      "seconds": 0.3071016250178218,
+      "ok": true
+    },
+    {
+      "seconds": 0.0714683749829419,
+      "ok": true
+    },
+    {
+      "seconds": 0.09303087499574758,
+      "ok": true
+    },
+    {
+      "seconds": 0.11798716700286604,
+      "ok": true
+    },
+    {
+      "seconds": 0.14222045801579952,
+      "ok": true
+    },
+    {
+      "seconds": 0.32244512499892153,
+      "ok": true
+    },
+    {
+      "seconds": 0.10599558398826048,
+      "ok": true
+    },
+    {
+      "seconds": 0.041267374996095896,
+      "ok": true
+    },
+    {
+      "seconds": 0.05984979201457463,
+      "ok": true
+    },
+    {
+      "seconds": 0.1469212499796413,
+      "ok": true
+    },
+    {
+      "seconds": 0.03673491699737497,
+      "ok": true
+    },
+    {
+      "seconds": 0.043669500009855255,
+      "ok": true
+    },
+    {
+      "seconds": 0.03260470801615156,
+      "ok": true
+    },
+    {
+      "seconds": 0.07123966701328754,
+      "ok": true
+    },
+    {
+      "seconds": 0.033821582997916266,
+      "ok": true
+    },
+    {
+      "seconds": 0.0510265420016367,
+      "ok": true
+    },
+    {
+      "seconds": 0.1485438750241883,
+      "ok": true
+    },
+    {
+      "seconds": 0.03864916699239984,
+      "ok": true
+    },
+    {
+      "seconds": 0.053130250016693026,
+      "ok": true
+    },
+    {
+      "seconds": 0.05109666599310003,
+      "ok": true
+    },
+    {
+      "seconds": 0.11296966599184088,
+      "ok": true
+    },
+    {
+      "seconds": 0.18373362498823553,
+      "ok": true
+    },
+    {
+      "seconds": 0.2194111669959966,
+      "ok": true
+    },
+    {
+      "seconds": 0.2376651660015341,
+      "ok": true
+    },
+    {
+      "seconds": 0.034863749984651804,
+      "ok": true
+    },
+    {
+      "seconds": 0.0492859999940265,
+      "ok": true
+    },
+    {
+      "seconds": 0.04069229098968208,
+      "ok": true
+    },
+    {
+      "seconds": 0.03939004099811427,
+      "ok": true
+    },
+    {
+      "seconds": 0.10274729199591093,
+      "ok": true
+    },
+    {
+      "seconds": 0.1757143750146497,
+      "ok": true
+    },
+    {
+      "seconds": 0.04357049998361617,
+      "ok": true
+    },
+    {
+      "seconds": 0.035137917002430186,
+      "ok": true
+    },
+    {
+      "seconds": 0.04239512499771081,
+      "ok": true
+    },
+    {
+      "seconds": 0.03966616597608663,
+      "ok": true
+    },
+    {
+      "seconds": 0.03519279198371805,
+      "ok": true
+    },
+    {
+      "seconds": 0.06705729101668112,
+      "ok": true
+    },
+    {
+      "seconds": 0.044247709010960534,
+      "ok": true
+    },
+    {
+      "seconds": 0.07303933298680931,
+      "ok": true
+    },
+    {
+      "seconds": 0.11910220899153501,
+      "ok": true
+    },
+    {
+      "seconds": 0.04259129098500125,
+      "ok": true
+    },
+    {
+      "seconds": 0.04723870800808072,
+      "ok": true
+    },
+    {
+      "seconds": 0.043773791985586286,
+      "ok": true
+    },
+    {
+      "seconds": 0.05481741699622944,
+      "ok": true
+    },
+    {
+      "seconds": 0.034447207988705486,
+      "ok": true
+    },
+    {
+      "seconds": 0.05795162499998696,
+      "ok": true
+    },
+    {
+      "seconds": 0.05081854198942892,
+      "ok": true
+    },
+    {
+      "seconds": 0.04100187501171604,
+      "ok": true
+    },
+    {
+      "seconds": 0.04847329200129025,
+      "ok": true
+    },
+    {
+      "seconds": 0.12962537500425242,
+      "ok": true
+    },
+    {
+      "seconds": 0.05348075000802055,
+      "ok": true
+    },
+    {
+      "seconds": 0.03655691698077135,
+      "ok": true
+    },
+    {
+      "seconds": 0.05873233298189007,
+      "ok": true
+    },
+    {
+      "seconds": 0.05078045799746178,
+      "ok": true
+    }
+  ],
+  "driver_event_loop_lag_seconds": "2518 items, see density540-rc39.json.gz",
+  "fleet_polls": "5174 items, see density540-rc39.json.gz",
+  "placements": {
+    "relay-load-e5c6e26daede-0017": "12403340",
+    "relay-load-e5c6e26daede-0006": "12403340",
+    "relay-load-e5c6e26daede-0011": "12403340",
+    "relay-load-e5c6e26daede-0016": "12403340",
+    "relay-load-e5c6e26daede-0025": "12403340",
+    "relay-load-e5c6e26daede-0000": "12403340",
+    "relay-load-e5c6e26daede-0002": "12403340",
+    "relay-load-e5c6e26daede-0004": "12403340",
+    "relay-load-e5c6e26daede-0008": "12403340",
+    "relay-load-e5c6e26daede-0012": "12403340",
+    "relay-load-e5c6e26daede-0013": "12403340",
+    "relay-load-e5c6e26daede-0018": "12403340",
+    "relay-load-e5c6e26daede-0020": "12403340",
+    "relay-load-e5c6e26daede-0021": "12403340",
+    "relay-load-e5c6e26daede-0023": "12403340",
+    "relay-load-e5c6e26daede-0027": "12403340",
+    "relay-load-e5c6e26daede-0028": "12403340",
+    "relay-load-e5c6e26daede-0030": "12403340",
+    "relay-load-e5c6e26daede-0005": "12403340",
+    "relay-load-e5c6e26daede-0007": "12403340",
+    "relay-load-e5c6e26daede-0014": "12403340",
+    "relay-load-e5c6e26daede-0022": "12403340",
+    "relay-load-e5c6e26daede-0029": "12403340",
+    "relay-load-e5c6e26daede-0001": "12403340",
+    "relay-load-e5c6e26daede-0010": "12403340",
+    "relay-load-e5c6e26daede-0019": "12403340",
+    "relay-load-e5c6e26daede-0024": "12403340",
+    "relay-load-e5c6e26daede-0031": "12403340",
+    "relay-load-e5c6e26daede-0003": "12403340",
+    "relay-load-e5c6e26daede-0009": "12403340",
+    "relay-load-e5c6e26daede-0015": "12403340",
+    "relay-load-e5c6e26daede-0026": "12403340",
+    "relay-load-e5c6e26daede-0032": "12403341",
+    "relay-load-e5c6e26daede-0033": "12403341",
+    "relay-load-e5c6e26daede-0034": "12403341",
+    "relay-load-e5c6e26daede-0035": "12403341",
+    "relay-load-e5c6e26daede-0036": "12403341",
+    "relay-load-e5c6e26daede-0037": "12403341",
+    "relay-load-e5c6e26daede-0038": "12403341",
+    "relay-load-e5c6e26daede-0039": "12403341",
+    "relay-load-e5c6e26daede-0040": "12403341",
+    "relay-load-e5c6e26daede-0041": "12403341",
+    "relay-load-e5c6e26daede-0044": "12403341",
+    "relay-load-e5c6e26daede-0043": "12403341",
+    "relay-load-e5c6e26daede-0042": "12403341",
+    "relay-load-e5c6e26daede-0045": "12403341",
+    "relay-load-e5c6e26daede-0046": "12403341",
+    "relay-load-e5c6e26daede-0047": "12403341",
+    "relay-load-e5c6e26daede-0048": "12403341",
+    "relay-load-e5c6e26daede-0049": "12403341",
+    "relay-load-e5c6e26daede-0050": "12403341",
+    "relay-load-e5c6e26daede-0051": "12403341",
+    "relay-load-e5c6e26daede-0052": "12403341",
+    "relay-load-e5c6e26daede-0053": "12403341",
+    "relay-load-e5c6e26daede-0054": "12403341",
+    "relay-load-e5c6e26daede-0055": "12403341",
+    "relay-load-e5c6e26daede-0056": "12403341",
+    "relay-load-e5c6e26daede-0057": "12403341",
+    "relay-load-e5c6e26daede-0058": "12403341",
+    "relay-load-e5c6e26daede-0059": "12403341",
+    "relay-load-e5c6e26daede-0060": "12403341",
+    "relay-load-e5c6e26daede-0061": "12403341",
+    "relay-load-e5c6e26daede-0062": "12403341",
+    "relay-load-e5c6e26daede-0063": "12403341",
+    "relay-load-e5c6e26daede-0064": "12403340",
+    "relay-load-e5c6e26daede-0067": "12403340",
+    "relay-load-e5c6e26daede-0068": "12403340",
+    "relay-load-e5c6e26daede-0069": "12403340",
+    "relay-load-e5c6e26daede-0073": "12403341",
+    "relay-load-e5c6e26daede-0066": "12403341",
+    "relay-load-e5c6e26daede-0075": "12403340",
+    "relay-load-e5c6e26daede-0078": "12403340",
+    "relay-load-e5c6e26daede-0079": "12403340",
+    "relay-load-e5c6e26daede-0077": "12403341",
+    "relay-load-e5c6e26daede-0080": "12403341",
+    "relay-load-e5c6e26daede-0072": "12403341",
+    "relay-load-e5c6e26daede-0089": "12403340",
+    "relay-load-e5c6e26daede-0065": "12403341",
+    "relay-load-e5c6e26daede-0070": "12403340",
+    "relay-load-e5c6e26daede-0071": "12403341",
+    "relay-load-e5c6e26daede-0076": "12403341",
+    "relay-load-e5c6e26daede-0081": "12403340",
+    "relay-load-e5c6e26daede-0084": "12403340",
+    "relay-load-e5c6e26daede-0085": "12403341",
+    "relay-load-e5c6e26daede-0086": "12403341",
+    "relay-load-e5c6e26daede-0087": "12403341",
+    "relay-load-e5c6e26daede-0088": "12403341",
+    "relay-load-e5c6e26daede-0091": "12403340",
+    "relay-load-e5c6e26daede-0092": "12403341",
+    "relay-load-e5c6e26daede-0093": "12403341",
+    "relay-load-e5c6e26daede-0094": "12403341",
+    "relay-load-e5c6e26daede-0097": "12403341",
+    "relay-load-e5c6e26daede-0098": "12403340",
+    "relay-load-e5c6e26daede-0090": "12403340",
+    "relay-load-e5c6e26daede-0096": "12403340",
+    "relay-load-e5c6e26daede-0074": "12403340",
+    "relay-load-e5c6e26daede-0083": "12403340",
+    "relay-load-e5c6e26daede-0095": "12403340",
+    "relay-load-e5c6e26daede-0100": "12403340",
+    "relay-load-e5c6e26daede-0102": "12403340",
+    "relay-load-e5c6e26daede-0101": "12403341",
+    "relay-load-e5c6e26daede-0082": "12403341",
+    "relay-load-e5c6e26daede-0099": "12403341",
+    "relay-load-e5c6e26daede-0103": "12403341",
+    "relay-load-e5c6e26daede-0104": "12403340",
+    "relay-load-e5c6e26daede-0106": "12403340",
+    "relay-load-e5c6e26daede-0109": "12403340",
+    "relay-load-e5c6e26daede-0112": "12403340",
+    "relay-load-e5c6e26daede-0113": "12403340",
+    "relay-load-e5c6e26daede-0114": "12403341",
+    "relay-load-e5c6e26daede-0117": "12403341",
+    "relay-load-e5c6e26daede-0119": "12403341",
+    "relay-load-e5c6e26daede-0121": "12403341",
+    "relay-load-e5c6e26daede-0122": "12403340",
+    "relay-load-e5c6e26daede-0124": "12403341",
+    "relay-load-e5c6e26daede-0125": "12403341",
+    "relay-load-e5c6e26daede-0128": "12403340",
+    "relay-load-e5c6e26daede-0132": "12403340",
+    "relay-load-e5c6e26daede-0108": "12403341",
+    "relay-load-e5c6e26daede-0116": "12403341",
+    "relay-load-e5c6e26daede-0130": "12403341",
+    "relay-load-e5c6e26daede-0133": "12403341",
+    "relay-load-e5c6e26daede-0107": "12403340",
+    "relay-load-e5c6e26daede-0127": "12403341",
+    "relay-load-e5c6e26daede-0123": "12403340",
+    "relay-load-e5c6e26daede-0135": "12403341",
+    "relay-load-e5c6e26daede-0105": "12403341",
+    "relay-load-e5c6e26daede-0110": "12403341",
+    "relay-load-e5c6e26daede-0111": "12403341",
+    "relay-load-e5c6e26daede-0118": "12403340",
+    "relay-load-e5c6e26daede-0120": "12403340",
+    "relay-load-e5c6e26daede-0129": "12403341",
+    "relay-load-e5c6e26daede-0131": "12403340",
+    "relay-load-e5c6e26daede-0134": "12403340",
+    "relay-load-e5c6e26daede-0137": "12403341",
+    "relay-load-e5c6e26daede-0139": "12403341",
+    "relay-load-e5c6e26daede-0140": "12403340",
+    "relay-load-e5c6e26daede-0141": "12403341",
+    "relay-load-e5c6e26daede-0143": "12403341",
+    "relay-load-e5c6e26daede-0145": "12403341",
+    "relay-load-e5c6e26daede-0147": "12403341",
+    "relay-load-e5c6e26daede-0115": "12403340",
+    "relay-load-e5c6e26daede-0126": "12403340",
+    "relay-load-e5c6e26daede-0146": "12403340",
+    "relay-load-e5c6e26daede-0148": "12403340",
+    "relay-load-e5c6e26daede-0136": "12403340",
+    "relay-load-e5c6e26daede-0138": "12403340",
+    "relay-load-e5c6e26daede-0142": "12403340",
+    "relay-load-e5c6e26daede-0144": "12403340",
+    "relay-load-e5c6e26daede-0149": "12403341",
+    "relay-load-e5c6e26daede-0153": "12403341",
+    "relay-load-e5c6e26daede-0156": "12403340",
+    "relay-load-e5c6e26daede-0157": "12403341",
+    "relay-load-e5c6e26daede-0159": "12403340",
+    "relay-load-e5c6e26daede-0160": "12403341",
+    "relay-load-e5c6e26daede-0164": "12403341",
+    "relay-load-e5c6e26daede-0166": "12403341",
+    "relay-load-e5c6e26daede-0151": "12403341",
+    "relay-load-e5c6e26daede-0152": "12403340",
+    "relay-load-e5c6e26daede-0170": "12403340",
+    "relay-load-e5c6e26daede-0171": "12403341",
+    "relay-load-e5c6e26daede-0154": "12403341",
+    "relay-load-e5c6e26daede-0150": "12403340",
+    "relay-load-e5c6e26daede-0161": "12403340",
+    "relay-load-e5c6e26daede-0165": "12403340",
+    "relay-load-e5c6e26daede-0173": "12403340",
+    "relay-load-e5c6e26daede-0177": "12403340",
+    "relay-load-e5c6e26daede-0182": "12403341",
+    "relay-load-e5c6e26daede-0162": "12403341",
+    "relay-load-e5c6e26daede-0174": "12403341",
+    "relay-load-e5c6e26daede-0158": "12403341",
+    "relay-load-e5c6e26daede-0169": "12403341",
+    "relay-load-e5c6e26daede-0176": "12403341",
+    "relay-load-e5c6e26daede-0179": "12403341",
+    "relay-load-e5c6e26daede-0190": "12403341",
+    "relay-load-e5c6e26daede-0155": "12403340",
+    "relay-load-e5c6e26daede-0192": "12403340",
+    "relay-load-e5c6e26daede-0168": "12403341",
+    "relay-load-e5c6e26daede-0181": "12403341",
+    "relay-load-e5c6e26daede-0197": "12403341",
+    "relay-load-e5c6e26daede-0167": "12403340",
+    "relay-load-e5c6e26daede-0172": "12403340",
+    "relay-load-e5c6e26daede-0175": "12403340",
+    "relay-load-e5c6e26daede-0178": "12403340",
+    "relay-load-e5c6e26daede-0180": "12403340",
+    "relay-load-e5c6e26daede-0186": "12403341",
+    "relay-load-e5c6e26daede-0193": "12403340",
+    "relay-load-e5c6e26daede-0201": "12403340",
+    "relay-load-e5c6e26daede-0202": "12403341",
+    "relay-load-e5c6e26daede-0183": "12403340",
+    "relay-load-e5c6e26daede-0199": "12403341",
+    "relay-load-e5c6e26daede-0195": "12403341",
+    "relay-load-e5c6e26daede-0185": "12403341",
+    "relay-load-e5c6e26daede-0191": "12403341",
+    "relay-load-e5c6e26daede-0194": "12403340",
+    "relay-load-e5c6e26daede-0196": "12403341",
+    "relay-load-e5c6e26daede-0208": "12403341",
+    "relay-load-e5c6e26daede-0210": "12403341",
+    "relay-load-e5c6e26daede-0207": "12403341",
+    "relay-load-e5c6e26daede-0163": "12403340",
+    "relay-load-e5c6e26daede-0188": "12403341",
+    "relay-load-e5c6e26daede-0206": "12403340",
+    "relay-load-e5c6e26daede-0214": "12403340",
+    "relay-load-e5c6e26daede-0213": "12403341",
+    "relay-load-e5c6e26daede-0204": "12403341",
+    "relay-load-e5c6e26daede-0205": "12403340",
+    "relay-load-e5c6e26daede-0211": "12403341",
+    "relay-load-e5c6e26daede-0215": "12403340",
+    "relay-load-e5c6e26daede-0218": "12403341",
+    "relay-load-e5c6e26daede-0220": "12403341",
+    "relay-load-e5c6e26daede-0221": "12403341",
+    "relay-load-e5c6e26daede-0224": "12403340",
+    "relay-load-e5c6e26daede-0225": "12403340",
+    "relay-load-e5c6e26daede-0216": "12403341",
+    "relay-load-e5c6e26daede-0226": "12403341",
+    "relay-load-e5c6e26daede-0233": "12403341",
+    "relay-load-e5c6e26daede-0228": "12403341",
+    "relay-load-e5c6e26daede-0184": "12403340",
+    "relay-load-e5c6e26daede-0200": "12403340",
+    "relay-load-e5c6e26daede-0203": "12403340",
+    "relay-load-e5c6e26daede-0209": "12403340",
+    "relay-load-e5c6e26daede-0217": "12403340",
+    "relay-load-e5c6e26daede-0219": "12403340",
+    "relay-load-e5c6e26daede-0223": "12403341",
+    "relay-load-e5c6e26daede-0232": "12403340",
+    "relay-load-e5c6e26daede-0234": "12403341",
+    "relay-load-e5c6e26daede-0235": "12403340",
+    "relay-load-e5c6e26daede-0187": "12403340",
+    "relay-load-e5c6e26daede-0241": "12403341",
+    "relay-load-e5c6e26daede-0237": "12403341",
+    "relay-load-e5c6e26daede-0189": "12403340",
+    "relay-load-e5c6e26daede-0212": "12403340",
+    "relay-load-e5c6e26daede-0230": "12403341",
+    "relay-load-e5c6e26daede-0231": "12403340",
+    "relay-load-e5c6e26daede-0239": "12403340",
+    "relay-load-e5c6e26daede-0245": "12403340",
+    "relay-load-e5c6e26daede-0249": "12403340",
+    "relay-load-e5c6e26daede-0240": "12403341",
+    "relay-load-e5c6e26daede-0236": "12403341",
+    "relay-load-e5c6e26daede-0222": "12403340",
+    "relay-load-e5c6e26daede-0229": "12403340",
+    "relay-load-e5c6e26daede-0238": "12403340",
+    "relay-load-e5c6e26daede-0257": "12403340",
+    "relay-load-e5c6e26daede-0259": "12403340",
+    "relay-load-e5c6e26daede-0246": "12403341",
+    "relay-load-e5c6e26daede-0255": "12403341",
+    "relay-load-e5c6e26daede-0262": "12403341",
+    "relay-load-e5c6e26daede-0256": "12403341",
+    "relay-load-e5c6e26daede-0260": "12403341",
+    "relay-load-e5c6e26daede-0253": "12403340",
+    "relay-load-e5c6e26daede-0252": "12403340",
+    "relay-load-e5c6e26daede-0244": "12403341",
+    "relay-load-e5c6e26daede-0247": "12403340",
+    "relay-load-e5c6e26daede-0266": "12403340",
+    "relay-load-e5c6e26daede-0243": "12403340",
+    "relay-load-e5c6e26daede-0264": "12403341",
+    "relay-load-e5c6e26daede-0271": "12403340",
+    "relay-load-e5c6e26daede-0198": "12403340",
+    "relay-load-e5c6e26daede-0269": "12403340",
+    "relay-load-e5c6e26daede-0242": "12403340",
+    "relay-load-e5c6e26daede-0268": "12403341",
+    "relay-load-e5c6e26daede-0272": "12403341",
+    "relay-load-e5c6e26daede-0273": "12403340",
+    "relay-load-e5c6e26daede-0276": "12403340",
+    "relay-load-e5c6e26daede-0251": "12403341",
+    "relay-load-e5c6e26daede-0258": "12403341",
+    "relay-load-e5c6e26daede-0279": "12403341",
+    "relay-load-e5c6e26daede-0265": "12403340",
+    "relay-load-e5c6e26daede-0280": "12403341",
+    "relay-load-e5c6e26daede-0248": "12403341",
+    "relay-load-e5c6e26daede-0284": "12403340",
+    "relay-load-e5c6e26daede-0227": "12403340",
+    "relay-load-e5c6e26daede-0278": "12403340",
+    "relay-load-e5c6e26daede-0274": "12403341",
+    "relay-load-e5c6e26daede-0277": "12403341",
+    "relay-load-e5c6e26daede-0267": "12403341",
+    "relay-load-e5c6e26daede-0263": "12403340",
+    "relay-load-e5c6e26daede-0281": "12403340",
+    "relay-load-e5c6e26daede-0286": "12403340",
+    "relay-load-e5c6e26daede-0288": "12403340",
+    "relay-load-e5c6e26daede-0270": "12403341",
+    "relay-load-e5c6e26daede-0275": "12403340",
+    "relay-load-e5c6e26daede-0283": "12403340",
+    "relay-load-e5c6e26daede-0282": "12403341",
+    "relay-load-e5c6e26daede-0290": "12403340",
+    "relay-load-e5c6e26daede-0285": "12403341",
+    "relay-load-e5c6e26daede-0261": "12403340",
+    "relay-load-e5c6e26daede-0289": "12403341",
+    "relay-load-e5c6e26daede-0294": "12403339",
+    "relay-load-e5c6e26daede-0295": "12403339",
+    "relay-load-e5c6e26daede-0296": "12403339",
+    "relay-load-e5c6e26daede-0297": "12403339",
+    "relay-load-e5c6e26daede-0299": "12403339",
+    "relay-load-e5c6e26daede-0298": "12403339",
+    "relay-load-e5c6e26daede-0300": "12403339",
+    "relay-load-e5c6e26daede-0287": "12403341",
+    "relay-load-e5c6e26daede-0301": "12403339",
+    "relay-load-e5c6e26daede-0302": "12403339",
+    "relay-load-e5c6e26daede-0254": "12403340",
+    "relay-load-e5c6e26daede-0293": "12403340",
+    "relay-load-e5c6e26daede-0303": "12403339",
+    "relay-load-e5c6e26daede-0304": "12403339",
+    "relay-load-e5c6e26daede-0250": "12403341",
+    "relay-load-e5c6e26daede-0291": "12403341",
+    "relay-load-e5c6e26daede-0292": "12403341",
+    "relay-load-e5c6e26daede-0305": "12403339",
+    "relay-load-e5c6e26daede-0306": "12403339",
+    "relay-load-e5c6e26daede-0307": "12403339",
+    "relay-load-e5c6e26daede-0308": "12403339",
+    "relay-load-e5c6e26daede-0309": "12403339",
+    "relay-load-e5c6e26daede-0310": "12403339",
+    "relay-load-e5c6e26daede-0311": "12403339",
+    "relay-load-e5c6e26daede-0312": "12403339",
+    "relay-load-e5c6e26daede-0313": "12403339",
+    "relay-load-e5c6e26daede-0314": "12403339",
+    "relay-load-e5c6e26daede-0315": "12403339",
+    "relay-load-e5c6e26daede-0316": "12403339",
+    "relay-load-e5c6e26daede-0317": "12403339",
+    "relay-load-e5c6e26daede-0318": "12403339",
+    "relay-load-e5c6e26daede-0319": "12403339",
+    "relay-load-e5c6e26daede-0320": "12403339",
+    "relay-load-e5c6e26daede-0321": "12403339",
+    "relay-load-e5c6e26daede-0322": "12403339",
+    "relay-load-e5c6e26daede-0324": "12403339",
+    "relay-load-e5c6e26daede-0323": "12403339",
+    "relay-load-e5c6e26daede-0325": "12403339",
+    "relay-load-e5c6e26daede-0326": "12403339",
+    "relay-load-e5c6e26daede-0327": "12403339",
+    "relay-load-e5c6e26daede-0328": "12403339",
+    "relay-load-e5c6e26daede-0329": "12403339",
+    "relay-load-e5c6e26daede-0330": "12403339",
+    "relay-load-e5c6e26daede-0331": "12403339",
+    "relay-load-e5c6e26daede-0332": "12403339",
+    "relay-load-e5c6e26daede-0333": "12403339",
+    "relay-load-e5c6e26daede-0334": "12403339",
+    "relay-load-e5c6e26daede-0335": "12403339",
+    "relay-load-e5c6e26daede-0336": "12403339",
+    "relay-load-e5c6e26daede-0337": "12403339",
+    "relay-load-e5c6e26daede-0338": "12403339",
+    "relay-load-e5c6e26daede-0339": "12403339",
+    "relay-load-e5c6e26daede-0340": "12403339",
+    "relay-load-e5c6e26daede-0341": "12403339",
+    "relay-load-e5c6e26daede-0342": "12403339",
+    "relay-load-e5c6e26daede-0343": "12403339",
+    "relay-load-e5c6e26daede-0344": "12403339",
+    "relay-load-e5c6e26daede-0345": "12403339",
+    "relay-load-e5c6e26daede-0346": "12403339",
+    "relay-load-e5c6e26daede-0347": "12403339",
+    "relay-load-e5c6e26daede-0348": "12403339",
+    "relay-load-e5c6e26daede-0349": "12403339",
+    "relay-load-e5c6e26daede-0350": "12403339",
+    "relay-load-e5c6e26daede-0351": "12403339",
+    "relay-load-e5c6e26daede-0352": "12403339",
+    "relay-load-e5c6e26daede-0353": "12403339",
+    "relay-load-e5c6e26daede-0354": "12403339",
+    "relay-load-e5c6e26daede-0355": "12403339",
+    "relay-load-e5c6e26daede-0356": "12403339",
+    "relay-load-e5c6e26daede-0357": "12403339",
+    "relay-load-e5c6e26daede-0358": "12403339",
+    "relay-load-e5c6e26daede-0359": "12403339",
+    "relay-load-e5c6e26daede-0360": "12403339",
+    "relay-load-e5c6e26daede-0361": "12403339",
+    "relay-load-e5c6e26daede-0362": "12403339",
+    "relay-load-e5c6e26daede-0363": "12403339",
+    "relay-load-e5c6e26daede-0364": "12403339",
+    "relay-load-e5c6e26daede-0368": "12403339",
+    "relay-load-e5c6e26daede-0365": "12403339",
+    "relay-load-e5c6e26daede-0366": "12403339",
+    "relay-load-e5c6e26daede-0367": "12403339",
+    "relay-load-e5c6e26daede-0369": "12403339",
+    "relay-load-e5c6e26daede-0370": "12403339",
+    "relay-load-e5c6e26daede-0371": "12403339",
+    "relay-load-e5c6e26daede-0372": "12403339",
+    "relay-load-e5c6e26daede-0373": "12403339",
+    "relay-load-e5c6e26daede-0374": "12403339",
+    "relay-load-e5c6e26daede-0375": "12403339",
+    "relay-load-e5c6e26daede-0376": "12403339",
+    "relay-load-e5c6e26daede-0377": "12403339",
+    "relay-load-e5c6e26daede-0378": "12403339",
+    "relay-load-e5c6e26daede-0380": "12403339",
+    "relay-load-e5c6e26daede-0381": "12403339",
+    "relay-load-e5c6e26daede-0379": "12403339",
+    "relay-load-e5c6e26daede-0382": "12403339",
+    "relay-load-e5c6e26daede-0383": "12403339",
+    "relay-load-e5c6e26daede-0384": "12403339",
+    "relay-load-e5c6e26daede-0385": "12403339",
+    "relay-load-e5c6e26daede-0386": "12403339",
+    "relay-load-e5c6e26daede-0387": "12403339",
+    "relay-load-e5c6e26daede-0388": "12403339",
+    "relay-load-e5c6e26daede-0389": "12403339",
+    "relay-load-e5c6e26daede-0390": "12403339",
+    "relay-load-e5c6e26daede-0391": "12403339",
+    "relay-load-e5c6e26daede-0392": "12403339",
+    "relay-load-e5c6e26daede-0393": "12403339",
+    "relay-load-e5c6e26daede-0394": "12403339",
+    "relay-load-e5c6e26daede-0395": "12403339",
+    "relay-load-e5c6e26daede-0396": "12403339",
+    "relay-load-e5c6e26daede-0397": "12403339",
+    "relay-load-e5c6e26daede-0398": "12403339",
+    "relay-load-e5c6e26daede-0399": "12403339",
+    "relay-load-e5c6e26daede-0400": "12403339",
+    "relay-load-e5c6e26daede-0401": "12403339",
+    "relay-load-e5c6e26daede-0402": "12403339",
+    "relay-load-e5c6e26daede-0403": "12403339",
+    "relay-load-e5c6e26daede-0404": "12403339",
+    "relay-load-e5c6e26daede-0406": "12403339",
+    "relay-load-e5c6e26daede-0405": "12403339",
+    "relay-load-e5c6e26daede-0407": "12403339",
+    "relay-load-e5c6e26daede-0410": "12403339",
+    "relay-load-e5c6e26daede-0408": "12403339",
+    "relay-load-e5c6e26daede-0409": "12403339",
+    "relay-load-e5c6e26daede-0411": "12403339",
+    "relay-load-e5c6e26daede-0412": "12403339",
+    "relay-load-e5c6e26daede-0413": "12403339",
+    "relay-load-e5c6e26daede-0414": "12403339",
+    "relay-load-e5c6e26daede-0415": "12403339",
+    "relay-load-e5c6e26daede-0416": "12403339",
+    "relay-load-e5c6e26daede-0418": "12403339",
+    "relay-load-e5c6e26daede-0417": "12403339",
+    "relay-load-e5c6e26daede-0419": "12403339",
+    "relay-load-e5c6e26daede-0420": "12403339",
+    "relay-load-e5c6e26daede-0421": "12403339",
+    "relay-load-e5c6e26daede-0422": "12403339",
+    "relay-load-e5c6e26daede-0423": "12403339",
+    "relay-load-e5c6e26daede-0424": "12403339",
+    "relay-load-e5c6e26daede-0425": "12403339",
+    "relay-load-e5c6e26daede-0426": "12403339",
+    "relay-load-e5c6e26daede-0427": "12403339",
+    "relay-load-e5c6e26daede-0428": "12403339",
+    "relay-load-e5c6e26daede-0429": "12403339",
+    "relay-load-e5c6e26daede-0430": "12403339",
+    "relay-load-e5c6e26daede-0431": "12403339",
+    "relay-load-e5c6e26daede-0432": "12403339",
+    "relay-load-e5c6e26daede-0433": "12403339",
+    "relay-load-e5c6e26daede-0434": "12403339",
+    "relay-load-e5c6e26daede-0435": "12403339",
+    "relay-load-e5c6e26daede-0436": "12403339",
+    "relay-load-e5c6e26daede-0438": "12403339",
+    "relay-load-e5c6e26daede-0439": "12403339",
+    "relay-load-e5c6e26daede-0437": "12403339",
+    "relay-load-e5c6e26daede-0441": "12403340",
+    "relay-load-e5c6e26daede-0442": "12403341",
+    "relay-load-e5c6e26daede-0440": "12403339",
+    "relay-load-e5c6e26daede-0443": "12403339",
+    "relay-load-e5c6e26daede-0445": "12403340",
+    "relay-load-e5c6e26daede-0444": "12403341",
+    "relay-load-e5c6e26daede-0446": "12403340",
+    "relay-load-e5c6e26daede-0447": "12403339",
+    "relay-load-e5c6e26daede-0448": "12403341",
+    "relay-load-e5c6e26daede-0449": "12403339",
+    "relay-load-e5c6e26daede-0450": "12403340",
+    "relay-load-e5c6e26daede-0451": "12403341",
+    "relay-load-e5c6e26daede-0452": "12403339",
+    "relay-load-e5c6e26daede-0453": "12403340",
+    "relay-load-e5c6e26daede-0454": "12403341",
+    "relay-load-e5c6e26daede-0455": "12403339",
+    "relay-load-e5c6e26daede-0456": "12403340",
+    "relay-load-e5c6e26daede-0457": "12403341",
+    "relay-load-e5c6e26daede-0458": "12403339",
+    "relay-load-e5c6e26daede-0459": "12403340",
+    "relay-load-e5c6e26daede-0462": "12403341",
+    "relay-load-e5c6e26daede-0460": "12403341",
+    "relay-load-e5c6e26daede-0461": "12403340",
+    "relay-load-e5c6e26daede-0463": "12403339",
+    "relay-load-e5c6e26daede-0464": "12403339",
+    "relay-load-e5c6e26daede-0465": "12403340",
+    "relay-load-e5c6e26daede-0466": "12403341",
+    "relay-load-e5c6e26daede-0467": "12403339",
+    "relay-load-e5c6e26daede-0468": "12403340",
+    "relay-load-e5c6e26daede-0469": "12403341",
+    "relay-load-e5c6e26daede-0470": "12403339",
+    "relay-load-e5c6e26daede-0471": "12403340",
+    "relay-load-e5c6e26daede-0472": "12403341",
+    "relay-load-e5c6e26daede-0473": "12403339",
+    "relay-load-e5c6e26daede-0474": "12403340",
+    "relay-load-e5c6e26daede-0475": "12403341",
+    "relay-load-e5c6e26daede-0476": "12403340",
+    "relay-load-e5c6e26daede-0477": "12403339",
+    "relay-load-e5c6e26daede-0478": "12403339",
+    "relay-load-e5c6e26daede-0479": "12403341",
+    "relay-load-e5c6e26daede-0480": "12403340",
+    "relay-load-e5c6e26daede-0481": "12403341",
+    "relay-load-e5c6e26daede-0482": "12403339",
+    "relay-load-e5c6e26daede-0483": "12403340",
+    "relay-load-e5c6e26daede-0484": "12403339",
+    "relay-load-e5c6e26daede-0485": "12403341",
+    "relay-load-e5c6e26daede-0486": "12403340",
+    "relay-load-e5c6e26daede-0487": "12403339",
+    "relay-load-e5c6e26daede-0489": "12403341",
+    "relay-load-e5c6e26daede-0488": "12403341",
+    "relay-load-e5c6e26daede-0490": "12403339",
+    "relay-load-e5c6e26daede-0491": "12403340",
+    "relay-load-e5c6e26daede-0492": "12403340",
+    "relay-load-e5c6e26daede-0493": "12403341",
+    "relay-load-e5c6e26daede-0494": "12403339",
+    "relay-load-e5c6e26daede-0495": "12403340",
+    "relay-load-e5c6e26daede-0496": "12403341",
+    "relay-load-e5c6e26daede-0497": "12403341",
+    "relay-load-e5c6e26daede-0498": "12403339",
+    "relay-load-e5c6e26daede-0499": "12403340",
+    "relay-load-e5c6e26daede-0500": "12403340",
+    "relay-load-e5c6e26daede-0501": "12403339",
+    "relay-load-e5c6e26daede-0502": "12403341",
+    "relay-load-e5c6e26daede-0503": "12403339",
+    "relay-load-e5c6e26daede-0504": "12403341",
+    "relay-load-e5c6e26daede-0505": "12403340",
+    "relay-load-e5c6e26daede-0506": "12403340",
+    "relay-load-e5c6e26daede-0507": "12403339",
+    "relay-load-e5c6e26daede-0508": "12403341",
+    "relay-load-e5c6e26daede-0509": "12403339",
+    "relay-load-e5c6e26daede-0510": "12403341",
+    "relay-load-e5c6e26daede-0511": "12403341",
+    "relay-load-e5c6e26daede-0512": "12403340",
+    "relay-load-e5c6e26daede-0513": "12403339",
+    "relay-load-e5c6e26daede-0514": "12403341",
+    "relay-load-e5c6e26daede-0515": "12403339",
+    "relay-load-e5c6e26daede-0516": "12403340",
+    "relay-load-e5c6e26daede-0517": "12403340",
+    "relay-load-e5c6e26daede-0518": "12403339",
+    "relay-load-e5c6e26daede-0520": "12403340",
+    "relay-load-e5c6e26daede-0519": "12403341",
+    "relay-load-e5c6e26daede-0521": "12403339",
+    "relay-load-e5c6e26daede-0522": "12403341",
+    "relay-load-e5c6e26daede-0523": "12403340",
+    "relay-load-e5c6e26daede-0524": "12403339",
+    "relay-load-e5c6e26daede-0525": "12403341",
+    "relay-load-e5c6e26daede-0526": "12403340",
+    "relay-load-e5c6e26daede-0527": "12403339",
+    "relay-load-e5c6e26daede-0528": "12403341",
+    "relay-load-e5c6e26daede-0529": "12403340",
+    "relay-load-e5c6e26daede-0531": "12403341",
+    "relay-load-e5c6e26daede-0532": "12403341",
+    "relay-load-e5c6e26daede-0530": "12403340",
+    "relay-load-e5c6e26daede-0533": "12403340",
+    "relay-load-e5c6e26daede-0534": "12403341",
+    "relay-load-e5c6e26daede-0535": "12403340",
+    "relay-load-e5c6e26daede-0537": "12403341",
+    "relay-load-e5c6e26daede-0536": "12403340",
+    "relay-load-e5c6e26daede-0538": "12403340",
+    "relay-load-e5c6e26daede-0539": "12403341"
+  },
+  "control_retries": [
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-e5c6e26daede-0017",
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-e5c6e26daede-0039",
+      "attempt": 1,
+      "status": 503
+    },
+    {
+      "operation": "delete",
+      "sandbox_id": "relay-load-e5c6e26daede-0294",
+      "attempt": 1,
+      "status": 503
+    }
+  ],
+  "resource_samples": "54 items, see density540-rc39.json.gz",
+  "resource_errors": [],
+  "fleet_health_checks": [
+    {
+      "at": "2026-09-25T22:48:44.004465+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:48:49.038369+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:48:54.074835+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:48:59.119626+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:49:04.152689+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:49:09.189335+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:49:14.231897+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:49:19.270198+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:49:24.312553+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:49:29.350989+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:49:34.384987+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:49:39.418753+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:49:44.453860+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:49:49.487020+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:49:54.521361+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:49:59.557722+00:00",
+      "required_jobs": [],
+      "grace_jobs": [],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:50:04.594468+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12403340"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:50:09.635058+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12403340",
+        "12403341"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:50:14.705672+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12403340",
+        "12403341"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:50:19.741825+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12403340",
+        "12403341"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:50:24.862156+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12403340",
+        "12403341"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:50:30.059974+00:00",
+      "required_jobs": [],
+      "grace_jobs": [
+        "12403340",
+        "12403341"
+      ],
+      "healthy_jobs": [],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:50:35.706771+00:00",
+      "required_jobs": [
+        "12403340"
+      ],
+      "grace_jobs": [
+        "12403339",
+        "12403341"
+      ],
+      "healthy_jobs": [
+        "12403340"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:50:41.024718+00:00",
+      "required_jobs": [
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [
+        "12403339"
+      ],
+      "healthy_jobs": [
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:50:46.380148+00:00",
+      "required_jobs": [
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [
+        "12403339"
+      ],
+      "healthy_jobs": [
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:50:52.359409+00:00",
+      "required_jobs": [
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [
+        "12403339"
+      ],
+      "healthy_jobs": [
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:50:58.378689+00:00",
+      "required_jobs": [
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [
+        "12403339"
+      ],
+      "healthy_jobs": [
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:51:03.803851+00:00",
+      "required_jobs": [
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [
+        "12403339"
+      ],
+      "healthy_jobs": [
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:51:09.111976+00:00",
+      "required_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:51:14.470480+00:00",
+      "required_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:51:19.736073+00:00",
+      "required_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:51:24.956921+00:00",
+      "required_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:51:30.231832+00:00",
+      "required_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:51:35.529611+00:00",
+      "required_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:51:40.763093+00:00",
+      "required_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:51:45.970124+00:00",
+      "required_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:51:51.186861+00:00",
+      "required_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:51:56.477261+00:00",
+      "required_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:52:01.762797+00:00",
+      "required_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:52:06.978344+00:00",
+      "required_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:52:12.221677+00:00",
+      "required_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:52:17.539709+00:00",
+      "required_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:52:22.801976+00:00",
+      "required_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:52:28.014344+00:00",
+      "required_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:52:33.318148+00:00",
+      "required_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:52:38.513709+00:00",
+      "required_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:52:43.762598+00:00",
+      "required_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:52:49.011111+00:00",
+      "required_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:52:54.212536+00:00",
+      "required_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:52:59.411921+00:00",
+      "required_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:53:04.674525+00:00",
+      "required_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:53:09.915595+00:00",
+      "required_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:53:15.256155+00:00",
+      "required_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    },
+    {
+      "at": "2026-09-25T22:53:17.749372+00:00",
+      "required_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "grace_jobs": [],
+      "healthy_jobs": [
+        "12403339",
+        "12403340",
+        "12403341"
+      ],
+      "failures": []
+    }
+  ],
+  "fleet_health_failures": [],
+  "driver_python": "3.10.13",
+  "sdk_version": "0.4.30",
+  "sdk_client_sha256": "dc6e7e059836ce1b924231d3edd7e28a2c9cce8a7403eca259f37059da545c0c",
+  "latency_definition": "model ready through guest-originated continuation receipt, then uploaded tool confirmation; receipt includes observation tunnel overhead; full integrity is a separate mandatory gate",
+  "harness_sha256": "d7bbf42c4d9fda9c456d46ffdcdf3f8dd3e0fdec83e4cc43039ace22080c2c67",
+  "deployed_health": {
+    "ok": true,
+    "service": "control-plane",
+    "version": "0.5.114rc39"
+  },
+  "fleet_health": {
+    "enabled": true,
+    "passed": true,
+    "status": "passed",
+    "used_jobs": [
+      "12403339",
+      "12403340",
+      "12403341"
+    ],
+    "observed_healthy_jobs": [
+      "12403339",
+      "12403340",
+      "12403341"
+    ],
+    "failure_count": 0,
+    "placement_grace_seconds": 30,
+    "freshness_seconds": 30
+  },
+  "driver_event_loop_lag_summary": {
+    "count": 2518,
+    "p50": 0.0007193750061560422,
+    "p95": 0.06880079201073386,
+    "p99": 0.12057241701404564,
+    "max": 0.2150603749905713
+  },
+  "response_commit_seconds": {
+    "count": 1080,
+    "p50": 0.06691524999041576,
+    "p95": 0.17889258300419897,
+    "p99": 0.40039729099953547,
+    "max": 0.7419467089930549
+  },
+  "usable_exec_seconds": {
+    "count": 1080,
+    "p50": 5.957043333502952,
+    "p95": 21.501885499979835,
+    "p99": 34.6145131670055,
+    "max": 47.094756583013805
+  },
+  "response_ready_to_usable_exec_seconds": {
+    "count": 1080,
+    "p50": 5.960868710302748,
+    "p95": 21.502054090757156,
+    "p99": 34.64972447109176,
+    "max": 47.183913197834045
+  },
+  "response_ready_to_commit_seconds": {
+    "count": 1080,
+    "p50": 0.07565241320116911,
+    "p95": 0.21943796283449046,
+    "p99": 0.40067837486276403,
+    "max": 0.8195753947366029
+  },
+  "response_ready_to_guest_continuation_seconds": {
+    "count": 1080,
+    "p50": 2.4168557190569118,
+    "p95": 18.483205121883657,
+    "p99": 33.24857484755921,
+    "max": 46.098059114825446
+  },
+  "post_continuation_exec_seconds": {
+    "count": 1080,
+    "p50": 2.7971079374983674,
+    "p95": 5.864061041997047,
+    "p99": 7.4057647089939564,
+    "max": 8.59532666701125
+  },
+  "post_continuation_exec_start_seconds": {
+    "count": 1080,
+    "p50": 1.1265625415107934,
+    "p95": 2.345115750009427,
+    "p99": 2.716445375001058,
+    "max": 3.0085641669866163
+  },
+  "post_continuation_exec_wait_seconds": {
+    "count": 1080,
+    "p50": 0.22896035449230112,
+    "p95": 1.9050311669998337,
+    "p99": 3.047031499998411,
+    "max": 4.081421415990917
+  },
+  "full_integrity_seconds": {
+    "count": 1080,
+    "p50": 7.640843051340198,
+    "p95": 23.538131808891194,
+    "p99": 35.07274822110776,
+    "max": 47.789704614842776
+  },
+  "guest_verification_seconds": {
+    "count": 1080,
+    "p50": 0.06521957749999885,
+    "p95": 0.08405361200000527,
+    "p99": 0.11137136800000036,
+    "max": 0.22154451700000521
+  },
+  "guest_tool_seconds": {
+    "count": 1080,
+    "p50": 0.022969456999998528,
+    "p95": 0.044613266999988355,
+    "p99": 0.06030223399999812,
+    "max": 0.10914234900000253
+  },
+  "guest_transport_retries": {
+    "count": 1080,
+    "p50": 0.0,
+    "p95": 0,
+    "p99": 1,
+    "max": 1
+  },
+  "measured_park_observed_cycles": 0,
+  "phase_latency_seconds": {
+    "during_provisioning": {
+      "count": 1560,
+      "p50": 5.677447176116402,
+      "p95": 18.996565864188597,
+      "p99": 33.896466963225976,
+      "max": 47.183913197834045
+    },
+    "after_provisioning": {
+      "count": 60,
+      "p50": 0.7090640635869931,
+      "p95": 0.8370014585379977,
+      "p99": 0.8965401616296731,
+      "max": 0.8965401616296731
+    }
+  },
+  "phase_continuation_seconds": {
+    "during_provisioning": {
+      "count": 1560,
+      "p50": 2.266410989846918,
+      "p95": 16.19493817476905,
+      "p99": 32.176971454551676,
+      "max": 46.098059114825446
+    },
+    "after_provisioning": {
+      "count": 60,
+      "p50": 0.22019700094824657,
+      "p95": 0.32538454080349766,
+      "p99": 0.45439199564862065,
+      "max": 0.45439199564862065
+    }
+  },
+  "completed_cycles": 1620,
+  "resource_summary": {
+    "sample_count": 54,
+    "observed_worker_seconds": 508.0056719779968,
+    "sampled_cpu_seconds": 2047.4338820141643,
+    "cpu_coverage_worker_seconds": 421.27398109436035,
+    "host_cpu_usage_seconds": 1739.25,
+    "host_cpu_steal_seconds": 1.08,
+    "host_cpu_usage_coverage_worker_seconds": 381.79673409461975,
+    "host_cpu_steal_coverage_worker_seconds": 381.79673409461975,
+    "sampled_host_memory_mib_seconds": 10422689.587474108,
+    "memory_coverage_worker_seconds": 508.0056719779968,
+    "device_read_bytes": 4350676992,
+    "device_write_bytes": 55041797120,
+    "device_read_bytes_coverage_worker_seconds": 381.79673409461975,
+    "device_write_bytes_coverage_worker_seconds": 381.79673409461975,
+    "scope": "sampled whole worker costs; excludes missing/stale intervals; not per-sandbox attribution"
+  },
+  "correct": true,
+  "slo_passed": false,
+  "finished_at": "2026-09-25T22:53:34.864115+00:00"
+}

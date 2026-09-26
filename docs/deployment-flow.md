@@ -108,6 +108,16 @@ shape, while an older gateway deliberately rejects unknown protocol fields.
 After the gateway reports the new package version, replace or restart workers;
 do not roll back only the gateway while newer workers remain admitted.
 
+`gateway_processes` (default 1) runs that many public gateway processes on the
+control-plane host, sharing the gateway port with `SO_REUSEPORT`. Each process
+builds its own server; the first starts the others and exits if any of them exits,
+so systemd restarts the set. PostgreSQL routing is the shared authority. Sequences
+it does not fence (image-build dispatch, external migration execution and
+registry lease changes) serialize across the replicas and the placement worker
+through host-wide keyed locks under `<state>/gateway-locks`. Per-process request
+threads, upload memory and PostgreSQL pools are divided by the process count.
+All replicas must run on one host.
+
 The deployment creates independent secrets for:
 
 - least-privileged public SDK access;

@@ -79,6 +79,7 @@ from .storage_native_migration import (
     SPLIT_MIGRATION_SCHEMA,
     StorageNativeMigration,
 )
+from .host_locks import HOST_LOCKS
 from .hibernation import hibernation_disk_reservation_mb
 from .http_server import (
     DEFAULT_MAX_HTTP_REQUEST_THREADS,
@@ -182,16 +183,11 @@ from .sandbox import SandboxSpec, sandbox_spec_fingerprint, sandbox_specs_match
 _BUILDER_DISPATCH_GUARD = RLock()
 _BUILDER_DISPATCH_COUNTS: dict[str, int] = {}
 _BUILDER_DISPATCH_INFLIGHT: dict[str, int] = {}
-_BUILDER_IMAGE_LOCKS_GUARD = RLock()
-_BUILDER_IMAGE_LOCKS: dict[str, tuple[RLock, int]] = {}
 _IMAGE_PULL_LOCKS_GUARD = RLock()
 _IMAGE_PULL_LOCKS: dict[tuple[str, str], RLock] = {}
 _IMAGE_WARMUP_TASKS_GUARD = RLock()
 _IMAGE_WARMUP_TASKS: set[tuple[str, str]] = set()
 _GATEWAY_SCHEDULING_LOCK = FairRLock()
-_MIGRATION_OPERATION_LOCKS_GUARD = RLock()
-_MIGRATION_OPERATION_LOCKS: dict[str, tuple[RLock, int]] = {}
-_REGISTRY_LEASE_COORDINATION_LOCK = RLock()
 REGISTRY_IMAGE_LEASE_TTL_SECONDS = 60 * 60
 DEFAULT_MAX_CONCURRENT_SANDBOX_CREATES = 0
 DEFAULT_MAX_GATEWAY_HTTP_REQUEST_THREADS = 2048
@@ -3997,7 +3993,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                               for ref in snapshot.references]
             # Partial acquisition leaks protection conservatively; never release
             # uncertain dependencies before a complete route transition commits.
-            with _REGISTRY_LEASE_COORDINATION_LOCK:
+            with _registry_lease_coordination():
                 for ref_repository, ref_tag, ref_digest in references:
                     store.acquire_reference(ref_repository, ref_tag, owner, digest=ref_digest)
         except (OSError, TypeError, ValueError) as exc:
@@ -7096,7 +7092,10 @@ def build_server(
     max_sandbox_resources: ResourceQuantity | None = None,
     wake_consolidation_policy: ScalePolicy | None = None,
     telemetry: Telemetry | None = None,
+    process_count: int = 1,
+    reuse_port: bool = False,
 ) -> HighBacklogThreadingHTTPServer:
+    """One gateway process; ``process_count`` replicas share budgets and port."""
     credentials = {
         "gateway bearer token": gateway_bearer_token.strip(),
         "sandbox API token": sandbox_api_token.strip(),
@@ -7171,10 +7170,11 @@ def build_server(
             raise ValueError('queued placement requires asynchronous public responses')
         from .shared_control.placement_queue import (
             IsolatedPlacementResponses, PlacementQueue, PlacementQueueClient)
-        from .shared_control.database import postgres_transaction_observer
+        from .shared_control.database import postgres_transaction_observer, process_pool_share
         placement_queue=IsolatedPlacementResponses(
             PlacementQueueClient(PlacementQueue(routing_store.pool.conninfo,
                 deployment_id,schema=routing_store.schema,
+                max_connections=process_pool_share(16),
                 observe=postgres_transaction_observer(resolved_telemetry))),
             on_loop_started=(
                 (lambda loop: resolved_telemetry.observe_event_loop_lag(loop, "placement-queue-io"))
@@ -7245,7 +7245,10 @@ def build_server(
         if BoundHandler.max_concurrent_sandbox_creates > 0
         else None
     )
-    BoundHandler.upload_memory_limiter = FairCapacity(DEFAULT_MAX_PROXY_BODY_BYTES)
+    # Replicas divide the host's buffered-upload memory budget.
+    BoundHandler.upload_memory_limiter = FairCapacity(
+        max(1, DEFAULT_MAX_PROXY_BODY_BYTES // max(1, process_count))
+    )
     BoundHandler.sandbox_create_busy_sampler = GatewayBusySampler(metrics_store)
     BoundHandler.create_image_pull_tasks = CreateImagePullTasks()
     BoundHandler.inflight_create_placements = InflightCreatePlacements()
@@ -7302,6 +7305,7 @@ def build_server(
                     node_http_pool.submit(placement_queue.close()).result(timeout=10)
                 metrics_store.close()
 
+    GatewayHTTPServer.reuse_port = bool(reuse_port)
     try:
         return GatewayHTTPServer(
             (host, port), BoundHandler, max_request_threads=max_http_request_threads,
@@ -7852,26 +7856,13 @@ def _reserve_builder_candidate(
         return selected
 
 
-@contextmanager
 def _builder_image_dispatch_lock(image_id: str):
-    """Serialize one image submission without retaining an unbounded keyed-lock cache."""
+    """Serialize one image submission across every gateway process on the host.
 
-    key = image_id.strip()
-    with _BUILDER_IMAGE_LOCKS_GUARD:
-        lock, users = _BUILDER_IMAGE_LOCKS.get(key, (RLock(), 0))
-        _BUILDER_IMAGE_LOCKS[key] = (lock, users + 1)
-    try:
-        with lock:
-            yield
-    finally:
-        with _BUILDER_IMAGE_LOCKS_GUARD:
-            current = _BUILDER_IMAGE_LOCKS.get(key)
-            if current is not None and current[0] is lock:
-                remaining = current[1] - 1
-                if remaining <= 0:
-                    _BUILDER_IMAGE_LOCKS.pop(key, None)
-                else:
-                    _BUILDER_IMAGE_LOCKS[key] = (lock, remaining)
+    The running-build probe, builder choice and dispatch must be one step, or
+    two processes both see "not running" and push the same managed tag.
+    """
+    return HOST_LOCKS.hold("image-dispatch", image_id.strip())
 
 
 def _image_pull_lock(node_url: str, image: str) -> RLock:
@@ -7884,26 +7875,23 @@ def _image_pull_lock(node_url: str, image: str) -> RLock:
         return lock
 
 
-@contextmanager
 def _migration_operation_lock(migration_id: str):
-    """Serialize one migration without retaining an unbounded keyed-lock cache."""
+    """Serialize one migration's worker export and stage calls across processes.
 
-    key = migration_id.strip()
-    with _MIGRATION_OPERATION_LOCKS_GUARD:
-        lock, users = _MIGRATION_OPERATION_LOCKS.get(key, (RLock(), 0))
-        _MIGRATION_OPERATION_LOCKS[key] = (lock, users + 1)
-    try:
-        with lock:
-            yield
-    finally:
-        with _MIGRATION_OPERATION_LOCKS_GUARD:
-            current = _MIGRATION_OPERATION_LOCKS.get(key)
-            if current is not None and current[0] is lock:
-                remaining = current[1] - 1
-                if remaining <= 0:
-                    _MIGRATION_OPERATION_LOCKS.pop(key, None)
-                else:
-                    _MIGRATION_OPERATION_LOCKS[key] = (lock, remaining)
+    Phase commits are compare-and-set in PostgreSQL, but the worker calls between
+    them are not; the public gateways and the placement worker all advance
+    migrations.
+    """
+    return HOST_LOCKS.hold("migration", migration_id.strip())
+
+
+def _registry_lease_coordination():
+    """The registry-GC fence for multi-step lease and dependency changes.
+
+    Each registry-usage transaction is atomic, but check-then-push-then-lease
+    sequences are not; every gateway process on the host shares this fence.
+    """
+    return HOST_LOCKS.hold("registry-leases", "")
 
 
 @contextmanager
@@ -8014,7 +8002,7 @@ def _persist_registry_image_protection(
         return False
     repository, tag = coordinates
     digest = manifest_digest_from_image_ref(image_ref)
-    with _REGISTRY_LEASE_COORDINATION_LOCK:
+    with _registry_lease_coordination():
         # Acquire artifact closure before publishing its primary image owner.
         # Exact persisted dependency-owner rows survive tag/annotation changes;
         # release never has to ask a mutable source what used to be retained.
@@ -8195,7 +8183,7 @@ def _release_registry_reference_keys(
 ) -> None:
     for repository, tag, owner in sorted(references):
         try:
-            with _REGISTRY_LEASE_COORDINATION_LOCK:
+            with _registry_lease_coordination():
                 store.release_lease(repository, tag, owner)
                 if owner in image_owners:
                     store.release_owner(owner + ":environment")

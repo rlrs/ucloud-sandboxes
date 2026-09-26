@@ -279,6 +279,14 @@ class HighBacklogThreadingHTTPServer(ThreadingHTTPServer):
     request_queue_size = DEFAULT_HTTP_REQUEST_QUEUE_SIZE
     daemon_threads = True
     allow_reuse_address = True
+    # Several gateway processes may share one port; the kernel spreads
+    # accepted connections across their listening sockets.
+    reuse_port = False
+
+    def server_bind(self) -> None:
+        if self.reuse_port:
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        super().server_bind()
 
     def __init__(
         self,

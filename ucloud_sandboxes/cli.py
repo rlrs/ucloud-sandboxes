@@ -9,8 +9,11 @@ import json
 import math
 import os
 from pathlib import Path, PurePosixPath
+import socket
 import ssl
+import subprocess
 import sys
+import threading
 from threading import Event, Lock, local
 import time
 from typing import Any, Callable, Iterable
@@ -1088,7 +1091,21 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
     placement_role=getattr(args,'placement_worker',False)
     if placement_role and (config.gateway_port>=65535 or config.gateway_port+1 in {config.registry_port,config.relay_port}):
         raise ValueError('private placement port conflicts with configured services')
-    telemetry = telemetry_from_config(config, "ucloud-sandboxes-placement" if placement_role else "ucloud-sandboxes-gateway")
+    from .host_locks import HOST_LOCKS
+    from .shared_control.database import GATEWAY_PROCESS_COUNT_ENV
+    # Replicas and the placement worker share this host's state directory; the
+    # multi-step sequences PostgreSQL does not fence serialize through it.
+    HOST_LOCKS.configure(config.control_state_file().parent / "gateway-locks")
+    processes = 1 if placement_role else config.gateway_processes
+    replica = int(os.environ.get(_GATEWAY_REPLICA_ENV, "0") or 0)
+    if processes > 1:
+        os.environ[GATEWAY_PROCESS_COUNT_ENV] = str(processes)
+    telemetry = telemetry_from_config(
+        config,
+        "ucloud-sandboxes-placement" if placement_role else "ucloud-sandboxes-gateway",
+        attributes={"service.instance.id": f"{socket.gethostname()}-"
+                    + ("placement" if placement_role else f"gateway-{replica}")},
+    )
     server = build_server(
         '127.0.0.1' if placement_role else args.host,
         config.gateway_port+1 if placement_role else config.gateway_port,
@@ -1122,13 +1139,18 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         create_target_concurrency_per_node=(
             config.policy.create_target_concurrency_per_node
         ),
-        max_http_request_threads=config.gateway_max_http_request_threads,
+        max_http_request_threads=max(64, config.gateway_max_http_request_threads // processes),
         max_sandbox_resources=config.sandbox.resources,
         wake_consolidation_policy=config.policy,
         telemetry=telemetry,
+        process_count=processes,
+        reuse_port=processes > 1,
     )
     host, port = server.server_address
-    print(f"Serving gateway on http://{host}:{port}")
+    print(f"Serving gateway on http://{host}:{port} (process {replica + 1}/{processes})")
+    replicas = _start_gateway_replicas(server, processes) if processes > 1 and replica == 0 else None
+    if replica > 0:
+        _exit_when_orphaned()
     placement_task=None
     placement_stop=None
     if placement_role:
@@ -1150,8 +1172,66 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
             node_http_pool.call_soon(placement_stop.set)
             placement_task.result(timeout=15)
         server.server_close()
+        if replicas is not None:
+            replicas.stop()
         telemetry.shutdown()
-    return 0
+    return 1 if replicas is not None and replicas.failed else 0
+
+
+_GATEWAY_REPLICA_ENV = "UCLOUD_GATEWAY_REPLICA"
+
+
+class _GatewayReplicas:
+    """Replica gateway processes; any exit stops the parent for a clean restart."""
+
+    def __init__(self, server, processes):
+        self.failed = False
+        self._children = [
+            subprocess.Popen(
+                [sys.executable, *sys.argv],
+                env={**os.environ, _GATEWAY_REPLICA_ENV: str(index)},
+            )
+            for index in range(1, processes)
+        ]
+        self._stopping = threading.Event()
+        threading.Thread(
+            target=self._watch, args=(server,), name="gateway-replicas", daemon=True
+        ).start()
+
+    def _watch(self, server):
+        while not self._stopping.wait(1):
+            if any(child.poll() is not None for child in self._children):
+                self.failed = True
+                print("A gateway replica exited; stopping so the service restarts.")
+                server.shutdown()
+                return
+
+    def stop(self):
+        self._stopping.set()
+        for child in self._children:
+            if child.poll() is None:
+                child.terminate()
+        for child in self._children:
+            try:
+                child.wait(timeout=20)
+            except subprocess.TimeoutExpired:
+                child.kill()
+
+
+def _start_gateway_replicas(server, processes):
+    return _GatewayReplicas(server, processes)
+
+
+def _exit_when_orphaned():
+    parent = os.getppid()
+
+    def watch():
+        while True:
+            time.sleep(1)
+            if os.getppid() != parent:
+                os._exit(1)  # the parent gateway is gone; systemd restarts the set
+
+    threading.Thread(target=watch, name="gateway-orphan-watch", daemon=True).start()
 
 
 def cmd_serve_builder_agent(args: argparse.Namespace) -> int:

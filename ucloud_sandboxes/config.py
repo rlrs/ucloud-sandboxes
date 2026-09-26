@@ -446,6 +446,8 @@ class DeploymentConfig:
     gateway_heartbeat_ttl_seconds: int
     gateway_max_concurrent_sandbox_creates: int
     gateway_max_http_request_threads: int
+    # Public gateway processes sharing the port (SO_REUSEPORT) on this host.
+    gateway_processes: int
     relay_port: int
     relay_request_timeout_seconds: int
     relay_worker_lease_seconds: int
@@ -486,6 +488,7 @@ class DeploymentConfig:
             gateway_heartbeat_ttl_seconds=120,
             gateway_max_concurrent_sandbox_creates=0,
             gateway_max_http_request_threads=1536,
+            gateway_processes=1,
             relay_port=8092,
             relay_request_timeout_seconds=7200,
             relay_worker_lease_seconds=600,
@@ -525,7 +528,7 @@ class DeploymentConfig:
     def from_dict(cls, raw: object) -> "DeploymentConfig":
         if not isinstance(raw, dict):
             raise ValueError("deployment config must be a JSON object")
-        raw = {"node_package_root": DEFAULT_INSTALL_ROOT + "/release", "relay_postgres": None, "immutable_environments": None, **raw}
+        raw = {"node_package_root": DEFAULT_INSTALL_ROOT + "/release", "relay_postgres": None, "immutable_environments": None, "gateway_processes": 1, **raw}
         expected = {item.name for item in fields(cls)}
         schema = _require_int("schema", raw.get("schema"), minimum=1)
         if schema != DEPLOYMENT_CONFIG_SCHEMA:
@@ -585,6 +588,9 @@ class DeploymentConfig:
                 "gateway_max_http_request_threads",
                 raw["gateway_max_http_request_threads"],
                 minimum=1,
+            ),
+            gateway_processes=_require_int(
+                "gateway_processes", raw["gateway_processes"], minimum=1, maximum=16,
             ),
             relay_port=_require_port("relay_port", raw["relay_port"]),
             relay_request_timeout_seconds=_require_int(
@@ -796,6 +802,7 @@ class DeploymentConfig:
                 self.gateway_max_concurrent_sandbox_creates
             ),
             "gateway_max_http_request_threads": self.gateway_max_http_request_threads,
+            "gateway_processes": self.gateway_processes,
             "relay_port": self.relay_port,
             "relay_request_timeout_seconds": self.relay_request_timeout_seconds,
             "relay_worker_lease_seconds": self.relay_worker_lease_seconds,

@@ -197,7 +197,7 @@ were stopped. At this closeout, production ran rc35 with the ten-worker cap unch
 
 ## Remaining architecture boundaries
 
-Multiple unrestricted public gateway processes are not yet qualified. Image-build
+Multiple unrestricted public gateway processes are not yet qualified. (Superseded: rc42 adds host-local replicas; see docs/deployment-flow.md.) Image-build
 dispatch, external migration execution and multi-step registry dependency changes
 still use process-local coordination. PostgreSQL routing alone does not make
 those sequences safe across processes. Moving those mutations behind a single

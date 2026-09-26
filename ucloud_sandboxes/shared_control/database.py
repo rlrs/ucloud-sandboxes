@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from importlib.resources import files
 import logging
+import os
 import re
 import time
 from typing import Callable
@@ -34,6 +35,20 @@ def postgres_transaction_observer(telemetry):
             })
 
     return observe
+
+
+# Set by the public gateway for its replicas (and inherited by their fleet-reader
+# subprocesses); other services never set it and keep their configured pools.
+GATEWAY_PROCESS_COUNT_ENV = "UCLOUD_GATEWAY_PROCESS_COUNT"
+
+
+def process_pool_share(maximum: int, *, floor: int = 4) -> int:
+    """This process's slice of a connection pool shared by gateway replicas."""
+    try:
+        count = max(1, int(os.environ.get(GATEWAY_PROCESS_COUNT_ENV, "1")))
+    except ValueError:
+        count = 1
+    return max(min(floor, maximum), maximum // count)
 
 
 class PostgresDatabase:

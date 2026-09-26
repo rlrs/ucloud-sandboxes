@@ -29,6 +29,7 @@ from psycopg import sql
 from psycopg.errors import DeadlockDetected, SerializationFailure
 from psycopg_pool import ConnectionPool
 
+from .database import process_pool_share
 from ..routing import RoutingStore, PlacementCommandRejected
 from ..models import utc_now
 from uuid import UUID
@@ -153,8 +154,10 @@ class PostgresRoutingStore(RoutingStore):
         dsn: str,
         schema: str,
         timeout_seconds=30,
-        max_connections=16,
+        max_connections=None,
     ):
+        if max_connections is None:
+            max_connections = process_pool_share(16)
         if (
             not re.fullmatch(r"ucloud_routing(?:_[a-z0-9_]+)?", schema)
             or len(schema) > 63

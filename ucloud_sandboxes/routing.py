@@ -3462,6 +3462,7 @@ class RoutingStore:
                 SandboxPlacementRequest(
                     resources=item.resources,
                     count=item.count,
+                    image=item.image,
                 )
             )
             created_at = parse_iso_datetime(item.created_at)
@@ -4629,6 +4630,12 @@ def _object(value: object) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
 
+def _route_image(route: SandboxRoute | None) -> str:
+    if route is None or not isinstance(route.spec, dict):
+        return ""
+    return str(route.spec.get("image") or "").strip()
+
+
 def sandbox_demand_from_routing_state(
     state: RoutingState,
     *,
@@ -4653,16 +4660,20 @@ def sandbox_demand_from_routing_state(
         pending_total = pending_total + item.resources
         pending_count += 1
         excluded_job_ids: tuple[str, ...] = ()
+        owner_id = item.sandbox_id
         for prefix in ("__migration__:", "__wake__:"):
             if item.sandbox_id.startswith(prefix):
-                route = state.sandboxes.get(item.sandbox_id[len(prefix) :])
+                owner_id = item.sandbox_id[len(prefix) :]
+                route = state.sandboxes.get(owner_id)
                 if route is not None and route.job_id:
                     excluded_job_ids = (route.job_id,)
                 break
+        owner = state.sandboxes.get(owner_id)
         placement_requests.append(
             SandboxPlacementRequest(
                 resources=item.resources,
                 excluded_job_ids=excluded_job_ids,
+                image=_route_image(owner),
             )
         )
         created_at = parse_iso_datetime(item.created_at)
@@ -4679,6 +4690,7 @@ def sandbox_demand_from_routing_state(
             SandboxPlacementRequest(
                 resources=item.resources,
                 count=item.count,
+                image=item.image,
             )
         )
         created_at = parse_iso_datetime(item.created_at)

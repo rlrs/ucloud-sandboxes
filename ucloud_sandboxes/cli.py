@@ -25,6 +25,12 @@ from uuid import uuid4
 from opentelemetry.propagate import inject
 
 from .gvisor_distribution import distribution_files
+from .disk_claims import IDLE_MEMORY_CLAIM_MB
+from .usage_history import (
+    UsageHistory,
+    demand_with_usage_forecast,
+    record_inventory_usage,
+)
 
 from .agent import (
     build_heartbeat,
@@ -3647,6 +3653,15 @@ def run_reconcile_cycle(
         prepared_builder_count=builder_prepared,
         policy=effective_policy,
     )
+    demand = _demand_forecast_from_usage(
+        config,
+        demand,
+        [
+            node.heartbeat for node in sandbox_nodes
+            if node.heartbeat is not None and node.heartbeat_fresh
+        ],
+        route_reservations or {},
+    )
     sandbox_demand = demand_with_build_warm_resources(
         demand,
         build_warm_resources,
@@ -5579,6 +5594,56 @@ def build_activity_sandbox_warm_resources(
         memory_mb=min(512, capacity.memory_mb),
         disk_mb=min(1024, capacity.disk_mb),
     )
+
+
+_USAGE_HISTORIES: dict[Path, UsageHistory] = {}
+
+
+def _initial_disk_claim_mb(config: DeploymentConfig, heartbeats) -> int:
+    """What a worker charges a new sandbox's disk at create; 0 if not dynamic."""
+
+    for heartbeat in heartbeats:
+        metrics = heartbeat.runtime_metrics
+        if metrics is not None and metrics.storage_workspace_grant_mb > 0:
+            return metrics.storage_workspace_grant_mb + metrics.storage_memory_idle_claim_mb
+    # No worker yet (a cold start): the deployment says what they will charge.
+    sandbox = config.sandbox
+    if sandbox.direct_workspace_initial_grant_mb > 0 and sandbox.direct_split_memory_backing:
+        return sandbox.direct_workspace_initial_grant_mb + IDLE_MEMORY_CLAIM_MB
+    return 0
+
+
+def _demand_forecast_from_usage(
+    config: DeploymentConfig,
+    demand: SandboxDemand,
+    heartbeats: list[NodeHeartbeat],
+    route_reservations: dict[str, tuple[SandboxRoute, ...]],
+) -> SandboxDemand:
+    """Record running sandboxes' usage, then size cold demand from that history."""
+
+    path = config.usage_history_file()
+    history = _USAGE_HISTORIES.get(path)
+    if history is None:
+        history = _USAGE_HISTORIES[path] = UsageHistory.load(path)
+    now = time.time()
+    images = {
+        (route.sandbox_id, route.generation): str(route.spec.get("image") or "")
+        for routes in route_reservations.values()
+        for route in routes
+    }
+    record_inventory_usage(history, heartbeats, images, now)
+    history.prune(now)
+    forecast = demand_with_usage_forecast(
+        demand,
+        history,
+        initial_disk_claim_mb=_initial_disk_claim_mb(config, heartbeats),
+        now=now,
+    )
+    try:
+        history.save_if_due(now)
+    except OSError as exc:
+        print(f"warning: could not save sandbox usage history: {exc}", file=sys.stderr)
+    return forecast
 
 
 def demand_with_build_warm_resources(

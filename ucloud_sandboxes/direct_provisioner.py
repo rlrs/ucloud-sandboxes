@@ -9,6 +9,7 @@ import shutil
 from threading import Lock
 from typing import Any
 
+from .image_eviction import ImageCacheEvictor
 from .storage_native_migration import (
     StorageNativeMigrationError,
     MIGRATION_CONNECTION_POLICY_DISCONNECT,
@@ -74,6 +75,11 @@ class DirectSandboxProvisioner:
         self._image_sweep_guard = Lock()
         self._image_gc_failure_generation = 1
         self._image_gc_reconciled_generation = 0
+        image_store = getattr(overlays, "image_store", None)
+        self.image_evictor: ImageCacheEvictor | None = (
+            ImageCacheEvictor(image_store, is_referenced=self.registry.references_image)
+            if callable(getattr(image_store, "evict_image", None)) else None
+        )
         self._validate_layout()
 
     def start(self) -> tuple[DirectSandboxRegistration, ...]:
@@ -574,7 +580,18 @@ class DirectSandboxProvisioner:
         self.reconcile_image_cache()
         return True
 
+    def evict_images_if_needed(self) -> tuple[str, ...]:
+        """Evict least recently used unreferenced images when the store is nearly full."""
+
+        if self.image_evictor is None:
+            return ()
+        return self.image_evictor.evict_if_needed()
+
     def _collect_deleted_image(self, image_id: str) -> None:
+        if self.image_evictor is not None:
+            # The pulled image stays cached for the next sandbox of this task;
+            # eviction under disk pressure starts from the least recently used.
+            self.image_evictor.note_used(image_id)
         try:
             self.overlays.collect_image(
                 image_id,

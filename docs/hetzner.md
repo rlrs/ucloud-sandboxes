@@ -147,9 +147,9 @@ UCLOUD_RELAY_WORKER_TOKEN=<gateway: /var/lib/ucloud-sandboxes/state/relay-worker
 - `gateway_processes=3`.
 - Docker image store: 256 GB on workers, 160 GB on the builder. Sandbox
   root filesystems mount Docker's overlay2 layers directly, so it holds the
-  distinct images of a worker's live sandboxes, with shared layers stored
-  once; an image is removed when its last sandbox is deleted. The earlier
-  64 GB filled during an agentic test with 2.5–12.6 GB images, and
+  images a worker has pulled, with shared layers stored once. Since rc51,
+  images are kept for reuse and the least recently used are evicted above
+  85% full (docs/image-placement.md). The earlier 64 GB filled during an agentic test with 2.5–12.6 GB images, and
   creates hung on `no space left on device`. VM init grows a snapshot's
   smaller store to the configured size.
 

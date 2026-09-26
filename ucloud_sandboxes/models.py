@@ -810,6 +810,8 @@ class SandboxPlacementRequest:
     excluded_job_ids: tuple[str, ...] = ()
     owned_job_id: str = ""
     owned_disk_mb: int = 0
+    # The image, when known, lets the autoscaler forecast usage from history.
+    image: str = ""
 
     def __post_init__(self) -> None:
         if isinstance(self.count, bool) or not isinstance(self.count, int):

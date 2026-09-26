@@ -3,6 +3,7 @@ from __future__ import annotations
 from .warm_park import WarmParkDeferred
 
 import base64
+import logging
 import sqlite3
 import hmac
 import math
@@ -160,6 +161,8 @@ def _resolve_node_epoch(node_epoch: str | None) -> str:
         raise ValueError("node_epoch cannot be empty")
     return resolved
 
+
+_LOG = logging.getLogger(__name__)
 
 class NodeAgentHandler(BuildContextHttpHandler):
     manager: Any
@@ -1465,6 +1468,12 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 raise ValueError("image pull payload must be a JSON object")
             image = str(raw.get("image") or "")
             image_id = str(raw["id"]) if raw.get("id") else None
+            image_evictor = getattr(self, "image_evictor", None)
+            if image_evictor is not None:
+                try:
+                    image_evictor.evict_if_needed()
+                except Exception as exc:
+                    _LOG.warning("could not evict cached images before a pull: %s", exc)
             with self.manager.image_operation(self.image_manager):
                 failed_phase = getattr(self.image_manager.runtime, "pull_phase", "docker_pull")
                 with self.image_manager.pull_slot() as pull_admission:
@@ -1876,6 +1885,21 @@ def build_direct_node_agent_server(
     DirectBoundHandler.manager = manager
     DirectBoundHandler.exec_manager = exec_manager
     DirectBoundHandler.image_manager = image_manager
+    image_evictor = getattr(service.provisioner, "image_evictor", None)
+    DirectBoundHandler.image_evictor = image_evictor
+    if image_evictor is not None:
+        evictable_store = service.provisioner.overlays.image_store
+
+        def forget_evicted_images(_evicted: tuple[str, ...]) -> None:
+            # Heartbeats advertise these records; the gateway skips the pull
+            # for an advertised image, so stale records would fail creates.
+            missing = [
+                record.tag for record in image_manager.list()
+                if not evictable_store.image_present(record.tag)
+            ]
+            image_manager.store.delete_by_tags(missing)
+
+        image_evictor.after_eviction.append(forget_evicted_images)
     DirectBoundHandler.build_context_store = build_context_store
     DirectBoundHandler.job_id = job_id
     DirectBoundHandler.node_id = node_id

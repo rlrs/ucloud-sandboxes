@@ -246,6 +246,9 @@ NODE_HTTP_POOL_ORIGINS = 64
 # Treat each additional distinct cold image like 256 MiB of missing transfer.
 # For the observed ~1.1 GiB shared TMax base this spreads after roughly four
 # concurrent related pulls instead of concentrating an entire burst on one node.
+# Load (0..1 pressure plus in-flight creates per target concurrency) below
+# which image locality outranks spreading.
+_AFFINITY_LOAD_BAND = 0.6
 COLD_PULL_PRESSURE_PENALTY_BYTES = 256 * 1024 * 1024
 
 
@@ -5754,31 +5757,42 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         self, candidate_states, requested, image, image_node_ids,
         inflight_image_node_ids, target_manifest, layer_cache,
     ) -> NodeHeartbeat:
-        return min(
-            candidate_states,
-            key=lambda item: (
-                # Durable assigned shapes include creates not yet visible in a
-                # heartbeat. Balance that future load first: a cached startup
-                # CPU spike must not funnel an entire burst onto its peers.
-                # Current pressure and in-flight work choose among comparably
-                # assigned nodes; worker admission still owns execution safety.
-                item[1].assigned_shape_pressure,
-                node_pressure_score(item[0])
-                + item[1].active_creates / max(1, self.create_target_concurrency_per_node),
-                (0 if item[0].node_id in image_node_ids else
-                 1 if item[0].node_id in inflight_image_node_ids else 2),
+        def rank(item):
+            heartbeat, state = item
+            # Live pressure plus in-flight creates, which heartbeats do not
+            # show yet: a burst overflows a node once its creates approach the
+            # per-node target, before a stale heartbeat could funnel it.
+            load = node_pressure_score(heartbeat) + state.active_creates / max(
+                1, self.create_target_concurrency_per_node
+            )
+            busy = load >= _AFFINITY_LOAD_BAND
+            return (
+                busy,
+                # Busy nodes keep the prior order: durable assigned shapes
+                # first, because a cached startup spike must not funnel a
+                # burst onto one peer while completed creates are not yet in
+                # any heartbeat. Pressure then chooses among them.
+                state.assigned_shape_pressure if busy else 0.0,
+                load if busy else 0.0,
+                # Below the band, prefer a node that already holds the image,
+                # then the fewest missing layers: every avoided pull saves
+                # time and image-store space (docs/image-placement.md).
+                (0 if heartbeat.node_id in image_node_ids else
+                 1 if heartbeat.node_id in inflight_image_node_ids else 2),
                 _cold_image_placement_cost_for_state(
-                    item[1], target_manifest, layer_cache,
+                    state, target_manifest, layer_cache,
                     spread_cold_image=bool(image),
                 ),
-                item[1].active_creates,
-                _resource_slack(
-                    item[1].available_resources,
-                    requested,
-                ),
-                item[0].node_id,
-            ),
-        )[0]
+                # Requested shapes are maximums, not load; they only spread
+                # otherwise equivalent nodes.
+                state.assigned_shape_pressure,
+                load,
+                state.active_creates,
+                _resource_slack(state.available_resources, requested),
+                heartbeat.node_id,
+            )
+
+        return min(candidate_states, key=rank)[0]
 
     def _sandbox_create_alternate_available(
         self,

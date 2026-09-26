@@ -84,8 +84,8 @@ sandbox.update({
     "default_vcpu": 48.0,
     "default_memory_mb": 180 * GIB,  # ~4 GiB host margin below the visible 188,669 MiB
     # Docker image store; sandbox rootfs mount its overlay2 layers directly.
-    # It holds the distinct images of a worker's live sandboxes (shared layers
-    # once). 64 GB filled during an agentic test with 2.5-12.6 GB images.
+    # Pulled images are kept and evicted least recently used above 85%
+    # (docs/image-placement.md). 64 GB filled during an agentic test.
     "docker_quota_image_gb": 256,
     "swap_gb": 0,
     "direct_runsc_commit": GVISOR_COMMIT,

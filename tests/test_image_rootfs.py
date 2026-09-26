@@ -90,6 +90,11 @@ class Overlay2Runner(FakeRunner):
             if repository == DockerOverlay2RootfsStore.PIN_REPOSITORY:
                 self.pins[digest] = command[3]
             return CommandResult(command, 0)
+        if command[:4] == ("docker", "image", "rm", "--force"):
+            # Removing a content ID removes every tag, including the pin.
+            self.commands.append(command)
+            self.pins.pop(command[4].removeprefix("sha256:"), None)
+            return CommandResult(command, 0)
         if command[:3] == ("docker", "image", "rm"):
             self.commands.append(command)
             repository, digest = command[3].rsplit(":", 1)
@@ -290,6 +295,36 @@ class ImageRootfsTests(unittest.TestCase):
             self.assertFalse(target.exists())
             self.assertNotIn(str(materialized.rootfs), runner.mounted)
             self.assertNotIn(IMAGE_DIGEST, runner.pins)
+
+    def test_evict_image_removes_cache_entry_and_docker_image(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            runner = Overlay2Runner(root / "docker")
+            store = image_store(root, runner)
+            with store.operation_lease("example/image:latest") as materialized:
+                pass
+            image_id = "sha256:" + IMAGE_DIGEST
+
+            self.assertFalse(store.evict_image(image_id, is_referenced=lambda _: True))
+            self.assertTrue(materialized.rootfs.parent.exists())
+
+            self.assertTrue(store.evict_image(image_id, is_referenced=lambda _: False))
+            self.assertFalse(materialized.rootfs.parent.exists())
+            self.assertIn(("docker", "image", "rm", "--force", image_id), runner.commands)
+            self.assertNotIn(IMAGE_DIGEST, runner.pins)
+
+    def test_evict_image_skips_an_image_held_by_a_lease(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            runner = Overlay2Runner(root / "docker")
+            store = image_store(root, runner)
+            with store.operation_lease("example/image:latest") as materialized:
+                self.assertFalse(store.evict_image(
+                    "sha256:" + IMAGE_DIGEST, is_referenced=lambda _: False,
+                ))
+            self.assertTrue(materialized.rootfs.parent.exists())
+            self.assertFalse(any(command[:3] == ("docker", "image", "rm")
+                                 and "--force" in command for command in runner.commands))
 
     def test_overlay2_gc_waits_for_digest_lease_and_rechecks_registry_root(
         self,

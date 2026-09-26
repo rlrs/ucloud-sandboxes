@@ -67,7 +67,10 @@ class IoPressurePlacementTests(unittest.TestCase):
             ))
         self.assertEqual(chosen[0], "quiet")
         counts = Counter(chosen)
-        self.assertEqual(counts["quiet"], counts["busy"])
+        # The quiet node takes creates until its in-flight work makes it busy
+        # too; then assigned shapes balance both busy nodes.
+        self.assertEqual(chosen[:2], ["quiet", "quiet"])
+        self.assertGreaterEqual(counts["quiet"], counts["busy"])
         self.assertGreater(counts["busy"], 0)
         # Even extreme I/O PSI only affects ranking; it cannot close admission.
         handler._ready_sandbox_heartbeats = lambda **_kwargs: [self.heartbeat("busy", io=99)]
@@ -157,6 +160,36 @@ class IoPressurePlacementTests(unittest.TestCase):
         # Retain locality when both nodes have comparable pressure/headroom.
         busy = self.heartbeat("busy")
         self.assertEqual(handler._select_node(requested, image="image").node_id, "busy")
+
+    def test_image_locality_outranks_assigned_shapes_below_the_load_band(self):
+        warm = self.heartbeat("warm")
+        empty = replace(self.heartbeat("empty"), cached_images=())
+        handler = object.__new__(control_plane.ControlPlaneHandler)
+        requested = ResourceQuantity(4, 8192, 10240)
+        # The warm node already runs ten large sandboxes of this image.
+        routes = [
+            _sandbox_route(sandbox_id=f"running-{i}", node_id="warm", job_id="warm",
+                           node_url=warm.node_url, resources=requested,
+                           state="running", spec={"image": "image"})
+            for i in range(10)
+        ]
+        handler._placement_routes = lambda: routes
+        handler._ready_sandbox_heartbeats = lambda **_kwargs: [warm, empty]
+        handler._nodes_with_image = lambda *_args, **_kwargs: {"warm"}
+        handler.registry_layer_cache = None
+        handler.create_target_concurrency_per_node = 8
+        chosen = []
+        for index in range(8):
+            node = handler._select_node(requested, image="image")
+            chosen.append(node.node_id)
+            routes.append(_sandbox_route(
+                sandbox_id=f"new-{index}", node_id=node.node_id, job_id=node.job_id,
+                node_url=node.node_url, resources=requested, state="creating",
+                spec={"image": "image"},
+            ))
+        # 0.1 live pressure + creates/8 reaches the 0.6 band after four creates.
+        self.assertEqual(chosen[:4], ["warm"] * 4)
+        self.assertIn("empty", chosen[4:])
 
     def test_io_psi_sampling_and_unavailable_signal(self):
         with TemporaryDirectory() as directory:

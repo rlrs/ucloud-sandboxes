@@ -576,6 +576,12 @@ class DirectSandboxService:
         while not self._stop_event.wait(self._deletion_reconcile_interval_seconds):
             failures: list[tuple[str, Exception]] = []
             deleted = 0
+            evict_images = getattr(self.provisioner, "evict_images_if_needed", None)
+            if evict_images is not None:
+                try:
+                    evict_images()
+                except Exception as exc:
+                    _LOG.warning("could not evict cached images: %s", exc)
             now = time.monotonic()
             image_reconcile_pending = (
                 self.provisioner.image_cache_reconciliation_pending

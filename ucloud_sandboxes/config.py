@@ -694,6 +694,9 @@ class DeploymentConfig:
     def metrics_path(self) -> Path:
         return self._state_file("metrics.sqlite")
 
+    def usage_history_file(self) -> Path:
+        return self._state_file("usage-history.json")
+
     def autoscaler_state_file(self) -> Path:
         return self._state_file("autoscaler-state.sqlite")
 

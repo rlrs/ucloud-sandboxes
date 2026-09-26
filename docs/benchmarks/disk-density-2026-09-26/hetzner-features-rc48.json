@@ -1,0 +1,186 @@
+{
+  "ok": true,
+  "results": [
+    {
+      "sandbox_id": "features-85361b-d0",
+      "kind": "direct",
+      "create_seconds": 8.824243916023988,
+      "upload_seconds": 3.5844338750175666,
+      "download_seconds": 1.2265404160134494,
+      "file_roundtrip_ok": true,
+      "guest_hash_ok": true,
+      "stream_20mb_seconds": 22.941112083004555,
+      "stream_bytes": 20971520,
+      "egress": "egress-ok",
+      "egress_seconds": 0.6826377090183087,
+      "ok": true
+    },
+    {
+      "sandbox_id": "features-85361b-d1",
+      "kind": "direct",
+      "create_seconds": 8.760049042000901,
+      "upload_seconds": 0.7486346249934286,
+      "download_seconds": 1.4091652919887565,
+      "file_roundtrip_ok": true,
+      "guest_hash_ok": true,
+      "stream_20mb_seconds": 24.49344195899903,
+      "stream_bytes": 20971520,
+      "egress": "egress-ok",
+      "egress_seconds": 1.372811792010907,
+      "ok": true
+    },
+    {
+      "sandbox_id": "features-85361b-d2",
+      "kind": "direct",
+      "create_seconds": 9.340963124996051,
+      "upload_seconds": 2.9445563330082223,
+      "download_seconds": 1.6433861670084298,
+      "file_roundtrip_ok": true,
+      "guest_hash_ok": true,
+      "stream_20mb_seconds": 22.234062166011427,
+      "stream_bytes": 20971520,
+      "egress": "egress-ok",
+      "egress_seconds": 1.0372900420043152,
+      "ok": true
+    },
+    {
+      "sandbox_id": "features-85361b-d3",
+      "kind": "direct",
+      "create_seconds": 9.337446582998382,
+      "upload_seconds": 1.3065472909947857,
+      "download_seconds": 0.7678243329864927,
+      "file_roundtrip_ok": true,
+      "guest_hash_ok": true,
+      "stream_20mb_seconds": 23.78441379198921,
+      "stream_bytes": 20971520,
+      "egress": "egress-ok",
+      "egress_seconds": 0.8411892919975799,
+      "ok": true
+    },
+    {
+      "sandbox_id": "features-85361b-d4",
+      "kind": "direct",
+      "create_seconds": 9.239280208013952,
+      "upload_seconds": 1.0034154579916503,
+      "download_seconds": 1.782118833012646,
+      "file_roundtrip_ok": true,
+      "guest_hash_ok": true,
+      "stream_20mb_seconds": 23.039106707990868,
+      "stream_bytes": 20971520,
+      "egress": "egress-ok",
+      "egress_seconds": 1.2480722080217674,
+      "ok": true
+    },
+    {
+      "sandbox_id": "features-85361b-d5",
+      "kind": "direct",
+      "create_seconds": 8.884909749991493,
+      "upload_seconds": 2.8576321250002366,
+      "download_seconds": 1.331315874995198,
+      "file_roundtrip_ok": true,
+      "guest_hash_ok": true,
+      "stream_20mb_seconds": 22.844034791982267,
+      "stream_bytes": 20971520,
+      "egress": "egress-ok",
+      "egress_seconds": 1.029083333996823,
+      "ok": true
+    },
+    {
+      "sandbox_id": "features-85361b-d6",
+      "kind": "direct",
+      "create_seconds": 8.77774083300028,
+      "upload_seconds": 3.4557096250064205,
+      "download_seconds": 1.3680296660168096,
+      "file_roundtrip_ok": true,
+      "guest_hash_ok": true,
+      "stream_20mb_seconds": 23.169468375010183,
+      "stream_bytes": 20971520,
+      "egress": "egress-ok",
+      "egress_seconds": 1.2639373749843799,
+      "ok": true
+    },
+    {
+      "sandbox_id": "features-85361b-d7",
+      "kind": "direct",
+      "create_seconds": 8.698908916005166,
+      "upload_seconds": 0.7786935420008376,
+      "download_seconds": 2.405122958996799,
+      "file_roundtrip_ok": true,
+      "guest_hash_ok": true,
+      "stream_20mb_seconds": 23.506290958001046,
+      "stream_bytes": 20971520,
+      "egress": "egress-ok",
+      "egress_seconds": 1.163316666992614,
+      "ok": true
+    },
+    {
+      "sandbox_id": "features-85361b-d8",
+      "kind": "direct",
+      "create_seconds": 8.875117832998512,
+      "upload_seconds": 0.8761988330224995,
+      "download_seconds": 1.4634341660130303,
+      "file_roundtrip_ok": true,
+      "guest_hash_ok": true,
+      "stream_20mb_seconds": 22.867776792001678,
+      "stream_bytes": 20971520,
+      "egress": "egress-ok",
+      "egress_seconds": 1.2542067079921253,
+      "ok": true
+    },
+    {
+      "sandbox_id": "features-85361b-d9",
+      "kind": "direct",
+      "create_seconds": 8.768515375006245,
+      "upload_seconds": 4.503923750016838,
+      "download_seconds": 0.747441333020106,
+      "file_roundtrip_ok": true,
+      "guest_hash_ok": true,
+      "stream_20mb_seconds": 23.594898084003944,
+      "stream_bytes": 20971520,
+      "egress": "egress-ok",
+      "egress_seconds": 1.0266954170074314,
+      "ok": true
+    },
+    {
+      "sandbox_id": "features-85361b-r0",
+      "kind": "relay-only",
+      "create_seconds": 8.703412709000986,
+      "egress": "egress-blocked URLError",
+      "relay": "relay-ok",
+      "ok": true
+    },
+    {
+      "sandbox_id": "features-85361b-r1",
+      "kind": "relay-only",
+      "create_seconds": 9.240000833000522,
+      "egress": "egress-blocked URLError",
+      "relay": "relay-ok",
+      "ok": true
+    }
+  ],
+  "create_seconds": {
+    "p50": 8.875,
+    "max": 9.341,
+    "n": 12
+  },
+  "upload_seconds": {
+    "p50": 2.858,
+    "max": 4.504,
+    "n": 10
+  },
+  "download_seconds": {
+    "p50": 1.409,
+    "max": 2.405,
+    "n": 10
+  },
+  "stream_20mb_seconds": {
+    "p50": 23.169,
+    "max": 24.493,
+    "n": 10
+  },
+  "egress_seconds": {
+    "p50": 1.163,
+    "max": 1.373,
+    "n": 10
+  }
+}

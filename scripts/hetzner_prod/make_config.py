@@ -36,10 +36,10 @@ raw.update({
         "location": "hel1",
         "sandbox_server_type": "ccx63",
         "sandbox_image": int(sys.argv[1]) if len(sys.argv) > 1 else "ubuntu-26.04",
-        # Builders install their own bundle on the plain image; images build
-        # on a smaller shape.
+        # Builder bundles also carry a kernel-module closure: boot builders
+        # from the same pinned-kernel snapshot, on a smaller shape.
         "builder_server_type": "ccx33",
-        "builder_image": "ubuntu-26.04",
+        "builder_image": int(sys.argv[1]) if len(sys.argv) > 1 else "ubuntu-26.04",
         "ssh_user": "root",
         "ssh_key_ids": [116985947],
         "firewall_ids": [11454113],
@@ -87,6 +87,8 @@ sandbox.update({
     "swap_gb": 0,
     "direct_runsc_commit": GVISOR_COMMIT,
     "direct_network_allow_tcp": ["10.42.0.2:8092"],
+    # Relay-only egress (network-policy-relay-v1:default), as on UCloud.
+    "network_relays": {"default": "10.42.0.2:8092"},
     "storage_native_cache_gb": 32,
     # Unlimited, as on UCloud: 128 capped the first 540-sandbox run at 128.
     "storage_native_max_ublk_devices": 0,

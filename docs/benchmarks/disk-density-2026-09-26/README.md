@@ -129,3 +129,31 @@ open item.
 checksum passed on rc48 (`e2e-park-wake-hetzner-cpx32-rc48.json`). On rc47,
 the same capture exceeded the fixed 60 s runsc timeout and the sandbox was
 lost; rc48 sizes that deadline by the bytes moved.
+
+## Hetzner: normal load test (rc48)
+
+Both tests were driven from a laptop over the public HTTPS endpoint.
+
+**`hetzner-load150-rc48.json`** (`scripts/live_load_benchmark.py --sandboxes 150`):
+- **Builds:** three fresh images (python/pip, node/npm, ubuntu/apt) built on a
+  CCX33 booted from the pinned-kernel snapshot, in 104–123 s each including
+  builder boot.
+- **Ramp:** 150 sandboxes in 0 → 10 → 50 → 150 steps with 0 failures; 100
+  creates took 8.6 s.
+- **Exec rounds:** 150/150 each.
+  - **Exec start** was slow under 100 concurrent callers: p50 about 6 s.
+  - **Light exec wait** p50 was 2.6 s; cpu_io wait p50 was 5.2 s.
+- **Cleanup:** every sandbox, capacity reservation and the builder cleaned up.
+
+**`hetzner-features-rc48.json`:**
+- **Direct sandboxes (10):**
+  - a 4 MB file round-trip (upload p50 2.9 s, download p50 1.4 s), with
+    hashes verified;
+  - a 20 MB exec stdout stream took about 23 s, under 1 MB/s per session;
+  - direct egress through the gateway NAT worked.
+- **Relay-only sandboxes (2):** direct egress was blocked and the relay at
+  10.42.0.2:8092 was reachable.
+
+**Open items:**
+- exec start latency under concurrency;
+- exec output streaming throughput through the gateway.

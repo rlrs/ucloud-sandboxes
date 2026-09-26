@@ -749,7 +749,7 @@ class RoutingStore:
         cutoff = (
             utc_now() - timedelta(seconds=PROGRAM_TERMINAL_RETENTION_SECONDS)
         ).isoformat()
-        with self._connect() as conn:
+        with self._read() as conn:
             row = conn.execute(
                 """
                 SELECT loss.sandbox_id, loss.generation, loss.job_id,
@@ -771,7 +771,7 @@ class RoutingStore:
         cutoff = (
             utc_now() - timedelta(seconds=PROGRAM_TERMINAL_RETENTION_SECONDS)
         ).isoformat()
-        with self._connect() as conn:
+        with self._read() as conn:
             row = conn.execute(
                 "SELECT * FROM exec_losses WHERE session_id = ? AND lost_at > ?",
                 (session_id, cutoff),
@@ -840,7 +840,7 @@ class RoutingStore:
         *,
         sandbox_generation: int | None = None,
     ) -> ManagedProcessRecord | None:
-        with self._connect() as conn:
+        with self._read() as conn:
             row = conn.execute(
                 """
                 SELECT sandbox_generation, record_json FROM managed_processes
@@ -1084,7 +1084,7 @@ class RoutingStore:
         expected triple; a reused IP or mismatched job must still be rejected.
         """
         cleaned_url = node_url.strip().rstrip("/")
-        with self._connect() as conn:
+        with self._read() as conn:
             return [tuple(row) for row in conn.execute(
                 """SELECT DISTINCT node_id, job_id, node_url FROM sandboxes
                    WHERE node_id = ? OR job_id = ? OR node_url IN (?, ?)
@@ -1096,14 +1096,33 @@ class RoutingStore:
     def sandbox_routes_matching_node_identity(
         self, *, node_id: str, job_id: str, node_url: str,
     ) -> list[SandboxRoute]:
+        """One node's routes for placement accounting; read-only, like
+        placement_routes_readonly, whose memo of unchanged rows it shares.
+
+        Each create or wake admission re-reads its candidate node; decoding
+        every route's JSON again was most of the placement worker's CPU.
+        """
         cleaned_url = node_url.strip().rstrip("/")
-        return [
-            _sandbox_route_from_row(row)
-            for row in self._sandbox_route_rows_readonly(node_identity=(
-                node_id.strip(), job_id.strip(), cleaned_url,
-                f"{cleaned_url}/" if cleaned_url else "",
-            ))
-        ]
+        previous = self._placement_route_memo
+        fresh: dict[str, tuple[tuple[Any, ...], SandboxRoute]] = {}
+        routes = []
+        for row in self._sandbox_route_rows_readonly(node_identity=(
+            node_id.strip(), job_id.strip(), cleaned_url,
+            f"{cleaned_url}/" if cleaned_url else "",
+        )):
+            key = tuple(row.values())
+            sandbox_id = row["sandbox_id"]
+            cached = previous.get(sandbox_id)
+            if cached is not None and cached[0] == key:
+                route = cached[1]
+            else:
+                route = _sandbox_route_from_row(row)
+                fresh[sandbox_id] = (key, route)
+            routes.append(route)
+        if fresh:
+            # Publish copy-on-write; racing readers each leave a valid memo.
+            self._placement_route_memo = {**self._placement_route_memo, **fresh}
+        return routes
 
     def upsert_program_request_transition_with_change(
         self,
@@ -1271,7 +1290,7 @@ class RoutingStore:
             ), True
 
     def program_request_readonly(self, request_id: str) -> ProgramRequestState | None:
-        with self._connect() as conn:
+        with self._read() as conn:
             row = conn.execute("""SELECT request_id, rollout_id, sandbox_id,
                 sandbox_generation, state, resources_json, accepted_at, parked_at,
                 response_ready_at, wake_started_at, wake_completed_at, updated_at,
@@ -1291,7 +1310,7 @@ class RoutingStore:
         )
         clauses = "" if include_terminal else f"WHERE state IN ({open_states})"
         bounded_limit = max(1, min(1_000_000, int(limit)))
-        with self._connect() as conn:
+        with self._read() as conn:
             return [
                 _program_request_from_row(row)
                 for row in conn.execute(
@@ -1857,7 +1876,7 @@ class RoutingStore:
             parameters.extend((node_id.strip(), job_id.strip(), cleaned_url,
                                cleaned_url + "/" if cleaned_url else ""))
         where = "WHERE " + " AND ".join(clauses) if clauses else ""
-        with self._connect() as conn:
+        with self._read() as conn:
             return [
                 _sandbox_migration_from_row(row)
                 for row in conn.execute(
@@ -3798,6 +3817,14 @@ class RoutingStore:
                 )
             conn.execute(f"PRAGMA user_version={ROUTING_SCHEMA_VERSION}")
             conn.commit()
+
+    def _read(self):
+        """Connection for a read that issues exactly one statement.
+
+        SQLite shares _connect. PostgreSQL runs it as one autocommit statement,
+        which is already a coherent snapshot, instead of BEGIN/SET/COMMIT.
+        """
+        return self._connect()
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:

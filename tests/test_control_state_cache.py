@@ -295,6 +295,7 @@ class ControlStateCacheTests(unittest.TestCase):
             with store._connection() as conn:
                 conn.set_trace_callback(statements.append)
             store.path.chmod(0o644)
+            store._connection_checked_at = float('-inf')  # file checks run once a second
             self.assertEqual(store.get_heartbeat('job').job_id, 'job')
             self.assertFalse(any(s.startswith(('BEGIN', 'COMMIT')) for s in statements))
             self.assertEqual(store.path.stat().st_mode & 0o777, 0o600)

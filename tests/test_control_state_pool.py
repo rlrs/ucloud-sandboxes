@@ -71,5 +71,6 @@ class ControlStatePoolTests(unittest.TestCase):
             replacement = Path(directory) / 'replacement.sqlite'
             ControlStateStore(replacement)
             os.replace(replacement, path)
+            store._connection_checked_at = float('-inf')  # next once-a-second check
             with self.assertRaisesRegex(ValueError, 'control state is unreadable'):
                 store.get_heartbeat('absent')

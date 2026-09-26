@@ -267,6 +267,31 @@ class RoutingStoreTests(unittest.TestCase):
                 self.assertEqual(store.sandbox_migrations(active_only=True, sandbox_id="absent"), [])
                 self.assertEqual(decode.call_count, 1)
 
+    def test_node_placement_read_decodes_only_changed_rows(self) -> None:
+        with routing_store() as store:
+            for name in ("one", "two"):
+                store.upsert_sandbox(sandbox_route(
+                    sandbox_id=name, node_id="node", job_id="job",
+                    node_url="http://node", state="running",
+                ))
+            identity = {"node_id": "node", "job_id": "job", "node_url": "http://node"}
+            first = store.sandbox_routes_matching_node_identity(**identity)
+            with patch("ucloud_sandboxes.routing._sandbox_route_from_row",
+                       wraps=routing_module._sandbox_route_from_row) as decode:
+                again = store.sandbox_routes_matching_node_identity(**identity)
+                self.assertEqual(decode.call_count, 0)
+                self.assertTrue(all(a is b for a, b in zip(first, again)))
+                store.upsert_sandbox(sandbox_route(
+                    sandbox_id="two", node_id="node", job_id="job",
+                    node_url="http://node", state="parked",
+                ))
+                before = decode.call_count  # the write decodes its own result
+                changed = store.sandbox_routes_matching_node_identity(**identity)
+                self.assertEqual(decode.call_count - before, 1)
+            by_id = {route.sandbox_id: route for route in changed}
+            self.assertEqual(by_id["two"].state, "parked")
+            self.assertIs(by_id["one"], first[0] if first[0].sandbox_id == "one" else first[1])
+
     def test_single_route_reads_do_not_wait_for_reconciliation_writer(self) -> None:
         with routing_store() as store, ThreadPoolExecutor(max_workers=2) as executor:
             route = store.upsert_sandbox(sandbox_route(

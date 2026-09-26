@@ -33,8 +33,11 @@ class SqlitePermissionTests(unittest.TestCase):
                             read()
                         chmod.assert_not_called()
 
-                    # Main-file mode and identity remain checked on every read.
+                    # Main-file mode and identity are rechecked on reads (the
+                    # control state at most once a second).
                     path.chmod(0o644)
+                    if not isinstance(store, RoutingStore):
+                        store._connection_checked_at = float("-inf")
                     read()
                     self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
 

@@ -4375,6 +4375,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 self._write_json({'error':str(exc)},status=400)
                 return
             if not self._warm_wake_route(sandbox_id,int(raw['generation'])):
+                self._prefetched_route = None
                 self._defer_placement('wake',sandbox_id,path,body)
                 return
             # A running owner already holds its capacity: there is no placement
@@ -4404,11 +4405,13 @@ class ControlPlaneHandler(BuildContextHttpHandler):
 
     def _warm_wake_route(self, sandbox_id: str, generation: int) -> bool:
         try:
-            return _is_warm_wake_route(
-                self.routing_store.get_sandbox_readonly(sandbox_id), generation,
-            )
+            route = self.routing_store.get_sandbox_readonly(sandbox_id)
         except sqlite3.DatabaseError:
             return False  # The durable queue owns availability errors.
+        # The admitted path runs immediately (a wake body is never buffered
+        # behind admission), so it reuses this read instead of repeating it.
+        self._prefetched_route = (sandbox_id, route)
+        return _is_warm_wake_route(route, generation)
 
     def _write_missing_sandbox_route(self, sandbox_id: str) -> None:
         loss = self.routing_store.get_sandbox_loss(sandbox_id)
@@ -4430,7 +4433,11 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         )
 
     def _route_sandbox_request_admitted(self, sandbox_id: str, path: str) -> None:
-        route = self.routing_store.get_sandbox(sandbox_id)
+        prefetched, self._prefetched_route = getattr(self, "_prefetched_route", None), None
+        if prefetched is not None and prefetched[0] == sandbox_id:
+            route = prefetched[1]
+        else:
+            route = self.routing_store.get_sandbox(sandbox_id)
         fallback, self._warm_wake_fallback = getattr(self, "_warm_wake_fallback", None), None
         if fallback is not None and not _is_warm_wake_route(route):
             # Placement belongs to the durable queue; never reserve it here.

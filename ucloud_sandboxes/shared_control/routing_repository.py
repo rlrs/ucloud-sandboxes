@@ -47,6 +47,22 @@ class _Row(dict):
         return iter(self.values())
 
 
+@contextmanager
+def _begun(conn, statement):
+    """Open a transaction in one round trip; commit on success, else roll back.
+
+    psycopg's transaction() followed by SET TRANSACTION costs two round trips
+    before the first query, on every routed request.
+    """
+    conn.execute(statement)
+    try:
+        yield
+    except BaseException:
+        conn.rollback()
+        raise
+    conn.commit()
+
+
 def _row_factory(cursor):
     names = [column.name for column in cursor.description] if cursor.description else []
     return lambda values: _Row(zip(names, values))
@@ -109,6 +125,8 @@ def _transactional(method):
     return call
 
 
+_AUTHORITY_RECHECK_SECONDS = 1.0
+
 # Indexes added after version 1. They only speed queries up, so old and new
 # code share the schema version; ``migrate`` applies them idempotently.
 ROUTING_ADDITIVE_DDL = (
@@ -149,6 +167,7 @@ class PostgresRoutingStore(RoutingStore):
         self.telemetry = Telemetry.disabled("routing-authority")
         self._pid = os.getpid()
         self._authority_identity = None
+        self._authority_checked_at = float("-inf")
         self._current = ContextVar("routing_connection", default=None)
         self._placement_snapshot = ContextVar("placement_snapshot", default=False)
         self._placement_worker = ContextVar("placement_worker", default=None)
@@ -193,16 +212,24 @@ class PostgresRoutingStore(RoutingStore):
     def bind_authority(self):
         info = self.path.stat()
         self._authority_identity = (info.st_dev, info.st_ino)
+        self._authority_checked_at = time.monotonic()
 
     def validate_authority(self):
         if os.getpid() != self._pid:
             raise sqlite3.DatabaseError("reopen PostgreSQL routing store after fork")
         if self._authority_identity is not None:
+            # A replaced descriptor means an operator cutover, which requires
+            # stopped services. Re-stat at most once a second: a stat before
+            # every routed query was ~7% of the gateway's CPU under load.
+            now = time.monotonic()
+            if now - self._authority_checked_at < _AUTHORITY_RECHECK_SECONDS:
+                return
             info = self.path.stat()
             if (info.st_dev, info.st_ino) != self._authority_identity:
                 raise sqlite3.DatabaseError(
                     "routing authority descriptor was replaced; restart required"
                 )
+            self._authority_checked_at = now
 
     @_transactional
     def _placement_attempt(self, operation, outcomes):
@@ -523,6 +550,20 @@ class PostgresRoutingStore(RoutingStore):
             raise sqlite3.DatabaseError("PostgreSQL routing read failed") from exc
 
     @contextmanager
+    def _read(self):
+        current = self._current.get()
+        if current is not None:
+            yield current
+            return
+        self.validate_authority()
+        try:
+            # One statement under autocommit has one coherent snapshot.
+            with self.pool.connection() as conn:
+                yield _Connection(conn)
+        except psycopg.Error as exc:
+            raise sqlite3.DatabaseError("PostgreSQL routing read failed") from exc
+
+    @contextmanager
     def _connect(self):
         current = self._current.get()
         if current is not None:
@@ -530,13 +571,12 @@ class PostgresRoutingStore(RoutingStore):
             return
         self.validate_authority()
         try:
-            with self.pool.connection() as conn, conn.transaction():
+            with self.pool.connection() as conn, _begun(
+                conn, "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY"
+            ):
                 # SQLite readers see one snapshot across explicit BEGIN and
                 # their subsequent queries. Preserve that contract for GC's
                 # completeness check and all other multi-query domain reads.
-                conn.execute(
-                    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
-                )
                 yield _Connection(conn, coherent_reader=True)
         except psycopg.Error as exc:
             raise sqlite3.DatabaseError("PostgreSQL routing read failed") from exc
@@ -613,12 +653,12 @@ class PostgresRoutingStore(RoutingStore):
             try:
                 with self.pool.connection() as conn:
                     acquired = time.monotonic()
-                    with self._worker_turn(conn, span), conn.transaction():
-                        conn.execute(
-                            "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"
-                            if self._placement_snapshot.get()
-                            else "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"
-                        )
+                    with self._worker_turn(conn, span), _begun(
+                        conn,
+                        "BEGIN ISOLATION LEVEL REPEATABLE READ"
+                        if self._placement_snapshot.get()
+                        else "BEGIN ISOLATION LEVEL SERIALIZABLE",
+                    ):
                         adapted = _Connection(conn)
                         token = self._current.set(adapted)
                         capacity_token = self._capacity_touched.set(set())

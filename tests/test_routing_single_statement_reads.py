@@ -132,6 +132,9 @@ class SingleStatementRoutingTests(unittest.TestCase):
         replacement = self.path.with_suffix(".replacement")
         replacement.write_text("changed")
         replacement.replace(self.path)
+        # Replacement is detected by the next once-a-second recheck.
+        self.store.get_sandbox("single")
+        self.store._authority_checked_at = float("-inf")
         with self.assertRaisesRegex(sqlite3.DatabaseError, "descriptor was replaced"):
             self.store.get_sandbox("single")
 

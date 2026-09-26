@@ -87,6 +87,7 @@ _TABLE_SQL = """CREATE TABLE control_records (
     payload TEXT NOT NULL,
     PRIMARY KEY (namespace, record_id)
 ) STRICT, WITHOUT ROWID"""
+_CONNECTION_FILE_RECHECK_SECONDS = 1.0
 
 
 class ControlStateStore:
@@ -101,6 +102,7 @@ class ControlStateStore:
         self._connections_guard = Lock()
         self._connection_pid = os.getpid()
         self._connection_identity: tuple[int, int] | None = None
+        self._connection_checked_at = float("-inf")
         self._connection_finalizer = weakref.finalize(
             self, self._reader_pool.close,
         )
@@ -438,6 +440,11 @@ class ControlStateStore:
     def _validate_connection_file(self):
         if os.getpid() != self._connection_pid:
             raise sqlite3.DatabaseError("reopen control state after fork")
+        # Replacement and mode drift are operator faults; detect them within a
+        # second instead of paying a stat and a lock on every heartbeat read.
+        now = time.monotonic()
+        if now - self._connection_checked_at < _CONNECTION_FILE_RECHECK_SECONDS:
+            return
         info = self.path.stat()
         identity = (info.st_dev, info.st_ino)
         with self._connections_guard:
@@ -446,6 +453,7 @@ class ControlStateStore:
             self._connection_identity = identity
         if stat.S_IMODE(info.st_mode) != 0o600:
             os.chmod(self.path, 0o600)
+        self._connection_checked_at = now
 
     @contextmanager
     def _transaction(self, *, write: bool) -> Iterator[sqlite3.Connection]:

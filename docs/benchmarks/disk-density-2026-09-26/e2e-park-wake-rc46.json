@@ -1,0 +1,49 @@
+{
+  "sandbox_id": "density-e2e-c17d42c3",
+  "create_seconds": 4.5419305420073215,
+  "df_initial": [
+    0,
+    "none           8796093022208     0 8796093022208   0% /",
+    ""
+  ],
+  "write": [
+    0,
+    "ok",
+    ""
+  ],
+  "write_seconds": 32.94915066700196,
+  "df_after_write": [
+    0,
+    "none           8796093022208  2560 8796093019648   1% /",
+    ""
+  ],
+  "sum_before": [
+    0,
+    "ab895e38b0ac3ae30971bdf3734cde253ba348843c965284b08dc9ca971d123a  -",
+    ""
+  ],
+  "mem": [
+    0,
+    "started",
+    ""
+  ],
+  "park_seconds": 48.132257749995915,
+  "park_state": "parked",
+  "sum_after": [
+    0,
+    "ab895e38b0ac3ae30971bdf3734cde253ba348843c965284b08dc9ca971d123a  -",
+    ""
+  ],
+  "wake_exec_seconds": 74.07118012499996,
+  "df_after_wake": [
+    0,
+    "none           8796093022208  2560 8796093019648   1% /",
+    ""
+  ],
+  "mem_alive": [
+    1,
+    "",
+    "sh: 1: kill: No such process"
+  ],
+  "checksums_match": true
+}

@@ -1,0 +1,114 @@
+{
+  "churn_upper_allocated": [
+    1020960768,
+    1020960768,
+    1020960768,
+    1020960768
+  ],
+  "churn_upper_bound_ok": true,
+  "create_seconds": 0.29666718400000036,
+  "enospc": {
+    "enospc": true,
+    "neighbour_enospc": false,
+    "neighbour_written": 268435456,
+    "written": 947912704
+  },
+  "final_metrics": {
+    "active_operations": 0,
+    "cache_bytes": 0,
+    "device_pool_acquires": 0,
+    "device_pool_discards": 0,
+    "device_pool_enabled": false,
+    "device_pool_high_watermark": 16,
+    "device_pool_idle_devices": 2,
+    "device_pool_low_watermark": 2,
+    "device_pool_new_acquires": 0,
+    "device_pool_releases": 0,
+    "device_pool_reused_acquires": 0,
+    "error_volumes": 0,
+    "hard_capacity_bytes": 68719476736,
+    "hard_reserved_bytes": 16655712256,
+    "journal_batch_begin_wait_ms": 1.1962619999792423,
+    "journal_batch_commit_ms": 68.6225820000459,
+    "journal_batch_commits": 25,
+    "journal_batch_failed_batches": 0.0,
+    "journal_batch_operations": 25,
+    "journal_batch_queue_wait_ms": 0.648909000005915,
+    "journal_batch_transaction_ms": 18.209932000047502,
+    "local_compaction_active": 0,
+    "local_compaction_adopted": 0,
+    "local_compaction_cancelled": 0,
+    "local_compaction_completed": 0,
+    "local_compaction_deferred": 0,
+    "local_compaction_discarded_bytes": 0,
+    "local_compaction_failed": 0,
+    "local_compaction_input_bytes": 0,
+    "local_compaction_output_bytes": 0,
+    "local_compaction_paced_ms": 0,
+    "local_compaction_waiting": 0,
+    "max_concurrent_operations": 8,
+    "published_local_cache_bytes": 0,
+    "published_local_cache_entries": 0,
+    "published_local_cache_evictions": 0,
+    "published_local_cache_hits": 0,
+    "published_local_cache_misses": 0,
+    "published_volumes": 0,
+    "retired_devices": 0,
+    "retired_reserved_bytes": 0,
+    "ublk_active_devices": 3,
+    "ublk_live_devices": 5,
+    "ublk_max_devices": 0,
+    "volume_count": 3,
+    "waiting_operations": 0
+  },
+  "grow_seconds": [
+    0.015648155000008046,
+    0.010835620000023027,
+    0.016169606999994812
+  ],
+  "initial": {
+    "filesystem_bytes": 1073741824,
+    "granted_size": 1073741824,
+    "metrics_hard_reserved": 1073741824,
+    "statvfs_free": 953409536,
+    "statvfs_total": 1006632960
+  },
+  "monitor_stream": {
+    "early_enospc": false,
+    "growths": [
+      [
+        1.0149938059999783,
+        2147483648
+      ],
+      [
+        1.5294586589999994,
+        3221225472
+      ],
+      [
+        3.551717903999986,
+        4831838208
+      ],
+      [
+        5.613079075000002,
+        7247757312
+      ],
+      [
+        8.127779863999962,
+        8589934592
+      ]
+    ],
+    "mb_per_second": 316.87836493718163,
+    "monitor_errors": [],
+    "seconds": 22.620667085999997,
+    "written": 7516192768
+  },
+  "released": {
+    "charged_bytes": 6992035840,
+    "local_layer_bytes": 2697068544
+  },
+  "remount_granted_size": 4294967296,
+  "schema": 1,
+  "status": "passed",
+  "test_root": "/var/tmp/ucloud-workspace-growth-di2wnxdf",
+  "upper_mode": "hybridLogStructured"
+}

@@ -1,6 +1,7 @@
 # Disk density: claims that follow demonstrated usage
 
-Status: implemented in 0.5.114rc44. Qualification notes are at the end.
+Status: implemented in 0.5.114rc44–rc46 and qualified on a UCloud worker; see
+[benchmarks/disk-density-2026-09-26](benchmarks/disk-density-2026-09-26/README.md).
 
 ## Problem
 
@@ -210,11 +211,22 @@ RAM (192 GB on a CCX63), not disk, now limits how many run at once.
 
 ## Qualification
 
-`runtime/storage_native/qualify_workspace_growth.py` formats a ublk
-(`--daemon`) or loop workspace at a grant. It then:
-- fills it and grows it online to the ceiling, repeatedly;
-- verifies that sealing, reconstruction and remount preserve the grown size;
-- checks that the upper's allocated bytes stay within the grant;
-- verifies that `ENOSPC` at the grant does not affect the node.
+`runtime/storage_native/qualify_workspace_growth.py` exercises grants on
+real ublk/XFS:
+- formatting at a grant, ENOSPC containment, and upper allocation under
+  churn;
+- online growth under writes, remount readback, and monitor-driven growth.
 
-Results are recorded in `docs/benchmarks/`.
+The 2026-09-26 results, an end-to-end park/wake run through the gateway, and
+540 sandboxes on one worker are recorded in
+[benchmarks/disk-density-2026-09-26](benchmarks/disk-density-2026-09-26/README.md).
+
+Known follow-ups:
+- **Heavy writers keep stale filestore blocks.** A sealed layer keeps the
+  filestore blocks that hibernate punched, because runtime trim is still
+  disabled. Until the workspace is published, a heavy writer's parked
+  workspace costs about its grant twice. Trimming before sealing
+  (`qualify_xfs_trim.py`) would remove that.
+- **Fixed-claim registrations still use the old formula.** This covers
+  upgraded and imported registrations, and it can be too small for a sandbox
+  that wrote gigabytes to its rootfs.

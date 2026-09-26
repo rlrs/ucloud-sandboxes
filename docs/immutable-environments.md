@@ -186,7 +186,8 @@ and drain workers for rollback. A new Docker worker remains the supported rollba
 The installer creates `ucloud-environment-io.service` independently of agent and
 storage frontend restarts, sharing the host mount namespace. Reinitialization
 starts an existing backend without restarting it. A newly loaded NBD module gets
-64 dedicated devices; an already loaded module is never reconfigured. Component
+512 dedicated devices (one per distinct mounted component); an already loaded
+module is never reconfigured. Component
 cache bytes consume at most half of existing reserved disk headroom, leaving the
 other half for safety rather than silently increasing writable admission.
 

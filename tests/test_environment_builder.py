@@ -62,6 +62,20 @@ class EnvironmentBuilderTests(unittest.TestCase):
                 if (root / "invalid").exists():
                     (root / "invalid").rmdir()
 
+    def test_whole_image_entry_copies_everything_but_runtime_mounts(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            for name in ("etc", "testbed", "opt", "dev", "proc", "sys", "run"):
+                (source / name).mkdir(parents=True)
+            (source / "testbed/repo.py").write_text("task")
+            (source / "bin").symlink_to("usr/bin")
+            target = root / "view"
+            allowlisted_build_view(source, target, ["*"])
+            self.assertEqual(sorted(p.name for p in target.iterdir()), ["bin", "etc", "opt", "testbed"])
+            self.assertEqual((target / "testbed/repo.py").read_text(), "task")
+            self.assertTrue((target / "bin").is_symlink())
+
     def test_existing_builder_records_annotated_manifest_only_after_publish(self):
         with TemporaryDirectory() as temporary:
             calls = []

@@ -61,12 +61,35 @@ def _copy_entry(source, destination, hardlinks):
     _copy_metadata(source, destination, info)
 
 
+# Mounted by the sandbox runtime; Docker images carry them empty.
+WHOLE_IMAGE_EXCLUDED = frozenset({"dev", "proc", "sys", "run"})
+
+
+def expand_allowlist(source_root: Path, paths) -> list:
+    """Expand ``*`` to every top-level image entry except runtime mounts.
+
+    Arbitrary imported and task images keep content in places a fixed list
+    cannot know (``/testbed``, ``/app``, ``/opt/conda``), and a listed path
+    that an image lacks is an error.
+    """
+    expanded = []
+    for value in paths:
+        if value == "*":
+            expanded.extend(sorted(
+                entry.name for entry in source_root.iterdir()
+                if entry.name not in WHOLE_IMAGE_EXCLUDED
+            ))
+        else:
+            expanded.append(value)
+    return expanded
+
+
 def allowlisted_build_view(source_root: Path, destination: Path, paths):
     """Copy declared immutable image paths, preserving merged-layer semantics."""
     if source_root.is_symlink() or not source_root.is_dir() or destination.exists():
         raise ValueError("fresh environment view requires a real source and new destination")
     allowed = []
-    for value in paths:
+    for value in expand_allowlist(source_root, paths):
         if not isinstance(value, str):
             raise ValueError("environment allowlist paths must be strings")
         path = PurePosixPath(value)

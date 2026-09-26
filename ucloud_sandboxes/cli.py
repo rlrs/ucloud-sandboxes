@@ -1145,6 +1145,10 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         registry_worker_url=config.registry_worker_url,
         registry_usage_file=config.registry_usage_file(),
         environment_registry=environment_registry_from_args(args) or environment_registry_from_deployment(config),
+        import_external_images=bool(
+            config.immutable_environments is not None
+            and config.immutable_environments.worker_enabled
+        ),
         max_concurrent_sandbox_creates=(config.gateway_max_concurrent_sandbox_creates),
         create_target_concurrency_per_node=(
             config.policy.create_target_concurrency_per_node

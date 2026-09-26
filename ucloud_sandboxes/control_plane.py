@@ -27,6 +27,12 @@ import urllib3
 from urllib3.exceptions import HTTPError as Urllib3HTTPError
 from urllib3.exceptions import EmptyPoolError
 
+from .image_import import (
+    IMPORT_RETRY_AFTER_SECONDS,
+    ImageImportSubmitter,
+    import_build_context,
+    import_image_id,
+)
 from .placement_accounting import (
     PlacementReservation as PlacementReservation,
     PlacementRecord as PlacementRecord,
@@ -2457,6 +2463,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             if image_error is not None:
                 self._write_image_resolution_error(image_error)
                 return
+            # Start an import early; creates wait for it, preparation does not.
+            image, _ = self._external_image_import(image, wait=False)
 
         item = self.routing_store.upsert_prepared_capacity(
             prepare_id,
@@ -3188,6 +3196,16 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     if resolved_image != spec.image:
                         spec = replace(spec, image=resolved_image)
                         root.set_attribute("resolved_image", resolved_image)
+                imported_image, import_error = self._external_image_import(
+                    spec.image, wait=True,
+                )
+                if import_error is not None:
+                    root.set_attribute("outcome", str(import_error.get("error_code")))
+                    self._write_image_import_error(import_error)
+                    return
+                if imported_image != spec.image:
+                    spec = replace(spec, image=imported_image)
+                    root.set_attribute("imported_image", imported_image)
 
             with self.telemetry.span(
                 "gateway.sandbox_existing_route_check",
@@ -5991,6 +6009,77 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     "hold_ms": held * 1000,
                 })
 
+    def _external_image_import(
+        self, image: str, *, wait: bool,
+    ) -> tuple[str, dict[str, Any] | None]:
+        """Map an external image to its imported managed copy (docs/image-import.md).
+
+        Only fleets whose workers run immutable environments import; their
+        workers cannot run an image without a signed attachment. Returns the
+        pinned managed reference once the import is published. Otherwise it
+        submits the import and, when ``wait`` is set, returns a pending error.
+        """
+
+        submitter = getattr(self, "image_import_submitter", None)
+        image = image.strip()
+        if submitter is None or not image:
+            return image, None
+        if self.registry_url and _managed_registry_image_coordinates(
+            image, self.registry_url, self.registry_worker_url or "",
+        ) is not None:
+            return image, None
+        import_id = import_image_id(image)
+        resolved, resolution_error = self._resolve_sandbox_image_reference(
+            import_id, reference_kind="name",
+        )
+        if resolution_error is None and manifest_digest_from_image_ref(resolved):
+            return resolved, None
+        failure = self._image_import_failure(import_id)
+        submitter.ensure_submitted(import_id, image)
+        if not wait:
+            return image, None
+        if failure:
+            return image, {
+                "error": f"importing {image} failed: {failure}",
+                "error_code": "image_import_failed",
+                "retryable": False,
+                "image": image,
+                "import_id": import_id,
+            }
+        return image, {
+            "error": f"image {image} is being imported for immutable workers",
+            "error_code": "image_import_pending",
+            "retryable": True,
+            "image": image,
+            "import_id": import_id,
+        }
+
+    def _image_import_failure(self, import_id: str) -> str:
+        try:
+            records = self._image_build_records_for_key(import_id)
+        except Exception:
+            return ""
+        if not records:
+            return ""
+        latest = sorted(
+            records,
+            key=lambda item: (str(item.get("created_at") or ""), str(item.get("build_id") or "")),
+        )[-1]
+        if str(latest.get("status") or "") != "failed":
+            return ""
+        return str(latest.get("error") or latest.get("log_tail") or "build failed")[-500:]
+
+    def _write_image_import_error(self, payload: dict[str, Any]) -> None:
+        retryable = payload.get("retryable") is True
+        self._write_json(
+            payload,
+            status=HTTPStatus.SERVICE_UNAVAILABLE if retryable else HTTPStatus.BAD_REQUEST,
+            headers=(
+                {"Retry-After": str(IMPORT_RETRY_AFTER_SECONDS), "X-UCloud-Sandbox-Retryable": "true"}
+                if retryable else None
+            ),
+        )
+
     def _write_image_resolution_error(self, payload: dict[str, Any]) -> None:
         transient = payload.get("error_code") in TRANSIENT_IMAGE_RESOLUTION_ERROR_CODES
         self._write_json(
@@ -7097,6 +7186,7 @@ def build_server(
     registry_worker_url: str | None = None,
     registry_usage_file: Path | None = None,
     environment_registry: object | None = None,
+    import_external_images: bool = False,
     max_concurrent_sandbox_creates: int = DEFAULT_MAX_CONCURRENT_SANDBOX_CREATES,
     create_target_concurrency_per_node: int = (
         ScalePolicy().create_target_concurrency_per_node
@@ -7240,6 +7330,15 @@ def build_server(
         else None
     )
     BoundHandler.registry_usage_store = registry_usage_store
+    loopback = ["127.0.0.1" if host in {"", "0.0.0.0", "::"} else host, port]
+    BoundHandler.image_import_submitter = (
+        ImageImportSubmitter(_loopback_image_import(
+            BoundHandler.build_context_store,
+            gateway_bearer_token,
+            lambda: f"http://{loopback[0]}:{loopback[1]}",
+        ))
+        if import_external_images else None
+    )
     BoundHandler.environment_dependency_resolver = None
     if environment_registry is not None:
         from .environment_dependencies import EnvironmentDependencyResolver
@@ -7321,14 +7420,56 @@ def build_server(
 
     GatewayHTTPServer.reuse_port = bool(reuse_port)
     try:
-        return GatewayHTTPServer(
+        server = GatewayHTTPServer(
             (host, port), BoundHandler, max_request_threads=max_http_request_threads,
         )
+        loopback[1] = server.server_address[1]
+        return server
     except BaseException:
         if routing_writer is not None:
             routing_writer.close()
         metrics_store.close()
         raise
+
+
+def _loopback_image_import(build_context_store, gateway_bearer_token, base_url):
+    """Submit an image import as an ordinary managed build through this gateway."""
+
+    def submit(import_id: str, image: str) -> None:
+        archive = import_build_context(image)
+        digest = "sha256:" + hashlib.sha256(archive).hexdigest()
+        from io import BytesIO
+        build_context_store.put_with_status(digest, BytesIO(archive), content_length=len(archive))
+        payload = {
+            "id": import_id,
+            "context_path": ".",
+            "dockerfile": "Dockerfile",
+            "context_archive_digest": digest,
+            "context_archive_format": "tar.gz",
+            "context_archive_size": len(archive),
+            "labels": {"org.ucloud.import-source": image[:512]},
+        }
+        submission = request.Request(
+            base_url() + "/v1/images/build",
+            data=json.dumps(payload).encode("utf-8"),
+            method="POST",
+            headers={
+                "Authorization": f"Bearer {gateway_bearer_token}",
+                "Content-Type": "application/json",
+            },
+        )
+        try:
+            with request.urlopen(submission, timeout=300) as response:
+                response.read()
+        except error.HTTPError as exc:
+            body = exc.read()[:500]
+            exc.close()
+            # No builder yet: the build is queued and the autoscaler boots one;
+            # the next create retry resubmits.
+            if exc.code != HTTPStatus.SERVICE_UNAVAILABLE:
+                raise RuntimeError(f"import build rejected ({exc.code}): {body!r}") from exc
+
+    return submit
 
 
 def _async_proxy_response(response, transport_error):

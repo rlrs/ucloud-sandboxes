@@ -1,0 +1,6 @@
+#!/bin/sh
+# SSH to a private node through the gateway: node <private-ip> [command...]
+d=$(cd "$(dirname "$0")" && pwd)
+ip="$1"; shift
+exec ssh -i "$d/../../.hetzner/ssh/gateway-init" -o UserKnownHostsFile="$d/../../build/hetzner-prod/known_hosts" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o ServerAliveInterval=30 \
+  -o ProxyCommand="ssh -i $d/../../.hetzner/ssh/gateway-init -o UserKnownHostsFile=$d/../../build/hetzner-prod/known_hosts -W %h:%p root@77.42.92.27" root@"$ip" "$@"

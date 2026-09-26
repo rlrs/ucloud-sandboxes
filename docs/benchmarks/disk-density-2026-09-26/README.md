@@ -90,3 +90,42 @@ The claim is still about 8 × the physical use, because each workspace holds
 a 1 GiB grant. A 512 MiB grant roughly halves it. On a CCX63 (about 780 GiB
 of capacity) the 1 GiB default fits about 700 running sandboxes on disk.
 RAM is the binding limit.
+
+## Hetzner: 540 sandboxes on one CCX63 (rc48)
+
+**Setup:**
+- Gateway: CPX32 on Primary IP 77.42.92.27, 3 gateway processes.
+- Worker: one CCX63 (48 dedicated vCPU, 184 GiB, 915 GiB disk), booted from
+  golden snapshot `436465822`: Ubuntu 26.04, pinned kernel 7.0.0-30, the
+  qualified rc48 node bundle.
+- Worker configuration: RAM-backed memory, reflink restore off, 512 MiB
+  grants, `storage_native_max_ublk_devices=0`.
+- Driver: a CCX23 in the private network.
+- Workload: identical to the UCloud run above.
+
+| Run | Placed | Correct | Usable exec p50 / p95 / p99 |
+|---|---:|---|---|
+| `-ublk128` (cap inherited from rc37) | 128 | no: creates beyond 128 timed out | 0.40 / 0.50 / 0.53 s |
+| `-cold` (worker booted seconds before) | 540 | yes, 0 errors | 0.62 / 4.61 / 8.49 s |
+| `-warm` (same worker, second run) | 540 | yes, 0 errors | 0.66 / 3.96 / 8.04 s |
+| `-gw3` (3 gateway processes) | 540 | yes, 0 errors | 0.62 / 3.83 / 8.80 s |
+
+**Claims:** 540 × 576 MiB = 311,040 MiB of about 795 GiB. Physical use on
+the shared filesystem grew by about 60 GB (`node-claim-totals-hetzner-rc48.txt`).
+
+**Where the tail comes from.** All of it falls in the creation burst: 540
+creates land on one node within about 80 s. Guest continuation p95 was:
+- **first 20 s:** 12.7 s;
+- **t+20 to 40 s:** 2.5 s;
+- **after that:** 0.16–0.57 s, lower than UCloud's 0.28–1.34 s in the same
+  windows.
+
+Three things were ruled out as causes: the driver's event loop (lag p99
+0.09 s), the gateway (3 processes changed nothing; response commit p95 is
+0.03 s), and cold images. Burst create admission on a single node is the
+open item.
+
+**Canary on the CPX32 snapshot source.** A 2.5 GiB write, park, wake and
+checksum passed on rc48 (`e2e-park-wake-hetzner-cpx32-rc48.json`). On rc47,
+the same capture exceeded the fixed 60 s runsc timeout and the sandbox was
+lost; rc48 sizes that deadline by the bytes moved.

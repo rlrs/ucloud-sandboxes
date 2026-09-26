@@ -1,0 +1,4 @@
+#!/bin/sh
+# SSH to the qualification gateway.
+d=$(cd "$(dirname "$0")" && pwd)
+exec ssh -i "$d/../../.hetzner/ssh/gateway-init" -o UserKnownHostsFile="$d/../../build/hetzner-prod/known_hosts" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o ServerAliveInterval=30 root@77.42.92.27 "$@"

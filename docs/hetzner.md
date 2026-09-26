@@ -102,6 +102,57 @@ transactional backups. Put the much larger immutable registry blob tree on a
 Hetzner Volume; network-storage latency should not sit under SQLite commits or
 worker sandbox COW.
 
+## Production deployment (2026-09-26, 0.5.114rc48)
+
+The Hetzner production deployment is scripted in `scripts/hetzner_prod/`. It
+writes generated state to the git-ignored `build/hetzner-prod/`, and its
+secrets come from `.env`.
+
+**Gateway:**
+- CPX32 `sandboxes-gateway` at `10.42.0.2`, on Primary IP `77.42.92.27`
+  (`auto_delete` off). The SDK URL is `https://77.42.92.27`, with a
+  Let's Encrypt IP certificate.
+- Runs PostgreSQL 18, an S3-backed registry (bucket
+  `ucloud-sandboxes-prod-20260926`), the relay, NAT and 3 gateway processes.
+
+**Workers:**
+- CCX63, autoscaled 0–3, booting golden snapshot `436465822`: Ubuntu 26.04,
+  **pinned kernel 7.0.0-30**, the rc48 node bundle.
+- The plain `ubuntu-26.04` image boots whatever kernel it currently carries
+  (7.0.0-29/30/31 have all been seen), and a bundle's kernel modules only
+  match one. Always boot workers from a snapshot.
+- The snapshot source can be a small CPX32. The snapshot boots on any larger
+  disk.
+
+**Configuration** (`make_config.py`):
+- Density over wake latency: RAM-backed memory, reflink restore off, 512 MiB
+  workspace grants (docs/disk-density.md).
+- `storage_native_max_ublk_devices=0`: the rc37 value of 128 capped a node
+  at 128 sandboxes.
+- `gateway_processes=3`.
+
+**Bring-up from an empty project** (network, firewalls and SSH key exist):
+1. `hz.py gateway`
+2. `upgrade-gateway.sh <version>`. It stages the wheel, the node bundles
+   (taken from the matching UCloud release) and the deployment. On a fresh
+   host it runs `gateway-prep.sh` (PostgreSQL, venv, schema migration,
+   routing cutover), then `install_hetzner_gateway.sh`. Rerunning it
+   upgrades in place and keeps the tokens.
+3. **New snapshot:**
+   1. Create a CPX32 source.
+   2. Install and hold the bundle's kernel, and disable unattended upgrades.
+   3. Run `node-init.sh <server-id>` from the gateway.
+   4. Canary a park/wake.
+   5. Run `prepare_hetzner_snapshot.sh "$(hostname)" 64 sandbox` from
+      `/var/tmp`, after stopping the node services and unmounting the
+      `/run`, `/var/lib` and `/work` ucloud-sandboxes mounts.
+   6. `hz.py snapshot <name> <description>`.
+   7. `make_config.py <image-id>`.
+
+**Result:** 540 sandboxes ran correctly on one CCX63, with
+steady-state usable-exec p95 under 0.6 s. See
+[benchmarks/disk-density-2026-09-26](benchmarks/disk-density-2026-09-26/README.md).
+
 ## Non-billable foundation
 
 The setup helper creates or reuses one private network, one registered

@@ -1,0 +1,50 @@
+{
+  "sandbox_id": "density-e2e-1fb09211",
+  "create_seconds": 0.7493883749993984,
+  "df_initial": [
+    0,
+    "none           8796093022208     0 8796093022208   0% /",
+    ""
+  ],
+  "write": [
+    0,
+    "ok",
+    ""
+  ],
+  "write_seconds": 61.872773042006884,
+  "df_after_write": [
+    0,
+    "none           8796093022208  2560 8796093019648   1% /",
+    ""
+  ],
+  "sum_before": [
+    0,
+    "323d3fdc3d5de7f4e31e007224a8f73e41d0ffe45003bd25583b8f5b6b8076cb  -",
+    ""
+  ],
+  "mem": [
+    0,
+    "started",
+    ""
+  ],
+  "park_error": "node-agent request failed (504): {'error': 'sandbox node request timed out', 'code': 'node_request_timeout', 'retryable': True}",
+  "park_seconds": 95.69144262501504,
+  "park_state": "parked",
+  "sum_after": [
+    0,
+    "323d3fdc3d5de7f4e31e007224a8f73e41d0ffe45003bd25583b8f5b6b8076cb  -",
+    ""
+  ],
+  "wake_exec_seconds": 78.19510016698041,
+  "df_after_wake": [
+    0,
+    "none           8796093022208  2560 8796093019648   1% /",
+    ""
+  ],
+  "mem_alive": [
+    1,
+    "",
+    "sh: 1: kill: No such process"
+  ],
+  "checksums_match": true
+}

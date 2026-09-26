@@ -323,7 +323,8 @@ systemctl enable --now ucloud-sandboxes-nat.service
   gateway-reconcile --config /etc/ucloud-sandboxes/deployment.json
 
 install -m 0755 "$ingress" /usr/local/sbin/configure-hetzner-sdk-ingress
-/usr/local/sbin/configure-hetzner-sdk-ingress --public-host "$public_ip"
+relay_port="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("relay_port", 8092))' /etc/ucloud-sandboxes/deployment.json)"
+/usr/local/sbin/configure-hetzner-sdk-ingress --public-host "$public_ip" --relay-port "$relay_port"
 
 rm -f \
   "$wheel" \

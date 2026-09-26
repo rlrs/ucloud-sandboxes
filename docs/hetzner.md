@@ -114,6 +114,19 @@ secrets come from `.env`.
   Let's Encrypt IP certificate.
 - Runs PostgreSQL 18, an S3-backed registry (bucket
   `ucloud-sandboxes-prod-20260926`), the relay, NAT and 3 gateway processes.
+- The model relay is published at `https://77.42.92.27/relay` for inference
+  workers outside Hetzner (`configure_hetzner_sdk_ingress.sh` proxies
+  `/relay/` to loopback port 8092). Sandboxes reach the same URL through
+  the gateway NAT. Relay-only sandboxes keep the private `10.42.0.2:8092`.
+
+**Client settings** (SDK and `verifiers-ucloud`):
+
+```bash
+UCLOUD_SANDBOX_URL=https://77.42.92.27
+UCLOUD_SANDBOX_API_TOKEN=<gateway: /var/lib/ucloud-sandboxes/state/sandbox-api-token>
+UCLOUD_RELAY_URL=https://77.42.92.27/relay
+UCLOUD_RELAY_WORKER_TOKEN=<gateway: /var/lib/ucloud-sandboxes/state/relay-worker-token>
+```
 
 **Workers:**
 - CCX63, autoscaled 0–3, booting golden snapshot `436475184`: Ubuntu 26.04,

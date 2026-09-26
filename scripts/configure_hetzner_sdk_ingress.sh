@@ -7,6 +7,8 @@ usage: configure_hetzner_sdk_ingress.sh --public-host <dns-name-or-ip> [options]
 
 Options:
   --gateway-port <port>  Loopback gateway port (default: 8090)
+  --relay-port <port>    Loopback model relay port, published under /relay/
+                         (default: 8092)
   --email <address>      ACME account email (recommended)
   --staging              Use Let's Encrypt staging for a non-trusted test cert
 EOF
@@ -14,6 +16,7 @@ EOF
 
 public_host=""
 gateway_port=8090
+relay_port=8092
 email=""
 staging=false
 while (($#)); do
@@ -32,6 +35,14 @@ while (($#)); do
         exit 2
       fi
       gateway_port="${2:-}"
+      shift 2
+      ;;
+    --relay-port)
+      if (($# < 2)); then
+        usage
+        exit 2
+      fi
+      relay_port="${2:-}"
       shift 2
       ;;
     --email)
@@ -64,6 +75,11 @@ fi
 if [[ ! "$gateway_port" =~ ^[0-9]+$ ]] \
   || ((gateway_port < 1 || gateway_port > 65535)); then
   echo "gateway port must be between 1 and 65535" >&2
+  exit 2
+fi
+if [[ ! "$relay_port" =~ ^[0-9]+$ ]] \
+  || ((relay_port < 1 || relay_port > 65535)); then
+  echo "relay port must be between 1 and 65535" >&2
   exit 2
 fi
 if [[ -z "$public_host" || "$public_host" == *:* || "$public_host" == */* ]]; then
@@ -178,6 +194,14 @@ if [[ ! -s "$certificate_dir/fullchain.pem" || ! -s "$certificate_dir/privkey.pe
 fi
 
 cat >"$temporary_site" <<EOF
+# The model relay is published under /relay/ for inference workers outside
+# the private network. The raw request URI is forwarded without the prefix:
+# nginx must not decode percent-encoded rollout ids in tunnel paths.
+map \$request_uri \$ucloud_relay_uri {
+    ~^/relay(?<rest>/.*)\$ \$rest;
+    default /;
+}
+
 server {
     listen 80;
     listen [::]:80;
@@ -213,6 +237,15 @@ server {
     proxy_connect_timeout 10s;
     proxy_send_timeout 3600s;
     proxy_read_timeout 3600s;
+
+    location /relay/ {
+        proxy_pass http://127.0.0.1:$relay_port\$ucloud_relay_uri;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header Proxy-Authorization "";
+    }
 
     location / {
         proxy_pass http://127.0.0.1:$gateway_port;
@@ -256,6 +289,8 @@ systemctl enable --now nginx.service ucloud-sandbox-certbot-renew.timer
 systemctl reload nginx.service
 
 curl --fail --silent --show-error "https://$public_host/healthz" >/dev/null
+curl --fail --silent --show-error "https://$public_host/relay/healthz" >/dev/null
 printf 'sdk_url=https://%s\n' "$public_host"
+printf 'relay_url=https://%s/relay\n' "$public_host"
 printf 'tls_certificate=%s\n' "$certificate_dir/fullchain.pem"
 printf 'gateway_upstream=http://127.0.0.1:%s\n' "$gateway_port"

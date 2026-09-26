@@ -16,3 +16,5 @@ git-ignored `build/hetzner-prod/`.
   source or a canary.
 - `gw`, `node <ip>` and `gscp` are SSH and scp to the gateway and to private
   nodes through it.
+- `relay_e2e.py <gateway-url> <relay-url> <token-dir>` checks the public relay
+  end to end: a local worker serves a sandbox's call through its tunnel URL.

@@ -45,7 +45,7 @@ created smaller, at the *grant*, and is grown online with `xfs_growfs` as the
 guest fills it.
 
 - **Grant size.** A new split workspace is formatted at
-  `min(disk_mb, direct_workspace_initial_grant_mb)`, 1 GiB by default. The
+  `min(disk_mb, direct_workspace_initial_grant_mb)`, 512 MiB by default. The
   minimum is 512 MiB, because current xfsprogs refuses filesystems under
   300 MB. A ceiling at or below the grant is formatted at full size, as before.
 - **Why the grant bounds physical bytes.** The overlaybd upper only stores
@@ -60,13 +60,20 @@ guest fills it.
   changes: at seal, when a mount adopts a local compaction, at publish and at
   import. Before this change the charge was `virtual_size`, which
   under-counted sealed layers.
+- **Trim before seal.** A sealed layer would otherwise keep every block the
+  guest ever wrote. Hibernate punches the gVisor filestore right before the
+  capture seals, so a heavy writer's layer used to hold its data twice.
+  Before sealing, the daemon runs FITRIM with 1 MiB minimum extents, the
+  policy `qualify_xfs_trim.py` qualified, if the live upper holds at least
+  `--trim-before-seal-bytes` (256 MiB) more than the filesystem uses. The
+  guest is already paused. Runtime trim stays off.
 - **Published workspaces** are charged nothing, as before. A remount charges
   the grant again, with retryable refusal.
 - **Growth.**
   - A node agent thread polls `statvfs` on mounted workspaces every 0.5 s.
   - It grows a filesystem when free space drops below
-    `max(384 MiB, size / 4)`.
-  - The step is `max(1 GiB, size / 2)`, capped at the ceiling.
+    `max(256 MiB, size / 4)`.
+  - The step is `max(512 MiB, size / 2)`, capped at the ceiling.
   - The registry first reserves the larger claim. If the node lacks physical
     headroom, it refuses and the filesystem keeps its current size.
   - The storage daemon then journals the new grant and runs
@@ -81,7 +88,7 @@ guest fills it.
 
 **Residual risk (accepted).** A guest that writes faster than roughly
 `free space / (poll interval + growth latency)` gets `ENOSPC` before it
-reaches `disk_mb`. With the defaults that means about 700 MB/s sustained from
+reaches `disk_mb`. With the defaults that means about 500 MB/s sustained from
 the moment free space crosses the threshold. A guest also gets `ENOSPC` early
 when the node has no headroom left for growth. Growth refusals are counted in
 node metrics, and the cold-offload relief below reacts to the same pressure.
@@ -140,8 +147,17 @@ Two cases keep the formula for the lifetime of the sandbox:
   park, and that owner's live memory file then grows on disk.
 - File-backed workers (no RAM root).
 
-To get the memory-side density on UCloud, turn reflink restore off. Workspace
-grants apply in both modes.
+Reflink restore is a real trade-off, not an oversight. It restores a 2 GiB
+heap in 78–127 ms instead of 731–1,601 ms, writes about a quarter as much
+per park/wake turn, and allows live memory reclaim without parking (see
+[memory-tiers](benchmarks/memory-tiers-2026-09-23/README.md)). The cost is
+the formula memory claim for the sandbox's lifetime. The Hetzner deployment
+turns it off for density. Workspace grants apply in both modes.
+
+Imported and upgraded split registrations start with a fixed claim. They
+adopt the equal dynamic claim (workspace ceiling + formula memory) on their
+first workspace sync or park, so they also get the filestore-safe capture
+bound.
 
 ## One ledger, three reporters
 
@@ -191,7 +207,7 @@ Old versus new claim:
 
 | State | Old claim | New claim |
 |---|---:|---:|
-| running (fresh) | 7,232 MiB | 1,088 MiB (1 GiB grant + 64) |
+| running (fresh) | 7,232 MiB | 576 MiB (512 MiB grant + 64); 1,088 MiB with a 1 GiB grant |
 | parked, unpublished | 7,232 MiB | grant + layers + checkpoint (about 1.5 GiB) |
 | parked, published | 3,136 MiB | checkpoint only (about 0.35 GiB) |
 
@@ -204,7 +220,7 @@ RAM (192 GB on a CCX63), not disk, now limits how many run at once.
 
 ## Configuration
 
-- `sandbox_pool.direct_workspace_initial_grant_mb`: default 1024. `0` formats
+- `sandbox_pool.direct_workspace_initial_grant_mb`: default 512. `0` formats
   full-size workspaces and disables growth, which is the old behaviour.
 - Demonstrated memory claims are on whenever RAM backing is on and reflink
   restore is off.
@@ -221,12 +237,6 @@ The 2026-09-26 results, an end-to-end park/wake run through the gateway, and
 540 sandboxes on one worker are recorded in
 [benchmarks/disk-density-2026-09-26](benchmarks/disk-density-2026-09-26/README.md).
 
-Known follow-ups:
-- **Heavy writers keep stale filestore blocks.** A sealed layer keeps the
-  filestore blocks that hibernate punched, because runtime trim is still
-  disabled. Until the workspace is published, a heavy writer's parked
-  workspace costs about its grant twice. Trimming before sealing
-  (`qualify_xfs_trim.py`) would remove that.
-- **Fixed-claim registrations still use the old formula.** This covers
-  upgraded and imported registrations, and it can be too small for a sandbox
-  that wrote gigabytes to its rootfs.
+Known follow-up: reflink-restored (file-backed) owners could also charge
+demonstrated memory, growing their project limit as the live memory file
+grows. That would combine reflink's fast wakes with memory-side density.

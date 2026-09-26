@@ -11,6 +11,7 @@ from tempfile import TemporaryDirectory
 import threading
 import time
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 from typing import Callable
 
@@ -291,6 +292,7 @@ class FakeHost:
         self.mount_devices: dict[Path, Path] = {}
         self.grown: list[tuple[Path, int]] = []
         self.format_sizes: list[int | None] = []
+        self.trimmed: list[Path] = []
 
     def device_is_unused(self, device: Path) -> bool:
         return device not in self.busy_devices
@@ -306,6 +308,9 @@ class FakeHost:
             size = self.formatted_sizes.pop(device)
             self.filesystem_sizes[target] = size or self.backend.device_sizes[device]
         self.mount_devices[target] = device
+
+    def trim(self, target: Path) -> None:
+        self.trimmed.append(target)
 
     def filesystem_bytes(self, target: Path) -> int:
         if target in self.filesystem_sizes:
@@ -667,6 +672,39 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
             mounted = service.converge_volume(owner, action="mount", operation_id="wake")
             self.assertEqual(mounted.granted_size, (2 << 30) + (1 << 20))
             self.assertEqual(mounted.local_layer_bytes, released.local_layer_bytes)
+
+    def test_seal_trims_only_when_the_upper_holds_freed_blocks(self):
+        with TemporaryDirectory() as raw:
+            service, _, host = self._service(Path(raw))
+            owner = StorageVolumeOwner("vol", "sandbox", 1)
+            live = service.converge_volume(owner, action="prepare", operation_id="create",
+                                           virtual_size=4 << 30, granted_size=1 << 30)
+            mount = Path(live.mount_path)
+            service.config = replace(service.config, trim_before_seal_bytes=1 << 20)
+            # The fake mount is a plain directory: report an empty filesystem.
+            empty = SimpleNamespace(f_blocks=256, f_bfree=256, f_frsize=4096)
+            statvfs = patch("ucloud_sandboxes.storage_native_daemon.os.statvfs", return_value=empty)
+            statvfs.start()
+            self.addCleanup(statvfs.stop)
+            captured = service.prepare_capture(**owner.request_fields(), operation_id="c1",
+                                               expected_revision=live.revision)
+            self.assertEqual(host.trimmed, [])  # the upper holds nothing freed
+            service.abort_capture(**owner.request_fields(), operation_id="a1",
+                                  expected_revision=captured.revision)
+            # A punched filestore: the upper keeps 8 MiB the filesystem freed.
+            (Path(live.runtime_dir) / "upper.data").write_bytes(b"u" * (8 << 20))
+            current = service.journal.load("vol")
+            service.prepare_capture(**owner.request_fields(), operation_id="c2",
+                                    expected_revision=current.revision)
+            self.assertEqual(host.trimmed, [mount])
+            service.config = replace(service.config, trim_before_seal_bytes=0)
+            current = service.journal.load("vol")
+            service.abort_capture(**owner.request_fields(), operation_id="a2",
+                                  expected_revision=current.revision)
+            current = service.journal.load("vol")
+            service.prepare_capture(**owner.request_fields(), operation_id="c3",
+                                    expected_revision=current.revision)
+            self.assertEqual(host.trimmed, [mount])
 
     def test_interrupted_growth_is_completed_by_a_retry(self):
         with TemporaryDirectory() as raw:

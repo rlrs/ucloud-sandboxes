@@ -2637,7 +2637,7 @@ class DirectRunscWarden:
             return  # release_published_workspace owns the published charge
         self.disk_capacity.update_disk_claim(
             sandbox.sandbox_id, sandbox.sandbox_generation,
-            workspace_mb=-(-record.charged_bytes // disk_claims.MIB),
+            workspace_mb=-(-record.charged_bytes // disk_claims.MIB), adopt=True,
         )
 
     def track_workspace_mounts(self, sandboxes: Sequence[DirectSandbox]) -> None:
@@ -2709,17 +2709,20 @@ class DirectRunscWarden:
 
         if self.disk_capacity is None or self.memory_backing is None or sandbox.memory is None:
             return None
-        claim = self.disk_capacity.disk_claim(sandbox.sandbox_id, sandbox.sandbox_generation)
-        if claim is None:
-            return None
         key = (sandbox.sandbox_id, sandbox.sandbox_generation)
-        formula_mb = -(-sandbox.memory.quota_bytes // disk_claims.MIB)
         now = time.monotonic()
         with self._claims_guard:
             overflowed = key in self._capture_overflows
             if self._capture_refused_until.get(key, 0.0) > now:
                 # Idle parking retries every tick; a full node answers cheaply.
                 raise DirectRegistryCapacityUnavailable("capture space was just refused")
+        # Imports and upgraded registrations adopt the equal dynamic claim:
+        # their formula never covered the rootfs filestore either.
+        claim = self.disk_capacity.update_disk_claim(
+            sandbox.sandbox_id, sandbox.sandbox_generation, adopt=True)
+        if claim is None:
+            return None
+        formula_mb = -(-sandbox.memory.quota_bytes // disk_claims.MIB)
         filestore = self._filestore_bytes(sandbox)
         demonstrated = self._demonstrated_memory(sandbox)
         demand = (self._capture_demand_bytes(sandbox, sentry_pid)

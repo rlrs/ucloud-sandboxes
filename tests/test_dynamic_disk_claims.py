@@ -123,6 +123,30 @@ class DynamicDiskClaimTests(unittest.TestCase):
         self.assertIsNone(self.registry.update_disk_claim("legacy", 1, workspace_mb=1))
         self.assertEqual(self._reserved_mb(), _spec("legacy").requested_resources().disk_mb)
 
+    def test_adopting_a_published_fixed_claim_keeps_the_total(self):
+        self.registry.hard_disk_capacity_mb = 10**6
+        planned = self._plan("one", claim=None)
+        quota = self.registry.commit_quota(
+            "one", expected_revision=planned.revision, project_id=200000,
+            total_mb=planned.spec.requested_resources().disk_mb, quota_path=self.root / "one")
+        incarnation = "one.sandbox-1"
+        rootfs = self.registry.commit_rootfs(
+            "one", expected_revision=quota.revision, image_id="sha256:" + "e" * 64,
+            sandbox=DirectSandbox(
+                sandbox_id="one", sandbox_generation=1, container_id="f" * 64,
+                spec_sha256=quota.spec_sha256, rootfs_sha256="d" * 64,
+                bundle=self.root / "bundles" / "one", memory_directory=incarnation,
+                workspace_directory="workspace-" + incarnation, memory=planned.memory_reference))
+        self.registry.commit_owned("one", expected_revision=rootfs.revision)
+        self.assertTrue(self.registry.release_published_workspace(
+            "one", 1, workspace_mb=4096, expected_mount_epoch=0))
+        before = self._reserved_mb()
+        adopted = self.registry.update_disk_claim("one", 1, adopt=True)
+        self.assertEqual(adopted.workspace_mb, 4096)
+        self.assertEqual(self._reserved_mb(), before)
+        self.registry.reserve_workspace_for_mount("one", 1)
+        self.assertEqual(self._reserved_mb(), before + 4096)
+
     def test_version8_upgrade_keeps_each_registration_fixed(self):
         self.registry.hard_disk_capacity_mb = 10**6
         self._plan("one")

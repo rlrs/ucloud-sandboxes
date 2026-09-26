@@ -279,7 +279,7 @@ class SandboxPoolConfig:
     direct_reflink_memory_restore: bool = False
     # Split workspaces start with an XFS filesystem this large and grow online
     # toward disk_mb (docs/disk-density.md). 0 formats full-size workspaces.
-    direct_workspace_initial_grant_mb: int = 1024
+    direct_workspace_initial_grant_mb: int = 512
     max_concurrent_image_pulls: int = 8
 
     @property

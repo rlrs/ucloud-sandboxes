@@ -57,8 +57,9 @@ class PolicyTests(unittest.TestCase):
                          3136 + 3072 + 64)
 
     def test_growth_waits_for_low_free_space_and_steps_toward_the_ceiling(self):
-        self.assertIsNone(next_grant(granted=GIB, free=512 * MIB, ceiling=4 * GIB))
-        self.assertEqual(next_grant(granted=GIB, free=300 * MIB, ceiling=4 * GIB), 2 * GIB)
+        self.assertIsNone(next_grant(granted=GIB, free=300 * MIB, ceiling=4 * GIB))
+        self.assertEqual(next_grant(granted=512 * MIB, free=200 * MIB, ceiling=4 * GIB), GIB)
+        self.assertEqual(next_grant(granted=GIB, free=200 * MIB, ceiling=4 * GIB), 1536 * MIB)
         self.assertEqual(next_grant(granted=3 * GIB, free=100 * MIB, ceiling=4 * GIB), 4 * GIB)
         self.assertIsNone(next_grant(granted=4 * GIB, free=0, ceiling=4 * GIB))
         # Large filesystems grow by half and keep a quarter free.
@@ -230,15 +231,22 @@ class DemonstratedMemoryClaimTests(unittest.TestCase):
         ceiling = self.sandbox.memory.quota_bytes // MIB
         self.assertEqual(observed, [ceiling + disk_claims.CAPTURE_OVERHEAD_MB])
 
-    def test_fixed_claims_are_left_alone(self):
+    def test_fixed_split_claims_are_adopted_before_capture(self):
         self.ram_split()
         self.registry = DirectSandboxRegistry(self.root / "fixed.sqlite", hard_disk_capacity_mb=100_000)
         self.registry.plan(spec=_spec(), sandbox_generation=1, operation_id="create:1",
                            runtime_compatibility_sha256="b" * 64, split_memory_backing=True)
         self.warden.disk_capacity = self.registry
-        self.park()
         self.assertIsNone(self.claim())
-        self.assertEqual(self.limit_mb(), 64)
+        with self.registry._transaction(write=False) as connection:
+            before = self.registry._reserved_disk_bytes(connection)
+        # Adoption alone moves nothing: ceiling workspace + formula memory.
+        self.assertEqual(self.registry.update_disk_claim("sandbox-1", 1, adopt=True),
+                         DiskClaim(4096, _spec().requested_resources().disk_mb - 4096))
+        with self.registry._transaction(write=False) as connection:
+            self.assertEqual(self.registry._reserved_disk_bytes(connection), before)
+        self.park()
+        self.assertLess(self.claim().memory_mb, 67)
 
 
 class _GrowthStorage:

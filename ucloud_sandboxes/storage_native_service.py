@@ -48,6 +48,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--local-compact-after-layers", default=8, type=int)
     parser.add_argument("--local-compact-after-bytes", default=4 * 1024**3, type=int)
     parser.add_argument("--published-local-cache-bytes", default=4 * 1024**3, type=int)
+    parser.add_argument("--trim-before-seal-bytes", default=256 * 1024**2, type=int)
     parser.add_argument("--snapshot-registry-url")
     parser.add_argument("--snapshot-repository")
     parser.add_argument(
@@ -214,6 +215,7 @@ def main(argv: list[str] | None = None) -> int:
             local_compact_after_layers=args.local_compact_after_layers,
             local_compact_after_bytes=args.local_compact_after_bytes,
             published_local_cache_bytes=args.published_local_cache_bytes,
+            trim_before_seal_bytes=args.trim_before_seal_bytes,
         ),
         backend=backend,
         global_config_path=args.backend_global_config.resolve(),

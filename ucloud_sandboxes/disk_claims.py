@@ -32,8 +32,8 @@ CAPTURE_OVERHEAD_MB = 64
 # Blocks a committed checkpoint may still need beyond its measured size.
 CAPTURE_SETTLE_SLACK_MB = 1
 MIN_WORKSPACE_GRANT_MB = 512
-GROWTH_MIN_FREE_MB = 384
-GROWTH_MIN_STEP_MB = 1024
+GROWTH_MIN_FREE_MB = 256
+GROWTH_MIN_STEP_MB = 512
 
 
 @dataclass(frozen=True)
@@ -107,7 +107,7 @@ def next_grant(*, granted: int, free: int, ceiling: int) -> int | None:
     """The next filesystem size, or None when this one still has headroom.
 
     Grow before the guest runs out: when free space falls below a quarter of
-    the filesystem (at least 384 MiB), add half again (at least 1 GiB).
+    the filesystem (at least 256 MiB), add half again (at least 512 MiB).
     """
     if granted >= ceiling:
         return None

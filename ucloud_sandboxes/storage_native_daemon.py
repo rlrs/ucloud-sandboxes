@@ -193,6 +193,10 @@ class StorageNativeNodeConfig:
     local_compact_after_layers: int = 8
     local_compact_after_bytes: int = 4 * 1024**3
     published_local_cache_bytes: int = 4 * 1024**3
+    # Trim freed filesystem blocks out of the live upper before sealing it
+    # when it holds at least this much more than the filesystem uses (for
+    # example a gVisor filestore that hibernate just punched). 0 disables.
+    trim_before_seal_bytes: int = 256 * 1024**2
 
     def __post_init__(self) -> None:
         for label, path in (
@@ -226,6 +230,8 @@ class StorageNativeNodeConfig:
             raise ValueError("local compaction requires at least two layers and a positive byte threshold")
         if self.published_local_cache_bytes < 0:
             raise ValueError("published local cache size must be non-negative")
+        if self.trim_before_seal_bytes < 0:
+            raise ValueError("trim-before-seal threshold must be non-negative")
         if (
             self.max_ublk_devices > 0
             and self.device_pool_high_watermark > self.max_ublk_devices
@@ -503,6 +509,8 @@ class StorageHostOperations(Protocol):
 
     def filesystem_bytes(self, target: Path) -> int: ...
 
+    def trim(self, target: Path) -> None: ...
+
     def sync(self, target: Path) -> None: ...
 
     def freeze(self, target: Path) -> None: ...
@@ -579,6 +587,10 @@ class LinuxStorageHostOperations:
         if block_size <= 0 or size_bytes % block_size:
             raise StorageNativeNodeError("grant is not a whole number of filesystem blocks")
         self._run("xfs_growfs", "-D", str(size_bytes // block_size), str(target))
+
+    def trim(self, target: Path) -> None:
+        # The qualified policy: extents of at least 1 MiB (qualify_xfs_trim.py).
+        self._run("fstrim", "-m", str(1024**2), str(target))
 
     @staticmethod
     def filesystem_bytes(target: Path) -> int:
@@ -2014,6 +2026,7 @@ class StorageNativeNodeService:
         layer_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         frozen = False
         try:
+            self._trim_before_seal(pending)
             self.host.sync(mount_path)
             self.host.freeze(mount_path)
             frozen = True
@@ -2081,6 +2094,35 @@ class StorageNativeNodeService:
             "storage.granted_bytes": record.granted_size, "storage.journal_changed": grown,
         })
         return record
+
+    def _trim_before_seal(self, record: StorageVolumeRecord) -> None:
+        """Keep blocks the filesystem freed out of the layer about to be sealed.
+
+        Runtime trim is otherwise off; without it a sealed layer retains every
+        block the guest ever wrote, including a filestore hibernate punched.
+        Best effort: sealing never depends on it.
+        """
+        threshold = self.config.trim_before_seal_bytes
+        if threshold <= 0:
+            return
+        try:
+            info = os.statvfs(record.mount_path)
+            used = (info.f_blocks - info.f_bfree) * info.f_frsize
+            runtime = Path(record.runtime_dir)
+            upper = sum(
+                entry.stat().st_blocks * 512 for entry in runtime.iterdir()
+                if entry.is_file() and not entry.is_symlink()
+            )
+            if upper - used < threshold:
+                return
+            started = time.monotonic()
+            self.host.trim(Path(record.mount_path))
+            get_current_span().add_event("storage.seal.trim", {
+                "storage.upper_bytes": upper, "storage.used_bytes": used,
+                "duration_ms": (time.monotonic() - started) * 1000,
+            })
+        except Exception:
+            LOGGER.warning("trim before seal skipped for %s", record.volume_id, exc_info=True)
 
     @_storage_mutation
     def commit_capture(

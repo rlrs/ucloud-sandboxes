@@ -641,8 +641,13 @@ class DirectSandboxRegistry:
         workspace_mb: int | None = None,
         memory_mb: int | None = None,
         require_capacity: bool = False,
+        adopt: bool = False,
     ) -> DiskClaim | None:
         """Move a dynamic claim. Fixed claims are left unchanged (returns None).
+
+        ``adopt`` first converts a split registration's fixed claim (imports,
+        upgraded registrations) into the equal dynamic claim: the workspace
+        ceiling plus the formula memory claim. The total is unchanged.
 
         ``require_capacity`` admits an increase that will create physical
         bytes (grant growth, park capture space); refusal is retryable and
@@ -664,7 +669,10 @@ class DirectSandboxRegistry:
             if row is None:
                 raise DirectRegistryConflictError("disk claim lost incarnation ownership")
             if not row[2]:
-                return None
+                adopted = self._adopt_dynamic_claim(connection, sandbox_id) if adopt else None
+                if adopted is None:
+                    return None
+                row = (adopted.workspace_mb, adopted.memory_mb, 1, row[3])
             old = DiskClaim(row[0], row[1])
             new = DiskClaim(old.workspace_mb if workspace_mb is None else workspace_mb,
                             old.memory_mb if memory_mb is None else memory_mb)
@@ -693,6 +701,23 @@ class DirectSandboxRegistry:
                 )
             self._bump_activity(connection)
             return new
+
+    def _adopt_dynamic_claim(self, connection, sandbox_id: str) -> DiskClaim | None:
+        record = self._get(connection, sandbox_id)
+        if record is None or record.memory_reference is None or record.spec.disk_mb is None:
+            return None
+        reserved = connection.execute(
+            "SELECT reserved_mb FROM registration_disk WHERE sandbox_id=?", (sandbox_id,)
+        ).fetchone()[0]
+        claim = DiskClaim(record.spec.disk_mb, max(0, reserved - record.spec.disk_mb))
+        # A published workspace's release stays released; its released_mb
+        # already equals the adopted workspace ceiling.
+        connection.execute(
+            "UPDATE registration_disk SET reserved_mb=0, workspace_mb=?, memory_mb=?, dynamic=1 "
+            "WHERE sandbox_id=?",
+            (claim.workspace_mb, claim.memory_mb, sandbox_id),
+        )
+        return claim
 
     def reserve_reflink_overlap(self, sandbox_id: str, sandbox_generation: int,
                                hibernation_generation: int, allocated_bytes: int, *,

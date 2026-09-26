@@ -124,3 +124,25 @@ removing docker-proxy. Identical rerun (`*-rc41*`, `host-cpu-rc41.txt`):
 Peak host CPU fell to ~3.0 cores (max interval 3.35): docker-proxy 0.29 → 0.02,
 placement 0.6–0.9 → 0.23. The public gateway process now uses ~1.14 cores, the
 practical ceiling of one CPython process, so it is the next bottleneck.
+
+## rc42: three public gateway processes
+
+rc42 (`df8f840`) runs the public gateway as `gateway_processes` replicas sharing
+the port through `SO_REUSEPORT`, with image-build dispatch, migration execution and
+registry lease sequences serialized through host-wide keyed locks, and per-process
+threads, upload memory and PostgreSQL pools divided. Production runs 3 processes.
+Identical rerun (`*-rc42*`, `host-cpu-rc42.txt`), all 540 scenarios correct:
+
+| | rc41 (1 process) | rc42 (3 processes) |
+|---|---|---|
+| response ready → usable exec p50 | 5.48 s | 1.00 s |
+| p95 | 7.12 s | 3.29 s |
+| p99 | 8.16 s | 3.75 s |
+| max | 9.90 s | 4.04 s |
+| relay delivery (commit → guest) p50 | 1.50 s | 0.17 s |
+| post-continuation exec p50 | 2.90 s | 0.51 s |
+
+The three gateway processes together used ~1.0 core at peak, less than the single
+process's 1.14: the single process was limited by GIL contention and thread
+handoffs, not raw CPU. Peak host CPU averaged ~3.1 of 4 cores with one 2 s interval
+at 4.0; PostgreSQL (0.82) and the relay (0.57) are now the next-largest consumers.

@@ -135,8 +135,11 @@ class MemoryBackingModeTests(unittest.TestCase):
         self.quota.fail = False
         self.store.set_limit(ref, **self.owner, limit_bytes=512)
         self.assertEqual(self.store.metrics()['memory_backing_hard_reserved_bytes'], 4608)
-        with self.assertRaisesRegex(MemoryBackingError, 'ceiling'):
+        # A capture may exceed the identity ceiling; only capacity bounds it.
+        with self.assertRaisesRegex(MemoryBackingError, 'capacity'):
             self.store.set_limit(ref, **self.owner, limit_bytes=8192)
+        with self.assertRaisesRegex(MemoryBackingError, 'positive'):
+            self.store.set_limit(ref, **self.owner, limit_bytes=0)
         with self.assertRaisesRegex(MemoryBackingError, 'retained'):
             self.store.set_limit(ref, sandbox_id='guest', sandbox_generation=2, limit_bytes=512)
 

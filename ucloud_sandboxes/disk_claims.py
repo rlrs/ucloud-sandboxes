@@ -85,18 +85,18 @@ class DiskClaimPolicy:
         }
 
 
-def capture_claim_mb(*, ceiling_mb: int, demand_bytes: int | None) -> int:
-    """Checkpoint space to reserve at park admission.
+def capture_claim_mb(*, base_bytes: int, filestore_bytes: int) -> int:
+    """Checkpoint space to reserve at park admission, in MiB.
 
-    ``demand_bytes`` is the RAM-backed application memory file's allocated
-    bytes plus the cgroup's resident memory (capped at the memory limit) for
-    private pages. Unknown demand falls back to the formula ceiling; an
-    underestimate fails inside the project quota and the next park of that
-    incarnation reserves the ceiling.
+    ``base_bytes`` bounds the application memory image and the sentry's other
+    private pages: for RAM-backed owners the tmpfs memory file's allocated
+    bytes plus resident memory capped at the memory limit, otherwise the
+    formula ceiling. ``filestore_bytes`` is the allocated size of the gVisor
+    filestore, whose contents (the guest's rootfs writes) a hibernate capture
+    serializes as private pages. A capture that runs out of space can lose
+    the sandbox, so this is an upper bound, not an estimate.
     """
-    if demand_bytes is None or demand_bytes < 0:
-        return ceiling_mb
-    return min(ceiling_mb, -(-demand_bytes // MIB) + CAPTURE_OVERHEAD_MB)
+    return -(-(base_bytes + filestore_bytes) // MIB) + CAPTURE_OVERHEAD_MB
 
 
 def settled_claim_mb(allocated_bytes: int) -> int:

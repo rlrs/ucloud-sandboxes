@@ -594,8 +594,11 @@ class MemoryBackingStore:
         never charges less than the project may hold. The caller keeps any
         lowered limit at or above the bytes already allocated.
         """
-        if not 0 < limit_bytes <= reference.quota_bytes:
-            raise MemoryBackingError("memory allocation limit exceeds its ceiling")
+        # A capture can exceed the identity ceiling (quota_bytes): it also
+        # serializes the guest's rootfs filestore. The registry claim and the
+        # capacity check below bound it; the ceiling is not a limit here.
+        if limit_bytes <= 0:
+            raise MemoryBackingError("memory allocation limit must be positive")
         with self._mutation_lock(reference):
             row = self._reader().execute(
                 "SELECT * FROM allocations WHERE allocation_id=?", (reference.allocation_id,)

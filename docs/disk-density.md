@@ -97,7 +97,7 @@ allocation directory holds only an ownership marker until it parks.
 | Phase | Memory claim | XFS project `bhard` |
 |---|---|---|
 | created, running | 64 MiB (idle) | 64 MiB |
-| park admission | `R = min(formula, memory.current + memory.swap.current + 64 MiB)` | `R` |
+| park admission | `R` = an upper bound of the capture (below) | `R` |
 | capture committed (parked) | allocated bytes actually written, plus 1 MiB | same |
 | capture failed or rolled back | back to idle. The next park of that incarnation uses the formula. | idle |
 | woken, checkpoint deleted | back to idle, after the coalesced FITRIM barrier | idle |
@@ -105,11 +105,31 @@ allocation directory holds only an ownership marker until it parks.
 
 `formula` is the old per-sandbox memory component (3,136 MiB for 1 GiB).
 
+`R` must be an upper bound, not an estimate. A hibernate capture frees
+runtime state as it writes, so running out of space part-way can lose the
+sandbox: the rollback can no longer resume it. The qualification worker
+showed this on its first attempt. A capture contains:
+
+- the application memory image. For RAM-backed owners this is the tmpfs
+  memory file's allocated bytes, which are known exactly;
+- other private sentry pages, bounded by the cgroup's resident memory
+  (itself at most `memory_mb`);
+- **the gVisor filestore**. The guest's rootfs writes, including
+  `/workspace`, live in `.gvisor.filestore.<cid>` in the workspace upper.
+  A hibernate capture serializes it into `pages.img` and punches the
+  filestore's blocks. Its allocated size is measured exactly at park.
+
+`R = memory file + min(resident, memory_mb) + filestore + 64 MiB`, with no
+formula cap. If resident memory is unknown, the formula stands in for the
+first two terms.
+
 - If the registry cannot reserve `R`, the park is refused with a retryable
   capacity error and the sandbox keeps running.
-- A capture that does not fit `R` fails inside the XFS project quota,
-  typically with `EDQUOT`. The existing capture rollback resumes the sandbox,
-  so the node is never at risk.
+- The old fixed formula (2 x memory + 64 MiB) never counted the filestore.
+  A sandbox that had written more than about 2 GB to its rootfs could fail
+  its park. This applies to fixed-claim registrations in production today.
+  Dynamic file-backed registrations now reserve formula + filestore at park
+  and settle back to at least the formula.
 - Lowering a claim after a wake waits for FITRIM, as allocation deletion
   already does. Freed extents in the sparse loop image must reach the parent
   disk before the claim is released.

@@ -806,8 +806,8 @@ class DirectRunscWarden:
             except Exception:
                 if not captured:
                     # After a failed capture the next park of this incarnation
-                    # reserves the ceiling. Maintenance returns a still-running
-                    # owner's claim to idle either way.
+                    # reserves the formula plus filestore. Maintenance returns
+                    # a still-running owner's claim to idle either way.
                     self._capture_failed(sandbox, overflow=not reserving)
                 raise
             finally:
@@ -2695,32 +2695,41 @@ class DirectRunscWarden:
             return record
 
     def _reserve_capture_space(self, sandbox: DirectSandbox, sentry_pid: int) -> int | None:
-        """Raise a RAM-backed owner's memory claim to its demonstrated capture.
+        """Raise the memory claim to an upper bound of what this capture writes.
 
-        Returns the previous limit in bytes, or None when the owner keeps a
-        fixed or formula claim. Refusal raises DirectRegistryCapacityUnavailable
-        before any lifecycle change; the sandbox simply keeps running.
+        A hibernate capture frees runtime state as it writes: running out of
+        space mid-capture can lose the sandbox, so this must be a bound, not
+        an estimate. The capture holds the application memory image, private
+        pages, and the gVisor filestore that backs the guest's rootfs writes
+        (serialized into private pages). Returns the claim floor to settle
+        to once the capture commits, or None for a fixed claim. Refusal
+        raises DirectRegistryCapacityUnavailable before any lifecycle change.
         """
         from .direct_registry import DirectRegistryCapacityUnavailable  # imports the Warden
 
-        if not self._demonstrated_memory(sandbox):
+        if self.disk_capacity is None or self.memory_backing is None or sandbox.memory is None:
             return None
-        assert sandbox.memory is not None and self.memory_backing is not None
         claim = self.disk_capacity.disk_claim(sandbox.sandbox_id, sandbox.sandbox_generation)
         if claim is None:
             return None
         key = (sandbox.sandbox_id, sandbox.sandbox_generation)
-        ceiling_mb = -(-sandbox.memory.quota_bytes // disk_claims.MIB)
+        formula_mb = -(-sandbox.memory.quota_bytes // disk_claims.MIB)
         now = time.monotonic()
         with self._claims_guard:
             overflowed = key in self._capture_overflows
             if self._capture_refused_until.get(key, 0.0) > now:
                 # Idle parking retries every tick; a full node answers cheaply.
                 raise DirectRegistryCapacityUnavailable("capture space was just refused")
-        demand = None if overflowed else self._capture_demand_bytes(sandbox, sentry_pid)
-        target_mb = max(claim.memory_mb,
-                        disk_claims.capture_claim_mb(ceiling_mb=ceiling_mb, demand_bytes=demand))
-        previous = self.memory_backing.limit_bytes(sandbox.memory)
+        filestore = self._filestore_bytes(sandbox)
+        demonstrated = self._demonstrated_memory(sandbox)
+        demand = (self._capture_demand_bytes(sandbox, sentry_pid)
+                  if demonstrated and not overflowed else None)
+        # RAM-backed owners settle to what they wrote; file-backed owners keep
+        # the formula, which their next run's live memory file needs.
+        floor_mb = 0 if demonstrated else formula_mb
+        target_mb = max(claim.memory_mb, disk_claims.capture_claim_mb(
+            base_bytes=sandbox.memory.quota_bytes if demand is None else demand,
+            filestore_bytes=filestore))
         if target_mb > claim.memory_mb:
             try:
                 self.disk_capacity.update_disk_claim(
@@ -2735,25 +2744,39 @@ class DirectRunscWarden:
                 raise
         with self._claims_guard:
             self._capture_refused_until.pop(key, None)
-        target = min(sandbox.memory.quota_bytes, target_mb * disk_claims.MIB)
+        previous = self.memory_backing.limit_bytes(sandbox.memory)
+        target = target_mb * disk_claims.MIB
         if previous is None or target > previous:
             self.memory_backing.set_limit(
                 sandbox.memory, sandbox_id=sandbox.sandbox_id,
                 sandbox_generation=sandbox.sandbox_generation, limit_bytes=target,
             )
         get_current_span().add_event("sandbox.park.capture_reservation", {
-            "memory.claim_mb": target_mb, "memory.demand_bytes": demand if demand is not None else -1,
-            "memory.ceiling_mb": ceiling_mb,
+            "memory.claim_mb": target_mb, "memory.formula_mb": formula_mb,
+            "memory.demand_bytes": demand if demand is not None else -1,
+            "memory.filestore_bytes": filestore,
         })
-        return previous
+        return floor_mb
+
+    def _filestore_bytes(self, sandbox: DirectSandbox) -> int:
+        """Allocated bytes of the gVisor filestore holding the guest's rootfs writes."""
+        path = sandbox.bundle / "rootfs" / f".gvisor.filestore.{sandbox.container_id}"
+        try:
+            return path.stat().st_blocks * 512
+        except FileNotFoundError:
+            return 0
+        except OSError:
+            # Unreadable: bound it by the largest filesystem it can live in.
+            registration = self.disk_capacity.get(sandbox.sandbox_id)
+            return (registration.spec.disk_mb or 0) * disk_claims.MIB if registration else 0
 
     def _capture_demand_bytes(self, sandbox: DirectSandbox, sentry_pid: int) -> int | None:
-        """What a capture will write: the RAM memory file plus private pages.
+        """Application memory image plus private pages, excluding the filestore.
 
         The application memory image is the tmpfs file's allocated blocks,
-        known exactly. Private pages (kernel page cache and other sentry
-        memory files) are bounded by the cgroup's resident memory, itself
-        at most the memory limit; they are not part of that tmpfs file.
+        known exactly. Other private pages (sentry memory files, internal
+        tmpfs) are resident in the sandbox cgroup, itself at most the memory
+        limit; the caller adds the filestore separately.
         """
         resident = disk_claims.cgroup_memory_demand(sentry_pid, proc_root=self.config.proc_root)
         if resident is None:
@@ -2777,24 +2800,23 @@ class DirectRunscWarden:
             return None
         return registration.spec.memory_mb * disk_claims.MIB
 
-    def _settle_capture_space(self, sandbox: DirectSandbox, reserved: int | None) -> None:
+    def _settle_capture_space(self, sandbox: DirectSandbox, floor_mb: int | None) -> None:
         """Shrink the capture reservation to what the checkpoint allocated."""
-        if reserved is None:
+        if floor_mb is None:
             return
         assert sandbox.memory is not None and self.memory_backing is not None
         try:
             allocated = self.memory_backing.allocated_bytes(sandbox.memory)
-            settled_mb = disk_claims.settled_claim_mb(allocated)
+            settled_mb = max(floor_mb, disk_claims.settled_claim_mb(allocated))
             limit = self.memory_backing.limit_bytes(sandbox.memory)
-            settled = min(sandbox.memory.quota_bytes, settled_mb * disk_claims.MIB)
+            settled = settled_mb * disk_claims.MIB
             if limit is not None and settled < limit:
                 self.memory_backing.set_limit(
                     sandbox.memory, sandbox_id=sandbox.sandbox_id,
                     sandbox_generation=sandbox.sandbox_generation, limit_bytes=settled,
                 )
                 self.disk_capacity.update_disk_claim(
-                    sandbox.sandbox_id, sandbox.sandbox_generation,
-                    memory_mb=-(-settled // disk_claims.MIB),
+                    sandbox.sandbox_id, sandbox.sandbox_generation, memory_mb=settled_mb,
                 )
         except Exception:
             # The park committed; the larger reservation is merely conservative.

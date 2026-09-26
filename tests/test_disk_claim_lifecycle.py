@@ -50,10 +50,11 @@ class PolicyTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             DiskClaimPolicy(workspace_grant_mb=256)
 
-    def test_capture_reservation_follows_measured_memory_up_to_the_formula(self):
-        self.assertEqual(capture_claim_mb(ceiling_mb=3136, demand_bytes=300 * MIB), 364)
-        self.assertEqual(capture_claim_mb(ceiling_mb=3136, demand_bytes=10 * GIB), 3136)
-        self.assertEqual(capture_claim_mb(ceiling_mb=3136, demand_bytes=None), 3136)
+    def test_capture_reservation_bounds_memory_and_filestore_without_a_formula_cap(self):
+        self.assertEqual(capture_claim_mb(base_bytes=300 * MIB, filestore_bytes=0), 364)
+        # A guest that wrote 3 GiB to its rootfs captures it as private pages.
+        self.assertEqual(capture_claim_mb(base_bytes=3136 * MIB, filestore_bytes=3 * GIB),
+                         3136 + 3072 + 64)
 
     def test_growth_waits_for_low_free_space_and_steps_toward_the_ceiling(self):
         self.assertIsNone(next_grant(granted=GIB, free=512 * MIB, ceiling=4 * GIB))
@@ -166,6 +167,34 @@ class DemonstratedMemoryClaimTests(unittest.TestCase):
         with patch("ucloud_sandboxes.disk_claims.cgroup_memory_demand", return_value=None):
             self.assertIsNone(self.warden._capture_demand_bytes(self.sandbox, 1))
 
+    def test_rootfs_filestore_is_reserved_even_beyond_the_formula(self):
+        self.ram_split()
+        rootfs = self.sandbox.bundle / "rootfs"
+        rootfs.mkdir(exist_ok=True)
+        filestore = rootfs / f".gvisor.filestore.{self.sandbox.container_id}"
+        filestore.write_bytes(b"f" * (16 * MIB))
+        allocated = filestore.stat().st_blocks * 512
+        observed = []
+        publish = self.warden.artifacts.publish_complete
+        with patch.object(self.warden.artifacts, "publish_complete",
+                          side_effect=lambda manifest: observed.append(self.limit_mb()) or publish(manifest)):
+            self.park()
+        self.assertEqual(observed, [-(-(3 * MIB + allocated) // MIB) + 64])
+
+    def test_file_backed_dynamic_claims_add_the_filestore_and_keep_the_formula(self):
+        self.ram_split()
+        self.warden.config = replace(self.config, application_memory_root=None)
+        rootfs = self.sandbox.bundle / "rootfs"
+        rootfs.mkdir(exist_ok=True)
+        (rootfs / f".gvisor.filestore.{self.sandbox.container_id}").write_bytes(b"f" * (4 * MIB))
+        self.assertFalse(self.warden._demonstrated_memory(self.sandbox))
+        floor = self.warden._reserve_capture_space(self.sandbox, 1)
+        formula = self.sandbox.memory.quota_bytes // MIB
+        self.assertEqual(floor, formula)
+        self.assertGreaterEqual(self.claim().memory_mb, formula + 4 + 64)
+        self.warden._settle_capture_space(self.sandbox, floor)
+        self.assertEqual(self.claim().memory_mb, formula)
+
     def test_refused_capture_space_keeps_the_sandbox_running_and_unchanged(self):
         self.ram_split()
         self.registry.hard_disk_capacity_mb = self.claim().total_mb + 2
@@ -199,7 +228,7 @@ class DemonstratedMemoryClaimTests(unittest.TestCase):
                           side_effect=lambda manifest: observed.append(self.limit_mb()) or publish(manifest)):
             self.park(operation_id="retry")
         ceiling = self.sandbox.memory.quota_bytes // MIB
-        self.assertEqual(observed, [ceiling])
+        self.assertEqual(observed, [ceiling + disk_claims.CAPTURE_OVERHEAD_MB])
 
     def test_fixed_claims_are_left_alone(self):
         self.ram_split()

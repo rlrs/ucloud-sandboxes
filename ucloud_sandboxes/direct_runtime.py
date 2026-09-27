@@ -15,7 +15,7 @@ from .direct_provisioner import DirectSandboxProvisioner
 from .disk_claims import DiskClaimPolicy
 from .direct_registry import DirectSandboxRegistry
 from .direct_service import DirectSandboxService
-from .direct_warden import DirectRunscWarden, DirectRunscWardenConfig
+from .direct_warden import DirectRunscWarden, DirectRunscWardenConfig, ensure_sandbox_cgroup_parent
 from .hibernation import HibernationRuntimeFingerprint
 from .gvisor_distribution import (
     installed_sidecar_fingerprints,
@@ -211,6 +211,7 @@ def build_direct_runtime_service(
         # A crash may leave a global reservation before the allocator writes
         # its retention row. Keep the cleanup-capable reader until it drains.
         raise ValueError("reflink restore reader is required until overlap capacity drains")
+    ensure_sandbox_cgroup_parent()
     warden = DirectRunscWarden(
         DirectRunscWardenConfig(
             runsc=runsc,

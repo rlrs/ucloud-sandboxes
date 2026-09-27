@@ -653,6 +653,62 @@ class DirectRunscWardenTests(unittest.TestCase):
             self.warden._delete_runtime(self.sandbox)
         self.assertFalse(self.warden._process_boot_marker(self.sandbox).exists())
 
+    def test_delete_tolerates_only_a_busy_shared_parent_cgroup(self):
+        parent_busy = 'removing cgroup path "/sys/fs/cgroup/ucloud-sandboxes": device or resource busy\n'
+        leaf_busy = (
+            'removing cgroup path "/sys/fs/cgroup/ucloud-sandboxes/'
+            f'{self.sandbox.container_id}": device or resource busy\n'
+        )
+        for stderr, listed, tolerated in (
+            (parent_busy, "null\n", True),
+            (parent_busy, json.dumps([{"id": self.sandbox.container_id}]), False),
+            (leaf_busy, "null\n", False),
+        ):
+            with self.subTest(stderr=stderr, listed=listed):
+                marker = self.warden._process_boot_marker(self.sandbox)
+                marker.parent.mkdir(parents=True, exist_ok=True)
+                marker.touch()
+
+                def run(argv, **_kwargs):
+                    if "delete" in argv:
+                        return CommandResult(tuple(argv), 1, stderr=stderr)
+                    if "list" in argv:
+                        return CommandResult(tuple(argv), 0, listed)
+                    return CommandResult(tuple(argv), 0)
+
+                with patch.object(self.runner, "run", side_effect=run), \
+                     patch.object(self.warden, "_fence_delete_metadata"):
+                    if tolerated:
+                        self.warden._delete_runtime(self.sandbox)
+                        self.assertFalse(marker.exists())
+                    else:
+                        with self.assertRaises(DirectWardenError):
+                            self.warden._delete_runtime(self.sandbox)
+                        self.assertTrue(marker.exists())
+
+    def test_shared_cgroup_parent_is_created_with_controllers(self):
+        from ucloud_sandboxes.direct_warden import ensure_sandbox_cgroup_parent
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            self.assertFalse(ensure_sandbox_cgroup_parent(root / "ucloud-sandboxes"))
+            (root / "cgroup.controllers").write_text("cpu io memory pids\n")
+            parent = root / "ucloud-sandboxes"
+            parent.mkdir()
+            (parent / "cgroup.controllers").write_text("cpu io memory pids\n")
+            (parent / "cgroup.subtree_control").write_text("memory\n")
+            writes = []
+            original = Path.write_text
+
+            def record(path, data, *args, **kwargs):
+                if path.name == "cgroup.subtree_control":
+                    writes.append(data)
+                    return len(data)
+                return original(path, data, *args, **kwargs)
+
+            with patch.object(Path, "write_text", record):
+                self.assertTrue(ensure_sandbox_cgroup_parent(parent))
+            self.assertEqual(writes, ["+cpu", "+io", "+pids"])
+
     def test_cleanup_clears_dead_process_without_signalling(self):
         self.runner.pid = 99999
         state = self._cleanup_state()

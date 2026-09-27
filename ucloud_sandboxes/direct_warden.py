@@ -68,6 +68,38 @@ _PAGES_METADATA = "pages_meta.img"
 _PRIVATE_PAGES = "pages.img"
 
 
+# Every sandbox's cgroupsPath is /ucloud-sandboxes/<container id>.
+SANDBOX_CGROUP_PARENT = Path("/sys/fs/cgroup/ucloud-sandboxes")
+_SHARED_PARENT_CGROUP_BUSY = re.compile(
+    r'removing cgroup path "?/sys/fs/cgroup/ucloud-sandboxes"?: device or resource busy'
+)
+
+
+def ensure_sandbox_cgroup_parent(parent: Path = SANDBOX_CGROUP_PARENT) -> bool:
+    """Create the shared sandbox cgroup before any ``runsc create``.
+
+    runsc records the cgroup directories it creates and removes them when that
+    container is deleted. If the first sandbox on a node creates the shared
+    parent, deleting it later fails with EBUSY while sibling sandboxes remain.
+    runsc never owns a parent that already exists.
+    """
+    if not (parent.parent / "cgroup.controllers").exists():
+        return False  # Not a cgroup v2 host.
+    try:
+        parent.mkdir(exist_ok=True)
+        enabled = set((parent / "cgroup.subtree_control").read_text().split())
+        for controller in (parent / "cgroup.controllers").read_text().split():
+            if controller not in enabled:
+                try:
+                    (parent / "cgroup.subtree_control").write_text(f"+{controller}")
+                except OSError as exc:
+                    _LOG.warning("cannot enable cgroup controller %s: %s", controller, exc)
+    except OSError as exc:
+        _LOG.warning("cannot prepare %s: %s", parent, exc)
+        return False
+    return True
+
+
 class DirectWardenError(RuntimeError):
     pass
 
@@ -2254,10 +2286,31 @@ class DirectRunscWarden:
             (*self._state_prefix(), "delete", "--force", sandbox.container_id),
             timeout=self.config.command_timeout_seconds,
         )
-        if result.returncode == 0:
+        if result.returncode == 0 or (
+            # Nodes that created the shared parent through a sandbox before it
+            # was pre-created: the container is gone, only the parent is busy.
+            _SHARED_PARENT_CGROUP_BUSY.search(result.stderr or "")
+            and self._runtime_absent(sandbox)
+        ):
             self._process_boot_marker(sandbox).unlink(missing_ok=True)
         elif checked:
             raise DirectWardenError(f"runsc cleanup failed: {result.stderr}")
+
+    def _runtime_absent(self, sandbox: DirectSandbox) -> bool:
+        listed = self.runner.run(
+            (*self._state_prefix(), "list", "--format=json"),
+            timeout=self.config.command_timeout_seconds,
+        )
+        if listed.returncode != 0:
+            return False
+        try:
+            inventory = json.loads(listed.stdout) or []
+        except json.JSONDecodeError:
+            return False
+        return isinstance(inventory, list) and not any(
+            isinstance(item, dict) and item.get("id") == sandbox.container_id
+            for item in inventory
+        )
 
     def workspace_record(self, sandbox: DirectSandbox) -> StorageVolumeRecord:
         """Read the workspace bound to this incarnation, checking owner and path.

@@ -18,8 +18,10 @@ S="$s/gscp"
 "$S" "$d/hetzner.env" "$H:/tmp/ucloud-sandboxes-hetzner.env"
 "$S" "$r/scripts/configure_hetzner_sdk_ingress.sh" "$r/scripts/install_hetzner_gateway.sh" "$H:/tmp/"
 "$S" "$s/gateway-prep.sh" "$H:/root/"
+# A filesystem registry lives on the ledger's registry Volume (hz.py volume).
+VOLUME_ARGS=$(python3 -c "import json,sys; v=json.load(open(sys.argv[1])).get('volumes',{}).get('sandboxes-registry'); print('--volume-device /dev/disk/by-id/scsi-0HC_Volume_%d' % v['id'] if v else '')" "$d/resources.json")
 "$s/gw" 'chmod 600 /tmp/ucloud-sandboxes-hetzner.env /tmp/ucloud-sandboxes-gateway-init;
   [ -x /work/ucloud-sandboxes/gateway-venv/bin/python ] || bash /root/gateway-prep.sh > /root/gateway-prep.log 2>&1 || { echo prep-failed; tail -20 /root/gateway-prep.log; exit 1; };
-  bash /tmp/install_hetzner_gateway.sh --public-ip 77.42.92.27 > /root/install-gateway.log 2>&1; echo installer_exit=$?;
+  bash /tmp/install_hetzner_gateway.sh --public-ip 77.42.92.27 '"$VOLUME_ARGS"' > /root/install-gateway.log 2>&1; echo installer_exit=$?;
   systemctl is-active ucloud-sandbox-gateway ucloud-sandbox-placement ucloud-sandbox-relay ucloud-sandbox-autoscaler | tr "\n" " "; echo;
   curl -s -m5 http://127.0.0.1:8090/healthz; echo'

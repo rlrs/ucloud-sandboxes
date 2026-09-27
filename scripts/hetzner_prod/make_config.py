@@ -53,8 +53,8 @@ raw.update({
     # upload and ~320 ms per read against 50 ms and 3 ms on the volume
     # (docs/image-import.md). `hz.py volume sandboxes-registry 500 ...`.
     "registry_store": {"kind": "filesystem",
-                       "mount_point": "/var/lib/ucloud-sandboxes/registry-volume",
-                       "data_root": "/var/lib/ucloud-sandboxes/registry-volume/registry",
+                       "mount_point": "/mnt/ucloud-registry",
+                       "data_root": "/mnt/ucloud-registry/docker-registry",
                        "endpoint": "", "bucket": "", "region": "", "prefix": "",
                        "access_key_id_env": "UCLOUD_REGISTRY_S3_ACCESS_KEY_ID",
                        "secret_access_key_env": "UCLOUD_REGISTRY_S3_SECRET_ACCESS_KEY",

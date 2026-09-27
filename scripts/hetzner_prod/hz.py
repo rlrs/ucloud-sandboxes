@@ -130,12 +130,12 @@ if __name__ == "__main__":
         record("images", description, {"id": result["image"]["id"]})
         print(json.dumps({"image_id": result["image"]["id"], "description": description}))
     elif command == "volume":
-        # Attach an unformatted XFS volume to a ledger server; prints its device.
+        # Attach an ext4 volume (as install_hetzner_gateway.sh expects); prints its device.
         name, size_gb, server_name = args
         entry = ledger()["servers"][server_name]
         result = call("POST", "/volumes", {
             "name": name, "size": int(size_gb), "location": "hel1", "server": entry["id"],
-            "automount": False, "format": "xfs", "labels": LABELS,
+            "automount": False, "format": "ext4", "labels": LABELS,
         })
         volume = result["volume"]
         record("volumes", name, {"id": volume["id"], "size_gb": int(size_gb), "server": server_name})

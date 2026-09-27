@@ -324,6 +324,10 @@ class WakePlacement:
                     raise WakePlacementStopped(
                         WakeUnavailable(
                             "parked sandbox has no node with active CPU, memory, and disk capacity",
+                            # Nothing is dispatched yet: clients replay the
+                            # operation while the fleet frees or adds capacity.
+                            error_code="wake_destination_unavailable",
+                            retry_after=1,
                             pending_resources=demand,
                         )
                     )

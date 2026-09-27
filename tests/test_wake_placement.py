@@ -147,6 +147,18 @@ class WakePlacementTests(unittest.TestCase):
         )
         self.assertEqual(self.calls, [])
 
+    def test_portable_parked_sandbox_on_a_full_fleet_is_a_retryable_wait(self):
+        self.local_capacity = False
+        portable = self.routes.upsert_sandbox(self.portable())
+        result = self.service().place(portable)
+        self.assertIsInstance(result, WakeUnavailable)
+        self.assertIn("no node with active CPU", result.message)
+        self.assertEqual((result.error_code, result.retry_after), ("wake_destination_unavailable", 1))
+        self.assertIsNotNone(
+            self.routes.get_pending(wake_pending_demand_id(self.route.sandbox_id))
+        )
+        self.assertEqual(self.calls, [])
+
     def test_publication_then_migration_uses_one_existing_durable_reservation(self):
         self.local_capacity = False
         self.destination_capacity = True

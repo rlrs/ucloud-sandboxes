@@ -1570,6 +1570,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                             ResourceQuantity(disk_mb=source.resources.disk_mb),
                             failure_reason='migration_destination_unavailable')
                         return WakeUnavailable('no ready destination has disk capacity for parked sandbox migration',
+                            error_code='migration_destination_unavailable',retry_after=1,
                             pending_resources=demand.pending_resources)
                     return self.routing_store.begin_sandbox_migration(source,migration_id=migration_id,
                         destination_node_id=destination.node_id,destination_job_id=destination.job_id,

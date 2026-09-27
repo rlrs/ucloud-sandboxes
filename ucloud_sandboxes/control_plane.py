@@ -99,6 +99,7 @@ from .http_server import (
 from .http_contract import SandboxHttpRoute, match_sandbox_http_route
 from .image_inventory_cache import ImageInventoryCache, ImageInventorySnapshot
 from .images import (
+    DEFAULT_MAX_ACTIVE_IMAGE_BUILDS,
     DockerImageRuntime,
     ImageBuildSpec,
     ImageManager,
@@ -8082,12 +8083,17 @@ def _reserve_builder_candidate(
                 - baseline.get(heartbeat.job_id, 0)
                 if reserve else 0
             )
+            load = heartbeat.active_image_builds + max(0, additions)
+            has_slot = load < DEFAULT_MAX_ACTIVE_IMAGE_BUILDS
+            # Pack: fill the busiest builder that still has a free slot, and
+            # among idle ones the oldest, so surplus builders stay idle and
+            # scale down. Only when every builder is full, take the shortest
+            # queue.
             return (
-                heartbeat.active_image_builds + max(0, additions),
+                0 if has_slot else 1,
+                -load if has_slot else load,
+                consolidation_rank(heartbeat),
                 -heartbeat.physical_disk_free_mb,
-                -heartbeat.free_resources.disk_mb,
-                -heartbeat.free_resources.memory_mb,
-                -heartbeat.free_resources.vcpu,
                 heartbeat.node_id,
             )
         selected = min(candidates, key=rank)

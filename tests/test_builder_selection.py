@@ -143,8 +143,11 @@ class BuilderSelectionTests(unittest.TestCase):
         self.handler._proxy_request.side_effect = lambda url, path, **kw: self.response(
             200, {"heartbeat": heartbeat_to_dict(next(h for h in self.handler._ready_heartbeats() if h.node_url == url))},
         )
+        # Builds pack onto a builder until its slots are full; dispatches it
+        # has not acknowledged yet count toward that.
+        full = control_plane.DEFAULT_MAX_ACTIVE_IMAGE_BUILDS
         with (
-            patch.dict(control_plane._BUILDER_DISPATCH_COUNTS, {"2": 1}, clear=True),
-            patch.dict(control_plane._BUILDER_DISPATCH_INFLIGHT, {"2": 1}, clear=True),
+            patch.dict(control_plane._BUILDER_DISPATCH_COUNTS, {"2": full}, clear=True),
+            patch.dict(control_plane._BUILDER_DISPATCH_INFLIGHT, {"2": full}, clear=True),
         ):
             self.assertEqual(self.handler._select_builder_node(reserve=True).job_id, "3")

@@ -733,6 +733,7 @@ class ImageManager:
         build_store: ImageBuildStore | None = None,
         max_active_builds: int = DEFAULT_MAX_ACTIVE_IMAGE_BUILDS,
         queue_builds: bool = False,
+        max_queued_builds: int | None = None,
         max_concurrent_pulls: int = 8,
         telemetry: Telemetry | None = None,
         environment_publisher: Callable[[ImageBuildSpec], str] | None = None,
@@ -743,6 +744,12 @@ class ImageManager:
         self.build_store = build_store or ImageBuildStore(store.path)
         self.max_active_builds = max(1, max_active_builds)
         self.queue_builds = queue_builds
+        # A bounded queue leaves a burst's excess pending at the gateway, where
+        # the autoscaler can add builders for it, instead of queuing it all
+        # behind one builder's slots.
+        self.max_queued_builds = (
+            self.max_active_builds if max_queued_builds is None else max(0, max_queued_builds)
+        )
         self._queued_builds: deque[tuple[ImageBuildRecord, Thread, Callable[[], None] | None]] = deque()
         self.max_concurrent_pulls = max(1, max_concurrent_pulls)
         self.telemetry = telemetry or Telemetry.disabled("image-manager")
@@ -875,7 +882,10 @@ class ImageManager:
                 self._retry_terminal_builds_locked()
                 record, build_started = self.build_store.reserve_build(
                     record,
-                    max_active_builds=None if self.queue_builds else self.max_active_builds,
+                    max_active_builds=(
+                        self.max_active_builds + self.max_queued_builds
+                        if self.queue_builds else self.max_active_builds
+                    ),
                 )
                 if not build_started:
                     if cleanup is not None:

@@ -62,7 +62,7 @@ class ImageTests(unittest.TestCase):
             manager = ImageManager(
                 ImageStore(Path(raw_dir) / "images.sqlite"),
                 DockerImageRuntime(executor=Executor()),
-                max_active_builds=2, queue_builds=True,
+                max_active_builds=2, queue_builds=True, max_queued_builds=10,
             )
             identity, materialize = _uploaded_context(("Dockerfile", b"FROM scratch\n"))
             records = []
@@ -96,6 +96,40 @@ class ImageTests(unittest.TestCase):
             self.assertEqual(peak, 2)
             self.assertEqual(completed, 12)
             self.assertEqual(manager.active_build_count(), 0)
+
+    def test_builder_queue_is_bounded_so_a_burst_can_reach_other_builders(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            release = Event()
+
+            class Executor:
+                def run(self, argv, **_kwargs):
+                    release.wait(10)
+                    return CommandResult(argv=argv, exit_code=0)
+
+            manager = ImageManager(
+                ImageStore(Path(raw_dir) / "images.sqlite"),
+                DockerImageRuntime(executor=Executor()),
+                max_active_builds=2, queue_builds=True,
+            )
+            identity, materialize = _uploaded_context(("Dockerfile", b"FROM scratch\n"))
+            records = []
+            try:
+                for i in range(4):  # two running and, by default, two queued
+                    spec = ImageBuildSpec(id=f"b-{i}", tag=f"local/b-{i}:latest", context_path=".")
+                    records.append(manager.start_build(
+                        spec, context_identity=identity, materialize_context=materialize,
+                    )[0])
+                with self.assertRaises(ImageBuildCapacityError):
+                    manager.start_build(
+                        ImageBuildSpec(id="b-4", tag="local/b-4:latest", context_path="."),
+                        context_identity=identity, materialize_context=materialize,
+                    )
+            finally:
+                release.set()
+                for record in records:
+                    self.assertEqual(
+                        manager.wait_for_build(record.build_id, timeout_seconds=5).status, "succeeded",
+                    )
 
     def test_cold_pull_slots_bound_concurrency_without_losing_drain_fence(self) -> None:
         with TemporaryDirectory() as raw_dir:

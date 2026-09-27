@@ -156,6 +156,7 @@ class RegistryDiskMonitor:
         *,
         cleanup_percent: float,
         refuse_percent: float,
+        target_percent: float = 0.0,
         maintenance_state_file: Path | None = None,
         cache_seconds: float = REGISTRY_DISK_CACHE_SECONDS,
         statvfs: StatVfs = os.statvfs,
@@ -164,6 +165,7 @@ class RegistryDiskMonitor:
         self.paths = paths
         self.cleanup_percent = cleanup_percent
         self.refuse_percent = refuse_percent
+        self.target_percent = target_percent
         self.maintenance_state_file = maintenance_state_file
         self.cache_seconds = cache_seconds
         self._statvfs = statvfs
@@ -184,6 +186,7 @@ class RegistryDiskMonitor:
             paths,
             cleanup_percent=config.registry_disk_cleanup_percent,
             refuse_percent=config.registry_disk_refuse_percent,
+            target_percent=config.registry_disk_target_percent,
             maintenance_state_file=config.registry_maintenance_state_file(),
         )
 
@@ -196,6 +199,7 @@ class RegistryDiskMonitor:
                 self.paths,
                 cleanup_percent=self.cleanup_percent,
                 refuse_percent=self.refuse_percent,
+                target_percent=self.target_percent,
                 statvfs=self._statvfs,
             )
             self._cached, self._cached_at = usage, now

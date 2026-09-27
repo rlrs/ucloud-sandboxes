@@ -130,3 +130,60 @@ the whole tree from a local loop mount):
 zstd saves another 10–20% of bytes for twice the mkfs time and slower
 decompression on every worker read. Workers fetch only what they touch, so lz4
 is the default (`FreshEnvironmentBuilder.compression`).
+
+## Many-image density: EROFS vs Docker workers (2026-09-27, rc57)
+
+The workload used 40 SWE-bench images (4 each from 10 repositories; 52.9 GB
+compressed), one CCX63 worker (`MAX_NODES=1`) and parkable sandboxes (1 vCPU,
+1 GiB, 4 GiB disk, running as root). The same worker ran both modes in turn.
+
+**Light phase** (200 sandboxes, 5 per image; create, then `git status` and a
+module import):
+
+| | EROFS | Docker |
+|---|---:|---:|
+| First create on an image, p50 / p95 | 1.3 / 2.4 s | 92 / 211 s (pull) |
+| Create, image already used, p50 / p95 | 0.5 / 0.7 s | 0.7 / 33 s |
+| Wall time for 200 | 92 s | 356 s |
+| Image bytes on the worker for 40 images | 2.5 GB chunk cache | 56.7 GB image store |
+
+**Agentic load** (500 sandboxes live at once, 8 turns each with 5–30 s think
+time, so sandboxes park and wake; turns rotate between a grep over the repo, a
+test file, and an edit plus `git diff`):
+
+| | EROFS | Docker |
+|---|---:|---:|
+| Wall time | 351 s | 368 s |
+| Sandboxes that failed a turn | 12 | 8 |
+| Create p50 / p95 | 2.7 / 61 s | 1.6 / 22 s |
+| grep, first / later turns (p50) | 2.6 / 0.8 s | 1.3 / 0.8 s |
+| Test file, first / later turns (p50) | 9.2 / 2.4 s | 4.7 / 2.5 s |
+| Edit + diff, first / later turns (p50) | 2.4 / 0.7 s | 2.1 / 0.7 s |
+| Worker CPU mean / max | 49 / 99% | 46 / 98% |
+| Memory max | 40.9 GB | 39.0 GB |
+| Root filesystem used | 51 GB | 100 GB |
+
+Findings:
+- **CPU-bound either way.** At 500 sandboxes this synthetic load saturates
+  48 vCPU. A trivial-exec variant with the same park/wake churn cost about
+  2.5 cores per 150 sandboxes, so the turns' own work dominates. gVisor's
+  per-command overhead was modest (pytest 2.7 s cold and 1.1 s warm, against
+  1.8 s native).
+- **The failures are wake backpressure.** On a CPU-saturated node the
+  gateway refuses local wakes with retryable 503s.
+  `wake_destination_unavailable` is now an SDK pre-dispatch fence (SDK commit
+  8f022c9). The Docker run's "parked sandbox has no node with active CPU,
+  memory, and disk capacity" carries no `error_code` yet, so the SDK cannot
+  fence it.
+- **EROFS wins on cold start and disk.** No image pulls: first creates
+  are 70× faster and the worker holds about 10% of Docker's image bytes.
+- **Steady state is equal.** Later turns match within noise.
+- **First touches are slower on EROFS under saturation**, about 2× on first
+  turns: first reads go through the userspace NBD server
+  (`serve-environment-io`, one Python process for all devices). This is the
+  next thing to profile.
+- **Bugs found:**
+  - NBD sizing overflowed for images of 2 GiB or more (fixed in rc57).
+  - Deleting a just-parked sandbox can return a non-retryable 503 ("memory
+    allocation still has publication readers").
+  - One wake failed with "stale storage revision".

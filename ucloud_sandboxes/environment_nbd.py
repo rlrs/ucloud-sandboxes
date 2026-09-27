@@ -21,8 +21,17 @@ REPLY_MAGIC = 0x67446698
 MAX_READ = 32 * 1024 ** 2
 # Linux UAPI _IO(0xab, command), from linux/nbd.h.
 SET_SOCK, SET_BLKSIZE, SET_SIZE, DO_IT, CLEAR_SOCK = (0xab00 + n for n in range(5))
-DISCONNECT, SET_TIMEOUT, SET_FLAGS = 0xab08, 0xab09, 0xab0a
+SET_SIZE_BLOCKS, DISCONNECT, SET_TIMEOUT, SET_FLAGS = 0xab07, 0xab08, 0xab09, 0xab0a
+BLOCK_BYTES = 4096
 READ_ONLY_FLAGS = 1 | 2
+
+
+def size_ioctls(image_size):
+    """Size the device in blocks: ``ioctl`` passes a C int, so SET_SIZE in
+    bytes overflows for images of 2 GiB and more. EROFS images are whole blocks."""
+    if image_size <= 0 or image_size % BLOCK_BYTES:
+        raise ValueError("environment image size is not a whole number of blocks")
+    return ((SET_BLKSIZE, BLOCK_BYTES), (SET_SIZE_BLOCKS, image_size // BLOCK_BYTES))
 
 
 class EnvironmentReadWorkers:
@@ -156,8 +165,8 @@ class ReadOnlyEnvironmentDevice:
                 # inode lease; never reconfigure a device with a kernel owner.
                 fcntl.ioctl(self._fd, SET_SOCK, kernel_socket.fileno())
                 self._bound = True
-                fcntl.ioctl(self._fd, SET_BLKSIZE, 4096)
-                fcntl.ioctl(self._fd, SET_SIZE, component.image_size)
+                for request, argument in size_ioctls(component.image_size):
+                    fcntl.ioctl(self._fd, request, argument)
                 fcntl.ioctl(self._fd, SET_FLAGS, READ_ONLY_FLAGS)
                 fcntl.ioctl(self._fd, SET_TIMEOUT, 30)
                 self._export = ReadOnlyNbdExport(stream, component, cache, workers)
@@ -177,7 +186,7 @@ class ReadOnlyEnvironmentDevice:
                 and self._export is not None and not self._export.cancel.is_set())
 
     def _await_ready(self, sysfs_device, image_size):
-        # SET_SIZE does not publish capacity synchronously on every kernel.
+        # Sizing does not publish capacity synchronously on every kernel.
         # Mounting before DO_IT finishes setup can read a zero-sized device.
         deadline = time.monotonic() + 5
         while True:

@@ -48,6 +48,16 @@ class EnvironmentBackendTests(EnvironmentArtifactTests):
         with self.assertRaisesRegex(RuntimeError, "did not become ready"):
             ReadOnlyEnvironmentDevice._await_ready(export, device, 4096)
 
+    def test_devices_are_sized_in_blocks_beyond_two_gib(self):
+        from ucloud_sandboxes.environment_nbd import SET_BLKSIZE, SET_SIZE_BLOCKS, size_ioctls
+        size = 3 * 1024 ** 3 + 4096
+        self.assertEqual(size_ioctls(size), ((SET_BLKSIZE, 4096), (SET_SIZE_BLOCKS, size // 4096)))
+        for argument in (value for _, value in size_ioctls(size)):
+            self.assertLess(argument, 2 ** 31)
+        for invalid in (0, 4097):
+            with self.assertRaises(ValueError):
+                size_ioctls(invalid)
+
     def test_device_owner_checks_precede_all_configuration(self):
         device = self.root / "device"
         device.touch()

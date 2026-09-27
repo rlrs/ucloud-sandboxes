@@ -49,10 +49,11 @@ raw.update({
         "enable_private_egress": True,
         "private_dns_servers": ["1.1.1.1", "8.8.8.8"],
     },
-    # The registry lives on a 500 GB Hetzner Volume on the gateway: immutable
-    # environment chunks are 256 KiB blobs, and Object Storage took ~1.3 s per
-    # upload and ~320 ms per read against 50 ms and 3 ms on the volume
-    # (docs/image-import.md). `hz.py volume sandboxes-registry 500 ...`.
+    # The registry lives on a Hetzner Volume on the gateway (2 TB since
+    # 2026-09-27, when 500 GB filled during a build-heavy run): Object Storage
+    # took ~1.3 s per upload and ~320 ms per read against 50 ms and 3 ms on the
+    # volume (docs/image-import.md). `hz.py volume sandboxes-registry 500 ...`,
+    # grown online with `hz.py resize-volume sandboxes-registry <GB>` + resize2fs.
     "registry_store": {"kind": "filesystem",
                        "mount_point": "/mnt/ucloud-registry",
                        "data_root": "/mnt/ucloud-registry/docker-registry",

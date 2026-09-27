@@ -144,6 +144,15 @@ if __name__ == "__main__":
                 wait_action(action["id"])
         volume = call("GET", f"/volumes/{volume['id']}")["volume"]
         print(json.dumps({"id": volume["id"], "linux_device": volume["linux_device"], "size_gb": volume["size"]}))
+    elif command == "resize-volume":
+        # Grow only (Hetzner cannot shrink); then resize2fs the mounted ext4 online.
+        name, size_gb = args
+        entry = ledger()["volumes"][name]
+        wait_action(call("POST", f"/volumes/{entry['id']}/actions/resize",
+                         {"size": int(size_gb)})["action"]["id"])
+        record("volumes", name, {**entry, "size_gb": int(size_gb)})
+        volume = call("GET", f"/volumes/{entry['id']}")["volume"]
+        print(json.dumps({"id": volume["id"], "linux_device": volume["linux_device"], "size_gb": volume["size"]}))
     elif command == "delete-volume":
         entry = ledger()["volumes"][args[0]]
         detach = call("POST", f"/volumes/{entry['id']}/actions/detach")

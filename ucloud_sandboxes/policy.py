@@ -6,6 +6,7 @@ import math
 
 from .capabilities import (
     DISK_QUOTA_CAPABILITY,
+    RUNTIME_CPU_CAPABILITY_PREFIX,
     has_capability,
 )
 from .consolidation import consolidation_rank
@@ -1450,6 +1451,22 @@ def plan_soft_drain(
             for request in placement_requests
         )
 
+    def cpu_identity(node: SandboxNode) -> str | None:
+        advertised = [
+            value for value in (node.heartbeat.capabilities if node.heartbeat else ())
+            if value.startswith(RUNTIME_CPU_CAPABILITY_PREFIX)
+        ]
+        return advertised[0] if len(advertised) == 1 else None
+
+    def has_move_peer(node: SandboxNode) -> bool:
+        # Checkpoints import only onto the same CPU feature set; draining a
+        # worker whose parks fit nowhere would hold the slot without progress.
+        identity = cpu_identity(node)
+        return identity is None or any(
+            other.job_id != node.job_id and cpu_identity(other) in (identity, None)
+            for other in ready_nodes
+        )
+
     kept = ""
     clear: list[str] = []
     reasons: list[str] = []
@@ -1469,6 +1486,9 @@ def plan_soft_drain(
         elif serves_pending(node):
             clear.append(node.job_id)
             reasons.append(f"{node.job_id} can serve pending demand")
+        elif not has_move_peer(node):
+            clear.append(node.job_id)
+            reasons.append(f"no other worker shares {node.job_id}'s CPU features")
         else:
             kept = node.job_id
     if kept or not allow_select or not excess or pending_count > 0:
@@ -1486,7 +1506,9 @@ def plan_soft_drain(
     ]
     # Idle workers already scale down normally; a lone busy worker has nowhere
     # to move its parks.
-    eligible = [node for node in candidates if surplus(node)] if len(candidates) > 1 else []
+    eligible = [
+        node for node in candidates if has_move_peer(node) and surplus(node)
+    ] if len(candidates) > 1 else []
     if not eligible:
         return SoftDrainPlan(clear_job_ids=tuple(clear), reason="; ".join(reasons))
     fewest = min(_soft_drain_sandboxes(node) for node in eligible)

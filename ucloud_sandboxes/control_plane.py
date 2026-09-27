@@ -69,6 +69,7 @@ from .capabilities import (
     SPLIT_CHECKPOINT_CAPABILITY,
     HOST_EROFS_CAPABILITY,
     RUNTIME_COMPATIBILITY_CAPABILITY_PREFIX,
+    RUNTIME_CPU_CAPABILITY_PREFIX,
     RESOURCE_PHASE_CAPABILITY,
     has_capability,
 )
@@ -1628,11 +1629,18 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             self._write_routing_store_unavailable(exc)
             return
         if migration.phase != "complete":
+            aborted = False
+            if soft_drain and migration.phase in {"planned", "prepared", "staged"}:
+                # A drain move is optional: roll it back at once so the source
+                # is never left fenced (unable to wake) by a failed import.
+                migration, abort_error = self._abort_sandbox_migration(migration)
+                aborted = not abort_error
             self._write_json(
                 {
                     "error": migration.error or "sandbox migration is incomplete",
                     "migration": migration.to_dict(),
                     "retryable": True,
+                    "aborted": aborted,
                     "timings_ms": migration_timings_ms,
                 },
                 status=HTTPStatus.SERVICE_UNAVAILABLE,
@@ -1702,6 +1710,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             runtime_capability = _migration_runtime_capability(source, source_heartbeat)
         except ValueError:
             return None
+        source_cpu = _migration_cpu_capability(source, source_heartbeat)
         required_destination_capabilities = _sandbox_required_capabilities(source.spec)
         if runtime_capability is not None:
             required_destination_capabilities = (*required_destination_capabilities, runtime_capability)
@@ -1740,6 +1749,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     for capability in required_destination_capabilities
                 )
                 or (requested_node_id and heartbeat.node_id != requested_node_id)
+                or not _cpu_compatible(heartbeat, source_cpu)
             ):
                 continue
             node_routes = route_index.routes_for(heartbeat)
@@ -7789,6 +7799,34 @@ def _migration_runtime_capability(
     if HOST_EROFS_CAPABILITY in owner.capabilities:
         raise ValueError("immutable environment source lacks its runtime identity")
     return None
+
+
+def _migration_cpu_capability(
+    route: SandboxRoute, owner: NodeHeartbeat | None,
+) -> str | None:
+    """The CPU feature identity a destination's import will require, if known."""
+
+    if route.storage_snapshot:
+        try:
+            snapshot = _portable_snapshot_for_route(route)
+        except ValueError:
+            return None
+        return RUNTIME_CPU_CAPABILITY_PREFIX + snapshot.manifest.runtime.cpu_features_sha256
+    if owner is None:
+        return None
+    advertised = [value for value in owner.capabilities
+                  if value.startswith(RUNTIME_CPU_CAPABILITY_PREFIX)]
+    return advertised[0] if len(advertised) == 1 else None
+
+
+def _cpu_compatible(destination: NodeHeartbeat, required: str | None) -> bool:
+    # Workers that predate the CPU capability stay eligible; their import
+    # still validates the full fingerprint.
+    if required is None:
+        return True
+    advertised = [value for value in destination.capabilities
+                  if value.startswith(RUNTIME_CPU_CAPABILITY_PREFIX)]
+    return not advertised or required in advertised
 
 
 def _portable_snapshot_for_route(route: SandboxRoute) -> StorageNativeMigration:

@@ -9,7 +9,10 @@ from urllib.error import HTTPError
 
 from ucloud_sandboxes import cli, control_plane
 from ucloud_sandboxes.autoscaler_state import AutoscalerStateStore
-from ucloud_sandboxes.capabilities import RUNTIME_COMPATIBILITY_CAPABILITY_PREFIX
+from ucloud_sandboxes.capabilities import (
+    RUNTIME_COMPATIBILITY_CAPABILITY_PREFIX,
+    RUNTIME_CPU_CAPABILITY_PREFIX,
+)
 from ucloud_sandboxes.config import DeploymentConfig
 from ucloud_sandboxes.control_state import SOFT_DRAIN, ControlStateStore
 from ucloud_sandboxes.deployment import package_version
@@ -144,6 +147,27 @@ class SoftDrainSelectionTests(unittest.TestCase):
             self.plan([worker("100"), worker("200", active=1), worker("300")]).job_id,
             "200",
         )
+
+    def test_only_drains_a_worker_whose_parks_can_move_to_a_cpu_twin(self):
+        def with_cpu(value, cpu):
+            heartbeat = value.heartbeat
+            return replace(value, heartbeat=replace(heartbeat, capabilities=(
+                *heartbeat.capabilities, RUNTIME_CPU_CAPABILITY_PREFIX + cpu * 64,
+            )))
+        now = utc_now()
+        mismatched = [with_cpu(worker("100", active=5), "a"), with_cpu(worker("200", active=2), "b")]
+        plan = plan_soft_drain(mismatched, ScalePolicy(max_nodes=3), now,
+                               required_resources=ResourceQuantity(vcpu=1, memory_mb=1024, disk_mb=1024))
+        self.assertEqual(plan.job_id, "")
+        twins = [*mismatched, with_cpu(worker("300", active=4), "b")]
+        plan = plan_soft_drain(twins, ScalePolicy(max_nodes=3), now,
+                               required_resources=ResourceQuantity(vcpu=1, memory_mb=1024, disk_mb=1024))
+        self.assertEqual(plan.job_id, "200")
+        # A selection that lost its twin is released.
+        lonely = [mismatched[0], drained_node(mismatched[1])]
+        plan = plan_soft_drain(lonely, ScalePolicy(max_nodes=3), now,
+                               required_resources=ResourceQuantity(vcpu=1, memory_mb=1024, disk_mb=1024))
+        self.assertEqual((plan.job_id, plan.clear_job_ids), ("", ("200",)))
 
     def test_requires_two_busy_workers_surplus_and_no_pending_demand(self):
         idle = worker("300", active=0, idle_since=utc_now())
@@ -548,6 +572,53 @@ class SoftDrainGatewayTests(unittest.TestCase):
             self.assertEqual(asked, ["unseen"])
             self.assertEqual(outcomes[0].error_code, "migration_source_not_parked")
             self.assertEqual(handler.routing_store.sandbox_migrations(), [])
+
+    def test_destinations_with_other_cpu_features_are_never_chosen(self):
+        snapshot_cpu = _portable_snapshot("parked").manifest.runtime.cpu_features_sha256
+        with TemporaryDirectory() as raw:
+            other = self.heartbeat("100")
+            other = replace(other, capabilities=(
+                *other.capabilities, RUNTIME_CPU_CAPABILITY_PREFIX + "f" * 64,
+            ))
+            same = self.heartbeat("150")
+            same = replace(same, capabilities=(
+                *same.capabilities, RUNTIME_CPU_CAPABILITY_PREFIX + snapshot_cpu,
+            ))
+            handler, route = self.handler(Path(raw), other, same)
+            self.assertEqual(
+                handler._select_migration_destination(route, requested_node_id="").job_id, "150",
+            )
+        with TemporaryDirectory() as raw:
+            handler, route = self.handler(Path(raw), other)
+            self.assertIsNone(handler._select_migration_destination(route, requested_node_id=""))
+        with TemporaryDirectory() as raw:
+            # A worker that predates the capability stays eligible.
+            handler, route = self.handler(Path(raw), self.heartbeat("120"))
+            self.assertEqual(
+                handler._select_migration_destination(route, requested_node_id="").job_id, "120",
+            )
+
+    def test_failed_drain_move_is_rolled_back_so_the_source_can_wake(self):
+        with TemporaryDirectory() as raw:
+            handler, route = self.handler(Path(raw), self.heartbeat("150"))
+            written, aborted = [], []
+            handler._read_json_body = lambda: {"migration_id": "m-3", "soft_drain": True}
+            handler._atomic_placement = lambda operation, **_kwargs: operation()
+            handler._prepare_and_advance_sandbox_migration = lambda migration, **_kwargs: replace(
+                migration, phase="prepared",
+                error="storage-native snapshot does not match the required runtime",
+            )
+
+            def abort(migration):
+                aborted.append(migration.migration_id)
+                return replace(migration, phase="complete", error=""), ""
+
+            handler._abort_sandbox_migration = abort
+            handler._write_json = lambda payload, status=200: written.append((status, payload))
+            handler._migrate_sandbox_on_node(route.sandbox_id)
+            self.assertEqual(aborted, ["m-3"])
+            self.assertEqual(written[0][0], 503)
+            self.assertTrue(written[0][1]["aborted"])
 
     def test_create_placement_prefers_undrained_but_falls_back(self):
         drained = replace(

@@ -11,6 +11,9 @@ SPLIT_CHECKPOINT_CAPABILITY = "sandbox-checkpoint-v3"
 REFLINK_MEMORY_RESTORE_CAPABILITY = "sandbox-memory-reflink-restore-v1"
 HOST_EROFS_CAPABILITY = "immutable-environment-host-erofs-v1"
 RUNTIME_COMPATIBILITY_CAPABILITY_PREFIX = "runtime-compatibility-sha256:"
+# Checkpoint import compares the full runtime fingerprint, including the CPU
+# feature set; same-model VMs can expose different flags (erms, fsrm).
+RUNTIME_CPU_CAPABILITY_PREFIX = "runtime-cpu-features-sha256:"
 STORAGE_NATIVE_MIGRATION_CAPABILITY = "sandbox-migrate-storage-native-v1"
 STORAGE_NATIVE_DETACH_CAPABILITY = "sandbox-detach-published-v1"
 

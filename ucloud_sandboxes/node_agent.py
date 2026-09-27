@@ -38,6 +38,7 @@ from .capabilities import (
     REFLINK_MEMORY_RESTORE_CAPABILITY,
     HOST_EROFS_CAPABILITY,
     RUNTIME_COMPATIBILITY_CAPABILITY_PREFIX,
+    RUNTIME_CPU_CAPABILITY_PREFIX,
     STORAGE_NATIVE_DETACH_CAPABILITY,
     STORAGE_NATIVE_MIGRATION_CAPABILITY,
 )
@@ -1985,6 +1986,7 @@ def build_direct_node_agent_server(
     fingerprint = getattr(getattr(service.warden, "config", None), "runtime_fingerprint", None)
     if fingerprint is not None:
         direct_capabilities.append(RUNTIME_COMPATIBILITY_CAPABILITY_PREFIX + fingerprint.node_compatibility_sha256)
+        direct_capabilities.append(RUNTIME_CPU_CAPABILITY_PREFIX + fingerprint.cpu_features_sha256)
     if getattr(service.provisioner.overlays.image_store, "backend_abi", None) == HOST_EROFS_ABI:
         direct_capabilities.append(HOST_EROFS_CAPABILITY)
     DirectBoundHandler.capabilities = tuple(direct_capabilities)

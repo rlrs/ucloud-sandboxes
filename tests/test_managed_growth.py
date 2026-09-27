@@ -385,6 +385,24 @@ class ManagedGrowthTests(unittest.TestCase):
         self.service.wake('one', generation=7, operation_id='wake:one')
         self.assertEqual(self.service.warm_park_demand().physical_bytes, 4 << 30)
 
+    def test_parked_queued_launch_wakes_without_phantom_growth(self):
+        self.service.start_managed_process('one', self.spec)
+        self.service.admission_wait_seconds = .05
+        with self.assertRaises(SandboxStartupBusyError):
+            self.service.start_managed_process('two', self.spec)
+        self.service.park('two', operation_id='park:queued')
+        self.assertEqual(self.registry.growth_intents()[1].phase, 'queued')
+        self.service.observe_managed_wait('one', 7, 'request-one')
+        self.service.wake('two', generation=7, operation_id='wake:queued')
+        # Nothing was dispatched, so the restore adds no primary growth.
+        self.assertEqual(self.registry.growth_intents()[1].phase, 'queued')
+        self.assertEqual(self.service.warm_park_demand().physical_bytes, 0)
+        self.assertEqual(self.control.call_count, 1)
+        self.service.admission_wait_seconds = 3
+        self.service.start_managed_process('two', self.spec)
+        self.assertEqual(self.registry.growth_intents()[1].phase, 'active')
+        self.assertEqual(self.service.warm_park_demand().physical_bytes, 4 << 30)
+
     def test_granted_continuation_atomically_revokes_late_safe_wait(self):
         self.service.start_managed_process('one', self.spec)
         self.service.observe_managed_wait('one', 7, 'request-one')

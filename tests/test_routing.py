@@ -664,6 +664,23 @@ class RoutingStoreTests(unittest.TestCase):
             with self.assertRaises(SandboxRouteConflictError):
                 store.upsert_managed_process(route, refreshed)
 
+    def test_sandbox_delete_removes_only_its_managed_process_row(self):
+        with routing_store() as store:
+            routes = {
+                sandbox_id: store.upsert_sandbox(sandbox_route(
+                    sandbox_id=sandbox_id, node_id="n", job_id="vm", node_url="http://n",
+                ))
+                for sandbox_id in ("gone", "kept")
+            }
+            for sandbox_id, route in routes.items():
+                store.upsert_managed_process(route, ManagedProcessRecord(
+                    sandbox_id=sandbox_id, sandbox_generation=route.generation,
+                    job_id="agent", spec_sha256="a" * 64, state="running", sequence=1,
+                ))
+            store.delete_sandbox("gone")
+            self.assertIsNone(store.get_managed_process("gone"))
+            self.assertEqual(store.get_managed_process("kept").job_id, "agent")
+
     def test_managed_changes_and_warmup_reads_progress_under_projection_lock(self):
         with routing_store() as store, ThreadPoolExecutor(max_workers=1) as pool:
             route = store.upsert_sandbox(sandbox_route(

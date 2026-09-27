@@ -62,6 +62,7 @@ from .images import (
     materialize_uploaded_build_context,
     uploaded_build_context_reference,
 )
+from .direct_registry import ManagedPrimaryOwnedError
 from .managed_process import ManagedProcessError, ManagedProcessReadUnavailable, ManagedProcessStart
 from .models import NodeRuntimeMetrics, ResidentWaitMetrics, ResourceQuantity, SandboxInventoryEntry, SandboxMemoryObservation, utc_now
 from .node_runtime import BuilderNodeRuntime, DirectNodeRuntime, NodeStateStore
@@ -688,6 +689,18 @@ class NodeAgentHandler(BuildContextHttpHandler):
             record = self.manager.start_managed_process(sandbox_id, spec)
         except ManagedProcessError as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
+            return
+        except ManagedPrimaryOwnedError as exc:
+            # Another launch owns this generation's sole primary. Retrying the
+            # same spec cannot succeed, unlike a queued node_startup_busy.
+            self._write_json(
+                {
+                    "error": str(exc),
+                    "error_code": "primary_already_owned",
+                    "job_id": exc.job_id,
+                },
+                status=HTTPStatus.CONFLICT,
+            )
             return
         except (RuntimeError, ValueError) as exc:
             self._write_exception(exc)

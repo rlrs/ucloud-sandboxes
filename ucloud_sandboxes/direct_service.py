@@ -38,7 +38,7 @@ from .managed_process import (
     control_request_bytes,
     parse_control_response,
 )
-from .direct_registry import DirectSandboxRegistration, DirectRegistryCapacityUnavailable
+from .direct_registry import DirectSandboxRegistration, DirectRegistryCapacityUnavailable, ManagedPrimaryOwnedError
 from .direct_warden import DirectWardenError
 from .hibernation import HibernationError, HibernationState
 from .models import NodeRuntimeMetrics, ResourceQuantity
@@ -1605,12 +1605,20 @@ class DirectSandboxService:
             job_id=spec.job_id, launch_sha256=digest)
         if intent.phase == "queued":
             try:
-                self._admit_managed_growth(registration, request_id="", startup=True)
+                admitted = self._admit_managed_growth(
+                    registration, request_id="", startup=True,
+                    launch=(spec.job_id, digest))
             except SandboxCapacityUnavailableError as exc:
                 # The primary has not been dispatched. Keep its durable queued
                 # identity and expose the existing bounded safe-retry contract.
                 # Never wrap the supervisor RPC: a failure there is ambiguous.
                 raise SandboxStartupBusyError(str(exc)) from exc
+            # Another launch may replace a queued one while this admission
+            # waits. Once this identity is active nothing can replace it, so a
+            # committed match here fences the dispatch below.
+            if admitted is None or admitted.phase == "queued" or (
+                    (admitted.job_id, admitted.launch_sha256) != (spec.job_id, digest)):
+                raise ManagedPrimaryOwnedError(admitted.job_id if admitted else "")
         raw = self._managed_control(registration, payload, retry_not_ready=True)
         result = ManagedProcessRecord.from_control_response(
             raw, sandbox_id=sandbox_id, sandbox_generation=registration.sandbox_generation)
@@ -1795,7 +1803,8 @@ class DirectSandboxService:
                 # that this still-resident safe wait is physically parked.
                 raise SandboxStartupBusyError(str(exc)) from exc
 
-    def _admit_managed_growth(self, registration, *, request_id, startup):
+    def _admit_managed_growth(self, registration, *, request_id, startup, launch=("", "")):
+        """Charge the next growth exposure; return the committed intent."""
         key = (registration.sandbox_id, registration.sandbox_generation)
         kind = TransitionKind.STARTUP if startup else TransitionKind.RESTORE
         bound = int(registration.spec.memory_mb * 1024**2)
@@ -1823,7 +1832,7 @@ class DirectSandboxService:
                     # The existing exposure already covers a fast response, but
                     # its old park must be revoked in the same durable order.
                     self.provisioner.registry.relay_wake_fence(*key, request_id, record=True)
-                return
+                return previous
         # Growth reserves bytes, not restore I/O. A resident continuation must
         # not queue behind disk restores; actual restores acquire their permit
         # in _restore_admission. Activation remains durable before returning.
@@ -1840,7 +1849,10 @@ class DirectSandboxService:
                     self._provisional_growth[key] = current_cost()
                     self._refresh_growth_forecasts_locked()
                 try:
-                    self._record_growth_intent(key, action="activate", request_id=request_id)
+                    job_id, launch_sha256 = launch
+                    return self._record_growth_intent(
+                        key, action="activate", request_id=request_id,
+                        job_id=job_id, launch_sha256=launch_sha256)
                 finally:
                     with self._capacity_guard:
                         self._provisional_growth.pop(key, None)

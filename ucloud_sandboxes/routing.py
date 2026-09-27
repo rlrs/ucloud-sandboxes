@@ -2696,6 +2696,7 @@ class RoutingStore:
         )
         conn.execute("DELETE FROM pending WHERE sandbox_id = ?", (sandbox_id,))
         conn.execute("DELETE FROM exec_sessions WHERE sandbox_id = ?", (sandbox_id,))
+        conn.execute("DELETE FROM managed_processes WHERE sandbox_id = ?", (sandbox_id,))
         conn.execute(
             """
             UPDATE sandbox_migrations

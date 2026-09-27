@@ -1,13 +1,19 @@
 """Primary growth admission is retryable only before supervisor dispatch."""
 
 import asyncio
+from dataclasses import replace
 import importlib.util
+import json
 from pathlib import Path
 from threading import Thread
 from unittest import TestCase, skipUnless
+from unittest.mock import patch
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 
 from tests import test_direct_provisioner as node_fixtures
 from tests import test_managed_growth as growth_fixtures
+from ucloud_sandboxes.direct_registry import ManagedPrimaryOwnedError
 from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, utc_now
 from ucloud_sandboxes.sandbox import (
     SandboxCapacityUnavailableError,
@@ -56,6 +62,85 @@ class ManagedStartRetryTests(TestCase):
         self.assertNotIsInstance(result.exception, SandboxStartupBusyError)
         self.assertEqual(self.fixture.registry.growth_intents()[0].phase, "active")
         self.assertEqual(self.fixture.control.call_count, 1)
+
+    def dispatched(self):
+        return [call.args[1]["job_id"] for call in self.fixture.control.call_args_list]
+
+    def test_timed_out_launch_is_replaced_by_the_next_start(self):
+        # The SDK chooses a fresh job id for every start_agent call.
+        self.service.start_managed_process("one", self.fixture.spec)
+        with self.assertRaises(SandboxStartupBusyError):
+            self.service.start_managed_process("two", self.fixture.spec)
+        self.service.observe_managed_wait("one", 7, "first-wait")
+        fresh = replace(self.fixture.spec, job_id="fresh", argv=("/bin/other",))
+        self.assertEqual(self.service.start_managed_process("two", fresh).job_id, "fresh")
+        intent = self.fixture.registry.growth_intents()[1]
+        self.assertEqual((intent.job_id, intent.phase), ("fresh", "active"))
+        self.assertEqual(self.dispatched(), ["primary", "fresh"])
+        # A dispatched launch is permanent for its generation.
+        with self.assertRaises(ManagedPrimaryOwnedError) as caught:
+            self.service.start_managed_process("two", self.fixture.spec)
+        self.assertEqual(caught.exception.job_id, "fresh")
+        self.assertEqual(self.dispatched(), ["primary", "fresh"])
+
+    def test_replacement_before_activation_fences_the_old_dispatch(self):
+        registry = self.fixture.registry
+        original = registry.growth_intent
+        replaced = False
+
+        def replace_first(sandbox_id, generation, **kwargs):
+            nonlocal replaced
+            if kwargs["action"] == "activate" and kwargs.get("job_id") == "primary" and not replaced:
+                replaced = True
+                # A newer start commits its launch while this one is admitted.
+                original(sandbox_id, generation, action="launch", job_id="fresh",
+                         launch_sha256="f" * 64)
+            return original(sandbox_id, generation, **kwargs)
+
+        with patch.object(registry, "growth_intent", side_effect=replace_first):
+            with self.assertRaises(ManagedPrimaryOwnedError) as caught:
+                self.service.start_managed_process("one", self.fixture.spec)
+        self.assertTrue(replaced)
+        self.assertEqual(caught.exception.job_id, "fresh")
+        self.assertEqual(self.dispatched(), [])
+        # The late activation did not charge the replacement's growth.
+        self.assertEqual(registry.growth_intents()[0].phase, "queued")
+        self.assertEqual(self.service.warm_park_demand().physical_bytes, 0)
+
+    def test_replacement_dispatched_first_fences_the_old_dispatch(self):
+        fresh = replace(self.fixture.spec, job_id="fresh")
+        original = self.service._admit_managed_growth
+        raced = []
+
+        def newer_start_wins(registration, **kwargs):
+            if kwargs.get("launch", ("",))[0] == "primary" and not raced:
+                # A newer start replaces, admits and dispatches in between.
+                raced.append(self.service.start_managed_process("one", fresh))
+            return original(registration, **kwargs)
+
+        with patch.object(self.service, "_admit_managed_growth", side_effect=newer_start_wins):
+            with self.assertRaises(ManagedPrimaryOwnedError) as caught:
+                self.service.start_managed_process("one", self.fixture.spec)
+        self.assertEqual(raced[0].job_id, "fresh")
+        self.assertEqual(caught.exception.job_id, "fresh")
+        self.assertEqual(self.dispatched(), ["fresh"])
+        self.assertEqual(self.fixture.registry.growth_intents()[0].phase, "active")
+
+    def test_owned_primary_conflict_is_a_typed_409(self):
+        self.service.start_managed_process("one", self.fixture.spec)
+        url = self.serve(lambda payload: None)
+        body = json.dumps({"job_id": "other", "argv": ["/bin/agent"], "cwd": "/workspace"})
+        request = Request(f"{url}/v1/sandboxes/one/jobs", data=body.encode(), method="POST",
+                          headers={"Content-Type": "application/json"})
+        with self.assertRaises(HTTPError) as caught:
+            urlopen(request, timeout=5)
+        with caught.exception:
+            self.assertEqual(caught.exception.code, 409)
+            payload = json.loads(caught.exception.read())
+        self.assertEqual(payload["error_code"], "primary_already_owned")
+        self.assertEqual(payload["job_id"], "primary")
+        self.assertNotIn("retryable", payload)
+        self.assertEqual(self.dispatched(), ["primary"])
 
     def serve(self, on_response):
         server = node_fixtures.build_direct_node_agent_server(

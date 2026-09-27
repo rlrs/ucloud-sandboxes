@@ -12,6 +12,7 @@ from ucloud_sandboxes.direct_registry import (
     DirectRegistryConflictError,
     DirectRegistryError,
     DirectSandboxRegistry,
+    ManagedPrimaryOwnedError,
 )
 from ucloud_sandboxes.direct_warden import DirectSandbox
 from ucloud_sandboxes.sandbox import NodeDrainState, SandboxSpec
@@ -33,6 +34,24 @@ class DirectRegistryTests(unittest.TestCase):
         sandbox_id: str,
         generation: int,
     ) -> None:
+        owned = self.owned_registration(registry, root, sandbox_id, generation)
+        deleting = registry.begin_delete(
+            sandbox_id,
+            expected_revision=owned.revision,
+        )
+        registry.commit_deleted(
+            sandbox_id,
+            sandbox_generation=generation,
+            expected_revision=deleting.revision,
+        )
+
+    def owned_registration(
+        self,
+        registry: DirectSandboxRegistry,
+        root: Path,
+        sandbox_id: str,
+        generation: int,
+    ):
         planned = registry.plan(
             spec=self.spec(sandbox_id),
             sandbox_generation=generation,
@@ -60,19 +79,47 @@ class DirectRegistryTests(unittest.TestCase):
                 memory_directory=f"{sandbox_id}.{generation}",
             ),
         )
-        owned = registry.commit_owned(
+        return registry.commit_owned(
             sandbox_id,
             expected_revision=rootfs.revision,
         )
-        deleting = registry.begin_delete(
-            sandbox_id,
-            expected_revision=owned.revision,
-        )
-        registry.commit_deleted(
-            sandbox_id,
-            sandbox_generation=generation,
-            expected_revision=deleting.revision,
-        )
+
+    def test_queued_launch_is_replaceable_but_activated_launch_is_not(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            registry = DirectSandboxRegistry(root / "registry.sqlite3")
+            self.owned_registration(registry, root, "sandbox", 3)
+            first = ("first", "1" * 64)
+            second = ("second", "2" * 64)
+
+            def growth(action, identity=("", ""), **kwargs):
+                return registry.growth_intent(
+                    "sandbox", 3, action=action,
+                    job_id=identity[0], launch_sha256=identity[1], **kwargs)
+
+            self.assertEqual(growth("launch", first).phase, "queued")
+            # Never dispatched: a new start's identity takes it over.
+            replaced = growth("launch", second)
+            self.assertEqual((replaced.job_id, replaced.phase), ("second", "queued"))
+            # The replaced launch's late admission and an identity-less wake
+            # both leave it queued; parking it records no growth.
+            self.assertEqual(growth("activate", first).phase, "queued")
+            self.assertEqual(growth("activate").phase, "queued")
+            self.assertEqual(growth("park").phase, "queued")
+            self.assertEqual(growth("activate", second).phase, "active")
+            with self.assertRaises(ManagedPrimaryOwnedError) as caught:
+                growth("launch", first)
+            self.assertEqual(caught.exception.job_id, "second")
+            self.assertIsInstance(caught.exception, DirectRegistryConflictError)
+            # Parked after dispatch is still that launch's primary.
+            self.assertEqual(growth("park").phase, "parked")
+            with self.assertRaises(ManagedPrimaryOwnedError):
+                growth("launch", first)
+            self.assertEqual(growth("activate").phase, "active")
+            self.assertEqual(
+                [(item.job_id, item.phase) for item in registry.growth_intents()],
+                [("second", "active")],
+            )
 
     def test_exact_plan_replay_is_idempotent_but_mismatch_conflicts(self) -> None:
         with TemporaryDirectory() as raw:

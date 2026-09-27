@@ -75,6 +75,14 @@ class DirectRegistryCapacityUnavailable(DirectRegistryConflictError):
     """No disk claim was granted; the caller may wait for physical capacity."""
 
 
+class ManagedPrimaryOwnedError(DirectRegistryConflictError):
+    """This generation's sole primary belongs to another launch identity."""
+
+    def __init__(self, job_id: str):
+        super().__init__("sandbox generation already owns another primary process")
+        self.job_id = job_id
+
+
 @dataclass(frozen=True)
 class DiskClaim:
     """A registration's current physical promise, in MiB.
@@ -1190,9 +1198,11 @@ class DirectSandboxRegistry:
         """Mutate a forecast under the same durable incarnation/wake fences.
 
         The guest supervisor accepts only one primary job/spec for its entire
-        generation. A different launch cannot replace an ambiguous first launch.
-        Imported generations initially have unknown job identity; their existing
-        lifecycle authority still fences wait and continuation observations.
+        generation. A different launch cannot replace an ambiguous first launch,
+        but may replace a still-queued one: activation commits before dispatch,
+        so a queued launch never reached the supervisor. Imported generations
+        initially have unknown job identity; their existing lifecycle authority
+        still fences wait and continuation observations.
         """
         if action not in {"launch", "bind", "activate", "wait", "park", "terminal"}:
             raise ValueError("invalid growth action")
@@ -1214,11 +1224,17 @@ class DirectSandboxRegistry:
                         intent = replace(intent, job_id=job_id, launch_sha256=launch_sha256)
                         connection.execute("INSERT OR REPLACE INTO managed_growth VALUES (?,?,?,?,?,?,?)", tuple(vars(intent).values()))
                         return intent
-                    if (intent.job_id, intent.launch_sha256) != (job_id, launch_sha256):
-                        raise DirectRegistryConflictError("sandbox generation already owns another primary process")
-                    return intent
-                intent = ManagedGrowthIntent(sandbox_id, generation, job_id, launch_sha256,
-                    int(owner.spec.memory_mb * 1024**2), "queued", "")
+                    if (intent.job_id, intent.launch_sha256) == (job_id, launch_sha256):
+                        return intent
+                    if action == "bind" or intent.phase != "queued":
+                        raise ManagedPrimaryOwnedError(intent.job_id)
+                    # An admission timeout left this launch queued and the SDK's
+                    # next start chose a fresh job id. Nothing reached the
+                    # supervisor; the old caller's activation now fails its fence.
+                    intent = replace(intent, job_id=job_id, launch_sha256=launch_sha256)
+                else:
+                    intent = ManagedGrowthIntent(sandbox_id, generation, job_id, launch_sha256,
+                        int(owner.spec.memory_mb * 1024**2), "queued", "")
             else:
                 if action == "terminal":
                     if intent is None or not job_id or (intent.job_id and intent.job_id != job_id):
@@ -1228,7 +1244,9 @@ class DirectSandboxRegistry:
                     # proves this generation's sole primary cannot grow again.
                     intent = replace(intent, phase="terminal")
                 elif action == "park":
-                    if intent is None or intent.phase == "terminal":
+                    # A queued launch has no primary to capture. Parking it
+                    # would let a later wake activate growth never dispatched.
+                    if intent is None or intent.phase in {"terminal", "queued"}:
                         return intent
                     intent = replace(intent, phase="parked")
                 elif action == "wait":
@@ -1245,7 +1263,12 @@ class DirectSandboxRegistry:
                     if intent is None:
                         intent = ManagedGrowthIntent(sandbox_id, generation, "", "",
                             int(owner.spec.memory_mb * 1024**2), "active", request_id)
-                    elif intent.phase in {"queued", "parked"} or (
+                    elif intent.phase == "queued":
+                        # Only this launch's own admission charges it. A wake or
+                        # a replaced launch's late admission leaves it queued.
+                        if (intent.job_id, intent.launch_sha256) == (job_id, launch_sha256):
+                            intent = replace(intent, phase="active", request_id=request_id)
+                    elif intent.phase == "parked" or (
                         intent.phase == "safe" and (not intent.request_id or intent.request_id == request_id)):
                         intent = replace(intent, phase="active", request_id=request_id)
             if action == "activate" and request_id:

@@ -1,0 +1,2 @@
+{"stage": "build", "seconds": 5.541, "state": null}
+{"stage": "built-image-exec", "stdout": "release-070-build-ok"}

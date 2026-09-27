@@ -1,0 +1,8 @@
+{"generation": 1, "seconds": 0.766, "stage": "create", "state": "parked"}
+{"exit_code": 0, "seconds": 0.696, "stage": "exec-write", "stdout": "hetzner-070-registry-detach-wake-ok"}
+{"seconds": 0.192, "stage": "file-round-trip", "value": "ucloud-file-api-ok"}
+{"seconds": 0.351, "stage": "park", "state": "parked"}
+{"seconds": 1.955, "snapshot_repository": "ucloud-sandbox-snapshots", "stage": "detach", "state": "parked", "storage_schema": "storage-native-v3", "worker_state": "detached"}
+{"seconds": 0.945, "stage": "wake", "state": "running", "worker_state": null}
+{"exit_code": 0, "seconds": 0.208, "stage": "post-wake-exec", "stdout": "hetzner-070-registry-detach-wake-ok\nucloud-file-api-ok"}
+{"sandbox_id": "hetzner-070-smoke-1", "seconds": 0.25, "stage": "cleanup"}

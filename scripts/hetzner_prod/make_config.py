@@ -49,10 +49,10 @@ raw.update({
         "enable_private_egress": True,
         "private_dns_servers": ["1.1.1.1", "8.8.8.8"],
     },
-    # The registry lives on a Hetzner Volume on the gateway (3 TB since
-    # 2026-09-27, when 500 GB filled during a build-heavy run): Object Storage
+    # The registry lives on a Hetzner Volume on the gateway (1 TB on the fresh
+    # 0.7.0 deployment): Object Storage
     # took ~1.3 s per upload and ~320 ms per read against 50 ms and 3 ms on the
-    # volume (docs/image-import.md). `hz.py volume sandboxes-registry 500 ...`,
+    # volume (docs/image-import.md). `hz.py volume sandboxes-registry 1000 ...`,
     # grown online with `hz.py resize-volume sandboxes-registry <GB>` + resize2fs.
     "registry_store": {"kind": "filesystem",
                        "mount_point": "/mnt/ucloud-registry",
@@ -61,8 +61,7 @@ raw.update({
                        "access_key_id_env": "UCLOUD_REGISTRY_S3_ACCESS_KEY_ID",
                        "secret_access_key_env": "UCLOUD_REGISTRY_S3_SECRET_ACCESS_KEY",
                        "force_path_style": False},
-    # Split memory backing (UCloud production mode) requires registry checkpoint
-    # publication; the registry itself is S3-backed.
+    # Split memory backing uses registry checkpoint publication on the Volume.
     "snapshot_store": {"kind": "registry", "endpoint": "", "bucket": "", "region": "",
                        "prefix": "ucloud-sandboxes",
                        "access_key_id_env": "UCLOUD_SNAPSHOT_S3_ACCESS_KEY_ID",

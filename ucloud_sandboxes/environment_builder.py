@@ -84,6 +84,11 @@ def expand_allowlist(source_root: Path, paths) -> list:
     return expanded
 
 
+def _whole_image(allowlist) -> bool:
+    values = list(allowlist)
+    return bool(values) and all(value == "*" for value in values)
+
+
 def allowlisted_build_view(source_root: Path, destination: Path, paths):
     """Copy declared immutable image paths, preserving merged-layer semantics."""
     if source_root.is_symlink() or not source_root.is_dir() or destination.exists():
@@ -133,6 +138,9 @@ class FreshEnvironmentBuilder:
     signing_key: object
     work_root: Path
     mkfs_erofs: str = "mkfs.erofs"
+    # lz4 made SWE-bench images 38% smaller with a faster mkfs; workers read
+    # fewer bytes per chunk and the kernel decompresses (docs/image-import.md).
+    compression: str = "lz4"
 
     def build(self, image_ref, *, allowlist, tag):
         if not isinstance(self.image_store, DockerOverlay2RootfsStore):
@@ -144,10 +152,23 @@ class FreshEnvironmentBuilder:
                 image_id = source.image_id
                 with TemporaryDirectory(dir=self.work_root) as temporary:
                     root = Path(temporary)
-                    view, image = root / "view", root / "component.erofs"
-                    allowlisted_build_view(source.rootfs, view, allowlist)
-                    subprocess.run((self.mkfs_erofs, "-T", "0", "-U", "00000000-0000-0000-0000-000000000000",
-                                    str(image), str(view)), check=True, capture_output=True, timeout=600)
+                    image = root / "component.erofs"
+                    options = ["-T", "0", "-U", "00000000-0000-0000-0000-000000000000"]
+                    if self.compression:
+                        options.append("-z" + self.compression)
+                    if _whole_image(allowlist):
+                        # The merged overlay already is the image; copying every
+                        # file into a fresh view only repeated it (13 s for 2.6 GB,
+                        # serialized on the GIL across concurrent publications).
+                        if source.rootfs.is_symlink() or not source.rootfs.is_dir():
+                            raise ValueError("environment publication requires a real source")
+                        options.append("--exclude-regex=^(" + "|".join(sorted(WHOLE_IMAGE_EXCLUDED)) + ")$")
+                        view = source.rootfs
+                    else:
+                        view = root / "view"
+                        allowlisted_build_view(source.rootfs, view, allowlist)
+                    subprocess.run((self.mkfs_erofs, *options, str(image), str(view)),
+                                   check=True, capture_output=True, timeout=600)
                     component = sign_component(image, source_image=source.image_id, signing_key=self.signing_key)
                     digest = self.registry.publish(image, component, tag=tag)
                     return {"image_id": source.image_id, "component_digest": digest,

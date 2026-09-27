@@ -1,6 +1,7 @@
 from concurrent.futures import CancelledError, ThreadPoolExecutor
 from dataclasses import replace
 import json
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Event
@@ -59,7 +60,9 @@ class MemoryRegistry:
 
     def upload_blob_file(self, repository, path, digest, size):
         data = Path(path).read_bytes()
-        assert len(data) == size and content_digest(data) == digest
+        assert len(data) == size
+        if content_digest(data) != digest:
+            raise RegistryRequestError(400, "PUT", "/v2/blobs/uploads", "DIGEST_INVALID")
         self.blobs[digest] = data
         return digest
 
@@ -101,7 +104,10 @@ class EnvironmentArtifactTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "signature"):
             changed.authenticate(self.registry.trusted_keys)
         self.image.write_bytes(b"x" * len(self.bytes))
-        with self.assertRaisesRegex(ValueError, "changed after signing"):
+        # With the signed blob stored, publication would reference it and never
+        # upload the changed file; without it the registry rejects the upload.
+        self.client.blobs.pop(self.component.image_digest, None)
+        with self.assertRaisesRegex(RegistryRequestError, "DIGEST_INVALID"):
             self.registry.publish(self.image, self.component, tag="changed")
         self.assertEqual(len(self.client.manifests), 1)
 
@@ -412,3 +418,41 @@ class RegistryRangeTests(unittest.TestCase):
         honour[0] = False
         with self.assertRaisesRegex(ValueError, "requested blob range"):
             client.blob_range("environments", digest, 100, 50)
+
+    def test_upload_blob_file_streams_the_whole_file_in_one_put(self):
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        from threading import Thread
+        from ucloud_sandboxes.managed_registry import RegistryClient
+        payload = os.urandom(3 * 1024 * 1024 + 17)
+        digest = content_digest(payload)
+        received = {}
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *_):
+                pass
+
+            def do_POST(inner):
+                inner.send_response(202)
+                inner.send_header("Location", "/v2/environments/blobs/uploads/u1?_state=s")
+                inner.send_header("Content-Length", "0")
+                inner.end_headers()
+
+            def do_PUT(inner):
+                received["path"] = inner.path
+                received["body"] = inner.rfile.read(int(inner.headers["Content-Length"]))
+                inner.send_response(201)
+                inner.send_header("Docker-Content-Digest", digest)
+                inner.send_header("Content-Length", "0")
+                inner.end_headers()
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        client = RegistryClient(f"http://127.0.0.1:{server.server_address[1]}")
+        with TemporaryDirectory() as temporary:
+            path = Path(temporary) / "image"
+            path.write_bytes(payload)
+            self.assertEqual(client.upload_blob_file("environments", path, digest, len(payload)), digest)
+        self.assertEqual(received["body"], payload)
+        self.assertIn("digest=sha256%3A", received["path"])

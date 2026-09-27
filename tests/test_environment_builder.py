@@ -40,6 +40,36 @@ class EnvironmentBuilderTests(unittest.TestCase):
             self.assertEqual(calls, ["leased", "released", "collected"])
             self.assertFalse(store.assertion)
 
+    def test_whole_image_publication_reads_the_overlay_directly(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "rootfs").mkdir()
+            class Store(DockerOverlay2RootfsStore):
+                def __init__(self):
+                    pass
+                @contextmanager
+                def operation_lease(self, _):
+                    yield SimpleNamespace(image_id="sha256:" + "1" * 64, rootfs=root / "rootfs")
+                def collect_image(self, image_id, *, is_referenced):
+                    pass
+            builder = FreshEnvironmentBuilder(Store(), None, None, root / "scratch")
+            for allowlist, direct in ((("*",), True), (("bin",), False)):
+                with self.subTest(allowlist=allowlist), \
+                     patch("ucloud_sandboxes.environment_builder.allowlisted_build_view") as view, \
+                     patch("ucloud_sandboxes.environment_builder.subprocess.run",
+                           side_effect=OSError("stop after mkfs")) as run, \
+                     self.assertRaises(OSError):
+                    builder.build("image", allowlist=allowlist, tag="test")
+                command = run.call_args.args[0]
+                self.assertIn("-zlz4", command)
+                self.assertEqual(view.called, not direct)
+                if direct:
+                    self.assertEqual(command[-1], str(root / "rootfs"))
+                    self.assertIn("--exclude-regex=^(dev|proc|run|sys)$", command)
+                else:
+                    self.assertTrue(command[-1].endswith("/view"))
+                    self.assertFalse(any(part.startswith("--exclude") for part in command))
+
     def test_fresh_view_preserves_links_and_literal_whiteout_names(self):
         with TemporaryDirectory() as temporary:
             root = Path(temporary)

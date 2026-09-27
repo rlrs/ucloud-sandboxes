@@ -87,3 +87,46 @@ After both images ran, the worker's verified chunk cache held 129 MB, about
 6% of the two images' ~2.2 GB of content. A Docker worker stores both images
 in full. Distinct images per worker are bounded by the 128 GiB cache and 512
 NBD devices, not by an image store sized for whole images.
+
+## Publication cost (2026-09-27, rc55 → rc56)
+
+rc55 published each EROFS image as one blob with worker Range reads per chunk.
+Importing SWE-bench images five at a time on the CCX33 builder still spent
+36–100 s per image in publication. The builder agent was one Python process at
+~95% of a core while the machine sat ~45% idle. Measured on the builder for a
+2.6 GB, 70k-file image:
+
+| Step | Seconds |
+|---|---:|
+| Python copy of the merged rootfs into a fresh view | 12.8 |
+| `mkfs.erofs` (uncompressed) | 2.3 |
+| Signing hash (image and per-chunk digests) | ~3.8 |
+| Local re-hash before upload | ~1.9 |
+| Upload to the volume registry (~180 MB/s) | ~15 |
+
+rc56 changes:
+- **No copy for `*`.** For a whole-image allowlist, `mkfs.erofs` reads the
+  merged overlay directly, with `--exclude-regex=^(dev|proc|run|sys)$`. The
+  resulting tree is identical to the copied view (same size, empty diff of
+  paths, modes, owners and sizes). Explicit allowlists still build a fresh view.
+- **lz4 compression.** EROFS images are about 38% smaller. The worker kernel
+  decompresses, and every chunk a worker fetches carries more content.
+- **No re-hash.** The registry verifies the signed digest when it commits the
+  upload, and the upload streams in 1 MiB blocks instead of `http.client`'s
+  8 KiB.
+
+Compression options on the same 2.5 GB image (8 mkfs threads, cold read of
+the whole tree from a local loop mount):
+
+| Option | mkfs | Size | Full read |
+|---|---:|---:|---:|
+| uncompressed | 6.8 s | 2.54 GB | 7.3 s |
+| lz4 | 8.2 s | 1.57 GB | 5.5 s |
+| lz4, 64 KiB clusters | 6.8 s | 1.50 GB | 7.2 s |
+| zstd | 16.6 s | 1.42 GB | 8.6 s |
+| zstd level=1 | 20.2 s | 1.25 GB | 9.5 s |
+| zstd, 64 KiB clusters | 18.5 s | 1.35 GB | 6.7 s |
+
+zstd saves another 10–20% of bytes for twice the mkfs time and slower
+decompression on every worker read. Workers fetch only what they touch, so lz4
+is the default (`FreshEnvironmentBuilder.compression`).

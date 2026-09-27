@@ -138,6 +138,9 @@ class RegistryMaintenanceBusy(RuntimeError):
     pass
 
 
+_UPLOAD_BLOCK_BYTES = 1024 * 1024
+
+
 class RegistryRequestError(ValueError):
     def __init__(
         self,
@@ -334,7 +337,9 @@ class RegistryClient:
                     f"{upload}{separator}{urlencode({'digest': normalized})}",
                     method="PUT",
                     headers={"Content-Type": "application/octet-stream", "Content-Length": str(size)},
-                    data=body,
+                    # http.client reads file bodies 8 KiB at a time, holding the
+                    # GIL per block; concurrent publications stream 1 MiB blocks.
+                    data=iter(lambda: body.read(_UPLOAD_BLOCK_BYTES), b""),
                     timeout_seconds=max(600.0, size / (8 * 1024 * 1024)),
                 )
             try:

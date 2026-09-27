@@ -202,12 +202,8 @@ class EnvironmentArtifactRegistry:
         # a 3.5 GB image take minutes (docs/image-import.md).
         if image.stat().st_size != component.image_size:
             raise ValueError("environment image size changed after signing")
-        digest = hashlib.sha256()
-        with image.open("rb") as source:
-            while block := source.read(8 * 1024 * 1024):
-                digest.update(block)
-        if "sha256:" + digest.hexdigest() != component.image_digest:
-            raise ValueError("environment image changed after signing")
+        # No local re-hash: the registry verifies the signed digest when it
+        # commits the upload and rejects changed content (DIGEST_INVALID).
         if not self.client.blob_exists(self.repository, component.image_digest):
             self.client.upload_blob_file(
                 self.repository, image, component.image_digest, component.image_size,

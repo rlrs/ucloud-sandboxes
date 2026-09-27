@@ -57,6 +57,21 @@ class MemoryRegistry:
             self.gate.wait(3)
         return self.blobs[digest][:max_bytes + 1]
 
+    def upload_blob_file(self, repository, path, digest, size):
+        data = Path(path).read_bytes()
+        assert len(data) == size and content_digest(data) == digest
+        self.blobs[digest] = data
+        return digest
+
+    def blob_range(self, repository, digest, offset, length, *, timeout_seconds=None):
+        data = self.blobs[digest][offset:offset + length]
+        # A range read of one chunk returns exactly that chunk's bytes.
+        self.reads.append(content_digest(data))
+        self.entered.set()
+        if self.gate is not None:
+            self.gate.wait(3)
+        return data
+
 
 class EnvironmentArtifactTests(unittest.TestCase):
     def setUp(self):
@@ -102,7 +117,10 @@ class EnvironmentArtifactTests(unittest.TestCase):
         target.write_bytes(b"z" * chunk.size)
         self.assertEqual(cache.read(self.component, CHUNK_BYTES, 4), b"bbbb")
         self.assertEqual(cache.metrics()["corruptions"], 1)
-        self.client.blobs[self.component.chunks[2].digest] = b"x" * 4096
+        # Corrupt the third chunk's bytes inside the published image blob.
+        blob = bytearray(self.client.blobs[self.component.image_digest])
+        blob[2 * CHUNK_BYTES:2 * CHUNK_BYTES + 4096] = b"x" * 4096
+        self.client.blobs[self.component.image_digest] = bytes(blob)
         with self.assertRaisesRegex(ValueError, "content identity"):
             cache.read(self.component, 2 * CHUNK_BYTES, 4)
         with self.assertRaises(ValueError):
@@ -147,7 +165,7 @@ class EnvironmentReadRetryTests(EnvironmentArtifactTests):
                 cancelled.set()
 
         with patch.object(Path, "chmod", after_write), self.assertRaises(CancelledError):
-            cache._fetch(self.component.chunks[0], cancelled)
+            cache._fetch(self.component.chunks[0], cancelled, (self.component.image_digest, 0))
         self.assertEqual(cache.metrics()["cached_bytes"], 0)
         self.assertEqual(list(cache.root.iterdir()), [])
 
@@ -230,17 +248,17 @@ class EnvironmentReadRetryTests(EnvironmentArtifactTests):
         cache = self.cache()
         for failure in (RegistryRequestError(404, "GET", "/blob", "missing"),
                         RegistryRequestError(403, "GET", "/blob", "forbidden")):
-            with self.subTest(failure=failure), patch.object(self.client, "blob_bytes", side_effect=failure) as read:
+            with self.subTest(failure=failure), patch.object(self.client, "blob_range", side_effect=failure) as read:
                 with self.assertRaises(RegistryRequestError):
                     cache.read(self.component, 0, 4)
                 self.assertEqual(read.call_count, 1)
-        with patch.object(self.client, "blob_bytes", return_value=b"x" * CHUNK_BYTES) as read:
+        with patch.object(self.client, "blob_range", return_value=b"x" * CHUNK_BYTES) as read:
             with self.assertRaisesRegex(ValueError, "content identity"):
                 cache.read(self.component, 0, 4)
             self.assertEqual(read.call_count, 1)
         self.assertEqual(cache.metrics()["fetch_retries"], 0)
         self.assertEqual(cache.metrics()["cached_bytes"], 0)
-        with patch.object(self.client, "blob_bytes",
+        with patch.object(self.client, "blob_range",
                           side_effect=URLError(SSLCertVerificationError("untrusted"))) as read:
             with self.assertRaises(URLError):
                 cache.read(self.component, 0, 4)
@@ -255,7 +273,7 @@ class EnvironmentReadRetryTests(EnvironmentArtifactTests):
             entered.set()
             self.assertTrue(gate.wait(1))
             raise RegistryRequestError(503, "GET", "/blob", "busy")
-        with patch.object(self.client, "blob_bytes", side_effect=unavailable):
+        with patch.object(self.client, "blob_range", side_effect=unavailable):
             with ThreadPoolExecutor(1) as pool:
                 future = pool.submit(cache.read, self.component, 0, 4, cancel=cancelled)
                 self.assertTrue(entered.wait(1))
@@ -274,7 +292,7 @@ class EnvironmentReadRetryTests(EnvironmentArtifactTests):
             timeouts.append(timeout_seconds)
             raise RegistryRequestError(429, "GET", "/blob", "busy")
         started = time.monotonic()
-        with patch.object(self.client, "blob_bytes", side_effect=unavailable):
+        with patch.object(self.client, "blob_range", side_effect=unavailable):
             with self.assertRaisesRegex(TimeoutError, "fetch deadline"):
                 cache.read(self.component, 0, 4)
         self.assertLess(time.monotonic() - started, .5)
@@ -284,7 +302,7 @@ class EnvironmentReadRetryTests(EnvironmentArtifactTests):
         def blocked(*_args, **_kwargs):
             entered.set()
             raise RegistryRequestError(503, "GET", "/blob", "busy")
-        with patch.object(self.client, "blob_bytes", side_effect=blocked), ThreadPoolExecutor(1) as pool:
+        with patch.object(self.client, "blob_range", side_effect=blocked), ThreadPoolExecutor(1) as pool:
             future = pool.submit(cache.read, self.component, 0, 4)
             self.assertTrue(entered.wait(1))
             cache.close()
@@ -329,3 +347,68 @@ class UploadBlobRetryTests(unittest.TestCase):
                                               environment_artifact.content_digest(payload))
         self.assertEqual(caught.exception.status_code, 400)
         self.assertEqual(client.finish_blob_upload.call_count, 1)
+
+
+class EnvironmentLayoutTests(EnvironmentArtifactTests.__mro__[0]):
+    """Whole-image and per-chunk publications both load and read."""
+
+    def test_earlier_per_chunk_publication_still_loads_and_reads(self):
+        from ucloud_sandboxes import environment_artifact as artifact
+        for chunk, offset in zip(self.component.chunks, range(0, len(self.bytes), CHUNK_BYTES)):
+            artifact._upload_blob(self.client, "environments", self.bytes[offset:offset + chunk.size], chunk.digest)
+        config = artifact.canonical_bytes(self.component.to_dict())
+        manifest = artifact.canonical_bytes({"schemaVersion": 2, "mediaType": artifact.OCI_IMAGE,
+            "config": {"mediaType": artifact.COMPONENT_MEDIA_TYPE, "digest": artifact.content_digest(config), "size": len(config)},
+            "layers": [{"mediaType": artifact.CHUNK_MEDIA_TYPE, **c.to_dict()} for c in self.component.chunks]})
+        self.client.put_manifest("environments", "per-chunk", manifest, media_type=artifact.OCI_IMAGE)
+        reader = EnvironmentArtifactRegistry(self.client, "environments", self.registry.trusted_keys)
+        self.assertEqual(reader.load(artifact.content_digest(manifest)), self.component)
+        self.assertFalse(reader.whole_image(self.component))
+        self.client.reads.clear()
+        cache = VerifiedEnvironmentCache(self.root / "per-chunk-cache", reader)
+        self.addCleanup(cache.close)
+        self.assertEqual(cache.read(self.component, CHUNK_BYTES - 5, 10), b"a" * 5 + b"b" * 5)
+        self.assertEqual(self.client.reads, [c.digest for c in self.component.chunks[:2]])
+
+    def test_whole_image_publication_is_one_blob_read_by_range(self):
+        self.assertTrue(self.registry.whole_image(self.component))
+        self.assertIn(self.component.image_digest, self.client.blobs)
+        self.assertFalse(any(c.digest in self.client.blobs for c in self.component.chunks
+                             if c.digest != self.component.image_digest))
+
+
+class RegistryRangeTests(unittest.TestCase):
+    def test_blob_range_requires_partial_content(self):
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        from threading import Thread
+        from ucloud_sandboxes.managed_registry import RegistryClient
+        payload = bytes(range(256)) * 16
+        honour = [True]
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *_):
+                pass
+
+            def do_GET(inner):
+                start, end = map(int, inner.headers["Range"].removeprefix("bytes=").split("-"))
+                if honour[0]:
+                    body = payload[start:end + 1]
+                    inner.send_response(206)
+                    inner.send_header("Content-Range", f"bytes {start}-{end}/{len(payload)}")
+                else:
+                    body = payload
+                    inner.send_response(200)
+                inner.send_header("Content-Length", str(len(body)))
+                inner.end_headers()
+                inner.wfile.write(body)
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        client = RegistryClient(f"http://127.0.0.1:{server.server_address[1]}")
+        digest = "sha256:" + "a" * 64
+        self.assertEqual(client.blob_range("environments", digest, 100, 50), payload[100:150])
+        honour[0] = False
+        with self.assertRaisesRegex(ValueError, "requested blob range"):
+            client.blob_range("environments", digest, 100, 50)

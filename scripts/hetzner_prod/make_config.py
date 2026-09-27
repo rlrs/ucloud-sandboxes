@@ -5,6 +5,7 @@ so both platforms are exercised with the same control-plane behaviour.
 """
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -139,7 +140,8 @@ builder.update({"product_id": "ccx33", "disk_gb": 223, "docker_quota_image_gb": 
 policy = raw["policy"]
 policy.update({
     "min_nodes": 0,
-    "max_nodes": 3,
+    # MAX_NODES overrides the cap for experiments (for example one-worker tests).
+    "max_nodes": int(os.environ.get("MAX_NODES", "3")),
     "max_create_per_cycle": 2,
     "max_provisioning_nodes": 3,
     # Idle workers are released after 5 minutes.

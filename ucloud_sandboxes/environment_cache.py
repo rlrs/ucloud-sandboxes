@@ -94,7 +94,8 @@ class VerifiedEnvironmentCache:
                 self._lru.move_to_end(path.name)
         return data
 
-    def chunk(self, chunk, *, cancel=None):
+    def chunk(self, chunk, *, cancel=None, source=None):
+        """Return a verified chunk; ``source`` is (image digest, offset) for range reads."""
         self._cancelled(cancel)
         with self._guard:
             if self._closed:
@@ -113,7 +114,7 @@ class VerifiedEnvironmentCache:
                     break
                 if pending is None and len(self._pending) < self._concurrent_misses:
                     pending = _ChunkFetch(Event(), readers=1)
-                    pending.future = self._executor.submit(self._fetch, chunk, pending.cancel)
+                    pending.future = self._executor.submit(self._fetch, chunk, pending.cancel, source)
                     self._pending[chunk.digest] = pending
                     pending.future.add_done_callback(lambda done: self._finished(chunk.digest, done))
                     break
@@ -148,7 +149,7 @@ class VerifiedEnvironmentCache:
                 self._pending.pop(digest)
             self._guard.notify_all()
 
-    def _fetch(self, chunk, cancel):
+    def _fetch(self, chunk, cancel, source=None):
         deadline = time.monotonic() + self._fetch_timeout_seconds
         backoff = .05
         while True:
@@ -157,9 +158,15 @@ class VerifiedEnvironmentCache:
             if remaining <= 0:
                 raise TimeoutError("immutable environment fetch deadline exceeded")
             try:
-                data = self.registry.client.blob_bytes(
-                    self.registry.repository, chunk.digest, max_bytes=chunk.size,
-                    timeout_seconds=remaining)
+                if source is not None:
+                    image_digest, offset = source
+                    data = self.registry.client.blob_range(
+                        self.registry.repository, image_digest, offset, chunk.size,
+                        timeout_seconds=remaining)
+                else:
+                    data = self.registry.client.blob_bytes(
+                        self.registry.repository, chunk.digest, max_bytes=chunk.size,
+                        timeout_seconds=remaining)
                 break
             except RegistryRequestError as exc:
                 if exc.status_code not in {408, 429, 500, 502, 503, 504}:
@@ -225,7 +232,9 @@ class VerifiedEnvironmentCache:
         end = offset + length
         while offset < end:
             index, within = divmod(offset, CHUNK_BYTES)
-            data = self.chunk(component.chunks[index], cancel=cancel)
+            whole = getattr(self.registry, "whole_image", None)
+            source = (component.image_digest, index * CHUNK_BYTES) if whole and whole(component) else None
+            data = self.chunk(component.chunks[index], cancel=cancel, source=source)
             take = min(len(data) - within, end - offset)
             result.append(data[within:within + take])
             offset += take

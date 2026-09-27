@@ -291,6 +291,66 @@ class RegistryClient:
             f"/v2/{_quote_repository(repository)}/blobs/{quote(normalized, safe=':')}"
         )
 
+    def blob_range(
+        self,
+        repository: str,
+        digest: str,
+        offset: int,
+        length: int,
+        *,
+        timeout_seconds: float | None = None,
+    ) -> bytes:
+        """Read ``length`` bytes at ``offset`` of an immutable blob (HTTP Range)."""
+        normalized = _validate_lease_digest(digest)
+        if type(offset) is not int or type(length) is not int or offset < 0 or length <= 0:
+            raise ValueError("registry blob range must be a non-negative offset and positive length")
+        deadline = time.monotonic() + timeout_seconds if timeout_seconds is not None else None
+        response = self._request(
+            f"/v2/{_quote_repository(repository)}/blobs/{quote(normalized, safe=':')}",
+            headers={"Range": f"bytes={offset}-{offset + length - 1}"},
+            timeout_seconds=timeout_seconds,
+        )
+        try:
+            status = int(getattr(response, "status", 200))
+            content_range = str(response.headers.get("Content-Range") or "")
+            if status != 206 or not content_range.startswith(f"bytes {offset}-{offset + length - 1}/"):
+                raise ValueError("registry did not serve the requested blob range")
+            payload = _read_response_bytes(response, length + 1, deadline=deadline)
+        finally:
+            response.close()
+        if len(payload) != length:
+            raise ValueError("registry blob range has an unexpected length")
+        return payload
+
+    def upload_blob_file(self, repository: str, path, digest: str, size: int) -> str:
+        """Upload a large immutable blob in one streamed request (monolithic PUT)."""
+        normalized = _validate_lease_digest(digest)
+        location = self.start_blob_upload(repository)
+        upload = self._validate_upload_location(location)
+        separator = "&" if "?" in upload else "?"
+        try:
+            with open(path, "rb") as body:
+                response = self._request(
+                    f"{upload}{separator}{urlencode({'digest': normalized})}",
+                    method="PUT",
+                    headers={"Content-Type": "application/octet-stream", "Content-Length": str(size)},
+                    data=body,
+                    timeout_seconds=max(600.0, size / (8 * 1024 * 1024)),
+                )
+            try:
+                stored = normalize_manifest_digest(str(response.headers.get("Docker-Content-Digest") or ""))
+            finally:
+                response.close()
+        except BaseException:
+            try:
+                self.abort_blob_upload(upload)
+            except Exception:
+                pass  # The upload's own error is the one to report.
+            raise
+        if stored and stored != normalized:
+            raise ValueError("registry stored blob under an unexpected digest")
+        return normalized
+
     def blob_bytes(
         self,
         repository: str,
@@ -591,7 +651,7 @@ class RegistryClient:
         *,
         method: str = "GET",
         headers: dict[str, str] | None = None,
-        data: bytes | None = None,
+        data: Any = None,
         timeout_seconds: float | None = None,
     ) -> Any:
         req = request.Request(

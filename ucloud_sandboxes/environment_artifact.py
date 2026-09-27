@@ -4,8 +4,6 @@ Only a trusted builder signs the chunk index. Workers authenticate that index
 before exposing any filesystem bytes, then verify each immutable chunk in full.
 These are build artifacts, never execution snapshots or mutable volume exports.
 """
-from collections import deque
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import base64
 import hashlib
@@ -13,6 +11,7 @@ import json
 import logging
 from pathlib import Path
 import re
+import threading
 import time
 from typing import Mapping
 
@@ -22,16 +21,14 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey,
 from .managed_registry import RegistryClient, RegistryRequestError
 
 _LOG = logging.getLogger(__name__)
-# Chunk blobs are small; per-request latency dominates publication, so upload
-# several at once with a bounded number of chunks held in memory.
-PUBLISH_CONCURRENCY = 16
-PUBLISH_IN_FLIGHT = 32
 _UPLOAD_ATTEMPTS = 3
 
 CHUNK_BYTES = 256 * 1024
 COMPONENT_SCHEMA = "ucloud-environment-erofs-v1"
 COMPONENT_MEDIA_TYPE = "application/vnd.ucloud.environment.erofs.v1+json"
 CHUNK_MEDIA_TYPE = "application/vnd.ucloud.environment.chunk.v1"
+# The whole EROFS image as one blob; workers read signed chunks as byte ranges.
+IMAGE_MEDIA_TYPE = "application/vnd.ucloud.environment.image.v1"
 OCI_IMAGE = "application/vnd.oci.image.manifest.v1+json"
 MAX_INDEX_BYTES = 16 * 1024 * 1024
 _MAX_CHUNKS = 65536
@@ -190,33 +187,43 @@ class EnvironmentArtifactRegistry:
         self.client = client
         self.repository = repository
         self.trusted_keys = dict(trusted_keys)
+        self._whole_images: set[str] = set()
+        self._layout_guard = threading.Lock()
+
+    def whole_image(self, component: "EnvironmentComponent") -> bool:
+        """Whether ``load`` found this component published as one image blob."""
+        with self._layout_guard:
+            return component.image_digest in self._whole_images
 
     def publish(self, image: Path, component: EnvironmentComponent, *, tag: str) -> str:
         component.authenticate(self.trusted_keys)
-        with image.open("rb") as source, ThreadPoolExecutor(PUBLISH_CONCURRENCY) as pool:
-            pending = deque()
-            for chunk in component.chunks:
-                payload = source.read(chunk.size)
-                if len(payload) != chunk.size:
-                    raise ValueError("environment image truncated after signing")
-                pending.append(pool.submit(
-                    _upload_blob, self.client, self.repository, payload, chunk.digest,
-                ))
-                while len(pending) >= PUBLISH_IN_FLIGHT:
-                    pending.popleft().result()
-            while pending:
-                pending.popleft().result()
-            if source.read(1):
-                raise ValueError("environment image grew after signing")
+        # One streamed upload of the whole image. A registry handles each blob
+        # as a separate upload and commit; per-chunk blobs made publication of
+        # a 3.5 GB image take minutes (docs/image-import.md).
+        if image.stat().st_size != component.image_size:
+            raise ValueError("environment image size changed after signing")
+        digest = hashlib.sha256()
+        with image.open("rb") as source:
+            while block := source.read(8 * 1024 * 1024):
+                digest.update(block)
+        if "sha256:" + digest.hexdigest() != component.image_digest:
+            raise ValueError("environment image changed after signing")
+        if not self.client.blob_exists(self.repository, component.image_digest):
+            self.client.upload_blob_file(
+                self.repository, image, component.image_digest, component.image_size,
+            )
         config = canonical_bytes(component.to_dict())
         config_digest = content_digest(config)
         _upload_blob(self.client, self.repository, config, config_digest)
         manifest = canonical_bytes({"schemaVersion": 2, "mediaType": OCI_IMAGE,
             "config": {"mediaType": COMPONENT_MEDIA_TYPE, "digest": config_digest, "size": len(config)},
-            "layers": [{"mediaType": CHUNK_MEDIA_TYPE, **chunk.to_dict()} for chunk in component.chunks]})
+            "layers": [{"mediaType": IMAGE_MEDIA_TYPE, "digest": component.image_digest,
+                        "size": component.image_size}]})
         # The root is the commit point; interrupted chunk uploads are never a
         # partially visible environment and follow ordinary registry blob GC.
         self.client.put_manifest(self.repository, tag, manifest, media_type=OCI_IMAGE)
+        with self._layout_guard:
+            self._whole_images.add(component.image_digest)
         return content_digest(manifest)
 
     def load(self, digest: str) -> EnvironmentComponent:
@@ -234,8 +241,15 @@ class EnvironmentArtifactRegistry:
         if len(payload) != config["size"] or content_digest(payload) != config["digest"]:
             raise ValueError("environment index content identity mismatch")
         component = EnvironmentComponent.from_dict(json.loads(payload)).authenticate(self.trusted_keys)
-        expected = [{"mediaType": CHUNK_MEDIA_TYPE, **chunk.to_dict()} for chunk in component.chunks]
-        if document.get("layers") != expected:
+        whole_image = [{"mediaType": IMAGE_MEDIA_TYPE, "digest": component.image_digest,
+                        "size": component.image_size}]
+        per_chunk = [{"mediaType": CHUNK_MEDIA_TYPE, **chunk.to_dict()} for chunk in component.chunks]
+        # Either layout binds every byte a worker may read to OCI GC: one image
+        # blob read by signed chunk ranges, or one blob per chunk (earlier builds).
+        if document.get("layers") == whole_image:
+            with self._layout_guard:
+                self._whole_images.add(component.image_digest)
+        elif document.get("layers") != per_chunk:
             raise ValueError("environment OCI dependency closure differs from signed index")
         # Publisher uses canonical JSON, so an attacker cannot substitute a
         # differently signed component for the selected immutable root digest.

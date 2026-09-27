@@ -290,3 +290,42 @@ class EnvironmentReadRetryTests(EnvironmentArtifactTests):
             cache.close()
             with self.assertRaises(CancelledError):
                 future.result(1)
+
+
+class UploadBlobRetryTests(unittest.TestCase):
+    def client(self, failures):
+        from unittest.mock import Mock
+        from ucloud_sandboxes.managed_registry import RegistryRequestError
+        client = Mock()
+        client.blob_exists.return_value = False
+        client.start_blob_upload.return_value = "/v2/environments/blobs/uploads/x"
+        client.upload_blob_chunk.return_value = "/v2/environments/blobs/uploads/x"
+        client.finish_blob_upload.side_effect = [
+            RegistryRequestError(code, "PUT", "/x", "err") if code else "sha256:ok"
+            for code in failures
+        ]
+        client.abort_blob_upload.side_effect = RegistryRequestError(500, "DELETE", "/x", "append to zero-size path")
+        return client
+
+    def test_transient_commit_failure_is_retried_and_abort_errors_do_not_mask(self):
+        from unittest.mock import patch
+        from ucloud_sandboxes import environment_artifact
+        payload = b"chunk"
+        client = self.client([503, None])
+        with patch.object(environment_artifact.time, "sleep"), \
+                self.assertLogs("ucloud_sandboxes.environment_artifact", level="WARNING"):
+            environment_artifact._upload_blob(client, "environments", payload,
+                                              environment_artifact.content_digest(payload))
+        self.assertEqual(client.finish_blob_upload.call_count, 2)
+
+    def test_permanent_failure_surfaces_its_own_error(self):
+        from ucloud_sandboxes import environment_artifact
+        from ucloud_sandboxes.managed_registry import RegistryRequestError
+        payload = b"chunk"
+        client = self.client([400])
+        with self.assertRaises(RegistryRequestError) as caught, \
+                self.assertLogs("ucloud_sandboxes.environment_artifact", level="WARNING"):
+            environment_artifact._upload_blob(client, "environments", payload,
+                                              environment_artifact.content_digest(payload))
+        self.assertEqual(caught.exception.status_code, 400)
+        self.assertEqual(client.finish_blob_upload.call_count, 1)

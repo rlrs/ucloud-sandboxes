@@ -48,8 +48,17 @@ raw.update({
         "enable_private_egress": True,
         "private_dns_servers": ["1.1.1.1", "8.8.8.8"],
     },
-    "registry_store": {"kind": "s3", "mount_point": "", "data_root": "",
-                       "prefix": "prod/oci", "force_path_style": False, **s3},
+    # The registry lives on a 500 GB Hetzner Volume on the gateway: immutable
+    # environment chunks are 256 KiB blobs, and Object Storage took ~1.3 s per
+    # upload and ~320 ms per read against 50 ms and 3 ms on the volume
+    # (docs/image-import.md). `hz.py volume sandboxes-registry 500 ...`.
+    "registry_store": {"kind": "filesystem",
+                       "mount_point": "/var/lib/ucloud-sandboxes/registry-volume",
+                       "data_root": "/var/lib/ucloud-sandboxes/registry-volume/registry",
+                       "endpoint": "", "bucket": "", "region": "", "prefix": "",
+                       "access_key_id_env": "UCLOUD_REGISTRY_S3_ACCESS_KEY_ID",
+                       "secret_access_key_env": "UCLOUD_REGISTRY_S3_SECRET_ACCESS_KEY",
+                       "force_path_style": False},
     # Split memory backing (UCloud production mode) requires registry checkpoint
     # publication; the registry itself is S3-backed.
     "snapshot_store": {"kind": "registry", "endpoint": "", "bucket": "", "region": "",
@@ -104,11 +113,9 @@ sandbox.update({
     "direct_reflink_memory_restore": False,
     "direct_workspace_initial_grant_mb": 512,
 })
-# Immutable-environment (EROFS) workers need a low-latency chunk store. The
-# S3-backed registry measured 1.3 s per 256 KiB chunk upload and ~320 ms per
-# read (docs/image-import.md), so they stay off until chunks have a faster
-# home. Set IMMUTABLE_WORKERS to enable them; the producer key is provisioned.
-IMMUTABLE_WORKERS = False
+# Immutable-environment (EROFS) workers read image chunks on demand from the
+# volume-backed registry (docs/immutable-environments.md, docs/image-import.md).
+IMMUTABLE_WORKERS = True
 PRODUCER_KEYS = "/var/lib/ucloud-sandboxes/state/environment-producer"
 immutable_environments = {
     "trusted_keys_file": f"{PRODUCER_KEYS}/producers.json",

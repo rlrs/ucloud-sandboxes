@@ -4,18 +4,29 @@ Only a trusted builder signs the chunk index. Workers authenticate that index
 before exposing any filesystem bytes, then verify each immutable chunk in full.
 These are build artifacts, never execution snapshots or mutable volume exports.
 """
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import base64
 import hashlib
 import json
+import logging
 from pathlib import Path
 import re
+import time
 from typing import Mapping
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
-from .managed_registry import RegistryClient
+from .managed_registry import RegistryClient, RegistryRequestError
+
+_LOG = logging.getLogger(__name__)
+# Chunk blobs are small; per-request latency dominates publication, so upload
+# several at once with a bounded number of chunks held in memory.
+PUBLISH_CONCURRENCY = 16
+PUBLISH_IN_FLIGHT = 32
+_UPLOAD_ATTEMPTS = 3
 
 CHUNK_BYTES = 256 * 1024
 COMPONENT_SCHEMA = "ucloud-environment-erofs-v1"
@@ -142,18 +153,33 @@ def sign_component(image: Path, *, source_image: str, signing_key: Ed25519Privat
     return EnvironmentComponent.from_dict(candidate.to_dict() | {"signature": base64.b64encode(signature).decode("ascii")})
 
 
+def _transient(exc: BaseException) -> bool:
+    if isinstance(exc, RegistryRequestError):
+        return exc.status_code in {408, 429, 500, 502, 503, 504}
+    return isinstance(exc, OSError)
+
+
 def _upload_blob(client, repository, payload, expected_digest):
     if content_digest(payload) != expected_digest:
         raise ValueError("environment changed after signing")
-    if client.blob_exists(repository, expected_digest):
-        return
-    location = client.start_blob_upload(repository)
-    try:
-        location = client.upload_blob_chunk(location, payload)
-        client.finish_blob_upload(location, expected_digest)
-    except BaseException:
-        client.abort_blob_upload(location)
-        raise
+    for attempt in range(_UPLOAD_ATTEMPTS):
+        if client.blob_exists(repository, expected_digest):
+            return
+        location = client.start_blob_upload(repository)
+        try:
+            location = client.upload_blob_chunk(location, payload)
+            client.finish_blob_upload(location, expected_digest)
+            return
+        except BaseException as exc:
+            try:
+                client.abort_blob_upload(location)
+            except Exception as abort_error:
+                # A failed cleanup must never replace the upload's own error;
+                # an abandoned upload follows ordinary registry GC.
+                _LOG.warning("could not abort a registry upload: %s", abort_error)
+            if attempt + 1 >= _UPLOAD_ATTEMPTS or not _transient(exc):
+                raise
+            time.sleep(0.5 * 2 ** attempt)
 
 
 class EnvironmentArtifactRegistry:
@@ -167,12 +193,19 @@ class EnvironmentArtifactRegistry:
 
     def publish(self, image: Path, component: EnvironmentComponent, *, tag: str) -> str:
         component.authenticate(self.trusted_keys)
-        with image.open("rb") as source:
+        with image.open("rb") as source, ThreadPoolExecutor(PUBLISH_CONCURRENCY) as pool:
+            pending = deque()
             for chunk in component.chunks:
                 payload = source.read(chunk.size)
                 if len(payload) != chunk.size:
                     raise ValueError("environment image truncated after signing")
-                _upload_blob(self.client, self.repository, payload, chunk.digest)
+                pending.append(pool.submit(
+                    _upload_blob, self.client, self.repository, payload, chunk.digest,
+                ))
+                while len(pending) >= PUBLISH_IN_FLIGHT:
+                    pending.popleft().result()
+            while pending:
+                pending.popleft().result()
             if source.read(1):
                 raise ValueError("environment image grew after signing")
         config = canonical_bytes(component.to_dict())

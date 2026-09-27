@@ -32,7 +32,9 @@ def call(method, path, body=None):
 
 
 def ledger():
-    return json.loads(LEDGER.read_text()) if LEDGER.exists() else {"servers": {}, "primary_ips": {}, "images": {}}
+    state = json.loads(LEDGER.read_text()) if LEDGER.exists() else {"servers": {}, "primary_ips": {}, "images": {}}
+    state.setdefault("volumes", {})
+    return state
 
 
 def record(kind, name, value):
@@ -127,6 +129,28 @@ if __name__ == "__main__":
         wait_action(result["action"]["id"], timeout=1800)
         record("images", description, {"id": result["image"]["id"]})
         print(json.dumps({"image_id": result["image"]["id"], "description": description}))
+    elif command == "volume":
+        # Attach an unformatted XFS volume to a ledger server; prints its device.
+        name, size_gb, server_name = args
+        entry = ledger()["servers"][server_name]
+        result = call("POST", "/volumes", {
+            "name": name, "size": int(size_gb), "location": "hel1", "server": entry["id"],
+            "automount": False, "format": "xfs", "labels": LABELS,
+        })
+        volume = result["volume"]
+        record("volumes", name, {"id": volume["id"], "size_gb": int(size_gb), "server": server_name})
+        for action in [result.get("action"), *result.get("next_actions", [])]:
+            if action:
+                wait_action(action["id"])
+        volume = call("GET", f"/volumes/{volume['id']}")["volume"]
+        print(json.dumps({"id": volume["id"], "linux_device": volume["linux_device"], "size_gb": volume["size"]}))
+    elif command == "delete-volume":
+        entry = ledger()["volumes"][args[0]]
+        detach = call("POST", f"/volumes/{entry['id']}/actions/detach")
+        wait_action(detach["action"]["id"])
+        call("DELETE", f"/volumes/{entry['id']}")
+        forget("volumes", args[0])
+        print("deleted volume", args[0])
     elif command == "delete-server":
         delete_server(args[0])
     elif command == "list":

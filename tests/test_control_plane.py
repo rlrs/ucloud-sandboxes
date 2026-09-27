@@ -5635,7 +5635,9 @@ class ControlPlaneTests(unittest.TestCase):
                 built_from_cached_context["image"]["id"],
                 "content-addressed-cached",
             )
-            self.assertEqual(builder_uploads, 0)
+            # Small contexts are re-sent (an idempotent, refreshing upload)
+            # instead of probed, so the builder cannot evict them first.
+            self.assertEqual(builder_uploads, 1)
             self.assertEqual(missing["status"], 400)
             self.assertIn("has not been uploaded", missing["body"]["error"])
             self.assertEqual(

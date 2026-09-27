@@ -220,7 +220,10 @@ DEFAULT_MAX_PROXY_RESPONSE_BYTES = 16 * 1024 * 1024
 DEFAULT_MAX_PROXY_ERROR_BYTES = 1024 * 1024
 PROXY_STREAM_CHUNK_BYTES = 64 * 1024
 DEFAULT_MAX_BUILD_CONTEXT_STORE_BYTES = 2 * 1024 * 1024 * 1024
-DEFAULT_MAX_BUILD_CONTEXT_ENTRIES = 128
+_BUILD_CONTEXT_PROBE_MIN_BYTES = 1024 * 1024
+# Contexts are usually tiny (a Dockerfile); a harness with hundreds of task
+# images must not evict the one it was just told exists. Bytes still bound it.
+DEFAULT_MAX_BUILD_CONTEXT_ENTRIES = 8192
 DEFAULT_MAX_BUILD_CONTEXT_AGE_SECONDS = 24 * 60 * 60
 NODE_RECONCILE_PROXY_TIMEOUT_SECONDS = 5
 NODE_RECOVERY_PROXY_TIMEOUT_SECONDS = 5
@@ -926,7 +929,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         context_digest = build_context_digest_from_path(parsed.path)
         if context_digest is not None:
             try:
-                size = self.build_context_store.size(context_digest)
+                size = self.build_context_store.size_and_touch(context_digest)
             except (FileNotFoundError, ValueError):
                 self._write_json(
                     {"error": "build context not found"},
@@ -4144,6 +4147,9 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             context_reference = uploaded_build_context_reference(
                 raw, self.build_context_store
             )
+            if context_reference is not None:
+                # Keep it recent while this build is copied to a builder.
+                self.build_context_store.touch(context_reference[0])
             spec = ImageBuildSpec.from_dict(raw)
             push = bool(raw.get("push", False))
             build_registry_url = self.registry_worker_url or ""
@@ -4314,13 +4320,18 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     ) -> ProxiedResponse:
         digest, size = reference
         path = f"/v1/image-contexts/{quote(digest, safe=':')}"
-        probe = self._proxy_request(node_url, path, method="GET")
-        if 200 <= probe.status < 300:
-            payload = probe.json()
-            if payload.get("digest") == digest and payload.get("size") == size:
+        # A small context is re-sent rather than probed: the builder's
+        # least-recently-used store could evict a probed context before the
+        # build starts (older builders do not refresh it on probe), while an
+        # identical upload only refreshes it.
+        if size > _BUILD_CONTEXT_PROBE_MIN_BYTES:
+            probe = self._proxy_request(node_url, path, method="GET")
+            if 200 <= probe.status < 300:
+                payload = probe.json()
+                if payload.get("digest") == digest and payload.get("size") == size:
+                    return probe
+            elif probe.status != HTTPStatus.NOT_FOUND:
                 return probe
-        elif probe.status != HTTPStatus.NOT_FOUND:
-            return probe
 
         try:
             with self.build_context_store.open(digest) as archive:

@@ -185,6 +185,18 @@ class BuildContextBlobStore:
         with self._hold_lock():
             return _regular_stat(path).st_size
 
+    def size_and_touch(self, digest: str) -> int:
+        """Report an existing context and mark it recently used.
+
+        Clients probe before they build: a context they were told exists must
+        not be the least recently used entry that the next upload evicts.
+        """
+        path = self.path(digest)
+        with self._hold_lock():
+            size = _regular_stat(path).st_size
+            os.utime(path, follow_symlinks=False)
+            return size
+
     def touch(self, digest: str) -> None:
         path = self.path(digest)
         with self._hold_lock():

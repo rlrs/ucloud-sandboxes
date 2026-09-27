@@ -98,7 +98,9 @@ from .telemetry import Telemetry
 
 DEFAULT_MAX_FILE_BODY_BYTES = 256 * 1024 * 1024
 DEFAULT_MAX_BUILD_CONTEXT_STORE_BYTES = 2 * 1024 * 1024 * 1024
-DEFAULT_MAX_BUILD_CONTEXT_ENTRIES = 128
+# Contexts are usually tiny (a Dockerfile); a harness with hundreds of task
+# images must not evict the one it was just told exists. Bytes still bound it.
+DEFAULT_MAX_BUILD_CONTEXT_ENTRIES = 8192
 DEFAULT_MAX_BUILD_CONTEXT_AGE_SECONDS = 24 * 60 * 60
 # Public node API headers for a generation-fenced DELETE operation.
 SANDBOX_GENERATION_HEADER = "X-UCloud-Sandbox-Generation"
@@ -341,7 +343,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
         context_digest = build_context_digest_from_path(parsed.path)
         if context_digest is not None and self.image_builds_enabled:
             try:
-                size = self.build_context_store.size(context_digest)
+                size = self.build_context_store.size_and_touch(context_digest)
             except (FileNotFoundError, ValueError):
                 self._write_json(
                     {"error": "build context not found"},

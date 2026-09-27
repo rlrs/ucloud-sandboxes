@@ -180,6 +180,22 @@ class BuildContextBlobStoreTests(unittest.TestCase):
             store.touch(digests[1])
             self.assertGreater(store.path(digests[1]).stat().st_mtime_ns, before)
 
+    def test_a_probed_context_is_not_the_next_lru_eviction(self) -> None:
+        # A harness probes a reused context, then submits its build while other
+        # uploads trigger GC. The probed context must survive the eviction.
+        with TemporaryDirectory() as raw_dir:
+            store = BuildContextBlobStore(Path(raw_dir), max_blob_bytes=100, max_entries=2)
+            reused, other, fresh = (_digest(value) for value in (b"reused", b"other", b"fresh"))
+            for digest, payload in ((reused, b"reused"), (other, b"other")):
+                store.put_with_status(digest, BytesIO(payload), content_length=len(payload))
+            os.utime(store.path(reused), (100, 100))
+            os.utime(store.path(other), (200, 200))
+            self.assertEqual(store.size_and_touch(reused), len(b"reused"))
+            store.put_with_status(fresh, BytesIO(b"fresh"), content_length=len(b"fresh"))
+            store.gc(protected=(fresh,))
+            self.assertTrue(store.path(reused).exists())
+            self.assertFalse(store.path(other).exists())
+
     def test_gc_never_evicts_protected_blobs_to_satisfy_limits(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = BuildContextBlobStore(

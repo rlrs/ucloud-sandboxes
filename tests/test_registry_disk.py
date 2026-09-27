@@ -114,6 +114,15 @@ class RegistryDiskUsageTests(unittest.TestCase):
         self.assertIsNone(registry_disk_usage(config))
         self.assertIsNone(RegistryDiskMonitor.from_config(config))
 
+    def test_monitor_reports_the_configured_eviction_target(self) -> None:
+        raw = DeploymentConfig.default("project").to_dict()
+        raw["registry_disk_target_percent"] = 55.0
+        config = DeploymentConfig.from_dict(raw)
+        monitor = RegistryDiskMonitor.from_config(config)
+        assert monitor is not None
+        monitor._statvfs = statvfs_at(10)
+        self.assertEqual(monitor.status()["target_percent"], 55.0)
+
     def test_monitor_caches_statvfs_and_reports_maintenance_state(self) -> None:
         calls = []
         now = [0.0]

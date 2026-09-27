@@ -187,3 +187,20 @@ Findings:
   - Deleting a just-parked sandbox can return a non-retryable 503 ("memory
     allocation still has publication readers").
   - One wake failed with "stale storage revision".
+
+**Rerun with rc58 and SDK 0.4.32.** Same worker type, same warm-up and the
+same 500-sandbox agentic load:
+- **Errors:** none. All 4,000 turns completed (rc57 had 12 failed sandboxes).
+- **Wall time:** 353 s.
+- **Latency:** later turns were unchanged (grep 0.9 s, tests 2.5 s, edit
+  0.7 s p50).
+
+The fixes behind this:
+- Wake capacity waits now carry a retryable code, and SDK 0.4.32 retries
+  them.
+- A wake that races the background snapshot publication re-reads and
+  retries.
+- Deletes drain an in-flight memory publication. A test deleting 60
+  just-parked sandboxes had none fail on the publication, all done within
+  2.6 s.
+- Deletes wait for an in-flight park (rc59).

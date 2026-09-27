@@ -1,0 +1,33 @@
+{
+ "build_managed": {
+  "seconds": 237.0,
+  "timings": {
+   "phases": {
+    "cleanup_ms": 0,
+    "docker_build_and_push_ms": 90590,
+    "immutable_environment_ms": 70719
+   },
+   "total_ms": 161322
+  }
+ },
+ "create_managed": {
+  "seconds": 1.5
+ },
+ "exec_managed": {
+  "seconds": 3.9,
+  "stdout": "ok 2.32.3"
+ },
+ "create_managed_second": {
+  "seconds": 0.7
+ },
+ "create_imported_node22": {
+  "seconds": 151.2
+ },
+ "exec_imported": {
+  "seconds": 2.1,
+  "stdout": "ok v22.23.3"
+ },
+ "create_imported_second": {
+  "seconds": 0.8
+ }
+}

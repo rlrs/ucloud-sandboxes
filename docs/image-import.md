@@ -60,3 +60,30 @@ minutes. DSec's on-demand loading relies on 3FS, an RDMA SSD cluster. Chunks
 need a comparably low-latency store before immutable workers are enabled on
 Hetzner. `IMMUTABLE_WORKERS` in `scripts/hetzner_prod/make_config.py` therefore
 stays off, and the producer key is already provisioned.
+
+## Hetzner canary on the registry Volume (2026-09-27, rc54)
+
+The registry moved to a 500 GB Hetzner Volume (ext4, `/mnt/ucloud-registry`):
+- **Uploads:** 256 KiB chunks take 50 ms each, or 144/s with 32 in parallel.
+- **Reads:** 3 ms p50.
+
+EROFS publication now uploads 16 chunks at a time and retries transient
+errors. The canary (`benchmarks/erofs-hetzner-2026-09-27/`) ran on a CCX63
+worker and a CCX33 builder, both EROFS-enabled:
+
+| Step | Seconds |
+|---|---:|
+| Managed build `FROM python:3.12` + pip install, including builder boot | 237 |
+| — Docker build and push | 90.6 |
+| — EROFS publication (fresh view, `mkfs.erofs`, parallel chunk upload) | 70.7 |
+| First sandbox on a worker that had never seen the image | 1.5 |
+| First `python3` exec (TLS, SQLite, requests import) | 3.9 |
+| Second sandbox, same image | 0.7 |
+| Docker Hub `node:22`, first create (includes the import build) | 151 |
+| First `node` exec | 2.1 |
+| Second `node:22` sandbox | 0.8 |
+
+After both images ran, the worker's verified chunk cache held 129 MB, about
+6% of the two images' ~2.2 GB of content. A Docker worker stores both images
+in full. Distinct images per worker are bounded by the 128 GiB cache and 512
+NBD devices, not by an image store sized for whole images.

@@ -81,9 +81,9 @@ raw.update({
     "heartbeat_interval_seconds": 20,
     "relay_request_timeout_seconds": 7200,
     "registry_keep_per_repository": 2,
-    # Host-local gateway replicas (SO_REUSEPORT), as on UCloud since rc42: one
-    # process is GIL-bound at 540 sandboxes per node.
-    "gateway_processes": 3,
+    # Six HTTP processes on the eight dedicated gateway vCPUs. Placement,
+    # relay, PostgreSQL and registry share the remaining CPU headroom.
+    "gateway_processes": 6,
 })
 # CCX63: 48 dedicated vCPU, 188,669 MiB visible, 915.5 GiB disk.
 disk_gib = 915

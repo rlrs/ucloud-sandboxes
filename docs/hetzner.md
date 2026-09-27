@@ -102,18 +102,18 @@ transactional backups. Put the much larger immutable registry blob tree on a
 Hetzner Volume; network-storage latency should not sit under SQLite commits or
 worker sandbox COW.
 
-## Production deployment (2026-09-26, 0.5.114rc52)
+## Production deployment (2026-09-27, 0.7.0)
 
 The Hetzner production deployment is scripted in `scripts/hetzner_prod/`. It
 writes generated state to the git-ignored `build/hetzner-prod/`, and its
 secrets come from `.env`.
 
 **Gateway:**
-- CPX32 `sandboxes-gateway` at `10.42.0.2`, on Primary IP `77.42.92.27`
+- CCX33 (8 dedicated vCPUs, 32 GB RAM) `sandboxes-gateway` at `10.42.0.2`, on Primary IP `77.42.92.27`
   (`auto_delete` off). The SDK URL is `https://77.42.92.27`, with a
   Let's Encrypt IP certificate.
-- Runs PostgreSQL 18, an S3-backed registry (bucket
-  `ucloud-sandboxes-prod-20260926`), the relay, NAT and 3 gateway processes.
+- Runs PostgreSQL 18, a registry on a 1,000 GB Hetzner Volume, the relay,
+  NAT and 6 gateway HTTP processes. Placement and autoscaling run separately.
 - The model relay is published at `https://77.42.92.27/relay` for inference
   workers outside Hetzner (`configure_hetzner_sdk_ingress.sh` proxies
   `/relay/` to loopback port 8092). Sandboxes reach the same URL through

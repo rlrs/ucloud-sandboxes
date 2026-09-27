@@ -525,6 +525,35 @@ This is incremental consolidation at existing park points. It does not
 proactively evacuate running or non-parkable workloads, guarantee a minimum
 worker count, or bypass the configured idle grace and drain/stop proof.
 
+### Drain on park
+
+A busy RL fleet is never idle, so idle scale-down alone never removes surplus
+workers. `policy.drain_on_park_enabled` (default `true`) lets the autoscaler
+soft-drain one surplus worker at a time and empty it through cheap parked
+moves (measured 0.6-0.8 s per move, and a 0.6-1.0 s first wake on the
+destination):
+
+- Selection runs only when the cycle plans no creates, has no resource or
+  placement deficit, no pending demand and no pressure cooldown, above
+  `min_nodes`, with at least two busy ready workers. A worker qualifies when
+  the scale-down math still fits demand without it, including the disk its
+  parks hold. The one with the fewest sandboxes wins; ties go to the newest.
+- The choice is the controller-owned heartbeat label
+  `ucloud-sandboxes/soft-drain`, preserved across heartbeat receipts and
+  quarantine recovery. Admission stays open: the worker keeps serving execs
+  and local wakes. Creates rank it last and use it only when nothing else
+  fits; migrations never target it, and a wake uses it only as a last resort.
+  The scale-up math withholds its capacity while it stays soft-drained.
+- Each cycle posts gateway migrations for up to
+  `policy.drain_on_park_moves_per_cycle` (default 4) of its published,
+  attached parks, with the stable id `drain-<job>-<sandbox>-<generation>`.
+  Running sandboxes move after they park. A soft-drain move never records
+  pending demand; without a destination it is retried next cycle.
+- The label is cleared when the worker stops being surplus or could serve
+  pending demand, so demand reopens it instead of buying a new worker.
+- Once idle, the worker uses `min(scale_down_idle_seconds, 60)` as its idle
+  grace, then takes the normal drain, detach and stop path.
+
 Publication also bounds the immutable snapshot chain. The prospective old
 remote layers plus new local sealed delta are compacted when they exceed eight
 layers or 4 GiB of accumulated delta data beyond the oldest base layer. Local

@@ -740,6 +740,16 @@ class NodeHeartbeat:
         )
 
 
+# Controller-owned heartbeat label: the autoscaler chose this worker to empty
+# as its parks move away. It keeps serving its own sandboxes; only creates and
+# migration destinations avoid it. The value is the ISO selection time.
+SOFT_DRAIN_LABEL = "ucloud-sandboxes/soft-drain"
+
+
+def is_soft_drained(heartbeat: NodeHeartbeat | None) -> bool:
+    return bool(heartbeat is not None and heartbeat.labels.get(SOFT_DRAIN_LABEL))
+
+
 @dataclass(frozen=True)
 class SandboxNode:
     job: ProviderInstance
@@ -999,6 +1009,8 @@ class ScalePolicy:
     provisioning_scale_down_multiplier: float = 2.0
     program_aware_autoscaling_enabled: bool = False
     parked_wake_consolidation_enabled: bool = False
+    drain_on_park_enabled: bool = True
+    drain_on_park_moves_per_cycle: int = 4
     model_wait_capacity_weight: float = 0.10
     model_wait_max_headroom_nodes: int = 1
     default_node_resources: ResourceQuantity = ResourceQuantity(
@@ -1039,6 +1051,11 @@ class ScaleDecision:
     pressure_scale_up: bool = False
     create_pressure_scale_up: bool = False
     effective_scale_down_idle_seconds: int = 0
+    # The worker soft-drained after this cycle (kept or newly selected), and
+    # labels to remove because its surplus is gone.
+    soft_drain_job_id: str = ""
+    soft_drain_selected: bool = False
+    soft_drain_clear_job_ids: tuple[str, ...] = ()
 
     @property
     def creates(self) -> int:

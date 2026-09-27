@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime
 import math
 
@@ -8,6 +8,7 @@ from .capabilities import (
     DISK_QUOTA_CAPABILITY,
     has_capability,
 )
+from .consolidation import consolidation_rank
 from .models import (
     ResourceQuantity,
     SandboxDemand,
@@ -18,6 +19,8 @@ from .models import (
     ScaleAction,
     ScaleDecision,
     ScalePolicy,
+    SOFT_DRAIN_LABEL,
+    is_soft_drained,
     utc_now,
 )
 from .resource_admission import (
@@ -204,27 +207,58 @@ def evaluate_scale(
             program_resources,
         )
     desired_resources = _add_resources(demand_resources, policy.warm_resources)
-    projected_free_resources = _projected_free_resources(
-        capacity_nodes,
-        policy,
-        now,
-        oldest_pending_seconds,
-    )
-    resource_deficit = _subtract_resources(
-        desired_resources,
-        projected_free_resources,
-    )
     placement_requests = (
         *demand_placement_requests,
         *program_placement_requests,
     )
-    placement_nodes = _nodes_for_unplaced_requests(
-        capacity_nodes,
-        placement_requests,
+    soft_drain = plan_soft_drain(
+        nodes,
         policy,
-        now=now,
+        now,
+        required_resources=desired_resources,
+        placement_requests=placement_requests,
         oldest_pending_seconds=oldest_pending_seconds,
+        pending_count=demand.pending_count,
+        allow_select=False,
     )
+
+    def scale_up_capacity(withheld: str):
+        # Creates avoid a soft-drained worker, so its capacity must not
+        # hide demand from scale-up either.
+        scale_nodes = [node for node in capacity_nodes if node.job_id != withheld]
+        projected = _projected_free_resources(
+            scale_nodes,
+            policy,
+            now,
+            oldest_pending_seconds,
+        )
+        return projected, _subtract_resources(desired_resources, projected), (
+            _nodes_for_unplaced_requests(
+                scale_nodes,
+                placement_requests,
+                policy,
+                now=now,
+                oldest_pending_seconds=oldest_pending_seconds,
+            )
+        )
+
+    projected_free_resources, resource_deficit, placement_nodes = (
+        scale_up_capacity(soft_drain.job_id)
+    )
+    soft_drain_released = False
+    if soft_drain.job_id and (
+        placement_nodes > 0
+        or (_has_resources(desired_resources) and _has_resources(resource_deficit))
+    ):
+        # Reopening the drained worker is cheaper than buying a new one.
+        soft_drain_released = True
+        soft_drain = SoftDrainPlan(
+            clear_job_ids=(*soft_drain.clear_job_ids, soft_drain.job_id),
+            reason=f"{soft_drain.job_id} is needed for current demand",
+        )
+        projected_free_resources, resource_deficit, placement_nodes = (
+            scale_up_capacity("")
+        )
     reasons: list[str] = []
     actions: list[ScaleAction] = []
 
@@ -553,6 +587,25 @@ def evaluate_scale(
                     )
                 )
                 reasons.append(reason)
+        if not pressure_cooldown and not soft_drain.job_id and not soft_drain_released:
+            selected = plan_soft_drain(
+                nodes,
+                policy,
+                now,
+                required_resources=desired_resources,
+                placement_requests=placement_requests,
+                oldest_pending_seconds=oldest_pending_seconds,
+                pending_count=demand.pending_count,
+                excluded_job_ids=_planned_stop_job_ids(actions),
+            )
+            soft_drain = replace(
+                selected,
+                clear_job_ids=tuple(
+                    dict.fromkeys((*soft_drain.clear_job_ids, *selected.clear_job_ids))
+                ),
+            )
+    if soft_drain.reason:
+        reasons.append(f"soft-drain: {soft_drain.reason}")
 
     if not actions and not reasons:
         reasons.append("current pool matches demand and policy")
@@ -577,6 +630,9 @@ def evaluate_scale(
         pressure_scale_up=pressure_scale_up,
         create_pressure_scale_up=create_pressure_scale_up,
         effective_scale_down_idle_seconds=effective_scale_down_idle_seconds,
+        soft_drain_job_id=soft_drain.job_id,
+        soft_drain_selected=soft_drain.selected,
+        soft_drain_clear_job_ids=soft_drain.clear_job_ids,
     )
 
 
@@ -710,6 +766,12 @@ def _ceil_div(value: int, divisor: int) -> int:
 
 def _planned_creates(actions: list[ScaleAction]) -> int:
     return sum(action.count for action in actions if action.kind == "create")
+
+
+def _planned_stop_job_ids(actions: list[ScaleAction]) -> tuple[str, ...]:
+    return tuple(
+        job_id for action in actions if action.kind == "stop" for job_id in action.job_ids
+    )
 
 
 def planned_stops(actions: list[ScaleAction]) -> int:
@@ -1215,61 +1277,232 @@ def _stop_candidates(
     if max_count <= 0:
         return []
     candidates: list[SandboxNode] = []
-    # Scale-down may only rely on capacity explicitly reported by surviving
-    # nodes. Estimates are useful for scale-up projections, but are not safe
-    # evidence for a destructive removal decision.
-    remaining_free_resources = ResourceQuantity()
-    for node in ready_nodes:
-        if node.heartbeat is not None and node.heartbeat.resources_known:
-            remaining_free_resources = remaining_free_resources + (
-                _forecast_free_resources(node)
-            )
+    remaining_free_resources = _reported_free_resources(ready_nodes)
     remaining_placement_nodes = list(placement_nodes)
     for node in ready_nodes:
         if len(candidates) >= max_count:
             break
         if not node.is_idle:
             continue
-        if not past_idle_grace(
+        idle_seconds = policy.scale_down_idle_seconds
+        if is_soft_drained(node.heartbeat):
+            # Selection already proved surplus; an emptied worker only waits
+            # out brief churn instead of the full idle grace.
+            idle_seconds = min(idle_seconds, _SOFT_DRAIN_IDLE_SECONDS)
+        if not past_idle_grace(node, idle_seconds=idle_seconds, now=now):
+            continue
+        removal = _removal_fits(
             node,
-            idle_seconds=policy.scale_down_idle_seconds,
-            now=now,
-        ):
-            continue
-        node_free_resources = (
-            _forecast_free_resources(node)
-            if node.heartbeat is not None and node.heartbeat.resources_known
-            else ResourceQuantity()
-        )
-        after_resources = _subtract_resources(
-            remaining_free_resources, node_free_resources
-        )
-        if not required_resources.fits_within(after_resources):
-            continue
-        after_nodes = [
-            current
-            for current in remaining_placement_nodes
-            if current.job_id != node.job_id
-        ]
-        exact_after_nodes = [
-            current
-            for current in after_nodes
-            if current.is_schedulable
-            and current.heartbeat is not None
-            and current.heartbeat.resources_known
-        ]
-        if _nodes_for_unplaced_requests(
-            exact_after_nodes,
-            placement_requests,
             policy,
-            now=now,
+            now,
+            remaining_free_resources=remaining_free_resources,
+            remaining_placement_nodes=remaining_placement_nodes,
+            required_resources=required_resources,
+            placement_requests=placement_requests,
             oldest_pending_seconds=oldest_pending_seconds,
-        ):
+        )
+        if removal is None:
             continue
         candidates.append(node)
-        remaining_free_resources = after_resources
-        remaining_placement_nodes = after_nodes
+        remaining_free_resources, remaining_placement_nodes = removal
     return candidates
+
+
+_SOFT_DRAIN_IDLE_SECONDS = 60
+
+
+def _reported_free_resources(nodes: list[SandboxNode]) -> ResourceQuantity:
+    # Scale-down may only rely on capacity explicitly reported by surviving
+    # nodes. Estimates are useful for scale-up projections, but are not safe
+    # evidence for a destructive removal decision.
+    total = ResourceQuantity()
+    for node in nodes:
+        if node.heartbeat is not None and node.heartbeat.resources_known:
+            total = total + _forecast_free_resources(node)
+    return total
+
+
+def _removal_fits(
+    node: SandboxNode,
+    policy: ScalePolicy,
+    now: datetime,
+    *,
+    remaining_free_resources: ResourceQuantity,
+    remaining_placement_nodes: list[SandboxNode],
+    required_resources: ResourceQuantity,
+    placement_requests: tuple[SandboxPlacementRequest, ...],
+    oldest_pending_seconds: int,
+) -> tuple[ResourceQuantity, list[SandboxNode]] | None:
+    """Return the fleet left after removing ``node`` if demand still fits."""
+
+    node_free_resources = (
+        _forecast_free_resources(node)
+        if node.heartbeat is not None and node.heartbeat.resources_known
+        else ResourceQuantity()
+    )
+    after_resources = _subtract_resources(remaining_free_resources, node_free_resources)
+    if not required_resources.fits_within(after_resources):
+        return None
+    after_nodes = [
+        current for current in remaining_placement_nodes if current.job_id != node.job_id
+    ]
+    exact_after_nodes = [
+        current
+        for current in after_nodes
+        if current.is_schedulable
+        and current.heartbeat is not None
+        and current.heartbeat.resources_known
+    ]
+    if _nodes_for_unplaced_requests(
+        exact_after_nodes,
+        placement_requests,
+        policy,
+        now=now,
+        oldest_pending_seconds=oldest_pending_seconds,
+    ):
+        return None
+    return after_resources, after_nodes
+
+
+@dataclass(frozen=True)
+class SoftDrainPlan:
+    job_id: str = ""
+    selected: bool = False
+    clear_job_ids: tuple[str, ...] = ()
+    reason: str = ""
+
+
+def _soft_drain_sandboxes(node: SandboxNode) -> int:
+    heartbeat = node.heartbeat
+    # Parked routes do not count as active compute, but each one is a move.
+    return max(node.active_sandboxes, len(heartbeat.inventory) if heartbeat else 0)
+
+
+def plan_soft_drain(
+    nodes: list[SandboxNode],
+    policy: ScalePolicy,
+    now: datetime,
+    *,
+    required_resources: ResourceQuantity,
+    placement_requests: tuple[SandboxPlacementRequest, ...] = (),
+    oldest_pending_seconds: int = 0,
+    pending_count: int = 0,
+    allow_select: bool = True,
+    excluded_job_ids: tuple[str, ...] = (),
+) -> SoftDrainPlan:
+    """Keep, clear or choose the one surplus worker to empty via parked moves.
+
+    A worker is surplus when the stop math (reported free resources and exact
+    placement shapes) still fits current demand without it. With
+    ``allow_select`` false an existing selection is only re-validated.
+    """
+
+    pool = [node for node in nodes if _counts_as_pool_node(node, policy, now, 0)]
+    labelled = [node for node in pool if is_soft_drained(node.heartbeat)]
+    if not policy.drain_on_park_enabled:
+        return SoftDrainPlan(
+            clear_job_ids=tuple(node.job_id for node in labelled),
+            reason="drain on park is disabled" if labelled else "",
+        )
+    capacity_nodes = [
+        node for node in pool if node.agent_version_compatible or node.is_provisioning
+    ]
+    ready_nodes = [node for node in capacity_nodes if node.is_schedulable]
+    ready_job_ids = {node.job_id for node in ready_nodes}
+    reported_free = _reported_free_resources(ready_nodes)
+    excess = len(pool) > policy.min_nodes
+
+    def surplus(node: SandboxNode) -> bool:
+        heartbeat = node.heartbeat
+        if heartbeat is None or not heartbeat.resources_known:
+            return False
+        # Its parks move onto the survivors and keep holding their disk.
+        held = _subtract_resources(
+            _security_adjusted_resources(node, heartbeat.total_resources),
+            _security_adjusted_resources(node, heartbeat.free_resources),
+        )
+        return _removal_fits(
+            node,
+            policy,
+            now,
+            remaining_free_resources=reported_free,
+            remaining_placement_nodes=capacity_nodes,
+            required_resources=replace(
+                required_resources,
+                disk_mb=max(0, required_resources.disk_mb) + held.disk_mb,
+            ),
+            placement_requests=placement_requests,
+            oldest_pending_seconds=oldest_pending_seconds,
+        ) is not None
+
+    def serves_pending(node: SandboxNode) -> bool:
+        if pending_count <= 0:
+            return False
+        if not placement_requests or node.heartbeat is None:
+            return True
+        total = _security_adjusted_resources(node, node.heartbeat.total_resources)
+        available = reusable_dynamic_resources(
+            _security_adjusted_resources(node, node.heartbeat.free_resources), total,
+        )
+        return any(
+            node.job_id not in request.excluded_job_ids
+            and dynamic_request_fits(request.resources, available, total)
+            for request in placement_requests
+        )
+
+    kept = ""
+    clear: list[str] = []
+    reasons: list[str] = []
+    for node in sorted(
+        labelled, key=lambda item: (item.heartbeat.labels[SOFT_DRAIN_LABEL], item.job_id),
+    ):
+        if kept:
+            clear.append(node.job_id)
+            reasons.append(f"{node.job_id} exceeds one soft-drained worker")
+        elif node.job_id not in ready_job_ids:
+            # Stopping, unreachable or closed: it takes no creates, and still
+            # occupies the single drain slot until it returns or is gone.
+            kept = node.job_id
+        elif not excess or not surplus(node):
+            clear.append(node.job_id)
+            reasons.append(f"{node.job_id} is no longer surplus")
+        elif serves_pending(node):
+            clear.append(node.job_id)
+            reasons.append(f"{node.job_id} can serve pending demand")
+        else:
+            kept = node.job_id
+    if kept or not allow_select or not excess or pending_count > 0:
+        return SoftDrainPlan(
+            job_id=kept, clear_job_ids=tuple(clear), reason="; ".join(reasons),
+        )
+    excluded = set(excluded_job_ids)
+    candidates = [
+        node
+        for node in ready_nodes
+        if node.job_id not in excluded
+        and not node.is_idle
+        and node.heartbeat is not None
+        and node.heartbeat.resources_known
+    ]
+    # Idle workers already scale down normally; a lone busy worker has nowhere
+    # to move its parks.
+    eligible = [node for node in candidates if surplus(node)] if len(candidates) > 1 else []
+    if not eligible:
+        return SoftDrainPlan(clear_job_ids=tuple(clear), reason="; ".join(reasons))
+    fewest = min(_soft_drain_sandboxes(node) for node in eligible)
+    chosen = max(
+        (node for node in eligible if _soft_drain_sandboxes(node) == fewest),
+        key=lambda node: consolidation_rank(node.heartbeat),
+    )
+    reasons.append(
+        f"selected {chosen.job_id} ({fewest} sandbox(es)); demand fits without it"
+    )
+    return SoftDrainPlan(
+        job_id=chosen.job_id,
+        selected=True,
+        clear_job_ids=tuple(clear),
+        reason="; ".join(reasons),
+    )
 
 
 def incompatible_stop_candidates(

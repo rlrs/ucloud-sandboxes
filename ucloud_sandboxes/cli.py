@@ -5,6 +5,7 @@ import asyncio
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta
+from http import HTTPStatus
 import json
 import math
 import os
@@ -122,6 +123,7 @@ from .models import (
     SandboxPlacementRequest,
     ScalePolicy,
     ProviderInstance,
+    is_soft_drained,
     utc_now,
 )
 from .providers.base import (
@@ -2708,17 +2710,149 @@ def _post_gateway_sandbox_migration(
     *,
     bearer_token: str | None = None,
     timeout_seconds: float = 3600.0,
+    migration_id: str = "",
+    soft_drain: bool = False,
 ) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    if migration_id:
+        payload["migration_id"] = migration_id
+    if soft_drain:
+        payload["soft_drain"] = True
     return _post_bounded_json(
         gateway_url,
         f"/v1/sandboxes/{quote(sandbox_id, safe='')}/migration",
-        {},
+        payload,
         bearer_token=bearer_token,
         invalid_url_error="gateway control URL is invalid",
         empty_token_error="gateway control bearer token cannot be empty",
         timeout_seconds=timeout_seconds,
         response_name="gateway migration",
     )[0]
+
+
+# Measured moves take under a second; a slower one is retried by migration id.
+_SOFT_DRAIN_MOVE_TIMEOUT_SECONDS = 60.0
+
+
+def _soft_drain_migration_id(route: SandboxRoute) -> str:
+    # Stable per parked incarnation, so an ambiguous retry resumes the same
+    # migration instead of starting a second one.
+    return f"drain-{route.job_id}-{route.sandbox_id}-{route.generation}"
+
+
+def _soft_drain_movable_routes(
+    routes: Iterable[SandboxRoute],
+    *,
+    pending_wake_sandbox_ids: set[str],
+    limit: int,
+) -> list[SandboxRoute]:
+    # Running, waking and creating sandboxes stay; they move after parking.
+    return [
+        route
+        for route in routes
+        if route.worker_state == "attached"
+        and is_portable_parked_route(route)
+        and not route.delete_operation_id
+        and route.sandbox_id not in pending_wake_sandbox_ids
+    ][: max(0, limit)]
+
+
+def _move_soft_drained_sandbox(
+    route: SandboxRoute,
+    *,
+    gateway_url: str,
+    bearer_token: str | None,
+) -> dict[str, Any]:
+    migration_id = _soft_drain_migration_id(route)
+    entry: dict[str, Any] = {
+        "jobId": route.job_id,
+        "sandboxId": route.sandbox_id,
+        "migrationId": migration_id,
+        "requestSucceeded": False,
+        "skipped": False,
+        "destinationJobId": "",
+        "error": "",
+    }
+    try:
+        payload = _post_gateway_sandbox_migration(
+            gateway_url,
+            route.sandbox_id,
+            bearer_token=bearer_token,
+            timeout_seconds=_SOFT_DRAIN_MOVE_TIMEOUT_SECONDS,
+            migration_id=migration_id,
+            soft_drain=True,
+        )
+    except HTTPError as exc:
+        # 503: no destination fits now, or a retryable incomplete migration.
+        # Either way the next cycle retries; nothing is lost.
+        entry["skipped"] = exc.code == HTTPStatus.SERVICE_UNAVAILABLE
+        entry["error"] = f"HTTP {exc.code}: {exc.reason}"
+        return entry
+    except Exception as exc:
+        entry["error"] = str(exc)
+        return entry
+    migration = payload.get("migration")
+    migration = migration if isinstance(migration, dict) else {}
+    entry["requestSucceeded"] = migration.get("phase") == "complete"
+    entry["destinationJobId"] = str(migration.get("destination_job_id") or "")
+    return entry
+
+
+def _apply_soft_drain(
+    decision: Any,
+    nodes: list[SandboxNode],
+    *,
+    control_state: ControlStateStore,
+    policy: ScalePolicy,
+    route_reservations: dict[str, tuple[SandboxRoute, ...]],
+    blocked_job_ids: set[str],
+    pending_wake_sandbox_ids: set[str],
+    gateway_url: str,
+    bearer_token: str | None,
+    execute: bool,
+    assert_provider_fence: Callable[[], None],
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Persist the soft-drain plan, then move the worker's published parks."""
+
+    job_id = decision.soft_drain_job_id
+    selected = bool(job_id and decision.soft_drain_selected)
+    if selected and job_id in blocked_job_ids:
+        # Stopping, lost or quarantined workers are never newly selected.
+        job_id, selected = "", False
+    result: dict[str, Any] = {
+        "jobId": job_id,
+        "selected": selected,
+        "clearedJobIds": list(decision.soft_drain_clear_job_ids),
+        "applied": False,
+    }
+    if not execute:
+        return result, []
+    for cleared in decision.soft_drain_clear_job_ids:
+        control_state.clear_soft_drain(cleared)
+    heartbeats = {node.job_id: node.heartbeat for node in nodes}
+    if job_id and not is_soft_drained(heartbeats.get(job_id)):
+        control_state.set_soft_drain(job_id, utc_now().isoformat())
+    result["applied"] = True
+    if not job_id or job_id in blocked_job_ids:
+        return result, []
+    routes = _soft_drain_movable_routes(
+        route_reservations.get(job_id, ()),
+        pending_wake_sandbox_ids=pending_wake_sandbox_ids,
+        limit=policy.drain_on_park_moves_per_cycle,
+    )
+    if not routes:
+        return result, []
+    assert_provider_fence()
+    with ThreadPoolExecutor(max_workers=len(routes)) as pool:
+        moves = list(
+            pool.map(
+                lambda route: _move_soft_drained_sandbox(
+                    route, gateway_url=gateway_url, bearer_token=bearer_token,
+                ),
+                routes,
+            )
+        )
+    return result, moves
 
 
 def _post_gateway_sandbox_detach(
@@ -4230,6 +4364,24 @@ def run_reconcile_cycle(
         intent.job_id for intent in pending_drain_intents if intent.state == "canceling"
     }
     pending_drain_job_ids = active_drain_job_ids | canceling_drain_job_ids
+    soft_drain_result, soft_drain_move_results = _apply_soft_drain(
+        decision,
+        sandbox_nodes,
+        control_state=control_state,
+        policy=effective_policy,
+        route_reservations=route_reservations or {},
+        blocked_job_ids=(
+            pending_drain_job_ids
+            | set(stop_job_ids)
+            | destructive_job_id_set
+            | quarantined_job_ids
+        ),
+        pending_wake_sandbox_ids=pending_wake_sandbox_ids or set(),
+        gateway_url=detach_gateway_url,
+        bearer_token=gateway_control_bearer_token,
+        execute=bool(execution_requested and execution_authorized),
+        assert_provider_fence=assert_provider_fence,
+    )
     active_bootstrap_job_ids = {
         node.job_id
         for node in (*sandbox_nodes, *builder_nodes)
@@ -4510,6 +4662,8 @@ def run_reconcile_cycle(
         "pending_delete_results": pending_delete_results,
         "storage_native_migration_results": storage_native_migration_results,
         "storage_native_detach_results": storage_native_detach_results,
+        "softDrain": soft_drain_result,
+        "softDrainMoveResults": soft_drain_move_results,
         "coldOffloadPlan": [candidate.to_dict() for candidate in cold_offload_plan],
         "prunedFinalHeartbeats": list(final_heartbeat_job_ids),
         "prunedOrphanedStaleHeartbeats": list(orphaned_stale_heartbeat_job_ids),
@@ -5954,6 +6108,22 @@ def print_reconcile(
             print(f"- {job_id} (blocked: worker storage cannot detach safely)")
         else:
             print(f"- {job_id} (blocked: missing matching deployment label)")
+    soft_drain = result.get("softDrain") or {}
+    if soft_drain.get("jobId") or soft_drain.get("clearedJobIds"):
+        print("Soft-drain:")
+        if soft_drain.get("jobId"):
+            state = "selected" if soft_drain.get("selected") else "draining"
+            print(f"- {soft_drain['jobId']} ({state})")
+        for job_id in soft_drain.get("clearedJobIds", []):
+            print(f"- {job_id} (cleared)")
+        for move in result.get("softDrainMoveResults", []):
+            outcome = (
+                f"moved to {move['destinationJobId']}"
+                if move.get("requestSucceeded")
+                else "skipped" if move.get("skipped")
+                else f"failed: {move.get('error')}"
+            )
+            print(f"- move {move['sandboxId']}: {outcome}")
     lost_job_ids = tuple(result.get("destructive_node_loss_job_ids", []))
     print("Destructive node-loss intents:")
     if not lost_job_ids:
@@ -6077,6 +6247,9 @@ def scale_decision_to_dict(decision: Any) -> dict[str, Any]:
         "pressureScaleUp": decision.pressure_scale_up,
         "createPressureScaleUp": decision.create_pressure_scale_up,
         "effectiveScaleDownIdleSeconds": (decision.effective_scale_down_idle_seconds),
+        "softDrainJobId": decision.soft_drain_job_id,
+        "softDrainSelected": decision.soft_drain_selected,
+        "softDrainClearJobIds": list(decision.soft_drain_clear_job_ids),
         "reasons": list(decision.reasons),
     }
 
@@ -6130,6 +6303,8 @@ def dashboard_scale_policy_to_dict(policy: ScalePolicy) -> dict[str, Any]:
         ),
         "program_aware_autoscaling_enabled": (policy.program_aware_autoscaling_enabled),
         "parked_wake_consolidation_enabled": policy.parked_wake_consolidation_enabled,
+        "drain_on_park_enabled": policy.drain_on_park_enabled,
+        "drain_on_park_moves_per_cycle": policy.drain_on_park_moves_per_cycle,
         "model_wait_capacity_weight": policy.model_wait_capacity_weight,
         "model_wait_max_headroom_nodes": policy.model_wait_max_headroom_nodes,
         "default_node_resources": policy.default_node_resources.to_dict(),

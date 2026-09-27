@@ -137,6 +137,7 @@ from .models import (
     ResourceQuantity,
     SandboxInventoryEntry,
     ScalePolicy,
+    is_soft_drained,
     parse_iso_datetime,
     sandbox_route_state_from_observation,
     utc_now,
@@ -1547,6 +1548,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 raw.get("migration_id") or f"migration-{uuid4().hex}"
             ).strip()
             requested_destination = str(raw.get("destination_node_id") or "").strip()
+            # An autoscaler drain move is optional work: it never buys capacity.
+            soft_drain = raw.get("soft_drain") is True
             migration = self.routing_store.get_sandbox_migration(migration_id)
             if migration is not None and migration.sandbox_id != sandbox_id:
                 raise SandboxRouteConflictError(
@@ -1562,8 +1565,14 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     source = self.routing_store.get_sandbox_readonly(sandbox_id)
                     if source is None:
                         return WakeUnavailable('sandbox route not found',missing_sandbox_id=sandbox_id)
+                    if soft_drain and not is_portable_parked_route(source):
+                        return WakeUnavailable('sandbox is no longer a published park',
+                            error_code='migration_source_not_parked',retry_after=1)
                     destination = self._select_migration_destination(
                         source,requested_node_id=requested_destination)
+                    if destination is None and soft_drain:
+                        return WakeUnavailable('no ready destination for soft-drain move',
+                            error_code='migration_destination_unavailable',retry_after=1)
                     if destination is None:
                         _,demand = self.routing_store.upsert_pending_with_demand(
                             _migration_pending_demand_id(sandbox_id),
@@ -1750,6 +1759,11 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     continue
             available_by_node[heartbeat.node_id] = available
             candidates.append(heartbeat)
+        undrained = [item for item in candidates if not is_soft_drained(item)]
+        # Moves (plain migrations) and optional consolidation never target a
+        # soft-drained worker. A wake falls back to it rather than failing.
+        if undrained or consolidation_source is not None or not require_active_resources:
+            candidates = undrained
         if not candidates:
             return None
         if consolidation_source is not None:
@@ -5786,6 +5800,9 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             )
             busy = load >= _AFFINITY_LOAD_BAND
             return (
+                # A soft-drained worker is emptying: only a last resort, so a
+                # create never fails because of soft drain.
+                is_soft_drained(heartbeat),
                 busy,
                 # Busy nodes keep the prior order: durable assigned shapes
                 # first, because a cached startup spike must not funnel a

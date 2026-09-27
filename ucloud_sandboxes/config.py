@@ -860,7 +860,10 @@ def _decode_policy(
     defaults = ScalePolicy()
     # Existing deployments retain local wake placement until explicitly enabled.
     raw = {"parked_wake_consolidation_enabled": False,
-           "max_io_psi_full_avg10": defaults.max_io_psi_full_avg10, **raw}
+           "max_io_psi_full_avg10": defaults.max_io_psi_full_avg10,
+           "drain_on_park_enabled": defaults.drain_on_park_enabled,
+           "drain_on_park_moves_per_cycle": defaults.drain_on_park_moves_per_cycle,
+           **raw}
     expected = {item.name for item in fields(defaults)} - _RUNTIME_POLICY_FIELDS
     _require_exact_keys("policy", raw, expected)
     values: dict[str, object] = {}

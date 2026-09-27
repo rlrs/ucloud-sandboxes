@@ -15,7 +15,7 @@ import weakref
 
 from .sqlite_pool import SqliteConnectionPool
 from .bootstrap import VmBootstrapRecord
-from .models import NODE_RUNTIME_METRIC_DEFAULTS, NodeHeartbeat
+from .models import NODE_RUNTIME_METRIC_DEFAULTS, SOFT_DRAIN_LABEL, NodeHeartbeat
 from .registry import (
     HeartbeatReceiptResult,
     _assert_heartbeat_binding,
@@ -37,6 +37,8 @@ _HEARTBEAT_CACHE_BYTES = 16 * 1024**2
 QUARANTINE_REASON = "ucloud-sandboxes/controller-quarantine"
 QUARANTINE_EPOCH = "ucloud-sandboxes/controller-quarantine-epoch"
 _QUARANTINE_KEYS = {QUARANTINE_REASON, QUARANTINE_EPOCH}
+SOFT_DRAIN = SOFT_DRAIN_LABEL
+_CONTROLLER_KEYS = _QUARANTINE_KEYS | {SOFT_DRAIN}
 
 
 def _placement_heartbeat(heartbeat: NodeHeartbeat) -> NodeHeartbeat:
@@ -73,10 +75,10 @@ def detached_heartbeat(
 
 
 def _controller_labels(heartbeat: NodeHeartbeat, previous: NodeHeartbeat | None):
-    labels = {k: v for k, v in heartbeat.labels.items() if k not in _QUARANTINE_KEYS}
+    labels = {k: v for k, v in heartbeat.labels.items() if k not in _CONTROLLER_KEYS}
     if previous is not None:
         labels.update(
-            {k: v for k, v in previous.labels.items() if k in _QUARANTINE_KEYS}
+            {k: v for k, v in previous.labels.items() if k in _CONTROLLER_KEYS}
         )
     return replace(heartbeat, labels=labels)
 
@@ -198,6 +200,27 @@ class ControlStateStore:
             self._upsert(connection, "heartbeat", job_id, payload)
             return _placement_heartbeat(stored)
 
+    def set_soft_drain(self, job_id: str, since: str) -> bool:
+        """Mark a worker to empty through parked moves; admission stays open."""
+        return self._set_controller_label(job_id, SOFT_DRAIN, since)
+
+    def clear_soft_drain(self, job_id: str) -> bool:
+        return self._set_controller_label(job_id, SOFT_DRAIN, None)
+
+    def _set_controller_label(self, job_id: str, key: str, value: str | None) -> bool:
+        with self._transaction(write=True) as connection:
+            current = self._load_heartbeats(connection).get(job_id)
+            if current is None or current.labels.get(key) == value:
+                return False
+            labels = dict(current.labels)
+            if value is None:
+                labels.pop(key, None)
+            else:
+                labels[key] = value
+            _, payload = _encode_heartbeat(replace(current, labels=labels))
+            self._upsert(connection, "heartbeat", job_id, payload)
+            return True
+
     def recover_quarantined_node(self, heartbeat: NodeHeartbeat) -> bool:
         """Commit verified continuity only if no newer boot/revision intervened."""
         with self._transaction(write=True) as connection:
@@ -210,8 +233,11 @@ class ControlStateStore:
             ):
                 return False
             labels = {
-                k: v for k, v in heartbeat.labels.items() if k not in _QUARANTINE_KEYS
+                k: v for k, v in heartbeat.labels.items() if k not in _CONTROLLER_KEYS
             }
+            # Recovery ends quarantine only; the autoscaler owns soft drain.
+            if current.labels.get(SOFT_DRAIN):
+                labels[SOFT_DRAIN] = current.labels[SOFT_DRAIN]
             stored, payload = _encode_heartbeat(
                 replace(
                     heartbeat,

@@ -67,3 +67,6 @@ See [tests.json](tests.json) for commands and fixture setup. The macOS run had
 two platform-specific failures (TCP_NODELAY value and sparse-file accounting);
 both pass on Linux. No PostgreSQL service or live fleet was used by this run;
 backend-gated tests retain their normal skips.
+
+The subsequent [registry GC qualification](../registry-gc-2026-09-27/README.md)
+fixes the separate blob-sweep race using an exclusive writer fence.

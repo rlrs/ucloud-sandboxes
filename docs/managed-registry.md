@@ -253,24 +253,41 @@ it would delete and why the rest stayed (`live`, `grace`, `leased`,
 ### Blob sweep
 
 Deleting a manifest frees no space until its blobs go. For the filesystem store,
-`ucloud-sandbox-registry-gc.service` (every six hours, and from pressure
-cleanup) runs an online sweep (`ucloud_sandboxes/registry_sweep.py`) while the
-registry keeps serving reads and writes. It marks every blob that any
-repository's manifest revisions reach, including index children, and deletes
-unreachable blobs whose data and repository links are older than
-`registry_blob_grace_seconds` (2 hours, longer than any push). It also removes
-repository layer links that none of that repository's manifests use.
+`ucloud-sandbox-registry-gc.service` (every six hours, and from pressure cleanup)
+runs the grace-aware collector in `ucloud_sandboxes/registry_sweep.py`.
+**Physical collection stops the registry for the entire scan and deletion.**
+Cold image reads, uploads and checkpoint publication are unavailable during this
+window and may need retrying. Existing sandboxes are not stopped by collection.
+Normal reference pruning remains online.
 
-A push can make an old blob reachable again only through a manifest PUT, which
-Distribution verifies against the repository's layer link and the blob data. The
-sweep therefore unlinks a batch, renames its blob directories aside, waits two
-seconds, and rescans links and manifests written since the sweep started. A hit
-restores the blob and its links; otherwise the renamed directories are deleted.
-A PUT that races the unlink fails with `BLOB_UNKNOWN` and is retried by the
-pusher; it cannot commit a manifest that points at a deleted blob. Because
-Distribution's in-memory blob descriptor cache would hide such deletions, the
-filesystem registry runs with `REGISTRY_STORAGE_CACHE_BLOBDESCRIPTOR=none`. A
-journal next to the data undoes a batch interrupted by a crash.
+The coordinator stops the registry service, acquires an exclusive writer lock,
+and verifies that the named Distribution container has exited before inspecting
+or mutating blobs. Registry startup holds the shared side of that lock for its
+entire process lifetime, including stale-container cleanup. A concurrent service
+start therefore waits for collection to finish. The separate maintenance lock
+still serializes pruning, pressure cleanup and collection; it does not by itself
+exclude registry writers.
+
+The collector marks every blob reachable from repository manifest revisions,
+including index children and subjects. Missing, unparseable or unsupported
+manifest references abort collection. Unreachable blobs and stale repository
+links younger than `registry_blob_grace_seconds` (two hours) remain, preserving
+recent uploads between requests. A rewritten link is checked by its own timestamp,
+never an ancestor directory's timestamp. Each repository is scanned once; there
+is no repeated scan or two-second settling delay. Journals from interrupted
+collection, including the older online sweep, are recovered conservatively.
+
+A fixed delay cannot prove that a manifest PUT has finished: a request may be
+paused after validating a blob but before committing its reference. The old
+online unlink/rename/recheck algorithm was therefore unsafe and is no longer
+used. Fully online physical collection would require coordination with all
+Distribution writers, not a longer grace period or sleep.
+
+The registry restarts in `finally` on success or failure. Both maintenance units
+also run marker-based recovery after abnormal termination (including SIGKILL).
+Recovery starts the registry only if collection stopped it, not on every idle
+pressure-timer tick. Registry starts outside the packaged helper or external
+writers to the same data directory bypass this contract and are unsupported.
 
 S3 registry stores keep Distribution's offline garbage collection, which stops
 the registry. It remains available for the filesystem store as a manual tool:

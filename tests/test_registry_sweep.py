@@ -103,7 +103,7 @@ class RegistrySweepTests(unittest.TestCase):
 
     def sweep(self, **kwargs):
         kwargs.setdefault("grace_seconds", 2 * HOUR)
-        kwargs.setdefault("sleep", lambda _seconds: None)
+        kwargs.setdefault("writers_stopped", True)
         return sweep_registry_blobs(self.root, **kwargs)
 
     def test_reachable_blobs_survive_and_unreferenced_blobs_go(self) -> None:
@@ -152,52 +152,43 @@ class RegistrySweepTests(unittest.TestCase):
         self.assertFalse(self.registry.exists(orphan))
         self.assertEqual(result.skipped_recent, 2)
 
-    def test_a_manifest_written_during_the_sweep_restores_its_blob(self) -> None:
-        orphan = self.registry.blob(b"reused-base-layer")
-        link = self.registry.layer_link("ucloud-managed/old", orphan)
-
-        def concurrent_push(_seconds: float) -> None:
-            # A push verified the layer through its link before the sweep
-            # removed it, then committed its manifest during the settle wait.
-            self.registry.now = time.time()
-            self.registry.manifest(
-                "ucloud-managed/new", layers=[orphan], age=0, link_layers=False,
-            )
-
-        result = self.sweep(sleep=concurrent_push)
-
+    def test_collection_refuses_to_run_with_writers(self) -> None:
+        orphan = self.registry.blob(b"not-safe-to-delete")
+        with self.assertRaises(RegistrySweepAborted):
+            self.sweep(writers_stopped=False)
         self.assertTrue(self.registry.exists(orphan))
-        self.assertTrue(link.exists())
-        self.assertEqual(result.restored_blobs, 1)
-        self.assertEqual(list(self.registry.tree.renamed_entries()), [])
 
-    def test_a_link_created_during_the_sweep_restores_its_blob(self) -> None:
-        orphan = self.registry.blob(b"reuploaded")
-
-        def concurrent_upload(_seconds: float) -> None:
-            self.registry.now = time.time()
-            self.registry.layer_link("ucloud-managed/new", orphan, age=0)
-
-        result = self.sweep(sleep=concurrent_upload)
-
+    def test_rewritten_link_is_found_even_with_unchanged_parent_mtime(self) -> None:
+        orphan = self.registry.blob(b"reused-layer")
+        link = self.registry.layer_link("repo", orphan)
+        parent_mtime = link.parent.parent.stat().st_mtime
+        link.write_text(orphan)
+        os.utime(link, (self.now, self.now))
+        self.assertEqual(link.parent.parent.stat().st_mtime, parent_mtime)
+        current = self.registry.tree.scan_repository("repo", self.registry.tree.repositories / "repo", since=self.now)
+        self.assertIn(orphan, current.layers)
+        self.sweep()
         self.assertTrue(self.registry.exists(orphan))
-        self.assertEqual(result.restored_blobs, 1)
 
-    def test_candidates_referenced_since_the_scan_are_skipped_before_unlinking(self) -> None:
-        orphan = self.registry.blob(b"late-reference")
-        link = self.registry.layer_link("ucloud-managed/old", orphan)
-
-        def before_batch(_batch: list[str]) -> None:
-            self.registry.now = time.time()
-            self.registry.manifest(
-                "ucloud-managed/new", layers=[orphan], age=0, link_layers=False,
-            )
-
-        result = self.sweep(before_batch=before_batch)
-
+    def test_missing_referenced_manifest_aborts_before_deleting(self) -> None:
+        manifest = self.registry.manifest("repo")
+        (self.registry.tree.blob_dir(manifest) / "data").unlink()
+        orphan = self.registry.blob(b"orphan")
+        with self.assertRaises(RegistrySweepAborted):
+            self.sweep()
         self.assertTrue(self.registry.exists(orphan))
-        self.assertTrue(link.exists())
-        self.assertEqual((result.deleted_blobs, result.restored_blobs), (0, 0))
+
+    def test_unknown_or_malformed_references_abort_before_deleting(self) -> None:
+        for document in ({"schemaVersion": 2}, {"layers": "not-a-list"},
+                         {"layers": [{"digest": "sha512:unsupported"}]}):
+            with self.subTest(document=document):
+                broken = self.registry.blob(json.dumps(document).encode())
+                link = self.registry.link(self.registry.tree.repositories / "repo/_manifests/revisions", broken)
+                orphan = self.registry.blob(b"must-survive")
+                with self.assertRaises(RegistrySweepAborted):
+                    self.sweep()
+                self.assertTrue(self.registry.exists(orphan))
+                link.unlink()
 
     def test_an_interrupted_batch_is_undone_from_its_journal(self) -> None:
         orphan = self.registry.blob(b"interrupted")

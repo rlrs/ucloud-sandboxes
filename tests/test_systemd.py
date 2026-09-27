@@ -79,11 +79,12 @@ class SystemdHelperTests(unittest.TestCase):
             check: bool,
             text: bool,
             env: dict[str, str] | None = None,
+            capture_output: bool = False,
         ) -> subprocess.CompletedProcess[str]:
             self.assertTrue(check)
             self.assertTrue(text)
             calls.append(command)
-            if command[0] == "docker":
+            if command[:2] == ["docker", "run"]:
                 raise subprocess.CalledProcessError(1, command)
             return subprocess.CompletedProcess(command, 0, "", "")
 
@@ -99,6 +100,7 @@ class SystemdHelperTests(unittest.TestCase):
             run_registry_gc(
                 config=config,
                 lock_file=Path(raw_dir) / "maintenance",
+                writer_lock=Path(raw_dir) / "writer",
                 runner=runner,
             )
 
@@ -107,9 +109,9 @@ class SystemdHelperTests(unittest.TestCase):
             ["systemctl", "stop", "ucloud-sandbox-registry.service"],
         )
         self.assertEqual(calls[1][0], "docker")
-        self.assertEqual(calls[1][-1], REGISTRY_CONFIG_PATH)
+        self.assertEqual(calls[2][-1], REGISTRY_CONFIG_PATH)
         self.assertEqual(
-            calls[2],
+            calls[3],
             ["systemctl", "start", "ucloud-sandbox-registry.service"],
         )
 
@@ -145,6 +147,7 @@ class SystemdHelperTests(unittest.TestCase):
             check: bool,
             text: bool,
             env: dict[str, str] | None = None,
+            capture_output: bool = False,
         ) -> subprocess.CompletedProcess[str]:
             calls.append((command, env))
             return subprocess.CompletedProcess(command, 0, "", "")
@@ -153,6 +156,7 @@ class SystemdHelperTests(unittest.TestCase):
             run_registry_gc(
                 config=config,
                 lock_file=Path(raw_dir) / "maintenance",
+                writer_lock=Path(raw_dir) / "writer",
                 runner=runner,
                 environ={
                     "REGISTRY_ACCESS_KEY": "access-value",
@@ -161,12 +165,12 @@ class SystemdHelperTests(unittest.TestCase):
             )
 
         self.assertEqual(calls[0][0][0], "systemctl")
-        self.assertEqual(calls[1][0], registry_gc_command(config))
+        self.assertEqual(calls[2][0], registry_gc_command(config))
         self.assertEqual(
-            calls[1][1]["REGISTRY_STORAGE_S3_SECRETKEY"],
+            calls[2][1]["REGISTRY_STORAGE_S3_SECRETKEY"],
             "secret-value",
         )
-        self.assertEqual(calls[2][0][0], "systemctl")
+        self.assertEqual(calls[3][0][0], "systemctl")
 
     def test_gateway_reconcile_uses_snapshot_backend_as_single_timer_policy(
         self,

@@ -60,9 +60,9 @@ errors rather than triggering more upload work.
 A `layer-*` tag indexes reusable components; the signed root remains authoritative.
 Reuse re-publishes the tag before a new root references it, and reference retention
 checks that refresh again before deleting a candidate. Shared components remain
-live while any protected root needs them. This protection is distinct from the
-registry's physical blob sweep and does not establish that sweep's concurrency
-safety.
+live while any protected root needs them. Physical blob collection separately
+stops registry writers and holds an exclusive startup fence; see
+[registry collection](managed-registry.md#blob-sweep).
 
 Workers mount each distinct component once. Images sharing a component share its
 NBD device, verified chunk cache and EROFS mount. Ordered relative lower paths

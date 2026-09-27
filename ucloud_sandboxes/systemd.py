@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 from datetime import datetime, timezone
+import fcntl
 import json
 import logging
 import os
@@ -32,13 +34,52 @@ REGISTRY_S3_CHUNK_BYTES = 32 * 1024 * 1024
 REGISTRY_SERVICE = "ucloud-sandbox-registry.service"
 # flock(1) in the prune unit locks the same file: "<path>.lock".
 REGISTRY_MAINTENANCE_LOCK = Path("/run/lock/ucloud-sandbox-registry-maintenance")
+REGISTRY_WRITER_LOCK = Path("/run/lock/ucloud-sandbox-registry-writer")
 # Bounded wait for a running prune or GC instead of failing the unit.
 REGISTRY_MAINTENANCE_WAIT_SECONDS = 1800.0
-# Distribution's in-memory blob descriptor cache would keep answering "blob
-# exists" after the online sweep removed a blob from disk; the filesystem
-# driver's stat is cheap, so the cache is disabled (registry_sweep.py).
+# Keep the filesystem authoritative for blob existence. Collection also
+# replaces the registry process, so no cached descriptors survive deletion.
 REGISTRY_BLOB_CACHE_ENV = "REGISTRY_STORAGE_CACHE_BLOBDESCRIPTOR"
 REGISTRY_BLOB_CACHE_DISABLED = "none"
+
+
+def registry_restart_marker(writer_lock: Path) -> Path:
+    return Path(str(writer_lock) + ".stopped")
+
+
+@contextmanager
+def stopped_registry(*, runner=subprocess.run, writer_lock: Path = REGISTRY_WRITER_LOCK):
+    """Exclude startup and prove the old writer exited before touching blobs."""
+    marker = registry_restart_marker(writer_lock)
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.touch()
+    try:
+        runner(["systemctl", "stop", REGISTRY_SERVICE], check=True, text=True)
+        with registry_maintenance_lock(writer_lock, timeout_seconds=REGISTRY_MAINTENANCE_WAIT_SECONDS):
+            running = runner(["docker", "ps", "--all", "--filter", "name=^/ucloud-sandbox-registry$",
+                              "--format", "{{.ID}}"], check=True, text=True, capture_output=True)
+            if running.stdout.strip():
+                raise RuntimeError("registry container still exists; refusing blob collection")
+            yield
+    finally:
+        # Release the exclusive fence before starting its shared-lock holder.
+        runner(["systemctl", "start", REGISTRY_SERVICE], check=True, text=True)
+        marker.unlink(missing_ok=True)
+
+
+def run_registry_process(config, *, writer_lock: Path = REGISTRY_WRITER_LOCK,
+                         runner=subprocess.run, environ=None) -> int:
+    """Hold the shared writer fence for the entire Distribution process lifetime."""
+    lock = Path(str(writer_lock) + ".lock")
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    with lock.open("a") as handle:
+        fcntl.flock(handle, fcntl.LOCK_SH)
+        # Stale-container cleanup must also happen inside the startup fence.
+        runner(["docker", "rm", "-f", "ucloud-sandbox-registry"], check=False, text=True,
+               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        registry_restart_marker(writer_lock).unlink(missing_ok=True)
+        return runner(registry_run_command(config), check=False, text=True,
+                      env=registry_process_environment(config, environ=environ)).returncode
 
 
 def require_registry_mount(config: DeploymentConfig) -> None:
@@ -57,11 +98,12 @@ def run_registry_gc(
     environ: Mapping[str, str] | None = None,
     maintenance_state_file: Path | None = None,
     lock_timeout_seconds: float = REGISTRY_MAINTENANCE_WAIT_SECONDS,
+    writer_lock: Path = REGISTRY_WRITER_LOCK,
 ) -> bool:
     """Offline Distribution GC: stops the registry for the whole run.
 
     Only S3 registry stores and explicit operator requests use this; the
-    filesystem store is swept online (``run_registry_sweep``).
+    filesystem store uses the grace-aware quiescent collector.
     """
 
     with registry_maintenance_lock(lock_file, timeout_seconds=lock_timeout_seconds):
@@ -80,16 +122,13 @@ def run_registry_gc(
             if not repositories_dir.exists():
                 return False
         environment = registry_process_environment(config, environ=environ)
-        runner(["systemctl", "stop", REGISTRY_SERVICE], check=True, text=True)
-        try:
+        with stopped_registry(runner=runner, writer_lock=writer_lock):
             runner(
                 registry_gc_command(config),
                 check=True,
                 text=True,
                 env=environment,
             )
-        finally:
-            runner(["systemctl", "start", REGISTRY_SERVICE], check=True, text=True)
         if maintenance_state_file is not None:
             record_registry_gc(maintenance_state_file, kind="offline")
         return True
@@ -100,19 +139,20 @@ def run_registry_sweep_locked(
     config: DeploymentConfig,
     maintenance_state_file: Path | None = None,
     sweep: Callable[..., RegistrySweepResult] = sweep_registry_blobs,
+    runner: CommandRunner = subprocess.run,
+    writer_lock: Path = REGISTRY_WRITER_LOCK,
 ) -> RegistrySweepResult | None:
-    """Online sweep of the filesystem store; the caller holds the fence."""
+    """Quiescent filesystem collection; caller already holds the maintenance lock."""
 
     if config.registry_store.kind != "filesystem":
         return None
-    result = sweep(
-        config.registry_data_dir(),
-        grace_seconds=config.registry_blob_grace_seconds,
-    )
+    with stopped_registry(runner=runner, writer_lock=writer_lock):
+        result = sweep(config.registry_data_dir(), grace_seconds=config.registry_blob_grace_seconds,
+                       writers_stopped=True)
     if maintenance_state_file is not None:
         record_registry_gc(
             maintenance_state_file,
-            kind="online",
+            kind="quiescent",
             deleted_bytes=result.deleted_bytes,
         )
     return result
@@ -125,12 +165,16 @@ def run_registry_sweep(
     maintenance_state_file: Path | None = None,
     lock_timeout_seconds: float = REGISTRY_MAINTENANCE_WAIT_SECONDS,
     sweep: Callable[..., RegistrySweepResult] = sweep_registry_blobs,
+    runner: CommandRunner = subprocess.run,
+    writer_lock: Path = REGISTRY_WRITER_LOCK,
 ) -> RegistrySweepResult | None:
     with registry_maintenance_lock(lock_file, timeout_seconds=lock_timeout_seconds):
         return run_registry_sweep_locked(
             config=config,
             maintenance_state_file=maintenance_state_file,
             sweep=sweep,
+            runner=runner,
+            writer_lock=writer_lock,
         )
 
 
@@ -251,7 +295,7 @@ def build_parser() -> argparse.ArgumentParser:
     registry_gc = subparsers.add_parser(
         "registry-gc",
         help=(
-            "reclaim unreferenced registry blobs: online for the filesystem "
+            "reclaim unreferenced registry blobs with registry writers stopped: filesystem "
             "store, offline Distribution GC for S3 or with --offline"
         ),
     )
@@ -271,6 +315,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="run the deployment Docker Distribution service",
     )
     registry.add_argument("--config", type=Path, required=True)
+    subparsers.add_parser("registry-recover", help="restart a registry stopped by interrupted collection")
     reconcile = subparsers.add_parser(
         "gateway-reconcile",
         help="converge and health-check the common gateway services",
@@ -465,6 +510,10 @@ def _registry_forwarded_environment_args(config: DeploymentConfig) -> list[str]:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "registry-recover":
+        if registry_restart_marker(REGISTRY_WRITER_LOCK).exists():
+            subprocess.run(["systemctl", "start", "--no-block", REGISTRY_SERVICE], check=True, text=True)
+        return 0
     config = DeploymentConfig.from_file(args.config)
     if args.command == "registry-gc":
         require_registry_mount(config)
@@ -508,9 +557,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         require_registry_mount(config)
         if config.registry_store.kind == "filesystem":
             config.registry_data_dir().mkdir(parents=True, exist_ok=True)
-        command = registry_run_command(config)
-        environment = registry_process_environment(config)
-        os.execvpe(command[0], command, environment)
+        return run_registry_process(config)
     if args.command == "gateway-reconcile":
         reconcile_gateway_services(config=config)
         return 0

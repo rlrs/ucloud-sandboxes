@@ -614,8 +614,8 @@ with HTTP 500. Age retention had deleted nothing, since everything was younger
 than 30 days, and the daily prune failed on the maintenance lock.
 
 Retention now works by reference for snapshots and environments, runs hourly,
-and waits for the lock. Blobs are swept online without stopping or freezing the
-registry. Above 70 % Volume usage a per-minute unit prunes, evicts
+and waits for the lock. Physical blob collection stops the registry and holds
+its exclusive writer fence; reference pruning stays online. Above 70 % Volume usage a per-minute unit prunes, evicts
 least-recently-used task images down to 60 %, and sweeps. Above 90 % the gateway
 refuses builds and imports with a retryable 503. The full behaviour and its race
 analysis are in [managed-registry.md](managed-registry.md#reference-retention).

@@ -1,0 +1,24 @@
+{
+  "passed": true,
+  "kernel": "7.0.0-30-generic",
+  "scope": "real Distribution 3.1.1 and systemd; isolated Hetzner VM",
+  "collection_and_ready_seconds": 1.226595666000037,
+  "collection": {
+    "repositories": 2,
+    "manifests": 1,
+    "reachable_blobs": 3,
+    "blobs": 5,
+    "candidate_blobs": 2,
+    "deleted_blobs": 2,
+    "deleted_bytes": 419,
+    "restored_blobs": 0,
+    "removed_stale_links": 1,
+    "restored_links": 0,
+    "recovered_renames": 0,
+    "skipped_recent": 0,
+    "seconds": 0.015
+  },
+  "live_reads_and_new_pushes_survive": true,
+  "exception_restarts_registry": true,
+  "sigkill_recovery_preserves_live_blob": true
+}

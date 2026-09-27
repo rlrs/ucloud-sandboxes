@@ -499,8 +499,8 @@ class DeploymentConfig:
     # Unreferenced snapshots, environments, and evictable images younger than
     # this stay.
     registry_reference_grace_seconds: int = 3600
-    # The online blob sweep keeps unreferenced blobs and links younger than
-    # this; it must exceed the longest push (registry_sweep.py).
+    # The quiescent blob collector keeps unreferenced blobs and links younger than
+    # this to preserve uploads between requests; writers are always fenced.
     registry_blob_grace_seconds: int = 7200
 
     @classmethod

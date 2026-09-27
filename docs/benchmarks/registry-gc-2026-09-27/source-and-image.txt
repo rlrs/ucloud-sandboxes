@@ -1,0 +1,4 @@
+f73a8c9430929b6fda061f1d5bd30024c0f2fe778937e4b680107ca995ed5c18  /root/gc-qualification/ucloud_sandboxes/registry_sweep.py
+cdb317d1a4c7cb2174ae41fc8d41218cb91c26dc07a8802b08dec9ae7c58d8fa  /root/gc-qualification/ucloud_sandboxes/systemd.py
+a09a723740b504748c37849a0d865a534d4d752822b8c95b1401f4898762a6dd  /root/gc-qualification/qualify_registry_gc.py
+["registry@sha256:325b4b29b041e82803abeb703e201655e4e23ab83264ec1a7c9ddb0a5b14a6e0"]

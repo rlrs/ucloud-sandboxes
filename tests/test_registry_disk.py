@@ -376,14 +376,18 @@ class RegistryGcTests(unittest.TestCase):
         self.assertEqual(environment[REGISTRY_BLOB_CACHE_ENV], "none")
         self.assertIn(REGISTRY_BLOB_CACHE_ENV, command)
 
-    def test_online_sweep_holds_the_lock_and_records_state(self) -> None:
+    def test_quiescent_sweep_holds_both_locks_and_records_state(self) -> None:
         calls = []
         with TemporaryDirectory() as raw:
             root = Path(raw)
             config = filesystem_config(root)
             state = root / "state.json"
 
-            def sweep(path, *, grace_seconds):
+            def sweep(path, *, grace_seconds, writers_stopped):
+                self.assertTrue(writers_stopped)
+                with self.assertRaises(RegistryMaintenanceBusy):
+                    with registry_maintenance_lock(root / "writer", blocking=False):
+                        pass
                 calls.append((path, grace_seconds))
                 with self.assertRaises(RegistryMaintenanceBusy):
                     with registry_maintenance_lock(root / "maintenance", blocking=False):
@@ -392,21 +396,22 @@ class RegistryGcTests(unittest.TestCase):
 
             result = run_registry_sweep(
                 config=config, lock_file=root / "maintenance",
-                maintenance_state_file=state, sweep=sweep,
+                maintenance_state_file=state, sweep=sweep, writer_lock=root / "writer",
+                runner=lambda command, **kw: subprocess.CompletedProcess(command, 0, "", ""),
             )
             recorded = read_registry_maintenance_state(state)
 
         self.assertEqual(calls, [(config.registry_data_dir(), 7200)])
         self.assertEqual(result.deleted_bytes, 123)
-        self.assertEqual(recorded["last_gc_kind"], "online")
+        self.assertEqual(recorded["last_gc_kind"], "quiescent")
         self.assertEqual(recorded["last_gc_deleted_bytes"], 123)
 
     def test_offline_gc_stops_and_always_restarts_the_registry(self) -> None:
         calls: list[list[str]] = []
 
-        def runner(command, *, check, text, env=None):
+        def runner(command, *, check, text, env=None, capture_output=False):
             calls.append(command)
-            if command[0] == "docker":
+            if command[:2] == ["docker", "run"]:
                 raise subprocess.CalledProcessError(1, command)
             return subprocess.CompletedProcess(command, 0, "", "")
 
@@ -416,11 +421,12 @@ class RegistryGcTests(unittest.TestCase):
             with self.assertRaises(subprocess.CalledProcessError):
                 run_registry_gc(
                     config=config, lock_file=Path(raw) / "maintenance", runner=runner,
+                    writer_lock=Path(raw) / "writer",
                 )
 
         self.assertEqual(calls[0], ["systemctl", "stop", "ucloud-sandbox-registry.service"])
-        self.assertEqual(calls[1], registry_gc_command(config))
-        self.assertEqual(calls[2], ["systemctl", "start", "ucloud-sandbox-registry.service"])
+        self.assertEqual(calls[2], registry_gc_command(config))
+        self.assertEqual(calls[3], ["systemctl", "start", "ucloud-sandbox-registry.service"])
 
 
 class MaintenanceUnitTests(unittest.TestCase):
@@ -434,6 +440,9 @@ class MaintenanceUnitTests(unittest.TestCase):
         self.assertIn("OnCalendar=hourly", units["ucloud-sandbox-registry-prune.timer"])
         self.assertIn("OnUnitInactiveSec=1min", units["ucloud-sandbox-registry-pressure.timer"])
         self.assertIn("registry-pressure", units["ucloud-sandbox-registry-pressure.service"])
+        for name in ("gc", "pressure"):
+            self.assertIn("registry-recover", units[f"ucloud-sandbox-registry-{name}.service"])
+        self.assertNotIn("ExecStartPre=", units["ucloud-sandbox-registry.service"])
         # Restarting the registry must never stop the maintenance units.
         for name in ("ucloud-sandbox-registry-pressure.service",
                      "ucloud-sandbox-registry-gc.service",

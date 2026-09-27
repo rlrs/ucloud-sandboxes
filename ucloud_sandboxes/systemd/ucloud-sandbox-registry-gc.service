@@ -6,7 +6,6 @@ After=docker.service ucloud-sandbox-registry.service
 [Service]
 Type=oneshot
 EnvironmentFile=-/etc/ucloud-sandboxes/registry-store.env
-# Filesystem stores are swept online. S3 stores (and --offline) stop the
-# registry for Distribution's garbage-collect, so always leave it started.
+# Physical collection stops the registry and holds its exclusive writer fence.
 ExecStart=/work/ucloud-sandboxes/gateway-venv/bin/python -m ucloud_sandboxes.systemd registry-gc --config /etc/ucloud-sandboxes/deployment.json
-ExecStopPost=-/usr/bin/systemctl start --no-block ucloud-sandbox-registry.service
+ExecStopPost=-/work/ucloud-sandboxes/gateway-venv/bin/python -m ucloud_sandboxes.systemd registry-recover

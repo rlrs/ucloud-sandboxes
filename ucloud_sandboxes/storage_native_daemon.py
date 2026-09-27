@@ -115,6 +115,10 @@ class StorageNativeConflictError(StorageNativeNodeError):
     pass
 
 
+class StorageNativeRevisionConflict(StorageNativeConflictError):
+    """The volume's ownership fence moved after the caller read it."""
+
+
 class StorageNativeCapacityError(StorageNativeConflictError):
     """The node cannot allocate another live storage volume right now."""
 
@@ -1470,7 +1474,7 @@ class StorageNativeJournal:
                 "storage-native volume belongs to another sandbox incarnation"
             )
         if record.revision != expected_revision:
-            raise StorageNativeConflictError(
+            raise StorageNativeRevisionConflict(
                 f"stale storage revision {expected_revision}; "
                 f"current revision is {record.revision}"
             )
@@ -1604,6 +1608,9 @@ class _StorageOperationGate:
             with self._condition:
                 self._maintenance = False
                 self._condition.notify_all()
+
+
+_CONVERGE_REVISION_ATTEMPTS = 3
 
 
 def _storage_mutation(method):
@@ -2605,6 +2612,40 @@ class StorageNativeNodeService:
 
     @_storage_mutation
     def converge_volume(
+        self,
+        owner: StorageVolumeOwner,
+        *,
+        action: str,
+        operation_id: str,
+        expected_revision: int | None = None,
+        **kwargs,
+    ) -> StorageVolumeRecord:
+        # A background publication can move a parked volume RELEASED ->
+        # PUBLISHING between this convergence reading the record and fencing
+        # its own transition. A failed fence writes nothing and operation ids
+        # are deterministic, so local lifecycle actions re-read and converge
+        # again; the next pass supersedes the publication. Callers that pass
+        # their own fence (publish, captures) must keep failing.
+        attempts = (
+            _CONVERGE_REVISION_ATTEMPTS
+            if expected_revision is None and action in {"delete", "discard", "mount", "release"}
+            else 1
+        )
+        for attempt in range(attempts):
+            try:
+                return self._converge_volume_once(
+                    owner,
+                    action=action,
+                    operation_id=operation_id,
+                    expected_revision=expected_revision,
+                    **kwargs,
+                )
+            except StorageNativeRevisionConflict:
+                if attempt + 1 >= attempts:
+                    raise
+        raise AssertionError("unreachable")
+
+    def _converge_volume_once(
         self,
         owner: StorageVolumeOwner,
         *,

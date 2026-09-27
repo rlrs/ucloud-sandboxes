@@ -26,7 +26,7 @@ from .storage_native_migration import (
     SPLIT_MIGRATION_SCHEMA,
     StorageNativeMigrationError,
 )
-from .storage_native_daemon import StorageNativeCapacityError
+from .storage_native_daemon import StorageNativeCapacityError, StorageNativeConflictError
 from .managed_process import (
     MANAGED_PROCESS_BINARY,
     MAX_LOG_READ_BYTES,
@@ -2476,6 +2476,16 @@ class DirectSandboxService:
                     # The disk overlap claim precedes candidate launch. Keep
                     # the exact durable checkpoint parked and route this safe
                     # retry through the same internal restore admission result.
+                    current = self.warden.inspect(registration.to_direct_sandbox())
+                    if current is not None and current.state == HibernationState.PARKED:
+                        raise SandboxRestoreBusyError(str(exc)) from exc
+                    raise
+                except StorageNativeConflictError as exc:
+                    # A concurrent storage transition (usually the background
+                    # snapshot publication) won the fence. The durable
+                    # checkpoint is still parked, so the wake is safe to retry.
+                    if isinstance(exc, StorageNativeCapacityError):
+                        raise
                     current = self.warden.inspect(registration.to_direct_sandbox())
                     if current is not None and current.state == HibernationState.PARKED:
                         raise SandboxRestoreBusyError(str(exc)) from exc

@@ -1358,6 +1358,26 @@ class DirectProvisionerTests(unittest.TestCase):
                 self.assertNotIsInstance(caught.exception, SandboxRestoreBusyError)
             self.assertEqual(service.activity_snapshot().active_operations, 0)
 
+    def test_wake_that_loses_a_storage_fence_stays_parked_and_retryable(self):
+        from ucloud_sandboxes.storage_native_daemon import (
+            StorageNativeCapacityError, StorageNativeConflictError,
+        )
+        with TemporaryDirectory() as raw:
+            provisioner, _, _, _, _ = self.make(Path(raw).resolve())
+            service = DirectSandboxService(provisioner)
+            record = self.create(service, self.spec())
+            service.park(record.spec.id, operation_id="park:fence")
+            stale = StorageNativeConflictError("stale storage revision 8; current revision is 9")
+            with patch.object(service.warden, "resume", side_effect=stale):
+                with self.assertRaises(SandboxRestoreBusyError):
+                    service.wake(record.spec.id, generation=record.generation, operation_id="wake:fence")
+            self.assertEqual(service.get(record.spec.id).state, "parked")
+            # Capacity keeps its own translation.
+            with patch.object(service.warden, "resume", side_effect=StorageNativeCapacityError("full")):
+                with self.assertRaises(SandboxCapacityUnavailableError):
+                    service.wake(record.spec.id, generation=record.generation, operation_id="wake:capacity")
+            self.assertEqual(service.activity_snapshot().active_operations, 0)
+
     def test_relay_park_deferral_returns_without_holding_http_or_lifecycle(self):
         from ucloud_sandboxes.background_io import Pressure
         from ucloud_sandboxes.warm_park import WarmParkPolicy

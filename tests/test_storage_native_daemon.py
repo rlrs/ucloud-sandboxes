@@ -1448,6 +1448,66 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
                     if action != "delete":
                         self.assertTrue(all(p.exists() for p in paths))
 
+    def test_local_lifecycle_rereads_after_publication_moves_the_fence(self):
+        # The wake reads RELEASED, then the background publication commits
+        # RELEASED -> PUBLISHING before the wake fences its own transition.
+        # (Discarding a released volume is a no-op and fences nothing.)
+        from unittest.mock import patch
+
+        for action in ("mount", "delete"):
+            with self.subTest(action=action), TemporaryDirectory() as raw:
+                service, _, _ = self._service(Path(raw), publisher=True)
+                owner = StorageVolumeOwner(sandbox_id="sandbox-1", sandbox_generation=1, volume_id="volume-1")
+                service.converge_volume(owner, action="prepare", operation_id="create", virtual_size=1 << 30)
+                released = service.converge_volume(owner, action="release", operation_id="park")
+                paths = tuple(Path(p) for p in released.sealed_layer_paths)
+                entered, finish = threading.Event(), threading.Event()
+                publish, load = service.publisher.publish, service.journal.load
+                local = threading.get_ident()
+                raced = []
+
+                def slow_publish(**kwargs):
+                    result = publish(**kwargs)
+                    entered.set()
+                    finish.wait(5)
+                    return result
+
+                def stale_load(volume_id):
+                    record = load(volume_id)
+                    if threading.get_ident() == local and not raced:
+                        raced.append(record)
+                        pool.submit(service.converge_volume, owner, action="publish",
+                                    operation_id="upload", expected_revision=record.revision)
+                        self.assertTrue(entered.wait(5))
+                    return record
+
+                with patch.object(service.publisher, "publish", side_effect=slow_publish), \
+                     patch.object(service.journal, "load", side_effect=stale_load), \
+                     ThreadPoolExecutor(max_workers=1) as pool:
+                    try:
+                        current = service.converge_volume(owner, action=action, operation_id="local")
+                    finally:
+                        finish.set()
+                self.assertEqual(raced[0].state, StorageVolumeState.RELEASED)
+                self.assertEqual(current.state, {
+                    "mount": StorageVolumeState.MOUNTED,
+                    "delete": StorageVolumeState.DELETED,
+                }[action])
+                self.assertEqual(service.journal.load(owner.volume_id), current)
+                if action == "mount":
+                    self.assertTrue(all(p.exists() for p in paths))
+
+    def test_fenced_callers_do_not_retry_a_moved_revision(self):
+        with TemporaryDirectory() as raw:
+            service, _, _ = self._service(Path(raw), publisher=True)
+            owner = StorageVolumeOwner(sandbox_id="sandbox-1", sandbox_generation=1, volume_id="volume-1")
+            service.converge_volume(owner, action="prepare", operation_id="create", virtual_size=1 << 30)
+            released = service.converge_volume(owner, action="release", operation_id="park")
+            with self.assertRaises(StorageNativeConflictError):
+                service.converge_volume(owner, action="mount", operation_id="stale",
+                                        expected_revision=released.revision - 1)
+            self.assertEqual(service.journal.load(owner.volume_id).state, StorageVolumeState.RELEASED)
+
     def test_delayed_publication_cannot_seal_resumed_or_reparked_volume(self):
         with TemporaryDirectory() as raw:
             service, backend, _ = self._service(Path(raw), publisher=True)

@@ -288,7 +288,7 @@ class SoftDrainMoverTests(unittest.TestCase):
         store.set_soft_drain("200", "t0")
         return store
 
-    def test_moves_only_published_attached_parks_within_budget(self):
+    def test_moves_attached_parks_within_budget_even_before_publication_is_seen(self):
         calls, lock = [], Lock()
 
         def post(gateway_url, sandbox_id, **kwargs):
@@ -314,17 +314,18 @@ class SoftDrainMoverTests(unittest.TestCase):
             self.assertFalse(is_soft_drained(store.get_heartbeat("200")))
         self.assertEqual(result["jobId"], "300")
         self.assertTrue(result["selected"])
-        self.assertEqual(sorted(call[1] for call in calls), ["first", "second"])
+        # The gateway publishes an unseen park before moving it.
+        self.assertEqual(sorted(call[1] for call in calls), ["first", "unpublished"])
         for gateway_url, _sandbox_id, kwargs in calls:
             self.assertEqual(gateway_url, "http://127.0.0.1:8080")
             self.assertEqual(kwargs["bearer_token"], "gateway-secret")
             self.assertTrue(kwargs["soft_drain"])
         self.assertEqual(
             [move["migrationId"] for move in moves],
-            ["drain-300-first-3", "drain-300-second-1"],
+            ["drain-300-unpublished-1", "drain-300-first-3"],
         )
         self.assertTrue(all(move["requestSucceeded"] for move in moves))
-        self.assertEqual(moves[0]["destinationJobId"], "100")
+        self.assertEqual(moves[1]["destinationJobId"], "100")
 
     def test_no_destination_skips_and_dry_run_or_blocked_worker_does_nothing(self):
         def unavailable(gateway_url, sandbox_id, **_kwargs):
@@ -524,6 +525,28 @@ class SoftDrainGatewayTests(unittest.TestCase):
             handler._migrate_sandbox_on_node(route.sandbox_id)
             self.assertEqual(outcomes[0].error_code, "migration_destination_unavailable")
             self.assertEqual(handler.routing_store.pending_sandboxes(), [])
+            self.assertEqual(handler.routing_store.sandbox_migrations(), [])
+
+    def test_soft_drain_move_publishes_a_park_the_gateway_has_not_seen(self):
+        with TemporaryDirectory() as raw:
+            handler, _route = self.handler(Path(raw), self.heartbeat("100", drained=True))
+            unseen = handler.routing_store.upsert_sandbox(portable_route(
+                "unseen", node_id="node-300", job_id="300",
+                node_url="http://node-300:8090", snapshot_tag="",
+            ))
+            outcomes, asked = [], []
+
+            def publish(route):
+                asked.append(route.sandbox_id)
+                return None, "sandbox woke before publication"
+
+            handler._publish_route_for_detach = publish
+            handler._read_json_body = lambda: {"migration_id": "m-2", "soft_drain": True}
+            handler._atomic_placement = lambda operation, **_kwargs: operation()
+            handler._write_wake_unavailable = outcomes.append
+            handler._migrate_sandbox_on_node(unseen.sandbox_id)
+            self.assertEqual(asked, ["unseen"])
+            self.assertEqual(outcomes[0].error_code, "migration_source_not_parked")
             self.assertEqual(handler.routing_store.sandbox_migrations(), [])
 
     def test_create_placement_prefers_undrained_but_falls_back(self):

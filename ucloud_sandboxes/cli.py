@@ -2747,11 +2747,13 @@ def _soft_drain_movable_routes(
     limit: int,
 ) -> list[SandboxRoute]:
     # Running, waking and creating sandboxes stay; they move after parking.
+    # A park the gateway has not yet seen published still qualifies: the move
+    # asks the owner to publish (or reuse) its snapshot first.
     return [
         route
         for route in routes
         if route.worker_state == "attached"
-        and is_portable_parked_route(route)
+        and (route.state or "").lower() == "parked"
         and not route.delete_operation_id
         and route.sandbox_id not in pending_wake_sandbox_ids
     ][: max(0, limit)]

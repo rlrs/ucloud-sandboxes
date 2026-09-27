@@ -1555,6 +1555,26 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 raise SandboxRouteConflictError(
                     "migration id belongs to another sandbox"
                 )
+            if migration is None and soft_drain:
+                # The gateway learns a worker's publication from its next
+                # heartbeat; agents that wake every few seconds are rarely seen
+                # as published parks. Ask the owner now, outside the placement
+                # lock (the worker reuses an existing publication).
+                source = self.routing_store.get_sandbox_readonly(sandbox_id)
+                if (
+                    source is not None
+                    and source.state.lower() == "parked"
+                    and source.worker_state == "attached"
+                    and not source.delete_operation_id
+                    and not is_portable_parked_route(source)
+                ):
+                    published, error = self._publish_route_for_detach(source)
+                    if published is None:
+                        self._write_wake_unavailable(WakeUnavailable(
+                            error or "sandbox is no longer a parked sandbox",
+                            error_code="migration_source_not_parked", retry_after=1,
+                        ))
+                        return
             if migration is None:
                 def reserve_migration():
                     existing = self.routing_store.get_sandbox_migration(migration_id)

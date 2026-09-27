@@ -1,0 +1,11 @@
+7.0.0-30-generic
+mkfs.erofs (erofs-utils) 1.9
+available compressors: lz4, lz4hc, lzma, deflate, libdeflate, zstd
+29.8.1
+Python 3.14.4
+5948b3066bd4e7c8d6f6c4f2a707f0994934571bb2ae31eb4787afc0c36b4541  /root/qualification/ucloud_sandboxes/environment_artifact.py
+78a60016b34d315af16db1d4fe84300d486acfaba96b93dda2576cb58c1dee0f  /root/qualification/ucloud_sandboxes/environment_builder.py
+b6333a102dae817230cfdc3b2dd72b7ed4a0b2e5a67d214a9e10d530be405101  /root/qualification/ucloud_sandboxes/environment_backend.py
+4df097a8c631fd6e93f5d49daff39b8352ed810b79be87e71161ca1e0afbc714  /root/qualification/ucloud_sandboxes/environment_rootfs.py
+fc4c57f0f1780bb463fa89bd3784265ca3915760c32e764a9e97ce0672364d4b  /root/qualification/runtime/storage_native/qualify_environment.py
+1c11b28dd19cfc41338e1142adf32b76797a0fb91678224105b23132523ed1db  /root/qualification/runtime/storage_native/qualify_environment_layers.py

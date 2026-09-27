@@ -12,16 +12,17 @@ remain ordinary filenames. Actual whiteout devices and opaque directory xattrs
 retain their filesystem semantics.
 
 The builder makes an uncompressed host EROFS component, signs its chunk index
-with Ed25519, and publishes its config and 256 KiB chunk blobs through the
-existing OCI registry client. A separately signed environment root describes
+with Ed25519, and publishes its config and one image blob through the existing
+OCI registry client. Workers fetch authenticated 256 KiB chunks using HTTP Range.
+A separately signed environment root describes
 base, optional workspace seed, ordered toolkits, original Docker config digest,
 and process configuration. The source OCI image carries the root digest in
 `org.ucloud.immutable-environment.v1`; its Docker config and layers stay intact.
 The normal `ImageRecord.manifest_digest` records the annotated image. There is
 no second image catalog. Independently authored components can be composed
 without copying their file contents into every combination. The regular image
-builder currently produces the base component; it does not reconstruct deleted
-lower-layer paths from a merged Docker image to infer toolkit whiteouts.
+builder can share groups of original Docker layer diffs, as described below;
+it never infers deleted paths from a merged image.
 
 Workers authenticate the producer and composition before exposing filesystem
 bytes. A cache miss reads a complete bounded chunk and checks its digest before
@@ -37,6 +38,59 @@ EROFS bundles use the existing schema 2 environment binding. Runtime boot
 fingerprints also distinguish the chosen adapter. An old Docker worker can
 still run the annotated OCI input using its original layers, but it cannot
 transparently restore an EROFS checkpoint with a different rootfs ABI.
+
+## Shared image layers (0.7.0)
+
+Whole-image publication now first tries to publish groups of the image's
+original OCI layer diffs as reusable EROFS components. Layers are grouped from
+bottom to top around a 64 MiB compressed-input threshold, with at most 24 groups
+(fewer when explicit toolkits need manifest slots). Completed lower groups stay
+stable across related images. Small trailing base layers may join task-specific
+layers; those bytes are not necessarily shared.
+
+A component's identity binds its ordered diff IDs, parent ChainID, mkfs version,
+compression and exclusions. The signed v2 schema is `ucloud-environment-erofs-v2`.
+The parent is essential because squashing may remove whiteouts that hide nothing
+below the group. Publication checks that the groups reconstruct exactly the
+source image's ordered diff IDs, ignoring empty-tar layers. Existing signed v1
+whole-image components still load. Unsplittable inputs and local conversion
+failures fall back to whole-image publication; registry transport failures remain
+errors rather than triggering more upload work.
+
+A `layer-*` tag indexes reusable components; the signed root remains authoritative.
+Reuse re-publishes the tag before a new root references it, and reference retention
+checks that refresh again before deleting a candidate. Shared components remain
+live while any protected root needs them. This protection is distinct from the
+registry's physical blob sweep and does not establish that sweep's concurrency
+safety.
+
+Workers mount each distinct component once. Images sharing a component share its
+NBD device, verified chunk cache and EROFS mount. Ordered relative lower paths
+keep OverlayFS mount options within the kernel's size limit. Fresh workers load
+1,024 NBD devices; an already loaded pool is not resized. Device exhaustion is a
+capacity error, and failed partial compositions release unused exports under
+exclusive component leases. Kernel dependencies retain components still used by
+other images. Operation metrics expose device totals and mounted composition use;
+they are not a reservation of every device needed by future images.
+
+The [Hetzner qualification](benchmarks/per-layer-erofs-2026-09-27/README.md)
+compares a base and two derived images with real Docker overlay2 trees, exercises
+a live guest on the layered image, and checks shared-component collection and
+zero-upload reuse. Run on a disposable Linux host with Docker overlay2,
+`busybox-static`, `erofs-utils`, EROFS/NBD modules and the qualified runsc:
+
+```sh
+sudo modprobe erofs
+# Only on a fresh qualification host with no existing NBD users:
+sudo modprobe nbd nbds_max=1024 max_part=0
+sudo PYTHONPATH=. python3 runtime/storage_native/qualify_environment.py \
+  --runsc /path/to/runsc --layers --output /tmp/environment-qualification.json
+```
+
+The scenario uses an in-process HTTP registry. Its layer-planning sizes come from
+local diff files rather than compressed registry tars. It qualifies filesystem
+correctness and component reuse, not production network throughput or high-load
+wake latency. It does not change memory checkpoint parking or restoration.
 
 ## Lifetime and ownership
 
@@ -186,7 +240,7 @@ and drain workers for rollback. A new Docker worker remains the supported rollba
 The installer creates `ucloud-environment-io.service` independently of agent and
 storage frontend restarts, sharing the host mount namespace. Reinitialization
 starts an existing backend without restarting it. A newly loaded NBD module gets
-512 dedicated devices (one per distinct mounted component); an already loaded
+1,024 dedicated devices (one per distinct mounted component); an already loaded
 module is never reconfigured. Component
 cache bytes consume at most half of existing reserved disk headroom, leaving the
 other half for safety rather than silently increasing writable admission.

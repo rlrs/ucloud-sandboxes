@@ -1,0 +1,21 @@
+{
+  "platform": "Hetzner CPX42, Linux 7.0.0-30-generic, Python 3.14.4",
+  "full_suite": {
+    "command": "python -m unittest discover -s tests",
+    "tests_run": 2444,
+    "skipped": 348,
+    "seconds": 161.886,
+    "passed": true
+  },
+  "focused_suite": {
+    "tests_run": 81,
+    "skipped": 1,
+    "passed": true
+  },
+  "late_failure_injection": {
+    "exit_code": 1,
+    "reported_passed": false,
+    "cleanup_errors": []
+  },
+  "fixture_setup": "Local SDK source supplied for script imports; disposable VM /tmp tmpfs enlarged from 7.6 GiB to 16 GiB to accommodate an existing assembly test with an 8 GiB physical-disk budget. No production configuration changes."
+}

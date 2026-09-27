@@ -489,6 +489,29 @@ class LayerPublicationTests(unittest.TestCase):
         self.assertIsInstance(raised.exception, DirectRegistryCapacityUnavailable)
 
 
+    def test_partial_device_exhaustion_releases_unused_exports(self):
+        _annotated, _base, environment = self.publish("base")
+        active = set()
+
+        def ensure(component):
+            if component not in active and len(active) == 2:
+                raise RuntimeError(NO_BLOCK_DEVICE)
+            active.add(component)
+            return self.root / "components" / component[7:]
+
+        def drop(component):
+            active.discard(component)
+            return True
+
+        store = EnvironmentRootfsStore(self.root / "store", self.registry,
+            SimpleNamespace(ensure=ensure, drop=drop), block_devices=2,
+            runner=SimpleNamespace(run=lambda *args, **kwargs: SimpleNamespace(returncode=1)))
+        (store.images / ("a" * 64)).mkdir()
+        with self.assertRaises(EnvironmentDeviceCapacityError):
+            store._mount(digest("a"), environment)
+        self.assertEqual(active, set())
+
+
 class RelativeLowerDependencyTests(unittest.TestCase):
     def test_relative_lowers_resolve_against_the_components_directory(self):
         with TemporaryDirectory() as raw:

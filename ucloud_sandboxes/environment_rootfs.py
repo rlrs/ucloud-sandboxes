@@ -9,6 +9,7 @@ from collections import OrderedDict
 from concurrent.futures import Future
 import fcntl
 import json
+import logging
 import os
 from pathlib import Path
 import shutil
@@ -26,6 +27,7 @@ from .image_rootfs import (
 )
 from .managed_registry import manifest_digest_from_image_ref, registry_host_from_image_ref, registry_repository_tag_from_image_ref
 
+_LOG = logging.getLogger(__name__)
 
 class EnvironmentDeviceCapacityError(DirectRegistryCapacityUnavailable):
     """Every environment block device serves another component."""
@@ -94,10 +96,25 @@ class EnvironmentRootfsStore:
 
     def _mount(self, image_id, environment):
         # Hold every component against GC until OverlayFS takes kernel refs.
-        with ExitStack() as leases:
-            for digest in sorted(set(environment.components)):
-                leases.enter_context(self._lease(digest))
-            return self._mount_components(image_id, environment)
+        components = sorted(set(environment.components))
+        try:
+            with ExitStack() as leases:
+                for digest in components:
+                    leases.enter_context(self._lease(digest))
+                return self._mount_components(image_id, environment)
+        except EnvironmentDeviceCapacityError:
+            # A many-layer image can exhaust the pool halfway through mounting.
+            # Release unused exports before placement retries elsewhere, or the
+            # failed admission itself keeps the node full. Upgrade to exclusive
+            # leases only after releasing the shared ones; concurrent composers
+            # finish first, and the backend retains their kernel dependencies.
+            for digest in components:
+                try:
+                    with self._lease(digest, exclusive=True):
+                        self.backend.drop(digest)
+                except Exception:
+                    _LOG.warning("could not release component after device exhaustion: %s", digest, exc_info=True)
+            raise
 
     def _ensure(self, digest):
         try:

@@ -21,6 +21,7 @@ import tempfile
 from threading import Thread
 import time
 from urllib.parse import unquote
+from types import SimpleNamespace
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
@@ -40,12 +41,24 @@ from ucloud_sandboxes.environment_config import configured_environment_registry
 from ucloud_sandboxes.environment_manifest import EnvironmentManifest
 from ucloud_sandboxes.environment_rootfs import EnvironmentRootfsStore
 from ucloud_sandboxes.image_rootfs import OverlayRootfsManager
+from ucloud_sandboxes.managed_registry import RegistryRequestError
 
 
 class FixtureRegistry:
     def __init__(self):
         self.blobs, self.manifests, self.uploads = {}, {}, {}
         self.downloaded_bytes = 0
+        self.layer_sizes = {}
+
+    def upload_blob_file(self, repository, path, digest, size):
+        payload = Path(path).read_bytes()
+        if len(payload) != size or content_digest(payload) != digest:
+            raise ValueError("fixture upload digest/size mismatch")
+        self.blobs[digest] = payload
+        return digest
+
+    def manifest_layers(self, repository, reference):
+        return SimpleNamespace(layers=[SimpleNamespace(size=size) for size in self.layer_sizes[reference]])
 
     def blob_exists(self, repository, digest):
         return digest in self.blobs
@@ -69,7 +82,10 @@ class FixtureRegistry:
         self.manifests[content_digest(payload)] = self.manifests[tag] = payload
 
     def manifest_document(self, repository, digest):
-        return json.loads(self.manifests[digest]), {}
+        try:
+            return json.loads(self.manifests[digest]), {}
+        except KeyError:
+            raise RegistryRequestError(404, "GET", digest, "MANIFEST_UNKNOWN") from None
 
     def blob_bytes(self, repository, digest, *, max_bytes):
         return self.blobs[digest][: max_bytes + 1]
@@ -122,6 +138,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runsc", type=Path)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--layers", action="store_true", help="Also qualify shared layers against Docker overlay2")
     parser.add_argument("--frontend", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.frontend:
@@ -247,9 +264,22 @@ def main():
                     payload = (fixture.blobs if kind == "blobs" else fixture.manifests)[
                         identity
                     ]
+                    status, content_range = 200, None
+                    if kind == "blobs" and self.headers.get("Range"):
+                        import re
+                        match = re.fullmatch(r"bytes=(\d+)-(\d+)", self.headers["Range"])
+                        if not match or not 0 <= int(match[1]) <= int(match[2]) < len(payload):
+                            self.send_error(416)
+                            return
+                        start, end = map(int, match.groups())
+                        content_range = f"bytes {start}-{end}/{len(payload)}"
+                        payload = payload[start:end + 1]
+                        status = 206
                     if kind == "blobs":
                         fixture.downloaded_bytes += len(payload)
-                    self.send_response(200)
+                    self.send_response(status)
+                    if content_range:
+                        self.send_header("Content-Range", content_range)
                     self.send_header("Content-Length", str(len(payload)))
                     self.send_header(
                         "Content-Type",
@@ -411,7 +441,6 @@ def main():
         (merged / "etc/hello").write_text("copy-up\n")
         assert os.getxattr(merged / "etc/hello", "user.fixture") == b"preserved"
         result.update(
-            passed=True,
             image_bytes=total_bytes,
             http_blob_bytes=fixture.downloaded_bytes,
             frontend_process_replacement=True,
@@ -424,6 +453,9 @@ def main():
             retained_lower_gc_fence=True,
         )
         assert fixture.downloaded_bytes < total_bytes // 8
+        if args.layers:
+            from qualify_environment_layers import qualify_layers
+            result["layers"] = qualify_layers(root, source, fixture, registry, key, client, url, runsc, config)
         # Deliberate artifact-backend loss after the guest exits. A fresh
         # process must fence retained mounts, never attach a replacement NBD
         # underneath an old filesystem and pretend it recovered safely.
@@ -437,7 +469,9 @@ def main():
             and "lost with retained mounts" in replacement.stderr
         )
         result["backend_loss_fenced"] = True
+        result["passed"] = True
     except Exception as exc:
+        result["passed"] = False
         result["error"] = repr(exc)
         result["debug_tail"] = {
             path.name: path.read_text(errors="replace")[-5000:]

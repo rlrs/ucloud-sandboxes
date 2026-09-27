@@ -1,0 +1,33 @@
+{
+  "passed": true,
+  "scope": "local fixture OCI HTTP, real Linux NBD/EROFS and live gVisor",
+  "runsc_sha256": "203d43a11e05fc836863aa40afee89b70b93403fcb73647c60c4df29e84b2f35",
+  "cold_materialize_seconds": 0.4058141539999838,
+  "frontend_replacement_seconds": 0.25248766199996453,
+  "frontend_replacement_blob_bytes": 0,
+  "image_bytes": 69312512,
+  "http_blob_bytes": 2391363,
+  "frontend_process_replacement": true,
+  "live_guest": true,
+  "whiteout": true,
+  "opaque_directory": true,
+  "hardlinks": true,
+  "xattrs": true,
+  "writable_copyup": true,
+  "retained_lower_gc_fence": true,
+  "layers": {
+    "passed": true,
+    "images": 3,
+    "docker_reference_trees_match": true,
+    "layered_live_guest_and_copyup": true,
+    "shared_base_gc_fenced": true,
+    "republication_uploads_no_blobs": true,
+    "component_references": 5,
+    "unique_components": 3,
+    "seconds": 6.079186481000022,
+    "component_image_bytes": 68784128,
+    "without_sharing_image_bytes": 206336000
+  },
+  "backend_loss_fenced": true,
+  "cleanup_errors": []
+}

@@ -145,8 +145,8 @@ tags remain supported for external and administrative flows.
 ## Cleanup
 
 The all-in-one deployment installs `ucloud-sandbox-registry-prune.timer`.
-By default it runs daily, deletes tags whose last recorded sandbox use is older
-than 30 days, and keeps no per-repository floor. The zero keep floor is
+By default it runs hourly, deletes image tags whose last recorded sandbox use
+is older than 30 days, and keeps no per-repository floor. The zero keep floor is
 deliberate: many generated build repositories have only one tag, so a keep
 floor would prevent those images from ever becoming eligible for cleanup.
 
@@ -165,7 +165,7 @@ and digest-bearing leases are required.
 Every resolved managed digest also has a deterministic internal
 `ucloud-digest-sha256-<hex>` tag. The gateway creates it by copying the exact
 manifest media type and bytes under that name. This keeps a pinned digest
-reachable by offline Distribution garbage collection after its user-facing tag
+reachable by the blob sweep and Distribution garbage collection after its user-facing tag
 moves. Internal tags are hidden from registry summaries, and retention floors
 count distinct digests rather than tag aliases.
 
@@ -219,15 +219,101 @@ are already missing. This matters for SDK clients because `list_images()` is
 used as the build cache signal; stale metadata must not make a deleted image
 look reusable.
 
-Prune and offline garbage collection run on independent timers and share a
-non-blocking maintenance fence, so they cannot mutate the registry at the same
-time. The GC helper holds that fence while it stops the registry, runs Docker
-Distribution garbage collection with `--delete-untagged`, and starts the
-registry again in a failure-safe cleanup path. GC and the live registry use the
-same manifest-derived directory on the persistent project mount.
+Prune, blob sweep, and pressure cleanup share one maintenance lock
+(`/run/lock/ucloud-sandbox-registry-maintenance.lock`). Each waits up to 30
+minutes for the others rather than failing.
 
 Tune `registry_retention_days` and `registry_keep_per_repository` in
 `deployment.json`, then converge the deployment.
+
+### Reference retention
+
+The age rules above cover image repositories only. Two repositories are
+retained by reference instead (`ucloud_sandboxes/registry_retention.py`):
+
+- the snapshot repository (`sandbox.storage_native_repository`, with the
+  `registry` snapshot store): a manifest is live while a sandbox route, a
+  worker-reported storage dependency, or an active migration names its tag or
+  digest. A woken sandbox can still read layers of the snapshot it restored
+  from, so snapshot retention is skipped while any sandbox has not reported its
+  storage dependencies;
+- the immutable environment repository (`immutable_environments.repository`):
+  a root is live while a tagged image in another repository carries its
+  `org.ucloud.immutable-environment.v1` annotation, and a component while a live
+  root lists it as base, workspace, or toolkit.
+
+Anything else is deleted once its newest known registry time (the filesystem
+tag link mtime, the image config time, or the last recorded use) is older than
+`registry_reference_grace_seconds` (1 hour). A tag with no known time is kept.
+Leases fence every deletion as in age pruning, and liveness is recomputed just
+before deleting. The prune output reports, per repository, how many manifests
+it would delete and why the rest stayed (`live`, `grace`, `leased`,
+`age_unknown`), plus layer bytes for environments.
+
+### Blob sweep
+
+Deleting a manifest frees no space until its blobs go. For the filesystem store,
+`ucloud-sandbox-registry-gc.service` (every six hours, and from pressure
+cleanup) runs an online sweep (`ucloud_sandboxes/registry_sweep.py`) while the
+registry keeps serving reads and writes. It marks every blob that any
+repository's manifest revisions reach, including index children, and deletes
+unreachable blobs whose data and repository links are older than
+`registry_blob_grace_seconds` (2 hours, longer than any push). It also removes
+repository layer links that none of that repository's manifests use.
+
+A push can make an old blob reachable again only through a manifest PUT, which
+Distribution verifies against the repository's layer link and the blob data. The
+sweep therefore unlinks a batch, renames its blob directories aside, waits two
+seconds, and rescans links and manifests written since the sweep started. A hit
+restores the blob and its links; otherwise the renamed directories are deleted.
+A PUT that races the unlink fails with `BLOB_UNKNOWN` and is retried by the
+pusher; it cannot commit a manifest that points at a deleted blob. Because
+Distribution's in-memory blob descriptor cache would hide such deletions, the
+filesystem registry runs with `REGISTRY_STORAGE_CACHE_BLOBDESCRIPTOR=none`. A
+journal next to the data undoes a batch interrupted by a crash.
+
+S3 registry stores keep Distribution's offline garbage collection, which stops
+the registry. It remains available for the filesystem store as a manual tool:
+
+```bash
+sudo /work/ucloud-sandboxes/gateway-venv/bin/python -m ucloud_sandboxes.systemd \
+  registry-gc --offline --config /etc/ucloud-sandboxes/deployment.json
+```
+
+### Disk pressure
+
+For the filesystem store, the gateway, autoscaler, and maintenance units
+measure the registry volume with `statvfs` (`ucloud_sandboxes/registry_disk.py`):
+
+- at `registry_disk_cleanup_percent` (70 %), `ucloud-sandbox-registry-pressure.timer`
+  (every minute) prunes by age and reference and sweeps blobs, at most once per
+  `registry_disk_gc_interval_seconds` (30 minutes) unless eviction follows. If
+  usage stays above the threshold, it evicts managed images (`ucloud-managed/*`)
+  least recently used first until the projected usage reaches
+  `registry_disk_target_percent` (60 %), deletes the environments only they
+  used, and sweeps again. An image is never evicted while leased, while a route,
+  prepared capacity, or warmup names it, or within the reference grace of its
+  last push or use. The projection counts a shared layer or environment
+  component only when its last owner goes;
+- at `registry_disk_refuse_percent` (90 %), the gateway answers image builds and
+  external image imports with 503 `registry_disk_pressure`, `retryable: true`
+  and `Retry-After: 60` before dispatching to a builder, so no push meets a
+  full disk.
+
+Eviction removes the gateway image records of evicted images and remembers
+their ids. An external image is then imported again on its next create. A
+create naming an evicted managed build fails with 400 `image_evicted` and
+`rebuild_required: true` instead of a registry manifest miss; building it again
+restores it. Gateways drop their cached manifest resolutions after each
+eviction.
+
+Snapshot publication after a park is not gated: workers publish straight to the
+registry, and a failed publication leaves the park local and is retried later.
+
+Usage, thresholds, and the last prune and sweep appear under `registry.disk` in
+`/v1/metrics` and the dashboard's registry page, and as `registry_disk` in each
+autoscaler cycle event. The autoscaler logs a warning while usage is above the
+cleanup threshold.
 
 For manual inspection, the registry prune command can plan deletions by
 last-used age, repository keep floor, or both:
@@ -245,8 +331,14 @@ ucloud-sandboxes registry-prune \
   --execute
 ```
 
-Run GC manually after an out-of-band manifest deletion:
+Add `--evict-lru` to also plan (or, with `--execute`, perform) the
+least-recently-used eviction that pressure cleanup runs above the cleanup
+threshold.
+
+Sweep blobs on demand, for example after an out-of-band manifest deletion, or
+run pressure cleanup at once:
 
 ```bash
 sudo systemctl start ucloud-sandbox-registry-gc.service
+sudo systemctl start ucloud-sandbox-registry-pressure.service
 ```

@@ -230,6 +230,8 @@ for unit in \
   ucloud-sandbox-placement.service \
   ucloud-sandbox-registry-gc.service \
   ucloud-sandbox-registry-gc.timer \
+  ucloud-sandbox-registry-pressure.service \
+  ucloud-sandbox-registry-pressure.timer \
   ucloud-sandbox-snapshot-gc.service \
   ucloud-sandbox-snapshot-gc.timer \
   ucloud-sandbox-registry-prune.service \
@@ -242,14 +244,16 @@ done
 install -d -m 0755 \
   /etc/systemd/system/ucloud-sandbox-autoscaler.service.d \
   /etc/systemd/system/ucloud-sandbox-registry.service.d \
-  /etc/systemd/system/ucloud-sandbox-registry-gc.service.d
+  /etc/systemd/system/ucloud-sandbox-registry-gc.service.d \
+  /etc/systemd/system/ucloud-sandbox-registry-pressure.service.d
 cat >/etc/systemd/system/ucloud-sandbox-autoscaler.service.d/hetzner.conf <<'EOF'
 [Service]
 EnvironmentFile=/etc/ucloud-sandboxes/hetzner.env
 EOF
 for unit in \
   ucloud-sandbox-registry.service \
-  ucloud-sandbox-registry-gc.service; do
+  ucloud-sandbox-registry-gc.service \
+  ucloud-sandbox-registry-pressure.service; do
   if [[ "$registry_store_kind" == filesystem ]]; then
     cat >"/etc/systemd/system/$unit.d/volume.conf" <<'EOF'
 [Unit]

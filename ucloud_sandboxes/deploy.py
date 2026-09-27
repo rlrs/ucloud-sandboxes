@@ -38,6 +38,8 @@ SYSTEMD_UNIT_NAMES = (
     "ucloud-sandbox-registry-prune.timer",
     "ucloud-sandbox-registry-gc.service",
     "ucloud-sandbox-registry-gc.timer",
+    "ucloud-sandbox-registry-pressure.service",
+    "ucloud-sandbox-registry-pressure.timer",
     "ucloud-sandbox-snapshot-gc.service",
     "ucloud-sandbox-snapshot-gc.timer",
     "ucloud-sandbox-autoscaler.service",
@@ -52,6 +54,7 @@ PERSISTENT_STATE_SYSTEMD_UNITS = (
 REGISTRY_STORAGE_SYSTEMD_UNITS = (
     "ucloud-sandbox-registry.service",
     "ucloud-sandbox-registry-gc.service",
+    "ucloud-sandbox-registry-pressure.service",
 )
 # The bundle is resolved against an empty dpkg status so it remains usable on a
 # freshly booted image. APT still treats some Essential packages as ambient.
@@ -771,6 +774,7 @@ def render_remote_deploy_script(
         "for unit in \\",
         "  ucloud-sandbox-registry-prune.timer \\",
         "  ucloud-sandbox-registry-gc.timer \\",
+        "  ucloud-sandbox-registry-pressure.timer \\",
         "  ucloud-sandbox-snapshot-gc.timer \\",
         "  ucloud-sandbox-autoscaler.service \\",
         "  ucloud-sandbox-gateway.service \\",
@@ -778,6 +782,7 @@ def render_remote_deploy_script(
         "  ucloud-sandbox-relay.service \\",
         "  ucloud-sandbox-registry-prune.service \\",
         "  ucloud-sandbox-registry-gc.service \\",
+        "  ucloud-sandbox-registry-pressure.service \\",
         "  ucloud-sandbox-snapshot-gc.service; do",
         '  if sudo systemctl cat "$unit" >/dev/null 2>&1; then',
         '    sudo systemctl stop "$unit"',

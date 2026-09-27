@@ -27,6 +27,13 @@ import urllib3
 from urllib3.exceptions import HTTPError as Urllib3HTTPError
 from urllib3.exceptions import EmptyPoolError
 
+from .registry_disk import (
+    REGISTRY_DISK_PRESSURE_ERROR_CODE,
+    REGISTRY_DISK_RETRY_AFTER_SECONDS,
+    RegistryDiskMonitor,
+    RegistryDiskUsage,
+    registry_disk_pressure_payload,
+)
 from .image_import import (
     IMPORT_RETRY_AFTER_SECONDS,
     ImageImportSubmitter,
@@ -252,6 +259,7 @@ REGISTRY_LAYER_METADATA_CACHE_MAX_ENTRIES = 4096
 REGISTRY_MANIFEST_CACHE_MAX_ENTRIES = 4096
 REGISTRY_IMMUTABLE_MANIFEST_CACHE_TTL_SECONDS = 5 * 60.0
 REGISTRY_MUTABLE_MANIFEST_CACHE_TTL_SECONDS = 5.0
+IMAGE_EVICTED_ERROR_CODE = "image_evicted"
 IMAGE_INVENTORY_CACHE_TTL_SECONDS = 5.0
 NODE_HTTP_POOL_CONNECTIONS_PER_ORIGIN = 128
 NODE_HTTP_POOL_ORIGINS = 64
@@ -561,6 +569,10 @@ class RegistryManifestResolutionCache:
             self._records.move_to_end(key)
             return record.digest
 
+    def clear(self) -> None:
+        with self._lock:
+            self._records.clear()
+
     def put(self, repository: str, reference: str, digest: str) -> None:
         normalized = normalize_manifest_digest(digest)
         if not normalized:
@@ -858,6 +870,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     registry_status_cache_at: float
     registry_status_lock: RLock
     registry_manifest_cache: RegistryManifestResolutionCache | None = None
+    registry_eviction_epoch: str = ""
     image_build_owners: OrderedDict[str, tuple[str, str, str]] = OrderedDict()
     image_build_owners_lock = RLock()
     image_inventory_cache = ImageInventoryCache(
@@ -870,6 +883,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     fleet_response_future: Future | None
     registry_layer_cache: RegistryLayerMetadataCache | None
     registry_usage_store: RegistryUsageStore | None
+    registry_disk_monitor: RegistryDiskMonitor | None = None
     environment_dependency_resolver: Any = None
     sandbox_create_limiter: FairCapacity | None
     upload_memory_limiter: FairCapacity
@@ -2994,6 +3008,12 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         return builds
 
     def _registry_status(self) -> dict[str, Any]:
+        result = self._registry_catalog_status()
+        monitor = self.registry_disk_monitor
+        result["disk"] = monitor.status() if monitor is not None else None
+        return result
+
+    def _registry_catalog_status(self) -> dict[str, Any]:
         if not self.registry_url:
             return {
                 "configured": False,
@@ -3088,7 +3108,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             return existing
         repository, image_tag = coordinates
         reference = existing or image_tag
-        cache = self.registry_manifest_cache
+        cache = self._registry_manifest_cache_current()
         if cache is not None:
             cached = cache.get(repository, reference)
             if cached:
@@ -4142,6 +4162,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         reserved_job_id = ""
         try:
             body = self._read_raw_body(max_bytes=self.max_json_body_bytes)
+            if self._write_registry_disk_pressure("image builds"):
+                return
             raw = json.loads(body.decode("utf-8")) if body else None
             if not isinstance(raw, dict):
                 raise ValueError("image build payload must be a JSON object")
@@ -6094,6 +6116,15 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         )
         if resolution_error is None and manifest_digest_from_image_ref(resolved):
             return resolved, None
+        pressure = self._registry_disk_refusal()
+        if pressure is not None:
+            # The import would push its layers and environment into a full
+            # registry; the create retries once retention has freed space.
+            return image, (
+                registry_disk_pressure_payload(pressure, action="image imports")
+                | {"image": image, "import_id": import_id}
+                if wait else None
+            )
         failure = self._image_import_failure(import_id)
         submitter.ensure_submitted(import_id, image)
         if not wait:
@@ -6131,14 +6162,75 @@ class ControlPlaneHandler(BuildContextHttpHandler):
 
     def _write_image_import_error(self, payload: dict[str, Any]) -> None:
         retryable = payload.get("retryable") is True
+        retry_after = (
+            REGISTRY_DISK_RETRY_AFTER_SECONDS
+            if payload.get("error_code") == REGISTRY_DISK_PRESSURE_ERROR_CODE
+            else IMPORT_RETRY_AFTER_SECONDS
+        )
         self._write_json(
             payload,
             status=HTTPStatus.SERVICE_UNAVAILABLE if retryable else HTTPStatus.BAD_REQUEST,
             headers=(
-                {"Retry-After": str(IMPORT_RETRY_AFTER_SECONDS), "X-UCloud-Sandbox-Retryable": "true"}
+                {"Retry-After": str(retry_after), "X-UCloud-Sandbox-Retryable": "true"}
                 if retryable else None
             ),
         )
+
+    def _registry_manifest_cache_current(self) -> RegistryManifestResolutionCache | None:
+        """The manifest cache, emptied after each disk-pressure eviction.
+
+        Eviction runs in the root maintenance unit; a cached resolution would
+        otherwise keep pinning creates to a deleted manifest for minutes.
+        """
+
+        cache = self.registry_manifest_cache
+        monitor = self.registry_disk_monitor
+        if cache is None or monitor is None:
+            return cache
+        epoch = str(monitor.maintenance_state().get("last_eviction_at") or "")
+        handler_cls = type(self)
+        if epoch != handler_cls.registry_eviction_epoch:
+            cache.clear()
+            handler_cls.registry_eviction_epoch = epoch
+        return cache
+
+    def _evicted_image_error(self, image: str) -> dict[str, Any] | None:
+        monitor = self.registry_disk_monitor
+        if monitor is None or not _looks_like_image_id_reference(image):
+            return None
+        record = monitor.evicted_image(image)
+        if record is None:
+            return None
+        return {
+            "error": (
+                f"image {image} was evicted from the registry under disk "
+                f"pressure at {record.get('evicted_at')}; build it again"
+            ),
+            "error_code": IMAGE_EVICTED_ERROR_CODE,
+            "retryable": False,
+            "rebuild_required": True,
+            "image_id": image,
+        }
+
+    def _registry_disk_refusal(self) -> RegistryDiskUsage | None:
+        monitor = self.registry_disk_monitor
+        return monitor.refusal() if monitor is not None else None
+
+    def _write_registry_disk_pressure(self, action: str) -> bool:
+        """Refuse a registry write before dispatch; True when refused."""
+
+        pressure = self._registry_disk_refusal()
+        if pressure is None:
+            return False
+        self._write_json(
+            registry_disk_pressure_payload(pressure, action=action),
+            status=HTTPStatus.SERVICE_UNAVAILABLE,
+            headers={
+                "Retry-After": str(REGISTRY_DISK_RETRY_AFTER_SECONDS),
+                "X-UCloud-Sandbox-Retryable": "true",
+            },
+        )
+        return True
 
     def _write_image_resolution_error(self, payload: dict[str, Any]) -> None:
         transient = payload.get("error_code") in TRANSIENT_IMAGE_RESOLUTION_ERROR_CODES
@@ -6228,6 +6320,9 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             image_id=image,
         )
         if not matches:
+            evicted = self._evicted_image_error(image)
+            if evicted is not None:
+                return image, evicted
             if reference_kind == "name":
                 if not inventory.complete:
                     return image, _incomplete_image_inventory_error(image)
@@ -7247,6 +7342,7 @@ def build_server(
     registry_usage_file: Path | None = None,
     environment_registry: object | None = None,
     import_external_images: bool = False,
+    registry_disk_monitor: RegistryDiskMonitor | None = None,
     max_concurrent_sandbox_creates: int = DEFAULT_MAX_CONCURRENT_SANDBOX_CREATES,
     create_target_concurrency_per_node: int = (
         ScalePolicy().create_target_concurrency_per_node
@@ -7390,6 +7486,7 @@ def build_server(
         else None
     )
     BoundHandler.registry_usage_store = registry_usage_store
+    BoundHandler.registry_disk_monitor = registry_disk_monitor
     loopback = ["127.0.0.1" if host in {"", "0.0.0.0", "::"} else host, port]
     BoundHandler.image_import_submitter = (
         ImageImportSubmitter(_loopback_image_import(

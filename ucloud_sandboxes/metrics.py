@@ -776,6 +776,7 @@ def record_autoscaler_cycle(
             ),
             "builder_actions": builder_decision.get("actions", []),
             "builder_reasons": builder_decision.get("reasons", []),
+            "registry_disk": result.get("registryDisk"),
         },
     )
 

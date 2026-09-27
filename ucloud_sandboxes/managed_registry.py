@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import astuple, dataclass, field
 from datetime import datetime, timedelta, timezone
 import fcntl
@@ -1223,8 +1223,13 @@ def registry_prune_plan(
     active_leases: Mapping[tuple[str, str, str], RegistryImageLease] | None = None,
     usage_generation: int | None = None,
     now: datetime | None = None,
+    exclude_repositories: Iterable[str] = (),
 ) -> dict[str, Any]:
-    records = list_registry_tags(client, repository_prefix=repository_prefix)
+    records = list_registry_tags(
+        client,
+        repository_prefix=repository_prefix,
+        exclude_repositories=exclude_repositories,
+    )
     records = apply_registry_usage(records, usage_records)
     use_last_used_at = usage_records is not None
     candidates = select_prune_candidates(
@@ -1310,26 +1315,56 @@ def registry_maintenance_lock(
     path: Path,
     *,
     blocking: bool = True,
+    timeout_seconds: float | None = None,
+    poll_seconds: float = 1.0,
+    sleep: Callable[[float], None] = time.sleep,
+    clock: Callable[[], float] = time.monotonic,
 ) -> Iterator[None]:
-    """Fence prune/GC processes that share a maintenance lock path."""
+    """Fence prune/GC processes that share a maintenance lock path.
 
-    try:
-        with _registry_file_lock(path, blocking=blocking):
-            yield
-    except BlockingIOError as exc:
-        raise RegistryMaintenanceBusy(
-            f"registry maintenance is already active: {path}"
-        ) from exc
+    With ``timeout_seconds`` the caller waits a bounded time for a running
+    prune or GC to finish instead of failing at once or waiting forever.
+    """
+
+    if timeout_seconds is None:
+        try:
+            with _registry_file_lock(path, blocking=blocking):
+                yield
+        except BlockingIOError as exc:
+            raise RegistryMaintenanceBusy(
+                f"registry maintenance is already active: {path}"
+            ) from exc
+        return
+    deadline = clock() + max(0.0, timeout_seconds)
+    with ExitStack() as stack:
+        while True:
+            try:
+                stack.enter_context(_registry_file_lock(path, blocking=False))
+                break
+            except BlockingIOError as exc:
+                if clock() >= deadline:
+                    raise RegistryMaintenanceBusy(
+                        "registry maintenance stayed active for "
+                        f"{timeout_seconds:g}s: {path}"
+                    ) from exc
+                sleep(max(0.0, min(poll_seconds, deadline - clock())))
+        yield
 
 
 def list_registry_tags(
     client: RegistryClient,
     *,
     repository_prefix: str = "",
+    exclude_repositories: Iterable[str] = (),
 ) -> list[RegistryTag]:
+    """Age-retention inventory; reference-retained repositories are excluded."""
+
+    excluded = set(exclude_repositories)
     records: list[RegistryTag] = []
     for repository in client.catalog():
         if repository_prefix and not repository.startswith(repository_prefix):
+            continue
+        if repository in excluded:
             continue
         try:
             tags = client.tags(repository)

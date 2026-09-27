@@ -640,6 +640,10 @@ DASHBOARD_HTML = """<!doctype html>
             <span>Coverage</span>
             <strong id="registryPageCoverageValue">-</strong>
           </div>
+          <div class="stat-box">
+            <span>Disk</span>
+            <strong id="registryPageDiskValue">-</strong>
+          </div>
         </div>
       </section>
 
@@ -5039,6 +5043,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "registryPageTagsValue",
     "registryPageVisibleTagsValue",
     "registryPageCoverageValue",
+    "registryPageDiskValue",
     "registryActiveBuildsValue",
     "registryFailedBuildsValue",
     "registryPendingBuildsValue",
@@ -6600,6 +6605,12 @@ function renderRegistryPage(snapshot) {
   const scanned = asNumber(registry.scanned_repository_count);
   const total = asNumber(registry.repository_count);
   setText("registryPageCoverageValue", configured && total > 0 ? `${formatInteger(scanned)}/${formatInteger(total)}` : "-");
+  const disk = registry.disk && typeof registry.disk === "object" ? registry.disk : null;
+  const diskPercent = disk ? nullableNumber(disk.used_percent) : null;
+  setText("registryPageDiskValue", diskPercent === null ? "-" : `${formatNumber(diskPercent)}%`);
+  const diskDetail = disk && disk.state && disk.state !== "ok" && diskPercent !== null
+    ? `; disk ${formatNumber(diskPercent)}% full, ${disk.state === "refusing" ? `image builds refused above ${formatNumber(disk.refuse_percent)}%` : `cleanup above ${formatNumber(disk.cleanup_percent)}%`}`
+    : "";
 
   if (!configured) {
     setText("registryPageHealthDetail", "Configure the deployment registry to show registry health.");
@@ -6627,7 +6638,7 @@ function renderRegistryPage(snapshot) {
   const partial = unavailable > 0 ? `, ${formatInteger(unavailable)} missing tag lists` : "";
   setText(
     "registryPageHealthDetail",
-    `${formatInteger(scanned)} repositories scanned, ${formatInteger(registry.scanned_tag_count)} tags observed${truncated}${partial}`
+    `${formatInteger(scanned)} repositories scanned, ${formatInteger(registry.scanned_tag_count)} tags observed${truncated}${partial}${diskDetail}`
   );
 
   const filteredRepos = repos.filter((repo) => registryRepoMatches(repo, buildByTag, filter, query));

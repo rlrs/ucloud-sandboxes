@@ -603,6 +603,23 @@ filesystem fallback evidence is recorded in
 The old Volume tree remains unchanged as a rollback source; it is no longer on
 the live registry data path.
 
+### Registry retention and disk pressure
+
+The registry has since moved back to a filesystem Volume at
+`/mnt/ucloud-registry` for EROFS chunk read latency (see
+`scripts/hetzner_prod/make_config.py`). On 2026-09-27 the 500 GB Volume filled
+during a build-heavy run: 276 GB of environments, 202 GB in 22,499 snapshot
+tags, and per-task image builds adding about 7 GB per minute. Pushes then failed
+with HTTP 500. Age retention had deleted nothing, since everything was younger
+than 30 days, and the daily prune failed on the maintenance lock.
+
+Retention now works by reference for snapshots and environments, runs hourly,
+and waits for the lock. Blobs are swept online without stopping or freezing the
+registry. Above 70 % Volume usage a per-minute unit prunes, evicts
+least-recently-used task images down to 60 %, and sweeps. Above 90 % the gateway
+refuses builds and imports with a retryable 503. The full behaviour and its race
+analysis are in [managed-registry.md](managed-registry.md#reference-retention).
+
 ## Worker-local active set and remote parked set
 
 The worker now has two materially different ownership states:

@@ -1,9 +1,9 @@
 [Unit]
-Description=Prune expired UCloud sandbox private registry tags
-Requires=ucloud-sandbox-registry.service
+Description=Prune UCloud sandbox private registry tags by age and reference
+Wants=ucloud-sandbox-registry.service
 After=ucloud-sandbox-registry.service
-Conflicts=ucloud-sandbox-registry-gc.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/flock --exclusive --nonblock /run/lock/ucloud-sandbox-registry-maintenance.lock /work/ucloud-sandboxes/gateway-venv/bin/ucloud-sandboxes registry-prune --config /etc/ucloud-sandboxes/deployment.json --execute
+# Wait for a running sweep or pressure cleanup instead of failing the run.
+ExecStart=/usr/bin/flock --exclusive --wait 1800 /run/lock/ucloud-sandbox-registry-maintenance.lock /work/ucloud-sandboxes/gateway-venv/bin/ucloud-sandboxes registry-prune --config /etc/ucloud-sandboxes/deployment.json --execute

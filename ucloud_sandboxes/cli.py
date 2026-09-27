@@ -100,6 +100,34 @@ from .managed_registry import (
     registry_repository_tag_from_image_ref,
     registry_prune_plan,
     select_prune_candidates,
+    RegistryTag,
+)
+from .registry_disk import (
+    RegistryDiskMonitor,
+    RegistryDiskUsage,
+    record_image_evictions,
+    record_registry_prune,
+    registry_disk_usage,
+)
+from .registry_retention import (
+    ENVIRONMENT_REASON,
+    SNAPSHOT_REASON,
+    EnvironmentBlobIndex,
+    ImageEnvironmentIndex,
+    ManagedImage,
+    ReferenceRetentionDecision,
+    RegistryTagClock,
+    environment_live_identities,
+    execute_reference_prune,
+    image_is_referenced,
+    list_repository_tags,
+    managed_images,
+    manifest_blob_sizes,
+    manifest_layer_bytes,
+    routing_image_identities,
+    select_lru_evictions,
+    select_unreferenced,
+    snapshot_live_identities,
 )
 from .metrics import (
     MetricsStore,
@@ -639,6 +667,14 @@ def build_parser() -> argparse.ArgumentParser:
     add_config_args(registry_prune)
     registry_prune.add_argument("--repository-prefix", default="")
     registry_prune.add_argument("--execute", action="store_true")
+    registry_prune.add_argument(
+        "--evict-lru",
+        action="store_true",
+        help=(
+            "Above registry_disk_cleanup_percent, also evict least-recently-used "
+            "managed images down to registry_disk_target_percent."
+        ),
+    )
     registry_prune.set_defaults(func=cmd_registry_prune)
 
     submit_vm = subparsers.add_parser(
@@ -1151,6 +1187,7 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
             config.immutable_environments is not None
             and config.immutable_environments.worker_enabled
         ),
+        registry_disk_monitor=RegistryDiskMonitor.from_config(config),
         max_concurrent_sandbox_creates=(config.gateway_max_concurrent_sandbox_creates),
         create_target_concurrency_per_node=(
             config.policy.create_target_concurrency_per_node
@@ -1195,6 +1232,8 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
 
 
 _GATEWAY_REPLICA_ENV = "UCLOUD_GATEWAY_REPLICA"
+# Repeat an unchanged registry disk warning about once per minute at 5 s.
+REGISTRY_DISK_WARNING_CYCLES = 12
 
 
 class _GatewayReplicas:
@@ -1809,30 +1848,63 @@ def cmd_vm_public_link_attachment(args: argparse.Namespace) -> int:
 
 def cmd_registry_prune(args: argparse.Namespace) -> int:
     config = load_config(args)
+    print_json(
+        run_registry_prune(
+            config,
+            execute=bool(args.execute),
+            repository_prefix=args.repository_prefix,
+            evict_lru=bool(args.evict_lru),
+        )
+    )
+    return 0
+
+
+def run_registry_prune(
+    config: DeploymentConfig,
+    *,
+    execute: bool,
+    repository_prefix: str = "",
+    evict_lru: bool = False,
+) -> dict[str, Any]:
+    """Age retention for image repositories, reference retention for the rest.
+
+    The snapshot and environment repositories are excluded from the age rules
+    and pruned by reference (docs/managed-registry.md). With ``evict_lru`` and
+    the registry volume above its cleanup threshold, least-recently-used
+    managed images are evicted down to the target first, so their
+    environments are pruned in the same run. Callers hold the registry
+    maintenance lock; this function never garbage collects.
+    """
+
     client = RegistryClient(config.registry_url)
     usage_store = RegistryUsageStore(config.registry_usage_file())
     usage_snapshot = usage_store.snapshot()
     usage_records = usage_snapshot.records
+    reference_repositories = _reference_retained_repositories(config)
     plan = registry_prune_plan(
         client,
         keep_per_repository=config.registry_keep_per_repository,
-        repository_prefix=args.repository_prefix,
+        repository_prefix=repository_prefix,
         max_age_days=config.registry_retention_days,
         usage_records=usage_records,
         active_leases=usage_snapshot.leases,
         usage_generation=usage_snapshot.generation,
+        exclude_repositories=reference_repositories.values(),
     )
-    plan["execute"] = bool(args.execute)
+    plan["execute"] = bool(execute)
     plan["usage_file"] = str(config.registry_usage_file())
     plan["image_file"] = str(config.image_file())
-    if args.execute:
-        deleted = []
+    image_records = [RegistryTag(**item) for item in plan["tags"]]
+    removed_images = {(item["repository"], item["tag"]) for item in plan["delete"]}
+    deleted: list[RegistryTag] = []
+    if execute:
         for attempt in range(3):
             usage_snapshot = usage_store.snapshot()
             usage_records = usage_snapshot.records
             records = list_registry_tags(
                 client,
-                repository_prefix=args.repository_prefix,
+                repository_prefix=repository_prefix,
+                exclude_repositories=reference_repositories.values(),
             )
             records = apply_registry_usage(records, usage_records)
             candidates = select_prune_candidates(
@@ -1855,6 +1927,8 @@ def cmd_registry_prune(args: argparse.Namespace) -> int:
                 if attempt == 2:
                     raise
                 continue
+        image_records = records
+        removed_images = {(item.repository, item.tag) for item in deleted}
         plan["deleted"] = [item.to_dict() for item in deleted]
         plan["usage_generation"] = usage_snapshot.generation
         plan["active_lease_count"] = len(usage_snapshot.leases)
@@ -1871,8 +1945,297 @@ def cmd_registry_prune(args: argparse.Namespace) -> int:
         plan["removed_image_records"] = [
             item.to_dict() for item in _dedupe_image_records(removed)
         ]
-    print_json(plan)
-    return 0
+    evicted: list[RegistryTag] = []
+    usage = registry_disk_usage(config) if evict_lru else None
+    if usage is not None and usage.cleanup_needed and not repository_prefix:
+        eviction, evicted, evicted_records = _run_lru_eviction(
+            config,
+            client,
+            usage_store,
+            images=[
+                record
+                for record in image_records
+                if (record.repository, record.tag) not in removed_images
+            ],
+            usage=usage,
+            execute=execute,
+        )
+        plan["lru_eviction"] = eviction
+        if execute:
+            removed_images |= {(item.repository, item.tag) for item in evicted}
+            plan.setdefault("removed_image_records", []).extend(
+                item.to_dict() for item in evicted_records
+            )
+        else:
+            removed_images |= {
+                (item["repository"], tag)
+                for item in eviction["evict_sample_all"]
+                for tag in item["tags"]
+            }
+        eviction.pop("evict_sample_all", None)
+    reference = _run_reference_retention(
+        config,
+        client,
+        usage_store,
+        repositories=reference_repositories,
+        # A dry run treats its planned deletions as already gone.
+        remaining_images=[
+            record
+            for record in image_records
+            if (record.repository, record.tag) not in removed_images
+        ],
+        repository_prefix=repository_prefix,
+        execute=execute,
+    )
+    plan["reference_retention"] = reference
+    if execute:
+        deleted_manifests = len(
+            {(item.repository, item.digest) for item in (*deleted, *evicted)}
+        )
+        deleted_manifests += sum(
+            item["deleted_manifests"] for item in reference["decisions"]
+        )
+        plan["deleted_manifest_count"] = deleted_manifests
+        try:
+            state = record_registry_prune(
+                config.registry_maintenance_state_file(), deleted=deleted_manifests
+            )
+            state.pop("evicted_images", None)
+            plan["maintenance_state"] = state
+        except OSError as exc:
+            plan["maintenance_state_error"] = str(exc)
+    usage = registry_disk_usage(config)
+    plan["registry_disk"] = usage.to_dict() if usage is not None else None
+    return plan
+
+
+def _run_lru_eviction(
+    config: DeploymentConfig,
+    client: RegistryClient,
+    usage_store: RegistryUsageStore,
+    *,
+    images: list[RegistryTag],
+    usage: RegistryDiskUsage,
+    execute: bool,
+) -> tuple[dict[str, Any], list[RegistryTag], list[ImageRecord]]:
+    """Evict managed images, oldest use first, down to the target usage."""
+
+    grace = config.registry_reference_grace_seconds
+    usage_snapshot = usage_store.snapshot()
+    data_dir = (
+        config.registry_data_dir()
+        if config.registry_store.kind == "filesystem"
+        and config.registry_data_dir().is_dir()
+        else None
+    )
+    routing_store = open_routing_store(config.routing_file())
+    environments = (
+        (ImageEnvironmentIndex(client),
+         EnvironmentBlobIndex(client, config.immutable_environments.repository))
+        if config.immutable_environments is not None
+        else None
+    )
+
+    def blobs(repository: str, digest: str) -> dict[str, int]:
+        result = manifest_blob_sizes(client, repository, digest)
+        if environments is not None:
+            roots, environment_blobs = environments
+            try:
+                result.update(environment_blobs.blobs(roots.root(repository, digest)))
+            except (RegistryRequestError, ValueError):
+                # An unreadable environment only makes the projection
+                # undercount what evicting this image frees.
+                pass
+        return result
+
+    now = utc_now()
+    plan = select_lru_evictions(
+        managed_images(
+            images,
+            tag_time=RegistryTagClock(data_dir, usage_snapshot.records),
+            blobs=blobs,
+        ),
+        used_bytes=usage.used_bytes,
+        target_used_bytes=usage.target_used_bytes,
+        grace_seconds=grace,
+        live=routing_image_identities(routing_store),
+        leased_digests=usage_snapshot.active_lease_digests(),
+        now=now,
+    )
+    summary = plan.to_dict()
+    summary["evict_sample_all"] = [
+        {"repository": image.repository, "tags": [tag.tag for tag in image.tags]}
+        for image in plan.evict
+    ]
+    if not execute or not plan.evict:
+        return summary, [], []
+    fresh = routing_image_identities(routing_store)
+    evicted = execute_reference_prune(
+        client,
+        plan.records,
+        usage_store=usage_store,
+        still_unreferenced=lambda record: not image_is_referenced(
+            ManagedImage(record.repository, record.digest, (record,), None), fresh,
+        ),
+        unused_since=now - timedelta(seconds=grace),
+    )
+    # A later create must rebuild or re-import the image, never resolve a
+    # gateway record to the deleted manifest.
+    removed = _remove_image_records_for_registry_tags(
+        config.image_file(),
+        {(record.repository, record.tag) for record in evicted},
+    )
+    if evicted:
+        try:
+            record_image_evictions(
+                config.registry_maintenance_state_file(),
+                [{"image_id": item.id, "tag": item.tag} for item in removed],
+            )
+        except OSError as exc:
+            summary["tombstone_error"] = str(exc)
+    summary["evicted_images"] = len({(item.repository, item.digest) for item in evicted})
+    summary["evicted_tags"] = len(evicted)
+    print(
+        "registry disk pressure evicted "
+        f"{summary['evicted_images']} least-recently-used managed images",
+        file=sys.stderr,
+    )
+    return summary, evicted, removed
+
+
+def _reference_retained_repositories(config: DeploymentConfig) -> dict[str, str]:
+    repositories: dict[str, str] = {}
+    if config.snapshot_store.kind == "registry":
+        repositories[SNAPSHOT_REASON] = config.sandbox.storage_native_repository
+    if config.immutable_environments is not None:
+        repositories[ENVIRONMENT_REASON] = config.immutable_environments.repository
+    return repositories
+
+
+def _run_reference_retention(
+    config: DeploymentConfig,
+    client: RegistryClient,
+    usage_store: RegistryUsageStore,
+    *,
+    repositories: dict[str, str],
+    remaining_images: list[RegistryTag],
+    repository_prefix: str,
+    execute: bool,
+) -> dict[str, Any]:
+    grace = config.registry_reference_grace_seconds
+    result: dict[str, Any] = {"grace_seconds": grace, "decisions": []}
+    if not repositories:
+        return result
+    catalog = set(client.catalog())
+    usage_snapshot = usage_store.snapshot()
+    leased = usage_snapshot.active_lease_digests()
+    data_dir = (
+        config.registry_data_dir()
+        if config.registry_store.kind == "filesystem"
+        and config.registry_data_dir().is_dir()
+        else None
+    )
+    tag_time = RegistryTagClock(data_dir, usage_snapshot.records)
+    now = utc_now()
+
+    def present(reason: str) -> bool:
+        repository = repositories.get(reason, "")
+        return repository in catalog and repository.startswith(repository_prefix)
+
+    def decide(reason: str, live: set[str]) -> ReferenceRetentionDecision:
+        return select_unreferenced(
+            list_repository_tags(client, repositories[reason]),
+            reason=reason,
+            repository=repositories[reason],
+            live=live,
+            grace_seconds=grace,
+            tag_time=tag_time,
+            leased_digests=leased,
+            now=now,
+        )
+
+    def skip(reason: str, message: str) -> ReferenceRetentionDecision:
+        return ReferenceRetentionDecision(
+            reason=reason, repository=repositories[reason], skipped=message,
+        )
+
+    outcomes: list[tuple[ReferenceRetentionDecision, list[RegistryTag]]] = []
+    if present(SNAPSHOT_REASON):
+        routing_store = open_routing_store(config.routing_file())
+        try:
+            decision = decide(SNAPSHOT_REASON, snapshot_live_identities(routing_store))
+        except ValueError as exc:
+            decision = skip(SNAPSHOT_REASON, f"snapshot liveness unknown: {exc}")
+        deleted_snapshots: list[RegistryTag] = []
+        if execute and decision.delete:
+            # Revalidate against references committed while the repository
+            # was listed; a route adopting an old snapshot also leases it.
+            fresh = snapshot_live_identities(routing_store)
+            deleted_snapshots = execute_reference_prune(
+                client, decision, usage_store=usage_store,
+                still_unreferenced=lambda record: (
+                    record.digest not in fresh and record.tag not in fresh
+                ),
+            )
+        outcomes.append((decision, deleted_snapshots))
+    if present(ENVIRONMENT_REASON):
+        environment_repository = repositories[ENVIRONMENT_REASON]
+        excluded = set(repositories.values())
+        index = ImageEnvironmentIndex(client)
+        if repository_prefix:
+            decision = skip(
+                ENVIRONMENT_REASON, "a repository prefix limits the managed image scan",
+            )
+        else:
+            try:
+                live = environment_live_identities(
+                    client,
+                    environment_repository,
+                    index.roots(
+                        record
+                        for record in remaining_images
+                        if record.repository not in excluded
+                    ),
+                )
+                decision = decide(ENVIRONMENT_REASON, live)
+                if decision.delete:
+                    decision = replace(
+                        decision,
+                        delete_layer_bytes=manifest_layer_bytes(
+                            client,
+                            environment_repository,
+                            (record.digest for record in decision.delete),
+                        ),
+                    )
+            except (RegistryRequestError, ValueError) as exc:
+                decision = skip(
+                    ENVIRONMENT_REASON, f"environment liveness unknown: {exc}",
+                )
+        deleted_environments: list[RegistryTag] = []
+        if execute and decision.delete:
+            # An image pushed since the scan may annotate an old root.
+            fresh = environment_live_identities(
+                client,
+                environment_repository,
+                index.roots(
+                    record
+                    for repository in client.catalog()
+                    if repository not in excluded
+                    for record in list_repository_tags(client, repository)
+                ),
+            )
+            deleted_environments = execute_reference_prune(
+                client, decision, usage_store=usage_store,
+                still_unreferenced=lambda record: record.digest not in fresh,
+            )
+        outcomes.append((decision, deleted_environments))
+    for decision, deleted in outcomes:
+        item = decision.to_dict()
+        if execute:
+            item["deleted_manifests"] = len({record.digest for record in deleted})
+            item["deleted_tags"] = len(deleted)
+        result["decisions"].append(item)
+    return result
 
 
 def _remove_image_records_for_registry_tags(
@@ -2393,6 +2756,7 @@ def cmd_autoscaler(args: argparse.Namespace) -> int:
     metrics_store = MetricsStore(metrics_file)
     interval = config.autoscaler_interval_seconds
     cycle = 0
+    last_registry_disk_state = "ok"
     observed_vm_keys: dict[str, tuple[object, ...]] = {}
     execution_requested = bool(args.execute)
     reject_mutating_jobs_fixture(args, execution_requested=execution_requested)
@@ -2635,6 +2999,24 @@ def cmd_autoscaler(args: argparse.Namespace) -> int:
                 item.to_dict() for item in orphaned_migrations_terminalized
             ]
             result["removedRoutes"] = [route.to_dict() for route in removed_routes]
+            # The gateway host's registry volume; the pressure unit acts on it.
+            registry_disk = registry_disk_usage(config)
+            result["registryDisk"] = (
+                registry_disk.to_dict() if registry_disk is not None else None
+            )
+            registry_disk_state = registry_disk.state if registry_disk else "ok"
+            if registry_disk is not None and registry_disk_state != "ok" and (
+                registry_disk_state != last_registry_disk_state
+                or cycle % REGISTRY_DISK_WARNING_CYCLES == 0
+            ):
+                print(
+                    f"WARNING: registry disk {registry_disk.path} is "
+                    f"{registry_disk.used_percent:.1f}% full (cleanup at "
+                    f"{registry_disk.cleanup_percent:g}%, builds refused at "
+                    f"{registry_disk.refuse_percent:g}%)",
+                    file=sys.stderr,
+                )
+            last_registry_disk_state = registry_disk_state
             record_autoscaler_cycle(metrics_store, cycle=cycle, result=result)
             record_submitted_vm_metrics(metrics_store, cycle, result)
             record_observed_vm_metrics(metrics_store, cycle, result, observed_vm_keys)

@@ -1,0 +1,11 @@
+[Unit]
+Description=Check UCloud sandbox registry disk pressure every minute
+
+[Timer]
+OnActiveSec=1min
+OnUnitInactiveSec=1min
+AccuracySec=5s
+Unit=ucloud-sandbox-registry-pressure.service
+
+[Install]
+WantedBy=timers.target

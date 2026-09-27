@@ -25,6 +25,14 @@ DEFAULT_REGISTRY_DATA_ROOT = "/work/data/ucloud-sandbox-registry/docker-registry
 DEFAULT_REGISTRY_ALIAS = "ucloud-sandbox-registry"
 DEFAULT_INSTALL_ROOT = "/work/ucloud-sandboxes"
 DEFAULT_DIRECT_RUNSC_COMMIT = "0" * 40
+_REGISTRY_GUARD_DEFAULTS = {
+    "registry_disk_cleanup_percent": 70.0,
+    "registry_disk_target_percent": 60.0,
+    "registry_disk_refuse_percent": 90.0,
+    "registry_disk_gc_interval_seconds": 1800,
+    "registry_reference_grace_seconds": 3600,
+    "registry_blob_grace_seconds": 7200,
+}
 _RUNTIME_POLICY_FIELDS = {
     "builder_scale_down_idle_seconds",
     "heartbeat_ttl_seconds",
@@ -479,6 +487,21 @@ class DeploymentConfig:
     node_package_root: str = DEFAULT_INSTALL_ROOT + "/release"
     relay_postgres: RelayPostgresConfig | None = None
     immutable_environments: EnvironmentDeploymentConfig | None = None
+    # Filesystem registry disk guard (docs/managed-registry.md): at the cleanup
+    # threshold the registry-pressure unit prunes, evicts least-recently-used
+    # managed images down to the target, and garbage collects; at the refuse
+    # threshold the gateway stops accepting image builds and imports.
+    registry_disk_cleanup_percent: float = 70.0
+    registry_disk_target_percent: float = 60.0
+    registry_disk_refuse_percent: float = 90.0
+    # Minimum spacing between pressure-triggered blob sweeps without eviction.
+    registry_disk_gc_interval_seconds: int = 1800
+    # Unreferenced snapshots, environments, and evictable images younger than
+    # this stay.
+    registry_reference_grace_seconds: int = 3600
+    # The online blob sweep keeps unreferenced blobs and links younger than
+    # this; it must exceed the longest push (registry_sweep.py).
+    registry_blob_grace_seconds: int = 7200
 
     @classmethod
     def default(cls, scope_id: str = "project-id") -> "DeploymentConfig":
@@ -536,7 +559,7 @@ class DeploymentConfig:
     def from_dict(cls, raw: object) -> "DeploymentConfig":
         if not isinstance(raw, dict):
             raise ValueError("deployment config must be a JSON object")
-        raw = {"node_package_root": DEFAULT_INSTALL_ROOT + "/release", "relay_postgres": None, "immutable_environments": None, "gateway_processes": 1, **raw}
+        raw = {"node_package_root": DEFAULT_INSTALL_ROOT + "/release", "relay_postgres": None, "immutable_environments": None, "gateway_processes": 1, **_REGISTRY_GUARD_DEFAULTS, **raw}
         expected = {item.name for item in fields(cls)}
         schema = _require_int("schema", raw.get("schema"), minimum=1)
         if schema != DEPLOYMENT_CONFIG_SCHEMA:
@@ -670,7 +693,48 @@ class DeploymentConfig:
             policy=policy,
             sandbox=sandbox,
             builder=builder,
+            registry_disk_cleanup_percent=_require_float(
+                "registry_disk_cleanup_percent",
+                raw["registry_disk_cleanup_percent"],
+                minimum=1.0,
+                maximum=100.0,
+            ),
+            registry_disk_target_percent=_require_float(
+                "registry_disk_target_percent",
+                raw["registry_disk_target_percent"],
+                minimum=1.0,
+                maximum=100.0,
+            ),
+            registry_disk_refuse_percent=_require_float(
+                "registry_disk_refuse_percent",
+                raw["registry_disk_refuse_percent"],
+                minimum=1.0,
+                maximum=100.0,
+            ),
+            registry_disk_gc_interval_seconds=_require_int(
+                "registry_disk_gc_interval_seconds",
+                raw["registry_disk_gc_interval_seconds"],
+                minimum=60,
+            ),
+            registry_reference_grace_seconds=_require_int(
+                "registry_reference_grace_seconds",
+                raw["registry_reference_grace_seconds"],
+                minimum=300,
+            ),
+            registry_blob_grace_seconds=_require_int(
+                "registry_blob_grace_seconds",
+                raw["registry_blob_grace_seconds"],
+                minimum=1800,
+            ),
         )
+        if not (
+            result.registry_disk_target_percent
+            <= result.registry_disk_cleanup_percent
+            <= result.registry_disk_refuse_percent
+        ):
+            raise ValueError(
+                "registry disk thresholds must satisfy target <= cleanup <= refuse"
+            )
         if result.sandbox.direct_split_memory_backing and result.snapshot_store.kind != "registry":
             raise ValueError("split memory backing requires registry checkpoint publication; S3 split checkpoints are unsupported")
         if result.gateway_port in {result.relay_port, result.registry_port} or (
@@ -690,6 +754,9 @@ class DeploymentConfig:
 
     def registry_usage_file(self) -> Path:
         return self._state_file("registry-usage.sqlite")
+
+    def registry_maintenance_state_file(self) -> Path:
+        return self._state_file("registry-maintenance.json")
 
     def metrics_path(self) -> Path:
         return self._state_file("metrics.sqlite")
@@ -823,6 +890,12 @@ class DeploymentConfig:
             "registry_port": self.registry_port,
             "registry_retention_days": self.registry_retention_days,
             "registry_keep_per_repository": self.registry_keep_per_repository,
+            "registry_disk_cleanup_percent": self.registry_disk_cleanup_percent,
+            "registry_disk_target_percent": self.registry_disk_target_percent,
+            "registry_disk_refuse_percent": self.registry_disk_refuse_percent,
+            "registry_disk_gc_interval_seconds": self.registry_disk_gc_interval_seconds,
+            "registry_reference_grace_seconds": self.registry_reference_grace_seconds,
+            "registry_blob_grace_seconds": self.registry_blob_grace_seconds,
             "autoscaler_interval_seconds": self.autoscaler_interval_seconds,
             "autoscaler_max_init_per_cycle": self.autoscaler_max_init_per_cycle,
             "autoscaler_init_retry_seconds": self.autoscaler_init_retry_seconds,

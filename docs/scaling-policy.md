@@ -545,14 +545,39 @@ destination):
   fits; migrations never target it, and a wake uses it only as a last resort.
   The scale-up math withholds its capacity while it stays soft-drained.
 - Each cycle posts gateway migrations for up to
-  `policy.drain_on_park_moves_per_cycle` (default 4) of its published,
-  attached parks, with the stable id `drain-<job>-<sandbox>-<generation>`.
-  Running sandboxes move after they park. A soft-drain move never records
-  pending demand; without a destination it is retried next cycle.
+  `policy.drain_on_park_moves_per_cycle` (default 4) of its attached parks,
+  with the stable id `drain-<job>-<sandbox>-<generation>`.
+  - Agents that wake every few seconds are rarely seen as published parks,
+    because the gateway learns publication from heartbeats. So the move first
+    asks the owner to publish, or reuse, its snapshot.
+  - Running sandboxes move after they park.
+  - A soft-drain move never records pending demand. Without a destination it
+    is retried next cycle.
+  - A move that fails before route commit is rolled back at once, so the
+    source can always wake.
+- Checkpoint import compares the full runtime fingerprint, including CPU
+  features. Same-model Hetzner VMs can expose different flags (for example
+  `erms`, `fsrm`).
+  - Workers advertise `runtime-cpu-features-sha256`, and migration and wake
+    destinations must match it.
+  - A worker is only selected, and only kept, while another ready worker
+    shares its CPU features.
 - The label is cleared when the worker stops being surplus or could serve
   pending demand, so demand reopens it instead of buying a new worker.
 - Once idle, the worker uses `min(scale_down_idle_seconds, 60)` as its idle
   grace, then takes the normal drain, detach and stop path.
+
+Measured on Hetzner (rc62, 2026-09-27): three CCX63 workers with the same CPU
+features, 60 parkable sandboxes (20 per worker), and an agent loop on every
+sandbox (an exec every 5-15 s). Then the capacity announcement was withdrawn:
+- The autoscaler soft-drained one worker within 30 s.
+- Its sandboxes moved as they parked: 20 -> 17 -> 14 -> 10 -> 6 -> 2 in
+  2.5 minutes. The last one was caught parked about 3 minutes later.
+- The worker was stopped after the 60 s grace, and a second worker was
+  soft-drained.
+- About 4,500 execs over roughly 15 minutes: none failed, p50 0.56-0.60 s.
+- When a real workload then announced 100 sandboxes, the drain was released
+  instead of buying a worker.
 
 Publication also bounds the immutable snapshot chain. The prospective old
 remote layers plus new local sealed delta are compacted when they exceed eight

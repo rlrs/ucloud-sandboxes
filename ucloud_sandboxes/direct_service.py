@@ -41,6 +41,7 @@ from .managed_process import (
 from .direct_registry import DirectSandboxRegistration, DirectRegistryCapacityUnavailable, ManagedPrimaryOwnedError
 from .direct_warden import DirectWardenError
 from .hibernation import HibernationError, HibernationState
+from .memory_backing import MemoryBackingBusyError
 from .models import NodeRuntimeMetrics, ResourceQuantity
 from .resource_admission import (
     dynamic_cpu_pressure_retryable,
@@ -53,6 +54,7 @@ from .sandbox import (
     SandboxAdmissionClosedError,
     SandboxCapacityUnavailableError,
     SandboxConflictError,
+    SandboxDeleteBusyError,
     SandboxExecAdmissionDeferredError,
     SandboxFileTooLargeError,
     SandboxOperation,
@@ -82,6 +84,12 @@ _FILE_ADMISSION_RETRY_WINDOW_SECONDS = 5.0
 _MANAGED_CONTROL_DEADLINE_SECONDS = 15.0
 # Growth credit may use an observation this old; see _growth_sample.
 _GROWTH_OBSERVATION_MAX_AGE_SECONDS = 30.0
+# A just-parked sandbox may still stream its memory file to the Registry under
+# a shared read lease. Delete commits phase deleting first; the publisher sees
+# that at its next chunk, but only while the lifecycle lock is free.
+_DELETE_DRAIN_DEADLINE_SECONDS = 10.0
+_DELETE_DRAIN_JOIN_SECONDS = 1.0
+_DELETE_DRAIN_RETRY_SECONDS = 0.1
 
 
 class DirectExecTimeoutError(DirectWardenError):
@@ -771,8 +779,35 @@ class DirectSandboxService:
         if registration.sandbox_generation != generation:
             raise DirectWardenError("delete generation does not own direct sandbox")
         key = (sandbox_id, registration.sandbox_generation)
-        with self._lock(*key):
-            self.provisioner.delete(sandbox_id, generation=generation)
+        deadline = time.monotonic() + _DELETE_DRAIN_DEADLINE_SECONDS
+        busy: MemoryBackingBusyError | None = None
+        while True:
+            with self._lock(*key):
+                if busy is not None:
+                    current = self.provisioner.registry.get(sandbox_id)
+                    if current is None or current.sandbox_generation != generation:
+                        # Reconciliation finished this generation meanwhile.
+                        break
+                try:
+                    self.provisioner.delete(sandbox_id, generation=generation)
+                    break
+                except MemoryBackingBusyError as exc:
+                    busy = exc
+            # Wait unlocked: the publisher re-checks ownership under this lock
+            # and would otherwise hold its lease until our deadline. Retrying
+            # is safe because the registration is durably in phase deleting.
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise SandboxDeleteBusyError(
+                    "sandbox memory publication is still draining; retry the delete"
+                ) from busy
+            with self._publication_guard:
+                publisher = self._publication_threads.get(key)
+            if (publisher is not None and publisher is not threading.current_thread()
+                    and publisher.is_alive()):
+                publisher.join(min(remaining, _DELETE_DRAIN_JOIN_SECONDS))
+            time.sleep(max(0.0, min(_DELETE_DRAIN_RETRY_SECONDS,
+                                    deadline - time.monotonic())))
         self._restore_slots.cancel_waiters(key)
         self._startup_slots.cancel_waiters(key)
         self._forget_growth(key)

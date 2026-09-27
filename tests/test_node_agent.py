@@ -8,16 +8,22 @@ from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Thread
+from types import SimpleNamespace
+from unittest.mock import Mock
 from urllib import error, request
 
 from ucloud_sandboxes.images import DockerImageRuntime
+from ucloud_sandboxes.memory_backing import MemoryBackingBusyError
 from ucloud_sandboxes.models import ResourceQuantity
 from ucloud_sandboxes.node_agent import (
+    NodeAgentHandler,
     _host_boot_epoch,
     build_builder_node_agent_server,
 )
 from ucloud_sandboxes.sandbox import (
+    SandboxDeleteBusyError,
     SandboxOperation,
+    SandboxRestoreBusyError,
     SandboxSpec,
     sandbox_spec_fingerprint,
 )
@@ -196,6 +202,38 @@ class BuilderNodeAgentTests(unittest.TestCase):
         self.assertEqual(status, 201)
         self.assertEqual(payload["build"]["status"], "succeeded")
         self.assertFalse(Path(payload["build"]["context_path"]).exists())
+
+
+class RetryableErrorMappingTests(unittest.TestCase):
+    def write(self, exc):
+        handler = SimpleNamespace(_write_json=Mock())
+        NodeAgentHandler._write_exception(handler, exc)
+        return handler._write_json.call_args
+
+    def test_restore_busy_keeps_its_retry_contract(self) -> None:
+        call = self.write(SandboxRestoreBusyError("busy"))
+        self.assertEqual(call.args[0]["error_code"], "node_restore_busy")
+
+    def test_delete_behind_publication_reader_is_retryable(self) -> None:
+        for exc in (
+            SandboxDeleteBusyError("sandbox memory publication is still draining"),
+            MemoryBackingBusyError("memory allocation still has publication readers"),
+        ):
+            with self.subTest(exc=type(exc).__name__):
+                call = self.write(exc)
+                self.assertEqual(call.kwargs["status"], 503)
+                self.assertEqual(
+                    call.kwargs["headers"],
+                    {"Retry-After": "1", "X-UCloud-Sandbox-Retryable": "true"},
+                )
+                self.assertEqual(
+                    call.args[0],
+                    {
+                        "error": str(exc),
+                        "error_code": "memory_publication_draining",
+                        "retryable": True,
+                    },
+                )
 
 
 class SandboxWireContractTests(unittest.TestCase):

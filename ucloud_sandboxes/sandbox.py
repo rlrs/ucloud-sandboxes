@@ -114,6 +114,10 @@ class SandboxSnapshotPublicationPendingError(RuntimeError):
     """A parked sandbox cannot wake until its durable publication completes."""
 
 
+class SandboxDeleteBusyError(RuntimeError):
+    """A durable delete is waiting for a memory publication reader to drain."""
+
+
 class SandboxFileTooLargeError(ValueError):
     """A sandbox file exceeded the configured download response limit."""
 

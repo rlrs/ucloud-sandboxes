@@ -63,6 +63,7 @@ from .images import (
     uploaded_build_context_reference,
 )
 from .direct_registry import ManagedPrimaryOwnedError
+from .memory_backing import MemoryBackingBusyError
 from .managed_process import ManagedProcessError, ManagedProcessReadUnavailable, ManagedProcessStart
 from .models import NodeRuntimeMetrics, ResidentWaitMetrics, ResourceQuantity, SandboxInventoryEntry, SandboxMemoryObservation, utc_now
 from .node_runtime import BuilderNodeRuntime, DirectNodeRuntime, NodeStateStore
@@ -77,6 +78,7 @@ from .sandbox import (
     SandboxCapacityUnavailableError,
     SandboxExecAdmissionDeferredError,
     SandboxConflictError,
+    SandboxDeleteBusyError,
     SandboxFileTooLargeError,
     SandboxFilesystemSpec,
     SandboxOperation,
@@ -1728,6 +1730,18 @@ class NodeAgentHandler(BuildContextHttpHandler):
                     "Retry-After": "1",
                     "X-UCloud-Sandbox-Retryable": "true",
                 },
+            )
+            return
+        if isinstance(exc, (SandboxDeleteBusyError, MemoryBackingBusyError)):
+            # Deletion is durably committed; only a publication reader delays it.
+            self._write_json(
+                {
+                    "error": str(exc),
+                    "error_code": "memory_publication_draining",
+                    "retryable": True,
+                },
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+                headers={"Retry-After": "1", "X-UCloud-Sandbox-Retryable": "true"},
             )
             return
         if isinstance(exc, (RequestBodyTooLargeError, SandboxFileTooLargeError)):

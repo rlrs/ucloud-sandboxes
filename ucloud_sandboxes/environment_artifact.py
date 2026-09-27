@@ -4,7 +4,7 @@ Only a trusted builder signs the chunk index. Workers authenticate that index
 before exposing any filesystem bytes, then verify each immutable chunk in full.
 These are build artifacts, never execution snapshots or mutable volume exports.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import base64
 import hashlib
 import json
@@ -25,6 +25,15 @@ _UPLOAD_ATTEMPTS = 3
 
 CHUNK_BYTES = 256 * 1024
 COMPONENT_SCHEMA = "ucloud-environment-erofs-v1"
+# One EROFS component per group of OCI layers, shared by every image whose
+# layers include that group on the same parent chain (docs/immutable-environments.md).
+COMPONENT_SCHEMA_V2 = "ucloud-environment-erofs-v2"
+LAYER_SOURCE_KIND = "oci-layer-diffs-v1"
+LAYER_TAG_PREFIX = "layer-"
+# The diff_id of an empty tar. Some builders emit it for metadata-only
+# instructions; it changes no file, so layer components skip it.
+EMPTY_LAYER_DIFF_ID = "sha256:5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef"
+_MAX_SOURCE_LAYERS = 128
 COMPONENT_MEDIA_TYPE = "application/vnd.ucloud.environment.erofs.v1+json"
 CHUNK_MEDIA_TYPE = "application/vnd.ucloud.environment.chunk.v1"
 # The whole EROFS image as one blob; workers read signed chunks as byte ranges.
@@ -71,6 +80,36 @@ class Chunk:
         return cls(**raw)
 
 
+def _require_range_index(component):
+    if (type(component.image_size) is not int or component.image_size <= 0 or component.image_size % 4096
+            or not isinstance(component.chunks, tuple) or not 0 < len(component.chunks) <= _MAX_CHUNKS
+            or any(not isinstance(chunk, Chunk) for chunk in component.chunks)
+            or any(chunk.size != CHUNK_BYTES for chunk in component.chunks[:-1])
+            or sum(chunk.size for chunk in component.chunks) != component.image_size):
+        raise ValueError("invalid authenticated environment range index")
+    try:
+        if len(base64.b64decode(component.signature, validate=True)) != 64:
+            raise ValueError("invalid signature length")
+    except (ValueError, TypeError) as exc:
+        raise ValueError("invalid environment producer signature") from exc
+
+
+def _authenticate(component, trusted_keys):
+    key_bytes = trusted_keys.get(component.producer_key)
+    if key_bytes is None or content_digest(key_bytes) != component.producer_key:
+        raise ValueError("environment producer is not trusted")
+    try:
+        # The schema is part of the signed bytes, so a v1 signature never
+        # authenticates a v2 index or the reverse.
+        Ed25519PublicKey.from_public_bytes(key_bytes).verify(
+            base64.b64decode(component.signature, validate=True),
+            _SIGNING_DOMAIN + canonical_bytes(component.unsigned()),
+        )
+    except (ValueError, InvalidSignature) as exc:
+        raise ValueError("environment producer signature did not verify") from exc
+    return component
+
+
 @dataclass(frozen=True)
 class EnvironmentComponent:
     source_image: str
@@ -90,17 +129,7 @@ class EnvironmentComponent:
         if (self.schema != COMPONENT_SCHEMA or self.filesystem != "erofs-host-v1"
                 or self.source_kind != "fresh-allowlisted-build-v1"):
             raise ValueError("unqualified immutable environment format/provenance")
-        if (type(self.image_size) is not int or self.image_size <= 0 or self.image_size % 4096
-                or not isinstance(self.chunks, tuple) or not 0 < len(self.chunks) <= _MAX_CHUNKS
-                or any(not isinstance(chunk, Chunk) for chunk in self.chunks)
-                or any(chunk.size != CHUNK_BYTES for chunk in self.chunks[:-1])
-                or sum(chunk.size for chunk in self.chunks) != self.image_size):
-            raise ValueError("invalid authenticated environment range index")
-        try:
-            if len(base64.b64decode(self.signature, validate=True)) != 64:
-                raise ValueError("invalid signature length")
-        except (ValueError, TypeError) as exc:
-            raise ValueError("invalid environment producer signature") from exc
+        _require_range_index(self)
 
     def unsigned(self):
         return {"schema": self.schema, "filesystem": self.filesystem,
@@ -114,6 +143,9 @@ class EnvironmentComponent:
 
     @classmethod
     def from_dict(cls, raw):
+        """Parse either component schema; v1 whole-image components stay valid."""
+        if isinstance(raw, dict) and raw.get("schema") == COMPONENT_SCHEMA_V2:
+            return LayerEnvironmentComponent.from_dict(raw)
         if not isinstance(raw, dict) or set(raw) != {
             "schema", "filesystem", "source_kind", "source_image", "image_digest",
             "image_size", "chunks", "producer_key", "signature",
@@ -122,32 +154,143 @@ class EnvironmentComponent:
         return cls(**(raw | {"chunks": tuple(Chunk.from_dict(chunk) for chunk in raw["chunks"])}))
 
     def authenticate(self, trusted_keys: Mapping[str, bytes]):
-        key_bytes = trusted_keys.get(self.producer_key)
-        if key_bytes is None or content_digest(key_bytes) != self.producer_key:
-            raise ValueError("environment producer is not trusted")
-        try:
-            Ed25519PublicKey.from_public_bytes(key_bytes).verify(
-                base64.b64decode(self.signature, validate=True),
-                _SIGNING_DOMAIN + canonical_bytes(self.unsigned()),
-            )
-        except (ValueError, InvalidSignature) as exc:
-            raise ValueError("environment producer signature did not verify") from exc
-        return self
+        return _authenticate(self, trusted_keys)
 
 
-def sign_component(image: Path, *, source_image: str, signing_key: Ed25519PrivateKey):
-    """Sign the output of the fresh builder; publication never accepts checkpoints."""
-    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+def layer_chain_id(diff_ids):
+    """OCI ChainID of layers listed bottom to top; None for no layers."""
+    chain = None
+    for diff_id in diff_ids:
+        require_digest(diff_id)
+        chain = diff_id if chain is None else content_digest((chain + " " + diff_id).encode("ascii"))
+    return chain
+
+
+def require_layer_format(value):
+    if (not isinstance(value, dict) or set(value) != {"layout", "mkfs", "compression", "excludes"}
+            or type(value["layout"]) is not int or value["layout"] != 1
+            or not isinstance(value["mkfs"], str) or not 0 < len(value["mkfs"]) <= 256
+            or not value["mkfs"].isprintable()
+            or not isinstance(value["compression"], str) or len(value["compression"]) > 32
+            or not isinstance(value["excludes"], list) or len(value["excludes"]) > 16
+            or any(not isinstance(name, str) or not name or "/" in name for name in value["excludes"])
+            or value["excludes"] != sorted(set(value["excludes"]))):
+        raise ValueError("invalid environment layer format")
+    return value
+
+
+def layer_group_key(layer_format, parent, diff_ids):
+    """Content address of one layer group's component; its tag is ``layer-<key>``.
+
+    A squashed group drops whiteouts that hide nothing beneath it, so its bytes
+    depend on the lower layers: the parent ChainID is part of the key. Images
+    sharing a base share its whole chain, so this costs no base reuse.
+    """
+    return hashlib.sha256(canonical_bytes({
+        "format": require_layer_format(layer_format), "parent": parent, "diff_ids": list(diff_ids),
+    })).hexdigest()
+
+
+@dataclass(frozen=True)
+class LayerEnvironmentComponent:
+    """EROFS of ordered OCI layer diffs, overlay whiteouts included.
+
+    It names no source image: every image with this layer group on the same
+    parent chain shares the component, its chunk cache, device and mount.
+    """
+    source_layers: tuple[str, ...]
+    parent: str | None
+    format: dict = field(hash=False)
+    image_digest: str = ""
+    image_size: int = 0
+    chunks: tuple[Chunk, ...] = ()
+    producer_key: str = ""
+    signature: str = ""
+    schema: str = COMPONENT_SCHEMA_V2
+    filesystem: str = "erofs-host-v1"
+    source_kind: str = LAYER_SOURCE_KIND
+
+    def __post_init__(self):
+        if (not isinstance(self.source_layers, tuple)
+                or not 0 < len(self.source_layers) <= _MAX_SOURCE_LAYERS
+                or EMPTY_LAYER_DIFF_ID in self.source_layers):
+            raise ValueError("invalid environment source layers")
+        for digest in self.source_layers:
+            require_digest(digest)
+        if self.parent is not None:
+            require_digest(self.parent)
+        require_layer_format(self.format)
+        require_digest(self.image_digest)
+        require_digest(self.producer_key)
+        if (self.schema != COMPONENT_SCHEMA_V2 or self.filesystem != "erofs-host-v1"
+                or self.source_kind != LAYER_SOURCE_KIND):
+            raise ValueError("unqualified immutable environment format/provenance")
+        _require_range_index(self)
+
+    @property
+    def group_key(self):
+        return layer_group_key(self.format, self.parent, self.source_layers)
+
+    def unsigned(self):
+        return {"schema": self.schema, "filesystem": self.filesystem,
+                "source_kind": self.source_kind, "source_layers": list(self.source_layers),
+                "parent": self.parent, "format": self.format,
+                "image_digest": self.image_digest, "image_size": self.image_size,
+                "chunks": [chunk.to_dict() for chunk in self.chunks],
+                "producer_key": self.producer_key}
+
+    def to_dict(self):
+        return self.unsigned() | {"signature": self.signature}
+
+    @classmethod
+    def from_dict(cls, raw):
+        if not isinstance(raw, dict) or set(raw) != {
+            "schema", "filesystem", "source_kind", "source_layers", "parent", "format",
+            "image_digest", "image_size", "chunks", "producer_key", "signature",
+        } or not isinstance(raw["chunks"], list) or not isinstance(raw["source_layers"], list):
+            raise ValueError("invalid environment component schema")
+        return cls(**(raw | {"chunks": tuple(Chunk.from_dict(chunk) for chunk in raw["chunks"]),
+                             "source_layers": tuple(raw["source_layers"])}))
+
+    def authenticate(self, trusted_keys: Mapping[str, bytes]):
+        return _authenticate(self, trusted_keys)
+
+
+def _chunk_image(image: Path):
     chunks, digest = [], hashlib.sha256()
     with image.open("rb") as source:
         while payload := source.read(CHUNK_BYTES):
             digest.update(payload)
             chunks.append(Chunk(content_digest(payload), len(payload)))
-    key_id = content_digest(signing_key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw))
-    candidate = EnvironmentComponent(source_image, "sha256:" + digest.hexdigest(),
-        sum(chunk.size for chunk in chunks), tuple(chunks), key_id, base64.b64encode(bytes(64)).decode("ascii"))
+    return tuple(chunks), "sha256:" + digest.hexdigest()
+
+
+def _signed(candidate, signing_key):
     signature = signing_key.sign(_SIGNING_DOMAIN + canonical_bytes(candidate.unsigned()))
     return EnvironmentComponent.from_dict(candidate.to_dict() | {"signature": base64.b64encode(signature).decode("ascii")})
+
+
+def _key_id(signing_key):
+    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+    return content_digest(signing_key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw))
+
+
+_UNSIGNED = base64.b64encode(bytes(64)).decode("ascii")
+
+
+def sign_component(image: Path, *, source_image: str, signing_key: Ed25519PrivateKey):
+    """Sign the output of the fresh builder; publication never accepts checkpoints."""
+    chunks, digest = _chunk_image(image)
+    return _signed(EnvironmentComponent(source_image, digest, sum(chunk.size for chunk in chunks),
+                                        chunks, _key_id(signing_key), _UNSIGNED), signing_key)
+
+
+def sign_layer_component(image: Path, *, source_layers, parent, layer_format, signing_key: Ed25519PrivateKey):
+    """Sign the EROFS of one layer group, built from Docker's immutable diffs."""
+    chunks, digest = _chunk_image(image)
+    return _signed(LayerEnvironmentComponent(tuple(source_layers), parent, layer_format, digest,
+                                             sum(chunk.size for chunk in chunks), chunks,
+                                             _key_id(signing_key), _UNSIGNED), signing_key)
 
 
 def _transient(exc: BaseException) -> bool:
@@ -308,7 +451,29 @@ class ImmutableEnvironment:
         return self
 
 
-def publish_environment(registry, *, source_image, environment, image_config, signing_key, tag):
+def bind_source_layers(components, diff_ids):
+    """Check that the layer components rebuild exactly the image layers.
+
+    Layer components come first. Concatenated in order, their source layers
+    must equal the OCI config's ``rootfs.diff_ids`` (empty-tar layers aside),
+    each on its parent chain. Only whole-image toolkits, with their own signed
+    source identities, may follow.
+    """
+    expected = [digest for digest in diff_ids if digest != EMPTY_LAYER_DIFF_ID]
+    layers = [component for component in components if isinstance(component, LayerEnvironmentComponent)]
+    if any(not isinstance(component, LayerEnvironmentComponent) for component in components[:len(layers)]):
+        raise ValueError("environment layer components differ from the OCI image layers")
+    consumed = []
+    for component in layers:
+        if component.parent != layer_chain_id(consumed):
+            raise ValueError("environment layer component sits on another parent chain")
+        consumed.extend(component.source_layers)
+    if not expected or consumed != expected:
+        raise ValueError("environment layer components differ from the OCI image layers")
+
+
+def publish_environment(registry, *, source_image, environment, image_config, signing_key, tag,
+                        source_diff_ids=None):
     from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
     key = signing_key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
     raw = {"schema": "ucloud-immutable-environment-v1", "source_image": source_image,
@@ -318,13 +483,18 @@ def publish_environment(registry, *, source_image, environment, image_config, si
     signed = ImmutableEnvironment.from_dict(raw | {"signature": base64.b64encode(signing_key.sign(
         _ENVIRONMENT_DOMAIN + canonical_bytes(candidate.unsigned()))).decode("ascii")})
     signed.authenticate(registry.trusted_keys)
-    # Refuse missing/untrusted components before committing composition. Base
-    # must originate from exactly this OCI config; toolkits carry their own
+    # Refuse missing/untrusted components before committing composition. A
+    # whole-image base must originate from exactly this OCI config; layer
+    # components must rebuild exactly its diff_ids, which the builder read
+    # under this image ID (the config digest). Toolkits carry their own
     # independently signed source identities.
-    for index, digest in enumerate(signed.components):
-        component = registry.load(digest)
-        if index == 0 and component.source_image != source_image:
-            raise ValueError("environment base belongs to a different OCI image")
+    components = [registry.load(digest) for digest in signed.components]
+    if isinstance(components[0], LayerEnvironmentComponent):
+        if source_diff_ids is None:
+            raise ValueError("layer environment components require the OCI image diff_ids")
+        bind_source_layers(components, source_diff_ids)
+    elif components[0].source_image != source_image:
+        raise ValueError("environment base belongs to a different OCI image")
     config = canonical_bytes(signed.to_dict())
     digest = content_digest(config)
     _upload_blob(registry.client, registry.repository, config, digest)

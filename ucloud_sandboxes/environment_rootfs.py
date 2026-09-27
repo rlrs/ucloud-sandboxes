@@ -17,7 +17,8 @@ from threading import Lock
 
 from .environment_artifact import (ImmutableEnvironment, canonical_bytes,
     environment_root_digest, load_image_environment, require_digest)
-from .environment_backend import mount_has_dependents
+from .direct_registry import DirectRegistryCapacityUnavailable
+from .environment_backend import NO_BLOCK_DEVICE, block_device_count, mount_has_dependents
 from .environment_manifest import HOST_EROFS_ABI
 from .image_rootfs import (
     DockerImageConfig, MaterializedRootfs, SubprocessCommandRunner,
@@ -26,10 +27,14 @@ from .image_rootfs import (
 from .managed_registry import manifest_digest_from_image_ref, registry_host_from_image_ref, registry_repository_tag_from_image_ref
 
 
+class EnvironmentDeviceCapacityError(DirectRegistryCapacityUnavailable):
+    """Every environment block device serves another component."""
+
+
 class EnvironmentRootfsStore:
     backend_abi = HOST_EROFS_ABI
 
-    def __init__(self, root, registry, backend, *, runner=None, referenced=None):
+    def __init__(self, root, registry, backend, *, runner=None, referenced=None, block_devices=None):
         self.root, self.registry, self.backend = Path(root), registry, backend
         if not self.root.is_absolute():
             raise ValueError("environment image store must be absolute")
@@ -46,6 +51,10 @@ class EnvironmentRootfsStore:
         self._active_leases = self._waiting_leases = 0
         self._resolutions = OrderedDict()
         self._resolving = {}
+        # The backend serves one block device per distinct mounted component
+        # from the whole nodewide NBD pool; count both for admission metrics.
+        self._block_devices = block_device_count() if block_devices is None else int(block_devices)
+        self._mounted_components = {}
 
     @contextmanager
     def _lease(self, image_id, exclusive=False):
@@ -90,6 +99,20 @@ class EnvironmentRootfsStore:
                 leases.enter_context(self._lease(digest))
             return self._mount_components(image_id, environment)
 
+    def _ensure(self, digest):
+        try:
+            return self.backend.ensure(digest)
+        except RuntimeError as exc:
+            # The backend RPC reports errors as text. Device exhaustion is a
+            # node capacity limit: placement may try another worker.
+            if NO_BLOCK_DEVICE in str(exc) and not isinstance(exc, EnvironmentDeviceCapacityError):
+                raise EnvironmentDeviceCapacityError(str(exc)) from exc
+            raise
+
+    def _track(self, image_id, environment):
+        with self._metrics_guard:
+            self._mounted_components[image_id] = tuple(environment.components)
+
     def _mount_components(self, image_id, environment):
         target = self.images / image_id[7:]
         rootfs = target / "rootfs"
@@ -98,9 +121,10 @@ class EnvironmentRootfsStore:
             # Backend ensure is also a liveness/fencing check after frontend
             # restart. Never silently trust retained mounts whose I/O died.
             for component in environment.components:
-                self.backend.ensure(component)
+                self._ensure(component)
+            self._track(image_id, environment)
             return rootfs
-        lowers = [self.backend.ensure(digest) for digest in environment.components]
+        lowers = [Path(self._ensure(digest)) for digest in environment.components]
         if any(any(character in str(path) for character in (":", ",", "\n")) for path in lowers):
             raise ValueError("invalid component mount path")
         if len(lowers) == 1:
@@ -109,11 +133,21 @@ class EnvironmentRootfsStore:
             # binding its read-only EROFS superblock preserves that protection.
             command = ("mount", "--bind", str(lowers[0]), str(rootfs))
         else:
-            command = ("mount", "-t", "overlay", "overlay", "-o",
-                "ro,lowerdir=" + ":".join(str(path) for path in reversed(lowers)), str(rootfs))
+            parent = lowers[0].parent
+            if any(path.parent != parent for path in lowers) or not parent.is_absolute():
+                raise ValueError("environment components must share one mount directory")
+            # A per-layer image stacks up to 33 components. Relative names
+            # from the shared components directory keep the option far below
+            # the one-page mount(2) limit; the forced classic mount(2) avoids
+            # fsconfig's 256-byte option values. mount_has_dependents resolves
+            # these names against the same directory.
+            command = ("env", "-C", str(parent), "LIBMOUNT_FORCE_MOUNT2=always",
+                "mount", "-t", "overlay", "overlay", "-o",
+                "ro,lowerdir=" + ":".join(path.name for path in reversed(lowers)), str(rootfs))
         result = self.runner.run(command, timeout=60)
         if result.returncode:
             raise RuntimeError(f"immutable environment mount failed: {result.stderr or result.stdout}")
+        self._track(image_id, environment)
         return rootfs
 
     def _resolved(self, image_ref):
@@ -219,6 +253,8 @@ class EnvironmentRootfsStore:
                 if result.returncode:
                     return False
             shutil.rmtree(target)
+            with self._metrics_guard:
+                self._mounted_components.pop(image_id, None)
             for digest in environment.components:
                 with self._lease(digest, exclusive=True):
                     self.backend.drop(digest)  # Other composed lowers return EBUSY.
@@ -247,7 +283,12 @@ class EnvironmentRootfsStore:
 
     def operation_snapshot(self):
         with self._metrics_guard:
-            return {"active_operations": self._active_leases, "waiting_operations": self._waiting_leases}
+            # Images sharing a base share its components and their devices.
+            in_use = len({digest for components in self._mounted_components.values() for digest in components})
+            return {"active_operations": self._active_leases, "waiting_operations": self._waiting_leases,
+                    "environment_devices_total": self._block_devices,
+                    "environment_devices_in_use": in_use,
+                    "environment_devices_free": max(0, self._block_devices - in_use)}
 
 
 class EnvironmentImageRuntime:

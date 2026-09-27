@@ -23,6 +23,7 @@ from ucloud_sandboxes.managed_registry import RegistryClient, RegistryRequestErr
 class MemoryRegistry:
     def __init__(self):
         self.blobs, self.manifests, self.uploads = {}, {}, {}
+        self.tags = {}
         self.reads = []
         self.gate = None
         self.entered = Event()
@@ -47,8 +48,12 @@ class MemoryRegistry:
 
     def put_manifest(self, repository, tag, payload, *, media_type):
         self.manifests[content_digest(payload)] = payload
+        self.tags[tag] = content_digest(payload)
 
     def manifest_document(self, repository, digest):
+        digest = self.tags.get(digest, digest) if digest not in self.manifests else digest
+        if digest not in self.manifests:
+            raise RegistryRequestError(404, "GET", digest, "MANIFEST_UNKNOWN")
         return json.loads(self.manifests[digest]), {}
 
     def blob_bytes(self, repository, digest, *, max_bytes, timeout_seconds=None):

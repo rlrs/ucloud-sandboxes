@@ -334,13 +334,38 @@ def environment_live_identities(
     repository: str,
     roots: Iterable[str],
 ) -> set[str]:
-    """Live roots plus their component digests."""
+    """Live roots plus their component digests.
+
+    Per-layer images share components: a base's ``layer-*`` components are
+    live while any live root lists them, however old their index tag.
+    """
 
     live: set[str] = set()
     for root in roots:
         live.add(root)
         live.update(environment_components(client, repository, root) or ())
     return live
+
+
+def still_unreferenced_environment(
+    fresh_live: set[str],
+    tag_time: Callable[[RegistryTag], datetime | None],
+    cutoff: datetime,
+) -> Callable[[RegistryTag], bool]:
+    """Delete-time recheck: no fresh root lists it and nobody re-tagged it.
+
+    A builder reusing a ``layer-*`` component re-puts its tag before it
+    publishes the root that will list it; a tag written since planning
+    therefore keeps the component through this run.
+    """
+
+    def check(record: RegistryTag) -> bool:
+        if record.digest in fresh_live:
+            return False
+        written = tag_time(record)
+        return written is not None and written < cutoff
+
+    return check
 
 
 # Least-recently-used eviction of managed images under disk pressure.

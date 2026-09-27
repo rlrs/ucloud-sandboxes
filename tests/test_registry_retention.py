@@ -27,6 +27,7 @@ from ucloud_sandboxes.registry_retention import (
     select_lru_evictions,
     select_unreferenced,
     snapshot_live_identities,
+    still_unreferenced_environment,
 )
 
 
@@ -212,6 +213,61 @@ class EnvironmentLivenessTests(unittest.TestCase):
             grace_seconds=3600, tag_time=at(2), now=NOW,
         )
         self.assertEqual([item.digest for item in decision.delete], [digest("6")])
+
+    def test_shared_layer_components_live_while_any_root_lists_them(self) -> None:
+        registry = FakeRegistry()
+        base_root, task_root, dead_root = digest("1"), digest("2"), digest("3")
+        shared, task_layer, dead_layer, orphan = digest("4"), digest("5"), digest("6"), digest("7")
+        # Two per-layer images share the base component; a third image is gone.
+        registry.documents[("ucloud-managed/base", digest("a"))] = {
+            "annotations": {ENVIRONMENT_ANNOTATION: base_root},
+        }
+        registry.documents[("ucloud-managed/task", digest("b"))] = {
+            "annotations": {ENVIRONMENT_ANNOTATION: task_root},
+        }
+        for root, toolkits in ((base_root, []), (task_root, [task_layer]), (dead_root, [dead_layer])):
+            config = json.dumps({"environment": {"base": shared, "toolkits": toolkits,
+                                                 "workspace": None}}).encode()
+            config_digest = "sha256:" + root[-1] * 63 + "c"
+            registry.documents[(ENVIRONMENTS, root)] = {
+                "config": {"digest": config_digest, "size": len(config)}, "layers": [],
+            }
+            registry.blobs[(ENVIRONMENTS, config_digest)] = config
+        roots = ImageEnvironmentIndex(registry).roots([
+            RegistryTag("ucloud-managed/base", "latest", digest("a")),
+            RegistryTag("ucloud-managed/task", "latest", digest("b")),
+        ])
+        live = environment_live_identities(registry, ENVIRONMENTS, roots)
+        self.assertEqual(live, {base_root, task_root, shared, task_layer})
+
+        # Every index tag is days old; the tag itself never keeps a component.
+        records = [
+            RegistryTag(ENVIRONMENTS, "environment-root-base", base_root),
+            RegistryTag(ENVIRONMENTS, "environment-root-task", task_root),
+            RegistryTag(ENVIRONMENTS, "environment-root-dead", dead_root),
+            RegistryTag(ENVIRONMENTS, "layer-" + "4" * 64, shared),
+            RegistryTag(ENVIRONMENTS, "layer-" + "5" * 64, task_layer),
+            RegistryTag(ENVIRONMENTS, "layer-" + "6" * 64, dead_layer),
+            RegistryTag(ENVIRONMENTS, "layer-" + "7" * 64, orphan),
+        ]
+        decision = select_unreferenced(
+            records, reason=ENVIRONMENT_REASON, repository=ENVIRONMENTS, live=live,
+            grace_seconds=3600, tag_time=at(72), now=NOW,
+        )
+        self.assertEqual({item.digest for item in decision.delete}, {dead_root, dead_layer, orphan})
+        self.assertEqual(decision.kept["live"], 4)
+
+        # A builder reusing the orphan re-put its tag after planning.
+        retagged = {"layer-" + "7" * 64}
+        check = still_unreferenced_environment(
+            live, lambda record: NOW if record.tag in retagged else NOW - timedelta(hours=72),
+            NOW - timedelta(hours=1),
+        )
+        deleted = execute_reference_prune(registry, decision, usage_store=None, still_unreferenced=check)
+        self.assertEqual({item.digest for item in deleted}, {dead_root, dead_layer})
+        self.assertFalse(check(RegistryTag(ENVIRONMENTS, "layer-" + "4" * 64, shared)))
+        unknown = still_unreferenced_environment(set(), lambda _record: None, NOW)
+        self.assertFalse(unknown(RegistryTag(ENVIRONMENTS, "layer-x", orphan)))
 
     def test_malformed_live_root_raises_instead_of_deleting(self) -> None:
         registry = FakeRegistry()

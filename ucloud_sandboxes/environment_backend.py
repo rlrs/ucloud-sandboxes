@@ -22,6 +22,15 @@ from .environment_cache import VerifiedEnvironmentCache
 from .environment_nbd import EnvironmentReadWorkers, ReadOnlyEnvironmentDevice
 
 MAX_RPC_BYTES = 64 * 1024
+NO_BLOCK_DEVICE = "no available environment block device"
+
+
+def block_devices():
+    return tuple(sorted(path for path in Path("/dev").glob("nbd[0-9]*") if re.fullmatch(r"nbd[0-9]+", path.name)))
+
+
+def block_device_count():
+    return len(block_devices())
 
 
 def _private_directory(path):
@@ -54,9 +63,15 @@ def mount_has_dependents(path, *, include_bind_mounts=True):
         if details[0] != "overlay":
             continue
         for option in details[2].split(","):
-            if option.startswith("lowerdir="):
-                for lower in option[len("lowerdir="):].split(":"):
+            if option.startswith(("lowerdir=", "lowerdir+=")):
+                for lower in option.split("=", 1)[1].split(":"):
                     lower = unescape(lower)
+                    if not lower.startswith("/"):
+                        # The kernel shows lowers as given. Composed images
+                        # name components relative to their shared directory
+                        # (EnvironmentRootfsStore); resolving any relative
+                        # lower there can only over-report a dependency.
+                        lower = str(path.parent / lower)
                     if lower == target or lower.startswith(target + "/"):
                         return True
     return False
@@ -84,7 +99,7 @@ class EnvironmentBackend:
         except BaseException:
             os.close(self._lock_fd)
             raise
-        self._devices = tuple(devices) if devices is not None else tuple(sorted(path for path in Path("/dev").glob("nbd[0-9]*") if re.fullmatch(r"nbd[0-9]+", path.name)))
+        self._devices = tuple(devices) if devices is not None else block_devices()
         self._factory = device_factory
         self._mount = mount or (lambda dev, target: subprocess.run(
             ["mount", "-t", "erofs", "-o", "ro", str(dev), str(target)], check=True))
@@ -129,7 +144,7 @@ class EnvironmentBackend:
                     if exc.errno != errno.EBUSY:
                         raise
             if selected is None:
-                raise RuntimeError("no available environment block device")
+                raise RuntimeError(NO_BLOCK_DEVICE)
             # Record ownership before invoking mount: an interrupted command
             # can have mounted successfully even if no acknowledgment arrived.
             self._active[digest] = selected

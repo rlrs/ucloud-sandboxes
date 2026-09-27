@@ -3,7 +3,8 @@
 The only public input is the existing immutable Docker image adapter. No runtime
 workspace, memory directory, or checkpoint is accepted as a publication source.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+import logging
 import os
 from pathlib import Path, PurePosixPath
 import shutil
@@ -11,17 +12,28 @@ import stat
 import subprocess
 from tempfile import TemporaryDirectory
 
-from .environment_artifact import sign_component
+from .direct_warden import DirectWardenError
+from .environment_artifact import (
+    EMPTY_LAYER_DIFF_ID, LAYER_TAG_PREFIX, OCI_IMAGE, LayerEnvironmentComponent, canonical_bytes,
+    content_digest, layer_chain_id, layer_group_key, sign_component, sign_layer_component,
+)
 from .image_rootfs import DockerOverlay2RootfsStore
+from .managed_registry import RegistryRequestError
+
+_LOG = logging.getLogger(__name__)
 
 
-def _copy_metadata(source, destination, info):
-    if hasattr(os, "listxattr"):
-        for name in os.listxattr(source, follow_symlinks=False):
-            os.setxattr(destination, name, os.getxattr(source, name, follow_symlinks=False), follow_symlinks=False)
+def _copy_metadata(source, destination, info, *, skip_xattrs=()):
+    # Ownership first: chown(2) clears security.capability and setuid bits,
+    # so file capabilities and the mode are applied after it.
     os.chown(destination, info.st_uid, info.st_gid, follow_symlinks=False)
     if not stat.S_ISLNK(info.st_mode):
         os.chmod(destination, stat.S_IMODE(info.st_mode))
+    if hasattr(os, "listxattr"):
+        for name in os.listxattr(source, follow_symlinks=False):
+            if name not in skip_xattrs:
+                os.setxattr(destination, name, os.getxattr(source, name, follow_symlinks=False),
+                            follow_symlinks=False)
     os.utime(destination, ns=(info.st_atime_ns, info.st_mtime_ns), follow_symlinks=False)
 
 
@@ -131,6 +143,187 @@ def allowlisted_build_view(source_root: Path, destination: Path, paths):
     _copy_metadata(source_root, destination, source_root.lstat())
 
 
+# Per-layer publication. Docker overlay2 diff directories encode deletions as
+# overlayfs does: a 0:0 character device whiteout and an opaque-directory
+# xattr. A group of layers becomes one component; the worker stacks the
+# components with overlayfs exactly as Docker stacks the layers.
+OPAQUE_XATTR = "trusted.overlay.opaque"
+# A group closes once its compressed layers reach this size, and a layer at
+# least this large is a group of its own: a shared base becomes a few large,
+# stable components and each task's small layers one more.
+LAYER_GROUP_BYTES = 64 * 1024 ** 2
+# The worker's overlay stacks every component below one mount; the manifest
+# allows 33 components and the mount option one page.
+MAX_LAYER_GROUPS = 24
+
+
+def plan_layer_groups(sizes, *, threshold=LAYER_GROUP_BYTES, max_groups=MAX_LAYER_GROUPS):
+    """Half-open layer index ranges, bottom to top.
+
+    Greedy from the bottom, so a group depends only on the layers at and below
+    it: images sharing a base plan identical groups for it. The layers above
+    the last closed group form one group. Beyond ``max_groups`` the top groups
+    merge, keeping every lower group unchanged.
+    """
+    if max_groups < 1:
+        raise ValueError("layer planning requires at least one group")
+    groups, start, total = [], 0, 0
+    for index, size in enumerate(sizes):
+        if type(size) is not int or size < 0:
+            raise ValueError("invalid layer size")
+        if size >= threshold and index > start:
+            groups.append((start, index))
+            start, total = index, 0
+        total += size
+        if total >= threshold:
+            groups.append((start, index + 1))
+            start, total = index + 1, 0
+    if start < len(sizes):
+        groups.append((start, len(sizes)))
+    if len(groups) > max_groups:
+        groups = groups[:max_groups - 1] + [(groups[max_groups - 1][0], len(sizes))]
+    return groups
+
+
+def _is_whiteout(info):
+    return stat.S_ISCHR(info.st_mode) and info.st_rdev == os.makedev(0, 0)
+
+
+def _is_opaque(path):
+    if not hasattr(os, "getxattr"):
+        return False
+    try:
+        return os.getxattr(path, OPAQUE_XATTR, follow_symlinks=False) == b"y"
+    except OSError:
+        return False
+
+
+def _make_whiteout(path):
+    os.mknod(path, stat.S_IFCHR | 0o600, os.makedev(0, 0))
+
+
+def _set_opaque(path):
+    os.setxattr(path, OPAQUE_XATTR, b"y", follow_symlinks=False)
+
+
+def _lstat(path):
+    try:
+        return path.lstat()
+    except FileNotFoundError:
+        return None
+
+
+def _remove(path, info):
+    if stat.S_ISDIR(info.st_mode):
+        shutil.rmtree(path)
+    else:
+        path.unlink()
+
+
+class _LowerView:
+    """Overlay lookup through Docker diff directories, top to bottom."""
+
+    def __init__(self, layers):
+        self.layers = tuple(layers)
+
+    def exists(self, parts):
+        directories = list(self.layers)
+        for depth, part in enumerate(parts):
+            found = []
+            for directory in directories:
+                candidate = directory / part
+                try:
+                    info = candidate.lstat()
+                except (FileNotFoundError, NotADirectoryError):
+                    continue
+                if _is_whiteout(info):
+                    break
+                if not stat.S_ISDIR(info.st_mode):
+                    # A non-directory ends the lookup; below a directory it
+                    # only stops the merge.
+                    if not found and depth == len(parts) - 1:
+                        return True
+                    break
+                found.append(candidate)
+                if _is_opaque(candidate):
+                    break
+            if not found:
+                return False
+            directories = found
+        return True
+
+
+def _replace_directory_metadata(source, destination):
+    """A merged directory shows the upper layer's inode; its opacity stays."""
+    info = source.lstat()
+    if hasattr(os, "listxattr"):
+        wanted = set(os.listxattr(source, follow_symlinks=False)) - {OPAQUE_XATTR}
+        for name in os.listxattr(destination, follow_symlinks=False):
+            if name != OPAQUE_XATTR and name not in wanted:
+                os.removexattr(destination, name, follow_symlinks=False)
+    _copy_metadata(source, destination, info, skip_xattrs=(OPAQUE_XATTR,))
+
+
+def _merge_layer_diff(source, target, parts, hardlinks, lower, lower_visible):
+    for child in sorted(source.iterdir(), key=lambda path: path.name):
+        if not parts and child.name in WHOLE_IMAGE_EXCLUDED:
+            continue  # mkfs excludes them; they may hold device nodes.
+        destination = target / child.name
+        path = (*parts, child.name)
+        info = child.lstat()
+        existing = _lstat(destination)
+        if _is_whiteout(info):
+            if existing is not None:
+                _remove(destination, existing)
+            # Keep a whiteout only while it hides something beneath the group:
+            # in a directory no lower layer has, overlayfs would list it.
+            if lower_visible and lower.exists(path):
+                _make_whiteout(destination)
+            continue
+        if not stat.S_ISDIR(info.st_mode):
+            if existing is not None:
+                _remove(destination, existing)
+            _copy_entry(child, destination, hardlinks)
+            continue
+        opaque = _is_opaque(child)
+        if existing is not None and stat.S_ISDIR(existing.st_mode) and not opaque:
+            _merge_layer_diff(child, destination, path, hardlinks, lower,
+                              lower_visible and not _is_opaque(destination))
+            _replace_directory_metadata(child, destination)
+            continue
+        # A directory over an earlier file or whiteout of this group hides
+        # every lower layer, as it does in the separate layers: make it opaque.
+        hides = opaque or existing is not None
+        if existing is not None:
+            _remove(destination, existing)
+        destination.mkdir(mode=0o700)
+        _merge_layer_diff(child, destination, path, hardlinks, lower, lower_visible and not hides)
+        _copy_metadata(child, destination, info)
+        if hides:
+            _set_opaque(destination)
+
+
+def squash_layer_diffs(diff_dirs, destination: Path, *, lower_dirs=()):
+    """Squash Docker overlay2 diffs (bottom to top) into one overlay layer.
+
+    Stacked above ``lower_dirs`` (bottom to top) the result shows the same tree
+    as the separate layers: a whiteout deletes its path and stays while a lower
+    layer has that path; an opaque directory replaces the earlier one; a
+    directory over an earlier file or whiteout becomes opaque; a file replaces
+    whatever was there, breaking earlier hard links.
+    """
+    if destination.exists() or not diff_dirs:
+        raise ValueError("layer squash requires layers and a new destination")
+    destination.mkdir(mode=0o700)
+    lower = _LowerView(tuple(reversed(tuple(lower_dirs))))
+    for layer in diff_dirs:
+        if layer.is_symlink() or not layer.is_dir():
+            raise ValueError("layer squash requires real diff directories")
+        # Hard links never span layers: each diff is its own tar extraction.
+        _merge_layer_diff(layer, destination, (), {}, lower, bool(lower.layers))
+        _replace_directory_metadata(layer, destination)
+
+
 @dataclass
 class FreshEnvironmentBuilder:
     image_store: DockerOverlay2RootfsStore
@@ -141,6 +334,7 @@ class FreshEnvironmentBuilder:
     # lz4 made SWE-bench images 38% smaller with a faster mkfs; workers read
     # fewer bytes per chunk and the kernel decompresses (docs/image-import.md).
     compression: str = "lz4"
+    _layer_format: dict | None = field(default=None, init=False, repr=False)
 
     def build(self, image_ref, *, allowlist, tag):
         if not isinstance(self.image_store, DockerOverlay2RootfsStore):
@@ -153,22 +347,17 @@ class FreshEnvironmentBuilder:
                 with TemporaryDirectory(dir=self.work_root) as temporary:
                     root = Path(temporary)
                     image = root / "component.erofs"
-                    options = ["-T", "0", "-U", "00000000-0000-0000-0000-000000000000"]
-                    if self.compression:
-                        options.append("-z" + self.compression)
                     if _whole_image(allowlist):
                         # The merged overlay already is the image; copying every
                         # file into a fresh view only repeated it (13 s for 2.6 GB,
                         # serialized on the GIL across concurrent publications).
                         if source.rootfs.is_symlink() or not source.rootfs.is_dir():
                             raise ValueError("environment publication requires a real source")
-                        options.append("--exclude-regex=^(" + "|".join(sorted(WHOLE_IMAGE_EXCLUDED)) + ")$")
-                        view = source.rootfs
+                        view, exclude = source.rootfs, True
                     else:
-                        view = root / "view"
+                        view, exclude = root / "view", False
                         allowlisted_build_view(source.rootfs, view, allowlist)
-                    subprocess.run((self.mkfs_erofs, *options, str(image), str(view)),
-                                   check=True, capture_output=True, timeout=600)
+                    self._mkfs(image, view, exclude_runtime_mounts=exclude)
                     component = sign_component(image, source_image=source.image_id, signing_key=self.signing_key)
                     digest = self.registry.publish(image, component, tag=tag)
                     return {"image_id": source.image_id, "component_digest": digest,
@@ -178,6 +367,123 @@ class FreshEnvironmentBuilder:
                 # Builders have no sandbox registry users of this temporary
                 # mount. Existing image leases fence concurrent build readers.
                 self.image_store.collect_image(image_id, is_referenced=lambda _: False)
+
+    def _mkfs(self, image, view, *, exclude_runtime_mounts):
+        options = ["-T", "0", "-U", "00000000-0000-0000-0000-000000000000"]
+        if self.compression:
+            options.append("-z" + self.compression)
+        if exclude_runtime_mounts:
+            options.append("--exclude-regex=^(" + "|".join(sorted(WHOLE_IMAGE_EXCLUDED)) + ")$")
+        subprocess.run((self.mkfs_erofs, *options, str(image), str(view)),
+                       check=True, capture_output=True, timeout=600)
+
+    def layer_format(self):
+        """Everything besides the layers that decides a layer component's bytes."""
+        if self._layer_format is None:
+            result = subprocess.run((self.mkfs_erofs, "-V"), check=True, capture_output=True,
+                                    text=True, timeout=60)
+            lines = (result.stdout.strip() or result.stderr.strip()).splitlines()
+            if not lines:
+                raise ValueError("mkfs.erofs reported no version")
+            self._layer_format = {"layout": 1, "mkfs": lines[0].strip(), "compression": self.compression or "",
+                                  "excludes": sorted(WHOLE_IMAGE_EXCLUDED)}
+        return self._layer_format
+
+    def build_layers(self, image_ref, *, repository, reference, max_groups=MAX_LAYER_GROUPS):
+        """Publish one component per layer group, reusing any already published.
+
+        Returns None when the image cannot be split (its Docker layers do not
+        match the registry manifest); the caller then publishes the whole image.
+        """
+        if not isinstance(self.image_store, DockerOverlay2RootfsStore):
+            raise ValueError("environment publication requires the immutable OCI build adapter")
+        self.work_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        image_id = None
+        try:
+            # The lease pins the image, so Docker cannot remove the diff
+            # directories while they are read.
+            with self.image_store.operation_lease(image_ref) as source:
+                image_id = source.image_id
+                leased_id, diff_ids, directories = self.image_store.layer_diffs(image_ref)
+                if leased_id != image_id:
+                    raise ValueError("image changed while its layers were read")
+                sizes = [layer.size for layer in self.registry.client.manifest_layers(repository, reference).layers]
+                if len(sizes) != len(diff_ids):
+                    _LOG.warning("registry manifest of %s lists %d layers, Docker %d; not splitting",
+                                 image_ref, len(sizes), len(diff_ids))
+                    return None
+                layers = [(diff_id, directory, size) for diff_id, directory, size
+                          in zip(diff_ids, directories, sizes) if diff_id != EMPTY_LAYER_DIFF_ID]
+                if not layers:
+                    return None
+                layer_format = self.layer_format()
+                components, reused = [], 0
+                for start, end in plan_layer_groups([size for _, _, size in layers], max_groups=max_groups):
+                    digest, hit = self._publish_layer_group(
+                        [item[1] for item in layers[start:end]], [item[0] for item in layers[start:end]],
+                        lower_dirs=[item[1] for item in layers[:start]],
+                        parent=layer_chain_id(item[0] for item in layers[:start]), layer_format=layer_format)
+                    components.append(digest)
+                    reused += hit
+                _LOG.info("published %s as %d layer components (%d reused)", image_ref, len(components), reused)
+                return {"image_id": image_id, "image_config": source.image_config, "components": components,
+                        "diff_ids": diff_ids, "reused": reused}
+        finally:
+            if image_id is not None:
+                self.image_store.collect_image(image_id, is_referenced=lambda _: False)
+
+    def _publish_layer_group(self, directories, diff_ids, *, lower_dirs, parent, layer_format):
+        tag = LAYER_TAG_PREFIX + layer_group_key(layer_format, parent, diff_ids)
+        existing = self._reuse_layer_component(tag, diff_ids, parent, layer_format)
+        if existing is not None:
+            return existing, True
+        with TemporaryDirectory(dir=self.work_root) as temporary:
+            root = Path(temporary)
+            image = root / "component.erofs"
+            if len(directories) == 1:
+                # A Docker diff directory already is an overlay layer: its
+                # whiteouts and opaque xattrs pass through mkfs unchanged.
+                view = directories[0]
+                if view.is_symlink() or not view.is_dir():
+                    raise ValueError("environment publication requires a real layer directory")
+            else:
+                view = root / "view"
+                squash_layer_diffs(directories, view, lower_dirs=lower_dirs)
+            self._mkfs(image, view, exclude_runtime_mounts=True)
+            component = sign_layer_component(image, source_layers=diff_ids, parent=parent,
+                                             layer_format=layer_format, signing_key=self.signing_key)
+            return self.registry.publish(image, component, tag=tag), False
+
+    def _reuse_layer_component(self, tag, diff_ids, parent, layer_format):
+        """The published component for this group, or None to build it.
+
+        The tag is only an index: a stale, foreign or unloadable entry is
+        rebuilt and overwritten. A hit re-puts the tag, restarting its
+        retention grace period until the new root references the component.
+        """
+        client, repository = self.registry.client, self.registry.repository
+        try:
+            document, _headers = client.manifest_document(repository, tag)
+            payload = canonical_bytes(document)
+            digest = content_digest(payload)
+            component = self.registry.load(digest)
+        except (RegistryRequestError, ValueError) as exc:
+            if isinstance(exc, RegistryRequestError) and exc.status_code not in {400, 404}:
+                raise
+            return None
+        if (not isinstance(component, LayerEnvironmentComponent) or component.source_layers != tuple(diff_ids)
+                or component.parent != parent or component.format != layer_format):
+            _LOG.warning("environment tag %s names another component; rebuilding it", tag)
+            return None
+        try:
+            # The registry refuses this when a blob is gone (swept after the
+            # manifest was deleted); the group is then built again.
+            client.put_manifest(repository, tag, payload, media_type=OCI_IMAGE)
+        except RegistryRequestError as exc:
+            if exc.status_code not in {400, 404}:
+                raise
+            return None
+        return digest
 
     def publish_image(self, image_ref, *, allowlist, toolkits=()):
         """Publish fresh build output and attach it to the existing image tag."""
@@ -192,13 +498,31 @@ class FreshEnvironmentBuilder:
         # Buildx direct-push deliberately leaves no local image. Pull this
         # completed immutable build input before constructing the fresh view.
         self.image_store._checked(self.image_store.docker_binary, "pull", image_ref, timeout=600)
-        result = self.build(image_ref, allowlist=allowlist, tag="environment-component-" + uuid.uuid4().hex)
+        toolkits = tuple(toolkits)
+        layered = None
+        if _whole_image(allowlist):
+            try:
+                # The manifest holds the base and at most 32 more components.
+                layered = self.build_layers(image_ref, repository=repository, reference=tag,
+                                            max_groups=min(MAX_LAYER_GROUPS, 33 - len(toolkits)))
+            except RegistryRequestError:
+                raise
+            except (ValueError, DirectWardenError, subprocess.SubprocessError, OSError) as exc:
+                _LOG.warning("per-layer environment publication of %s failed; publishing the whole image: %s",
+                             image_ref, exc)
+        if layered is not None:
+            result, diff_ids = layered, layered["diff_ids"]
+            manifest = EnvironmentManifest(layered["components"][0],
+                                           toolkits=(*layered["components"][1:], *toolkits))
+        else:
+            result = self.build(image_ref, allowlist=allowlist, tag="environment-component-" + uuid.uuid4().hex)
+            diff_ids, manifest = None, EnvironmentManifest(result["component_digest"], toolkits=toolkits)
         config = result["image_config"]
         environment_digest = publish_environment(self.registry,
-            source_image=result["image_id"], environment=EnvironmentManifest(result["component_digest"], toolkits=tuple(toolkits)),
+            source_image=result["image_id"], environment=manifest,
             image_config={"Entrypoint": list(config.entrypoint), "Cmd": list(config.command), "Env": list(config.env),
                           "WorkingDir": config.working_dir, "User": config.user},
-            signing_key=self.signing_key, tag="environment-root-" + uuid.uuid4().hex)
+            signing_key=self.signing_key, tag="environment-root-" + uuid.uuid4().hex, source_diff_ids=diff_ids)
         return attach_environment_to_image(self.registry, image_repository=repository, image_reference=tag,
                                            environment_digest=environment_digest)
 

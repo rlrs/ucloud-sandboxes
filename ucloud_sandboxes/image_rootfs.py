@@ -798,6 +798,33 @@ class DockerOverlay2RootfsStore:
         self,
         image_ref: str,
     ) -> tuple[str, DockerImageConfig, tuple[Path, ...]]:
+        image_id, image_config, layers, _record = self._inspect_overlay2_record(image_ref)
+        return image_id, image_config, layers
+
+    def layer_diffs(self, image_ref: str) -> tuple[str, tuple[str, ...], tuple[Path, ...]]:
+        """Image ID, layer diff_ids and Docker diff directories, bottom to top.
+
+        Docker lists ``UpperDir`` then ``LowerDir`` top to bottom, one per
+        ``RootFS.Layers`` entry; a count mismatch is refused, never guessed.
+        """
+        image_id, _config, layers, record = self._inspect_overlay2_record(image_ref)
+        try:
+            rootfs = record["RootFS"]
+            diff_ids = tuple(str(item) for item in rootfs["Layers"])
+        except (KeyError, TypeError) as exc:
+            raise DirectWardenError("docker image inspect returned no layer diff_ids") from exc
+        if (
+            rootfs.get("Type") != "layers"
+            or len(diff_ids) != len(layers)
+            or any(not item.startswith("sha256:") or not _DIGEST.fullmatch(item[7:]) for item in diff_ids)
+        ):
+            raise DirectWardenError("Docker overlay2 layers do not match the image diff_ids")
+        return image_id, diff_ids, tuple(reversed(layers))
+
+    def _inspect_overlay2_record(
+        self,
+        image_ref: str,
+    ) -> tuple[str, DockerImageConfig, tuple[Path, ...], dict[str, Any]]:
         inspection = self._checked(
             self.docker_binary,
             "image",
@@ -843,7 +870,7 @@ class DockerOverlay2RootfsStore:
             raise DirectWardenError(
                 "Docker overlay2 layer stack exceeds the kernel mount option limit"
             )
-        return image_id, image_config, layers
+        return image_id, image_config, layers, record
 
     def _validate_docker_driver(self) -> None:
         if self._driver_validated:

@@ -40,8 +40,9 @@ fi
 $SUDO modprobe erofs
 # Do not change a live nodewide device pool. Dedicated fresh-worker pool only.
 # One device serves each distinct mounted component, so the pool bounds the
-# distinct images a worker can run at once (hundreds at target density).
-if [ ! -d /sys/module/nbd ]; then $SUDO modprobe nbd nbds_max=512 max_part=0; fi
+# distinct components a worker mounts at once: per-layer images share their
+# base components but add one or more of their own (hundreds at target density).
+if [ ! -d /sys/module/nbd ]; then $SUDO modprobe nbd nbds_max=1024 max_part=0; fi
 test -b /dev/nbd0
 $SUDO touch "$UCLOUD_STATE_DIR/environment-adapter"
 $SUDO tee /etc/systemd/system/{SERVICE} >/dev/null <<ENVIRONMENT_IO_SERVICE

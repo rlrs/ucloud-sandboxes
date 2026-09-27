@@ -128,6 +128,7 @@ from .registry_retention import (
     select_lru_evictions,
     select_unreferenced,
     snapshot_live_identities,
+    still_unreferenced_environment,
 )
 from .metrics import (
     MetricsStore,
@@ -2226,7 +2227,9 @@ def _run_reference_retention(
             )
             deleted_environments = execute_reference_prune(
                 client, decision, usage_store=usage_store,
-                still_unreferenced=lambda record: record.digest not in fresh,
+                still_unreferenced=still_unreferenced_environment(
+                    fresh, tag_time, now - timedelta(seconds=grace),
+                ),
             )
         outcomes.append((decision, deleted_environments))
     for decision, deleted in outcomes:

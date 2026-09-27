@@ -136,7 +136,9 @@ if IMMUTABLE_WORKERS:
     sandbox["docker_quota_image_gb"] = 32
     sandbox["direct_disk_headroom_mb"] = 256 * GIB
 builder = raw["builder"]
-builder.update({"product_id": "ccx33", "disk_gb": 223, "docker_quota_image_gb": 160, "max_nodes": 1,
+# Up to four builders: a harness with ~100 task images queued 90 builds behind
+# one CCX33. They still stop after 5 idle minutes.
+builder.update({"product_id": "ccx33", "disk_gb": 223, "docker_quota_image_gb": 160, "max_nodes": 4,
                 "scale_down_idle_seconds": 300})
 policy = raw["policy"]
 policy.update({
@@ -150,7 +152,10 @@ policy.update({
     # Plain Ubuntu 26.04 private-only boots open SSH after ~130 s; the golden
     # snapshot removes that delay. Do not evict nodes before init can finish.
     "unreachable_stop_after_seconds": 900,
-    "create_target_concurrency_per_node": 8,
+    # EROFS creates take ~1.3 s (200 in 92 s on one worker at 16-way). At 8 a
+    # burst of 33 creates queued past the 30 s startup rule and bought two
+    # temporary workers.
+    "create_target_concurrency_per_node": 32,
 })
 config = DeploymentConfig.from_dict(raw)  # validate the exact document
 Path(__file__).resolve().parents[2].joinpath("build", "hetzner-prod", "deployment.json").write_text(

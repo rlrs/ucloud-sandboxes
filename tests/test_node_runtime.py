@@ -139,6 +139,26 @@ class DirectNodeRuntimeTests(unittest.TestCase):
                 with manager.lifecycle._coordinator.exclusive("agent"):
                     pass  # Neither branch leaks an activity lease.
 
+    def test_delete_waits_for_an_in_flight_park_instead_of_conflicting(self) -> None:
+        service = _WakeService()
+        service.get = Mock(return_value=None)
+        service.delete = Mock()
+        manager = DirectNodeRuntime(service)
+        done = Event()
+
+        def delete():
+            manager.delete("agent", generation=1, operation_id="delete-1")
+            done.set()
+
+        with manager.lifecycle._coordinator.exclusive("agent"):  # the park
+            thread = Thread(target=delete)
+            thread.start()
+            self.assertFalse(done.wait(.1))
+            service.delete.assert_not_called()
+        thread.join(2)
+        self.assertTrue(done.is_set())
+        service.delete.assert_called_once_with("agent", generation=1)
+
     def test_tool_transition_timeout_is_retryable_before_exec_acceptance(self) -> None:
         service = _WakeService()
         service.admission_wait_seconds = .01

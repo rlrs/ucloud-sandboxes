@@ -520,8 +520,15 @@ class DirectNodeRuntime:
         if record is not None and record.generation != generation:
             raise SandboxConflictError("delete generation does not own direct sandbox")
         # Deletion is a hard revocation boundary. It closes new activity but is
-        # allowed to sever attached exec sessions during sandbox deletion.
-        with self.lifecycle.exclusive(sandbox_id, allow_shared=True):
+        # allowed to sever attached exec sessions during sandbox deletion. It
+        # waits for an in-flight park or wake (an idle park can outlast the
+        # caller's next request on a busy node) instead of failing with 409.
+        with self.lifecycle.exclusive(
+            sandbox_id,
+            allow_shared=True,
+            join_transition=True,
+            transition_timeout_seconds=60.0,
+        ):
             self.service.delete(
                 sandbox_id,
                 generation=generation,

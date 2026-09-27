@@ -1599,10 +1599,14 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
             b"answer",
         )
 
-    async def completion_client(self, wake, *, deployment="http-acceptance"):
+    async def completion_client(self, wake, *, deployment="http-acceptance",
+                                request_timeout_seconds=30):
+        # The server's maintenance loop completes requests past their deadline
+        # with a 504; a 1 s deadline let it win against a slow commit on a
+        # loaded host, turning the worker's real completion into a 409.
         app = api.create_model_relay_app(
             postgres_store=PostgresDatabase(DSN, deployment, schema=self.schema),
-            request_timeout_seconds=1,
+            request_timeout_seconds=request_timeout_seconds,
             result_notifier=wake,
             worker_bearer_token="worker",
         )

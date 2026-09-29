@@ -1,0 +1,3347 @@
+{
+  "schema": 1,
+  "generated_at": "2026-09-29T13:37:15.546382+00:00",
+  "root": "docs/benchmarks/build-cache-affinity-2026-09-29",
+  "source_report": "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-cache-affinity-2026-09-29/build-load-report.json",
+  "report_fingerprint": {
+    "bytes": 651086,
+    "sha256": "fe4f14dbb9fc7fdbf17b6b9289699003cc0c4e52c7d3108601feaa20b1e0efcc"
+  },
+  "gateway_label": "gateway",
+  "gateway_disk": "sdb",
+  "builder_disk": "sda",
+  "sources": {
+    "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-cache-affinity-2026-09-29/telemetry/builder-167966880.jsonl.gz": {
+      "bytes": 120624,
+      "sha256": "943c5daf1316f8ab760308679a027475ed97ef174a92001a2b457e43e9ccbe21",
+      "first_sample": "2026-09-29T13:14:09.805088+00:00",
+      "last_sample": "2026-09-29T13:20:13.805152+00:00",
+      "online_cpus": [
+        8
+      ],
+      "memory_total_gib": 30.59585189819336,
+      "malformed_lines": 0,
+      "excluded_disk_busy_counter_anomalies": []
+    },
+    "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-cache-affinity-2026-09-29/telemetry/builder-167966883.jsonl.gz": {
+      "bytes": 105170,
+      "sha256": "cebb4008f0f847ae40b10e22c03ff96db537ed653ef7d050bbb83c7d586c3f40",
+      "first_sample": "2026-09-29T13:14:12.063227+00:00",
+      "last_sample": "2026-09-29T13:20:14.063226+00:00",
+      "online_cpus": [
+        8
+      ],
+      "memory_total_gib": 30.595848083496094,
+      "malformed_lines": 0,
+      "excluded_disk_busy_counter_anomalies": []
+    },
+    "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-cache-affinity-2026-09-29/telemetry/builder-167966886.jsonl.gz": {
+      "bytes": 115421,
+      "sha256": "9afbe417afa472387aba0d35dce8b3d9dc470f2b834c65d34f92e25e3ae6e019",
+      "first_sample": "2026-09-29T13:14:18.733213+00:00",
+      "last_sample": "2026-09-29T13:20:12.733262+00:00",
+      "online_cpus": [
+        8
+      ],
+      "memory_total_gib": 30.59585189819336,
+      "malformed_lines": 0,
+      "excluded_disk_busy_counter_anomalies": []
+    },
+    "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-cache-affinity-2026-09-29/telemetry/builder-167966887.jsonl.gz": {
+      "bytes": 115936,
+      "sha256": "57ab59a293dcd917f26f5c44970d5e3fab0dc8f78f10e96c354d8ed6a915ca46",
+      "first_sample": "2026-09-29T13:14:11.700372+00:00",
+      "last_sample": "2026-09-29T13:20:13.700505+00:00",
+      "online_cpus": [
+        8
+      ],
+      "memory_total_gib": 30.595848083496094,
+      "malformed_lines": 0,
+      "excluded_disk_busy_counter_anomalies": []
+    },
+    "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-cache-affinity-2026-09-29/telemetry/builder-167968139.jsonl.gz": {
+      "bytes": 90726,
+      "sha256": "7fbe40daa61662d15ff04553bed724107a0867cdd53c244b33e7d3be288e656a",
+      "first_sample": "2026-09-29T13:27:34.300745+00:00",
+      "last_sample": "2026-09-29T13:32:50.300732+00:00",
+      "online_cpus": [
+        8
+      ],
+      "memory_total_gib": 30.59585189819336,
+      "malformed_lines": 0,
+      "excluded_disk_busy_counter_anomalies": []
+    },
+    "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-cache-affinity-2026-09-29/telemetry/builder-167968141.jsonl.gz": {
+      "bytes": 93403,
+      "sha256": "cb2b51cf1204cb1a8effa4a201f0b73656a2f31b0cc2fc87c0ec85bd1fda9cb1",
+      "first_sample": "2026-09-29T13:27:32.975314+00:00",
+      "last_sample": "2026-09-29T13:32:52.975331+00:00",
+      "online_cpus": [
+        8
+      ],
+      "memory_total_gib": 30.595844268798828,
+      "malformed_lines": 0,
+      "excluded_disk_busy_counter_anomalies": [
+        {
+          "at": "2026-09-29T13:31:56.975337+00:00",
+          "device": "sda1",
+          "derived_busy_percent": 1049.5494657793336,
+          "seconds": 2.0000010179999776,
+          "previous_busy_ms": 5521,
+          "current_busy_ms": 26512
+        }
+      ]
+    },
+    "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-cache-affinity-2026-09-29/telemetry/builder-167968156.jsonl.gz": {
+      "bytes": 88235,
+      "sha256": "8fc801a25833fced95c2e4d3f03eec4c2efc973b1ffcae6c3757d2383d5e4c4c",
+      "first_sample": "2026-09-29T13:27:36.280560+00:00",
+      "last_sample": "2026-09-29T13:32:56.280577+00:00",
+      "online_cpus": [
+        8
+      ],
+      "memory_total_gib": 30.59585189819336,
+      "malformed_lines": 0,
+      "excluded_disk_busy_counter_anomalies": []
+    },
+    "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-cache-affinity-2026-09-29/telemetry/builder-167968157.jsonl.gz": {
+      "bytes": 89938,
+      "sha256": "11f8e097266d6ae33098784c7a7cbaa5f34921520dd991e4bfcf685fe20bd540",
+      "first_sample": "2026-09-29T13:27:34.704107+00:00",
+      "last_sample": "2026-09-29T13:32:54.704092+00:00",
+      "online_cpus": [
+        8
+      ],
+      "memory_total_gib": 30.595848083496094,
+      "malformed_lines": 0,
+      "excluded_disk_busy_counter_anomalies": [
+        {
+          "at": "2026-09-29T13:30:28.704074+00:00",
+          "device": "sda",
+          "derived_busy_percent": 101.3517040262,
+          "seconds": 1.999966373999996,
+          "previous_busy_ms": 7412,
+          "current_busy_ms": 9439
+        }
+      ]
+    },
+    "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-cache-affinity-2026-09-29/telemetry/gateway.jsonl.gz": {
+      "bytes": 670911,
+      "sha256": "ef080b6090df879160ebd4ed5bf582e0c24a49327764a0295426aff3a914c7e1",
+      "first_sample": "2026-09-29T13:11:11.242980+00:00",
+      "last_sample": "2026-09-29T13:37:09.242956+00:00",
+      "online_cpus": [
+        4
+      ],
+      "memory_total_gib": 15.239540100097656,
+      "malformed_lines": 0,
+      "excluded_disk_busy_counter_anomalies": [
+        {
+          "at": "2026-09-29T13:17:55.242951+00:00",
+          "device": "sdb",
+          "derived_busy_percent": 176.69911208791467,
+          "seconds": 2.000010049989214,
+          "previous_busy_ms": 1470522,
+          "current_busy_ms": 1474056
+        }
+      ]
+    }
+  },
+  "phases": [
+    {
+      "phase": "affinity-seed",
+      "window": {
+        "started_at": "2026-09-29T13:16:05+00:00",
+        "finished_at": "2026-09-29T13:18:10+00:00",
+        "seconds": 125.0,
+        "records_with_start": 48,
+        "records_with_finish": 48
+      },
+      "cases": 48,
+      "statuses": {
+        "succeeded": 48
+      },
+      "owners": {
+        "167966880": 14,
+        "167966883": 8,
+        "167966886": 14,
+        "167966887": 12
+      },
+      "http": {
+        "statuses": {
+          "200": 1659,
+          "202": 48,
+          "503": 668
+        },
+        "by_category": {
+          "context": {
+            "200": 48
+          },
+          "submit": {
+            "202": 48,
+            "503": 668
+          },
+          "poll": {
+            "200": 1611
+          }
+        },
+        "responses_503": 668,
+        "cases_with_503": 33,
+        "repeated_submit_attempts": 668,
+        "time_to_headers_seconds": {
+          "context": {
+            "count": 48,
+            "min": 0.0012232190056238323,
+            "mean": 0.01655124522949336,
+            "p50": 0.006912851502420381,
+            "p95": 0.05245697009959258,
+            "max": 0.06280985601188149
+          },
+          "poll": {
+            "count": 1611,
+            "min": 0.0018460579885868356,
+            "mean": 0.007284569762174771,
+            "p50": 0.004233774001477286,
+            "p95": 0.017818839995015878,
+            "max": 0.3314656209986424
+          },
+          "submit": {
+            "count": 716,
+            "min": 0.0158451809984399,
+            "mean": 0.056245310343906035,
+            "p50": 0.0255155190025107,
+            "p95": 0.27324656625205535,
+            "max": 1.1129491020110436
+          }
+        }
+      },
+      "measurements": {
+        "client_wall_seconds": {
+          "count": 48,
+          "min": 12.29011257798993,
+          "mean": 74.1103289783335,
+          "p50": 77.73210231950361,
+          "p95": 116.63912646490644,
+          "max": 125.62483371300914
+        },
+        "submission_seconds": {
+          "count": 48,
+          "min": 7.441102208002121,
+          "mean": 41.2919998381667,
+          "p50": 42.35192375299812,
+          "p95": 88.26609654469867,
+          "max": 94.33954718800669
+        },
+        "polling_seconds": {
+          "count": 48,
+          "min": 4.093775481000193,
+          "mean": 32.81803978952121,
+          "p50": 34.29656650650577,
+          "p95": 50.291973871851226,
+          "max": 51.3268842260004
+        },
+        "preparation_seconds": {
+          "count": 48,
+          "min": 0.166,
+          "mean": 0.4074166666666667,
+          "p50": 0.291,
+          "p95": 0.97325,
+          "max": 1.024
+        },
+        "queue_seconds": {
+          "count": 48,
+          "min": 0.002,
+          "mean": 0.004187500000000003,
+          "p50": 0.0035,
+          "p95": 0.007,
+          "max": 0.022
+        },
+        "execution_seconds": {
+          "count": 48,
+          "min": 3.097,
+          "mean": 32.23847916666667,
+          "p50": 33.781,
+          "p95": 49.5326,
+          "max": 51.19
+        },
+        "worker_end_to_end_seconds": {
+          "count": 48,
+          "min": 3.342,
+          "mean": 32.650083333333335,
+          "p50": 33.994,
+          "p95": 50.1714,
+          "max": 51.381
+        },
+        "build_push_seconds": {
+          "count": 48,
+          "min": 2.596,
+          "mean": 30.114062500000003,
+          "p50": 32.2655,
+          "p95": 47.59205,
+          "max": 48.395
+        },
+        "erofs_publication_seconds": {
+          "count": 48,
+          "min": 0.445,
+          "mean": 2.0611458333333332,
+          "p50": 1.7145000000000001,
+          "p95": 3.9922,
+          "max": 4.274
+        },
+        "cleanup_seconds": {
+          "count": 48,
+          "min": 0.013,
+          "mean": 0.033562500000000016,
+          "p50": 0.025500000000000002,
+          "p95": 0.08609999999999995,
+          "max": 0.137
+        }
+      },
+      "overlap": {
+        "admitted": {
+          "peak": 16,
+          "first_peak_at": "2026-09-29T13:16:15.111922+00:00",
+          "complete_intervals": 48,
+          "missing_or_invalid_intervals": 0,
+          "duplicate_build_ids_ignored": 0,
+          "by_owner": {
+            "167966880": {
+              "peak": 4,
+              "first_peak_at": "2026-09-29T13:16:13.265149+00:00"
+            },
+            "167966883": {
+              "peak": 4,
+              "first_peak_at": "2026-09-29T13:16:12.793747+00:00"
+            },
+            "167966886": {
+              "peak": 4,
+              "first_peak_at": "2026-09-29T13:16:15.111922+00:00"
+            },
+            "167966887": {
+              "peak": 4,
+              "first_peak_at": "2026-09-29T13:16:14.496302+00:00"
+            }
+          }
+        },
+        "executing": {
+          "peak": 16,
+          "first_peak_at": "2026-09-29T13:16:15.373447+00:00",
+          "complete_intervals": 48,
+          "missing_or_invalid_intervals": 0,
+          "duplicate_build_ids_ignored": 0,
+          "by_owner": {
+            "167966880": {
+              "peak": 4,
+              "first_peak_at": "2026-09-29T13:16:13.458761+00:00"
+            },
+            "167966883": {
+              "peak": 4,
+              "first_peak_at": "2026-09-29T13:16:13.674103+00:00"
+            },
+            "167966886": {
+              "peak": 4,
+              "first_peak_at": "2026-09-29T13:16:15.373447+00:00"
+            },
+            "167966887": {
+              "peak": 4,
+              "first_peak_at": "2026-09-29T13:16:14.687306+00:00"
+            }
+          }
+        }
+      },
+      "batch_wall_seconds": 125.63465783299762,
+      "hosts": [
+        {
+          "label": "builder-167966880",
+          "source": "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-cache-affinity-2026-09-29/telemetry/builder-167966880.jsonl.gz",
+          "coverage_fraction": 0.991999860072,
+          "covered_seconds": 123.999982509,
+          "started_at": "2026-09-29T13:16:05.805169+00:00",
+          "finished_at": "2026-09-29T13:18:09.805146+00:00",
+          "counter_resets": 0,
+          "host_cpu_cores": {
+            "samples": 62,
+            "covered_seconds": 123.999982509,
+            "mean": 4.144597358815744,
+            "min": 0.01499994403520849,
+            "max": 6.1650045004531755,
+            "p95": 6.100038113038163,
+            "cpu_seconds": 513.93
+          },
+          "iowait_cores": {
+            "samples": 62,
+            "covered_seconds": 123.999982509,
+            "mean": 0.15032260184913407,
+            "min": 0.0,
+            "max": 0.634839743594479,
+            "p95": 0.47499998028750684,
+            "cpu_seconds": 18.639999999999997
+          },
+          "process_cpu_cores": {
+            "gateway": {
+              "samples": 62,
+              "covered_seconds": 123.999982509,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "registry": {
+              "samples": 62,
+              "covered_seconds": 123.999982509,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "benchmark_driver": {
+              "samples": 62,
+              "covered_seconds": 123.999982509,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "postgres": {
+              "samples": 62,
+              "covered_seconds": 123.999982509,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "nginx": {
+              "samples": 62,
+              "covered_seconds": 123.999982509,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "relay": {
+              "samples": 62,
+              "covered_seconds": 123.999982509,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "autoscaler": {
+              "samples": 62,
+              "covered_seconds": 123.999982509,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "placement": {
+              "samples": 62,
+              "covered_seconds": 123.999982509,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "node_agent": {
+              "samples": 62,
+              "covered_seconds": 123.999982509,
+              "mean": 0.18903228472873954,
+              "min": 0.0,
+              "max": 1.2850106919314637,
+              "p95": 0.8850347265500873,
+              "cpu_seconds": 23.440000000000012
+            },
+            "dockerd": {
+              "samples": 62,
+              "covered_seconds": 123.999982509,
+              "mean": 0.01129032417321823,
+              "min": 0.0,
+              "max": 0.11497097718640173,
+              "p95": 0.04000156956158586,
+              "cpu_seconds": 1.4000000000000006
+            },
+            "buildkit": {
+              "samples": 62,
+              "covered_seconds": 123.999982509,
+              "mean": 2.9963713903994504,
+              "min": 0.0,
+              "max": 5.559951492203093,
+              "p95": 5.3099814097550375,
+              "cpu_seconds": 371.5499999999999
+            },
+            "erofs": {
+              "samples": 62,
+              "covered_seconds": 123.999982509,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            }
+          },
+          "memory_available_gib": {
+            "samples": 62,
+            "covered_seconds": 123.999982509,
+            "mean": 27.291307820479176,
+            "min": 26.0933837890625,
+            "max": 28.7755126953125,
+            "p95": 28.726558685302734
+          },
+          "pressure_percent": {
+            "cpu": {
+              "samples": 62,
+              "covered_seconds": 123.999982509,
+              "mean": 6.867097742841987,
+              "min": 0.026049600946163126,
+              "max": 23.28764663208971,
+              "p95": 17.814253041219093
+            },
+            "memory": {
+              "samples": 62,
+              "covered_seconds": 123.999982509,
+              "mean": 8.790323820577047e-05,
+              "min": 0.0,
+              "max": 0.005150066816966959,
+              "p95": 5.000003650002576e-05
+            },
+            "io": {
+              "samples": 62,
+              "covered_seconds": 123.999982509,
+              "mean": 2.694642315580555,
+              "min": 0.0,
+              "max": 12.447753787714198,
+              "p95": 8.077199664796316
+            }
+          },
+          "oom_kills": 0.0,
+          "swap_pages_in": 0.0,
+          "swap_pages_out": 0.0,
+          "disk": {
+            "device": "sda",
+            "read": {
+              "mib_per_second": {
+                "samples": 62,
+                "covered_seconds": 123.999982509,
+                "mean": 0.02315398512085769,
+                "min": 0.0,
+                "max": 1.1211377406421037,
+                "p95": 0.05273474701727298
+              },
+              "total_gib": 0.002803802490234375
+            },
+            "write": {
+              "mib_per_second": {
+                "samples": 62,
+                "covered_seconds": 123.999982509,
+                "mean": 42.83058819878885,
+                "min": 0.0,
+                "max": 474.8680154252329,
+                "p95": 233.73725138714462
+              },
+              "total_gib": 5.186515808105469
+            },
+            "await_ms": {
+              "samples": 53,
+              "covered_seconds": 106.00104932199997,
+              "mean": 1.0721894361065056,
+              "min": 0.2190721649484536,
+              "max": 4.677902621722846,
+              "p95": 2.9257362355953904,
+              "io_weighted_mean": 1.1183890559302339
+            },
+            "queue_depth": {
+              "samples": 62,
+              "covered_seconds": 123.999982509,
+              "mean": 0.7888791435345572,
+              "min": 0.0,
+              "max": 3.6445151229155046,
+              "p95": 3.1960126242498887
+            }
+          },
+          "network_drop_deltas": {
+            "network/lo/rx_drops_per_second": 0.0,
+            "network/lo/tx_drops_per_second": 0.0,
+            "network/enp7s0/rx_drops_per_second": 0.0,
+            "network/enp7s0/tx_drops_per_second": 0.0,
+            "network/docker0/rx_drops_per_second": 0.0,
+            "network/docker0/tx_drops_per_second": 0.0
+          },
+          "health": {
+            "probes": 0,
+            "failures": 0,
+            "latency_p95_ms": null,
+            "max_latency_ms": null
+          },
+          "relevance": "included"
+        },
+        {
+          "label": "builder-167966883",
+          "source": "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-cache-affinity-2026-09-29/telemetry/builder-167966883.jsonl.gz",
+          "coverage_fraction": 0.9759995093760001,
+          "covered_seconds": 121.99993867200001,
+          "started_at": "2026-09-29T13:16:06.063329+00:00",
+          "finished_at": "2026-09-29T13:18:08.063263+00:00",
+          "counter_resets": 0,
+          "host_cpu_cores": {
+            "samples": 61,
+            "covered_seconds": 121.99993867200001,
+            "mean": 2.604181636961078,
+            "min": 0.0150000307200629,
+            "max": 6.9699260665092355,
+            "p95": 6.260086057403012,
+            "cpu_seconds": 317.71000000000015
+          },
+          "iowait_cores": {
+            "samples": 61,
+            "covered_seconds": 121.99993867200001,
+            "mean": 0.12081973286584079,
+            "min": 0.0,
+            "max": 1.014997927374227,
+            "p95": 0.6500163661120668,
+            "cpu_seconds": 14.74
+          },
+          "process_cpu_cores": {
+            "gateway": {
+              "samples": 61,
+              "covered_seconds": 121.99993867200001,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "registry": {
+              "samples": 61,
+              "covered_seconds": 121.99993867200001,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "benchmark_driver": {
+              "samples": 61,
+              "covered_seconds": 121.99993867200001,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "postgres": {
+              "samples": 61,
+              "covered_seconds": 121.99993867200001,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "nginx": {
+              "samples": 61,
+              "covered_seconds": 121.99993867200001,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "relay": {
+              "samples": 61,
+              "covered_seconds": 121.99993867200001,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "autoscaler": {
+              "samples": 61,
+              "covered_seconds": 121.99993867200001,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "placement": {
+              "samples": 61,
+              "covered_seconds": 121.99993867200001,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "node_agent": {
+              "samples": 61,
+              "covered_seconds": 121.99993867200001,
+              "mean": 0.1352459696259413,
+              "min": 0.0,
+              "max": 1.145011786178818,
+              "p95": 0.8699982234636229,
+              "cpu_seconds": 16.500000000000014
+            },
+            "dockerd": {
+              "samples": 61,
+              "covered_seconds": 121.99993867200001,
+              "mean": 0.008114758177556473,
+              "min": 0.0,
+              "max": 0.1250031473292436,
+              "p95": 0.04000080593623818,
+              "cpu_seconds": 0.9900000000000002
+            },
+            "buildkit": {
+              "samples": 61,
+              "covered_seconds": 121.99993867200001,
+              "mean": 1.8786894689858011,
+              "min": 0.0,
+              "max": 7.064925058807424,
+              "p95": 5.929986023022946,
+              "cpu_seconds": 229.20000000000002
+            },
+            "erofs": {
+              "samples": 61,
+              "covered_seconds": 121.99993867200001,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            }
+          },
+          "memory_available_gib": {
+            "samples": 61,
+            "covered_seconds": 121.99993867200001,
+            "mean": 27.809731741282775,
+            "min": 25.45209503173828,
+            "max": 28.768367767333984,
+            "p95": 28.730205535888672
+          },
+          "pressure_percent": {
+            "cpu": {
+              "samples": 61,
+              "covered_seconds": 121.99993867200001,
+              "mean": 6.521642622617204,
+              "min": 0.0386999799534101,
+              "max": 33.392795785918636,
+              "p95": 25.68587923053098
+            },
+            "memory": {
+              "samples": 61,
+              "covered_seconds": 121.99993867200001,
+              "mean": 1.6393450863750445e-05,
+              "min": 0.0,
+              "max": 0.0006499717668513702,
+              "p95": 0.0
+            },
+            "io": {
+              "samples": 61,
+              "covered_seconds": 121.99993867200001,
+              "mean": 2.2387109614398835,
+              "min": 0.0,
+              "max": 15.500504654889756,
+              "p95": 12.45475442027256
+            }
+          },
+          "oom_kills": 0.0,
+          "swap_pages_in": 0.0,
+          "swap_pages_out": 0.0,
+          "disk": {
+            "device": "sda",
+            "read": {
+              "mib_per_second": {
+                "samples": 61,
+                "covered_seconds": 121.99993867200001,
+                "mean": 0.026159080772820534,
+                "min": 0.0,
+                "max": 1.1211052900973006,
+                "p95": 0.08007973844657057
+              },
+              "total_gib": 0.003116607666015625
+            },
+            "write": {
+              "mib_per_second": {
+                "samples": 61,
+                "covered_seconds": 121.99993867200001,
+                "mean": 37.27646597205823,
+                "min": 0.0,
+                "max": 523.2682064908531,
+                "p95": 226.0583412428304
+              },
+              "total_gib": 4.441139221191406
+            },
+            "await_ms": {
+              "samples": 40,
+              "covered_seconds": 79.99834834300003,
+              "mean": 1.1454207507288212,
+              "min": 0.0,
+              "max": 7.372787610619469,
+              "p95": 3.823741007194245,
+              "io_weighted_mean": 1.4126134320028112
+            },
+            "queue_depth": {
+              "samples": 61,
+              "covered_seconds": 121.99993867200001,
+              "mean": 0.5819101285851178,
+              "min": 0.0,
+              "max": 6.687082909797392,
+              "p95": 3.689992465035366
+            }
+          },
+          "network_drop_deltas": {
+            "network/lo/rx_drops_per_second": 0.0,
+            "network/lo/tx_drops_per_second": 0.0,
+            "network/enp7s0/rx_drops_per_second": 0.0,
+            "network/enp7s0/tx_drops_per_second": 0.0,
+            "network/docker0/rx_drops_per_second": 0.0,
+            "network/docker0/tx_drops_per_second": 0.0
+          },
+          "health": {
+            "probes": 0,
+            "failures": 0,
+            "latency_p95_ms": null,
+            "max_latency_ms": null
+          },
+          "relevance": "included"
+        },
+        {
+          "label": "builder-167966886",
+          "source": "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-cache-affinity-2026-09-29/telemetry/builder-167966886.jsonl.gz",
+          "coverage_fraction": 0.9759997783439999,
+          "covered_seconds": 121.99997229299998,
+          "started_at": "2026-09-29T13:16:06.733292+00:00",
+          "finished_at": "2026-09-29T13:18:08.733267+00:00",
+          "counter_resets": 0,
+          "host_cpu_cores": {
+            "samples": 61,
+            "covered_seconds": 121.99997229299998,
+            "mean": 4.146886187686686,
+            "min": 0.01500008970803638,
+            "max": 6.610010281871034,
+            "p95": 6.413895527916176,
+            "cpu_seconds": 505.92
+          },
+          "iowait_cores": {
+            "samples": 61,
+            "covered_seconds": 121.99997229299998,
+            "mean": 0.17377053126770586,
+            "min": 0.0,
+            "max": 1.1049831219353188,
+            "p95": 0.6147410504757194,
+            "cpu_seconds": 21.200000000000003
+          },
+          "process_cpu_cores": {
+            "gateway": {
+              "samples": 61,
+              "covered_seconds": 121.99997229299998,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "registry": {
+              "samples": 61,
+              "covered_seconds": 121.99997229299998,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "benchmark_driver": {
+              "samples": 61,
+              "covered_seconds": 121.99997229299998,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "postgres": {
+              "samples": 61,
+              "covered_seconds": 121.99997229299998,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "nginx": {
+              "samples": 61,
+              "covered_seconds": 121.99997229299998,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "relay": {
+              "samples": 61,
+              "covered_seconds": 121.99997229299998,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "autoscaler": {
+              "samples": 61,
+              "covered_seconds": 121.99997229299998,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "placement": {
+              "samples": 61,
+              "covered_seconds": 121.99997229299998,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "node_agent": {
+              "samples": 61,
+              "covered_seconds": 121.99997229299998,
+              "mean": 0.16155741373992846,
+              "min": 0.004999882552758888,
+              "max": 1.085037353495915,
+              "p95": 0.6150084412983592,
+              "cpu_seconds": 19.710000000000008
+            },
+            "dockerd": {
+              "samples": 61,
+              "covered_seconds": 121.99997229299998,
+              "mean": 0.013934429394108489,
+              "min": 0.0,
+              "max": 0.15500191597868168,
+              "p95": 0.07499904004978805,
+              "cpu_seconds": 1.7000000000000002
+            },
+            "buildkit": {
+              "samples": 61,
+              "covered_seconds": 121.99997229299998,
+              "mean": 3.0650006960817557,
+              "min": 0.0,
+              "max": 5.697201703538534,
+              "p95": 5.404931711390162,
+              "cpu_seconds": 373.9299999999999
+            },
+            "erofs": {
+              "samples": 61,
+              "covered_seconds": 121.99997229299998,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            }
+          },
+          "memory_available_gib": {
+            "samples": 61,
+            "covered_seconds": 121.99997229299998,
+            "mean": 27.328674956464525,
+            "min": 25.886253356933594,
+            "max": 28.782733917236328,
+            "p95": 28.75250244140625
+          },
+          "pressure_percent": {
+            "cpu": {
+              "samples": 61,
+              "covered_seconds": 121.99997229299998,
+              "mean": 8.05200346800705,
+              "min": 0.035249171996950164,
+              "max": 22.337065314479744,
+              "p95": 21.27503309331411
+            },
+            "memory": {
+              "samples": 61,
+              "covered_seconds": 121.99997229299998,
+              "mean": 2.459016951901498e-06,
+              "min": 0.0,
+              "max": 5.000068628441945e-05,
+              "p95": 0.0
+            },
+            "io": {
+              "samples": 61,
+              "covered_seconds": 121.99997229299998,
+              "mean": 3.1469031736987394,
+              "min": 0.0,
+              "max": 22.99279879649509,
+              "p95": 11.133910024111948
+            }
+          },
+          "oom_kills": 0.0,
+          "swap_pages_in": 0.0,
+          "swap_pages_out": 0.0,
+          "disk": {
+            "device": "sda",
+            "read": {
+              "mib_per_second": {
+                "samples": 61,
+                "covered_seconds": 121.99997229299998,
+                "mean": 0.02209273042724002,
+                "min": 0.0,
+                "max": 1.1211012221396464,
+                "p95": 0.01757836627186621
+              },
+              "total_gib": 0.00263214111328125
+            },
+            "write": {
+              "mib_per_second": {
+                "samples": 61,
+                "covered_seconds": 121.99997229299998,
+                "mean": 41.88173338456711,
+                "min": 0.0,
+                "max": 482.99954200007124,
+                "p95": 228.095036823494
+              },
+              "total_gib": 4.989814758300781
+            },
+            "await_ms": {
+              "samples": 45,
+              "covered_seconds": 89.99726047200002,
+              "mean": 1.5878125716697538,
+              "min": 0.270388863670752,
+              "max": 18.47275922671353,
+              "p95": 4.870801033591731,
+              "io_weighted_mean": 1.514450326636983
+            },
+            "queue_depth": {
+              "samples": 61,
+              "covered_seconds": 121.99997229299998,
+              "mean": 1.1005822171625539,
+              "min": 0.0,
+              "max": 9.929030735314415,
+              "p95": 5.689295166322469
+            }
+          },
+          "network_drop_deltas": {
+            "network/lo/rx_drops_per_second": 0.0,
+            "network/lo/tx_drops_per_second": 0.0,
+            "network/enp7s0/rx_drops_per_second": 0.0,
+            "network/enp7s0/tx_drops_per_second": 0.0,
+            "network/docker0/rx_drops_per_second": 0.0,
+            "network/docker0/tx_drops_per_second": 0.0
+          },
+          "health": {
+            "probes": 0,
+            "failures": 0,
+            "latency_p95_ms": null,
+            "max_latency_ms": null
+          },
+          "relevance": "included"
+        },
+        {
+          "label": "builder-167966887",
+          "source": "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-cache-affinity-2026-09-29/telemetry/builder-167966887.jsonl.gz",
+          "coverage_fraction": 0.9919999008800002,
+          "covered_seconds": 123.99998761000003,
+          "started_at": "2026-09-29T13:16:05.700465+00:00",
+          "finished_at": "2026-09-29T13:18:09.700452+00:00",
+          "counter_resets": 0,
+          "host_cpu_cores": {
+            "samples": 62,
+            "covered_seconds": 123.99998761000003,
+            "mean": 3.7639519889948785,
+            "min": 0.014999434708804455,
+            "max": 6.510283236382464,
+            "p95": 6.276333836497826,
+            "cpu_seconds": 466.7299999999999
+          },
+          "iowait_cores": {
+            "samples": 62,
+            "covered_seconds": 123.99998761000003,
+            "mean": 0.22427421595772198,
+            "min": 0.0,
+            "max": 1.8650870081740016,
+            "p95": 1.084990442319216,
+            "cpu_seconds": 27.81
+          },
+          "process_cpu_cores": {
+            "gateway": {
+              "samples": 62,
+              "covered_seconds": 123.99998761000003,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "registry": {
+              "samples": 62,
+              "covered_seconds": 123.99998761000003,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "benchmark_driver": {
+              "samples": 62,
+              "covered_seconds": 123.99998761000003,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "postgres": {
+              "samples": 62,
+              "covered_seconds": 123.99998761000003,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "nginx": {
+              "samples": 62,
+              "covered_seconds": 123.99998761000003,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "relay": {
+              "samples": 62,
+              "covered_seconds": 123.99998761000003,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "autoscaler": {
+              "samples": 62,
+              "covered_seconds": 123.99998761000003,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "placement": {
+              "samples": 62,
+              "covered_seconds": 123.99998761000003,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "node_agent": {
+              "samples": 62,
+              "covered_seconds": 123.99998761000003,
+              "mean": 0.15072582151203978,
+              "min": 0.0,
+              "max": 0.870002075824933,
+              "p95": 0.7652790333626522,
+              "cpu_seconds": 18.69000000000001
+            },
+            "dockerd": {
+              "samples": 62,
+              "covered_seconds": 123.99998761000003,
+              "mean": 0.012258065740947052,
+              "min": 0.0,
+              "max": 0.14499939622251568,
+              "p95": 0.05500103847460836,
+              "cpu_seconds": 1.5200000000000005
+            },
+            "buildkit": {
+              "samples": 62,
+              "covered_seconds": 123.99998761000003,
+              "mean": 2.7181454328856605,
+              "min": 0.0,
+              "max": 6.170268443698895,
+              "p95": 5.4769970034778055,
+              "cpu_seconds": 337.05000000000007
+            },
+            "erofs": {
+              "samples": 62,
+              "covered_seconds": 123.99998761000003,
+              "mean": 0.009677420321800302,
+              "min": 0.0,
+              "max": 0.600013153788362,
+              "p95": 0.0,
+              "cpu_seconds": 1.2
+            }
+          },
+          "memory_available_gib": {
+            "samples": 62,
+            "covered_seconds": 123.99998761000003,
+            "mean": 27.50670730219297,
+            "min": 26.04729461669922,
+            "max": 28.80240249633789,
+            "p95": 28.787174224853516
+          },
+          "pressure_percent": {
+            "cpu": {
+              "samples": 62,
+              "covered_seconds": 123.99998761000003,
+              "mean": 6.935345854265607,
+              "min": 0.028000414196126897,
+              "max": 22.30547042179611,
+              "p95": 19.333406873710107
+            },
+            "memory": {
+              "samples": 62,
+              "covered_seconds": 123.99998761000003,
+              "mean": 3.225806773933434e-06,
+              "min": 0.0,
+              "max": 9.999706123636624e-05,
+              "p95": 0.0
+            },
+            "io": {
+              "samples": 62,
+              "covered_seconds": 123.99998761000003,
+              "mean": 4.277702040328453,
+              "min": 0.0,
+              "max": 36.05653207327743,
+              "p95": 21.72000866844409
+            }
+          },
+          "oom_kills": 0.0,
+          "swap_pages_in": 0.0,
+          "swap_pages_out": 0.0,
+          "disk": {
+            "device": "sda",
+            "read": {
+              "mib_per_second": {
+                "samples": 62,
+                "covered_seconds": 123.99998761000003,
+                "mean": 0.026461696192422703,
+                "min": 0.0,
+                "max": 1.1206907927375214,
+                "p95": 0.050781144426000124
+              },
+              "total_gib": 0.003204345703125
+            },
+            "write": {
+              "mib_per_second": {
+                "samples": 62,
+                "covered_seconds": 123.99998761000003,
+                "mean": 40.44449748876873,
+                "min": 0.0,
+                "max": 590.3261053700668,
+                "p95": 223.6288708670778
+              },
+              "total_gib": 4.897575378417969
+            },
+            "await_ms": {
+              "samples": 50,
+              "covered_seconds": 99.99983869200017,
+              "mean": 1.4615761816547295,
+              "min": 0.23931623931623933,
+              "max": 8.558620689655172,
+              "p95": 6.866121394748171,
+              "io_weighted_mean": 1.5296787387030806
+            },
+            "queue_depth": {
+              "samples": 62,
+              "covered_seconds": 123.99998761000003,
+              "mean": 1.046500104565615,
+              "min": 0.0,
+              "max": 7.996248777854045,
+              "p95": 3.9415750416764297
+            }
+          },
+          "network_drop_deltas": {
+            "network/lo/rx_drops_per_second": 0.0,
+            "network/lo/tx_drops_per_second": 0.0,
+            "network/enp7s0/rx_drops_per_second": 0.0,
+            "network/enp7s0/tx_drops_per_second": 0.0,
+            "network/docker0/rx_drops_per_second": 0.0,
+            "network/docker0/tx_drops_per_second": 0.0
+          },
+          "health": {
+            "probes": 0,
+            "failures": 0,
+            "latency_p95_ms": null,
+            "max_latency_ms": null
+          },
+          "relevance": "included"
+        },
+        {
+          "label": "builder-167968139",
+          "source": "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-cache-affinity-2026-09-29/telemetry/builder-167968139.jsonl.gz",
+          "coverage_fraction": 0.0,
+          "covered_seconds": 0,
+          "started_at": null,
+          "finished_at": null,
+          "counter_resets": 0,
+          "host_cpu_cores": {},
+          "iowait_cores": {},
+          "process_cpu_cores": {
+            "gateway": {},
+            "registry": {},
+            "benchmark_driver": {},
+            "postgres": {},
+            "nginx": {},
+            "relay": {},
+            "autoscaler": {},
+            "placement": {},
+            "node_agent": {},
+            "dockerd": {},
+            "buildkit": {},
+            "erofs": {}
+          },
+          "memory_available_gib": {},
+          "pressure_percent": {
+            "cpu": {},
+            "memory": {},
+            "io": {}
+          },
+          "oom_kills": null,
+          "swap_pages_in": null,
+          "swap_pages_out": null,
+          "disk": {
+            "device": "sda",
+            "read": {
+              "mib_per_second": {},
+              "total_gib": null
+            },
+            "write": {
+              "mib_per_second": {},
+              "total_gib": null
+            },
+            "await_ms": {},
+            "queue_depth": {}
+          },
+          "network_drop_deltas": {},
+          "health": {
+            "probes": 0,
+            "failures": 0,
+            "latency_p95_ms": null,
+            "max_latency_ms": null
+          },
+          "relevance": "outside_phase_window"
+        },
+        {
+          "label": "builder-167968141",
+          "source": "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-cache-affinity-2026-09-29/telemetry/builder-167968141.jsonl.gz",
+          "coverage_fraction": 0.0,
+          "covered_seconds": 0,
+          "started_at": null,
+          "finished_at": null,
+          "counter_resets": 0,
+          "host_cpu_cores": {},
+          "iowait_cores": {},
+          "process_cpu_cores": {
+            "gateway": {},
+            "registry": {},
+            "benchmark_driver": {},
+            "postgres": {},
+            "nginx": {},
+            "relay": {},
+            "autoscaler": {},
+            "placement": {},
+            "node_agent": {},
+            "dockerd": {},
+            "buildkit": {},
+            "erofs": {}
+          },
+          "memory_available_gib": {},
+          "pressure_percent": {
+            "cpu": {},
+            "memory": {},
+            "io": {}
+          },
+          "oom_kills": null,
+          "swap_pages_in": null,
+          "swap_pages_out": null,
+          "disk": {
+            "device": "sda",
+            "read": {
+              "mib_per_second": {},
+              "total_gib": null
+            },
+            "write": {
+              "mib_per_second": {},
+              "total_gib": null
+            },
+            "await_ms": {},
+            "queue_depth": {}
+          },
+          "network_drop_deltas": {},
+          "health": {
+            "probes": 0,
+            "failures": 0,
+            "latency_p95_ms": null,
+            "max_latency_ms": null
+          },
+          "relevance": "outside_phase_window"
+        },
+        {
+          "label": "builder-167968156",
+          "source": "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-cache-affinity-2026-09-29/telemetry/builder-167968156.jsonl.gz",
+          "coverage_fraction": 0.0,
+          "covered_seconds": 0,
+          "started_at": null,
+          "finished_at": null,
+          "counter_resets": 0,
+          "host_cpu_cores": {},
+          "iowait_cores": {},
+          "process_cpu_cores": {
+            "gateway": {},
+            "registry": {},
+            "benchmark_driver": {},
+            "postgres": {},
+            "nginx": {},
+            "relay": {},
+            "autoscaler": {},
+            "placement": {},
+            "node_agent": {},
+            "dockerd": {},
+            "buildkit": {},
+            "erofs": {}
+          },
+          "memory_available_gib": {},
+          "pressure_percent": {
+            "cpu": {},
+            "memory": {},
+            "io": {}
+          },
+          "oom_kills": null,
+          "swap_pages_in": null,
+          "swap_pages_out": null,
+          "disk": {
+            "device": "sda",
+            "read": {
+              "mib_per_second": {},
+              "total_gib": null
+            },
+            "write": {
+              "mib_per_second": {},
+              "total_gib": null
+            },
+            "await_ms": {},
+            "queue_depth": {}
+          },
+          "network_drop_deltas": {},
+          "health": {
+            "probes": 0,
+            "failures": 0,
+            "latency_p95_ms": null,
+            "max_latency_ms": null
+          },
+          "relevance": "outside_phase_window"
+        },
+        {
+          "label": "builder-167968157",
+          "source": "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-cache-affinity-2026-09-29/telemetry/builder-167968157.jsonl.gz",
+          "coverage_fraction": 0.0,
+          "covered_seconds": 0,
+          "started_at": null,
+          "finished_at": null,
+          "counter_resets": 0,
+          "host_cpu_cores": {},
+          "iowait_cores": {},
+          "process_cpu_cores": {
+            "gateway": {},
+            "registry": {},
+            "benchmark_driver": {},
+            "postgres": {},
+            "nginx": {},
+            "relay": {},
+            "autoscaler": {},
+            "placement": {},
+            "node_agent": {},
+            "dockerd": {},
+            "buildkit": {},
+            "erofs": {}
+          },
+          "memory_available_gib": {},
+          "pressure_percent": {
+            "cpu": {},
+            "memory": {},
+            "io": {}
+          },
+          "oom_kills": null,
+          "swap_pages_in": null,
+          "swap_pages_out": null,
+          "disk": {
+            "device": "sda",
+            "read": {
+              "mib_per_second": {},
+              "total_gib": null
+            },
+            "write": {
+              "mib_per_second": {},
+              "total_gib": null
+            },
+            "await_ms": {},
+            "queue_depth": {}
+          },
+          "network_drop_deltas": {},
+          "health": {
+            "probes": 0,
+            "failures": 0,
+            "latency_p95_ms": null,
+            "max_latency_ms": null
+          },
+          "relevance": "outside_phase_window"
+        },
+        {
+          "label": "gateway",
+          "source": "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-cache-affinity-2026-09-29/telemetry/gateway.jsonl.gz",
+          "coverage_fraction": 0.9919997494081035,
+          "covered_seconds": 123.99996867601294,
+          "started_at": "2026-09-29T13:16:05.242979+00:00",
+          "finished_at": "2026-09-29T13:18:09.242946+00:00",
+          "counter_resets": 0,
+          "host_cpu_cores": {
+            "samples": 62,
+            "covered_seconds": 123.99996867601294,
+            "mean": 0.4047581667632224,
+            "min": 0.039999933820036304,
+            "max": 1.9050267675209196,
+            "p95": 1.5750003023968602,
+            "cpu_seconds": 50.19
+          },
+          "iowait_cores": {
+            "samples": 62,
+            "covered_seconds": 123.99996867601294,
+            "mean": 0.3665323506552791,
+            "min": 0.0,
+            "max": 1.28000006783754,
+            "p95": 1.2199850917822799,
+            "cpu_seconds": 45.45
+          },
+          "process_cpu_cores": {
+            "gateway": {
+              "samples": 62,
+              "covered_seconds": 123.99996867601294,
+              "mean": 0.07000001768290035,
+              "min": 0.0,
+              "max": 0.21500004127957137,
+              "p95": 0.14500099115431042,
+              "cpu_seconds": 8.679999999999994
+            },
+            "registry": {
+              "samples": 62,
+              "covered_seconds": 123.99996867601294,
+              "mean": 0.10983873742409017,
+              "min": 0.0,
+              "max": 0.7350001411185347,
+              "p95": 0.34499456978328186,
+              "cpu_seconds": 13.619999999999992
+            },
+            "benchmark_driver": {
+              "available": false,
+              "reason": "driver_not_in_classified_service_cgroup",
+              "launch_method": "ssh",
+              "expected_cgroup_prefix": "ucloud-build-load-client"
+            },
+            "postgres": {
+              "samples": 62,
+              "covered_seconds": 123.99996867601294,
+              "mean": 0.007822582621245786,
+              "min": 0.0,
+              "max": 0.03500027538199203,
+              "p95": 0.020000072750236506,
+              "cpu_seconds": 0.9700000000000005
+            },
+            "nginx": {
+              "samples": 62,
+              "covered_seconds": 123.99996867601294,
+              "mean": 0.0052419368080512995,
+              "min": 0.0,
+              "max": 0.02500000479995016,
+              "p95": 0.010000109171187816,
+              "cpu_seconds": 0.6500000000000004
+            },
+            "relay": {
+              "samples": 62,
+              "covered_seconds": 123.99996867601294,
+              "mean": 0.006370969351323887,
+              "min": 0.00499993161846604,
+              "max": 0.015000002879970095,
+              "p95": 0.01000011087125272,
+              "cpu_seconds": 0.7900000000000005
+            },
+            "autoscaler": {
+              "samples": 62,
+              "covered_seconds": 123.99996867601294,
+              "mean": 0.009354841072830007,
+              "min": 0.0,
+              "max": 0.20500095499640478,
+              "p95": 0.0200002853041177,
+              "cpu_seconds": 1.1600000000000001
+            },
+            "placement": {
+              "samples": 62,
+              "covered_seconds": 123.99996867601294,
+              "mean": 0.008387098892882078,
+              "min": 0.0,
+              "max": 0.01500016630687908,
+              "p95": 0.015000002879970095,
+              "cpu_seconds": 1.0400000000000005
+            },
+            "node_agent": {
+              "samples": 62,
+              "covered_seconds": 123.99996867601294,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "dockerd": {
+              "samples": 62,
+              "covered_seconds": 123.99996867601294,
+              "mean": 0.00798387298457044,
+              "min": 0.0,
+              "max": 0.034999805383658766,
+              "p95": 0.02500000479995016,
+              "cpu_seconds": 0.9900000000000005
+            },
+            "buildkit": {
+              "samples": 62,
+              "covered_seconds": 123.99996867601294,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "erofs": {
+              "samples": 62,
+              "covered_seconds": 123.99996867601294,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            }
+          },
+          "memory_available_gib": {
+            "samples": 62,
+            "covered_seconds": 123.99996867601294,
+            "mean": 13.057611505933643,
+            "min": 13.013313293457031,
+            "max": 13.21612548828125,
+            "p95": 13.126510620117188
+          },
+          "pressure_percent": {
+            "cpu": {
+              "samples": 62,
+              "covered_seconds": 123.99996867601294,
+              "mean": 2.5363385439373842,
+              "min": 0.061950128825155985,
+              "max": 27.161381644428186,
+              "p95": 13.227352539624832
+            },
+            "memory": {
+              "samples": 62,
+              "covered_seconds": 123.99996867601294,
+              "mean": 8.064518166232763e-06,
+              "min": 0.0,
+              "max": 0.00015000081742882492,
+              "p95": 4.999999657520699e-05
+            },
+            "io": {
+              "samples": 62,
+              "covered_seconds": 123.99996867601294,
+              "mean": 11.318110923615809,
+              "min": 0.0,
+              "max": 39.56345209678682,
+              "p95": 35.85434621401023
+            }
+          },
+          "oom_kills": 0.0,
+          "swap_pages_in": 0.0,
+          "swap_pages_out": 0.0,
+          "disk": {
+            "device": "sdb",
+            "read": {
+              "mib_per_second": {
+                "samples": 62,
+                "covered_seconds": 123.99996867601294,
+                "mean": 0.0003150202408684673,
+                "min": 0.0,
+                "max": 0.0039062376445535567,
+                "p95": 0.0019531248662190228
+              },
+              "total_gib": 3.814697265625e-05
+            },
+            "write": {
+              "mib_per_second": {
+                "samples": 62,
+                "covered_seconds": 123.99996867601294,
+                "mean": 5.123961727846055,
+                "min": 0.0,
+                "max": 37.4837850049861,
+                "p95": 18.833926131078453
+              },
+              "total_gib": 0.6204795837402344
+            },
+            "await_ms": {
+              "samples": 44,
+              "covered_seconds": 88.00000068101508,
+              "mean": 3.154947770632064,
+              "min": 1.5942307692307693,
+              "max": 10.397715472481828,
+              "p95": 7.778698979591836,
+              "io_weighted_mean": 3.720290264819527
+            },
+            "queue_depth": {
+              "samples": 62,
+              "covered_seconds": 123.99996867601294,
+              "mean": 0.686040495883255,
+              "min": 0.0,
+              "max": 6.503420528201686,
+              "p95": 1.7064731401019435
+            }
+          },
+          "network_drop_deltas": {
+            "network/lo/rx_drops_per_second": 0.0,
+            "network/lo/tx_drops_per_second": 0.0,
+            "network/eth0/rx_drops_per_second": 0.0,
+            "network/eth0/tx_drops_per_second": 0.0,
+            "network/enp7s0/rx_drops_per_second": 0.0,
+            "network/enp7s0/tx_drops_per_second": 0.0,
+            "network/docker0/rx_drops_per_second": 0.0,
+            "network/docker0/tx_drops_per_second": 0.0
+          },
+          "health": {
+            "probes": 17,
+            "failures": 0,
+            "latency_p95_ms": 11.711286002537236,
+            "max_latency_ms": 11.711286002537236
+          },
+          "relevance": "included",
+          "attribution_provenance": {
+            "benchmark_driver": {
+              "available": false,
+              "reason": "driver_not_in_classified_service_cgroup",
+              "launch_method": "ssh",
+              "expected_cgroup_prefix": "ucloud-build-load-client"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "phase": "affinity-repeat",
+      "window": {
+        "started_at": "2026-09-29T13:27:54+00:00",
+        "finished_at": "2026-09-29T13:29:33+00:00",
+        "seconds": 99.0,
+        "records_with_start": 48,
+        "records_with_finish": 48
+      },
+      "cases": 48,
+      "statuses": {
+        "succeeded": 48
+      },
+      "owners": {
+        "167968139": 14,
+        "167968141": 11,
+        "167968156": 13,
+        "167968157": 10
+      },
+      "http": {
+        "statuses": {
+          "200": 1217,
+          "202": 48,
+          "503": 309
+        },
+        "by_category": {
+          "context": {
+            "200": 48
+          },
+          "submit": {
+            "202": 48,
+            "503": 309
+          },
+          "poll": {
+            "200": 1169
+          }
+        },
+        "responses_503": 309,
+        "cases_with_503": 31,
+        "repeated_submit_attempts": 309,
+        "time_to_headers_seconds": {
+          "context": {
+            "count": 48,
+            "min": 0.00435921699681785,
+            "mean": 0.03275174289531909,
+            "p50": 0.02626778000558261,
+            "p95": 0.08566524575362564,
+            "max": 0.10585374799848069
+          },
+          "poll": {
+            "count": 1169,
+            "min": 0.0027298089989926666,
+            "mean": 0.01020202332064135,
+            "p50": 0.004892762997769751,
+            "p95": 0.023607337399152967,
+            "max": 0.5234522839891724
+          },
+          "submit": {
+            "count": 357,
+            "min": 0.01909425700432621,
+            "mean": 0.09074793854830734,
+            "p50": 0.03134768200106919,
+            "p95": 0.3464320999948541,
+            "max": 1.456514616991626
+          }
+        }
+      },
+      "measurements": {
+        "client_wall_seconds": {
+          "count": 48,
+          "min": 9.627247807002277,
+          "mean": 48.28052160268786,
+          "p50": 57.64791188899835,
+          "p95": 97.27469475970138,
+          "max": 98.58107977001055
+        },
+        "submission_seconds": {
+          "count": 48,
+          "min": 6.420561592996819,
+          "mean": 24.66506149454138,
+          "p50": 13.855532943496655,
+          "p95": 65.68531981729393,
+          "max": 68.0446943220013
+        },
+        "polling_seconds": {
+          "count": 48,
+          "min": 2.0629247150063748,
+          "mean": 23.61480538818887,
+          "p50": 24.22291975650296,
+          "p95": 52.99345341909939,
+          "max": 57.4309209829953
+        },
+        "preparation_seconds": {
+          "count": 48,
+          "min": 0.111,
+          "mean": 0.3732083333333333,
+          "p50": 0.209,
+          "p95": 1.3327499999999999,
+          "max": 1.407
+        },
+        "queue_seconds": {
+          "count": 48,
+          "min": 0.001,
+          "mean": 0.002708333333333335,
+          "p50": 0.002,
+          "p95": 0.005949999999999996,
+          "max": 0.009
+        },
+        "execution_seconds": {
+          "count": 48,
+          "min": 1.291,
+          "mean": 23.01910416666667,
+          "p50": 23.668,
+          "p95": 52.1612,
+          "max": 57.251
+        },
+        "worker_end_to_end_seconds": {
+          "count": 48,
+          "min": 1.487,
+          "mean": 23.39502083333333,
+          "p50": 23.792,
+          "p95": 52.457100000000004,
+          "max": 57.441
+        },
+        "build_push_seconds": {
+          "count": 48,
+          "min": 1.009,
+          "mean": 21.33758333333333,
+          "p50": 21.647,
+          "p95": 50.65555,
+          "max": 52.46
+        },
+        "erofs_publication_seconds": {
+          "count": 48,
+          "min": 0.246,
+          "mean": 1.6442500000000002,
+          "p50": 1.019,
+          "p95": 4.24885,
+          "max": 5.013
+        },
+        "cleanup_seconds": {
+          "count": 48,
+          "min": 0.012,
+          "mean": 0.022708333333333348,
+          "p50": 0.017,
+          "p95": 0.04674999999999998,
+          "max": 0.093
+        }
+      },
+      "overlap": {
+        "admitted": {
+          "peak": 16,
+          "first_peak_at": "2026-09-29T13:28:05.034881+00:00",
+          "complete_intervals": 48,
+          "missing_or_invalid_intervals": 0,
+          "duplicate_build_ids_ignored": 0,
+          "by_owner": {
+            "167968139": {
+              "peak": 4,
+              "first_peak_at": "2026-09-29T13:28:02.114773+00:00"
+            },
+            "167968141": {
+              "peak": 4,
+              "first_peak_at": "2026-09-29T13:28:02.565822+00:00"
+            },
+            "167968156": {
+              "peak": 4,
+              "first_peak_at": "2026-09-29T13:28:02.679945+00:00"
+            },
+            "167968157": {
+              "peak": 4,
+              "first_peak_at": "2026-09-29T13:28:04.827024+00:00"
+            }
+          }
+        },
+        "executing": {
+          "peak": 16,
+          "first_peak_at": "2026-09-29T13:28:05.592843+00:00",
+          "complete_intervals": 48,
+          "missing_or_invalid_intervals": 0,
+          "duplicate_build_ids_ignored": 0,
+          "by_owner": {
+            "167968139": {
+              "peak": 4,
+              "first_peak_at": "2026-09-29T13:28:02.240465+00:00"
+            },
+            "167968141": {
+              "peak": 4,
+              "first_peak_at": "2026-09-29T13:28:02.701658+00:00"
+            },
+            "167968156": {
+              "peak": 4,
+              "first_peak_at": "2026-09-29T13:28:02.812382+00:00"
+            },
+            "167968157": {
+              "peak": 4,
+              "first_peak_at": "2026-09-29T13:28:05.010194+00:00"
+            }
+          }
+        }
+      },
+      "batch_wall_seconds": 98.59357859300508,
+      "hosts": [
+        {
+          "label": "builder-167966880",
+          "source": "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-cache-affinity-2026-09-29/telemetry/builder-167966880.jsonl.gz",
+          "coverage_fraction": 0.0,
+          "covered_seconds": 0,
+          "started_at": null,
+          "finished_at": null,
+          "counter_resets": 0,
+          "host_cpu_cores": {},
+          "iowait_cores": {},
+          "process_cpu_cores": {
+            "gateway": {},
+            "registry": {},
+            "benchmark_driver": {},
+            "postgres": {},
+            "nginx": {},
+            "relay": {},
+            "autoscaler": {},
+            "placement": {},
+            "node_agent": {},
+            "dockerd": {},
+            "buildkit": {},
+            "erofs": {}
+          },
+          "memory_available_gib": {},
+          "pressure_percent": {
+            "cpu": {},
+            "memory": {},
+            "io": {}
+          },
+          "oom_kills": null,
+          "swap_pages_in": null,
+          "swap_pages_out": null,
+          "disk": {
+            "device": "sda",
+            "read": {
+              "mib_per_second": {},
+              "total_gib": null
+            },
+            "write": {
+              "mib_per_second": {},
+              "total_gib": null
+            },
+            "await_ms": {},
+            "queue_depth": {}
+          },
+          "network_drop_deltas": {},
+          "health": {
+            "probes": 0,
+            "failures": 0,
+            "latency_p95_ms": null,
+            "max_latency_ms": null
+          },
+          "relevance": "outside_phase_window"
+        },
+        {
+          "label": "builder-167966883",
+          "source": "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-cache-affinity-2026-09-29/telemetry/builder-167966883.jsonl.gz",
+          "coverage_fraction": 0.0,
+          "covered_seconds": 0,
+          "started_at": null,
+          "finished_at": null,
+          "counter_resets": 0,
+          "host_cpu_cores": {},
+          "iowait_cores": {},
+          "process_cpu_cores": {
+            "gateway": {},
+            "registry": {},
+            "benchmark_driver": {},
+            "postgres": {},
+            "nginx": {},
+            "relay": {},
+            "autoscaler": {},
+            "placement": {},
+            "node_agent": {},
+            "dockerd": {},
+            "buildkit": {},
+            "erofs": {}
+          },
+          "memory_available_gib": {},
+          "pressure_percent": {
+            "cpu": {},
+            "memory": {},
+            "io": {}
+          },
+          "oom_kills": null,
+          "swap_pages_in": null,
+          "swap_pages_out": null,
+          "disk": {
+            "device": "sda",
+            "read": {
+              "mib_per_second": {},
+              "total_gib": null
+            },
+            "write": {
+              "mib_per_second": {},
+              "total_gib": null
+            },
+            "await_ms": {},
+            "queue_depth": {}
+          },
+          "network_drop_deltas": {},
+          "health": {
+            "probes": 0,
+            "failures": 0,
+            "latency_p95_ms": null,
+            "max_latency_ms": null
+          },
+          "relevance": "outside_phase_window"
+        },
+        {
+          "label": "builder-167966886",
+          "source": "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-cache-affinity-2026-09-29/telemetry/builder-167966886.jsonl.gz",
+          "coverage_fraction": 0.0,
+          "covered_seconds": 0,
+          "started_at": null,
+          "finished_at": null,
+          "counter_resets": 0,
+          "host_cpu_cores": {},
+          "iowait_cores": {},
+          "process_cpu_cores": {
+            "gateway": {},
+            "registry": {},
+            "benchmark_driver": {},
+            "postgres": {},
+            "nginx": {},
+            "relay": {},
+            "autoscaler": {},
+            "placement": {},
+            "node_agent": {},
+            "dockerd": {},
+            "buildkit": {},
+            "erofs": {}
+          },
+          "memory_available_gib": {},
+          "pressure_percent": {
+            "cpu": {},
+            "memory": {},
+            "io": {}
+          },
+          "oom_kills": null,
+          "swap_pages_in": null,
+          "swap_pages_out": null,
+          "disk": {
+            "device": "sda",
+            "read": {
+              "mib_per_second": {},
+              "total_gib": null
+            },
+            "write": {
+              "mib_per_second": {},
+              "total_gib": null
+            },
+            "await_ms": {},
+            "queue_depth": {}
+          },
+          "network_drop_deltas": {},
+          "health": {
+            "probes": 0,
+            "failures": 0,
+            "latency_p95_ms": null,
+            "max_latency_ms": null
+          },
+          "relevance": "outside_phase_window"
+        },
+        {
+          "label": "builder-167966887",
+          "source": "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-cache-affinity-2026-09-29/telemetry/builder-167966887.jsonl.gz",
+          "coverage_fraction": 0.0,
+          "covered_seconds": 0,
+          "started_at": null,
+          "finished_at": null,
+          "counter_resets": 0,
+          "host_cpu_cores": {},
+          "iowait_cores": {},
+          "process_cpu_cores": {
+            "gateway": {},
+            "registry": {},
+            "benchmark_driver": {},
+            "postgres": {},
+            "nginx": {},
+            "relay": {},
+            "autoscaler": {},
+            "placement": {},
+            "node_agent": {},
+            "dockerd": {},
+            "buildkit": {},
+            "erofs": {}
+          },
+          "memory_available_gib": {},
+          "pressure_percent": {
+            "cpu": {},
+            "memory": {},
+            "io": {}
+          },
+          "oom_kills": null,
+          "swap_pages_in": null,
+          "swap_pages_out": null,
+          "disk": {
+            "device": "sda",
+            "read": {
+              "mib_per_second": {},
+              "total_gib": null
+            },
+            "write": {
+              "mib_per_second": {},
+              "total_gib": null
+            },
+            "await_ms": {},
+            "queue_depth": {}
+          },
+          "network_drop_deltas": {},
+          "health": {
+            "probes": 0,
+            "failures": 0,
+            "latency_p95_ms": null,
+            "max_latency_ms": null
+          },
+          "relevance": "outside_phase_window"
+        },
+        {
+          "label": "builder-167968139",
+          "source": "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-cache-affinity-2026-09-29/telemetry/builder-167968139.jsonl.gz",
+          "coverage_fraction": 0.9898990931717171,
+          "covered_seconds": 98.000010224,
+          "started_at": "2026-09-29T13:27:54.300718+00:00",
+          "finished_at": "2026-09-29T13:29:32.300726+00:00",
+          "counter_resets": 0,
+          "host_cpu_cores": {
+            "samples": 49,
+            "covered_seconds": 98.000010224,
+            "mean": 3.4588771901677515,
+            "min": 0.0049999625027812074,
+            "max": 6.2896907988003115,
+            "p95": 5.981697651278343,
+            "cpu_seconds": 338.97
+          },
+          "iowait_cores": {
+            "samples": 49,
+            "covered_seconds": 98.000010224,
+            "mean": 0.0618367282426662,
+            "min": 0.0,
+            "max": 0.4449964896451943,
+            "p95": 0.25499663315195326,
+            "cpu_seconds": 6.059999999999997
+          },
+          "process_cpu_cores": {
+            "gateway": {
+              "samples": 49,
+              "covered_seconds": 98.000010224,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "registry": {
+              "samples": 49,
+              "covered_seconds": 98.000010224,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "benchmark_driver": {
+              "samples": 49,
+              "covered_seconds": 98.000010224,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "postgres": {
+              "samples": 49,
+              "covered_seconds": 98.000010224,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "nginx": {
+              "samples": 49,
+              "covered_seconds": 98.000010224,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "relay": {
+              "samples": 49,
+              "covered_seconds": 98.000010224,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "autoscaler": {
+              "samples": 49,
+              "covered_seconds": 98.000010224,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "placement": {
+              "samples": 49,
+              "covered_seconds": 98.000010224,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "node_agent": {
+              "samples": 49,
+              "covered_seconds": 98.000010224,
+              "mean": 0.13469386349887694,
+              "min": 0.0,
+              "max": 0.9150225887051342,
+              "p95": 0.6300016798994763,
+              "cpu_seconds": 13.2
+            },
+            "dockerd": {
+              "samples": 49,
+              "covered_seconds": 98.000010224,
+              "mean": 0.011224488624906413,
+              "min": 0.0,
+              "max": 0.10499251665837556,
+              "p95": 0.06499986265529062,
+              "cpu_seconds": 1.1
+            },
+            "buildkit": {
+              "samples": 49,
+              "covered_seconds": 98.000010224,
+              "mean": 2.4615303554419765,
+              "min": 0.0,
+              "max": 5.519931003622409,
+              "p95": 5.339986804892671,
+              "cpu_seconds": 241.23000000000005
+            },
+            "erofs": {
+              "samples": 49,
+              "covered_seconds": 98.000010224,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            }
+          },
+          "memory_available_gib": {
+            "samples": 49,
+            "covered_seconds": 98.000010224,
+            "mean": 27.537055679534966,
+            "min": 26.54883575439453,
+            "max": 28.766674041748047,
+            "p95": 28.725597381591797
+          },
+          "pressure_percent": {
+            "cpu": {
+              "samples": 49,
+              "covered_seconds": 98.000010224,
+              "mean": 5.7253789945278095,
+              "min": 0.005749999108750085,
+              "max": 19.533316134728334,
+              "p95": 16.592134330676252
+            },
+            "memory": {
+              "samples": 49,
+              "covered_seconds": 98.000010224,
+              "mean": 1.020408056809674e-06,
+              "min": 0.0,
+              "max": 5.0000109300239096e-05,
+              "p95": 0.0
+            },
+            "io": {
+              "samples": 49,
+              "covered_seconds": 98.000010224,
+              "mean": 1.1575825322946554,
+              "min": 0.0,
+              "max": 8.457683281565489,
+              "p95": 4.932034879877446
+            }
+          },
+          "oom_kills": 0.0,
+          "swap_pages_in": 0.0,
+          "swap_pages_out": 0.0,
+          "disk": {
+            "device": "sda",
+            "read": {
+              "mib_per_second": {
+                "samples": 49,
+                "covered_seconds": 98.000010224,
+                "mean": 0.02690529056041132,
+                "min": 0.0,
+                "max": 1.1210972085848918,
+                "p95": 0.009765547964474944
+              },
+              "total_gib": 0.002574920654296875
+            },
+            "write": {
+              "mib_per_second": {
+                "samples": 49,
+                "covered_seconds": 98.000010224,
+                "mean": 44.61618635300113,
+                "min": 0.0,
+                "max": 577.7755744652005,
+                "p95": 350.2999710336807
+              },
+              "total_gib": 4.269908905029297
+            },
+            "await_ms": {
+              "samples": 38,
+              "covered_seconds": 75.99873206399995,
+              "mean": 0.5301845790705895,
+              "min": 0.0,
+              "max": 3.3450733752620545,
+              "p95": 2.2979919678714857,
+              "io_weighted_mean": 0.6238166027697363
+            },
+            "queue_depth": {
+              "samples": 49,
+              "covered_seconds": 98.000010224,
+              "mean": 0.41828567064742167,
+              "min": 0.0,
+              "max": 4.306443139877987,
+              "p95": 1.9040659303810126
+            }
+          },
+          "network_drop_deltas": {
+            "network/lo/rx_drops_per_second": 0.0,
+            "network/lo/tx_drops_per_second": 0.0,
+            "network/enp7s0/rx_drops_per_second": 0.0,
+            "network/enp7s0/tx_drops_per_second": 0.0,
+            "network/docker0/rx_drops_per_second": 0.0,
+            "network/docker0/tx_drops_per_second": 0.0
+          },
+          "health": {
+            "probes": 0,
+            "failures": 0,
+            "latency_p95_ms": null,
+            "max_latency_ms": null
+          },
+          "relevance": "included"
+        },
+        {
+          "label": "builder-167968141",
+          "source": "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-cache-affinity-2026-09-29/telemetry/builder-167968141.jsonl.gz",
+          "coverage_fraction": 0.989899096969697,
+          "covered_seconds": 98.00001060000001,
+          "started_at": "2026-09-29T13:27:54.975309+00:00",
+          "finished_at": "2026-09-29T13:29:32.975305+00:00",
+          "counter_resets": 0,
+          "host_cpu_cores": {
+            "samples": 49,
+            "covered_seconds": 98.00001060000001,
+            "mean": 4.512142369094804,
+            "min": 0.00499992052626325,
+            "max": 6.840067966335297,
+            "p95": 6.599973586905629,
+            "cpu_seconds": 442.19
+          },
+          "iowait_cores": {
+            "samples": 49,
+            "covered_seconds": 98.00001060000001,
+            "mean": 0.05744897337796818,
+            "min": 0.0,
+            "max": 0.34999638873726313,
+            "p95": 0.23999813185454055,
+            "cpu_seconds": 5.63
+          },
+          "process_cpu_cores": {
+            "gateway": {
+              "samples": 49,
+              "covered_seconds": 98.00001060000001,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "registry": {
+              "samples": 49,
+              "covered_seconds": 98.00001060000001,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "benchmark_driver": {
+              "samples": 49,
+              "covered_seconds": 98.00001060000001,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "postgres": {
+              "samples": 49,
+              "covered_seconds": 98.00001060000001,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "nginx": {
+              "samples": 49,
+              "covered_seconds": 98.00001060000001,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "relay": {
+              "samples": 49,
+              "covered_seconds": 98.00001060000001,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "autoscaler": {
+              "samples": 49,
+              "covered_seconds": 98.00001060000001,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "placement": {
+              "samples": 49,
+              "covered_seconds": 98.00001060000001,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "node_agent": {
+              "samples": 49,
+              "covered_seconds": 98.00001060000001,
+              "mean": 0.12336733359496177,
+              "min": 0.0,
+              "max": 0.9600077938232795,
+              "p95": 0.48999341693844367,
+              "cpu_seconds": 12.089999999999991
+            },
+            "dockerd": {
+              "samples": 49,
+              "covered_seconds": 98.00001060000001,
+              "mean": 0.011122447776551568,
+              "min": 0.0,
+              "max": 0.139998910248482,
+              "p95": 0.08499861766748035,
+              "cpu_seconds": 1.0900000000000003
+            },
+            "buildkit": {
+              "samples": 49,
+              "covered_seconds": 98.00001060000001,
+              "mean": 3.450203708447354,
+              "min": 0.0,
+              "max": 6.574871707815873,
+              "p95": 6.255110165000185,
+              "cpu_seconds": 338.12
+            },
+            "erofs": {
+              "samples": 49,
+              "covered_seconds": 98.00001060000001,
+              "mean": 0.010510202944814783,
+              "min": 0.0,
+              "max": 0.5149988958423711,
+              "p95": 0.0,
+              "cpu_seconds": 1.03
+            }
+          },
+          "memory_available_gib": {
+            "samples": 49,
+            "covered_seconds": 98.00001060000001,
+            "mean": 27.293191083913744,
+            "min": 25.51007080078125,
+            "max": 28.763980865478516,
+            "p95": 28.763809204101562
+          },
+          "pressure_percent": {
+            "cpu": {
+              "samples": 49,
+              "covered_seconds": 98.00001060000001,
+              "mean": 9.747516292615586,
+              "min": 0.012250331469468908,
+              "max": 30.155499640121953,
+              "p95": 25.69679859121777
+            },
+            "memory": {
+              "samples": 49,
+              "covered_seconds": 98.00001060000001,
+              "mean": 9.18367247605175e-06,
+              "min": 0.0,
+              "max": 0.0002000010822058537,
+              "p95": 4.99998928002302e-05
+            },
+            "io": {
+              "samples": 49,
+              "covered_seconds": 98.00001060000001,
+              "mean": 1.0847284541007998,
+              "min": 0.0,
+              "max": 6.301584980246212,
+              "p95": 4.803183712404066
+            }
+          },
+          "oom_kills": 0.0,
+          "swap_pages_in": 0.0,
+          "swap_pages_out": 0.0,
+          "disk": {
+            "device": "sda",
+            "read": {
+              "mib_per_second": {
+                "samples": 49,
+                "covered_seconds": 98.00001060000001,
+                "mean": 0.027303887352844836,
+                "min": 0.0,
+                "max": 1.1288910833482957,
+                "p95": 0.009765632983404913
+              },
+              "total_gib": 0.002613067626953125
+            },
+            "write": {
+              "mib_per_second": {
+                "samples": 49,
+                "covered_seconds": 98.00001060000001,
+                "mean": 45.78857923103122,
+                "min": 0.0,
+                "max": 584.9641901337044,
+                "p95": 310.51783197332605
+              },
+              "total_gib": 4.382110595703125
+            },
+            "await_ms": {
+              "samples": 37,
+              "covered_seconds": 73.99759284499997,
+              "mean": 0.7064922923203366,
+              "min": 0.0,
+              "max": 3.724099099099099,
+              "p95": 3.472844534962661,
+              "io_weighted_mean": 0.8547043561381947
+            },
+            "queue_depth": {
+              "samples": 49,
+              "covered_seconds": 98.00001060000001,
+              "mean": 0.5217448415255578,
+              "min": 0.0,
+              "max": 5.130442877648977,
+              "p95": 3.271488906381142
+            }
+          },
+          "network_drop_deltas": {
+            "network/lo/rx_drops_per_second": 0.0,
+            "network/lo/tx_drops_per_second": 0.0,
+            "network/enp7s0/rx_drops_per_second": 0.0,
+            "network/enp7s0/tx_drops_per_second": 0.0,
+            "network/docker0/rx_drops_per_second": 0.0,
+            "network/docker0/tx_drops_per_second": 0.0
+          },
+          "health": {
+            "probes": 0,
+            "failures": 0,
+            "latency_p95_ms": null,
+            "max_latency_ms": null
+          },
+          "relevance": "included"
+        },
+        {
+          "label": "builder-167968156",
+          "source": "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-cache-affinity-2026-09-29/telemetry/builder-167968156.jsonl.gz",
+          "coverage_fraction": 0.9898992315858586,
+          "covered_seconds": 98.000023927,
+          "started_at": "2026-09-29T13:27:54.280561+00:00",
+          "finished_at": "2026-09-29T13:29:32.280586+00:00",
+          "counter_resets": 0,
+          "host_cpu_cores": {
+            "samples": 49,
+            "covered_seconds": 98.000023927,
+            "mean": 3.0112237545964207,
+            "min": 0.00999993553541562,
+            "max": 5.935063205455597,
+            "p95": 5.759973207484671,
+            "cpu_seconds": 295.1
+          },
+          "iowait_cores": {
+            "samples": 49,
+            "covered_seconds": 98.000023927,
+            "mean": 0.06806120787244366,
+            "min": 0.0,
+            "max": 0.47500711703163445,
+            "p95": 0.2600232947069042,
+            "cpu_seconds": 6.669999999999999
+          },
+          "process_cpu_cores": {
+            "gateway": {
+              "samples": 49,
+              "covered_seconds": 98.000023927,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "registry": {
+              "samples": 49,
+              "covered_seconds": 98.000023927,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "benchmark_driver": {
+              "samples": 49,
+              "covered_seconds": 98.000023927,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "postgres": {
+              "samples": 49,
+              "covered_seconds": 98.000023927,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "nginx": {
+              "samples": 49,
+              "covered_seconds": 98.000023927,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "relay": {
+              "samples": 49,
+              "covered_seconds": 98.000023927,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "autoscaler": {
+              "samples": 49,
+              "covered_seconds": 98.000023927,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "placement": {
+              "samples": 49,
+              "covered_seconds": 98.000023927,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "node_agent": {
+              "samples": 49,
+              "covered_seconds": 98.000023927,
+              "mean": 0.16591832683747146,
+              "min": 0.0,
+              "max": 2.095038391578524,
+              "p95": 0.5550044755560906,
+              "cpu_seconds": 16.26000000000001
+            },
+            "dockerd": {
+              "samples": 49,
+              "covered_seconds": 98.000023927,
+              "mean": 0.013265302883684672,
+              "min": 0.0,
+              "max": 0.12499882869847624,
+              "p95": 0.07500726194057601,
+              "cpu_seconds": 1.3
+            },
+            "buildkit": {
+              "samples": 49,
+              "covered_seconds": 98.000023927,
+              "mean": 2.0952035700822877,
+              "min": 0.0,
+              "max": 5.849972788851618,
+              "p95": 4.855071272446243,
+              "cpu_seconds": 205.33
+            },
+            "erofs": {
+              "samples": 49,
+              "covered_seconds": 98.000023927,
+              "mean": 0.003367346116627648,
+              "min": 0.0,
+              "max": 0.16499893262190507,
+              "p95": 0.0,
+              "cpu_seconds": 0.33
+            }
+          },
+          "memory_available_gib": {
+            "samples": 49,
+            "covered_seconds": 98.000023927,
+            "mean": 27.719451655521198,
+            "min": 26.391956329345703,
+            "max": 28.80621337890625,
+            "p95": 28.805179595947266
+          },
+          "pressure_percent": {
+            "cpu": {
+              "samples": 49,
+              "covered_seconds": 98.000023927,
+              "mean": 4.408735658287569,
+              "min": 0.017599926467507264,
+              "max": 14.390753254326759,
+              "p95": 14.06511073755418
+            },
+            "memory": {
+              "samples": 49,
+              "covered_seconds": 98.000023927,
+              "mean": 3.0612237423887707e-06,
+              "min": 0.0,
+              "max": 0.00010000011060012225,
+              "p95": 0.0
+            },
+            "io": {
+              "samples": 49,
+              "covered_seconds": 98.000023927,
+              "mean": 1.2188190901766895,
+              "min": 0.0,
+              "max": 9.401140857293463,
+              "p95": 4.963192929931678
+            }
+          },
+          "oom_kills": 0.0,
+          "swap_pages_in": 0.0,
+          "swap_pages_out": 0.0,
+          "disk": {
+            "device": "sda",
+            "read": {
+              "mib_per_second": {
+                "samples": 49,
+                "covered_seconds": 98.000023927,
+                "mean": 0.028140937006855105,
+                "min": 0.0,
+                "max": 1.1210748425122425,
+                "p95": 0.013671855524441822
+              },
+              "total_gib": 0.00269317626953125
+            },
+            "write": {
+              "mib_per_second": {
+                "samples": 49,
+                "covered_seconds": 98.000023927,
+                "mean": 43.652253372780955,
+                "min": 0.0,
+                "max": 594.0479819036505,
+                "p95": 350.13415231000397
+              },
+              "total_gib": 4.1776580810546875
+            },
+            "await_ms": {
+              "samples": 34,
+              "covered_seconds": 68.000050574,
+              "mean": 0.4879206576392089,
+              "min": 0.0,
+              "max": 2.5800666154240326,
+              "p95": 2.303977272727273,
+              "io_weighted_mean": 0.6156655132273445
+            },
+            "queue_depth": {
+              "samples": 49,
+              "covered_seconds": 98.000023927,
+              "mean": 0.40727541076654317,
+              "min": 0.0,
+              "max": 5.051992803436258,
+              "p95": 2.723243967257308
+            }
+          },
+          "network_drop_deltas": {
+            "network/lo/rx_drops_per_second": 0.0,
+            "network/lo/tx_drops_per_second": 0.0,
+            "network/enp7s0/rx_drops_per_second": 0.0,
+            "network/enp7s0/tx_drops_per_second": 0.0,
+            "network/docker0/rx_drops_per_second": 0.0,
+            "network/docker0/tx_drops_per_second": 0.0
+          },
+          "health": {
+            "probes": 0,
+            "failures": 0,
+            "latency_p95_ms": null,
+            "max_latency_ms": null
+          },
+          "relevance": "included"
+        },
+        {
+          "label": "builder-167968157",
+          "source": "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-cache-affinity-2026-09-29/telemetry/builder-167968157.jsonl.gz",
+          "coverage_fraction": 0.9898988153434345,
+          "covered_seconds": 97.99998271900002,
+          "started_at": "2026-09-29T13:27:54.704101+00:00",
+          "finished_at": "2026-09-29T13:29:32.704085+00:00",
+          "counter_resets": 0,
+          "host_cpu_cores": {
+            "samples": 49,
+            "covered_seconds": 97.99998271900002,
+            "mean": 3.237143427970159,
+            "min": 0.009999906490874448,
+            "max": 7.059994419074439,
+            "p95": 6.815055552925323,
+            "cpu_seconds": 317.24000000000007
+          },
+          "iowait_cores": {
+            "samples": 49,
+            "covered_seconds": 97.99998271900002,
+            "mean": 0.04887755963931741,
+            "min": 0.0,
+            "max": 0.3950015039682238,
+            "p95": 0.31000080104207006,
+            "cpu_seconds": 4.789999999999999
+          },
+          "process_cpu_cores": {
+            "gateway": {
+              "samples": 49,
+              "covered_seconds": 97.99998271900002,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "registry": {
+              "samples": 49,
+              "covered_seconds": 97.99998271900002,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "benchmark_driver": {
+              "samples": 49,
+              "covered_seconds": 97.99998271900002,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "postgres": {
+              "samples": 49,
+              "covered_seconds": 97.99998271900002,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "nginx": {
+              "samples": 49,
+              "covered_seconds": 97.99998271900002,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "relay": {
+              "samples": 49,
+              "covered_seconds": 97.99998271900002,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "autoscaler": {
+              "samples": 49,
+              "covered_seconds": 97.99998271900002,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "placement": {
+              "samples": 49,
+              "covered_seconds": 97.99998271900002,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "node_agent": {
+              "samples": 49,
+              "covered_seconds": 97.99998271900002,
+              "mean": 0.10857144771656307,
+              "min": 0.0,
+              "max": 0.8150124974016327,
+              "p95": 0.6100054610738967,
+              "cpu_seconds": 10.639999999999995
+            },
+            "dockerd": {
+              "samples": 49,
+              "covered_seconds": 97.99998271900002,
+              "mean": 0.010306124266327894,
+              "min": 0.0,
+              "max": 0.11500029716076794,
+              "p95": 0.07999914656910427,
+              "cpu_seconds": 1.0100000000000002
+            },
+            "buildkit": {
+              "samples": 49,
+              "covered_seconds": 97.99998271900002,
+              "mean": 2.5431637137593075,
+              "min": 0.0,
+              "max": 7.099994387454464,
+              "p95": 6.790055349136162,
+              "cpu_seconds": 249.23000000000002
+            },
+            "erofs": {
+              "samples": 49,
+              "covered_seconds": 97.99998271900002,
+              "mean": 0.006428572562164922,
+              "min": 0.0,
+              "max": 0.3150008139621035,
+              "p95": 0.0,
+              "cpu_seconds": 0.63
+            }
+          },
+          "memory_available_gib": {
+            "samples": 49,
+            "covered_seconds": 97.99998271900002,
+            "mean": 27.661999722540656,
+            "min": 25.624225616455078,
+            "max": 28.801544189453125,
+            "p95": 28.765262603759766
+          },
+          "pressure_percent": {
+            "cpu": {
+              "samples": 49,
+              "covered_seconds": 97.99998271900002,
+              "mean": 7.6003135851124375,
+              "min": 0.02864988242088259,
+              "max": 35.68662178972561,
+              "p95": 31.786377177294884
+            },
+            "memory": {
+              "samples": 49,
+              "covered_seconds": 97.99998271900002,
+              "mean": 1.0204083432007812e-06,
+              "min": 0.0,
+              "max": 5.000053075563366e-05,
+              "p95": 0.0
+            },
+            "io": {
+              "samples": 49,
+              "covered_seconds": 97.99998271900002,
+              "mean": 0.8632348460975652,
+              "min": 0.0,
+              "max": 7.033593636414833,
+              "p95": 4.738254786070994
+            }
+          },
+          "oom_kills": 0.0,
+          "swap_pages_in": 0.0,
+          "swap_pages_out": 0.0,
+          "disk": {
+            "device": "sda",
+            "read": {
+              "mib_per_second": {
+                "samples": 49,
+                "covered_seconds": 97.99998271900002,
+                "mean": 0.023477363833799225,
+                "min": 0.0,
+                "max": 1.1211024643294474,
+                "p95": 0.003906284971016244
+              },
+              "total_gib": 0.002246856689453125
+            },
+            "write": {
+              "mib_per_second": {
+                "samples": 49,
+                "covered_seconds": 97.99998271900002,
+                "mean": 27.136882974004838,
+                "min": 0.0,
+                "max": 575.2000101251207,
+                "p95": 123.77586190159339
+              },
+              "total_gib": 2.5970840454101562
+            },
+            "await_ms": {
+              "samples": 30,
+              "covered_seconds": 60.00000875100004,
+              "mean": 0.5221539927971532,
+              "min": 0.0,
+              "max": 3.049663735126746,
+              "p95": 2.0183502906976742,
+              "io_weighted_mean": 0.625872624991528
+            },
+            "queue_depth": {
+              "samples": 49,
+              "covered_seconds": 97.99998271900002,
+              "mean": 0.29143882690157513,
+              "min": 0.0,
+              "max": 5.5765345968205695,
+              "p95": 1.3194818940694424
+            }
+          },
+          "network_drop_deltas": {
+            "network/lo/rx_drops_per_second": 0.0,
+            "network/lo/tx_drops_per_second": 0.0,
+            "network/enp7s0/rx_drops_per_second": 0.0,
+            "network/enp7s0/tx_drops_per_second": 0.0,
+            "network/docker0/rx_drops_per_second": 0.0,
+            "network/docker0/tx_drops_per_second": 0.0
+          },
+          "health": {
+            "probes": 0,
+            "failures": 0,
+            "latency_p95_ms": null,
+            "max_latency_ms": null
+          },
+          "relevance": "included"
+        },
+        {
+          "label": "gateway",
+          "source": "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-cache-affinity-2026-09-29/telemetry/gateway.jsonl.gz",
+          "coverage_fraction": 0.9697032313737454,
+          "covered_seconds": 96.0006199060008,
+          "started_at": "2026-09-29T13:27:55.242954+00:00",
+          "finished_at": "2026-09-29T13:29:31.243569+00:00",
+          "counter_resets": 0,
+          "host_cpu_cores": {
+            "samples": 48,
+            "covered_seconds": 96.0006199060008,
+            "mean": 0.4957259655885332,
+            "min": 0.055006858475352374,
+            "max": 2.6900106053653623,
+            "p95": 1.7700089367715663,
+            "cpu_seconds": 47.59
+          },
+          "iowait_cores": {
+            "samples": 48,
+            "covered_seconds": 96.0006199060008,
+            "mean": 0.34833108403615354,
+            "min": 0.0,
+            "max": 1.4750151063667614,
+            "p95": 1.2293634509732105,
+            "cpu_seconds": 33.44
+          },
+          "process_cpu_cores": {
+            "gateway": {
+              "samples": 48,
+              "covered_seconds": 96.0006199060008,
+              "mean": 0.06812456009558744,
+              "min": 0.004999865581097219,
+              "max": 0.235001273588704,
+              "p95": 0.1449988474772112,
+              "cpu_seconds": 6.539999999999999
+            },
+            "registry": {
+              "samples": 48,
+              "covered_seconds": 96.0006199060008,
+              "mean": 0.1388532700419237,
+              "min": 0.0,
+              "max": 0.9250036468263791,
+              "p95": 0.47500323786086224,
+              "cpu_seconds": 13.330000000000002
+            },
+            "benchmark_driver": {
+              "available": false,
+              "reason": "driver_not_in_classified_service_cgroup",
+              "launch_method": "ssh",
+              "expected_cgroup_prefix": "ucloud-build-load-client"
+            },
+            "postgres": {
+              "samples": 48,
+              "covered_seconds": 96.0006199060008,
+              "mean": 0.008958275486575724,
+              "min": 0.0,
+              "max": 0.030000162585792002,
+              "p95": 0.020000070040213987,
+              "cpu_seconds": 0.8600000000000004
+            },
+            "nginx": {
+              "samples": 48,
+              "covered_seconds": 96.0006199060008,
+              "mean": 0.006354125635826968,
+              "min": 0.0,
+              "max": 0.01500024944674894,
+              "p95": 0.014999853053907655,
+              "cpu_seconds": 0.6100000000000003
+            },
+            "relay": {
+              "samples": 48,
+              "covered_seconds": 96.0006199060008,
+              "mean": 0.008854109492545774,
+              "min": 0.0049984845544671155,
+              "max": 0.05499634387052058,
+              "p95": 0.010001246995518614,
+              "cpu_seconds": 0.8500000000000004
+            },
+            "autoscaler": {
+              "samples": 48,
+              "covered_seconds": 96.0006199060008,
+              "mean": 0.012499919283594027,
+              "min": 0.0,
+              "max": 0.23487838290951582,
+              "p95": 0.020000357746462933,
+              "cpu_seconds": 1.2
+            },
+            "placement": {
+              "samples": 48,
+              "covered_seconds": 96.0006199060008,
+              "mean": 0.011249927355234633,
+              "min": 0.004999923433687559,
+              "max": 0.015000420851886154,
+              "p95": 0.015000102248237756,
+              "cpu_seconds": 1.0800000000000007
+            },
+            "node_agent": {
+              "samples": 48,
+              "covered_seconds": 96.0006199060008,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "dockerd": {
+              "samples": 48,
+              "covered_seconds": 96.0006199060008,
+              "mean": 0.010520765397024978,
+              "min": 0.0,
+              "max": 0.05000027097632,
+              "p95": 0.03500035845616044,
+              "cpu_seconds": 1.0100000000000005
+            },
+            "buildkit": {
+              "samples": 48,
+              "covered_seconds": 96.0006199060008,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            },
+            "erofs": {
+              "samples": 48,
+              "covered_seconds": 96.0006199060008,
+              "mean": 0.0,
+              "min": 0.0,
+              "max": 0.0,
+              "p95": 0.0,
+              "cpu_seconds": 0.0
+            }
+          },
+          "memory_available_gib": {
+            "samples": 48,
+            "covered_seconds": 96.0006199060008,
+            "mean": 12.926049186733188,
+            "min": 12.898727416992188,
+            "max": 13.040081024169922,
+            "p95": 12.979633331298828
+          },
+          "pressure_percent": {
+            "cpu": {
+              "samples": 48,
+              "covered_seconds": 96.0006199060008,
+              "mean": 3.6403681595201327,
+              "min": 0.0873608925058551,
+              "max": 40.04005785790653,
+              "p95": 20.20605202031606
+            },
+            "memory": {
+              "samples": 48,
+              "covered_seconds": 96.0006199060008,
+              "mean": 0.01493740354389486,
+              "min": 0.0,
+              "max": 0.434201711840015,
+              "p95": 0.11535597532387129
+            },
+            "io": {
+              "samples": 48,
+              "covered_seconds": 96.0006199060008,
+              "mean": 11.77355418232408,
+              "min": 0.0,
+              "max": 45.37481470615095,
+              "p95": 38.35747433407751
+            }
+          },
+          "oom_kills": 0.0,
+          "swap_pages_in": 0.0,
+          "swap_pages_out": 0.0,
+          "disk": {
+            "device": "sdb",
+            "read": {
+              "mib_per_second": {
+                "samples": 48,
+                "covered_seconds": 96.0006199060008,
+                "mean": 0.0020344920708974656,
+                "min": 0.0,
+                "max": 0.06640523310366289,
+                "p95": 0.005859328427150237
+              },
+              "total_gib": 0.00019073486328125
+            },
+            "write": {
+              "mib_per_second": {
+                "samples": 48,
+                "covered_seconds": 96.0006199060008,
+                "mean": 4.7002870313944145,
+                "min": 0.0,
+                "max": 21.318577709207098,
+                "p95": 19.648571434540603
+              },
+              "total_gib": 0.4406547546386719
+            },
+            "await_ms": {
+              "samples": 36,
+              "covered_seconds": 72.00097123398155,
+              "mean": 3.193203199716268,
+              "min": 1.5,
+              "max": 9.533180778032037,
+              "p95": 8.156469408224673,
+              "io_weighted_mean": 3.7597289318303813
+            },
+            "queue_depth": {
+              "samples": 48,
+              "covered_seconds": 96.0006199060008,
+              "mean": 0.6345896522298597,
+              "min": 0.0,
+              "max": 4.167485344722655,
+              "p95": 2.3352908156088668
+            }
+          },
+          "network_drop_deltas": {
+            "network/lo/rx_drops_per_second": 0.0,
+            "network/lo/tx_drops_per_second": 0.0,
+            "network/eth0/rx_drops_per_second": 0.0,
+            "network/eth0/tx_drops_per_second": 0.0,
+            "network/enp7s0/rx_drops_per_second": 0.0,
+            "network/enp7s0/tx_drops_per_second": 0.0,
+            "network/docker0/rx_drops_per_second": 0.0,
+            "network/docker0/tx_drops_per_second": 0.0
+          },
+          "health": {
+            "probes": 14,
+            "failures": 0,
+            "latency_p95_ms": 45.61369400471449,
+            "max_latency_ms": 45.61369400471449
+          },
+          "relevance": "included",
+          "attribution_provenance": {
+            "benchmark_driver": {
+              "available": false,
+              "reason": "driver_not_in_classified_service_cgroup",
+              "launch_method": "ssh",
+              "expected_cgroup_prefix": "ucloud-build-load-client"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "run_specific_evidence": [],
+  "limitations": [
+    "These results describe the sampled image-build pipeline. They do not qualify 500 or 1,000 running agent sandboxes, model-relay traffic, or their mixed load.",
+    "Batch averages include submission, queueing, execution and completion tails. Repeated fixture graphs can share BuildKit work. Execution overlap includes build, push and EROFS publication, not only CPU-heavy RUN instructions.",
+    "The gateway-local SDK driver consumes host CPU. Process groups are exclusive, but short-lived processes and asynchronous counter reads limit exact attribution. Never subtract independently calculated percentiles.",
+    "Disk busy_percent is deliberately excluded from all conclusions and tables because earlier qualification exposed unreliable busy_ms counter jumps. This run's raw counters and any flagged anomalies are retained in JSON. No disk-utilization ceiling is inferred.",
+    "Disk bytes, request latency, queue depth, PSI and iowait are separate signals. Traffic includes buffering, writeback, metadata, cache exports and maintenance. Physical reads near zero can mean page-cache hits. Do not sum overlapping devices or network interfaces.",
+    "Low gateway CPU does not establish why admission returned 503 or why a build queued. Correlate per-build phases before assigning a specific cause or raising concurrency.",
+    "Telemetry means are time-weighted and p95 is nearest-rank over sampled intervals. API/client p95 uses linear interpolation. Only complete counter intervals inside each client window are included; short phases lose a larger fraction at their boundaries.",
+    "Health probes originate on the gateway; SDK timing includes a gateway-local client. Neither is an external end-to-end capacity test. No OOM delta means none observed in covered intervals, not a complete kernel-log audit.",
+    "For affinity-seed and affinity-repeat, the SDK driver was launched through SSH, not a ucloud-build-load-client*.service cgroup recognized by the sampler. Gateway benchmark_driver attribution is unavailable, not zero CPU. Whole-host CPU includes this work; API and registry attribution remain valid."
+  ],
+  "attribution_provenance": {
+    "phases": [
+      "affinity-repeat",
+      "affinity-seed"
+    ],
+    "note": "For affinity-seed and affinity-repeat, the SDK driver was launched through SSH, not a ucloud-build-load-client*.service cgroup recognized by the sampler. Gateway benchmark_driver attribution is unavailable, not zero CPU. Whole-host CPU includes this work; API and registry attribution remain valid.",
+    "raw_telemetry_modified": false,
+    "whole_host_api_registry_metrics_modified": false
+  }
+}

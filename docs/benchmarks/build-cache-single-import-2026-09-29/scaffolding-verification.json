@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "scope": "Local scaffolding checks only; no network or production calls",
+  "checks": {
+    "final_audit_self_test": "passed",
+    "runner_self_test": "passed",
+    "selection_self_test": "passed",
+    "reservation_state_readonly_and_missing_file": "passed",
+    "controller_only_fixed_root_changed": "passed",
+    "all_helpers_ast_parse": "passed"
+  },
+  "helper_sha256": {
+    "deployment-controller.py": "fdbc0b7d2073a9c6a3a517c646d10a61e4efcfb43818c5eff239e0d4094ec037",
+    "final-audit.py": "b2b7c3ac9dde9c289c7512b325e899c94bc4e2b985a97c4b02e7f416618cb8f7",
+    "initial-builder-check.py": "cb4e074c33b84d265fe3327e47530d5f5113eea64e4be6caa12367a0b2c2b314",
+    "qualification-control.py": "4416e944526f46c829555815e9c66bae95e008e4f53f03d9c20423f4fe705d34",
+    "run-qualification.py": "f716be10b67b98bfd1b6ca0d4b96fca06e19ed94d833b475ad3a394ad1ecbfe0",
+    "selection-report.py": "fc4f1b794759dd70ce64b8217db5fb0f2e0d5825202fef54773549f3582fa9ee"
+  }
+}

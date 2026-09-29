@@ -1,0 +1,2646 @@
+{
+  "schema_version": 1,
+  "phase": "affinity-seed",
+  "captured_at": "2026-09-29T13:21:51.583767+00:00",
+  "summary_sha256": "79f05872298c802ccf4e2d490aef2c7628dcd901d4c29b4b20c0816215a1935b",
+  "repository": "ucloud-build-cache",
+  "counts": {
+    "records": 48,
+    "logs_present": 48,
+    "selection_coverage": 48,
+    "affinity_match_true": 0,
+    "affinity_match_false": 48,
+    "import_count_distribution": {
+      "8": 48
+    },
+    "single_export_digest_coverage": 48,
+    "unique_export_tag_coverage": 48
+  },
+  "records": [
+    {
+      "index": 0,
+      "build_id": "33e56410-2349-40a7-a7b4-b6518480e1d1",
+      "image_id": "bl20260929-affinity-seed-000",
+      "recipe": "python-agent",
+      "variant": "app-change-5",
+      "context_sha256": "b0f478441cb60aeb84a6042bdca8835a477ab839ef7227d092904f0b8def7afb",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc1-0272715ed089fd48-1790684203-fee9a8da9753433e84462d9a87a4ee2c",
+        "bc1-0272715ed089fd48-1790684208-3b9dc4d1264b401bad12d9b0803d2301",
+        "bc1-0272715ed089fd48-1790684211-33c2d1c2322745a88b039b8fa4a6e469",
+        "bc1-0272715ed089fd48-1790684213-f8ccb21505cb4a0abced02b15622db5e",
+        "bc1-4323dfe71c2dff7b-1790684163-8b29db250b174e1eb6c89ce45a4b4a41",
+        "bc1-510fd9cd262740ab-1790684209-280594d84fd24945880be4870b8b25bf",
+        "bc1-510fd9cd262740ab-1790684210-9acb9b96a159478198ab8beb726c594c",
+        "bc1-510fd9cd262740ab-1790684210-b4673e5ee1d74825a1a0530912543d56"
+      ],
+      "exported_manifest_digests": [
+        "sha256:7a3dd985f8dff30fa05f6aba3c181f343db25783641f247fc760a78c134311d7"
+      ],
+      "log_sha256": "db0c09ab31d81246f8c88ce6ba57f3a7b4a9f6973d5bf8fb52ab53d0a0b40be9",
+      "log_bytes": 11389,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-4323dfe71c2dff7b-2e76d4ecce110e24cde35866a3043244-1790687773-3311b17464d344f68f80fcb878e0fbff",
+          "manifest_digest": "sha256:7a3dd985f8dff30fa05f6aba3c181f343db25783641f247fc760a78c134311d7",
+          "schema": "bc2",
+          "recipe_hint": "4323dfe71c2dff7b",
+          "affinity_hint": "2e76d4ecce110e24cde35866a3043244",
+          "created_at_unix": 1790687773
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-4323dfe71c2dff7b-2e76d4ecce110e24cde35866a3043244-1790687773-3311b17464d344f68f80fcb878e0fbff"
+    },
+    {
+      "index": 1,
+      "build_id": "a67380d3-5431-4d7a-8a90-f0aeb4d9d350",
+      "image_id": "bl20260929-affinity-seed-001",
+      "recipe": "typescript-tools",
+      "variant": "app-change-5",
+      "context_sha256": "888202c5790256485f047832a06c8de754e1e78233fcd8ca96bb63fc0cf2d066",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc1-0272715ed089fd48-1790684213-f8ccb21505cb4a0abced02b15622db5e",
+        "bc2-4323dfe71c2dff7b-7456ad1685172b984161b10b4b3ac5a7-1790687773-0a0ac8a653f24a1192d1c5be2d5e2062",
+        "bc2-4323dfe71c2dff7b-842c3cf19f7f598081b61076cdcc98ce-1790687773-757cb0a2ea784b83b2536ea710fd30fb",
+        "bc2-4323dfe71c2dff7b-9d0472a0b4a191a15cbba50037a8e264-1790687773-20bc77e2dca547f09f36c4dc285395d3",
+        "bc2-4323dfe71c2dff7b-a383f62ae6d89d9566476cf4f6dd9d82-1790687775-382c9bd1721d4d038a15cb95e0d5bc40",
+        "bc2-4323dfe71c2dff7b-e4c1264b9bea234914725c8968369a71-1790687773-a8f89ecc32a24036bc5fbc95bd4cb4f5",
+        "bc2-4323dfe71c2dff7b-eaf3448fe5fcd543f3db31e9e8a347ec-1790687773-36d25e08e2be4d4985b5ebc50ab0215d",
+        "bc2-510fd9cd262740ab-09d3aceb312e1c29f299f3f7feb737cf-1790687803-47c76aff94de424b9d9ba3fb0b562b42"
+      ],
+      "exported_manifest_digests": [
+        "sha256:be3830f1ede1d61a82b8c2a727a3f96785c803db7925a19f224747fa054b9011"
+      ],
+      "log_sha256": "abcd7856778739de969274515186e24ccecdb78ac29490f5d8bed2b2c3bae16c",
+      "log_bytes": 10902,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-510fd9cd262740ab-1f7e125f5c28d097b8141d0df04ba047-1790687809-7c20243f1d8d41e297e016ed64edb2a3",
+          "manifest_digest": "sha256:be3830f1ede1d61a82b8c2a727a3f96785c803db7925a19f224747fa054b9011",
+          "schema": "bc2",
+          "recipe_hint": "510fd9cd262740ab",
+          "affinity_hint": "1f7e125f5c28d097b8141d0df04ba047",
+          "created_at_unix": 1790687809
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-510fd9cd262740ab-1f7e125f5c28d097b8141d0df04ba047-1790687809-7c20243f1d8d41e297e016ed64edb2a3"
+    },
+    {
+      "index": 2,
+      "build_id": "122bb442-c13a-40d7-bfe8-8d9889cb41e9",
+      "image_id": "bl20260929-affinity-seed-002",
+      "recipe": "typescript-multistage",
+      "variant": "app-change-5",
+      "context_sha256": "134a0d4d35cfb2abbe3a5036befbb37d42fe7f8cefb34be91780232d31400ddf",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc1-0272715ed089fd48-1790684213-f8ccb21505cb4a0abced02b15622db5e",
+        "bc2-4323dfe71c2dff7b-36a75cc80b813a493f3964dad6309484-1790687773-80a68e5d61a34e93bdb40fb42cfda01e",
+        "bc2-4323dfe71c2dff7b-4c5e8f764cb29925a3b43c07ac629a66-1790687773-202c22703ee845ce9190f2b7df022f43",
+        "bc2-4323dfe71c2dff7b-7456ad1685172b984161b10b4b3ac5a7-1790687773-0a0ac8a653f24a1192d1c5be2d5e2062",
+        "bc2-4323dfe71c2dff7b-842c3cf19f7f598081b61076cdcc98ce-1790687773-757cb0a2ea784b83b2536ea710fd30fb",
+        "bc2-4323dfe71c2dff7b-a383f62ae6d89d9566476cf4f6dd9d82-1790687775-382c9bd1721d4d038a15cb95e0d5bc40",
+        "bc2-4323dfe71c2dff7b-eaf3448fe5fcd543f3db31e9e8a347ec-1790687773-36d25e08e2be4d4985b5ebc50ab0215d",
+        "bc2-510fd9cd262740ab-09d3aceb312e1c29f299f3f7feb737cf-1790687803-47c76aff94de424b9d9ba3fb0b562b42"
+      ],
+      "exported_manifest_digests": [
+        "sha256:1f55eb6a24669df4a6c6ec16d69758a2b565e642f77abeac1982b98a40e310da"
+      ],
+      "log_sha256": "d3f4df7b56b9e0e9bf8650d214b1b0ad60cb38d4d68f38a0451c22de55c3ed22",
+      "log_bytes": 15235,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-0272715ed089fd48-d8369322b67fd4360e5e568d7a70584a-1790687806-6a853ef0e9f944d2b66c3ef75904ce60",
+          "manifest_digest": "sha256:1f55eb6a24669df4a6c6ec16d69758a2b565e642f77abeac1982b98a40e310da",
+          "schema": "bc2",
+          "recipe_hint": "0272715ed089fd48",
+          "affinity_hint": "d8369322b67fd4360e5e568d7a70584a",
+          "created_at_unix": 1790687806
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-0272715ed089fd48-d8369322b67fd4360e5e568d7a70584a-1790687806-6a853ef0e9f944d2b66c3ef75904ce60"
+    },
+    {
+      "index": 3,
+      "build_id": "8765437c-3cfa-4707-8b58-194c688a0e64",
+      "image_id": "bl20260929-affinity-seed-003",
+      "recipe": "python-agent",
+      "variant": "app-change-6",
+      "context_sha256": "b7e702dfb1daa056d6862e57e4a1b4611e6e843f49de0105c5716ffe5633caa0",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc1-0272715ed089fd48-1790684203-fee9a8da9753433e84462d9a87a4ee2c",
+        "bc1-0272715ed089fd48-1790684208-3b9dc4d1264b401bad12d9b0803d2301",
+        "bc1-0272715ed089fd48-1790684211-33c2d1c2322745a88b039b8fa4a6e469",
+        "bc1-0272715ed089fd48-1790684213-f8ccb21505cb4a0abced02b15622db5e",
+        "bc1-4323dfe71c2dff7b-1790684163-8b29db250b174e1eb6c89ce45a4b4a41",
+        "bc1-510fd9cd262740ab-1790684209-280594d84fd24945880be4870b8b25bf",
+        "bc1-510fd9cd262740ab-1790684210-9acb9b96a159478198ab8beb726c594c",
+        "bc1-510fd9cd262740ab-1790684210-b4673e5ee1d74825a1a0530912543d56"
+      ],
+      "exported_manifest_digests": [
+        "sha256:083e7d2dd0e4bb4ba0d118a922e06ca783f722568d4d19d2a39486a3bcc26143"
+      ],
+      "log_sha256": "37d67e624765276f9608f4a58c4ebd6a2cef7e7fdefc8895aa9a007829861613",
+      "log_bytes": 11689,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-4323dfe71c2dff7b-eaf3448fe5fcd543f3db31e9e8a347ec-1790687773-36d25e08e2be4d4985b5ebc50ab0215d",
+          "manifest_digest": "sha256:083e7d2dd0e4bb4ba0d118a922e06ca783f722568d4d19d2a39486a3bcc26143",
+          "schema": "bc2",
+          "recipe_hint": "4323dfe71c2dff7b",
+          "affinity_hint": "eaf3448fe5fcd543f3db31e9e8a347ec",
+          "created_at_unix": 1790687773
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-4323dfe71c2dff7b-eaf3448fe5fcd543f3db31e9e8a347ec-1790687773-36d25e08e2be4d4985b5ebc50ab0215d"
+    },
+    {
+      "index": 4,
+      "build_id": "e0fa7a50-9114-4007-8160-4f09aa38be5b",
+      "image_id": "bl20260929-affinity-seed-004",
+      "recipe": "typescript-tools",
+      "variant": "app-change-6",
+      "context_sha256": "c08eb45fa8d26d53d418d20a5f0fa76f30eff99a507e2fd410b79bf55f11e1c0",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc2-0272715ed089fd48-6baadc8365f0e35163372624351a87b2-1790687826-e20d9488e705482aa3bdff28f60ebe31",
+        "bc2-0272715ed089fd48-7a3cff339dcaf7901ccd1e8b1ccb062a-1790687826-71c50682cb3a4a93abc7ff33f2dbe070",
+        "bc2-0272715ed089fd48-b15fe7c8116d33b43cdd9ce32a1e2cc3-1790687818-b55a5dc12b15444b8f2a5b792bfd2626",
+        "bc2-4323dfe71c2dff7b-1779e75fc28d6d3bda2dd791e859a71b-1790687842-d290bb2555994993a981173e04bea908",
+        "bc2-510fd9cd262740ab-22b540cb75ee2543d4d2291dfbf532e0-1790687820-a75c5388b21a43b981c88ac2bc14065a",
+        "bc2-510fd9cd262740ab-a193bc108748016e1286a7d582515056-1790687853-547550d4db8c4584bc46e1824cd0e022",
+        "bc2-510fd9cd262740ab-a5e3267d76a0a5d8d22c2407f276dbbf-1790687812-2545267aa6cd43efa24f66f43093d9e5",
+        "bc2-510fd9cd262740ab-d2b744c628dec075019e0d00ddd47a47-1790687823-945da34e3683434393aa48ae8ae4039e"
+      ],
+      "exported_manifest_digests": [
+        "sha256:985cda32a3170a24c771934230f07674995bc249c073c094ba4dc6736e23412c"
+      ],
+      "log_sha256": "f37a9e0f8c155d979f7def197bc6630fdc2440df444935ce3f755791fa022935",
+      "log_bytes": 10597,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-510fd9cd262740ab-e1e830274e7e399b2135bdc5409c1135-1790687859-7fcc63052e8545848710694dc067e77e",
+          "manifest_digest": "sha256:985cda32a3170a24c771934230f07674995bc249c073c094ba4dc6736e23412c",
+          "schema": "bc2",
+          "recipe_hint": "510fd9cd262740ab",
+          "affinity_hint": "e1e830274e7e399b2135bdc5409c1135",
+          "created_at_unix": 1790687859
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-510fd9cd262740ab-e1e830274e7e399b2135bdc5409c1135-1790687859-7fcc63052e8545848710694dc067e77e"
+    },
+    {
+      "index": 5,
+      "build_id": "64bbeb7c-6151-4c4a-bfd5-be4dd261a7f6",
+      "image_id": "bl20260929-affinity-seed-005",
+      "recipe": "typescript-multistage",
+      "variant": "app-change-6",
+      "context_sha256": "f87c03a26673105c1ced3c637078a614256e399a8c93e880478dcb90d02c26e8",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc2-0272715ed089fd48-2eb3feaccb36cd16d062b6f4a1d83cb3-1790687777-b6f7cf1524504be797cacde7fb6a6b4b",
+        "bc2-0272715ed089fd48-d2ac8e1749f7ae62cb2af37c4883c3a3-1790687802-c89a98b00e0843568abee14c8bf501d5",
+        "bc2-4323dfe71c2dff7b-773c378213b51de6cceb88fc9e4eefb9-1790687809-cfdbb06c99824127bd65fa1732f362e8",
+        "bc2-4323dfe71c2dff7b-a383f62ae6d89d9566476cf4f6dd9d82-1790687775-382c9bd1721d4d038a15cb95e0d5bc40",
+        "bc2-510fd9cd262740ab-09d3aceb312e1c29f299f3f7feb737cf-1790687803-47c76aff94de424b9d9ba3fb0b562b42",
+        "bc2-510fd9cd262740ab-6d7d3114779d7d01725813bed9ed8dc7-1790687801-6cb07104baad4bf3a65e878be4ddb481",
+        "bc2-510fd9cd262740ab-9aaea2f77183b0fefc255b7837f70241-1790687801-5166b5afe0a84b6b9be6e26f5b6ccd5b",
+        "bc2-510fd9cd262740ab-9d28fc293f0bd66f65349fdba6523988-1790687775-8c8f44ca26fe446ea780a2ebe2b07d7f"
+      ],
+      "exported_manifest_digests": [
+        "sha256:b3919ec321d9b3477954a1f6d7b5dd5d67b2125b39bb9eb20a588b5da7e6477d"
+      ],
+      "log_sha256": "60e3cf298d2bb144f37088b64733517c2edb11836b4b5e7a76eccfb6caee75e2",
+      "log_bytes": 12515,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-0272715ed089fd48-51a4f207d076391a1a45b93048033b83-1790687837-c69d73c28a9443228b9443cd51a3a35b",
+          "manifest_digest": "sha256:b3919ec321d9b3477954a1f6d7b5dd5d67b2125b39bb9eb20a588b5da7e6477d",
+          "schema": "bc2",
+          "recipe_hint": "0272715ed089fd48",
+          "affinity_hint": "51a4f207d076391a1a45b93048033b83",
+          "created_at_unix": 1790687837
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-0272715ed089fd48-51a4f207d076391a1a45b93048033b83-1790687837-c69d73c28a9443228b9443cd51a3a35b"
+    },
+    {
+      "index": 6,
+      "build_id": "10769050-11b7-4f35-aeb3-ad79cda5e8a8",
+      "image_id": "bl20260929-affinity-seed-006",
+      "recipe": "python-agent",
+      "variant": "app-change-7",
+      "context_sha256": "220a8922b40005c3281769355025097e5d4dff3be525eb24ca1524c169cbad09",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc1-0272715ed089fd48-1790684203-fee9a8da9753433e84462d9a87a4ee2c",
+        "bc1-0272715ed089fd48-1790684208-3b9dc4d1264b401bad12d9b0803d2301",
+        "bc1-0272715ed089fd48-1790684211-33c2d1c2322745a88b039b8fa4a6e469",
+        "bc1-0272715ed089fd48-1790684213-f8ccb21505cb4a0abced02b15622db5e",
+        "bc1-4323dfe71c2dff7b-1790684163-8b29db250b174e1eb6c89ce45a4b4a41",
+        "bc1-510fd9cd262740ab-1790684209-280594d84fd24945880be4870b8b25bf",
+        "bc1-510fd9cd262740ab-1790684210-9acb9b96a159478198ab8beb726c594c",
+        "bc1-510fd9cd262740ab-1790684210-b4673e5ee1d74825a1a0530912543d56"
+      ],
+      "exported_manifest_digests": [
+        "sha256:2b96ba6169ebe3980eaf641fb851d895d25e81e9c4d6c504385d5cdf52ab9e7c"
+      ],
+      "log_sha256": "b11880c63bad74e18b259a8c9330738216659b93bf6b777d918cb0d3a0fbba03",
+      "log_bytes": 10777,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-4323dfe71c2dff7b-ee3756b499f5bc7c7164c6fac6ce04ad-1790687772-24d20d5aa2304fa1ae1dc4e440ea9f3c",
+          "manifest_digest": "sha256:2b96ba6169ebe3980eaf641fb851d895d25e81e9c4d6c504385d5cdf52ab9e7c",
+          "schema": "bc2",
+          "recipe_hint": "4323dfe71c2dff7b",
+          "affinity_hint": "ee3756b499f5bc7c7164c6fac6ce04ad",
+          "created_at_unix": 1790687772
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-4323dfe71c2dff7b-ee3756b499f5bc7c7164c6fac6ce04ad-1790687772-24d20d5aa2304fa1ae1dc4e440ea9f3c"
+    },
+    {
+      "index": 7,
+      "build_id": "2216742f-9849-49b7-ae96-dc739647c700",
+      "image_id": "bl20260929-affinity-seed-007",
+      "recipe": "typescript-tools",
+      "variant": "app-change-7",
+      "context_sha256": "9fd639ef9337887cc7e08558c16f37f68bc42f85c41bb97ec3c3b5e893003a67",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc1-0272715ed089fd48-1790684213-f8ccb21505cb4a0abced02b15622db5e",
+        "bc1-510fd9cd262740ab-1790684210-b4673e5ee1d74825a1a0530912543d56",
+        "bc2-4323dfe71c2dff7b-2e76d4ecce110e24cde35866a3043244-1790687773-3311b17464d344f68f80fcb878e0fbff",
+        "bc2-4323dfe71c2dff7b-4c5e8f764cb29925a3b43c07ac629a66-1790687773-202c22703ee845ce9190f2b7df022f43",
+        "bc2-4323dfe71c2dff7b-7456ad1685172b984161b10b4b3ac5a7-1790687773-0a0ac8a653f24a1192d1c5be2d5e2062",
+        "bc2-4323dfe71c2dff7b-842c3cf19f7f598081b61076cdcc98ce-1790687773-757cb0a2ea784b83b2536ea710fd30fb",
+        "bc2-4323dfe71c2dff7b-a383f62ae6d89d9566476cf4f6dd9d82-1790687775-382c9bd1721d4d038a15cb95e0d5bc40",
+        "bc2-4323dfe71c2dff7b-eaf3448fe5fcd543f3db31e9e8a347ec-1790687773-36d25e08e2be4d4985b5ebc50ab0215d"
+      ],
+      "exported_manifest_digests": [
+        "sha256:aa69a87df302762cc2a6f1cb36f55f5eb4f691474bd515edcb2db505ebf84f46"
+      ],
+      "log_sha256": "772e5ad1f2ec50429e4f7d9a22a39f18c177f3a0aabf7ed39fa9f58bdc795d98",
+      "log_bytes": 7821,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-510fd9cd262740ab-09d3aceb312e1c29f299f3f7feb737cf-1790687803-47c76aff94de424b9d9ba3fb0b562b42",
+          "manifest_digest": "sha256:aa69a87df302762cc2a6f1cb36f55f5eb4f691474bd515edcb2db505ebf84f46",
+          "schema": "bc2",
+          "recipe_hint": "510fd9cd262740ab",
+          "affinity_hint": "09d3aceb312e1c29f299f3f7feb737cf",
+          "created_at_unix": 1790687803
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-510fd9cd262740ab-09d3aceb312e1c29f299f3f7feb737cf-1790687803-47c76aff94de424b9d9ba3fb0b562b42"
+    },
+    {
+      "index": 8,
+      "build_id": "9dbf237b-6153-4b36-9882-83e85be4675d",
+      "image_id": "bl20260929-affinity-seed-008",
+      "recipe": "typescript-multistage",
+      "variant": "app-change-7",
+      "context_sha256": "5c838e892dc7fa616026c8b6a6b0f7b69042020eb835189b74495943df98a523",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc1-0272715ed089fd48-1790684213-f8ccb21505cb4a0abced02b15622db5e",
+        "bc1-510fd9cd262740ab-1790684210-b4673e5ee1d74825a1a0530912543d56",
+        "bc2-4323dfe71c2dff7b-2e440572593ac7691b8e68bf73a9164f-1790687773-b9c9760fc1b340d1a4a8e772e611fe79",
+        "bc2-4323dfe71c2dff7b-4c5e8f764cb29925a3b43c07ac629a66-1790687773-202c22703ee845ce9190f2b7df022f43",
+        "bc2-4323dfe71c2dff7b-7456ad1685172b984161b10b4b3ac5a7-1790687773-0a0ac8a653f24a1192d1c5be2d5e2062",
+        "bc2-4323dfe71c2dff7b-a383f62ae6d89d9566476cf4f6dd9d82-1790687775-382c9bd1721d4d038a15cb95e0d5bc40",
+        "bc2-4323dfe71c2dff7b-eaf3448fe5fcd543f3db31e9e8a347ec-1790687773-36d25e08e2be4d4985b5ebc50ab0215d",
+        "bc2-4323dfe71c2dff7b-f602b8092d391f23ebde2c641f9a14e2-1790687772-b0549009aab645bb8eb9977eab4b9b31"
+      ],
+      "exported_manifest_digests": [
+        "sha256:58802bfbb6913cd4115bea0fafcb50ccdd697783c99619bae879c09e432998b4"
+      ],
+      "log_sha256": "363233dc8d87bc53799ddff22e1a911119e8a9b83f448e644b6cd3b17b303f90",
+      "log_bytes": 12459,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-0272715ed089fd48-d2ac8e1749f7ae62cb2af37c4883c3a3-1790687802-c89a98b00e0843568abee14c8bf501d5",
+          "manifest_digest": "sha256:58802bfbb6913cd4115bea0fafcb50ccdd697783c99619bae879c09e432998b4",
+          "schema": "bc2",
+          "recipe_hint": "0272715ed089fd48",
+          "affinity_hint": "d2ac8e1749f7ae62cb2af37c4883c3a3",
+          "created_at_unix": 1790687802
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-0272715ed089fd48-d2ac8e1749f7ae62cb2af37c4883c3a3-1790687802-c89a98b00e0843568abee14c8bf501d5"
+    },
+    {
+      "index": 9,
+      "build_id": "59f25daa-e5a0-48ce-8682-00e201829855",
+      "image_id": "bl20260929-affinity-seed-009",
+      "recipe": "python-agent",
+      "variant": "app-change-8",
+      "context_sha256": "f554cff1ab9f9e324a6f3f9051a9e9f1f051d7f89889ed8c0119b35074169af0",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc1-0272715ed089fd48-1790684213-f8ccb21505cb4a0abced02b15622db5e",
+        "bc2-4323dfe71c2dff7b-4c5e8f764cb29925a3b43c07ac629a66-1790687773-202c22703ee845ce9190f2b7df022f43",
+        "bc2-4323dfe71c2dff7b-7456ad1685172b984161b10b4b3ac5a7-1790687773-0a0ac8a653f24a1192d1c5be2d5e2062",
+        "bc2-4323dfe71c2dff7b-842c3cf19f7f598081b61076cdcc98ce-1790687773-757cb0a2ea784b83b2536ea710fd30fb",
+        "bc2-4323dfe71c2dff7b-9d0472a0b4a191a15cbba50037a8e264-1790687773-20bc77e2dca547f09f36c4dc285395d3",
+        "bc2-4323dfe71c2dff7b-a383f62ae6d89d9566476cf4f6dd9d82-1790687775-382c9bd1721d4d038a15cb95e0d5bc40",
+        "bc2-4323dfe71c2dff7b-eaf3448fe5fcd543f3db31e9e8a347ec-1790687773-36d25e08e2be4d4985b5ebc50ab0215d",
+        "bc2-510fd9cd262740ab-09d3aceb312e1c29f299f3f7feb737cf-1790687803-47c76aff94de424b9d9ba3fb0b562b42"
+      ],
+      "exported_manifest_digests": [
+        "sha256:e7b8c36faef7ce280b87600d6fe40e0799c87b808058f094af4742270ae25a3f"
+      ],
+      "log_sha256": "9066b7f0601c6c92425619a4d12f968170439a24b4344a0c7d07ea34298ffe9b",
+      "log_bytes": 6253,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-4323dfe71c2dff7b-773c378213b51de6cceb88fc9e4eefb9-1790687809-cfdbb06c99824127bd65fa1732f362e8",
+          "manifest_digest": "sha256:e7b8c36faef7ce280b87600d6fe40e0799c87b808058f094af4742270ae25a3f",
+          "schema": "bc2",
+          "recipe_hint": "4323dfe71c2dff7b",
+          "affinity_hint": "773c378213b51de6cceb88fc9e4eefb9",
+          "created_at_unix": 1790687809
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-4323dfe71c2dff7b-773c378213b51de6cceb88fc9e4eefb9-1790687809-cfdbb06c99824127bd65fa1732f362e8"
+    },
+    {
+      "index": 10,
+      "build_id": "052c06e9-25b7-4657-a054-c41d40ff4085",
+      "image_id": "bl20260929-affinity-seed-010",
+      "recipe": "typescript-tools",
+      "variant": "app-change-8",
+      "context_sha256": "a7f9e7716df25c501dd4c161211184b56e64b64f69195abb4c3e1e31fc9f8862",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc1-0272715ed089fd48-1790684203-fee9a8da9753433e84462d9a87a4ee2c",
+        "bc1-0272715ed089fd48-1790684208-3b9dc4d1264b401bad12d9b0803d2301",
+        "bc1-0272715ed089fd48-1790684211-33c2d1c2322745a88b039b8fa4a6e469",
+        "bc1-0272715ed089fd48-1790684213-f8ccb21505cb4a0abced02b15622db5e",
+        "bc1-4323dfe71c2dff7b-1790684163-8b29db250b174e1eb6c89ce45a4b4a41",
+        "bc1-510fd9cd262740ab-1790684209-280594d84fd24945880be4870b8b25bf",
+        "bc1-510fd9cd262740ab-1790684210-9acb9b96a159478198ab8beb726c594c",
+        "bc1-510fd9cd262740ab-1790684210-b4673e5ee1d74825a1a0530912543d56"
+      ],
+      "exported_manifest_digests": [
+        "sha256:e45c46ee964d25915bcef62ccbf55eefb848c0813f1399d7967cb4d5c3c23c79"
+      ],
+      "log_sha256": "5f8f1baa123ff06938b9e1dbbfdaa33a7f899c951ac41cff04fe4cf19ae22441",
+      "log_bytes": 10781,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-510fd9cd262740ab-599884a87b9f33cad6955ef2aa04ecf7-1790687774-3037b40e7fb84da994ddd59058f7721a",
+          "manifest_digest": "sha256:e45c46ee964d25915bcef62ccbf55eefb848c0813f1399d7967cb4d5c3c23c79",
+          "schema": "bc2",
+          "recipe_hint": "510fd9cd262740ab",
+          "affinity_hint": "599884a87b9f33cad6955ef2aa04ecf7",
+          "created_at_unix": 1790687774
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-510fd9cd262740ab-599884a87b9f33cad6955ef2aa04ecf7-1790687774-3037b40e7fb84da994ddd59058f7721a"
+    },
+    {
+      "index": 11,
+      "build_id": "bf79465f-3148-4be0-80ad-6ed3f6df06e3",
+      "image_id": "bl20260929-affinity-seed-011",
+      "recipe": "typescript-multistage",
+      "variant": "app-change-8",
+      "context_sha256": "7e2f5bd636a15d4a4613aa78abb3d4b5b7a15336bde5a82a26b2da33c74340bd",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc2-0272715ed089fd48-6f319c62b78c3e939f5f732c12dc68f3-1790687802-da3f1993fce44df9b821310168447a74",
+        "bc2-0272715ed089fd48-8e0334c364dcdd0921106a8d77bc2d14-1790687802-c49cc996733e49e0ba934c4c62811b38",
+        "bc2-0272715ed089fd48-d2ac8e1749f7ae62cb2af37c4883c3a3-1790687802-c89a98b00e0843568abee14c8bf501d5",
+        "bc2-0272715ed089fd48-d8369322b67fd4360e5e568d7a70584a-1790687806-6a853ef0e9f944d2b66c3ef75904ce60",
+        "bc2-4323dfe71c2dff7b-773c378213b51de6cceb88fc9e4eefb9-1790687809-cfdbb06c99824127bd65fa1732f362e8",
+        "bc2-510fd9cd262740ab-09d3aceb312e1c29f299f3f7feb737cf-1790687803-47c76aff94de424b9d9ba3fb0b562b42",
+        "bc2-510fd9cd262740ab-6d7d3114779d7d01725813bed9ed8dc7-1790687801-6cb07104baad4bf3a65e878be4ddb481",
+        "bc2-510fd9cd262740ab-9aaea2f77183b0fefc255b7837f70241-1790687801-5166b5afe0a84b6b9be6e26f5b6ccd5b"
+      ],
+      "exported_manifest_digests": [
+        "sha256:20a14257d70064ed846f08cc31cc6dbead7a97125f081e997cea063bc08ea50d"
+      ],
+      "log_sha256": "68b8077402cfff12818e25f71e83d05bde88dc93002fcd3f02b20478e70d63c0",
+      "log_bytes": 13861,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-0272715ed089fd48-8a2fff919252aaf6cef32c51757224cc-1790687843-2fe5b707886e468da96342b9ebcd8c57",
+          "manifest_digest": "sha256:20a14257d70064ed846f08cc31cc6dbead7a97125f081e997cea063bc08ea50d",
+          "schema": "bc2",
+          "recipe_hint": "0272715ed089fd48",
+          "affinity_hint": "8a2fff919252aaf6cef32c51757224cc",
+          "created_at_unix": 1790687843
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-0272715ed089fd48-8a2fff919252aaf6cef32c51757224cc-1790687843-2fe5b707886e468da96342b9ebcd8c57"
+    },
+    {
+      "index": 12,
+      "build_id": "3326ecf7-dc92-492c-9905-2a2b51e7c846",
+      "image_id": "bl20260929-affinity-seed-012",
+      "recipe": "python-agent",
+      "variant": "app-change-9",
+      "context_sha256": "350087d72f870166d9a2eb4651c347dcf7c30ccb931c818e7534db847f6c3110",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc2-0272715ed089fd48-6f319c62b78c3e939f5f732c12dc68f3-1790687802-da3f1993fce44df9b821310168447a74",
+        "bc2-0272715ed089fd48-8e0334c364dcdd0921106a8d77bc2d14-1790687802-c49cc996733e49e0ba934c4c62811b38",
+        "bc2-0272715ed089fd48-d2ac8e1749f7ae62cb2af37c4883c3a3-1790687802-c89a98b00e0843568abee14c8bf501d5",
+        "bc2-0272715ed089fd48-d8369322b67fd4360e5e568d7a70584a-1790687806-6a853ef0e9f944d2b66c3ef75904ce60",
+        "bc2-4323dfe71c2dff7b-773c378213b51de6cceb88fc9e4eefb9-1790687809-cfdbb06c99824127bd65fa1732f362e8",
+        "bc2-510fd9cd262740ab-09d3aceb312e1c29f299f3f7feb737cf-1790687803-47c76aff94de424b9d9ba3fb0b562b42",
+        "bc2-510fd9cd262740ab-6d7d3114779d7d01725813bed9ed8dc7-1790687801-6cb07104baad4bf3a65e878be4ddb481",
+        "bc2-510fd9cd262740ab-9aaea2f77183b0fefc255b7837f70241-1790687801-5166b5afe0a84b6b9be6e26f5b6ccd5b"
+      ],
+      "exported_manifest_digests": [
+        "sha256:8e26995f2157d2d6751164723b24f3c2f9b5be1b0538739e4bf9817d041174da"
+      ],
+      "log_sha256": "72158be145986bb28e9d9cc2f2e1a181449a5ea0f5a7a69d99aee17a5c71579f",
+      "log_bytes": 6208,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-4323dfe71c2dff7b-1779e75fc28d6d3bda2dd791e859a71b-1790687842-d290bb2555994993a981173e04bea908",
+          "manifest_digest": "sha256:8e26995f2157d2d6751164723b24f3c2f9b5be1b0538739e4bf9817d041174da",
+          "schema": "bc2",
+          "recipe_hint": "4323dfe71c2dff7b",
+          "affinity_hint": "1779e75fc28d6d3bda2dd791e859a71b",
+          "created_at_unix": 1790687842
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-4323dfe71c2dff7b-1779e75fc28d6d3bda2dd791e859a71b-1790687842-d290bb2555994993a981173e04bea908"
+    },
+    {
+      "index": 13,
+      "build_id": "0f760d9f-47e8-4f67-9742-7b489094435c",
+      "image_id": "bl20260929-affinity-seed-013",
+      "recipe": "typescript-tools",
+      "variant": "app-change-9",
+      "context_sha256": "1b1b34d4c9a6622fa323b21a9f254861a72d5a638bfbfa2c4e916618c6853f26",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc2-0272715ed089fd48-d2ac8e1749f7ae62cb2af37c4883c3a3-1790687802-c89a98b00e0843568abee14c8bf501d5",
+        "bc2-4323dfe71c2dff7b-7456ad1685172b984161b10b4b3ac5a7-1790687773-0a0ac8a653f24a1192d1c5be2d5e2062",
+        "bc2-4323dfe71c2dff7b-842c3cf19f7f598081b61076cdcc98ce-1790687773-757cb0a2ea784b83b2536ea710fd30fb",
+        "bc2-4323dfe71c2dff7b-9d0472a0b4a191a15cbba50037a8e264-1790687773-20bc77e2dca547f09f36c4dc285395d3",
+        "bc2-4323dfe71c2dff7b-a383f62ae6d89d9566476cf4f6dd9d82-1790687775-382c9bd1721d4d038a15cb95e0d5bc40",
+        "bc2-4323dfe71c2dff7b-e4c1264b9bea234914725c8968369a71-1790687773-a8f89ecc32a24036bc5fbc95bd4cb4f5",
+        "bc2-4323dfe71c2dff7b-eaf3448fe5fcd543f3db31e9e8a347ec-1790687773-36d25e08e2be4d4985b5ebc50ab0215d",
+        "bc2-510fd9cd262740ab-09d3aceb312e1c29f299f3f7feb737cf-1790687803-47c76aff94de424b9d9ba3fb0b562b42"
+      ],
+      "exported_manifest_digests": [
+        "sha256:982d153cb9c3079a643248e38605e2636ec22cb691f0551f9ea3e7570c72bd0c"
+      ],
+      "log_sha256": "d219dc4ff04aef48facbfa42e829ddf425e083527a8b58bc542eb2136abef24b",
+      "log_bytes": 11846,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-510fd9cd262740ab-96fa278414125ac950b1fb330178fdc3-1790687811-49a1e4ffc9744ee5af06b09cbaf63a27",
+          "manifest_digest": "sha256:982d153cb9c3079a643248e38605e2636ec22cb691f0551f9ea3e7570c72bd0c",
+          "schema": "bc2",
+          "recipe_hint": "510fd9cd262740ab",
+          "affinity_hint": "96fa278414125ac950b1fb330178fdc3",
+          "created_at_unix": 1790687811
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-510fd9cd262740ab-96fa278414125ac950b1fb330178fdc3-1790687811-49a1e4ffc9744ee5af06b09cbaf63a27"
+    },
+    {
+      "index": 14,
+      "build_id": "689db650-4123-42b8-a042-3513cb34915a",
+      "image_id": "bl20260929-affinity-seed-014",
+      "recipe": "typescript-multistage",
+      "variant": "app-change-9",
+      "context_sha256": "6b11aa2329fce274574483f67835b3a51d3038880865dde6dfe80119a39e216a",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc2-0272715ed089fd48-6baadc8365f0e35163372624351a87b2-1790687826-e20d9488e705482aa3bdff28f60ebe31",
+        "bc2-0272715ed089fd48-7a3cff339dcaf7901ccd1e8b1ccb062a-1790687826-71c50682cb3a4a93abc7ff33f2dbe070",
+        "bc2-0272715ed089fd48-b15fe7c8116d33b43cdd9ce32a1e2cc3-1790687818-b55a5dc12b15444b8f2a5b792bfd2626",
+        "bc2-4323dfe71c2dff7b-1779e75fc28d6d3bda2dd791e859a71b-1790687842-d290bb2555994993a981173e04bea908",
+        "bc2-510fd9cd262740ab-22b540cb75ee2543d4d2291dfbf532e0-1790687820-a75c5388b21a43b981c88ac2bc14065a",
+        "bc2-510fd9cd262740ab-a193bc108748016e1286a7d582515056-1790687853-547550d4db8c4584bc46e1824cd0e022",
+        "bc2-510fd9cd262740ab-a5e3267d76a0a5d8d22c2407f276dbbf-1790687812-2545267aa6cd43efa24f66f43093d9e5",
+        "bc2-510fd9cd262740ab-d2b744c628dec075019e0d00ddd47a47-1790687823-945da34e3683434393aa48ae8ae4039e"
+      ],
+      "exported_manifest_digests": [
+        "sha256:d3a4118bcefc507eb2a76cbcd658bfa6dfd7370ae4c32d909544ffa4d79bf3f9"
+      ],
+      "log_sha256": "1c2e40d19df3adf53057c09e453df64ad6e95900f1bef69ad6911113384df621",
+      "log_bytes": 12587,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-0272715ed089fd48-f8915d982bf50c8394d71db13b4b731a-1790687858-9c85a367e30643c9bf0f1f113a7477dc",
+          "manifest_digest": "sha256:d3a4118bcefc507eb2a76cbcd658bfa6dfd7370ae4c32d909544ffa4d79bf3f9",
+          "schema": "bc2",
+          "recipe_hint": "0272715ed089fd48",
+          "affinity_hint": "f8915d982bf50c8394d71db13b4b731a",
+          "created_at_unix": 1790687858
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-0272715ed089fd48-f8915d982bf50c8394d71db13b4b731a-1790687858-9c85a367e30643c9bf0f1f113a7477dc"
+    },
+    {
+      "index": 15,
+      "build_id": "9f55a531-60e9-469b-86ab-07d1b5350ff9",
+      "image_id": "bl20260929-affinity-seed-015",
+      "recipe": "python-agent",
+      "variant": "app-change-10",
+      "context_sha256": "5ac74b48fcffb01e3677dbd177086c75466efa8e1b79d1747195956d99516414",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc1-0272715ed089fd48-1790684203-fee9a8da9753433e84462d9a87a4ee2c",
+        "bc1-0272715ed089fd48-1790684208-3b9dc4d1264b401bad12d9b0803d2301",
+        "bc1-0272715ed089fd48-1790684211-33c2d1c2322745a88b039b8fa4a6e469",
+        "bc1-0272715ed089fd48-1790684213-f8ccb21505cb4a0abced02b15622db5e",
+        "bc1-4323dfe71c2dff7b-1790684163-8b29db250b174e1eb6c89ce45a4b4a41",
+        "bc1-510fd9cd262740ab-1790684209-280594d84fd24945880be4870b8b25bf",
+        "bc1-510fd9cd262740ab-1790684210-9acb9b96a159478198ab8beb726c594c",
+        "bc1-510fd9cd262740ab-1790684210-b4673e5ee1d74825a1a0530912543d56"
+      ],
+      "exported_manifest_digests": [
+        "sha256:4714d093813bc25f0d5569f15245d1b24f1364bdffc0bf91e1043360b7a8e2e9"
+      ],
+      "log_sha256": "0fe4559ae5816cce7f8d76a4122f7b9ccfa7f5ada2d5fc2e5e0faafa913d842f",
+      "log_bytes": 7422,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-4323dfe71c2dff7b-7456ad1685172b984161b10b4b3ac5a7-1790687773-0a0ac8a653f24a1192d1c5be2d5e2062",
+          "manifest_digest": "sha256:4714d093813bc25f0d5569f15245d1b24f1364bdffc0bf91e1043360b7a8e2e9",
+          "schema": "bc2",
+          "recipe_hint": "4323dfe71c2dff7b",
+          "affinity_hint": "7456ad1685172b984161b10b4b3ac5a7",
+          "created_at_unix": 1790687773
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-4323dfe71c2dff7b-7456ad1685172b984161b10b4b3ac5a7-1790687773-0a0ac8a653f24a1192d1c5be2d5e2062"
+    },
+    {
+      "index": 16,
+      "build_id": "e2a458a5-2511-406a-b128-ea1393802160",
+      "image_id": "bl20260929-affinity-seed-016",
+      "recipe": "typescript-tools",
+      "variant": "app-change-10",
+      "context_sha256": "14b676c8f93ce6e4117195499575ab9084958a7913d8d4938c898cba82a693d0",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc1-0272715ed089fd48-1790684203-fee9a8da9753433e84462d9a87a4ee2c",
+        "bc1-0272715ed089fd48-1790684208-3b9dc4d1264b401bad12d9b0803d2301",
+        "bc1-0272715ed089fd48-1790684211-33c2d1c2322745a88b039b8fa4a6e469",
+        "bc1-0272715ed089fd48-1790684213-f8ccb21505cb4a0abced02b15622db5e",
+        "bc1-4323dfe71c2dff7b-1790684163-8b29db250b174e1eb6c89ce45a4b4a41",
+        "bc1-510fd9cd262740ab-1790684209-280594d84fd24945880be4870b8b25bf",
+        "bc1-510fd9cd262740ab-1790684210-9acb9b96a159478198ab8beb726c594c",
+        "bc1-510fd9cd262740ab-1790684210-b4673e5ee1d74825a1a0530912543d56"
+      ],
+      "exported_manifest_digests": [
+        "sha256:1d8806282792f62deeed87be8db2cfb371db5f3ca27dfc550f0f63fa989f445b"
+      ],
+      "log_sha256": "f8c29efe371e6842a895fa9a910478506c35eac99c591c7f76984edf4da2c49a",
+      "log_bytes": 10850,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-510fd9cd262740ab-9d28fc293f0bd66f65349fdba6523988-1790687775-8c8f44ca26fe446ea780a2ebe2b07d7f",
+          "manifest_digest": "sha256:1d8806282792f62deeed87be8db2cfb371db5f3ca27dfc550f0f63fa989f445b",
+          "schema": "bc2",
+          "recipe_hint": "510fd9cd262740ab",
+          "affinity_hint": "9d28fc293f0bd66f65349fdba6523988",
+          "created_at_unix": 1790687775
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-510fd9cd262740ab-9d28fc293f0bd66f65349fdba6523988-1790687775-8c8f44ca26fe446ea780a2ebe2b07d7f"
+    },
+    {
+      "index": 17,
+      "build_id": "4129cf99-0d90-4fd8-9756-b1cdbe6373d0",
+      "image_id": "bl20260929-affinity-seed-017",
+      "recipe": "typescript-multistage",
+      "variant": "app-change-10",
+      "context_sha256": "d1a3c98393a070e6be0910231e16b144f61cb5a4bf374ce15af3f8cc3f5bcca9",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc1-0272715ed089fd48-1790684213-f8ccb21505cb4a0abced02b15622db5e",
+        "bc2-4323dfe71c2dff7b-7456ad1685172b984161b10b4b3ac5a7-1790687773-0a0ac8a653f24a1192d1c5be2d5e2062",
+        "bc2-4323dfe71c2dff7b-842c3cf19f7f598081b61076cdcc98ce-1790687773-757cb0a2ea784b83b2536ea710fd30fb",
+        "bc2-4323dfe71c2dff7b-9d0472a0b4a191a15cbba50037a8e264-1790687773-20bc77e2dca547f09f36c4dc285395d3",
+        "bc2-4323dfe71c2dff7b-a383f62ae6d89d9566476cf4f6dd9d82-1790687775-382c9bd1721d4d038a15cb95e0d5bc40",
+        "bc2-4323dfe71c2dff7b-e4c1264b9bea234914725c8968369a71-1790687773-a8f89ecc32a24036bc5fbc95bd4cb4f5",
+        "bc2-4323dfe71c2dff7b-eaf3448fe5fcd543f3db31e9e8a347ec-1790687773-36d25e08e2be4d4985b5ebc50ab0215d",
+        "bc2-510fd9cd262740ab-09d3aceb312e1c29f299f3f7feb737cf-1790687803-47c76aff94de424b9d9ba3fb0b562b42"
+      ],
+      "exported_manifest_digests": [
+        "sha256:b7c7ef1d45630a202cccd02ef3a290be79a67b1d00b642058d72508569093382"
+      ],
+      "log_sha256": "eb54db5a45fc543552879c9c2a84f2acd0de4fb3445e058b25fbbce72297af43",
+      "log_bytes": 14355,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-0272715ed089fd48-5f55b1814b1f4fab1bdf8599c264cf96-1790687809-7f4a9b557fc54eeca68bdc2506e1c718",
+          "manifest_digest": "sha256:b7c7ef1d45630a202cccd02ef3a290be79a67b1d00b642058d72508569093382",
+          "schema": "bc2",
+          "recipe_hint": "0272715ed089fd48",
+          "affinity_hint": "5f55b1814b1f4fab1bdf8599c264cf96",
+          "created_at_unix": 1790687809
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-0272715ed089fd48-5f55b1814b1f4fab1bdf8599c264cf96-1790687809-7f4a9b557fc54eeca68bdc2506e1c718"
+    },
+    {
+      "index": 18,
+      "build_id": "8c2f7487-5e94-4034-8286-6a366c47741b",
+      "image_id": "bl20260929-affinity-seed-018",
+      "recipe": "python-agent",
+      "variant": "app-change-11",
+      "context_sha256": "2b38077f6396ae93cdc59c917a342aee761a5a6e9f5696d915b724b0493a8fe4",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc1-0272715ed089fd48-1790684203-fee9a8da9753433e84462d9a87a4ee2c",
+        "bc1-0272715ed089fd48-1790684208-3b9dc4d1264b401bad12d9b0803d2301",
+        "bc1-0272715ed089fd48-1790684211-33c2d1c2322745a88b039b8fa4a6e469",
+        "bc1-0272715ed089fd48-1790684213-f8ccb21505cb4a0abced02b15622db5e",
+        "bc1-4323dfe71c2dff7b-1790684163-8b29db250b174e1eb6c89ce45a4b4a41",
+        "bc1-510fd9cd262740ab-1790684209-280594d84fd24945880be4870b8b25bf",
+        "bc1-510fd9cd262740ab-1790684210-9acb9b96a159478198ab8beb726c594c",
+        "bc1-510fd9cd262740ab-1790684210-b4673e5ee1d74825a1a0530912543d56"
+      ],
+      "exported_manifest_digests": [
+        "sha256:e958dffbee7a2902f6555d6a430a21dd6c05f877f1454ff3f64e2c8da3e0d863"
+      ],
+      "log_sha256": "a4887b9ccc2c6a4450ad777c4c9528f5ddec65d5bba2afb74732b53c71964647",
+      "log_bytes": 11763,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-4323dfe71c2dff7b-4c5e8f764cb29925a3b43c07ac629a66-1790687773-202c22703ee845ce9190f2b7df022f43",
+          "manifest_digest": "sha256:e958dffbee7a2902f6555d6a430a21dd6c05f877f1454ff3f64e2c8da3e0d863",
+          "schema": "bc2",
+          "recipe_hint": "4323dfe71c2dff7b",
+          "affinity_hint": "4c5e8f764cb29925a3b43c07ac629a66",
+          "created_at_unix": 1790687773
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-4323dfe71c2dff7b-4c5e8f764cb29925a3b43c07ac629a66-1790687773-202c22703ee845ce9190f2b7df022f43"
+    },
+    {
+      "index": 19,
+      "build_id": "fd914961-11bb-4bd7-bf02-a1de36f73ae4",
+      "image_id": "bl20260929-affinity-seed-019",
+      "recipe": "typescript-tools",
+      "variant": "app-change-11",
+      "context_sha256": "463c014b882f51ac436f4c7a20ff595cbdf7fca701cb4da71a6d32e9c0277f38",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc1-0272715ed089fd48-1790684213-f8ccb21505cb4a0abced02b15622db5e",
+        "bc1-510fd9cd262740ab-1790684210-b4673e5ee1d74825a1a0530912543d56",
+        "bc2-4323dfe71c2dff7b-2e440572593ac7691b8e68bf73a9164f-1790687773-b9c9760fc1b340d1a4a8e772e611fe79",
+        "bc2-4323dfe71c2dff7b-4c5e8f764cb29925a3b43c07ac629a66-1790687773-202c22703ee845ce9190f2b7df022f43",
+        "bc2-4323dfe71c2dff7b-7456ad1685172b984161b10b4b3ac5a7-1790687773-0a0ac8a653f24a1192d1c5be2d5e2062",
+        "bc2-4323dfe71c2dff7b-a383f62ae6d89d9566476cf4f6dd9d82-1790687775-382c9bd1721d4d038a15cb95e0d5bc40",
+        "bc2-4323dfe71c2dff7b-eaf3448fe5fcd543f3db31e9e8a347ec-1790687773-36d25e08e2be4d4985b5ebc50ab0215d",
+        "bc2-4323dfe71c2dff7b-f602b8092d391f23ebde2c641f9a14e2-1790687772-b0549009aab645bb8eb9977eab4b9b31"
+      ],
+      "exported_manifest_digests": [
+        "sha256:2db88469738b30afb1cf440d2ad640ad9eb2acfe2313725c7bc2d4b3d79055d8"
+      ],
+      "log_sha256": "7febe858ebfb80bdb367955531972923b2c301c0833d9654121e74a19e730a38",
+      "log_bytes": 10261,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-510fd9cd262740ab-6d7d3114779d7d01725813bed9ed8dc7-1790687801-6cb07104baad4bf3a65e878be4ddb481",
+          "manifest_digest": "sha256:2db88469738b30afb1cf440d2ad640ad9eb2acfe2313725c7bc2d4b3d79055d8",
+          "schema": "bc2",
+          "recipe_hint": "510fd9cd262740ab",
+          "affinity_hint": "6d7d3114779d7d01725813bed9ed8dc7",
+          "created_at_unix": 1790687801
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-510fd9cd262740ab-6d7d3114779d7d01725813bed9ed8dc7-1790687801-6cb07104baad4bf3a65e878be4ddb481"
+    },
+    {
+      "index": 20,
+      "build_id": "4a842a3b-9611-4911-8d83-130653d4adb0",
+      "image_id": "bl20260929-affinity-seed-020",
+      "recipe": "typescript-multistage",
+      "variant": "app-change-11",
+      "context_sha256": "08694f2b2def1440ad590d8c5efb486d82cb7ed82f7ab1a3cd59ffc5937189b8",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc1-0272715ed089fd48-1790684203-fee9a8da9753433e84462d9a87a4ee2c",
+        "bc1-0272715ed089fd48-1790684208-3b9dc4d1264b401bad12d9b0803d2301",
+        "bc1-0272715ed089fd48-1790684211-33c2d1c2322745a88b039b8fa4a6e469",
+        "bc1-0272715ed089fd48-1790684213-f8ccb21505cb4a0abced02b15622db5e",
+        "bc1-510fd9cd262740ab-1790684209-280594d84fd24945880be4870b8b25bf",
+        "bc1-510fd9cd262740ab-1790684210-9acb9b96a159478198ab8beb726c594c",
+        "bc1-510fd9cd262740ab-1790684210-b4673e5ee1d74825a1a0530912543d56",
+        "bc2-4323dfe71c2dff7b-7456ad1685172b984161b10b4b3ac5a7-1790687773-0a0ac8a653f24a1192d1c5be2d5e2062"
+      ],
+      "exported_manifest_digests": [
+        "sha256:fcd524a753d0cf8394137ec04691265a3a6b48b1f842265be30d843422c04c66"
+      ],
+      "log_sha256": "af53c816665d8614f35b27ae0c13e6ccb9d983278b7c75cbe0435784ff067cd6",
+      "log_bytes": 15023,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-0272715ed089fd48-2eb3feaccb36cd16d062b6f4a1d83cb3-1790687777-b6f7cf1524504be797cacde7fb6a6b4b",
+          "manifest_digest": "sha256:fcd524a753d0cf8394137ec04691265a3a6b48b1f842265be30d843422c04c66",
+          "schema": "bc2",
+          "recipe_hint": "0272715ed089fd48",
+          "affinity_hint": "2eb3feaccb36cd16d062b6f4a1d83cb3",
+          "created_at_unix": 1790687777
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-0272715ed089fd48-2eb3feaccb36cd16d062b6f4a1d83cb3-1790687777-b6f7cf1524504be797cacde7fb6a6b4b"
+    },
+    {
+      "index": 21,
+      "build_id": "e63b54f6-f459-4af2-9f56-6c5c0eeb32b6",
+      "image_id": "bl20260929-affinity-seed-021",
+      "recipe": "python-agent",
+      "variant": "app-change-12",
+      "context_sha256": "06f98a244cc997a278585a3402a2dde9fb2876a1681734826c4feeed671fedda",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc1-0272715ed089fd48-1790684203-fee9a8da9753433e84462d9a87a4ee2c",
+        "bc1-0272715ed089fd48-1790684208-3b9dc4d1264b401bad12d9b0803d2301",
+        "bc1-0272715ed089fd48-1790684211-33c2d1c2322745a88b039b8fa4a6e469",
+        "bc1-0272715ed089fd48-1790684213-f8ccb21505cb4a0abced02b15622db5e",
+        "bc1-4323dfe71c2dff7b-1790684163-8b29db250b174e1eb6c89ce45a4b4a41",
+        "bc1-510fd9cd262740ab-1790684209-280594d84fd24945880be4870b8b25bf",
+        "bc1-510fd9cd262740ab-1790684210-9acb9b96a159478198ab8beb726c594c",
+        "bc1-510fd9cd262740ab-1790684210-b4673e5ee1d74825a1a0530912543d56"
+      ],
+      "exported_manifest_digests": [
+        "sha256:55a32b4238fa271b5c8986b2cf5a9baef483195035dd53e68873c59221b66eca"
+      ],
+      "log_sha256": "40e8870b3a7fa5d59bc4d2cc8fd3d03730c52cd5eb3514b7cf786376149958c9",
+      "log_bytes": 11060,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-4323dfe71c2dff7b-9d0472a0b4a191a15cbba50037a8e264-1790687773-20bc77e2dca547f09f36c4dc285395d3",
+          "manifest_digest": "sha256:55a32b4238fa271b5c8986b2cf5a9baef483195035dd53e68873c59221b66eca",
+          "schema": "bc2",
+          "recipe_hint": "4323dfe71c2dff7b",
+          "affinity_hint": "9d0472a0b4a191a15cbba50037a8e264",
+          "created_at_unix": 1790687773
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-4323dfe71c2dff7b-9d0472a0b4a191a15cbba50037a8e264-1790687773-20bc77e2dca547f09f36c4dc285395d3"
+    },
+    {
+      "index": 22,
+      "build_id": "225dd78b-6b0b-497d-a7a7-04085137c176",
+      "image_id": "bl20260929-affinity-seed-022",
+      "recipe": "typescript-tools",
+      "variant": "app-change-12",
+      "context_sha256": "35c1e8ed86c56afceb35b5c8cf1cb80bd20e24c3ac2d08818c3f5d938a9697f3",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc2-0272715ed089fd48-d2ac8e1749f7ae62cb2af37c4883c3a3-1790687802-c89a98b00e0843568abee14c8bf501d5",
+        "bc2-4323dfe71c2dff7b-7456ad1685172b984161b10b4b3ac5a7-1790687773-0a0ac8a653f24a1192d1c5be2d5e2062",
+        "bc2-4323dfe71c2dff7b-842c3cf19f7f598081b61076cdcc98ce-1790687773-757cb0a2ea784b83b2536ea710fd30fb",
+        "bc2-4323dfe71c2dff7b-9d0472a0b4a191a15cbba50037a8e264-1790687773-20bc77e2dca547f09f36c4dc285395d3",
+        "bc2-4323dfe71c2dff7b-a383f62ae6d89d9566476cf4f6dd9d82-1790687775-382c9bd1721d4d038a15cb95e0d5bc40",
+        "bc2-4323dfe71c2dff7b-e4c1264b9bea234914725c8968369a71-1790687773-a8f89ecc32a24036bc5fbc95bd4cb4f5",
+        "bc2-4323dfe71c2dff7b-eaf3448fe5fcd543f3db31e9e8a347ec-1790687773-36d25e08e2be4d4985b5ebc50ab0215d",
+        "bc2-510fd9cd262740ab-09d3aceb312e1c29f299f3f7feb737cf-1790687803-47c76aff94de424b9d9ba3fb0b562b42"
+      ],
+      "exported_manifest_digests": [
+        "sha256:91447a79bc0c68eb9702d5337d007ce18460f578134f7f23473fd8e3a149ca3e"
+      ],
+      "log_sha256": "1947086e92d033113f8b6ae5b36a2bb42ce79131e5c50cbd0c2f7d119e7f77f9",
+      "log_bytes": 10773,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-510fd9cd262740ab-35a6398815bfcdcabf52ba61d163b531-1790687811-065cc53ae15b4628841cce1453501fb8",
+          "manifest_digest": "sha256:91447a79bc0c68eb9702d5337d007ce18460f578134f7f23473fd8e3a149ca3e",
+          "schema": "bc2",
+          "recipe_hint": "510fd9cd262740ab",
+          "affinity_hint": "35a6398815bfcdcabf52ba61d163b531",
+          "created_at_unix": 1790687811
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-510fd9cd262740ab-35a6398815bfcdcabf52ba61d163b531-1790687811-065cc53ae15b4628841cce1453501fb8"
+    },
+    {
+      "index": 23,
+      "build_id": "76f1e16d-706c-487a-a452-150e98efaa63",
+      "image_id": "bl20260929-affinity-seed-023",
+      "recipe": "typescript-multistage",
+      "variant": "app-change-12",
+      "context_sha256": "d8a4917b03778f9dd6b4c272c45d1c328e14633fee08f87c1480dd92b7fd9c3e",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc2-0272715ed089fd48-2eb3feaccb36cd16d062b6f4a1d83cb3-1790687777-b6f7cf1524504be797cacde7fb6a6b4b",
+        "bc2-0272715ed089fd48-d2ac8e1749f7ae62cb2af37c4883c3a3-1790687802-c89a98b00e0843568abee14c8bf501d5",
+        "bc2-4323dfe71c2dff7b-773c378213b51de6cceb88fc9e4eefb9-1790687809-cfdbb06c99824127bd65fa1732f362e8",
+        "bc2-4323dfe71c2dff7b-a383f62ae6d89d9566476cf4f6dd9d82-1790687775-382c9bd1721d4d038a15cb95e0d5bc40",
+        "bc2-510fd9cd262740ab-09d3aceb312e1c29f299f3f7feb737cf-1790687803-47c76aff94de424b9d9ba3fb0b562b42",
+        "bc2-510fd9cd262740ab-599884a87b9f33cad6955ef2aa04ecf7-1790687774-3037b40e7fb84da994ddd59058f7721a",
+        "bc2-510fd9cd262740ab-6d7d3114779d7d01725813bed9ed8dc7-1790687801-6cb07104baad4bf3a65e878be4ddb481",
+        "bc2-510fd9cd262740ab-9d28fc293f0bd66f65349fdba6523988-1790687775-8c8f44ca26fe446ea780a2ebe2b07d7f"
+      ],
+      "exported_manifest_digests": [
+        "sha256:03ca685cb778e5150e494146e3063c9344d7359ba1e3a8081356ed71bfae0e25"
+      ],
+      "log_sha256": "4ddb1f5f63974fef5fd22352dc6d0d14a8a4c043445ed734d1bf34dee59eb169",
+      "log_bytes": 14684,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-0272715ed089fd48-7a3cff339dcaf7901ccd1e8b1ccb062a-1790687826-71c50682cb3a4a93abc7ff33f2dbe070",
+          "manifest_digest": "sha256:03ca685cb778e5150e494146e3063c9344d7359ba1e3a8081356ed71bfae0e25",
+          "schema": "bc2",
+          "recipe_hint": "0272715ed089fd48",
+          "affinity_hint": "7a3cff339dcaf7901ccd1e8b1ccb062a",
+          "created_at_unix": 1790687826
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-0272715ed089fd48-7a3cff339dcaf7901ccd1e8b1ccb062a-1790687826-71c50682cb3a4a93abc7ff33f2dbe070"
+    },
+    {
+      "index": 24,
+      "build_id": "07c7fab6-ef57-461f-b9d9-2a2f24fb5d52",
+      "image_id": "bl20260929-affinity-seed-024",
+      "recipe": "python-agent",
+      "variant": "app-change-13",
+      "context_sha256": "b501744a58da9b46a912f44c003033b1fd9b47e35ec2732c6c015bb8740dd601",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc1-0272715ed089fd48-1790684203-fee9a8da9753433e84462d9a87a4ee2c",
+        "bc1-0272715ed089fd48-1790684208-3b9dc4d1264b401bad12d9b0803d2301",
+        "bc1-0272715ed089fd48-1790684211-33c2d1c2322745a88b039b8fa4a6e469",
+        "bc1-0272715ed089fd48-1790684213-f8ccb21505cb4a0abced02b15622db5e",
+        "bc1-4323dfe71c2dff7b-1790684163-8b29db250b174e1eb6c89ce45a4b4a41",
+        "bc1-510fd9cd262740ab-1790684209-280594d84fd24945880be4870b8b25bf",
+        "bc1-510fd9cd262740ab-1790684210-9acb9b96a159478198ab8beb726c594c",
+        "bc1-510fd9cd262740ab-1790684210-b4673e5ee1d74825a1a0530912543d56"
+      ],
+      "exported_manifest_digests": [
+        "sha256:e17dfd95764052536e9b7cc419516e18c5c5036c52efc3c9975f46f92e4fa277"
+      ],
+      "log_sha256": "234d92c47cfc3a15fb1879d7ae12d9c3a7375caa56a9fb6ee591d66468f66202",
+      "log_bytes": 10923,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-4323dfe71c2dff7b-001514b219e2187cccaebbb0df50307e-1790687773-1112b8dcc59e48acaf0c901681874d2c",
+          "manifest_digest": "sha256:e17dfd95764052536e9b7cc419516e18c5c5036c52efc3c9975f46f92e4fa277",
+          "schema": "bc2",
+          "recipe_hint": "4323dfe71c2dff7b",
+          "affinity_hint": "001514b219e2187cccaebbb0df50307e",
+          "created_at_unix": 1790687773
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-4323dfe71c2dff7b-001514b219e2187cccaebbb0df50307e-1790687773-1112b8dcc59e48acaf0c901681874d2c"
+    },
+    {
+      "index": 25,
+      "build_id": "c867b538-996a-475e-86d3-3837fc94086c",
+      "image_id": "bl20260929-affinity-seed-025",
+      "recipe": "typescript-tools",
+      "variant": "app-change-13",
+      "context_sha256": "feda02588beec436a339b46e0c68e93a9096876d2ca2e7dad4d629f33738441e",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc2-0272715ed089fd48-d2ac8e1749f7ae62cb2af37c4883c3a3-1790687802-c89a98b00e0843568abee14c8bf501d5",
+        "bc2-4323dfe71c2dff7b-7456ad1685172b984161b10b4b3ac5a7-1790687773-0a0ac8a653f24a1192d1c5be2d5e2062",
+        "bc2-4323dfe71c2dff7b-842c3cf19f7f598081b61076cdcc98ce-1790687773-757cb0a2ea784b83b2536ea710fd30fb",
+        "bc2-4323dfe71c2dff7b-9d0472a0b4a191a15cbba50037a8e264-1790687773-20bc77e2dca547f09f36c4dc285395d3",
+        "bc2-4323dfe71c2dff7b-a383f62ae6d89d9566476cf4f6dd9d82-1790687775-382c9bd1721d4d038a15cb95e0d5bc40",
+        "bc2-4323dfe71c2dff7b-e4c1264b9bea234914725c8968369a71-1790687773-a8f89ecc32a24036bc5fbc95bd4cb4f5",
+        "bc2-4323dfe71c2dff7b-eaf3448fe5fcd543f3db31e9e8a347ec-1790687773-36d25e08e2be4d4985b5ebc50ab0215d",
+        "bc2-510fd9cd262740ab-09d3aceb312e1c29f299f3f7feb737cf-1790687803-47c76aff94de424b9d9ba3fb0b562b42"
+      ],
+      "exported_manifest_digests": [
+        "sha256:07edff245d00b1684669163aac5f291664914c7a9b0f6c87b87852eaee5890a6"
+      ],
+      "log_sha256": "9ef92a43d46396a34a912b016c596b2eed92e75a205952bd8f3ee9fa151db940",
+      "log_bytes": 11237,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-510fd9cd262740ab-a5e3267d76a0a5d8d22c2407f276dbbf-1790687812-2545267aa6cd43efa24f66f43093d9e5",
+          "manifest_digest": "sha256:07edff245d00b1684669163aac5f291664914c7a9b0f6c87b87852eaee5890a6",
+          "schema": "bc2",
+          "recipe_hint": "510fd9cd262740ab",
+          "affinity_hint": "a5e3267d76a0a5d8d22c2407f276dbbf",
+          "created_at_unix": 1790687812
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-510fd9cd262740ab-a5e3267d76a0a5d8d22c2407f276dbbf-1790687812-2545267aa6cd43efa24f66f43093d9e5"
+    },
+    {
+      "index": 26,
+      "build_id": "547edc26-070b-4dfd-9838-f20bbbf982c8",
+      "image_id": "bl20260929-affinity-seed-026",
+      "recipe": "typescript-multistage",
+      "variant": "app-change-13",
+      "context_sha256": "7b55e7cb1a334f9efc2d1363f4ce5551a3ca53081d2a8b7d7577b79196e3af6f",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc2-0272715ed089fd48-2eb3feaccb36cd16d062b6f4a1d83cb3-1790687777-b6f7cf1524504be797cacde7fb6a6b4b",
+        "bc2-0272715ed089fd48-d2ac8e1749f7ae62cb2af37c4883c3a3-1790687802-c89a98b00e0843568abee14c8bf501d5",
+        "bc2-4323dfe71c2dff7b-773c378213b51de6cceb88fc9e4eefb9-1790687809-cfdbb06c99824127bd65fa1732f362e8",
+        "bc2-4323dfe71c2dff7b-a383f62ae6d89d9566476cf4f6dd9d82-1790687775-382c9bd1721d4d038a15cb95e0d5bc40",
+        "bc2-510fd9cd262740ab-09d3aceb312e1c29f299f3f7feb737cf-1790687803-47c76aff94de424b9d9ba3fb0b562b42",
+        "bc2-510fd9cd262740ab-599884a87b9f33cad6955ef2aa04ecf7-1790687774-3037b40e7fb84da994ddd59058f7721a",
+        "bc2-510fd9cd262740ab-6d7d3114779d7d01725813bed9ed8dc7-1790687801-6cb07104baad4bf3a65e878be4ddb481",
+        "bc2-510fd9cd262740ab-9d28fc293f0bd66f65349fdba6523988-1790687775-8c8f44ca26fe446ea780a2ebe2b07d7f"
+      ],
+      "exported_manifest_digests": [
+        "sha256:4f3f6c04cb5ce604ba63404a2e1907d02b16ed53fbea0334832a201a89158481"
+      ],
+      "log_sha256": "23476ae3907809755f6879c743637bbf7a5d2e5b74eaef3038e890893667c51d",
+      "log_bytes": 14535,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-0272715ed089fd48-6baadc8365f0e35163372624351a87b2-1790687826-e20d9488e705482aa3bdff28f60ebe31",
+          "manifest_digest": "sha256:4f3f6c04cb5ce604ba63404a2e1907d02b16ed53fbea0334832a201a89158481",
+          "schema": "bc2",
+          "recipe_hint": "0272715ed089fd48",
+          "affinity_hint": "6baadc8365f0e35163372624351a87b2",
+          "created_at_unix": 1790687826
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-0272715ed089fd48-6baadc8365f0e35163372624351a87b2-1790687826-e20d9488e705482aa3bdff28f60ebe31"
+    },
+    {
+      "index": 27,
+      "build_id": "ff8b4687-a553-421b-a8ec-1c4e70959bc7",
+      "image_id": "bl20260929-affinity-seed-027",
+      "recipe": "python-agent",
+      "variant": "app-change-14",
+      "context_sha256": "5c456fcaf6784a55ff41656c2bb9c16d1ec16151357b95945ec012fb291e2782",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc1-0272715ed089fd48-1790684203-fee9a8da9753433e84462d9a87a4ee2c",
+        "bc1-0272715ed089fd48-1790684208-3b9dc4d1264b401bad12d9b0803d2301",
+        "bc1-0272715ed089fd48-1790684211-33c2d1c2322745a88b039b8fa4a6e469",
+        "bc1-0272715ed089fd48-1790684213-f8ccb21505cb4a0abced02b15622db5e",
+        "bc1-4323dfe71c2dff7b-1790684163-8b29db250b174e1eb6c89ce45a4b4a41",
+        "bc1-510fd9cd262740ab-1790684209-280594d84fd24945880be4870b8b25bf",
+        "bc1-510fd9cd262740ab-1790684210-9acb9b96a159478198ab8beb726c594c",
+        "bc1-510fd9cd262740ab-1790684210-b4673e5ee1d74825a1a0530912543d56"
+      ],
+      "exported_manifest_digests": [
+        "sha256:4efd474e4e8cced69dac32ca9f60c12e94cdd37259c55fb82eb9bf0d97d3f29c"
+      ],
+      "log_sha256": "b5aa9108c58e49b206f3595ea022531af5bfc949f95859c6d73b640929971f02",
+      "log_bytes": 11381,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-4323dfe71c2dff7b-36a75cc80b813a493f3964dad6309484-1790687773-80a68e5d61a34e93bdb40fb42cfda01e",
+          "manifest_digest": "sha256:4efd474e4e8cced69dac32ca9f60c12e94cdd37259c55fb82eb9bf0d97d3f29c",
+          "schema": "bc2",
+          "recipe_hint": "4323dfe71c2dff7b",
+          "affinity_hint": "36a75cc80b813a493f3964dad6309484",
+          "created_at_unix": 1790687773
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-4323dfe71c2dff7b-36a75cc80b813a493f3964dad6309484-1790687773-80a68e5d61a34e93bdb40fb42cfda01e"
+    },
+    {
+      "index": 28,
+      "build_id": "c108e96f-3359-41f3-a763-7b990e2c6aaa",
+      "image_id": "bl20260929-affinity-seed-028",
+      "recipe": "typescript-tools",
+      "variant": "app-change-14",
+      "context_sha256": "c6cf5286ab6dab194e540c52449cedb8a27455b4555c341b29e7847c7691abf3",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc2-0272715ed089fd48-2eb3feaccb36cd16d062b6f4a1d83cb3-1790687777-b6f7cf1524504be797cacde7fb6a6b4b",
+        "bc2-0272715ed089fd48-d2ac8e1749f7ae62cb2af37c4883c3a3-1790687802-c89a98b00e0843568abee14c8bf501d5",
+        "bc2-4323dfe71c2dff7b-773c378213b51de6cceb88fc9e4eefb9-1790687809-cfdbb06c99824127bd65fa1732f362e8",
+        "bc2-4323dfe71c2dff7b-a383f62ae6d89d9566476cf4f6dd9d82-1790687775-382c9bd1721d4d038a15cb95e0d5bc40",
+        "bc2-510fd9cd262740ab-09d3aceb312e1c29f299f3f7feb737cf-1790687803-47c76aff94de424b9d9ba3fb0b562b42",
+        "bc2-510fd9cd262740ab-599884a87b9f33cad6955ef2aa04ecf7-1790687774-3037b40e7fb84da994ddd59058f7721a",
+        "bc2-510fd9cd262740ab-6d7d3114779d7d01725813bed9ed8dc7-1790687801-6cb07104baad4bf3a65e878be4ddb481",
+        "bc2-510fd9cd262740ab-9d28fc293f0bd66f65349fdba6523988-1790687775-8c8f44ca26fe446ea780a2ebe2b07d7f"
+      ],
+      "exported_manifest_digests": [
+        "sha256:edaa6b36f4359068b300b70bcfc7eb12aab6c6777ec8044f6e246f14ac88f325"
+      ],
+      "log_sha256": "1630f293aae6ab81e2766a9a2e5379711659aca0d0af14f4698c0654bf8ae0e5",
+      "log_bytes": 10715,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-510fd9cd262740ab-d2b744c628dec075019e0d00ddd47a47-1790687823-945da34e3683434393aa48ae8ae4039e",
+          "manifest_digest": "sha256:edaa6b36f4359068b300b70bcfc7eb12aab6c6777ec8044f6e246f14ac88f325",
+          "schema": "bc2",
+          "recipe_hint": "510fd9cd262740ab",
+          "affinity_hint": "d2b744c628dec075019e0d00ddd47a47",
+          "created_at_unix": 1790687823
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-510fd9cd262740ab-d2b744c628dec075019e0d00ddd47a47-1790687823-945da34e3683434393aa48ae8ae4039e"
+    },
+    {
+      "index": 29,
+      "build_id": "2efe3a00-8158-48b9-925e-bfbe37c5c378",
+      "image_id": "bl20260929-affinity-seed-029",
+      "recipe": "typescript-multistage",
+      "variant": "app-change-14",
+      "context_sha256": "37765a91d9345372c423554ed3c3c7066d8f804c7a588705cca7f220b4f0da0a",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc2-0272715ed089fd48-6f319c62b78c3e939f5f732c12dc68f3-1790687802-da3f1993fce44df9b821310168447a74",
+        "bc2-0272715ed089fd48-8e0334c364dcdd0921106a8d77bc2d14-1790687802-c49cc996733e49e0ba934c4c62811b38",
+        "bc2-0272715ed089fd48-d2ac8e1749f7ae62cb2af37c4883c3a3-1790687802-c89a98b00e0843568abee14c8bf501d5",
+        "bc2-0272715ed089fd48-d8369322b67fd4360e5e568d7a70584a-1790687806-6a853ef0e9f944d2b66c3ef75904ce60",
+        "bc2-4323dfe71c2dff7b-773c378213b51de6cceb88fc9e4eefb9-1790687809-cfdbb06c99824127bd65fa1732f362e8",
+        "bc2-510fd9cd262740ab-09d3aceb312e1c29f299f3f7feb737cf-1790687803-47c76aff94de424b9d9ba3fb0b562b42",
+        "bc2-510fd9cd262740ab-6d7d3114779d7d01725813bed9ed8dc7-1790687801-6cb07104baad4bf3a65e878be4ddb481",
+        "bc2-510fd9cd262740ab-9aaea2f77183b0fefc255b7837f70241-1790687801-5166b5afe0a84b6b9be6e26f5b6ccd5b"
+      ],
+      "exported_manifest_digests": [
+        "sha256:31d01b338bc530b150215b1e2f6ec2e3342d1358bbb5c13a1e19c0edb4b9e648"
+      ],
+      "log_sha256": "d9af1c66ca7171f77d79b6b97e5e461faa267c4acaedd6cee0c6da2ac51a8a62",
+      "log_bytes": 13707,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-0272715ed089fd48-f73b1e5281ce48cb2edafb49c0485564-1790687842-cb05acc5b0bf425da3303f2e686c5a1d",
+          "manifest_digest": "sha256:31d01b338bc530b150215b1e2f6ec2e3342d1358bbb5c13a1e19c0edb4b9e648",
+          "schema": "bc2",
+          "recipe_hint": "0272715ed089fd48",
+          "affinity_hint": "f73b1e5281ce48cb2edafb49c0485564",
+          "created_at_unix": 1790687842
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-0272715ed089fd48-f73b1e5281ce48cb2edafb49c0485564-1790687842-cb05acc5b0bf425da3303f2e686c5a1d"
+    },
+    {
+      "index": 30,
+      "build_id": "15e5fa63-31e6-4665-bcfe-1483dd65442d",
+      "image_id": "bl20260929-affinity-seed-030",
+      "recipe": "python-agent",
+      "variant": "app-change-15",
+      "context_sha256": "798cce6e4b1200de1cff61a3382a44fb61abc93c48a38d63e257bb351ea4e9ed",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc1-0272715ed089fd48-1790684203-fee9a8da9753433e84462d9a87a4ee2c",
+        "bc1-0272715ed089fd48-1790684208-3b9dc4d1264b401bad12d9b0803d2301",
+        "bc1-0272715ed089fd48-1790684211-33c2d1c2322745a88b039b8fa4a6e469",
+        "bc1-0272715ed089fd48-1790684213-f8ccb21505cb4a0abced02b15622db5e",
+        "bc1-4323dfe71c2dff7b-1790684163-8b29db250b174e1eb6c89ce45a4b4a41",
+        "bc1-510fd9cd262740ab-1790684209-280594d84fd24945880be4870b8b25bf",
+        "bc1-510fd9cd262740ab-1790684210-9acb9b96a159478198ab8beb726c594c",
+        "bc1-510fd9cd262740ab-1790684210-b4673e5ee1d74825a1a0530912543d56"
+      ],
+      "exported_manifest_digests": [
+        "sha256:0335024d7b77029cee161e7b5b13b1b570bd147900edda3acd870aa965046b9f"
+      ],
+      "log_sha256": "bc087cf514002dc4e7489bce07c6847091cb5d61ded9cae96288e054a8f34709",
+      "log_bytes": 11010,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-4323dfe71c2dff7b-842c3cf19f7f598081b61076cdcc98ce-1790687773-757cb0a2ea784b83b2536ea710fd30fb",
+          "manifest_digest": "sha256:0335024d7b77029cee161e7b5b13b1b570bd147900edda3acd870aa965046b9f",
+          "schema": "bc2",
+          "recipe_hint": "4323dfe71c2dff7b",
+          "affinity_hint": "842c3cf19f7f598081b61076cdcc98ce",
+          "created_at_unix": 1790687773
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-4323dfe71c2dff7b-842c3cf19f7f598081b61076cdcc98ce-1790687773-757cb0a2ea784b83b2536ea710fd30fb"
+    },
+    {
+      "index": 31,
+      "build_id": "a408cc49-e012-4778-aac8-9f9be9a726f7",
+      "image_id": "bl20260929-affinity-seed-031",
+      "recipe": "typescript-tools",
+      "variant": "app-change-15",
+      "context_sha256": "3943e7d1a73f86835225feb4bd18df65375a92de23b2765ffc4044ef8cff3f8d",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc2-0272715ed089fd48-2eb3feaccb36cd16d062b6f4a1d83cb3-1790687777-b6f7cf1524504be797cacde7fb6a6b4b",
+        "bc2-0272715ed089fd48-d2ac8e1749f7ae62cb2af37c4883c3a3-1790687802-c89a98b00e0843568abee14c8bf501d5",
+        "bc2-4323dfe71c2dff7b-773c378213b51de6cceb88fc9e4eefb9-1790687809-cfdbb06c99824127bd65fa1732f362e8",
+        "bc2-4323dfe71c2dff7b-a383f62ae6d89d9566476cf4f6dd9d82-1790687775-382c9bd1721d4d038a15cb95e0d5bc40",
+        "bc2-4323dfe71c2dff7b-e4c1264b9bea234914725c8968369a71-1790687773-a8f89ecc32a24036bc5fbc95bd4cb4f5",
+        "bc2-4323dfe71c2dff7b-eaf3448fe5fcd543f3db31e9e8a347ec-1790687773-36d25e08e2be4d4985b5ebc50ab0215d",
+        "bc2-510fd9cd262740ab-09d3aceb312e1c29f299f3f7feb737cf-1790687803-47c76aff94de424b9d9ba3fb0b562b42",
+        "bc2-510fd9cd262740ab-6d7d3114779d7d01725813bed9ed8dc7-1790687801-6cb07104baad4bf3a65e878be4ddb481"
+      ],
+      "exported_manifest_digests": [
+        "sha256:03db2bf6d8bba751db23cb90acccc56113cbbfa8de196bdb6eb24b2b871a8e22"
+      ],
+      "log_sha256": "584c3f3bfd68b741a9bba5558211de60d6231becf9a37b724e78528b9a84ac98",
+      "log_bytes": 10787,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-510fd9cd262740ab-22b540cb75ee2543d4d2291dfbf532e0-1790687820-a75c5388b21a43b981c88ac2bc14065a",
+          "manifest_digest": "sha256:03db2bf6d8bba751db23cb90acccc56113cbbfa8de196bdb6eb24b2b871a8e22",
+          "schema": "bc2",
+          "recipe_hint": "510fd9cd262740ab",
+          "affinity_hint": "22b540cb75ee2543d4d2291dfbf532e0",
+          "created_at_unix": 1790687820
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-510fd9cd262740ab-22b540cb75ee2543d4d2291dfbf532e0-1790687820-a75c5388b21a43b981c88ac2bc14065a"
+    },
+    {
+      "index": 32,
+      "build_id": "883eaf14-83d7-4bf2-94c4-71594480f8dd",
+      "image_id": "bl20260929-affinity-seed-032",
+      "recipe": "typescript-multistage",
+      "variant": "app-change-15",
+      "context_sha256": "1f7a585de306827ba0dc3b1c3bdff03e7e2e0e7726562da1209c40dc773ec2b3",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc2-0272715ed089fd48-d2ac8e1749f7ae62cb2af37c4883c3a3-1790687802-c89a98b00e0843568abee14c8bf501d5",
+        "bc2-4323dfe71c2dff7b-773c378213b51de6cceb88fc9e4eefb9-1790687809-cfdbb06c99824127bd65fa1732f362e8",
+        "bc2-4323dfe71c2dff7b-842c3cf19f7f598081b61076cdcc98ce-1790687773-757cb0a2ea784b83b2536ea710fd30fb",
+        "bc2-4323dfe71c2dff7b-9d0472a0b4a191a15cbba50037a8e264-1790687773-20bc77e2dca547f09f36c4dc285395d3",
+        "bc2-4323dfe71c2dff7b-a383f62ae6d89d9566476cf4f6dd9d82-1790687775-382c9bd1721d4d038a15cb95e0d5bc40",
+        "bc2-4323dfe71c2dff7b-e4c1264b9bea234914725c8968369a71-1790687773-a8f89ecc32a24036bc5fbc95bd4cb4f5",
+        "bc2-4323dfe71c2dff7b-eaf3448fe5fcd543f3db31e9e8a347ec-1790687773-36d25e08e2be4d4985b5ebc50ab0215d",
+        "bc2-510fd9cd262740ab-09d3aceb312e1c29f299f3f7feb737cf-1790687803-47c76aff94de424b9d9ba3fb0b562b42"
+      ],
+      "exported_manifest_digests": [
+        "sha256:b943f958924b2297c005adbf87b4f43b336b49f2387c6aae265fc7ff08d3d621"
+      ],
+      "log_sha256": "cbf2b3422ceceed8da4ec21a8c0110d03a4dc376652277454c5f91953c6fbe5e",
+      "log_bytes": 14627,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-0272715ed089fd48-b15fe7c8116d33b43cdd9ce32a1e2cc3-1790687818-b55a5dc12b15444b8f2a5b792bfd2626",
+          "manifest_digest": "sha256:b943f958924b2297c005adbf87b4f43b336b49f2387c6aae265fc7ff08d3d621",
+          "schema": "bc2",
+          "recipe_hint": "0272715ed089fd48",
+          "affinity_hint": "b15fe7c8116d33b43cdd9ce32a1e2cc3",
+          "created_at_unix": 1790687818
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-0272715ed089fd48-b15fe7c8116d33b43cdd9ce32a1e2cc3-1790687818-b55a5dc12b15444b8f2a5b792bfd2626"
+    },
+    {
+      "index": 33,
+      "build_id": "c6cec075-6d48-40ce-b0d1-ec2dfc2ee9c2",
+      "image_id": "bl20260929-affinity-seed-033",
+      "recipe": "python-agent",
+      "variant": "app-change-16",
+      "context_sha256": "89b20c8550c7d6c3e0f40883e2e95f9b3ede1f8b72e1c0e70c584e007017a9c8",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc1-0272715ed089fd48-1790684203-fee9a8da9753433e84462d9a87a4ee2c",
+        "bc1-0272715ed089fd48-1790684208-3b9dc4d1264b401bad12d9b0803d2301",
+        "bc1-0272715ed089fd48-1790684211-33c2d1c2322745a88b039b8fa4a6e469",
+        "bc1-0272715ed089fd48-1790684213-f8ccb21505cb4a0abced02b15622db5e",
+        "bc1-4323dfe71c2dff7b-1790684163-8b29db250b174e1eb6c89ce45a4b4a41",
+        "bc1-510fd9cd262740ab-1790684209-280594d84fd24945880be4870b8b25bf",
+        "bc1-510fd9cd262740ab-1790684210-9acb9b96a159478198ab8beb726c594c",
+        "bc1-510fd9cd262740ab-1790684210-b4673e5ee1d74825a1a0530912543d56"
+      ],
+      "exported_manifest_digests": [
+        "sha256:619d3687288c22fd38c141431d378277717b1300de966c3ae27fd5c425ad992d"
+      ],
+      "log_sha256": "4867cc0e08b5a673df931296f9b5a353f64e394644d383428c57cda55b2fa473",
+      "log_bytes": 11138,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-4323dfe71c2dff7b-e4c1264b9bea234914725c8968369a71-1790687773-a8f89ecc32a24036bc5fbc95bd4cb4f5",
+          "manifest_digest": "sha256:619d3687288c22fd38c141431d378277717b1300de966c3ae27fd5c425ad992d",
+          "schema": "bc2",
+          "recipe_hint": "4323dfe71c2dff7b",
+          "affinity_hint": "e4c1264b9bea234914725c8968369a71",
+          "created_at_unix": 1790687773
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-4323dfe71c2dff7b-e4c1264b9bea234914725c8968369a71-1790687773-a8f89ecc32a24036bc5fbc95bd4cb4f5"
+    },
+    {
+      "index": 34,
+      "build_id": "9a5320e1-e23b-4e19-89cd-e40d23c51592",
+      "image_id": "bl20260929-affinity-seed-034",
+      "recipe": "typescript-tools",
+      "variant": "app-change-16",
+      "context_sha256": "ce5feb424e4034d2f9cb5f0919875d090747223265fb3159d994e49d5032d0e5",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc2-0272715ed089fd48-5f55b1814b1f4fab1bdf8599c264cf96-1790687809-7f4a9b557fc54eeca68bdc2506e1c718",
+        "bc2-0272715ed089fd48-b15fe7c8116d33b43cdd9ce32a1e2cc3-1790687818-b55a5dc12b15444b8f2a5b792bfd2626",
+        "bc2-0272715ed089fd48-d8369322b67fd4360e5e568d7a70584a-1790687806-6a853ef0e9f944d2b66c3ef75904ce60",
+        "bc2-4323dfe71c2dff7b-1779e75fc28d6d3bda2dd791e859a71b-1790687842-d290bb2555994993a981173e04bea908",
+        "bc2-4323dfe71c2dff7b-773c378213b51de6cceb88fc9e4eefb9-1790687809-cfdbb06c99824127bd65fa1732f362e8",
+        "bc2-510fd9cd262740ab-1f7e125f5c28d097b8141d0df04ba047-1790687809-7c20243f1d8d41e297e016ed64edb2a3",
+        "bc2-510fd9cd262740ab-22b540cb75ee2543d4d2291dfbf532e0-1790687820-a75c5388b21a43b981c88ac2bc14065a",
+        "bc2-510fd9cd262740ab-35a6398815bfcdcabf52ba61d163b531-1790687811-065cc53ae15b4628841cce1453501fb8"
+      ],
+      "exported_manifest_digests": [
+        "sha256:d2916db70d7a9053b4f031f98ad6a1fdacc3fe7ad3d999b9bcdb85a11f8bf748"
+      ],
+      "log_sha256": "7ea285af20fe6139094cfc12094ce0dc1b7db0f1ab176e7c94b2ec91bd92d70e",
+      "log_bytes": 10249,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-510fd9cd262740ab-c4c2ff1b4e3b678aaf076c58bf0f1a71-1790687853-81b2aab233cd481185b7a85dc32033d5",
+          "manifest_digest": "sha256:d2916db70d7a9053b4f031f98ad6a1fdacc3fe7ad3d999b9bcdb85a11f8bf748",
+          "schema": "bc2",
+          "recipe_hint": "510fd9cd262740ab",
+          "affinity_hint": "c4c2ff1b4e3b678aaf076c58bf0f1a71",
+          "created_at_unix": 1790687853
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-510fd9cd262740ab-c4c2ff1b4e3b678aaf076c58bf0f1a71-1790687853-81b2aab233cd481185b7a85dc32033d5"
+    },
+    {
+      "index": 35,
+      "build_id": "1d0eb1a9-d728-4d41-82a3-8907ec4395bb",
+      "image_id": "bl20260929-affinity-seed-035",
+      "recipe": "typescript-multistage",
+      "variant": "app-change-16",
+      "context_sha256": "c51fd44cefedc69d72d6f50d03b952d9db392333a76e404c2d328eab90370b13",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc2-0272715ed089fd48-5f55b1814b1f4fab1bdf8599c264cf96-1790687809-7f4a9b557fc54eeca68bdc2506e1c718",
+        "bc2-0272715ed089fd48-8e0334c364dcdd0921106a8d77bc2d14-1790687802-c49cc996733e49e0ba934c4c62811b38",
+        "bc2-0272715ed089fd48-d2ac8e1749f7ae62cb2af37c4883c3a3-1790687802-c89a98b00e0843568abee14c8bf501d5",
+        "bc2-0272715ed089fd48-d8369322b67fd4360e5e568d7a70584a-1790687806-6a853ef0e9f944d2b66c3ef75904ce60",
+        "bc2-4323dfe71c2dff7b-773c378213b51de6cceb88fc9e4eefb9-1790687809-cfdbb06c99824127bd65fa1732f362e8",
+        "bc2-510fd9cd262740ab-09d3aceb312e1c29f299f3f7feb737cf-1790687803-47c76aff94de424b9d9ba3fb0b562b42",
+        "bc2-510fd9cd262740ab-1f7e125f5c28d097b8141d0df04ba047-1790687809-7c20243f1d8d41e297e016ed64edb2a3",
+        "bc2-510fd9cd262740ab-35a6398815bfcdcabf52ba61d163b531-1790687811-065cc53ae15b4628841cce1453501fb8"
+      ],
+      "exported_manifest_digests": [
+        "sha256:c23b6bb0dc9bf23eacedbf032dd6540780477600ce6cdd69d4935bb9fa247136"
+      ],
+      "log_sha256": "739fcbf7e6244063d1dae89227433e8130b834d48c635b610cc651b320a7c1b2",
+      "log_bytes": 13961,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-0272715ed089fd48-05da782dc65f420a90fa27b45fe1fd32-1790687848-8562c7b2eeba4f6492710cf7eb8c7df7",
+          "manifest_digest": "sha256:c23b6bb0dc9bf23eacedbf032dd6540780477600ce6cdd69d4935bb9fa247136",
+          "schema": "bc2",
+          "recipe_hint": "0272715ed089fd48",
+          "affinity_hint": "05da782dc65f420a90fa27b45fe1fd32",
+          "created_at_unix": 1790687848
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-0272715ed089fd48-05da782dc65f420a90fa27b45fe1fd32-1790687848-8562c7b2eeba4f6492710cf7eb8c7df7"
+    },
+    {
+      "index": 36,
+      "build_id": "b601a8c3-d011-47ea-ba07-a295d481290e",
+      "image_id": "bl20260929-affinity-seed-036",
+      "recipe": "python-agent",
+      "variant": "app-change-17",
+      "context_sha256": "f98338d1777c0118ac3ae79962c0aae8d55af449c30b327cb02d6f4a4ba09596",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc1-0272715ed089fd48-1790684203-fee9a8da9753433e84462d9a87a4ee2c",
+        "bc1-0272715ed089fd48-1790684208-3b9dc4d1264b401bad12d9b0803d2301",
+        "bc1-0272715ed089fd48-1790684211-33c2d1c2322745a88b039b8fa4a6e469",
+        "bc1-0272715ed089fd48-1790684213-f8ccb21505cb4a0abced02b15622db5e",
+        "bc1-4323dfe71c2dff7b-1790684163-8b29db250b174e1eb6c89ce45a4b4a41",
+        "bc1-510fd9cd262740ab-1790684209-280594d84fd24945880be4870b8b25bf",
+        "bc1-510fd9cd262740ab-1790684210-9acb9b96a159478198ab8beb726c594c",
+        "bc1-510fd9cd262740ab-1790684210-b4673e5ee1d74825a1a0530912543d56"
+      ],
+      "exported_manifest_digests": [
+        "sha256:1ad08bf58ea46a491c56b79cd305540608af85d425f6af91159b0cdbeca8d3b8"
+      ],
+      "log_sha256": "6adb8f44b819e3bb8a4084d769edcd0fdb00c0dcc551be026b0d77f87941f793",
+      "log_bytes": 11074,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-4323dfe71c2dff7b-f602b8092d391f23ebde2c641f9a14e2-1790687772-b0549009aab645bb8eb9977eab4b9b31",
+          "manifest_digest": "sha256:1ad08bf58ea46a491c56b79cd305540608af85d425f6af91159b0cdbeca8d3b8",
+          "schema": "bc2",
+          "recipe_hint": "4323dfe71c2dff7b",
+          "affinity_hint": "f602b8092d391f23ebde2c641f9a14e2",
+          "created_at_unix": 1790687772
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-4323dfe71c2dff7b-f602b8092d391f23ebde2c641f9a14e2-1790687772-b0549009aab645bb8eb9977eab4b9b31"
+    },
+    {
+      "index": 37,
+      "build_id": "44dad811-bcfd-4d66-b5c8-728e435ee35b",
+      "image_id": "bl20260929-affinity-seed-037",
+      "recipe": "typescript-tools",
+      "variant": "app-change-17",
+      "context_sha256": "407bd23ed3ff4f3c66c259fc3ae6f6f5d919f2ee5a755e9e3c9ff6a15e167289",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc2-0272715ed089fd48-5f55b1814b1f4fab1bdf8599c264cf96-1790687809-7f4a9b557fc54eeca68bdc2506e1c718",
+        "bc2-0272715ed089fd48-8e0334c364dcdd0921106a8d77bc2d14-1790687802-c49cc996733e49e0ba934c4c62811b38",
+        "bc2-0272715ed089fd48-d2ac8e1749f7ae62cb2af37c4883c3a3-1790687802-c89a98b00e0843568abee14c8bf501d5",
+        "bc2-0272715ed089fd48-d8369322b67fd4360e5e568d7a70584a-1790687806-6a853ef0e9f944d2b66c3ef75904ce60",
+        "bc2-4323dfe71c2dff7b-773c378213b51de6cceb88fc9e4eefb9-1790687809-cfdbb06c99824127bd65fa1732f362e8",
+        "bc2-510fd9cd262740ab-09d3aceb312e1c29f299f3f7feb737cf-1790687803-47c76aff94de424b9d9ba3fb0b562b42",
+        "bc2-510fd9cd262740ab-1f7e125f5c28d097b8141d0df04ba047-1790687809-7c20243f1d8d41e297e016ed64edb2a3",
+        "bc2-510fd9cd262740ab-35a6398815bfcdcabf52ba61d163b531-1790687811-065cc53ae15b4628841cce1453501fb8"
+      ],
+      "exported_manifest_digests": [
+        "sha256:b5a11f5be2918489f988585a259f9803553447cde48e1b0a9272a4204f49d82f"
+      ],
+      "log_sha256": "749d9a8e9447176fcc71c63795770c7b5e472b0825897ac9c36e77d75d661592",
+      "log_bytes": 10917,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-510fd9cd262740ab-eeb513f8d75f19229c2122a014b4ba2a-1790687848-cca77b5a70064d40854b856836e41acd",
+          "manifest_digest": "sha256:b5a11f5be2918489f988585a259f9803553447cde48e1b0a9272a4204f49d82f",
+          "schema": "bc2",
+          "recipe_hint": "510fd9cd262740ab",
+          "affinity_hint": "eeb513f8d75f19229c2122a014b4ba2a",
+          "created_at_unix": 1790687848
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-510fd9cd262740ab-eeb513f8d75f19229c2122a014b4ba2a-1790687848-cca77b5a70064d40854b856836e41acd"
+    },
+    {
+      "index": 38,
+      "build_id": "60d371bc-57a1-4bfc-b8e1-c0e6503ed268",
+      "image_id": "bl20260929-affinity-seed-038",
+      "recipe": "typescript-multistage",
+      "variant": "app-change-17",
+      "context_sha256": "5bd620357ceb7dff1c3c594fbcfdb74cecb837601466a07db9ebcb58ed710dc3",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc2-0272715ed089fd48-d2ac8e1749f7ae62cb2af37c4883c3a3-1790687802-c89a98b00e0843568abee14c8bf501d5",
+        "bc2-4323dfe71c2dff7b-7456ad1685172b984161b10b4b3ac5a7-1790687773-0a0ac8a653f24a1192d1c5be2d5e2062",
+        "bc2-4323dfe71c2dff7b-842c3cf19f7f598081b61076cdcc98ce-1790687773-757cb0a2ea784b83b2536ea710fd30fb",
+        "bc2-4323dfe71c2dff7b-9d0472a0b4a191a15cbba50037a8e264-1790687773-20bc77e2dca547f09f36c4dc285395d3",
+        "bc2-4323dfe71c2dff7b-a383f62ae6d89d9566476cf4f6dd9d82-1790687775-382c9bd1721d4d038a15cb95e0d5bc40",
+        "bc2-4323dfe71c2dff7b-e4c1264b9bea234914725c8968369a71-1790687773-a8f89ecc32a24036bc5fbc95bd4cb4f5",
+        "bc2-4323dfe71c2dff7b-eaf3448fe5fcd543f3db31e9e8a347ec-1790687773-36d25e08e2be4d4985b5ebc50ab0215d",
+        "bc2-510fd9cd262740ab-09d3aceb312e1c29f299f3f7feb737cf-1790687803-47c76aff94de424b9d9ba3fb0b562b42"
+      ],
+      "exported_manifest_digests": [
+        "sha256:b4a012b5bc9898443ecf3a31c9b7e744d2d7cbcb11a33ec488808b82640f296e"
+      ],
+      "log_sha256": "eb7c1a6cb077164bf33ad405cab7c086d43bd20839c02aba809daba2af326608",
+      "log_bytes": 14877,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-0272715ed089fd48-56d1c32f38cc2cdb324dbc245e4b50a7-1790687812-dcd8a939316f4c979099ce00289ee623",
+          "manifest_digest": "sha256:b4a012b5bc9898443ecf3a31c9b7e744d2d7cbcb11a33ec488808b82640f296e",
+          "schema": "bc2",
+          "recipe_hint": "0272715ed089fd48",
+          "affinity_hint": "56d1c32f38cc2cdb324dbc245e4b50a7",
+          "created_at_unix": 1790687812
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-0272715ed089fd48-56d1c32f38cc2cdb324dbc245e4b50a7-1790687812-dcd8a939316f4c979099ce00289ee623"
+    },
+    {
+      "index": 39,
+      "build_id": "e5d11540-6962-43af-8353-27e5bae87b6d",
+      "image_id": "bl20260929-affinity-seed-039",
+      "recipe": "python-agent",
+      "variant": "app-change-18",
+      "context_sha256": "0ab651dd9dbaec0431484e7ab57477fa53b0350ebc3dc15f5435780f4433117f",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc1-0272715ed089fd48-1790684203-fee9a8da9753433e84462d9a87a4ee2c",
+        "bc1-0272715ed089fd48-1790684208-3b9dc4d1264b401bad12d9b0803d2301",
+        "bc1-0272715ed089fd48-1790684211-33c2d1c2322745a88b039b8fa4a6e469",
+        "bc1-0272715ed089fd48-1790684213-f8ccb21505cb4a0abced02b15622db5e",
+        "bc1-4323dfe71c2dff7b-1790684163-8b29db250b174e1eb6c89ce45a4b4a41",
+        "bc1-510fd9cd262740ab-1790684209-280594d84fd24945880be4870b8b25bf",
+        "bc1-510fd9cd262740ab-1790684210-9acb9b96a159478198ab8beb726c594c",
+        "bc1-510fd9cd262740ab-1790684210-b4673e5ee1d74825a1a0530912543d56"
+      ],
+      "exported_manifest_digests": [
+        "sha256:63faac46f8b20bc35ebd68a8fcd7dcf64ca31256c85e51d643aa57249f22e87b"
+      ],
+      "log_sha256": "c5988c8203965dc6628512588ca1a771f4762eac2e77492dbb0c71a40cf07dc4",
+      "log_bytes": 10376,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-4323dfe71c2dff7b-a383f62ae6d89d9566476cf4f6dd9d82-1790687775-382c9bd1721d4d038a15cb95e0d5bc40",
+          "manifest_digest": "sha256:63faac46f8b20bc35ebd68a8fcd7dcf64ca31256c85e51d643aa57249f22e87b",
+          "schema": "bc2",
+          "recipe_hint": "4323dfe71c2dff7b",
+          "affinity_hint": "a383f62ae6d89d9566476cf4f6dd9d82",
+          "created_at_unix": 1790687775
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-4323dfe71c2dff7b-a383f62ae6d89d9566476cf4f6dd9d82-1790687775-382c9bd1721d4d038a15cb95e0d5bc40"
+    },
+    {
+      "index": 40,
+      "build_id": "c17740f7-1cca-445d-bfa9-3864f401df76",
+      "image_id": "bl20260929-affinity-seed-040",
+      "recipe": "typescript-tools",
+      "variant": "app-change-18",
+      "context_sha256": "c2201186b6128a8235cdb25f52e415f8494d8ec72b2281907fa5b478f48b430a",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc1-0272715ed089fd48-1790684213-f8ccb21505cb4a0abced02b15622db5e",
+        "bc1-510fd9cd262740ab-1790684210-b4673e5ee1d74825a1a0530912543d56",
+        "bc2-4323dfe71c2dff7b-2e440572593ac7691b8e68bf73a9164f-1790687773-b9c9760fc1b340d1a4a8e772e611fe79",
+        "bc2-4323dfe71c2dff7b-4c5e8f764cb29925a3b43c07ac629a66-1790687773-202c22703ee845ce9190f2b7df022f43",
+        "bc2-4323dfe71c2dff7b-7456ad1685172b984161b10b4b3ac5a7-1790687773-0a0ac8a653f24a1192d1c5be2d5e2062",
+        "bc2-4323dfe71c2dff7b-a383f62ae6d89d9566476cf4f6dd9d82-1790687775-382c9bd1721d4d038a15cb95e0d5bc40",
+        "bc2-4323dfe71c2dff7b-eaf3448fe5fcd543f3db31e9e8a347ec-1790687773-36d25e08e2be4d4985b5ebc50ab0215d",
+        "bc2-4323dfe71c2dff7b-f602b8092d391f23ebde2c641f9a14e2-1790687772-b0549009aab645bb8eb9977eab4b9b31"
+      ],
+      "exported_manifest_digests": [
+        "sha256:29f223bef6ea65d697c7e79bdbf4fbb33b4cbcb9e44f67f74ef56e4dd07e7ba7"
+      ],
+      "log_sha256": "e3fb0293560452f9ef1954936a89552b40260245c4fd65937b0bc5a2f6cd7d22",
+      "log_bytes": 10583,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-510fd9cd262740ab-9aaea2f77183b0fefc255b7837f70241-1790687801-5166b5afe0a84b6b9be6e26f5b6ccd5b",
+          "manifest_digest": "sha256:29f223bef6ea65d697c7e79bdbf4fbb33b4cbcb9e44f67f74ef56e4dd07e7ba7",
+          "schema": "bc2",
+          "recipe_hint": "510fd9cd262740ab",
+          "affinity_hint": "9aaea2f77183b0fefc255b7837f70241",
+          "created_at_unix": 1790687801
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-510fd9cd262740ab-9aaea2f77183b0fefc255b7837f70241-1790687801-5166b5afe0a84b6b9be6e26f5b6ccd5b"
+    },
+    {
+      "index": 41,
+      "build_id": "f4ec664c-2b6b-46ed-b638-703a3d170025",
+      "image_id": "bl20260929-affinity-seed-041",
+      "recipe": "typescript-multistage",
+      "variant": "app-change-18",
+      "context_sha256": "7d36b931c89ee793b3d447a794a1817c40b4c48c9aa986af0802efe2813bd3b8",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc1-0272715ed089fd48-1790684213-f8ccb21505cb4a0abced02b15622db5e",
+        "bc1-510fd9cd262740ab-1790684210-b4673e5ee1d74825a1a0530912543d56",
+        "bc2-4323dfe71c2dff7b-2e440572593ac7691b8e68bf73a9164f-1790687773-b9c9760fc1b340d1a4a8e772e611fe79",
+        "bc2-4323dfe71c2dff7b-4c5e8f764cb29925a3b43c07ac629a66-1790687773-202c22703ee845ce9190f2b7df022f43",
+        "bc2-4323dfe71c2dff7b-7456ad1685172b984161b10b4b3ac5a7-1790687773-0a0ac8a653f24a1192d1c5be2d5e2062",
+        "bc2-4323dfe71c2dff7b-a383f62ae6d89d9566476cf4f6dd9d82-1790687775-382c9bd1721d4d038a15cb95e0d5bc40",
+        "bc2-4323dfe71c2dff7b-eaf3448fe5fcd543f3db31e9e8a347ec-1790687773-36d25e08e2be4d4985b5ebc50ab0215d",
+        "bc2-4323dfe71c2dff7b-f602b8092d391f23ebde2c641f9a14e2-1790687772-b0549009aab645bb8eb9977eab4b9b31"
+      ],
+      "exported_manifest_digests": [
+        "sha256:0692fff706a2193ce70a5ba6e30101cfd76b7e79c5ebe9b66be30e5fc2cf7a87"
+      ],
+      "log_sha256": "f6c343c26bed59297b95adfb553cc037288ae4e3b454c6095c82395f3caeb15e",
+      "log_bytes": 13944,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-0272715ed089fd48-8e0334c364dcdd0921106a8d77bc2d14-1790687802-c49cc996733e49e0ba934c4c62811b38",
+          "manifest_digest": "sha256:0692fff706a2193ce70a5ba6e30101cfd76b7e79c5ebe9b66be30e5fc2cf7a87",
+          "schema": "bc2",
+          "recipe_hint": "0272715ed089fd48",
+          "affinity_hint": "8e0334c364dcdd0921106a8d77bc2d14",
+          "created_at_unix": 1790687802
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-0272715ed089fd48-8e0334c364dcdd0921106a8d77bc2d14-1790687802-c49cc996733e49e0ba934c4c62811b38"
+    },
+    {
+      "index": 42,
+      "build_id": "6f5bfb6c-4a7f-49d6-bb0a-6c8c736135b1",
+      "image_id": "bl20260929-affinity-seed-042",
+      "recipe": "python-agent",
+      "variant": "app-change-19",
+      "context_sha256": "8f264218c553fd9eb33ddde01e334f74e4499762a0f2a1d0690a361cc6687293",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc1-0272715ed089fd48-1790684203-fee9a8da9753433e84462d9a87a4ee2c",
+        "bc1-0272715ed089fd48-1790684208-3b9dc4d1264b401bad12d9b0803d2301",
+        "bc1-0272715ed089fd48-1790684211-33c2d1c2322745a88b039b8fa4a6e469",
+        "bc1-0272715ed089fd48-1790684213-f8ccb21505cb4a0abced02b15622db5e",
+        "bc1-4323dfe71c2dff7b-1790684163-8b29db250b174e1eb6c89ce45a4b4a41",
+        "bc1-510fd9cd262740ab-1790684209-280594d84fd24945880be4870b8b25bf",
+        "bc1-510fd9cd262740ab-1790684210-9acb9b96a159478198ab8beb726c594c",
+        "bc1-510fd9cd262740ab-1790684210-b4673e5ee1d74825a1a0530912543d56"
+      ],
+      "exported_manifest_digests": [
+        "sha256:11257689467bee047a8212f078aa54550c8d03fc7257e74272a9af6eab325f0a"
+      ],
+      "log_sha256": "d6ffc25c0b0202c12f4b51c3a65bb46477dad9a08654a099a1cfd548a7daec07",
+      "log_bytes": 10829,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-4323dfe71c2dff7b-928a35dc2939d357087457a7c96b9bb5-1790687772-6b0da629042b4967b9688b2f0f104468",
+          "manifest_digest": "sha256:11257689467bee047a8212f078aa54550c8d03fc7257e74272a9af6eab325f0a",
+          "schema": "bc2",
+          "recipe_hint": "4323dfe71c2dff7b",
+          "affinity_hint": "928a35dc2939d357087457a7c96b9bb5",
+          "created_at_unix": 1790687772
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-4323dfe71c2dff7b-928a35dc2939d357087457a7c96b9bb5-1790687772-6b0da629042b4967b9688b2f0f104468"
+    },
+    {
+      "index": 43,
+      "build_id": "f7fd8757-a94f-4b02-bf5e-515919363122",
+      "image_id": "bl20260929-affinity-seed-043",
+      "recipe": "typescript-tools",
+      "variant": "app-change-19",
+      "context_sha256": "e10c4cb94f351a9714130c481c6e541b794c3bf98283c1c0c9af7bcb040a44a9",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc2-0272715ed089fd48-5f55b1814b1f4fab1bdf8599c264cf96-1790687809-7f4a9b557fc54eeca68bdc2506e1c718",
+        "bc2-0272715ed089fd48-8e0334c364dcdd0921106a8d77bc2d14-1790687802-c49cc996733e49e0ba934c4c62811b38",
+        "bc2-0272715ed089fd48-d2ac8e1749f7ae62cb2af37c4883c3a3-1790687802-c89a98b00e0843568abee14c8bf501d5",
+        "bc2-0272715ed089fd48-d8369322b67fd4360e5e568d7a70584a-1790687806-6a853ef0e9f944d2b66c3ef75904ce60",
+        "bc2-4323dfe71c2dff7b-773c378213b51de6cceb88fc9e4eefb9-1790687809-cfdbb06c99824127bd65fa1732f362e8",
+        "bc2-510fd9cd262740ab-09d3aceb312e1c29f299f3f7feb737cf-1790687803-47c76aff94de424b9d9ba3fb0b562b42",
+        "bc2-510fd9cd262740ab-1f7e125f5c28d097b8141d0df04ba047-1790687809-7c20243f1d8d41e297e016ed64edb2a3",
+        "bc2-510fd9cd262740ab-35a6398815bfcdcabf52ba61d163b531-1790687811-065cc53ae15b4628841cce1453501fb8"
+      ],
+      "exported_manifest_digests": [
+        "sha256:febab792cd191b2a8890d66773600b2f1accb8b05262f2c52f7dbec08f848b59"
+      ],
+      "log_sha256": "896b96e337010dd86b0fbae805ab7d0d0badd749930bd91bf5a0546db3e39cd0",
+      "log_bytes": 10819,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-510fd9cd262740ab-aa5b9fbbb4d928708091841e72299de4-1790687848-d3bb1e542a5a4ccda95718204fb697cb",
+          "manifest_digest": "sha256:febab792cd191b2a8890d66773600b2f1accb8b05262f2c52f7dbec08f848b59",
+          "schema": "bc2",
+          "recipe_hint": "510fd9cd262740ab",
+          "affinity_hint": "aa5b9fbbb4d928708091841e72299de4",
+          "created_at_unix": 1790687848
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-510fd9cd262740ab-aa5b9fbbb4d928708091841e72299de4-1790687848-d3bb1e542a5a4ccda95718204fb697cb"
+    },
+    {
+      "index": 44,
+      "build_id": "2d4ad2dc-8d70-4094-b1a3-d11b7e213fe3",
+      "image_id": "bl20260929-affinity-seed-044",
+      "recipe": "typescript-multistage",
+      "variant": "app-change-19",
+      "context_sha256": "8ec3e04e5921839fc916cfd74f2362952047a83e26a81337334c958cedcaa9ca",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc2-0272715ed089fd48-d2ac8e1749f7ae62cb2af37c4883c3a3-1790687802-c89a98b00e0843568abee14c8bf501d5",
+        "bc2-4323dfe71c2dff7b-7456ad1685172b984161b10b4b3ac5a7-1790687773-0a0ac8a653f24a1192d1c5be2d5e2062",
+        "bc2-4323dfe71c2dff7b-842c3cf19f7f598081b61076cdcc98ce-1790687773-757cb0a2ea784b83b2536ea710fd30fb",
+        "bc2-4323dfe71c2dff7b-9d0472a0b4a191a15cbba50037a8e264-1790687773-20bc77e2dca547f09f36c4dc285395d3",
+        "bc2-4323dfe71c2dff7b-a383f62ae6d89d9566476cf4f6dd9d82-1790687775-382c9bd1721d4d038a15cb95e0d5bc40",
+        "bc2-4323dfe71c2dff7b-e4c1264b9bea234914725c8968369a71-1790687773-a8f89ecc32a24036bc5fbc95bd4cb4f5",
+        "bc2-4323dfe71c2dff7b-eaf3448fe5fcd543f3db31e9e8a347ec-1790687773-36d25e08e2be4d4985b5ebc50ab0215d",
+        "bc2-510fd9cd262740ab-09d3aceb312e1c29f299f3f7feb737cf-1790687803-47c76aff94de424b9d9ba3fb0b562b42"
+      ],
+      "exported_manifest_digests": [
+        "sha256:1c03877eadc4785c808abd36849a9feb9e2605f49ece518ab10e1b95dd2d33b5"
+      ],
+      "log_sha256": "3c88692689285f29fb417b9fa97ec9f81f1482e97aa2b0d43966346abfeeae53",
+      "log_bytes": 14980,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-0272715ed089fd48-9d0b768bb5f1e1eb9c0807aa8bc312d3-1790687811-69f986a4c776419e8ed1b13b3253b356",
+          "manifest_digest": "sha256:1c03877eadc4785c808abd36849a9feb9e2605f49ece518ab10e1b95dd2d33b5",
+          "schema": "bc2",
+          "recipe_hint": "0272715ed089fd48",
+          "affinity_hint": "9d0b768bb5f1e1eb9c0807aa8bc312d3",
+          "created_at_unix": 1790687811
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-0272715ed089fd48-9d0b768bb5f1e1eb9c0807aa8bc312d3-1790687811-69f986a4c776419e8ed1b13b3253b356"
+    },
+    {
+      "index": 45,
+      "build_id": "77891c69-18ba-46e9-9be6-f5e322e8581c",
+      "image_id": "bl20260929-affinity-seed-045",
+      "recipe": "python-agent",
+      "variant": "app-change-20",
+      "context_sha256": "b63d320f94281cbe05558114a46c88e918b34199d465c181a94ea9ee03f4e3eb",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc1-0272715ed089fd48-1790684203-fee9a8da9753433e84462d9a87a4ee2c",
+        "bc1-0272715ed089fd48-1790684208-3b9dc4d1264b401bad12d9b0803d2301",
+        "bc1-0272715ed089fd48-1790684211-33c2d1c2322745a88b039b8fa4a6e469",
+        "bc1-0272715ed089fd48-1790684213-f8ccb21505cb4a0abced02b15622db5e",
+        "bc1-4323dfe71c2dff7b-1790684163-8b29db250b174e1eb6c89ce45a4b4a41",
+        "bc1-510fd9cd262740ab-1790684209-280594d84fd24945880be4870b8b25bf",
+        "bc1-510fd9cd262740ab-1790684210-9acb9b96a159478198ab8beb726c594c",
+        "bc1-510fd9cd262740ab-1790684210-b4673e5ee1d74825a1a0530912543d56"
+      ],
+      "exported_manifest_digests": [
+        "sha256:03631d5d9f7f686f5d82ef3d5fe03bc32690a586406d3a2a3c8486f585297917"
+      ],
+      "log_sha256": "5c3a9e047342b0e7d97e26d769809994820d7062fea6fd3478f75224985503e2",
+      "log_bytes": 10962,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-4323dfe71c2dff7b-2e440572593ac7691b8e68bf73a9164f-1790687773-b9c9760fc1b340d1a4a8e772e611fe79",
+          "manifest_digest": "sha256:03631d5d9f7f686f5d82ef3d5fe03bc32690a586406d3a2a3c8486f585297917",
+          "schema": "bc2",
+          "recipe_hint": "4323dfe71c2dff7b",
+          "affinity_hint": "2e440572593ac7691b8e68bf73a9164f",
+          "created_at_unix": 1790687773
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-4323dfe71c2dff7b-2e440572593ac7691b8e68bf73a9164f-1790687773-b9c9760fc1b340d1a4a8e772e611fe79"
+    },
+    {
+      "index": 46,
+      "build_id": "74ba6306-faf9-46e4-bec8-ae903110de3e",
+      "image_id": "bl20260929-affinity-seed-046",
+      "recipe": "typescript-tools",
+      "variant": "app-change-20",
+      "context_sha256": "f7698f9f9021730a6e8a3e585971b5d4edbe8567628089f24788e92dafa2fe26",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc2-0272715ed089fd48-5f55b1814b1f4fab1bdf8599c264cf96-1790687809-7f4a9b557fc54eeca68bdc2506e1c718",
+        "bc2-0272715ed089fd48-b15fe7c8116d33b43cdd9ce32a1e2cc3-1790687818-b55a5dc12b15444b8f2a5b792bfd2626",
+        "bc2-0272715ed089fd48-d8369322b67fd4360e5e568d7a70584a-1790687806-6a853ef0e9f944d2b66c3ef75904ce60",
+        "bc2-4323dfe71c2dff7b-1779e75fc28d6d3bda2dd791e859a71b-1790687842-d290bb2555994993a981173e04bea908",
+        "bc2-4323dfe71c2dff7b-773c378213b51de6cceb88fc9e4eefb9-1790687809-cfdbb06c99824127bd65fa1732f362e8",
+        "bc2-510fd9cd262740ab-09d3aceb312e1c29f299f3f7feb737cf-1790687803-47c76aff94de424b9d9ba3fb0b562b42",
+        "bc2-510fd9cd262740ab-1f7e125f5c28d097b8141d0df04ba047-1790687809-7c20243f1d8d41e297e016ed64edb2a3",
+        "bc2-510fd9cd262740ab-35a6398815bfcdcabf52ba61d163b531-1790687811-065cc53ae15b4628841cce1453501fb8"
+      ],
+      "exported_manifest_digests": [
+        "sha256:94d11c49501064287888cd06f6a182fc4e8d633e14816cf551726412628e0e53"
+      ],
+      "log_sha256": "ef2e328c227999c7d9af538365850850c804de9efb3638a5966e8a4e3a362cbc",
+      "log_bytes": 8192,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-510fd9cd262740ab-a193bc108748016e1286a7d582515056-1790687853-547550d4db8c4584bc46e1824cd0e022",
+          "manifest_digest": "sha256:94d11c49501064287888cd06f6a182fc4e8d633e14816cf551726412628e0e53",
+          "schema": "bc2",
+          "recipe_hint": "510fd9cd262740ab",
+          "affinity_hint": "a193bc108748016e1286a7d582515056",
+          "created_at_unix": 1790687853
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-510fd9cd262740ab-a193bc108748016e1286a7d582515056-1790687853-547550d4db8c4584bc46e1824cd0e022"
+    },
+    {
+      "index": 47,
+      "build_id": "df2a6ffa-7b14-4785-bc9e-564c2c53c787",
+      "image_id": "bl20260929-affinity-seed-047",
+      "recipe": "typescript-multistage",
+      "variant": "app-change-20",
+      "context_sha256": "46f9216b46c6689acc8ab3ea72ced50d772944c8e07525a8347200e5b281ad83",
+      "status": "succeeded",
+      "log_present": true,
+      "selection": {
+        "affinity_match": false,
+        "imports": 8
+      },
+      "selection_observations": 1,
+      "selection_malformed_or_conflicting": false,
+      "imported_owned_tags": [
+        "bc1-0272715ed089fd48-1790684213-f8ccb21505cb4a0abced02b15622db5e",
+        "bc1-510fd9cd262740ab-1790684210-b4673e5ee1d74825a1a0530912543d56",
+        "bc2-4323dfe71c2dff7b-2e76d4ecce110e24cde35866a3043244-1790687773-3311b17464d344f68f80fcb878e0fbff",
+        "bc2-4323dfe71c2dff7b-4c5e8f764cb29925a3b43c07ac629a66-1790687773-202c22703ee845ce9190f2b7df022f43",
+        "bc2-4323dfe71c2dff7b-7456ad1685172b984161b10b4b3ac5a7-1790687773-0a0ac8a653f24a1192d1c5be2d5e2062",
+        "bc2-4323dfe71c2dff7b-842c3cf19f7f598081b61076cdcc98ce-1790687773-757cb0a2ea784b83b2536ea710fd30fb",
+        "bc2-4323dfe71c2dff7b-a383f62ae6d89d9566476cf4f6dd9d82-1790687775-382c9bd1721d4d038a15cb95e0d5bc40",
+        "bc2-4323dfe71c2dff7b-eaf3448fe5fcd543f3db31e9e8a347ec-1790687773-36d25e08e2be4d4985b5ebc50ab0215d"
+      ],
+      "exported_manifest_digests": [
+        "sha256:be652d74ce4fc50b8c5aa61892c6233a73c658b14f66d5e81f2bca6b5dd71f9a"
+      ],
+      "log_sha256": "a35285c307106e0902aad2c0a8228a000d8adff1b696438d175650517eea8a84",
+      "log_bytes": 14059,
+      "at_or_above_retained_tail_limit": false,
+      "export_bc2_aliases": [
+        {
+          "tag": "bc2-0272715ed089fd48-6f319c62b78c3e939f5f732c12dc68f3-1790687802-da3f1993fce44df9b821310168447a74",
+          "manifest_digest": "sha256:be652d74ce4fc50b8c5aa61892c6233a73c658b14f66d5e81f2bca6b5dd71f9a",
+          "schema": "bc2",
+          "recipe_hint": "0272715ed089fd48",
+          "affinity_hint": "6f319c62b78c3e939f5f732c12dc68f3",
+          "created_at_unix": 1790687802
+        }
+      ],
+      "export_tag_uniquely_resolved": true,
+      "export_tag": "bc2-0272715ed089fd48-6f319c62b78c3e939f5f732c12dc68f3-1790687802-da3f1993fce44df9b821310168447a74"
+    }
+  ],
+  "cache_snapshot": {
+    "started_at": "2026-09-29T13:21:51.513664+00:00",
+    "finished_at": "2026-09-29T13:21:51.583580+00:00",
+    "owned_tags": [
+      {
+        "tag": "bc1-0272715ed089fd48-1790684171-984bbd9fdaca4f72b5e08a6193d1e14a",
+        "manifest_digest": "sha256:0eabbc74958f787471dd8705b60729c1dfe4997f121a3b64289f1573869c77e2",
+        "schema": "bc1",
+        "recipe_hint": "0272715ed089fd48",
+        "created_at_unix": 1790684171
+      },
+      {
+        "tag": "bc1-0272715ed089fd48-1790684186-148fa6c821ab47d5929477a9216d5ecd",
+        "manifest_digest": "sha256:d24ae3a57f6f30ca45d4d9f17f81d6dc3cc3217f88681f599ff5eadec06ca182",
+        "schema": "bc1",
+        "recipe_hint": "0272715ed089fd48",
+        "created_at_unix": 1790684186
+      },
+      {
+        "tag": "bc1-0272715ed089fd48-1790684197-39756eb6659d4e79b99983ec06b6b3d4",
+        "manifest_digest": "sha256:abe62057734e6fd2d6e6fc932a91de101c567292eb122ff36f8b6cbcd41c0aca",
+        "schema": "bc1",
+        "recipe_hint": "0272715ed089fd48",
+        "created_at_unix": 1790684197
+      },
+      {
+        "tag": "bc1-0272715ed089fd48-1790684198-57e11d25adb942bda0f60f69bb508a31",
+        "manifest_digest": "sha256:6d853429b8cf9f5d04d9cbdc9e2969cc11bc203719ea64348c44ff5fab85f0af",
+        "schema": "bc1",
+        "recipe_hint": "0272715ed089fd48",
+        "created_at_unix": 1790684198
+      },
+      {
+        "tag": "bc1-0272715ed089fd48-1790684201-40471aa76d7248f59ddacbbd2c689a83",
+        "manifest_digest": "sha256:54d64f5260c2664a96afdbbd305b1dc908886dd185e0d7d1e64446c232cb1bee",
+        "schema": "bc1",
+        "recipe_hint": "0272715ed089fd48",
+        "created_at_unix": 1790684201
+      },
+      {
+        "tag": "bc1-0272715ed089fd48-1790684203-fee9a8da9753433e84462d9a87a4ee2c",
+        "manifest_digest": "sha256:0bdf6af7685490636b46527c4f2f2d73aad5e993f169ea3014ef77782efabbf5",
+        "schema": "bc1",
+        "recipe_hint": "0272715ed089fd48",
+        "created_at_unix": 1790684203
+      },
+      {
+        "tag": "bc1-0272715ed089fd48-1790684208-3b9dc4d1264b401bad12d9b0803d2301",
+        "manifest_digest": "sha256:d1a534fb9b1cfce43ef7380539c15b1ecd38fb32f66c8a4f83d33aab6046063b",
+        "schema": "bc1",
+        "recipe_hint": "0272715ed089fd48",
+        "created_at_unix": 1790684208
+      },
+      {
+        "tag": "bc1-0272715ed089fd48-1790684211-33c2d1c2322745a88b039b8fa4a6e469",
+        "manifest_digest": "sha256:110841a2037b665b031c1fbf7883052d8ed38989d64ddebe53a08564c2dc9e9f",
+        "schema": "bc1",
+        "recipe_hint": "0272715ed089fd48",
+        "created_at_unix": 1790684211
+      },
+      {
+        "tag": "bc1-0272715ed089fd48-1790684213-f8ccb21505cb4a0abced02b15622db5e",
+        "manifest_digest": "sha256:ec901c7eb75268b1d839829eb9e188d41c94a02b92271e8e507c0b52c8611e55",
+        "schema": "bc1",
+        "recipe_hint": "0272715ed089fd48",
+        "created_at_unix": 1790684213
+      },
+      {
+        "tag": "bc1-510fd9cd262740ab-1790684186-4c8e8e6991e540658f92d125b9abe93e",
+        "manifest_digest": "sha256:2a23ef8c0c0ccf08072389d71609ae5a63d98e7e26be1b08c7808b48dd1d70d8",
+        "schema": "bc1",
+        "recipe_hint": "510fd9cd262740ab",
+        "created_at_unix": 1790684186
+      },
+      {
+        "tag": "bc1-510fd9cd262740ab-1790684198-b1b9841954054afba94dd17382c5cb2c",
+        "manifest_digest": "sha256:b6ddca7cec803163d8cba905127942e356bd7537c1299fd1bf91144e4b0c05c8",
+        "schema": "bc1",
+        "recipe_hint": "510fd9cd262740ab",
+        "created_at_unix": 1790684198
+      },
+      {
+        "tag": "bc1-510fd9cd262740ab-1790684200-bde3d14bd2cf4171a054ca5545481dd6",
+        "manifest_digest": "sha256:aabce70562c43a288bb91236aff3f81945c384e6d5ed5e00351cabe3690f6af2",
+        "schema": "bc1",
+        "recipe_hint": "510fd9cd262740ab",
+        "created_at_unix": 1790684200
+      },
+      {
+        "tag": "bc1-510fd9cd262740ab-1790684201-33728fd87cf4489d9388c2801f94a16d",
+        "manifest_digest": "sha256:99589aecd11d49144c3e29791121de8f204a0c9aaa2d781d724f0bd45f33e6a8",
+        "schema": "bc1",
+        "recipe_hint": "510fd9cd262740ab",
+        "created_at_unix": 1790684201
+      },
+      {
+        "tag": "bc1-510fd9cd262740ab-1790684209-280594d84fd24945880be4870b8b25bf",
+        "manifest_digest": "sha256:f8a4e6951ee027da3669e778c7172300b099c9a960ec02823c4ba06ceff2c1b1",
+        "schema": "bc1",
+        "recipe_hint": "510fd9cd262740ab",
+        "created_at_unix": 1790684209
+      },
+      {
+        "tag": "bc1-510fd9cd262740ab-1790684210-9acb9b96a159478198ab8beb726c594c",
+        "manifest_digest": "sha256:b00b6c0805772cb6ddab4c66b5296839c6c10b85369e67ba074fa48b2831fac6",
+        "schema": "bc1",
+        "recipe_hint": "510fd9cd262740ab",
+        "created_at_unix": 1790684210
+      },
+      {
+        "tag": "bc1-510fd9cd262740ab-1790684210-b4673e5ee1d74825a1a0530912543d56",
+        "manifest_digest": "sha256:083f0332ff1dc19a0906bd849c547c6a8316570bcf27ab8a30c797b8e9d5f62b",
+        "schema": "bc1",
+        "recipe_hint": "510fd9cd262740ab",
+        "created_at_unix": 1790684210
+      },
+      {
+        "tag": "bc2-0272715ed089fd48-05da782dc65f420a90fa27b45fe1fd32-1790687848-8562c7b2eeba4f6492710cf7eb8c7df7",
+        "manifest_digest": "sha256:c23b6bb0dc9bf23eacedbf032dd6540780477600ce6cdd69d4935bb9fa247136",
+        "schema": "bc2",
+        "recipe_hint": "0272715ed089fd48",
+        "affinity_hint": "05da782dc65f420a90fa27b45fe1fd32",
+        "created_at_unix": 1790687848
+      },
+      {
+        "tag": "bc2-0272715ed089fd48-2eb3feaccb36cd16d062b6f4a1d83cb3-1790687777-b6f7cf1524504be797cacde7fb6a6b4b",
+        "manifest_digest": "sha256:fcd524a753d0cf8394137ec04691265a3a6b48b1f842265be30d843422c04c66",
+        "schema": "bc2",
+        "recipe_hint": "0272715ed089fd48",
+        "affinity_hint": "2eb3feaccb36cd16d062b6f4a1d83cb3",
+        "created_at_unix": 1790687777
+      },
+      {
+        "tag": "bc2-0272715ed089fd48-51a4f207d076391a1a45b93048033b83-1790687837-c69d73c28a9443228b9443cd51a3a35b",
+        "manifest_digest": "sha256:b3919ec321d9b3477954a1f6d7b5dd5d67b2125b39bb9eb20a588b5da7e6477d",
+        "schema": "bc2",
+        "recipe_hint": "0272715ed089fd48",
+        "affinity_hint": "51a4f207d076391a1a45b93048033b83",
+        "created_at_unix": 1790687837
+      },
+      {
+        "tag": "bc2-0272715ed089fd48-56d1c32f38cc2cdb324dbc245e4b50a7-1790687812-dcd8a939316f4c979099ce00289ee623",
+        "manifest_digest": "sha256:b4a012b5bc9898443ecf3a31c9b7e744d2d7cbcb11a33ec488808b82640f296e",
+        "schema": "bc2",
+        "recipe_hint": "0272715ed089fd48",
+        "affinity_hint": "56d1c32f38cc2cdb324dbc245e4b50a7",
+        "created_at_unix": 1790687812
+      },
+      {
+        "tag": "bc2-0272715ed089fd48-5f55b1814b1f4fab1bdf8599c264cf96-1790687809-7f4a9b557fc54eeca68bdc2506e1c718",
+        "manifest_digest": "sha256:b7c7ef1d45630a202cccd02ef3a290be79a67b1d00b642058d72508569093382",
+        "schema": "bc2",
+        "recipe_hint": "0272715ed089fd48",
+        "affinity_hint": "5f55b1814b1f4fab1bdf8599c264cf96",
+        "created_at_unix": 1790687809
+      },
+      {
+        "tag": "bc2-0272715ed089fd48-6baadc8365f0e35163372624351a87b2-1790687826-e20d9488e705482aa3bdff28f60ebe31",
+        "manifest_digest": "sha256:4f3f6c04cb5ce604ba63404a2e1907d02b16ed53fbea0334832a201a89158481",
+        "schema": "bc2",
+        "recipe_hint": "0272715ed089fd48",
+        "affinity_hint": "6baadc8365f0e35163372624351a87b2",
+        "created_at_unix": 1790687826
+      },
+      {
+        "tag": "bc2-0272715ed089fd48-6f319c62b78c3e939f5f732c12dc68f3-1790687802-da3f1993fce44df9b821310168447a74",
+        "manifest_digest": "sha256:be652d74ce4fc50b8c5aa61892c6233a73c658b14f66d5e81f2bca6b5dd71f9a",
+        "schema": "bc2",
+        "recipe_hint": "0272715ed089fd48",
+        "affinity_hint": "6f319c62b78c3e939f5f732c12dc68f3",
+        "created_at_unix": 1790687802
+      },
+      {
+        "tag": "bc2-0272715ed089fd48-7a3cff339dcaf7901ccd1e8b1ccb062a-1790687826-71c50682cb3a4a93abc7ff33f2dbe070",
+        "manifest_digest": "sha256:03ca685cb778e5150e494146e3063c9344d7359ba1e3a8081356ed71bfae0e25",
+        "schema": "bc2",
+        "recipe_hint": "0272715ed089fd48",
+        "affinity_hint": "7a3cff339dcaf7901ccd1e8b1ccb062a",
+        "created_at_unix": 1790687826
+      },
+      {
+        "tag": "bc2-0272715ed089fd48-8a2fff919252aaf6cef32c51757224cc-1790687843-2fe5b707886e468da96342b9ebcd8c57",
+        "manifest_digest": "sha256:20a14257d70064ed846f08cc31cc6dbead7a97125f081e997cea063bc08ea50d",
+        "schema": "bc2",
+        "recipe_hint": "0272715ed089fd48",
+        "affinity_hint": "8a2fff919252aaf6cef32c51757224cc",
+        "created_at_unix": 1790687843
+      },
+      {
+        "tag": "bc2-0272715ed089fd48-8e0334c364dcdd0921106a8d77bc2d14-1790687802-c49cc996733e49e0ba934c4c62811b38",
+        "manifest_digest": "sha256:0692fff706a2193ce70a5ba6e30101cfd76b7e79c5ebe9b66be30e5fc2cf7a87",
+        "schema": "bc2",
+        "recipe_hint": "0272715ed089fd48",
+        "affinity_hint": "8e0334c364dcdd0921106a8d77bc2d14",
+        "created_at_unix": 1790687802
+      },
+      {
+        "tag": "bc2-0272715ed089fd48-9d0b768bb5f1e1eb9c0807aa8bc312d3-1790687811-69f986a4c776419e8ed1b13b3253b356",
+        "manifest_digest": "sha256:1c03877eadc4785c808abd36849a9feb9e2605f49ece518ab10e1b95dd2d33b5",
+        "schema": "bc2",
+        "recipe_hint": "0272715ed089fd48",
+        "affinity_hint": "9d0b768bb5f1e1eb9c0807aa8bc312d3",
+        "created_at_unix": 1790687811
+      },
+      {
+        "tag": "bc2-0272715ed089fd48-b15fe7c8116d33b43cdd9ce32a1e2cc3-1790687818-b55a5dc12b15444b8f2a5b792bfd2626",
+        "manifest_digest": "sha256:b943f958924b2297c005adbf87b4f43b336b49f2387c6aae265fc7ff08d3d621",
+        "schema": "bc2",
+        "recipe_hint": "0272715ed089fd48",
+        "affinity_hint": "b15fe7c8116d33b43cdd9ce32a1e2cc3",
+        "created_at_unix": 1790687818
+      },
+      {
+        "tag": "bc2-0272715ed089fd48-d2ac8e1749f7ae62cb2af37c4883c3a3-1790687802-c89a98b00e0843568abee14c8bf501d5",
+        "manifest_digest": "sha256:58802bfbb6913cd4115bea0fafcb50ccdd697783c99619bae879c09e432998b4",
+        "schema": "bc2",
+        "recipe_hint": "0272715ed089fd48",
+        "affinity_hint": "d2ac8e1749f7ae62cb2af37c4883c3a3",
+        "created_at_unix": 1790687802
+      },
+      {
+        "tag": "bc2-0272715ed089fd48-d8369322b67fd4360e5e568d7a70584a-1790687806-6a853ef0e9f944d2b66c3ef75904ce60",
+        "manifest_digest": "sha256:1f55eb6a24669df4a6c6ec16d69758a2b565e642f77abeac1982b98a40e310da",
+        "schema": "bc2",
+        "recipe_hint": "0272715ed089fd48",
+        "affinity_hint": "d8369322b67fd4360e5e568d7a70584a",
+        "created_at_unix": 1790687806
+      },
+      {
+        "tag": "bc2-0272715ed089fd48-f73b1e5281ce48cb2edafb49c0485564-1790687842-cb05acc5b0bf425da3303f2e686c5a1d",
+        "manifest_digest": "sha256:31d01b338bc530b150215b1e2f6ec2e3342d1358bbb5c13a1e19c0edb4b9e648",
+        "schema": "bc2",
+        "recipe_hint": "0272715ed089fd48",
+        "affinity_hint": "f73b1e5281ce48cb2edafb49c0485564",
+        "created_at_unix": 1790687842
+      },
+      {
+        "tag": "bc2-0272715ed089fd48-f8915d982bf50c8394d71db13b4b731a-1790687858-9c85a367e30643c9bf0f1f113a7477dc",
+        "manifest_digest": "sha256:d3a4118bcefc507eb2a76cbcd658bfa6dfd7370ae4c32d909544ffa4d79bf3f9",
+        "schema": "bc2",
+        "recipe_hint": "0272715ed089fd48",
+        "affinity_hint": "f8915d982bf50c8394d71db13b4b731a",
+        "created_at_unix": 1790687858
+      },
+      {
+        "tag": "bc2-4323dfe71c2dff7b-001514b219e2187cccaebbb0df50307e-1790687773-1112b8dcc59e48acaf0c901681874d2c",
+        "manifest_digest": "sha256:e17dfd95764052536e9b7cc419516e18c5c5036c52efc3c9975f46f92e4fa277",
+        "schema": "bc2",
+        "recipe_hint": "4323dfe71c2dff7b",
+        "affinity_hint": "001514b219e2187cccaebbb0df50307e",
+        "created_at_unix": 1790687773
+      },
+      {
+        "tag": "bc2-4323dfe71c2dff7b-1779e75fc28d6d3bda2dd791e859a71b-1790687842-d290bb2555994993a981173e04bea908",
+        "manifest_digest": "sha256:8e26995f2157d2d6751164723b24f3c2f9b5be1b0538739e4bf9817d041174da",
+        "schema": "bc2",
+        "recipe_hint": "4323dfe71c2dff7b",
+        "affinity_hint": "1779e75fc28d6d3bda2dd791e859a71b",
+        "created_at_unix": 1790687842
+      },
+      {
+        "tag": "bc2-4323dfe71c2dff7b-2e440572593ac7691b8e68bf73a9164f-1790687773-b9c9760fc1b340d1a4a8e772e611fe79",
+        "manifest_digest": "sha256:03631d5d9f7f686f5d82ef3d5fe03bc32690a586406d3a2a3c8486f585297917",
+        "schema": "bc2",
+        "recipe_hint": "4323dfe71c2dff7b",
+        "affinity_hint": "2e440572593ac7691b8e68bf73a9164f",
+        "created_at_unix": 1790687773
+      },
+      {
+        "tag": "bc2-4323dfe71c2dff7b-2e76d4ecce110e24cde35866a3043244-1790687773-3311b17464d344f68f80fcb878e0fbff",
+        "manifest_digest": "sha256:7a3dd985f8dff30fa05f6aba3c181f343db25783641f247fc760a78c134311d7",
+        "schema": "bc2",
+        "recipe_hint": "4323dfe71c2dff7b",
+        "affinity_hint": "2e76d4ecce110e24cde35866a3043244",
+        "created_at_unix": 1790687773
+      },
+      {
+        "tag": "bc2-4323dfe71c2dff7b-36a75cc80b813a493f3964dad6309484-1790687773-80a68e5d61a34e93bdb40fb42cfda01e",
+        "manifest_digest": "sha256:4efd474e4e8cced69dac32ca9f60c12e94cdd37259c55fb82eb9bf0d97d3f29c",
+        "schema": "bc2",
+        "recipe_hint": "4323dfe71c2dff7b",
+        "affinity_hint": "36a75cc80b813a493f3964dad6309484",
+        "created_at_unix": 1790687773
+      },
+      {
+        "tag": "bc2-4323dfe71c2dff7b-4c5e8f764cb29925a3b43c07ac629a66-1790687773-202c22703ee845ce9190f2b7df022f43",
+        "manifest_digest": "sha256:e958dffbee7a2902f6555d6a430a21dd6c05f877f1454ff3f64e2c8da3e0d863",
+        "schema": "bc2",
+        "recipe_hint": "4323dfe71c2dff7b",
+        "affinity_hint": "4c5e8f764cb29925a3b43c07ac629a66",
+        "created_at_unix": 1790687773
+      },
+      {
+        "tag": "bc2-4323dfe71c2dff7b-7456ad1685172b984161b10b4b3ac5a7-1790687773-0a0ac8a653f24a1192d1c5be2d5e2062",
+        "manifest_digest": "sha256:4714d093813bc25f0d5569f15245d1b24f1364bdffc0bf91e1043360b7a8e2e9",
+        "schema": "bc2",
+        "recipe_hint": "4323dfe71c2dff7b",
+        "affinity_hint": "7456ad1685172b984161b10b4b3ac5a7",
+        "created_at_unix": 1790687773
+      },
+      {
+        "tag": "bc2-4323dfe71c2dff7b-773c378213b51de6cceb88fc9e4eefb9-1790687809-cfdbb06c99824127bd65fa1732f362e8",
+        "manifest_digest": "sha256:e7b8c36faef7ce280b87600d6fe40e0799c87b808058f094af4742270ae25a3f",
+        "schema": "bc2",
+        "recipe_hint": "4323dfe71c2dff7b",
+        "affinity_hint": "773c378213b51de6cceb88fc9e4eefb9",
+        "created_at_unix": 1790687809
+      },
+      {
+        "tag": "bc2-4323dfe71c2dff7b-842c3cf19f7f598081b61076cdcc98ce-1790687773-757cb0a2ea784b83b2536ea710fd30fb",
+        "manifest_digest": "sha256:0335024d7b77029cee161e7b5b13b1b570bd147900edda3acd870aa965046b9f",
+        "schema": "bc2",
+        "recipe_hint": "4323dfe71c2dff7b",
+        "affinity_hint": "842c3cf19f7f598081b61076cdcc98ce",
+        "created_at_unix": 1790687773
+      },
+      {
+        "tag": "bc2-4323dfe71c2dff7b-928a35dc2939d357087457a7c96b9bb5-1790687772-6b0da629042b4967b9688b2f0f104468",
+        "manifest_digest": "sha256:11257689467bee047a8212f078aa54550c8d03fc7257e74272a9af6eab325f0a",
+        "schema": "bc2",
+        "recipe_hint": "4323dfe71c2dff7b",
+        "affinity_hint": "928a35dc2939d357087457a7c96b9bb5",
+        "created_at_unix": 1790687772
+      },
+      {
+        "tag": "bc2-4323dfe71c2dff7b-9d0472a0b4a191a15cbba50037a8e264-1790687773-20bc77e2dca547f09f36c4dc285395d3",
+        "manifest_digest": "sha256:55a32b4238fa271b5c8986b2cf5a9baef483195035dd53e68873c59221b66eca",
+        "schema": "bc2",
+        "recipe_hint": "4323dfe71c2dff7b",
+        "affinity_hint": "9d0472a0b4a191a15cbba50037a8e264",
+        "created_at_unix": 1790687773
+      },
+      {
+        "tag": "bc2-4323dfe71c2dff7b-a383f62ae6d89d9566476cf4f6dd9d82-1790687775-382c9bd1721d4d038a15cb95e0d5bc40",
+        "manifest_digest": "sha256:63faac46f8b20bc35ebd68a8fcd7dcf64ca31256c85e51d643aa57249f22e87b",
+        "schema": "bc2",
+        "recipe_hint": "4323dfe71c2dff7b",
+        "affinity_hint": "a383f62ae6d89d9566476cf4f6dd9d82",
+        "created_at_unix": 1790687775
+      },
+      {
+        "tag": "bc2-4323dfe71c2dff7b-e4c1264b9bea234914725c8968369a71-1790687773-a8f89ecc32a24036bc5fbc95bd4cb4f5",
+        "manifest_digest": "sha256:619d3687288c22fd38c141431d378277717b1300de966c3ae27fd5c425ad992d",
+        "schema": "bc2",
+        "recipe_hint": "4323dfe71c2dff7b",
+        "affinity_hint": "e4c1264b9bea234914725c8968369a71",
+        "created_at_unix": 1790687773
+      },
+      {
+        "tag": "bc2-4323dfe71c2dff7b-eaf3448fe5fcd543f3db31e9e8a347ec-1790687773-36d25e08e2be4d4985b5ebc50ab0215d",
+        "manifest_digest": "sha256:083e7d2dd0e4bb4ba0d118a922e06ca783f722568d4d19d2a39486a3bcc26143",
+        "schema": "bc2",
+        "recipe_hint": "4323dfe71c2dff7b",
+        "affinity_hint": "eaf3448fe5fcd543f3db31e9e8a347ec",
+        "created_at_unix": 1790687773
+      },
+      {
+        "tag": "bc2-4323dfe71c2dff7b-ee3756b499f5bc7c7164c6fac6ce04ad-1790687772-24d20d5aa2304fa1ae1dc4e440ea9f3c",
+        "manifest_digest": "sha256:2b96ba6169ebe3980eaf641fb851d895d25e81e9c4d6c504385d5cdf52ab9e7c",
+        "schema": "bc2",
+        "recipe_hint": "4323dfe71c2dff7b",
+        "affinity_hint": "ee3756b499f5bc7c7164c6fac6ce04ad",
+        "created_at_unix": 1790687772
+      },
+      {
+        "tag": "bc2-4323dfe71c2dff7b-f602b8092d391f23ebde2c641f9a14e2-1790687772-b0549009aab645bb8eb9977eab4b9b31",
+        "manifest_digest": "sha256:1ad08bf58ea46a491c56b79cd305540608af85d425f6af91159b0cdbeca8d3b8",
+        "schema": "bc2",
+        "recipe_hint": "4323dfe71c2dff7b",
+        "affinity_hint": "f602b8092d391f23ebde2c641f9a14e2",
+        "created_at_unix": 1790687772
+      },
+      {
+        "tag": "bc2-510fd9cd262740ab-09d3aceb312e1c29f299f3f7feb737cf-1790687803-47c76aff94de424b9d9ba3fb0b562b42",
+        "manifest_digest": "sha256:aa69a87df302762cc2a6f1cb36f55f5eb4f691474bd515edcb2db505ebf84f46",
+        "schema": "bc2",
+        "recipe_hint": "510fd9cd262740ab",
+        "affinity_hint": "09d3aceb312e1c29f299f3f7feb737cf",
+        "created_at_unix": 1790687803
+      },
+      {
+        "tag": "bc2-510fd9cd262740ab-1f7e125f5c28d097b8141d0df04ba047-1790687809-7c20243f1d8d41e297e016ed64edb2a3",
+        "manifest_digest": "sha256:be3830f1ede1d61a82b8c2a727a3f96785c803db7925a19f224747fa054b9011",
+        "schema": "bc2",
+        "recipe_hint": "510fd9cd262740ab",
+        "affinity_hint": "1f7e125f5c28d097b8141d0df04ba047",
+        "created_at_unix": 1790687809
+      },
+      {
+        "tag": "bc2-510fd9cd262740ab-22b540cb75ee2543d4d2291dfbf532e0-1790687820-a75c5388b21a43b981c88ac2bc14065a",
+        "manifest_digest": "sha256:03db2bf6d8bba751db23cb90acccc56113cbbfa8de196bdb6eb24b2b871a8e22",
+        "schema": "bc2",
+        "recipe_hint": "510fd9cd262740ab",
+        "affinity_hint": "22b540cb75ee2543d4d2291dfbf532e0",
+        "created_at_unix": 1790687820
+      },
+      {
+        "tag": "bc2-510fd9cd262740ab-35a6398815bfcdcabf52ba61d163b531-1790687811-065cc53ae15b4628841cce1453501fb8",
+        "manifest_digest": "sha256:91447a79bc0c68eb9702d5337d007ce18460f578134f7f23473fd8e3a149ca3e",
+        "schema": "bc2",
+        "recipe_hint": "510fd9cd262740ab",
+        "affinity_hint": "35a6398815bfcdcabf52ba61d163b531",
+        "created_at_unix": 1790687811
+      },
+      {
+        "tag": "bc2-510fd9cd262740ab-599884a87b9f33cad6955ef2aa04ecf7-1790687774-3037b40e7fb84da994ddd59058f7721a",
+        "manifest_digest": "sha256:e45c46ee964d25915bcef62ccbf55eefb848c0813f1399d7967cb4d5c3c23c79",
+        "schema": "bc2",
+        "recipe_hint": "510fd9cd262740ab",
+        "affinity_hint": "599884a87b9f33cad6955ef2aa04ecf7",
+        "created_at_unix": 1790687774
+      },
+      {
+        "tag": "bc2-510fd9cd262740ab-6d7d3114779d7d01725813bed9ed8dc7-1790687801-6cb07104baad4bf3a65e878be4ddb481",
+        "manifest_digest": "sha256:2db88469738b30afb1cf440d2ad640ad9eb2acfe2313725c7bc2d4b3d79055d8",
+        "schema": "bc2",
+        "recipe_hint": "510fd9cd262740ab",
+        "affinity_hint": "6d7d3114779d7d01725813bed9ed8dc7",
+        "created_at_unix": 1790687801
+      },
+      {
+        "tag": "bc2-510fd9cd262740ab-96fa278414125ac950b1fb330178fdc3-1790687811-49a1e4ffc9744ee5af06b09cbaf63a27",
+        "manifest_digest": "sha256:982d153cb9c3079a643248e38605e2636ec22cb691f0551f9ea3e7570c72bd0c",
+        "schema": "bc2",
+        "recipe_hint": "510fd9cd262740ab",
+        "affinity_hint": "96fa278414125ac950b1fb330178fdc3",
+        "created_at_unix": 1790687811
+      },
+      {
+        "tag": "bc2-510fd9cd262740ab-9aaea2f77183b0fefc255b7837f70241-1790687801-5166b5afe0a84b6b9be6e26f5b6ccd5b",
+        "manifest_digest": "sha256:29f223bef6ea65d697c7e79bdbf4fbb33b4cbcb9e44f67f74ef56e4dd07e7ba7",
+        "schema": "bc2",
+        "recipe_hint": "510fd9cd262740ab",
+        "affinity_hint": "9aaea2f77183b0fefc255b7837f70241",
+        "created_at_unix": 1790687801
+      },
+      {
+        "tag": "bc2-510fd9cd262740ab-9d28fc293f0bd66f65349fdba6523988-1790687775-8c8f44ca26fe446ea780a2ebe2b07d7f",
+        "manifest_digest": "sha256:1d8806282792f62deeed87be8db2cfb371db5f3ca27dfc550f0f63fa989f445b",
+        "schema": "bc2",
+        "recipe_hint": "510fd9cd262740ab",
+        "affinity_hint": "9d28fc293f0bd66f65349fdba6523988",
+        "created_at_unix": 1790687775
+      },
+      {
+        "tag": "bc2-510fd9cd262740ab-a193bc108748016e1286a7d582515056-1790687853-547550d4db8c4584bc46e1824cd0e022",
+        "manifest_digest": "sha256:94d11c49501064287888cd06f6a182fc4e8d633e14816cf551726412628e0e53",
+        "schema": "bc2",
+        "recipe_hint": "510fd9cd262740ab",
+        "affinity_hint": "a193bc108748016e1286a7d582515056",
+        "created_at_unix": 1790687853
+      },
+      {
+        "tag": "bc2-510fd9cd262740ab-a5e3267d76a0a5d8d22c2407f276dbbf-1790687812-2545267aa6cd43efa24f66f43093d9e5",
+        "manifest_digest": "sha256:07edff245d00b1684669163aac5f291664914c7a9b0f6c87b87852eaee5890a6",
+        "schema": "bc2",
+        "recipe_hint": "510fd9cd262740ab",
+        "affinity_hint": "a5e3267d76a0a5d8d22c2407f276dbbf",
+        "created_at_unix": 1790687812
+      },
+      {
+        "tag": "bc2-510fd9cd262740ab-aa5b9fbbb4d928708091841e72299de4-1790687848-d3bb1e542a5a4ccda95718204fb697cb",
+        "manifest_digest": "sha256:febab792cd191b2a8890d66773600b2f1accb8b05262f2c52f7dbec08f848b59",
+        "schema": "bc2",
+        "recipe_hint": "510fd9cd262740ab",
+        "affinity_hint": "aa5b9fbbb4d928708091841e72299de4",
+        "created_at_unix": 1790687848
+      },
+      {
+        "tag": "bc2-510fd9cd262740ab-c4c2ff1b4e3b678aaf076c58bf0f1a71-1790687853-81b2aab233cd481185b7a85dc32033d5",
+        "manifest_digest": "sha256:d2916db70d7a9053b4f031f98ad6a1fdacc3fe7ad3d999b9bcdb85a11f8bf748",
+        "schema": "bc2",
+        "recipe_hint": "510fd9cd262740ab",
+        "affinity_hint": "c4c2ff1b4e3b678aaf076c58bf0f1a71",
+        "created_at_unix": 1790687853
+      },
+      {
+        "tag": "bc2-510fd9cd262740ab-d2b744c628dec075019e0d00ddd47a47-1790687823-945da34e3683434393aa48ae8ae4039e",
+        "manifest_digest": "sha256:edaa6b36f4359068b300b70bcfc7eb12aab6c6777ec8044f6e246f14ac88f325",
+        "schema": "bc2",
+        "recipe_hint": "510fd9cd262740ab",
+        "affinity_hint": "d2b744c628dec075019e0d00ddd47a47",
+        "created_at_unix": 1790687823
+      },
+      {
+        "tag": "bc2-510fd9cd262740ab-e1e830274e7e399b2135bdc5409c1135-1790687859-7fcc63052e8545848710694dc067e77e",
+        "manifest_digest": "sha256:985cda32a3170a24c771934230f07674995bc249c073c094ba4dc6736e23412c",
+        "schema": "bc2",
+        "recipe_hint": "510fd9cd262740ab",
+        "affinity_hint": "e1e830274e7e399b2135bdc5409c1135",
+        "created_at_unix": 1790687859
+      },
+      {
+        "tag": "bc2-510fd9cd262740ab-eeb513f8d75f19229c2122a014b4ba2a-1790687848-cca77b5a70064d40854b856836e41acd",
+        "manifest_digest": "sha256:b5a11f5be2918489f988585a259f9803553447cde48e1b0a9272a4204f49d82f",
+        "schema": "bc2",
+        "recipe_hint": "510fd9cd262740ab",
+        "affinity_hint": "eeb513f8d75f19229c2122a014b4ba2a",
+        "created_at_unix": 1790687848
+      }
+    ],
+    "unknown_tag_count": 0,
+    "tag_set_unchanged_at_end": true,
+    "inventory_sha256": "0d1c2a5a709e2c4552d42042590d1415fccfc53d873f186b7f8ff840d06b3459",
+    "atomic_registry_snapshot": false
+  },
+  "limitations": [
+    "Affinity match is a selector observation, not proof a RUN was reused.",
+    "Export tags are joined by logged immutable manifest digest; multiple aliases remain ambiguous.",
+    "An absent tag can reflect optional export failure or pruning; logs can be truncated.",
+    "The bounded registry snapshot is sequential; tags are not a transactional cache inventory.",
+    "No raw logs, command text or credentials are included."
+  ]
+}

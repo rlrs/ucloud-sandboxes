@@ -1,0 +1,40 @@
+{
+  "archive_bytes": 105643,
+  "archive_sha256": "7172678c6b2870bf5e65df67d5cedab36c3eb66d99d338e5a9d4a66330f37c79",
+  "changed_entry_count_by_field": {
+    "ctime_ns": 2017,
+    "gid": 0,
+    "kind": 0,
+    "mode": 0,
+    "mtime_ns": 3,
+    "sha256": 0,
+    "size": 0,
+    "uid": 0
+  },
+  "entries": 2017,
+  "file_mtimes_all_zero": true,
+  "files": 2014,
+  "gid": 1000,
+  "limits": [
+    "Directory mtime/ctime changes reflect sequential extraction and are not by themselves proof of a BuildKit checksum change.",
+    "Archive fixture metadata includes a temporary local path, so this archive hash is unique to this local audit, not the production archive.",
+    "Production archive equality follows separately from matching verified affinity; service umask was not collected in this local audit."
+  ],
+  "mtime_changes_by_type": {
+    "directory": 3,
+    "file": 0
+  },
+  "python": "3.10.13",
+  "repeat_archive_bytes_identical": true,
+  "root_modes": [
+    509,
+    509
+  ],
+  "scope": "local nonroot SDK0.4.32 + current runtime, two fresh extractions of one normalized archive; not a production metadata capture",
+  "source_sha256": {
+    "runtime_extractor": "d3d06a4b566c5e3bf9cf9dfa574cc29f0a3d60f8f6aba890e64a270c7babde67",
+    "sdk_client": "1f2964dc14f8face526b592b3fb4d9c1610e62589195d8092c5bc6311e111de7"
+  },
+  "stable_input_metadata_and_contents_identical": true,
+  "uid": 1000
+}

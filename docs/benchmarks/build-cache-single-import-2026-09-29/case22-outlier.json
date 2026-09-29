@@ -1,0 +1,186 @@
+{
+  "schema_version": 1,
+  "case": 22,
+  "phase": "single-import-repeat",
+  "inputs_sha256": {
+    "summary": "7ba49be7fa3110c0a0b7b2dd4d26524dcd57b542cd81ac0b1dd9ad0100b40299",
+    "bounded_cache_metadata": "8774063f193c39fda6b78b7c92f79fe02918e29391025fc682caa9a124f5cfb3"
+  },
+  "registry_reads": {
+    "manifests": 4,
+    "config_blobs": 4,
+    "max_bytes_each": 1048576,
+    "operations": "GET only; exact owned cache references; no layer payloads or mutations"
+  },
+  "cache_documents": {
+    "prior_tools_022": {
+      "manifest_digest": "sha256:ba6a6f33b26db33d3d39dc1d0e9ae9b06194b45cada82716acea9ea789c3dc2b",
+      "config_digest": "sha256:7e9b92bb7dd25cbcd211bc32a1f674164b2ce2b063e6a44d4e14ddf55945920a",
+      "config_bytes": 3413,
+      "record_count": 13,
+      "layer_count": 15,
+      "normalized_graph_sha256": "79e3ae6adfddef9ee374c26c5358caad7ac9723412e904cfd5c2ee56b8e165b5"
+    },
+    "new_tools_022": {
+      "manifest_digest": "sha256:25e727c550f2415a6cd405a9c9a96c67c71dd8a97535833c7f79c372b54b8a65",
+      "config_digest": "sha256:6c5fec7ec7f4179a52dbf96c8fa8ea52f6e7827148297a0c7f8f5c2204984d13",
+      "config_bytes": 3413,
+      "record_count": 13,
+      "layer_count": 15,
+      "normalized_graph_sha256": "79e3ae6adfddef9ee374c26c5358caad7ac9723412e904cfd5c2ee56b8e165b5"
+    },
+    "imported_multi_023": {
+      "manifest_digest": "sha256:0bb7d0055ac9ce6c815a3bd79d59df1244a2c8bf23b1d63c9497382e53c656a0",
+      "config_digest": "sha256:f545e97468bcb04da18edcd6de892e509ba83ff33a0a6910bd5c6ca63cfd8254",
+      "config_bytes": 5903,
+      "record_count": 24,
+      "layer_count": 23,
+      "normalized_graph_sha256": "9e96cf2546b23fab62d687d7da7dcc7436715f796c6a6ae627e6fd3b7f0e2e3b"
+    },
+    "new_multi_023": {
+      "manifest_digest": "sha256:2c1563c7504dffcbb7682e5d888f8a837b70aea6ea7608aaa61cfdc51cc2ddbc",
+      "config_digest": "sha256:f545e97468bcb04da18edcd6de892e509ba83ff33a0a6910bd5c6ca63cfd8254",
+      "config_bytes": 5903,
+      "record_count": 24,
+      "layer_count": 23,
+      "normalized_graph_sha256": "9e96cf2546b23fab62d687d7da7dcc7436715f796c6a6ae627e6fd3b7f0e2e3b"
+    }
+  },
+  "comparison": {
+    "tools_graphs_identical": true,
+    "tools_graph_record_count": 13,
+    "tools_graph_records_also_in_multistage": 13,
+    "terminal_records": [
+      {
+        "step": "final_copy",
+        "prior_tools": {
+          "record_digest": "sha256:f70502797b6055e3a5e4a44cb45692a28af18eefad1ee9c7ade2ee8581f9dfc5",
+          "results": [
+            {
+              "created_at": "2026-09-29T13:28:29.873485234Z",
+              "blob": "sha256:712a59b62617f956d6641e38b590335afa9d12557081c74f3bd6746486e079b4"
+            }
+          ]
+        },
+        "new_tools": {
+          "record_digest": "sha256:f70502797b6055e3a5e4a44cb45692a28af18eefad1ee9c7ade2ee8581f9dfc5",
+          "results": [
+            {
+              "created_at": "2026-09-29T14:05:12.580513444Z",
+              "blob": "sha256:3cfab2a20a145f794e2b1bf5ce761b3f21465bcc8e20b018643fa599c8cf99f4"
+            }
+          ]
+        },
+        "overlapping_multistage": {
+          "record_digest": "sha256:f70502797b6055e3a5e4a44cb45692a28af18eefad1ee9c7ade2ee8581f9dfc5",
+          "results": []
+        }
+      },
+      {
+        "step": "application_run",
+        "prior_tools": {
+          "record_digest": "sha256:6267a8dba780bbf93d0a6ce1b4a74033f1698eba878ff6f59252299c2091a2b0",
+          "results": [
+            {
+              "created_at": "2026-09-29T13:28:59.890347248Z",
+              "blob": "sha256:f0ed5419de6238b9de3ea1ddbfe155b20ebb19888f765dbf25caab9d683e06e6"
+            }
+          ]
+        },
+        "new_tools": {
+          "record_digest": "sha256:6267a8dba780bbf93d0a6ce1b4a74033f1698eba878ff6f59252299c2091a2b0",
+          "results": [
+            {
+              "created_at": "2026-09-29T14:05:32.474905732Z",
+              "blob": "sha256:fc20daee4a54460f8b7784278bad89769b409a97c0bac7ff538e3ca30892b765"
+            }
+          ]
+        },
+        "overlapping_multistage": {
+          "record_digest": "sha256:6267a8dba780bbf93d0a6ce1b4a74033f1698eba878ff6f59252299c2091a2b0",
+          "results": []
+        }
+      }
+    ],
+    "multistage_import_export_config_identical": true
+  },
+  "overlapping_builds": [
+    {
+      "index": 22,
+      "image_id": "bl20260929-single-import-repeat-022",
+      "build_id": "306474da-7375-4bab-8419-093c8c45b931",
+      "recipe": "typescript-tools",
+      "variant": "app-change-12",
+      "context_sha256": "35c1e8ed86c56afceb35b5c8cf1cb80bd20e24c3ac2d08818c3f5d938a9697f3",
+      "owner_id": "167971516",
+      "execution_started_at": "2026-09-29T14:04:59.876865+00:00",
+      "finished_at": "2026-09-29T14:05:36.391439+00:00",
+      "build_push_ms": 33629,
+      "log_sha256": "fb2035f09497480ce3823d7f8a15bc1168d66650d71dbd68f942c664712a1c81"
+    },
+    {
+      "index": 23,
+      "image_id": "bl20260929-single-import-repeat-023",
+      "build_id": "2d63732b-a349-40c3-b710-d05fb51681ac",
+      "recipe": "typescript-multistage",
+      "variant": "app-change-12",
+      "context_sha256": "d8a4917b03778f9dd6b4c272c45d1c328e14633fee08f87c1480dd92b7fd9c3e",
+      "owner_id": "167971516",
+      "execution_started_at": "2026-09-29T14:04:59.558781+00:00",
+      "finished_at": "2026-09-29T14:05:01.340887+00:00",
+      "build_push_ms": 1296,
+      "log_sha256": "79da1a37f28b892800999825073008599fb370f199fd767ca1ccb901c8fb3ede"
+    }
+  ],
+  "same_variant_same_owner_pairs": [
+    {
+      "variant": "app-change-9",
+      "tools_index": 13,
+      "multistage_index": 14,
+      "same_owner": true,
+      "tools_start_after_multistage_ms": 1471.443,
+      "estimated_build_push_overlap_seconds": 0,
+      "tools_build_push_ms": 1098
+    },
+    {
+      "variant": "app-change-11",
+      "tools_index": 19,
+      "multistage_index": 20,
+      "same_owner": true,
+      "tools_start_after_multistage_ms": 2698.68,
+      "estimated_build_push_overlap_seconds": 0,
+      "tools_build_push_ms": 978
+    },
+    {
+      "variant": "app-change-12",
+      "tools_index": 22,
+      "multistage_index": 23,
+      "same_owner": true,
+      "tools_start_after_multistage_ms": 318.084,
+      "estimated_build_push_overlap_seconds": 0.978,
+      "tools_build_push_ms": 33629
+    },
+    {
+      "variant": "app-change-16",
+      "tools_index": 34,
+      "multistage_index": 35,
+      "same_owner": true,
+      "tools_start_after_multistage_ms": 1627.184,
+      "estimated_build_push_overlap_seconds": 0,
+      "tools_build_push_ms": 754
+    }
+  ],
+  "observed_progress": {
+    "tools_final_vertices_named_compile": true,
+    "multistage_log_contains_tools_stage_materialization": true,
+    "tools_application_run_seconds": 19.9,
+    "tools_cached_parent_materialization_seconds": 8.6,
+    "tools_final_copy_seconds": 3.6
+  },
+  "interpretation": "Complete matching tools cache was imported. Shared active graph/cache-source interaction with the overlapping multistage solve is strongly supported, but the precise internal missed-cache decision is not instrumented.",
+  "limitations": [
+    "Build-push overlap is estimated from ImageManager execution start plus phase duration; cache preparation/mount ordering slightly shifts true solve start.",
+    "Mixed progress labels are shared graph evidence, not proof each displayed cached intermediate has a remotely materializable result.",
+    "Only one residual outlier observed; metadata and timing correlation are not a controlled concurrency reproduction."
+  ]
+}

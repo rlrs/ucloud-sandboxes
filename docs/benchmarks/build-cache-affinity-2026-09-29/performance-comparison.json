@@ -1,0 +1,1232 @@
+{
+  "baseline_to_repeat": {
+    "aggregate_phase_elapsed_change_percent": {
+      "cache_mount_seconds": 39.802414928649846,
+      "cache_prepare_seconds": 57.522123893805265,
+      "cleanup_seconds": -16.730328495034385,
+      "docker_build_and_push_seconds": -20.838817734447048,
+      "immutable_environment_seconds": -16.789844911385455
+    },
+    "batch_wall_change_percent": -14.633964062286164,
+    "metrics_seconds_p95_change_percent": {
+      "cleanup_seconds": -32.87867910983492,
+      "client_wall_seconds": -13.228218936002467,
+      "docker_build_and_push_seconds": 15.094860492592922,
+      "immutable_environment_seconds": 13.666399143927222,
+      "preparation_seconds": 60.29226050874985,
+      "queue_wait_seconds": 27.956989247311782,
+      "submission_seconds": -17.679925488940707,
+      "total_seconds": 13.26980873130308
+    }
+  },
+  "limits": [
+    "Seed populates affinity metadata and is not the latency acceptance comparison.",
+    "Context SHA-256, recipe, and variant are identical by case index across included phases.",
+    "Phase totals sum elapsed time across concurrent builds, not host CPU time or batch critical-path shares.",
+    "Cache prepare/mount are nested in docker_build_and_push and must not be added again.",
+    "BuildKit vertex and sub-operation durations overlap; RUN-labelled cache materialization is separated from execution.",
+    "Retained log completeness cannot be proved; coverage counters report visible signs of truncation/missing vertices.",
+    "A sequential fleet comparison includes placement, cache-history and host/storage variation; the controlled proof isolates selection correctness.",
+    "Metrics are for owned synthetic fixtures and one bounded 48-request burst per phase, not arbitrary customer workloads."
+  ],
+  "phases": {
+    "baseline": {
+      "aggregate_phase_elapsed_seconds": {
+        "cache_mount_seconds": 13.665000000000001,
+        "cache_prepare_seconds": 0.11300000000000007,
+        "cleanup_seconds": 1.3090000000000002,
+        "docker_build_and_push_seconds": 1293.8210000000001,
+        "immutable_environment_seconds": 94.84899999999999
+      },
+      "batch_wall_seconds": 115.49508830999548,
+      "critical_client_completion": {
+        "client_wall_seconds": 115.48274326199316,
+        "completed_vertex_seconds_by_category": {
+          "cache_export": 0.2,
+          "cache_import": 0.7999999999999999,
+          "copy": 0.6,
+          "image_export": 1.0,
+          "internal": 0.1,
+          "run": 29.4,
+          "source": 0.0
+        },
+        "finish_offset_seconds": 115.4924566779955,
+        "index": 7,
+        "phase_seconds": {
+          "cache_mount": 0.232,
+          "cache_prepare": 0.002,
+          "cleanup": 0.021,
+          "docker_build_and_push": 31.899,
+          "immutable_environment": 3.271
+        },
+        "recipe": "typescript-tools",
+        "submission_seconds": 79.266919710004,
+        "submit_503_count": 30,
+        "variant": "app-change-7"
+      },
+      "identical_frozen_contexts": 48,
+      "metrics_seconds": {
+        "cleanup_seconds": {
+          "count": 48,
+          "max": 0.08600000000000001,
+          "min": 0.011,
+          "p50": 0.0195,
+          "p95": 0.06965
+        },
+        "client_wall_seconds": {
+          "count": 48,
+          "max": 115.48274326199316,
+          "min": 11.085700168012409,
+          "p50": 69.71823336500529,
+          "p95": 112.10406605340685
+        },
+        "docker_build_and_push_seconds": {
+          "count": 48,
+          "max": 44.902,
+          "min": 1.6500000000000001,
+          "p50": 27.074,
+          "p95": 44.012
+        },
+        "immutable_environment_seconds": {
+          "count": 48,
+          "max": 3.98,
+          "min": 0.387,
+          "p50": 1.805,
+          "p95": 3.738
+        },
+        "preparation_seconds": {
+          "count": 48,
+          "max": 1.006,
+          "min": 0.115,
+          "p50": 0.1955,
+          "p95": 0.8314499999999996
+        },
+        "queue_wait_seconds": {
+          "count": 48,
+          "max": 0.007,
+          "min": 0.001,
+          "p50": 0.002,
+          "p95": 0.004649999999999999
+        },
+        "submission_seconds": {
+          "count": 48,
+          "max": 82.71030239500396,
+          "min": 6.721340229996713,
+          "p50": 32.27485972100112,
+          "p95": 79.7925903340496
+        },
+        "total_seconds": {
+          "count": 48,
+          "max": 47.215,
+          "min": 2.4090000000000003,
+          "p50": 27.8655,
+          "p95": 46.0504
+        }
+      },
+      "progress_coverage": {
+        "at_or_above_known_tail_cap": 0,
+        "builder_banner_seen": 48,
+        "explicit_truncation_markers": 0,
+        "incomplete_vertices": 0,
+        "vertices_without_recognized_header": 0
+      },
+      "progress_path": "baseline-buildkit-progress.json",
+      "progress_sha256": "499d4139ffc26fe845910d7c6ea4040d6dee2f1e686e868aea48103948b789d0",
+      "recipes": {
+        "python-agent": {
+          "builds": 16,
+          "completed_vertex_seconds_per_build_mean": {
+            "cache_export": 0.48125,
+            "cache_import": 0.049999999999999996,
+            "cached_layer_materialization": 9.4,
+            "copy": 2.2375,
+            "image_export": 0.58125,
+            "internal": 0.975,
+            "layer_materialization": 2.50625,
+            "run": 3.3937500000000003,
+            "source": 0.0
+          },
+          "layer_materialization_seconds_per_build_mean": 11.90625,
+          "receipt_seconds": {
+            "client_wall_seconds": {
+              "count": 16,
+              "max": 40.13950355599809,
+              "mean": 31.404785459189043,
+              "median": 32.03650862599898,
+              "p95": 40.13950355599809,
+              "sum": 502.4765673470247
+            },
+            "docker_build_and_push_seconds": {
+              "count": 16,
+              "max": 23.904,
+              "mean": 19.82975,
+              "median": 22.069,
+              "p95": 23.904,
+              "sum": 317.27599999999995
+            },
+            "immutable_environment_seconds": {
+              "count": 16,
+              "max": 2.111,
+              "mean": 1.7938125,
+              "median": 1.845,
+              "p95": 2.111,
+              "sum": 28.700999999999997
+            },
+            "submission_seconds": {
+              "count": 16,
+              "max": 33.061154857001384,
+              "mean": 9.25504905762682,
+              "median": 7.705253662497853,
+              "p95": 33.061154857001384,
+              "sum": 148.08078492202912
+            }
+          },
+          "run_activities": {
+            "python_compile_smoke": {
+              "executed_vertex_seconds": {
+                "count": 15,
+                "max": 3.9,
+                "mean": 3.62,
+                "median": 3.6,
+                "p95": 3.9,
+                "sum": 54.30000000000002
+              },
+              "materializing_vertex_seconds": {
+                "count": 0,
+                "max": null,
+                "mean": null,
+                "median": null,
+                "p95": null,
+                "sum": 0.0
+              },
+              "vertices_with_cached_marker": 1
+            },
+            "python_dependencies": {
+              "executed_vertex_seconds": {
+                "count": 0,
+                "max": null,
+                "mean": null,
+                "median": null,
+                "p95": null,
+                "sum": 0.0
+              },
+              "materializing_vertex_seconds": {
+                "count": 0,
+                "max": null,
+                "mean": null,
+                "median": null,
+                "p95": null,
+                "sum": 0.0
+              },
+              "vertices_with_cached_marker": 16
+            },
+            "python_native_extension": {
+              "executed_vertex_seconds": {
+                "count": 0,
+                "max": null,
+                "mean": null,
+                "median": null,
+                "p95": null,
+                "sum": 0.0
+              },
+              "materializing_vertex_seconds": {
+                "count": 14,
+                "max": 14.6,
+                "mean": 13.607142857142858,
+                "median": 13.5,
+                "p95": 14.6,
+                "sum": 190.49999999999997
+              },
+              "vertices_with_cached_marker": 24
+            }
+          }
+        },
+        "typescript-multistage": {
+          "builds": 16,
+          "completed_vertex_seconds_per_build_mean": {
+            "cache_export": 0.35625,
+            "cache_import": 1.2625,
+            "cached_layer_materialization": 0.38125,
+            "copy": 1.2375,
+            "image_export": 0.35625,
+            "internal": 0.51875,
+            "layer_materialization": 4.36875,
+            "run": 26.96875,
+            "source": 0.09375
+          },
+          "layer_materialization_seconds_per_build_mean": 4.75,
+          "receipt_seconds": {
+            "client_wall_seconds": {
+              "count": 16,
+              "max": 114.92007638201176,
+              "mean": 85.86814401131323,
+              "median": 79.51242372249544,
+              "p95": 114.92007638201176,
+              "sum": 1373.8903041810117
+            },
+            "docker_build_and_push_seconds": {
+              "count": 16,
+              "max": 44.902,
+              "mean": 32.0388125,
+              "median": 33.1825,
+              "p95": 44.902,
+              "sum": 512.621
+            },
+            "immutable_environment_seconds": {
+              "count": 16,
+              "max": 0.967,
+              "mean": 0.8189375,
+              "median": 0.783,
+              "p95": 0.967,
+              "sum": 13.103
+            },
+            "submission_seconds": {
+              "count": 16,
+              "max": 82.71030239500396,
+              "mean": 52.51712257193503,
+              "median": 48.06924541549233,
+              "p95": 82.71030239500396,
+              "sum": 840.2739611509605
+            }
+          },
+          "run_activities": {
+            "node_dependencies": {
+              "executed_vertex_seconds": {
+                "count": 0,
+                "max": null,
+                "mean": null,
+                "median": null,
+                "p95": null,
+                "sum": 0.0
+              },
+              "materializing_vertex_seconds": {
+                "count": 0,
+                "max": null,
+                "mean": null,
+                "median": null,
+                "p95": null,
+                "sum": 0.0
+              },
+              "vertices_with_cached_marker": 16
+            },
+            "node_lint_build_test_smoke": {
+              "executed_vertex_seconds": {
+                "count": 15,
+                "max": 35.1,
+                "mean": 28.766666666666666,
+                "median": 28.9,
+                "p95": 35.1,
+                "sum": 431.5
+              },
+              "materializing_vertex_seconds": {
+                "count": 1,
+                "max": 1.9,
+                "mean": 1.9,
+                "median": 1.9,
+                "p95": 1.9,
+                "sum": 1.9
+              },
+              "vertices_with_cached_marker": 1
+            }
+          }
+        },
+        "typescript-tools": {
+          "builds": 16,
+          "completed_vertex_seconds_per_build_mean": {
+            "cache_export": 0.3,
+            "cache_import": 0.8749999999999999,
+            "cached_layer_materialization": 0.94375,
+            "copy": 1.2,
+            "image_export": 1.1375,
+            "internal": 0.54375,
+            "layer_materialization": 1.86875,
+            "run": 24.4375,
+            "source": 0.018750000000000003
+          },
+          "layer_materialization_seconds_per_build_mean": 2.8125,
+          "receipt_seconds": {
+            "client_wall_seconds": {
+              "count": 16,
+              "max": 115.48274326199316,
+              "mean": 79.90896631781197,
+              "median": 79.76746334951167,
+              "p95": 115.48274326199316,
+              "sum": 1278.5434610849916
+            },
+            "docker_build_and_push_seconds": {
+              "count": 16,
+              "max": 43.609,
+              "mean": 28.99525,
+              "median": 32.229,
+              "p95": 43.609,
+              "sum": 463.924
+            },
+            "immutable_environment_seconds": {
+              "count": 16,
+              "max": 3.98,
+              "mean": 3.3153125,
+              "median": 3.4935,
+              "p95": 3.98,
+              "sum": 53.045
+            },
+            "submission_seconds": {
+              "count": 16,
+              "max": 80.07564374699723,
+              "mean": 47.07250290649972,
+              "median": 35.76081222449284,
+              "p95": 80.07564374699723,
+              "sum": 753.1600465039955
+            }
+          },
+          "run_activities": {
+            "node_dependencies": {
+              "executed_vertex_seconds": {
+                "count": 0,
+                "max": null,
+                "mean": null,
+                "median": null,
+                "p95": null,
+                "sum": 0.0
+              },
+              "materializing_vertex_seconds": {
+                "count": 0,
+                "max": null,
+                "mean": null,
+                "median": null,
+                "p95": null,
+                "sum": 0.0
+              },
+              "vertices_with_cached_marker": 15
+            },
+            "node_lint_build_test_smoke": {
+              "executed_vertex_seconds": {
+                "count": 13,
+                "max": 35.1,
+                "mean": 30.076923076923077,
+                "median": 29.1,
+                "p95": 35.1,
+                "sum": 391.0
+              },
+              "materializing_vertex_seconds": {
+                "count": 0,
+                "max": null,
+                "mean": null,
+                "median": null,
+                "p95": null,
+                "sum": 0.0
+              },
+              "vertices_with_cached_marker": 3
+            }
+          }
+        }
+      },
+      "submit_http_status_counts": {
+        "202": 48,
+        "503": 560
+      },
+      "succeeded": 48,
+      "summary_path": "builder-execution-2026-09-29/exec-repeat/summary.json",
+      "summary_sha256": "3e7b3dbe7b4c6098a34e6b2431f80b417a07c97d0633f43075ed6e556734da4f"
+    },
+    "repeat": {
+      "aggregate_phase_elapsed_seconds": {
+        "cache_mount_seconds": 19.104000000000003,
+        "cache_prepare_seconds": 0.17800000000000007,
+        "cleanup_seconds": 1.09,
+        "docker_build_and_push_seconds": 1024.204,
+        "immutable_environment_seconds": 78.924
+      },
+      "batch_wall_seconds": 98.59357859300508,
+      "critical_client_completion": {
+        "client_wall_seconds": 98.58107977001055,
+        "completed_vertex_seconds_by_category": {
+          "cache_export": 0.4,
+          "cache_import": 0.7999999999999999,
+          "copy": 0.7,
+          "image_export": 1.2,
+          "internal": 0.2,
+          "layer_materialization": 3.9,
+          "run": 28.6,
+          "source": 0.1
+        },
+        "finish_offset_seconds": 98.59084387800249,
+        "index": 37,
+        "phase_seconds": {
+          "cache_mount": 0.246,
+          "cache_prepare": 0.002,
+          "cleanup": 0.016,
+          "docker_build_and_push": 31.566,
+          "immutable_environment": 3.747
+        },
+        "recipe": "typescript-tools",
+        "submission_seconds": 62.301134461013135,
+        "submit_503_count": 22,
+        "variant": "app-change-17"
+      },
+      "identical_frozen_contexts": 48,
+      "metrics_seconds": {
+        "cleanup_seconds": {
+          "count": 48,
+          "max": 0.093,
+          "min": 0.012,
+          "p50": 0.017,
+          "p95": 0.04674999999999998
+        },
+        "client_wall_seconds": {
+          "count": 48,
+          "max": 98.58107977001055,
+          "min": 9.627247807002277,
+          "p50": 57.64791188899835,
+          "p95": 97.27469475970138
+        },
+        "docker_build_and_push_seconds": {
+          "count": 48,
+          "max": 52.46,
+          "min": 1.0090000000000001,
+          "p50": 21.647000000000002,
+          "p95": 50.65555
+        },
+        "immutable_environment_seconds": {
+          "count": 48,
+          "max": 5.013,
+          "min": 0.246,
+          "p50": 1.0190000000000001,
+          "p95": 4.248849999999999
+        },
+        "preparation_seconds": {
+          "count": 48,
+          "max": 1.407,
+          "min": 0.111,
+          "p50": 0.209,
+          "p95": 1.3327499999999999
+        },
+        "queue_wait_seconds": {
+          "count": 48,
+          "max": 0.009000000000000001,
+          "min": 0.001,
+          "p50": 0.002,
+          "p95": 0.005949999999999996
+        },
+        "submission_seconds": {
+          "count": 48,
+          "max": 68.0446943220013,
+          "min": 6.420561592996819,
+          "p50": 13.855532943496655,
+          "p95": 65.68531981729393
+        },
+        "total_seconds": {
+          "count": 48,
+          "max": 57.251,
+          "min": 1.291,
+          "p50": 23.668,
+          "p95": 52.1612
+        }
+      },
+      "progress_coverage": {
+        "at_or_above_known_tail_cap": 0,
+        "builder_banner_seen": 48,
+        "explicit_truncation_markers": 0,
+        "incomplete_vertices": 0,
+        "vertices_without_recognized_header": 0
+      },
+      "progress_path": "repeat-buildkit-progress.json",
+      "progress_sha256": "e2e50607f18936606dbab28f9bef5874ff959df35d42c755307a1f3577a6fa1a",
+      "recipes": {
+        "python-agent": {
+          "builds": 16,
+          "completed_vertex_seconds_per_build_mean": {
+            "cache_export": 0.30625,
+            "cache_import": 0.23125,
+            "cached_layer_materialization": 2.9875000000000003,
+            "copy": 0.2625,
+            "image_export": 0.40625,
+            "internal": 1.01875,
+            "layer_materialization": 1.7625,
+            "run": 1.21875,
+            "source": 0.0
+          },
+          "layer_materialization_seconds_per_build_mean": 4.75,
+          "receipt_seconds": {
+            "client_wall_seconds": {
+              "count": 16,
+              "max": 33.05650216700451,
+              "mean": 18.038394428750507,
+              "median": 12.870243952507735,
+              "p95": 33.05650216700451,
+              "sum": 288.6143108600081
+            },
+            "docker_build_and_push_seconds": {
+              "count": 16,
+              "max": 23.025,
+              "mean": 8.132375,
+              "median": 3.034,
+              "p95": 23.025,
+              "sum": 130.11800000000002
+            },
+            "immutable_environment_seconds": {
+              "count": 16,
+              "max": 2.055,
+              "mean": 1.3009375,
+              "median": 1.1749999999999998,
+              "p95": 2.055,
+              "sum": 20.814999999999998
+            },
+            "submission_seconds": {
+              "count": 16,
+              "max": 10.78359383699717,
+              "mean": 7.940342191249329,
+              "median": 7.68864929350093,
+              "p95": 10.78359383699717,
+              "sum": 127.04547505998926
+            }
+          },
+          "run_activities": {
+            "python_compile_smoke": {
+              "executed_vertex_seconds": {
+                "count": 5,
+                "max": 4.0,
+                "mean": 3.9,
+                "median": 3.9,
+                "p95": 4.0,
+                "sum": 19.5
+              },
+              "materializing_vertex_seconds": {
+                "count": 0,
+                "max": null,
+                "mean": null,
+                "median": null,
+                "p95": null,
+                "sum": 0.0
+              },
+              "vertices_with_cached_marker": 11
+            },
+            "python_dependencies": {
+              "executed_vertex_seconds": {
+                "count": 0,
+                "max": null,
+                "mean": null,
+                "median": null,
+                "p95": null,
+                "sum": 0.0
+              },
+              "materializing_vertex_seconds": {
+                "count": 0,
+                "max": null,
+                "mean": null,
+                "median": null,
+                "p95": null,
+                "sum": 0.0
+              },
+              "vertices_with_cached_marker": 16
+            },
+            "python_native_extension": {
+              "executed_vertex_seconds": {
+                "count": 0,
+                "max": null,
+                "mean": null,
+                "median": null,
+                "p95": null,
+                "sum": 0.0
+              },
+              "materializing_vertex_seconds": {
+                "count": 8,
+                "max": 16.1,
+                "mean": 9.5,
+                "median": 14.1,
+                "p95": 16.1,
+                "sum": 76.0
+              },
+              "vertices_with_cached_marker": 25
+            }
+          }
+        },
+        "typescript-multistage": {
+          "builds": 16,
+          "completed_vertex_seconds_per_build_mean": {
+            "cache_export": 0.225,
+            "cache_import": 0.9999999999999999,
+            "cached_layer_materialization": 0.525,
+            "copy": 2.15,
+            "image_export": 0.23750000000000002,
+            "internal": 0.7312500000000001,
+            "layer_materialization": 3.99375,
+            "run": 21.9,
+            "source": 0.1125
+          },
+          "layer_materialization_seconds_per_build_mean": 4.51875,
+          "receipt_seconds": {
+            "client_wall_seconds": {
+              "count": 16,
+              "max": 98.28672003000975,
+              "mean": 62.44018499431422,
+              "median": 65.77851856249617,
+              "p95": 98.28672003000975,
+              "sum": 999.0429599090276
+            },
+            "docker_build_and_push_seconds": {
+              "count": 16,
+              "max": 51.8,
+              "mean": 27.2333125,
+              "median": 29.1,
+              "p95": 51.8,
+              "sum": 435.733
+            },
+            "immutable_environment_seconds": {
+              "count": 16,
+              "max": 0.803,
+              "mean": 0.4913125,
+              "median": 0.5175000000000001,
+              "p95": 0.803,
+              "sum": 7.861000000000001
+            },
+            "submission_seconds": {
+              "count": 16,
+              "max": 68.0446943220013,
+              "mean": 34.09946395225052,
+              "median": 31.35950595700706,
+              "p95": 68.0446943220013,
+              "sum": 545.5914232360083
+            }
+          },
+          "run_activities": {
+            "node_dependencies": {
+              "executed_vertex_seconds": {
+                "count": 0,
+                "max": null,
+                "mean": null,
+                "median": null,
+                "p95": null,
+                "sum": 0.0
+              },
+              "materializing_vertex_seconds": {
+                "count": 0,
+                "max": null,
+                "mean": null,
+                "median": null,
+                "p95": null,
+                "sum": 0.0
+              },
+              "vertices_with_cached_marker": 16
+            },
+            "node_lint_build_test_smoke": {
+              "executed_vertex_seconds": {
+                "count": 11,
+                "max": 36.9,
+                "mean": 31.854545454545455,
+                "median": 32.6,
+                "p95": 36.9,
+                "sum": 350.3999999999999
+              },
+              "materializing_vertex_seconds": {
+                "count": 0,
+                "max": null,
+                "mean": null,
+                "median": null,
+                "p95": null,
+                "sum": 0.0
+              },
+              "vertices_with_cached_marker": 7
+            }
+          }
+        },
+        "typescript-tools": {
+          "builds": 16,
+          "completed_vertex_seconds_per_build_mean": {
+            "cache_export": 0.40625,
+            "cache_import": 0.65625,
+            "cached_layer_materialization": 1.60625,
+            "copy": 1.84375,
+            "image_export": 1.075,
+            "internal": 0.5437500000000001,
+            "layer_materialization": 1.875,
+            "run": 22.58125,
+            "source": 0.025
+          },
+          "layer_materialization_seconds_per_build_mean": 3.48125,
+          "receipt_seconds": {
+            "client_wall_seconds": {
+              "count": 16,
+              "max": 98.58107977001055,
+              "mean": 64.36298538499886,
+              "median": 69.3328802219985,
+              "p95": 98.58107977001055,
+              "sum": 1029.8077661599818
+            },
+            "docker_build_and_push_seconds": {
+              "count": 16,
+              "max": 52.46,
+              "mean": 28.6470625,
+              "median": 32.427,
+              "p95": 52.46,
+              "sum": 458.35300000000007
+            },
+            "immutable_environment_seconds": {
+              "count": 16,
+              "max": 5.013,
+              "mean": 3.1405,
+              "median": 3.71,
+              "p95": 5.013,
+              "sum": 50.248000000000005
+            },
+            "submission_seconds": {
+              "count": 16,
+              "max": 65.81339518498862,
+              "mean": 31.955378340124298,
+              "median": 24.479318644494924,
+              "p95": 65.81339518498862,
+              "sum": 511.28605344198877
+            }
+          },
+          "run_activities": {
+            "node_dependencies": {
+              "executed_vertex_seconds": {
+                "count": 0,
+                "max": null,
+                "mean": null,
+                "median": null,
+                "p95": null,
+                "sum": 0.0
+              },
+              "materializing_vertex_seconds": {
+                "count": 0,
+                "max": null,
+                "mean": null,
+                "median": null,
+                "p95": null,
+                "sum": 0.0
+              },
+              "vertices_with_cached_marker": 16
+            },
+            "node_lint_build_test_smoke": {
+              "executed_vertex_seconds": {
+                "count": 12,
+                "max": 36.9,
+                "mean": 30.108333333333334,
+                "median": 29.9,
+                "p95": 36.9,
+                "sum": 361.3
+              },
+              "materializing_vertex_seconds": {
+                "count": 0,
+                "max": null,
+                "mean": null,
+                "median": null,
+                "p95": null,
+                "sum": 0.0
+              },
+              "vertices_with_cached_marker": 4
+            }
+          }
+        }
+      },
+      "submit_http_status_counts": {
+        "202": 48,
+        "503": 309
+      },
+      "succeeded": 48,
+      "summary_path": "build-cache-affinity-2026-09-29/affinity-repeat/summary.json",
+      "summary_sha256": "de9becc17f5c00c651e5985bf0d1e72093d0cefd2a122f0ec371da6ec7418c0a"
+    },
+    "seed": {
+      "aggregate_phase_elapsed_seconds": {
+        "cache_mount_seconds": 14.412999999999998,
+        "cache_prepare_seconds": 0.15300000000000008,
+        "cleanup_seconds": 1.6109999999999998,
+        "docker_build_and_push_seconds": 1445.4750000000001,
+        "immutable_environment_seconds": 98.93499999999996
+      },
+      "batch_wall_seconds": 125.63465783299762,
+      "critical_client_completion": {
+        "client_wall_seconds": 125.62483371300914,
+        "completed_vertex_seconds_by_category": {
+          "cache_export": 0.3,
+          "cache_import": 2.5,
+          "copy": 0.4,
+          "image_export": 1.1,
+          "internal": 0.4,
+          "layer_materialization": 5.8,
+          "run": 24.4,
+          "source": 0.2
+        },
+        "finish_offset_seconds": 125.6320885669993,
+        "index": 4,
+        "phase_seconds": {
+          "cache_mount": 0.387,
+          "cache_prepare": 0.003,
+          "cleanup": 0.027,
+          "docker_build_and_push": 27.498,
+          "immutable_environment": 2.995
+        },
+        "recipe": "typescript-tools",
+        "submission_seconds": 94.33954718800669,
+        "submit_503_count": 36,
+        "variant": "app-change-6"
+      },
+      "identical_frozen_contexts": 48,
+      "metrics_seconds": {
+        "cleanup_seconds": {
+          "count": 48,
+          "max": 0.137,
+          "min": 0.013000000000000001,
+          "p50": 0.025500000000000002,
+          "p95": 0.08609999999999995
+        },
+        "client_wall_seconds": {
+          "count": 48,
+          "max": 125.62483371300914,
+          "min": 12.29011257798993,
+          "p50": 77.73210231950361,
+          "p95": 116.63912646490644
+        },
+        "docker_build_and_push_seconds": {
+          "count": 48,
+          "max": 48.395,
+          "min": 2.596,
+          "p50": 32.2655,
+          "p95": 47.59205
+        },
+        "immutable_environment_seconds": {
+          "count": 48,
+          "max": 4.274,
+          "min": 0.445,
+          "p50": 1.7145000000000001,
+          "p95": 3.9922
+        },
+        "preparation_seconds": {
+          "count": 48,
+          "max": 1.024,
+          "min": 0.166,
+          "p50": 0.291,
+          "p95": 0.97325
+        },
+        "queue_wait_seconds": {
+          "count": 48,
+          "max": 0.022,
+          "min": 0.002,
+          "p50": 0.0035,
+          "p95": 0.007
+        },
+        "submission_seconds": {
+          "count": 48,
+          "max": 94.33954718800669,
+          "min": 7.441102208002121,
+          "p50": 42.35192375299812,
+          "p95": 88.26609654469867
+        },
+        "total_seconds": {
+          "count": 48,
+          "max": 51.19,
+          "min": 3.097,
+          "p50": 33.781,
+          "p95": 49.5326
+        }
+      },
+      "progress_coverage": {
+        "at_or_above_known_tail_cap": 0,
+        "builder_banner_seen": 48,
+        "explicit_truncation_markers": 0,
+        "incomplete_vertices": 0,
+        "vertices_without_recognized_header": 0
+      },
+      "progress_path": "seed-buildkit-progress.json",
+      "progress_sha256": "0a3170309e1a0c320b08e1641070c7df1f0f5ba33c0f194f2199aa994f97a913",
+      "recipes": {
+        "python-agent": {
+          "builds": 16,
+          "completed_vertex_seconds_per_build_mean": {
+            "cache_export": 0.375,
+            "cache_import": 0.50625,
+            "cached_layer_materialization": 15.88125,
+            "copy": 1.9,
+            "image_export": 0.80625,
+            "internal": 1.2312500000000002,
+            "layer_materialization": 1.21875,
+            "run": 3.5375,
+            "source": 0.018750000000000003
+          },
+          "layer_materialization_seconds_per_build_mean": 17.1,
+          "receipt_seconds": {
+            "client_wall_seconds": {
+              "count": 16,
+              "max": 88.46679522799968,
+              "mean": 43.35365347174957,
+              "median": 43.66610412299633,
+              "p95": 88.46679522799968,
+              "sum": 693.6584555479931
+            },
+            "docker_build_and_push_seconds": {
+              "count": 16,
+              "max": 36.551,
+              "mean": 26.286625,
+              "median": 27.525,
+              "p95": 36.551,
+              "sum": 420.58599999999996
+            },
+            "immutable_environment_seconds": {
+              "count": 16,
+              "max": 1.94,
+              "mean": 1.673625,
+              "median": 1.7405,
+              "p95": 1.94,
+              "sum": 26.778
+            },
+            "submission_seconds": {
+              "count": 16,
+              "max": 77.33137850099592,
+              "mean": 14.680586688063158,
+              "median": 8.264664700007415,
+              "p95": 77.33137850099592,
+              "sum": 234.88938700901053
+            }
+          },
+          "run_activities": {
+            "python_compile_smoke": {
+              "executed_vertex_seconds": {
+                "count": 15,
+                "max": 4.0,
+                "mean": 3.7733333333333334,
+                "median": 3.8,
+                "p95": 4.0,
+                "sum": 56.59999999999999
+              },
+              "materializing_vertex_seconds": {
+                "count": 0,
+                "max": null,
+                "mean": null,
+                "median": null,
+                "p95": null,
+                "sum": 0.0
+              },
+              "vertices_with_cached_marker": 1
+            },
+            "python_dependencies": {
+              "executed_vertex_seconds": {
+                "count": 0,
+                "max": null,
+                "mean": null,
+                "median": null,
+                "p95": null,
+                "sum": 0.0
+              },
+              "materializing_vertex_seconds": {
+                "count": 0,
+                "max": null,
+                "mean": null,
+                "median": null,
+                "p95": null,
+                "sum": 0.0
+              },
+              "vertices_with_cached_marker": 16
+            },
+            "python_native_extension": {
+              "executed_vertex_seconds": {
+                "count": 0,
+                "max": null,
+                "mean": null,
+                "median": null,
+                "p95": null,
+                "sum": 0.0
+              },
+              "materializing_vertex_seconds": {
+                "count": 13,
+                "max": 24.3,
+                "mean": 21.046153846153846,
+                "median": 20.6,
+                "p95": 24.3,
+                "sum": 273.6
+              },
+              "vertices_with_cached_marker": 25
+            }
+          }
+        },
+        "typescript-multistage": {
+          "builds": 16,
+          "completed_vertex_seconds_per_build_mean": {
+            "cache_export": 0.58125,
+            "cache_import": 2.75625,
+            "cached_layer_materialization": 3.025,
+            "copy": 1.5437500000000002,
+            "image_export": 0.75,
+            "internal": 0.80625,
+            "layer_materialization": 5.0874999999999995,
+            "run": 26.44375,
+            "source": 0.28750000000000003
+          },
+          "layer_materialization_seconds_per_build_mean": 8.112499999999999,
+          "receipt_seconds": {
+            "client_wall_seconds": {
+              "count": 16,
+              "max": 121.30516495500342,
+              "mean": 90.65557455062572,
+              "median": 93.87053597749764,
+              "p95": 121.30516495500342,
+              "sum": 1450.4891928100114
+            },
+            "docker_build_and_push_seconds": {
+              "count": 16,
+              "max": 48.395,
+              "mean": 33.776625,
+              "median": 32.742999999999995,
+              "p95": 48.395,
+              "sum": 540.4259999999999
+            },
+            "immutable_environment_seconds": {
+              "count": 16,
+              "max": 1.333,
+              "mean": 1.0338125,
+              "median": 1.04,
+              "p95": 1.333,
+              "sum": 16.541
+            },
+            "submission_seconds": {
+              "count": 16,
+              "max": 93.09494628800894,
+              "mean": 55.131741508499545,
+              "median": 50.34850611750153,
+              "p95": 93.09494628800894,
+              "sum": 882.1078641359927
+            }
+          },
+          "run_activities": {
+            "node_dependencies": {
+              "executed_vertex_seconds": {
+                "count": 0,
+                "max": null,
+                "mean": null,
+                "median": null,
+                "p95": null,
+                "sum": 0.0
+              },
+              "materializing_vertex_seconds": {
+                "count": 0,
+                "max": null,
+                "mean": null,
+                "median": null,
+                "p95": null,
+                "sum": 0.0
+              },
+              "vertices_with_cached_marker": 16
+            },
+            "node_lint_build_test_smoke": {
+              "executed_vertex_seconds": {
+                "count": 15,
+                "max": 31.1,
+                "mean": 28.206666666666667,
+                "median": 28.4,
+                "p95": 31.1,
+                "sum": 423.1
+              },
+              "materializing_vertex_seconds": {
+                "count": 1,
+                "max": 2.6,
+                "mean": 2.6,
+                "median": 2.6,
+                "p95": 2.6,
+                "sum": 2.6
+              },
+              "vertices_with_cached_marker": 1
+            }
+          }
+        },
+        "typescript-tools": {
+          "builds": 16,
+          "completed_vertex_seconds_per_build_mean": {
+            "cache_export": 0.55625,
+            "cache_import": 2.35625,
+            "cached_layer_materialization": 1.6375,
+            "copy": 1.34375,
+            "image_export": 1.46875,
+            "internal": 0.5,
+            "layer_materialization": 4.2,
+            "run": 24.26875,
+            "source": 0.1375
+          },
+          "layer_materialization_seconds_per_build_mean": 5.8375,
+          "receipt_seconds": {
+            "client_wall_seconds": {
+              "count": 16,
+              "max": 125.62483371300914,
+              "mean": 88.32175891262523,
+              "median": 94.08860214349988,
+              "p95": 125.62483371300914,
+              "sum": 1413.1481426020036
+            },
+            "docker_build_and_push_seconds": {
+              "count": 16,
+              "max": 47.746,
+              "mean": 30.2789375,
+              "median": 31.832500000000003,
+              "p95": 47.746,
+              "sum": 484.46299999999997
+            },
+            "immutable_environment_seconds": {
+              "count": 16,
+              "max": 4.274,
+              "mean": 3.476,
+              "median": 3.5735,
+              "p95": 4.274,
+              "sum": 55.61600000000001
+            },
+            "submission_seconds": {
+              "count": 16,
+              "max": 94.33954718800669,
+              "mean": 54.063671317937406,
+              "median": 47.08305729049607,
+              "p95": 94.33954718800669,
+              "sum": 865.0187410869985
+            }
+          },
+          "run_activities": {
+            "node_dependencies": {
+              "executed_vertex_seconds": {
+                "count": 0,
+                "max": null,
+                "mean": null,
+                "median": null,
+                "p95": null,
+                "sum": 0.0
+              },
+              "materializing_vertex_seconds": {
+                "count": 0,
+                "max": null,
+                "mean": null,
+                "median": null,
+                "p95": null,
+                "sum": 0.0
+              },
+              "vertices_with_cached_marker": 14
+            },
+            "node_lint_build_test_smoke": {
+              "executed_vertex_seconds": {
+                "count": 14,
+                "max": 31.1,
+                "mean": 27.735714285714288,
+                "median": 27.799999999999997,
+                "p95": 31.1,
+                "sum": 388.3
+              },
+              "materializing_vertex_seconds": {
+                "count": 0,
+                "max": null,
+                "mean": null,
+                "median": null,
+                "p95": null,
+                "sum": 0.0
+              },
+              "vertices_with_cached_marker": 2
+            }
+          }
+        }
+      },
+      "submit_http_status_counts": {
+        "202": 48,
+        "503": 668
+      },
+      "succeeded": 48,
+      "summary_path": "build-cache-affinity-2026-09-29/affinity-seed/summary.json",
+      "summary_sha256": "79f05872298c802ccf4e2d490aef2c7628dcd901d4c29b4b20c0816215a1935b"
+    }
+  },
+  "repeat_complete": true,
+  "schema_version": 1
+}

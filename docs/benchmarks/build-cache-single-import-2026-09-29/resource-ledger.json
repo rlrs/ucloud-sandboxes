@@ -1,0 +1,22 @@
+{
+  "build_nodes": [
+    "167971499",
+    "167971500",
+    "167971515",
+    "167971516"
+  ],
+  "auto_provisioned_sandbox_worker": [
+    "167971785"
+  ],
+  "smoke_sandboxes_deleted": true,
+  "gateway_and_four_builder_samplers_stopped": true,
+  "fleet_release_receipt": "pool-release.json",
+  "complete": true,
+  "final_audit": {
+    "path": "final-state.json",
+    "sha256": "facda24220e77114d1bf01eef7792e5607856792228a2c671b53be1825173857",
+    "captured_at": "2026-09-29T14:13:56Z",
+    "all_test_nodes_retired": true,
+    "provider_nodes_remaining": 0
+  }
+}

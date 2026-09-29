@@ -1,0 +1,200 @@
+{
+  "schema_version": 1,
+  "case": {
+    "recipe": "typescript-tools",
+    "variant": "app-change-5",
+    "seed_index": 1,
+    "repeat_index": 1
+  },
+  "collection": "Read-only metadata GETs for two exact synthetic cache manifests and SHA256/size-verified bounded cache-config blobs; no layer payloads fetched.",
+  "evidence_sha256": {
+    "seed_log": "abcd7856778739de969274515186e24ccecdb78ac29490f5d8bed2b2c3bae16c",
+    "repeat_log": "55d8f7b0efbb3684e6d7bf640d5cae4b5b48bf8f3cfd00285ac3412624ecf968",
+    "raw_metadata_receipt": "2739cde5a2142778c7a288e50bb535b6b16fe2c9d09c835ad7c20a3b25be4517"
+  },
+  "manifests": {
+    "seed001": {
+      "manifest_digest": "sha256:be3830f1ede1d61a82b8c2a727a3f96785c803db7925a19f224747fa054b9011",
+      "cache_config_digest": "sha256:0a7c4dba6bdf1424a620315a0506c42904fc91ad7c71f7f235fe9d48ca76bcbd",
+      "cache_config_bytes": 3414,
+      "layer_count": 15,
+      "record_count": 13
+    },
+    "repeat001": {
+      "manifest_digest": "sha256:0991478f2c69064dcb544838c17e5e3aed541597f644ecc474cea4cc3b3dbf0e",
+      "cache_config_digest": "sha256:27c8aa8a87934ca27681754e1e9a9d7b1675d2a7ce0e082ef2260d11855eff83",
+      "cache_config_bytes": 3414,
+      "layer_count": 15,
+      "record_count": 13
+    }
+  },
+  "comparison": {
+    "all_record_digests_and_input_links_selectors_equal": true,
+    "normalized_graph_sha256": "859a7457fcaf7eafe1a7cdc93fd457cfe7a383ba8fb0f38820feebaa57ab43f6",
+    "identical_record_count": 11,
+    "records_with_changed_output_blobs_or_timestamps": [
+      {
+        "record_index": 4,
+        "record_digest": "sha256:6267a8dba780bbf93d0a6ce1b4a74033f1698eba878ff6f59252299c2091a2b0",
+        "outputs": [
+          {
+            "seed_created_at": "2026-09-29T13:17:21.684027282Z",
+            "repeat_created_at": "2026-09-29T13:28:58.409464728Z",
+            "seed_blob": "sha256:49e84768a746b3a21239e585c4ef692568a3faea391629791b37bc01f59ec193",
+            "repeat_blob": "sha256:59bd12733ddb9c3c19a41e545637fbdf068d143839f4633ff5c564a05353aff5"
+          }
+        ]
+      },
+      {
+        "record_index": 12,
+        "record_digest": "sha256:f70502797b6055e3a5e4a44cb45692a28af18eefad1ee9c7ade2ee8581f9dfc5",
+        "outputs": [
+          {
+            "seed_created_at": "2026-09-29T13:16:51.349288432Z",
+            "repeat_created_at": "2026-09-29T13:28:21.489845326Z",
+            "seed_blob": "sha256:a0c1399ddac6a76743ce79d1404a7c5e393cb2a868df08da3561e1756e194d1d",
+            "repeat_blob": "sha256:adc18b82eae5af8220dd96032d6ff0f69de17d2ad5beed1bb04888111eca173b"
+          }
+        ]
+      }
+    ],
+    "exact_seed_tag_observed_in_repeat_import": true
+  },
+  "log_observations": {
+    "repeat_affinity_match": true,
+    "repeat_imports": 8,
+    "repeat_copy_src_seconds": 3.7,
+    "repeat_application_run_seconds": 36.9,
+    "repeat_previous_copy_tests_cached": true
+  },
+  "interpretation": [
+    "The selected seed cache contains the final-stage COPY and RUN records; mode=min omission does not explain this tools case.",
+    "Both exports describe identical record keys and input graphs. Changed source content or LLB identity is not supported by this case.",
+    "The cause is still unresolved: an upstream concurrent cache lookup issue is a hypothesis requiring a serial/concurrent witness.",
+    "Layer bytes may differ on re-execution because cache checksums omit mtime; output-layer changes alone do not prove changed application content."
+  ],
+  "primary_references": [
+    "https://github.com/moby/buildkit/issues/4674",
+    "https://raw.githubusercontent.com/moby/buildkit/v0.33.0/solver/edge.go",
+    "https://raw.githubusercontent.com/moby/buildkit/v0.33.0/cache/contenthash/tarsum.go"
+  ],
+  "additional_cross_checks": {
+    "raw_metadata_receipt_sha256": "db25634ddb90a834428b9ab30a5c54539eb95f908939a11ac90ec288b685ef1a",
+    "cases": [
+      {
+        "index": 3,
+        "recipe": "python-agent",
+        "variant": "app-change-6",
+        "record_count": 12,
+        "all_record_digests_and_input_links_selectors_equal": true,
+        "normalized_graph_sha256": "060a77ce1f7d8371f05ece196ba79891608324b30638ff7746662071ea505f3f",
+        "repeat_application_run_seconds": 3.8,
+        "manifests": {
+          "seed": {
+            "manifest_digest": "sha256:083e7d2dd0e4bb4ba0d118a922e06ca783f722568d4d19d2a39486a3bcc26143",
+            "cache_config_digest": "sha256:a52cd3fb0b3054c450c984a4bb4d4610b9dc4dd4622a28dcb80ea910be290cb3",
+            "cache_config_bytes": 3305
+          },
+          "repeat": {
+            "manifest_digest": "sha256:e27a4df77a038dea12cb31038a0d166fe83dd911e5ca34b1f19abd664e179191",
+            "cache_config_digest": "sha256:50007414d6ba315d8f8ffcfb94a88c97b492e480675618ebbbc6e658ab60c43d",
+            "cache_config_bytes": 3306
+          }
+        }
+      },
+      {
+        "index": 7,
+        "recipe": "typescript-tools",
+        "variant": "app-change-7",
+        "record_count": 13,
+        "all_record_digests_and_input_links_selectors_equal": true,
+        "normalized_graph_sha256": "8f8ab69a564a7e391b36eab01d98eafde74eae180ced2443d09e33e4a2b42706",
+        "repeat_application_run_seconds": 35.1,
+        "manifests": {
+          "seed": {
+            "manifest_digest": "sha256:aa69a87df302762cc2a6f1cb36f55f5eb4f691474bd515edcb2db505ebf84f46",
+            "cache_config_digest": "sha256:bc9c64549d31e356090a968f1f5f0ba63b12655b48f9d1b6434ddd4e53cf05ac",
+            "cache_config_bytes": 3414
+          },
+          "repeat": {
+            "manifest_digest": "sha256:bc29e934dd4320205cc15e6880433f04c70610b99af98b9a0491f288b2b7a962",
+            "cache_config_digest": "sha256:872ee9092080bf29341a0da41446608e0721d1574c4644869940c585719e1e82",
+            "cache_config_bytes": 3413
+          }
+        }
+      }
+    ]
+  },
+  "fan_in_hypothesis": {
+    "status": "metadata condition confirmed; solver causality not yet proven",
+    "metadata_receipt_sha256": "098168afc9b3169f8813f921d0a25cc052b235679498ca5ef9955b0ca9f84857",
+    "pairs": [
+      {
+        "tools_case": "repeat001",
+        "multistage_case": "repeat002",
+        "equivalent_record_key_count": 13,
+        "tools_record_count": 13,
+        "multistage_record_count": 24,
+        "tools_manifest_digest": "sha256:0991478f2c69064dcb544838c17e5e3aed541597f644ecc474cea4cc3b3dbf0e",
+        "multistage_manifest_digest": "sha256:9fece2fa3bab4052141edc27bc227b08255582f7ebd9cab614a64c5b7354f241",
+        "multistage_config_digest": "sha256:69f1971b7ab476547926866c96924e7d17bbd97efefbb2aaa0419ac272e61855",
+        "full_result_and_partial_record_pairs": [
+          {
+            "tools_record_index": 12,
+            "multistage_record_index": 22,
+            "operation_digest": "sha256:f70502797b6055e3a5e4a44cb45692a28af18eefad1ee9c7ade2ee8581f9dfc5",
+            "recursive_key_sha256": "de42b58da15962187fb57861c69d663cb19ed544a8c4d361a70aeb587e405739",
+            "tools_has_layer_result": true,
+            "multistage_has_no_result": true
+          },
+          {
+            "tools_record_index": 4,
+            "multistage_record_index": 5,
+            "operation_digest": "sha256:6267a8dba780bbf93d0a6ce1b4a74033f1698eba878ff6f59252299c2091a2b0",
+            "recursive_key_sha256": "fe73eeb80d7531cfd61c7d1620060f783a1b089898fb405700330781d2a4f02a",
+            "tools_has_layer_result": true,
+            "multistage_has_no_result": true
+          }
+        ]
+      },
+      {
+        "tools_case": "repeat007",
+        "multistage_case": "repeat008",
+        "equivalent_record_key_count": 13,
+        "tools_record_count": 13,
+        "multistage_record_count": 24,
+        "tools_manifest_digest": "sha256:bc29e934dd4320205cc15e6880433f04c70610b99af98b9a0491f288b2b7a962",
+        "multistage_manifest_digest": "sha256:2d9f870c81d9840709989a6630ae9b3d160c186d81a16d550bb11243700d0167",
+        "multistage_config_digest": "sha256:b0ddd3f6ccfadf5f136f4be01a8024500ccb05f092d4cc69482768077038a1f4",
+        "full_result_and_partial_record_pairs": [
+          {
+            "tools_record_index": 3,
+            "multistage_record_index": 4,
+            "operation_digest": "sha256:6267a8dba780bbf93d0a6ce1b4a74033f1698eba878ff6f59252299c2091a2b0",
+            "recursive_key_sha256": "7520ef32264e701fe3f81678f7d3312a58ac250661072160a2f04a2af391f63f",
+            "tools_has_layer_result": true,
+            "multistage_has_no_result": true
+          },
+          {
+            "tools_record_index": 12,
+            "multistage_record_index": 23,
+            "operation_digest": "sha256:f70502797b6055e3a5e4a44cb45692a28af18eefad1ee9c7ade2ee8581f9dfc5",
+            "recursive_key_sha256": "ea52697969d2ab53b9f18532d55f8552f592cfbe41825ba8adcd847a7680ed6f",
+            "tools_has_layer_result": true,
+            "multistage_has_no_result": true
+          }
+        ]
+      }
+    ],
+    "source_observations": [
+      "Combined Query deduplicates CacheKey objects by ID. Non-main duplicate selection depends on concurrent query completion, not cache-from argument order.",
+      "A new imported CacheKey initially records only its source manager; Combined Records iterates managers in the selected key.ids map.",
+      "A partial result-less record could therefore shadow a full result if identical key IDs collide. A controlled exact-only versus exact-plus-partial import witness is required."
+    ],
+    "references": [
+      "https://raw.githubusercontent.com/moby/buildkit/v0.33.0/solver/combinedcache.go",
+      "https://raw.githubusercontent.com/moby/buildkit/v0.33.0/solver/cachemanager.go",
+      "https://raw.githubusercontent.com/moby/buildkit/v0.33.0/cache/remotecache/v1/chains.go"
+    ]
+  }
+}

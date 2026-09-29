@@ -1,0 +1,33 @@
+{
+  "seed_builders": [
+    "167966880",
+    "167966883",
+    "167966886",
+    "167966887"
+  ],
+  "seed_auto_provisioned_sandbox_worker": [
+    "167967501"
+  ],
+  "canary_builder": "167966880",
+  "repeat_builders": [
+    "167968139",
+    "167968141",
+    "167968156",
+    "167968157"
+  ],
+  "smoke_workers": [
+    "167968374"
+  ],
+  "complete": true,
+  "repeat_auto_provisioned_sandbox_worker": [
+    "167968374"
+  ],
+  "final_audit": {
+    "path": "final-state.json",
+    "sha256": "e142d7577546a9f40c92aef040163ff8f543e4d5c8d3ab0dac5cff7bd6dc547f",
+    "captured_at": "2026-09-29T13:58:21Z",
+    "unique_owned_nodes": 10,
+    "all_test_nodes_retired": true,
+    "provider_nodes_remaining": 0
+  }
+}

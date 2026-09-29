@@ -1,0 +1,479 @@
+{
+  "captured_at": "2026-09-29T14:13:56Z",
+  "source_identity": {
+    "wheel_sha256": "33c89ef609c5f7fc014d0a8e1c1e7b698566b524cbba46cebcc73d3a90bb76df",
+    "controller_sha256": "fdbc0b7d2073a9c6a3a517c646d10a61e4efcfb43818c5eff239e0d4094ec037",
+    "bundle_sha256": {
+      "builder": "431df3c32e0461ac11bee1cce75c3e1147dcb0c56806c5dd4c88c17e090d4fa6",
+      "sandbox": "7420088fd3bcd182d547b0174cb5e7394d0bbb1a6fa63f96b84f746bbd98a022"
+    },
+    "configured_node_package_root": "/work/ucloud-sandboxes/build-cache-single-import-20260929-r1",
+    "packaged_files_compared": 163,
+    "mismatched_files": [],
+    "all_packaged_files_match": true
+  },
+  "health": {
+    "gateway_https": true,
+    "relay_https": true,
+    "metrics_ok": true,
+    "relay_storage_budget_bytes": 68719476736,
+    "database_pools": {
+      "database_pool": {
+        "connections_num": 1,
+        "connections_ms": 3,
+        "requests_num": 1638,
+        "usage_ms": 114,
+        "pool_min": 1,
+        "pool_max": 16,
+        "pool_size": 1,
+        "pool_available": 1,
+        "requests_waiting": 0
+      },
+      "lifecycle_database_pool": {
+        "connections_num": 1,
+        "connections_ms": 4,
+        "requests_num": 6522,
+        "usage_ms": 331,
+        "pool_min": 1,
+        "pool_max": 4,
+        "pool_size": 1,
+        "pool_available": 1,
+        "requests_waiting": 0
+      }
+    }
+  },
+  "idle_guard": {
+    "sandboxes": 0,
+    "relay_inflight": 0,
+    "relay_delivery_pending": 0,
+    "lifecycle_claimed": 0,
+    "lifecycle_due": 0,
+    "lifecycle_deferred": 0
+  },
+  "phases": [
+    {
+      "phase": "single-import-repeat",
+      "records": 48,
+      "phase_succeeded": true,
+      "application_smoke_required": true,
+      "application_smoke_gate_passed": true,
+      "initial_builder_ids": [
+        "167971499",
+        "167971500",
+        "167971515",
+        "167971516"
+      ],
+      "smoke_sandbox_ids": [
+        "bl-smoke-single-import-repeat-0",
+        "bl-smoke-single-import-repeat-1",
+        "bl-smoke-single-import-repeat-2"
+      ],
+      "successful_deleted_smokes": 3,
+      "known_node_ids": [
+        "167971499",
+        "167971500",
+        "167971515",
+        "167971516"
+      ],
+      "input_sha256": {
+        "/work/ucloud-sandboxes/build-cache-single-import-load-20260929/single-import-repeat/summary.json": "7ba49be7fa3110c0a0b7b2dd4d26524dcd57b542cd81ac0b1dd9ad0100b40299",
+        "/work/ucloud-sandboxes/build-cache-single-import-load-20260929/single-import-repeat/before.json": "6c56d3d21ed820e8d00b40e45f4c05ed6aab56adb00c1c5b026ff3e0c73d538a",
+        "/work/ucloud-sandboxes/build-cache-single-import-load-20260929/smoke-single-import-repeat.json": "7d34d6b491287bac136e14dc66d6fd0bdb6739b23cff8df73396225769896c8f"
+      }
+    }
+  ],
+  "measured_build_count": 48,
+  "qualification": {
+    "receipt_sha256": "d063072dba9099d03a300ded02dc03973c51ec8382ef60cdbace7a9d8ced5173",
+    "frozen_contexts_verified": 48,
+    "inventory_sha256": "45efcdbd714d7fbc6748b26f7fcdc29b4b18d1f4117baac0feb8af24e32505a7",
+    "launch_receipt_sha256": "76cbf686197cb7c5a6f7eb0dc61f9c90f244bb16257e503d344f9737fd543044",
+    "driver_service_unit": "ucloud-build-load-client-single-import-repeat"
+  },
+  "initial_builders": [
+    {
+      "node_id": "167971499",
+      "receipt_sha256": "16dffd201c86161d77d3a7c5374697a51846c7761e6e1a57d4f2243c1e5899c2",
+      "source_hashes": {
+        "images.py": "d3d06a4b566c5e3bf9cf9dfa574cc29f0a3d60f8f6aba890e64a270c7babde67",
+        "build_cache.py": "a6cbe0b3fbb1c303304c559f343d9c58a646f987f83befecfe8468cf17799f0e",
+        "environment_prepare.py": "a04d9ca83163c8e39835c4a0f86314e8cfd6aa2cf57940d1026d63b1374adde4",
+        "environment_builder.py": "da4348d19158102f936df051d0dae3b770f55c6149627dc461cb5b17024ff734"
+      },
+      "initial_buildkit_cache_empty": true,
+      "configuration_matches": true
+    },
+    {
+      "node_id": "167971500",
+      "receipt_sha256": "16dffd201c86161d77d3a7c5374697a51846c7761e6e1a57d4f2243c1e5899c2",
+      "source_hashes": {
+        "images.py": "d3d06a4b566c5e3bf9cf9dfa574cc29f0a3d60f8f6aba890e64a270c7babde67",
+        "build_cache.py": "a6cbe0b3fbb1c303304c559f343d9c58a646f987f83befecfe8468cf17799f0e",
+        "environment_prepare.py": "a04d9ca83163c8e39835c4a0f86314e8cfd6aa2cf57940d1026d63b1374adde4",
+        "environment_builder.py": "da4348d19158102f936df051d0dae3b770f55c6149627dc461cb5b17024ff734"
+      },
+      "initial_buildkit_cache_empty": true,
+      "configuration_matches": true
+    },
+    {
+      "node_id": "167971515",
+      "receipt_sha256": "16dffd201c86161d77d3a7c5374697a51846c7761e6e1a57d4f2243c1e5899c2",
+      "source_hashes": {
+        "images.py": "d3d06a4b566c5e3bf9cf9dfa574cc29f0a3d60f8f6aba890e64a270c7babde67",
+        "build_cache.py": "a6cbe0b3fbb1c303304c559f343d9c58a646f987f83befecfe8468cf17799f0e",
+        "environment_prepare.py": "a04d9ca83163c8e39835c4a0f86314e8cfd6aa2cf57940d1026d63b1374adde4",
+        "environment_builder.py": "da4348d19158102f936df051d0dae3b770f55c6149627dc461cb5b17024ff734"
+      },
+      "initial_buildkit_cache_empty": true,
+      "configuration_matches": true
+    },
+    {
+      "node_id": "167971516",
+      "receipt_sha256": "16dffd201c86161d77d3a7c5374697a51846c7761e6e1a57d4f2243c1e5899c2",
+      "source_hashes": {
+        "images.py": "d3d06a4b566c5e3bf9cf9dfa574cc29f0a3d60f8f6aba890e64a270c7babde67",
+        "build_cache.py": "a6cbe0b3fbb1c303304c559f343d9c58a646f987f83befecfe8468cf17799f0e",
+        "environment_prepare.py": "a04d9ca83163c8e39835c4a0f86314e8cfd6aa2cf57940d1026d63b1374adde4",
+        "environment_builder.py": "da4348d19158102f936df051d0dae3b770f55c6149627dc461cb5b17024ff734"
+      },
+      "initial_buildkit_cache_empty": true,
+      "configuration_matches": true
+    }
+  ],
+  "harness_sha256": "d0b2754af69c69d9a303fd15117f60fad044ca0e559b3a1cfbe934f49682c6ec",
+  "sdk_wheel_sha256": "d15b65fbb5e1570fde69cb9d571789a9b61d4418682efc17732bdc9c2ca8414c",
+  "sandbox_count": 0,
+  "active_builds": 0,
+  "fleet_count": 0,
+  "pending_reservations_absent": true,
+  "known_test_node_ids": [
+    "167971499",
+    "167971500",
+    "167971515",
+    "167971516",
+    "167971785"
+  ],
+  "test_nodes_remaining_at_provider": [],
+  "all_test_nodes_retired": true,
+  "provider_instances": [],
+  "samplers": [
+    {
+      "unit": "ucloud-build-load-client-single-import-repeat",
+      "load_state": "not-found",
+      "active_state": "inactive",
+      "inactive": true
+    },
+    {
+      "unit": "ucloud-single-import-load-monitor",
+      "load_state": "not-found",
+      "active_state": "inactive",
+      "inactive": true
+    }
+  ],
+  "gateway_sampler_active": false,
+  "history_source": "gateway build-history.sqlite, read-only exact-UUID lookups for the measured phase",
+  "successful_history_count": 48,
+  "history_count": 48,
+  "history": [
+    {
+      "build_id": "0d24ad6d-cc26-4721-a66a-af23de40e812",
+      "image_id": "bl20260929-single-import-repeat-000",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "1e9da1bc-2e67-4818-989b-bf5b9919ea76",
+      "image_id": "bl20260929-single-import-repeat-001",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "90316076-8053-4658-a9d9-57577c55ee16",
+      "image_id": "bl20260929-single-import-repeat-002",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "b6b9fa6d-a383-44ce-a504-f1487e62c043",
+      "image_id": "bl20260929-single-import-repeat-003",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "eb61bafc-ec53-4bc3-8ac1-e2660d5209e3",
+      "image_id": "bl20260929-single-import-repeat-004",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "3cd904c5-8dcb-4e58-8386-9a6d42002bc7",
+      "image_id": "bl20260929-single-import-repeat-005",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "ba6cac4d-1561-45ca-a45d-c16276680fd1",
+      "image_id": "bl20260929-single-import-repeat-006",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "f4aa5bf5-cf1c-4ee0-a08a-d45730a39988",
+      "image_id": "bl20260929-single-import-repeat-007",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "8cb250c7-db2a-4f4f-a35b-742343b33c31",
+      "image_id": "bl20260929-single-import-repeat-008",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "2671d2a6-6407-498f-8402-7ea84d1cf7c6",
+      "image_id": "bl20260929-single-import-repeat-009",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "3fee38dd-c0b2-4a1c-b9a4-755234d43fbd",
+      "image_id": "bl20260929-single-import-repeat-010",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "58021aee-8c45-4578-82c0-e5e218c1976e",
+      "image_id": "bl20260929-single-import-repeat-011",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "0ebc936e-fe26-4234-85fb-24452c5839ae",
+      "image_id": "bl20260929-single-import-repeat-012",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "0c86f216-e444-4a22-b54b-da15b4f77c11",
+      "image_id": "bl20260929-single-import-repeat-013",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "5395ad24-1267-4e12-a508-10fca0f0972e",
+      "image_id": "bl20260929-single-import-repeat-014",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "b5d1ed39-bdbb-4fa7-a0a8-8b1f9caec5b4",
+      "image_id": "bl20260929-single-import-repeat-015",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "da739258-f973-4067-a219-d4448bd76390",
+      "image_id": "bl20260929-single-import-repeat-016",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "4a5db366-061f-4b59-9bd8-edc51fb027e9",
+      "image_id": "bl20260929-single-import-repeat-017",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "f0ffbd07-3d6e-4f92-a45f-fde38c4f4f7c",
+      "image_id": "bl20260929-single-import-repeat-018",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "e67736d5-c93b-416b-aa26-1df68cb2fadb",
+      "image_id": "bl20260929-single-import-repeat-019",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "60d55bf6-5a0f-41ef-82db-cd8cb386f837",
+      "image_id": "bl20260929-single-import-repeat-020",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "54dec4ef-d78c-4654-b337-7ffa6a76b6ca",
+      "image_id": "bl20260929-single-import-repeat-021",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "306474da-7375-4bab-8419-093c8c45b931",
+      "image_id": "bl20260929-single-import-repeat-022",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "2d63732b-a349-40c3-b710-d05fb51681ac",
+      "image_id": "bl20260929-single-import-repeat-023",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "d4361a83-5bfe-4894-b523-30fdf522d46a",
+      "image_id": "bl20260929-single-import-repeat-024",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "051fe61f-aab2-4a38-8e23-a04ff0a4e6b1",
+      "image_id": "bl20260929-single-import-repeat-025",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "c09d8602-a771-415e-80da-7dfe2d8c22c7",
+      "image_id": "bl20260929-single-import-repeat-026",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "2ef9423a-abb9-4535-87db-0ee7828bc6d4",
+      "image_id": "bl20260929-single-import-repeat-027",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "7f21970d-0a21-4bd8-8966-1d114af559d7",
+      "image_id": "bl20260929-single-import-repeat-028",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "6c66dd09-1593-43fd-a60c-7041513c946e",
+      "image_id": "bl20260929-single-import-repeat-029",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "607dd212-ceba-4e6e-85dc-33af7e98dc3c",
+      "image_id": "bl20260929-single-import-repeat-030",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "7ca71ac8-7367-462a-83a8-e964d6759a6a",
+      "image_id": "bl20260929-single-import-repeat-031",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "4cd7dcd7-a308-4019-bd2f-f16ec1960c13",
+      "image_id": "bl20260929-single-import-repeat-032",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "aa8dda83-5e1a-4c6b-a388-16f41fb31e3e",
+      "image_id": "bl20260929-single-import-repeat-033",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "27e82dbe-93ac-4961-a374-f27511c5e34c",
+      "image_id": "bl20260929-single-import-repeat-034",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "6d24dc11-b8c2-46cf-81ef-d5de1e6d4f9e",
+      "image_id": "bl20260929-single-import-repeat-035",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "276720da-dcc4-4db6-9d8a-fd8530829853",
+      "image_id": "bl20260929-single-import-repeat-036",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "64aa8865-deeb-4042-a34d-3c3de9ef3676",
+      "image_id": "bl20260929-single-import-repeat-037",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "42e03121-c4a6-483d-894c-78d8b065bb71",
+      "image_id": "bl20260929-single-import-repeat-038",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "378558d7-f7c3-4474-8296-373cc5ce1bae",
+      "image_id": "bl20260929-single-import-repeat-039",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "d7b8bcdb-513d-4314-91b6-15cf36ff03ad",
+      "image_id": "bl20260929-single-import-repeat-040",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "55fbbdae-83a5-42cc-8179-04fe56dab096",
+      "image_id": "bl20260929-single-import-repeat-041",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "676bf18c-7646-4701-835c-75e2f09b53b1",
+      "image_id": "bl20260929-single-import-repeat-042",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "f4b3ceb5-1218-4f66-b69d-96c23fa42d85",
+      "image_id": "bl20260929-single-import-repeat-043",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "832f58be-414c-435f-92ae-f2081f2b83ea",
+      "image_id": "bl20260929-single-import-repeat-044",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "45e82b21-a90f-4fad-bc37-37e0248b9208",
+      "image_id": "bl20260929-single-import-repeat-045",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "c37f1927-c415-496f-b3bc-a18bed775281",
+      "image_id": "bl20260929-single-import-repeat-046",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "87c50174-331a-4fe9-a27c-966e45036e95",
+      "image_id": "bl20260929-single-import-repeat-047",
+      "status": "succeeded",
+      "identity_matches": true
+    }
+  ],
+  "retained_artifacts": [
+    "48 measured managed test image aliases",
+    "local synthetic benchmark receipts",
+    "frozen fixture contexts and dependency locks",
+    "qualification receipts and local raw progress logs"
+  ],
+  "limitations": [
+    "Historical cache/placement chronology limits causal attribution of a single fresh-pool comparison.",
+    "This final audit does not prove cache hits or semantic invalidation; retain separate cache-witness and canary evidence.",
+    "This final idle audit does not establish health during the measured burst or agent-sandbox capacity."
+  ],
+  "audit_complete": true
+}

@@ -1,0 +1,291 @@
+{
+  "captured_at": "2026-09-29T14:15:12.818382+00:00",
+  "scope": "Current single-import release directory, including final-state.json; excludes this receipt and gitignored __pycache__ files.",
+  "method": [
+    "Parse every JSON document and every decompressed JSONL record.",
+    "Scan text for private keys, bearer values, JWTs, common token formats, signed query credentials and credentialed URLs.",
+    "Review payload-like JSON keys, owned fixture schemas, sanitized progress and previously reviewed helper source."
+  ],
+  "file_count": 44,
+  "json_documents": 602,
+  "findings": [],
+  "raw_customer_payload_or_log_fields": [],
+  "reviewed_exceptions": [
+    {
+      "path": "single-import-repeat.qualification.json",
+      "key": "command",
+      "reason": "Owned frozen SDK qualification harness argv; no credentials or customer command content."
+    }
+  ],
+  "limitations": [
+    "Bounded pattern/schema review, not a repository-wide security audit or proof that every secret encoding is absent.",
+    "Authorized production IDs, private addresses, operational paths, hashes, numeric metrics and synthetic benchmark metadata are intentionally retained.",
+    "Helper source reads credentials in process for authorized API calls but does not embed or export credential values."
+  ],
+  "files": [
+    {
+      "path": "README.md",
+      "sha256": "9ce58789f616a4ad357416e76fd34e5f01e6f096cfa415127b4bd41e97ed3077",
+      "bytes": 16494,
+      "json_documents": 0
+    },
+    {
+      "path": "build-load-report.json",
+      "sha256": "061f14cf60a4e79ed3d319787342d659495d9e1f33888e4c80f0b47dee131b8c",
+      "bytes": 321438,
+      "json_documents": 1
+    },
+    {
+      "path": "build-load-report.md",
+      "sha256": "47dd98fe1c69637e93ac998e78e48050e54331df7b27cbd84edad1b8ce6e5d53",
+      "bytes": 6448,
+      "json_documents": 0
+    },
+    {
+      "path": "builder-167971499-initial.json",
+      "sha256": "16dffd201c86161d77d3a7c5374697a51846c7761e6e1a57d4f2243c1e5899c2",
+      "bytes": 880,
+      "json_documents": 1
+    },
+    {
+      "path": "builder-167971500-initial.json",
+      "sha256": "16dffd201c86161d77d3a7c5374697a51846c7761e6e1a57d4f2243c1e5899c2",
+      "bytes": 880,
+      "json_documents": 1
+    },
+    {
+      "path": "builder-167971515-initial.json",
+      "sha256": "16dffd201c86161d77d3a7c5374697a51846c7761e6e1a57d4f2243c1e5899c2",
+      "bytes": 880,
+      "json_documents": 1
+    },
+    {
+      "path": "builder-167971516-initial.json",
+      "sha256": "16dffd201c86161d77d3a7c5374697a51846c7761e6e1a57d4f2243c1e5899c2",
+      "bytes": 880,
+      "json_documents": 1
+    },
+    {
+      "path": "cache-prune.json",
+      "sha256": "b910d89956ae19b99eed31126ef8f52c6102720947d36c8ada5234934f86fbab",
+      "bytes": 14491,
+      "json_documents": 1
+    },
+    {
+      "path": "candidate-buildkit-progress.json",
+      "sha256": "464e01787aa46ee6775c4580e9ffc8409034949a8e378045b9b0e5b1e5cfc5f0",
+      "bytes": 949668,
+      "json_documents": 1
+    },
+    {
+      "path": "candidate-source.json",
+      "sha256": "7e369579e9fa5cc1e5743935ea92b6f42cbf12f60b32cc67a628511c2a81beb8",
+      "bytes": 561,
+      "json_documents": 1
+    },
+    {
+      "path": "case22-outlier.json",
+      "sha256": "bc06a7b93335cfab3a0633ea2a8bc8f25ff92fcaf9d2b4aa6a0df7a59af819e8",
+      "bytes": 7488,
+      "json_documents": 1
+    },
+    {
+      "path": "case22-outlier.md",
+      "sha256": "84ca912f2331caedf0a2b169803781f190208245df7adeee82816bbba2a18305",
+      "bytes": 3975,
+      "json_documents": 0
+    },
+    {
+      "path": "deployment-controller.py",
+      "sha256": "fdbc0b7d2073a9c6a3a517c646d10a61e4efcfb43818c5eff239e0d4094ec037",
+      "bytes": 19033,
+      "json_documents": 0
+    },
+    {
+      "path": "deployment-receipt.json",
+      "sha256": "ac8ed74447295adb60ac54be1892af6c02dcf455ef90956ab65fad6b484eb32f",
+      "bytes": 1267,
+      "json_documents": 1
+    },
+    {
+      "path": "final-audit.py",
+      "sha256": "b2b7c3ac9dde9c289c7512b325e899c94bc4e2b985a97c4b02e7f416618cb8f7",
+      "bytes": 29165,
+      "json_documents": 0
+    },
+    {
+      "path": "final-state.json",
+      "sha256": "facda24220e77114d1bf01eef7792e5607856792228a2c671b53be1825173857",
+      "bytes": 16493,
+      "json_documents": 1
+    },
+    {
+      "path": "host-findings.json",
+      "sha256": "7fc3e06834a92371541446d28bf8afc60cedc6bc06f6f4e4d8f2f366cb2b3dda",
+      "bytes": 49025,
+      "json_documents": 1
+    },
+    {
+      "path": "host-findings.md",
+      "sha256": "ab87b39ac8b9e33eaa4ad4806e7e08431fafe14a86ecbf67810b91ac025fd790",
+      "bytes": 5247,
+      "json_documents": 0
+    },
+    {
+      "path": "image-inventory.json",
+      "sha256": "fbef7ce8e5b106dc513d7429251635d493cb3b24581567414cc37db49a5a2025",
+      "bytes": 144936,
+      "json_documents": 1
+    },
+    {
+      "path": "initial-builder-check.py",
+      "sha256": "cb4e074c33b84d265fe3327e47530d5f5113eea64e4be6caa12367a0b2c2b314",
+      "bytes": 1697,
+      "json_documents": 0
+    },
+    {
+      "path": "performance-comparison.json",
+      "sha256": "da45cd46bd626230749fa46ea6d70bff33610148e288fc33e31b571cf5bd0908",
+      "bytes": 26528,
+      "json_documents": 1
+    },
+    {
+      "path": "performance-comparison.md",
+      "sha256": "9658860c343b53d8f729b2926be9e26ebab0f4160d4ae55c812d8b607970833d",
+      "bytes": 2554,
+      "json_documents": 0
+    },
+    {
+      "path": "performance-report.py",
+      "sha256": "b5d0e576379ddbdb347ad8403178000eb35068a3dd4a6ada3c28653acb0528a1",
+      "bytes": 6736,
+      "json_documents": 0
+    },
+    {
+      "path": "pool-hold.json",
+      "sha256": "1945deb0a9f62ed2b06991b49c4dda07a50ce32ac05091e416fbce33b138e888",
+      "bytes": 3728,
+      "json_documents": 1
+    },
+    {
+      "path": "pool-prepare.json",
+      "sha256": "d9566c5a76d43323a9f7c95ca797791365496864176f267075586e471d86b67b",
+      "bytes": 2309,
+      "json_documents": 1
+    },
+    {
+      "path": "pool-release.json",
+      "sha256": "fc7801ef33faf4179a876c70fe6cba44615cdb329a560e702000774babf6bc4e",
+      "bytes": 5065,
+      "json_documents": 1
+    },
+    {
+      "path": "qualification-control.py",
+      "sha256": "4416e944526f46c829555815e9c66bae95e008e4f53f03d9c20423f4fe705d34",
+      "bytes": 3623,
+      "json_documents": 0
+    },
+    {
+      "path": "resource-ledger.json",
+      "sha256": "86782c4f156fd8246326ba7e30c78d75ec0bc64b54ad5b8a142c8783ecc3c00e",
+      "bytes": 561,
+      "json_documents": 1
+    },
+    {
+      "path": "run-launch.json",
+      "sha256": "76cbf686197cb7c5a6f7eb0dc61f9c90f244bb16257e503d344f9737fd543044",
+      "bytes": 1720,
+      "json_documents": 1
+    },
+    {
+      "path": "run-qualification.py",
+      "sha256": "f716be10b67b98bfd1b6ca0d4b96fca06e19ed94d833b475ad3a394ad1ecbfe0",
+      "bytes": 5184,
+      "json_documents": 0
+    },
+    {
+      "path": "scaffolding-verification.json",
+      "sha256": "ce32810fcdfa2bd2fcc877f560e5833bb4640d90d7d46803a0389a83d70f3ee1",
+      "bytes": 988,
+      "json_documents": 1
+    },
+    {
+      "path": "selection-report.py",
+      "sha256": "fc4f1b794759dd70ce64b8217db5fb0f2e0d5825202fef54773549f3582fa9ee",
+      "bytes": 13461,
+      "json_documents": 0
+    },
+    {
+      "path": "single-import-repeat/before.json",
+      "sha256": "6c56d3d21ed820e8d00b40e45f4c05ed6aab56adb00c1c5b026ff3e0c73d538a",
+      "bytes": 1472,
+      "json_documents": 1
+    },
+    {
+      "path": "single-import-repeat/summary.json",
+      "sha256": "7ba49be7fa3110c0a0b7b2dd4d26524dcd57b542cd81ac0b1dd9ad0100b40299",
+      "bytes": 243097,
+      "json_documents": 1
+    },
+    {
+      "path": "single-import-repeat-selection.json",
+      "sha256": "97228ec2518480824349993e9399a19e9e6aa2e58c580892cff5e19560179166",
+      "bytes": 124363,
+      "json_documents": 1
+    },
+    {
+      "path": "single-import-repeat.qualification.json",
+      "sha256": "d063072dba9099d03a300ded02dc03973c51ec8382ef60cdbace7a9d8ced5173",
+      "bytes": 13098,
+      "json_documents": 1
+    },
+    {
+      "path": "smoke-single-import-repeat.json",
+      "sha256": "7d34d6b491287bac136e14dc66d6fd0bdb6739b23cff8df73396225769896c8f",
+      "bytes": 1479,
+      "json_documents": 1
+    },
+    {
+      "path": "staging-receipt.json",
+      "sha256": "116670c30795b374f3bb5977ef0da4d855c64aebfa971ce611e2f5a43b13c465",
+      "bytes": 1864,
+      "json_documents": 1
+    },
+    {
+      "path": "telemetry/builder-167971499.jsonl.gz",
+      "sha256": "53a23b1ac9ca8bd3a2dd9648181c168fad61699b8b723e9c1898d55197dccfa2",
+      "bytes": 47747,
+      "json_documents": 101
+    },
+    {
+      "path": "telemetry/builder-167971500.jsonl.gz",
+      "sha256": "54921a8e7aa0e7cf3f71b1303243d81f29ec157aaf3c760840ae0d2e68097678",
+      "bytes": 45736,
+      "json_documents": 101
+    },
+    {
+      "path": "telemetry/builder-167971515.jsonl.gz",
+      "sha256": "a1b367caff9b43b6924f0dae6712c72157dfbb05cdf1a6ef7518ffd1e1cccd77",
+      "bytes": 46752,
+      "json_documents": 100
+    },
+    {
+      "path": "telemetry/builder-167971516.jsonl.gz",
+      "sha256": "19a3e77b0317cda50b1cb94b2b96aa4a6315edf5b44fad26776956b4ce7e59c1",
+      "bytes": 53403,
+      "json_documents": 102
+    },
+    {
+      "path": "telemetry/gateway.jsonl.gz",
+      "sha256": "521f40abce0cf32c27f333fcd579359bc1157018bbf4d02abdade690ac7a9343",
+      "bytes": 150723,
+      "json_documents": 172
+    },
+    {
+      "path": "test-verification.md",
+      "sha256": "57a613240e063b961e61fdc0ffffb57521329708547b601f3852de000877d40c",
+      "bytes": 2619,
+      "json_documents": 0
+    }
+  ]
+}

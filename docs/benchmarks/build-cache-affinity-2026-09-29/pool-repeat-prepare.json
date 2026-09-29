@@ -1,0 +1,90 @@
+{
+  "at": "2026-09-29T13:25:10Z",
+  "fleet": [],
+  "prepared": {
+    "prepared_builders": [],
+    "demand": {
+      "pending_resources": {
+        "vcpu": 0.0,
+        "memory_mb": 0,
+        "disk_mb": 0
+      },
+      "suppressed_pending_resources": {
+        "vcpu": 0.0,
+        "memory_mb": 0,
+        "disk_mb": 0
+      },
+      "pending_count": 0,
+      "suppressed_pending_count": 0,
+      "prepared_resources": {
+        "vcpu": 0.0,
+        "memory_mb": 0,
+        "disk_mb": 0
+      },
+      "desired_resources": {
+        "vcpu": 0.0,
+        "memory_mb": 0,
+        "disk_mb": 0
+      },
+      "oldest_pending_seconds": 0,
+      "pending_image_builds": 0,
+      "prepared_builder_count": 0,
+      "desired_builders": 0,
+      "pending": [],
+      "prepared": [],
+      "prepared_builders": [],
+      "image_warmups": []
+    }
+  },
+  "sandbox_count": 0,
+  "active_builds": 0,
+  "prepare": {
+    "prepare": {
+      "prepare_id": "build-cache-affinity-20260929-repeat",
+      "count": 4,
+      "created_at": "2026-09-29T13:25:10.846171+00:00",
+      "updated_at": "2026-09-29T13:25:10.846171+00:00",
+      "expires_at": "2026-09-29T14:25:10.846171+00:00"
+    },
+    "demand": {
+      "pending_resources": {
+        "vcpu": 0.0,
+        "memory_mb": 0,
+        "disk_mb": 0
+      },
+      "suppressed_pending_resources": {
+        "vcpu": 0.0,
+        "memory_mb": 0,
+        "disk_mb": 0
+      },
+      "pending_count": 0,
+      "suppressed_pending_count": 0,
+      "prepared_resources": {
+        "vcpu": 0.0,
+        "memory_mb": 0,
+        "disk_mb": 0
+      },
+      "desired_resources": {
+        "vcpu": 0.0,
+        "memory_mb": 0,
+        "disk_mb": 0
+      },
+      "oldest_pending_seconds": 0,
+      "pending_image_builds": 0,
+      "prepared_builder_count": 4,
+      "desired_builders": 4,
+      "pending": [],
+      "prepared": [],
+      "prepared_builders": [
+        {
+          "prepare_id": "build-cache-affinity-20260929-repeat",
+          "count": 4,
+          "created_at": "2026-09-29T13:25:10.846171+00:00",
+          "updated_at": "2026-09-29T13:25:10.846171+00:00",
+          "expires_at": "2026-09-29T14:25:10.846171+00:00"
+        }
+      ],
+      "image_warmups": []
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "concurrent_submissions": 4,
+  "same_context_each_submission": true,
+  "fixture_bytes_per_context": 16777216,
+  "client_elapsed_seconds": 4.018831497989595,
+  "heartbeat_interval_seconds": 0.005,
+  "max_heartbeat_gap_seconds": 4.008513516746461,
+  "mock_request_calls": 12,
+  "network_calls": 0,
+  "production_calls": 0,
+  "sdk_version": "0.4.33",
+  "sdk_client_sha256": "a0a0d996872ea826b4976cd657ddc51c444698fe27cf5cbe7fde0c3a077a95c6",
+  "source_matches_published_wheel": true
+}

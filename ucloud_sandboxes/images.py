@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import codecs
 import gzip
 import hashlib
 import json
 import os
 import re
+import selectors
+import signal
 import sqlite3
 import subprocess
 import tarfile
@@ -15,12 +18,20 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
+from io import IncrementalNewlineDecoder
 from pathlib import Path
 from threading import BoundedSemaphore, Condition, RLock, Thread
 from typing import Any, Callable, Generic, Iterable, Iterator, TypeVar
 from uuid import uuid4
 
 from .build_context_store import BuildContextBlobStore
+from .build_deadline import (
+    DEFAULT_BUILD_EXECUTION_TIMEOUT_SECONDS,
+    ImageBuildTimeoutError,
+    build_execution_deadline,
+    remaining_build_execution_seconds,
+    without_build_execution_deadline,
+)
 from .managed_registry import (
     canonical_image_digest_ref,
     manifest_digest_from_image_ref,
@@ -37,6 +48,8 @@ BUILD_LOG_TAIL_CHARS = 64 * 1024
 COMMAND_OUTPUT_TAIL_CHARS = 64 * 1024
 COMMAND_OUTPUT_READ_CHARS = 16 * 1024
 COMMAND_OUTPUT_TRUNCATION_MARKER = "[output truncated; showing retained tail]\n"
+BUILD_PROCESS_TERMINATE_GRACE_SECONDS = 1.0
+BUILD_PROCESS_KILL_WAIT_SECONDS = 5.0
 DEFAULT_TERMINAL_BUILD_HISTORY = 256
 DEFAULT_MAX_ACTIVE_IMAGE_BUILDS = 4
 BUILD_LOG_FLUSH_CHARS = 16 * 1024
@@ -70,6 +83,37 @@ class ImageBuildCapacityError(RuntimeError):
 
 class ImageBuildConflictError(RuntimeError):
     pass
+
+
+def _stop_owned_build_process(process: subprocess.Popen[bytes]) -> None:
+    """Stop this CLI and its inherited group, including stdout-holding children.
+
+    The group is created by _run_streaming. A BuildKit daemon is a separate
+    service and is never signalled here; disconnecting this build's CLI cancels
+    its client-side solve. Cleanup has a bounded TERM grace before KILL/reap.
+    """
+    if os.name == "posix":
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    elif process.poll() is None:
+        process.terminate()
+    try:
+        process.wait(timeout=BUILD_PROCESS_TERMINATE_GRACE_SECONDS)
+    except subprocess.TimeoutExpired:
+        pass
+    finally:
+        # The leader may already have exited while a descendant still owns the
+        # output pipe. Do not use the leader's poll result to skip group cleanup.
+        if os.name == "posix":
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        elif process.poll() is None:
+            process.kill()
+        process.wait(timeout=BUILD_PROCESS_KILL_WAIT_SECONDS)
 
 
 @dataclass(frozen=True)
@@ -366,6 +410,8 @@ class DockerImageRuntime:
                     on_output("stderr", "Shared build cache selection: " + json.dumps({
                         "affinity_match": getattr(plan, "affinity_match", False) is True,
                         "imports": len(imports)}, sort_keys=True) + "\n")
+            except ImageBuildTimeoutError:
+                raise
             except (OSError, ValueError, RuntimeError) as exc:
                 if on_output is not None:
                     on_output("stderr", f"Shared build cache unavailable ({type(exc).__name__}); building without it.\n")
@@ -453,11 +499,17 @@ class DockerImageRuntime:
         *,
         on_output: Callable[[str, str], None] | None = None,
     ) -> CommandResult:
+        remaining = remaining_build_execution_seconds()
         if self.dry_run:
             return CommandResult(argv=argv, exit_code=0)
-        if on_output is not None and isinstance(self.executor, SubprocessExecutor):
-            return self._run_streaming(argv, on_output=on_output)
+        if isinstance(self.executor, SubprocessExecutor) and (
+            on_output is not None or remaining is not None
+        ):
+            return self._run_streaming(
+                argv, on_output=on_output or (lambda _stream, _chunk: None)
+            )
         result = self.executor.run(argv)
+        remaining_build_execution_seconds()
         if on_output is not None:
             if result.stdout:
                 on_output("stdout", result.stdout)
@@ -476,14 +528,16 @@ class DockerImageRuntime:
         *,
         on_output: Callable[[str, str], None],
     ) -> CommandResult:
+        remaining_build_execution_seconds()
         process = subprocess.Popen(
             list(argv),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            bufsize=1,
+            # A build owns this group, including CLI/plugin descendants, never
+            # the shared BuildKit daemon. Binary nonblocking reads avoid a
+            # buffered read waiting forever for its requested character count.
+            start_new_session=(os.name == "posix"),
+            bufsize=0,
         )
         # Continue delivering every chunk to the live callback, but retain only
         # a bounded diagnostic tail in CommandResult. Docker build output can
@@ -491,25 +545,48 @@ class DockerImageRuntime:
         output_tail = ""
         output_truncated = False
         assert process.stdout is not None
+        decoder = IncrementalNewlineDecoder(
+            codecs.getincrementaldecoder("utf-8")(errors="replace"), translate=True
+        )
+
+        def deliver(chunk: str) -> None:
+            nonlocal output_tail, output_truncated
+            if not chunk:
+                return
+            if len(output_tail) + len(chunk) > COMMAND_OUTPUT_TAIL_CHARS:
+                output_truncated = True
+            output_tail = _tail_text(output_tail + chunk, limit=COMMAND_OUTPUT_TAIL_CHARS)
+            on_output("combined", chunk)
+
         try:
-            while True:
-                chunk = process.stdout.read(COMMAND_OUTPUT_READ_CHARS)
-                if not chunk:
-                    break
-                if len(output_tail) + len(chunk) > COMMAND_OUTPUT_TAIL_CHARS:
-                    output_truncated = True
-                output_tail = _tail_text(
-                    output_tail + chunk,
-                    limit=COMMAND_OUTPUT_TAIL_CHARS,
-                )
-                on_output("combined", chunk)
+            with selectors.DefaultSelector() as selector:
+                os.set_blocking(process.stdout.fileno(), False)
+                selector.register(process.stdout, selectors.EVENT_READ)
+                while True:
+                    ready = selector.select(remaining_build_execution_seconds())
+                    remaining_build_execution_seconds()
+                    if not ready:
+                        continue
+                    try:
+                        chunk = os.read(process.stdout.fileno(), COMMAND_OUTPUT_READ_CHARS)
+                    except BlockingIOError:
+                        continue
+                    if not chunk:
+                        deliver(decoder.decode(b"", final=True))
+                        break
+                    deliver(decoder.decode(chunk))
+            try:
+                exit_code = process.wait(timeout=remaining_build_execution_seconds())
+            except subprocess.TimeoutExpired:
+                raise ImageBuildTimeoutError(
+                    "image build exceeded its server execution deadline"
+                ) from None
+            remaining_build_execution_seconds()
         except BaseException:
-            process.terminate()
-            process.wait()
+            _stop_owned_build_process(process)
             raise
         finally:
             process.stdout.close()
-        exit_code = process.wait()
         output = (
             COMMAND_OUTPUT_TRUNCATION_MARKER
             + output_tail[
@@ -816,6 +893,7 @@ class ImageManager:
         queue_builds: bool = False,
         max_queued_builds: int | None = None,
         max_concurrent_pulls: int = 8,
+        build_execution_timeout_seconds: float = DEFAULT_BUILD_EXECUTION_TIMEOUT_SECONDS,
         telemetry: Telemetry | None = None,
         environment_publisher: Callable[[ImageBuildSpec], str] | None = None,
     ) -> None:
@@ -824,6 +902,11 @@ class ImageManager:
         self.runtime = runtime
         self.build_store = build_store or ImageBuildStore(store.path)
         self.max_active_builds = max(1, max_active_builds)
+        # Validate before admitting any work. This is a server policy, separate
+        # from the wait_for_build timeout and from queued/admission time.
+        with build_execution_deadline(build_execution_timeout_seconds):
+            pass
+        self.build_execution_timeout_seconds = float(build_execution_timeout_seconds)
         self.queue_builds = queue_builds
         # A bounded queue leaves a burst's excess pending at the gateway, where
         # the autoscaler can add builders for it, instead of queuing it all
@@ -1170,16 +1253,17 @@ class ImageManager:
             },
             parent_context=self.telemetry.extracted_context(trace_context),
         ) as span:
-            self._run_tracked_build_unobserved(
-                build_id,
-                spec,
-                push,
-                direct_push,
-                cleanup,
-                admitted_at,
-                queued_at,
-                cache_affinity,
-            )
+            with build_execution_deadline(self.build_execution_timeout_seconds):
+                self._run_tracked_build_unobserved(
+                    build_id,
+                    spec,
+                    push,
+                    direct_push,
+                    cleanup,
+                    admitted_at,
+                    queued_at,
+                    cache_affinity,
+                )
             record = self.build_store.get(build_id)
             if record is not None:
                 span.set_attribute("image.build.status", record.status)
@@ -1230,6 +1314,7 @@ class ImageManager:
                     push=direct_push,
                     on_output=append_output,
                 )
+                remaining_build_execution_seconds()
             finally:
                 _BUILD_CACHE_AFFINITY.reset(cache_affinity_token)
                 _CACHE_PHASE_TIMINGS.reset(cache_timing_token)
@@ -1249,6 +1334,7 @@ class ImageManager:
                             chunk,
                         ),
                     )
+                    remaining_build_execution_seconds()
                 finally:
                     phases["docker_push_ms"] = _elapsed_ms(phase)
                     update_timings()
@@ -1259,10 +1345,12 @@ class ImageManager:
                 try:
                     with publication_metrics() as environment_metrics:
                         manifest_digest = self.environment_publisher(spec)
+                    remaining_build_execution_seconds()
                     if not normalize_manifest_digest(manifest_digest):
                         raise ValueError("immutable environment publisher returned an invalid image digest")
                 finally:
                     phases["immutable_environment_ms"] = _elapsed_ms(phase)
+            remaining_build_execution_seconds()
             now = utc_now()
             image_record = ImageRecord(
                 id=spec.id,
@@ -1306,7 +1394,8 @@ class ImageManager:
                 if cleanup is not None:
                     phase = time.monotonic()
                     try:
-                        cleanup()
+                        with without_build_execution_deadline():
+                            cleanup()
                     finally:
                         phases["cleanup_ms"] = _elapsed_ms(phase)
                         update_timings()

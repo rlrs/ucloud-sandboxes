@@ -27,6 +27,10 @@ from .environment_artifact import (
 )
 from .image_rootfs import DockerImageConfig, DockerOverlay2RootfsStore
 from .managed_registry import RegistryRequestError
+from .build_deadline import (
+    ImageBuildTimeoutError, build_execution_deadline,
+    remaining_build_execution_seconds, without_build_execution_deadline,
+)
 
 _LOG = logging.getLogger(__name__)
 _PUBLICATION_METRICS = ContextVar("environment_publication_metrics", default=None)
@@ -77,6 +81,7 @@ def _copy_metadata(source, destination, info, *, skip_xattrs=()):
 
 
 def _copy_entry(source, destination, hardlinks):
+    remaining_build_execution_seconds()
     info = source.lstat()
     if stat.S_ISDIR(info.st_mode):
         destination.mkdir(mode=0o700)
@@ -98,7 +103,9 @@ def _copy_entry(source, destination, hardlinks):
                 current = os.fstat(reader.fileno())
                 if (current.st_dev, current.st_ino) != identity:
                     raise ValueError("immutable build input changed")
-                shutil.copyfileobj(reader, writer, 1024 * 1024)
+                while chunk := reader.read(1024 * 1024):
+                    remaining_build_execution_seconds()
+                    writer.write(chunk)
                 after = os.fstat(reader.fileno())
                 if (after.st_size, after.st_mtime_ns) != (info.st_size, info.st_mtime_ns):
                     raise ValueError("immutable build input changed while copying")
@@ -306,6 +313,7 @@ def _replace_directory_metadata(source, destination, info=None):
 
 def _merge_layer_diff(source, target, parts, hardlinks, lower, lower_visible, *, consume_private_diffs=False):
     for child in sorted(source.iterdir(), key=lambda path: path.name):
+        remaining_build_execution_seconds()
         if not parts and child.name in WHOLE_IMAGE_EXCLUDED:
             continue  # mkfs excludes them; they may hold device nodes.
         destination = target / child.name
@@ -433,7 +441,17 @@ class FreshEnvironmentBuilder:
             if image_id is not None:
                 # Builders have no sandbox registry users of this temporary
                 # mount. Existing image leases fence concurrent build readers.
+                self._collect_image(image_id)
+
+    def _collect_image(self, image_id):
+        # Another publisher may still hold a lease on the same image. Cleanup
+        # cannot extend an expired build indefinitely; ordinary image GC can
+        # reclaim a cache entry whose readers have not drained in this budget.
+        try:
+            with without_build_execution_deadline(), build_execution_deadline(10):
                 self.image_store.collect_image(image_id, is_referenced=lambda _: False)
+        except ImageBuildTimeoutError:
+            _LOG.warning("temporary builder image cleanup deferred after its deadline")
 
     def _mkfs(self, image, view, *, exclude_runtime_mounts):
         options = ["-T", "0", "-U", "00000000-0000-0000-0000-000000000000"]
@@ -442,13 +460,13 @@ class FreshEnvironmentBuilder:
         if exclude_runtime_mounts:
             options.append("--exclude-regex=^(" + "|".join(sorted(WHOLE_IMAGE_EXCLUDED)) + ")$")
         subprocess.run((self.mkfs_erofs, *options, str(image), str(view)),
-                       check=True, capture_output=True, timeout=600)
+                       check=True, capture_output=True, timeout=remaining_build_execution_seconds(600))
 
     def layer_format(self):
         """Everything besides the layers that decides a layer component's bytes."""
         if self._layer_format is None:
             result = subprocess.run((self.mkfs_erofs, "-V"), check=True, capture_output=True,
-                                    text=True, timeout=60)
+                                    text=True, timeout=remaining_build_execution_seconds(60))
             lines = (result.stdout.strip() or result.stderr.strip()).splitlines()
             if not lines:
                 raise ValueError("mkfs.erofs reported no version")
@@ -497,7 +515,7 @@ class FreshEnvironmentBuilder:
                         "diff_ids": diff_ids, "reused": reused}
         finally:
             if image_id is not None:
-                self.image_store.collect_image(image_id, is_referenced=lambda _: False)
+                self._collect_image(image_id)
 
     @contextmanager
     def _group_lock(self, tag):
@@ -508,7 +526,16 @@ class FreshEnvironmentBuilder:
         fd = os.open(locks / tag, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
         try:
             with _phase("layer_lock_wait"):
-                fcntl.flock(fd, fcntl.LOCK_EX)
+                if remaining_build_execution_seconds() is None:
+                    fcntl.flock(fd, fcntl.LOCK_EX)
+                else:
+                    while True:
+                        remaining_build_execution_seconds()
+                        try:
+                            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                            break
+                        except BlockingIOError:
+                            time.sleep(remaining_build_execution_seconds(0.05))
             yield
         finally:
             os.close(fd)
@@ -640,7 +667,8 @@ class FreshEnvironmentBuilder:
                     from .environment_prepare import prepare_in_subprocess
                     result = prepare_in_subprocess(self.registry.client, repository,
                         [item[2] for item in selected], [item[0] for item in selected],
-                        [groups[index][4] - groups[index][3] for index in missing], Path(temporary))
+                        [groups[index][4] - groups[index][3] for index in missing], Path(temporary),
+                        timeout_seconds=remaining_build_execution_seconds(600))
                     for name, value in result.metrics.items():
                         _measure(name, value)
                     if result.fallback:

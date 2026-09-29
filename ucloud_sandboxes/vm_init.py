@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import math
 from functools import lru_cache
 from pathlib import Path
 from pathlib import PurePosixPath
@@ -195,6 +196,7 @@ class VmInitOptions:
     host_aliases: tuple[str, ...] = ()
     buildx_cache_ref: str = ""
     buildx_cache_registry_url: str = ""
+    build_execution_timeout_seconds: float = 1800.0
     direct_runsc_commit: str = ""
     direct_network: str = "none"
     direct_network_allow_tcp: tuple[str, ...] = ()
@@ -438,6 +440,7 @@ def render_vm_init_script(options: VmInitOptions) -> str:
     builder_flags = ""
     if options.role == "builder":
         builder_flags += " --buildx-direct-push"
+        builder_flags += f" --build-execution-timeout-seconds {options.build_execution_timeout_seconds:g}"
     if options.role == "builder" and options.buildx_cache_ref:
         builder_flags += f" --buildx-cache-ref {shlex.quote(options.buildx_cache_ref)}"
         builder_flags += f" --buildx-builder {SHARED_BUILDX_BUILDER}"
@@ -2130,6 +2133,10 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         raise ValueError("swap size cannot be negative.")
     if options.max_concurrent_image_pulls < 1:
         raise ValueError("max concurrent image pulls must be positive.")
+    if (type(options.build_execution_timeout_seconds) not in {int, float}
+            or not math.isfinite(options.build_execution_timeout_seconds)
+            or options.build_execution_timeout_seconds <= 0):
+        raise ValueError("build execution timeout must be positive and finite.")
     _validate_service_user(options.service_user)
     for value_name, value in {
         "job id": options.job_id,

@@ -9,6 +9,17 @@ from ucloud_sandboxes.config import DeploymentConfig
 
 
 class ConfigTests(unittest.TestCase):
+    def test_build_execution_budget_is_additive_and_validated(self):
+        raw = self._raw()
+        raw["builder"].pop("build_execution_timeout_seconds")
+        self.assertEqual(DeploymentConfig.from_dict(raw).builder.build_execution_timeout_seconds, 1800)
+        for value in (0, -1, True, "30", float("inf"), float("nan")):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                DeploymentConfig.from_dict({**raw, "builder": {**raw["builder"],
+                    "build_execution_timeout_seconds": value}})
+        raw["builder"]["build_execution_timeout_seconds"] = 120
+        self.assertEqual(DeploymentConfig.from_dict(raw).builder.build_execution_timeout_seconds, 120)
+
     def test_managed_build_cache_is_bounded_and_uses_the_private_registry(self):
         raw = self._raw()
         raw["builder"]["buildx_cache_ref"] = f"{raw['gateway_private_host']}:{raw['registry_port']}/ucloud-build-cache:shared"

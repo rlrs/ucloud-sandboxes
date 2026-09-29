@@ -12,6 +12,7 @@ from pathlib import Path
 import re
 import shutil
 import tempfile
+import time
 from threading import BoundedSemaphore, Lock
 from typing import Any, Callable, Iterable, Iterator, Protocol
 
@@ -23,6 +24,9 @@ from .direct_warden import (
 )
 from .mount_status import linux_mount_root
 from .environment_manifest import DOCKER_OVERLAY2_ABI, HOST_EROFS_ABI, EnvironmentManifest
+from .build_deadline import (
+    remaining_build_execution_seconds, ImageBuildTimeoutError, without_build_execution_deadline,
+)
 
 
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
@@ -263,7 +267,7 @@ class DockerOverlay2RootfsStore:
         *argv: str,
         timeout: float = 60,
     ) -> str:
-        result = self.runner.run(argv, timeout=timeout)
+        result = self.runner.run(argv, timeout=remaining_build_execution_seconds(timeout))
         if result.returncode != 0:
             raise DirectWardenError(
                 f"image command failed ({result.returncode}): {result.argv!r}; "
@@ -275,7 +279,7 @@ class DockerOverlay2RootfsStore:
     def _locked(self, digest: str) -> Iterator[None]:
         descriptor = self._open_digest_lock(digest)
         try:
-            fcntl.flock(descriptor, fcntl.LOCK_EX)
+            self._acquire_digest_lock(descriptor, fcntl.LOCK_EX)
             yield
         finally:
             fcntl.flock(descriptor, fcntl.LOCK_UN)
@@ -300,7 +304,11 @@ class DockerOverlay2RootfsStore:
         acquired = False
         active = False
         try:
-            self._operation_slots.acquire()
+            remaining = remaining_build_execution_seconds()
+            if remaining is None:
+                self._operation_slots.acquire()
+            elif not self._operation_slots.acquire(timeout=remaining):
+                raise ImageBuildTimeoutError("image build execution deadline exceeded waiting for filesystem preparation")
             acquired = True
             with self._operation_guard:
                 self._waiting_operations -= 1
@@ -322,7 +330,16 @@ class DockerOverlay2RootfsStore:
         with self._operation_guard:
             self._waiting_operations += 1
         try:
-            fcntl.flock(descriptor, operation)
+            if remaining_build_execution_seconds() is None:
+                fcntl.flock(descriptor, operation)
+            else:
+                while True:
+                    remaining_build_execution_seconds()
+                    try:
+                        fcntl.flock(descriptor, operation | fcntl.LOCK_NB)
+                        break
+                    except BlockingIOError:
+                        time.sleep(remaining_build_execution_seconds(0.05))
         finally:
             with self._operation_guard:
                 self._waiting_operations -= 1
@@ -495,7 +512,8 @@ class DockerOverlay2RootfsStore:
                     ) from exc
             shutil.rmtree(target, ignore_errors=True)
             try:
-                self._unpin_image(image_id)
+                with without_build_execution_deadline():
+                    self._unpin_image(image_id)
             except Exception as cleanup_exc:
                 raise DirectWardenError(
                     "overlay2 image publication failed and its private pin "

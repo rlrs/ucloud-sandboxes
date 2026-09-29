@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Preserve retryable builder-status failures instead of returning false build-not-found
+  responses. Bound build execution, publication and owned subprocess cancellation
+  with one configurable server budget; retain independent client wait semantics.
+- Retain caches for distinct verified contexts before duplicate exports of a hot
+  context. Raise the Hetzner production tag budget to 512 within the existing
+  32 GiB shared-blob budget. See `docs/build-deadlines.md` for timeout and capacity behavior.
+
 - Isolate selective OCI extraction and private filesystem squashing in a bounded
   fresh Python process per admitted build. Preserve parent-side signing and
   publication, complete-cache-hit behavior, integrity checks, and Docker fallback

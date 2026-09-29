@@ -333,7 +333,7 @@ class RegistryBuildCache:
         candidates: list[_CacheManifest] = []
         blobs: dict[str, int] = {}
         retained_entries = 0
-        for manifest in sorted(manifests, key=lambda entry: (not entry.protected, -entry.created_at, entry.digest)):
+        for manifest in self._retention_order(manifests, now):
             additions = {
                 digest: size for digest, size in manifest.blobs.items() if digest not in blobs
             }
@@ -387,6 +387,33 @@ class RegistryBuildCache:
             summary["deleted_digests"].append(entry.digest)
             summary["deleted_manifests"] += 1
         return summary
+
+    def _retention_order(self, manifests: list[_CacheManifest], now: int) -> list[_CacheManifest]:
+        # Repeated exports of a hot context must not displace every other
+        # reusable context solely because the writer published more recently.
+        # Tags are only selection hints; deletion remains manifest-wide, so
+        # every alias still consumes a slot and unknown aliases stay protected.
+        newest: dict[tuple[str, str], tuple[int, str, str]] = {}
+        preferred: set[str] = set()
+        for manifest in manifests:
+            for tag in manifest.tags:
+                owned = _parse_owned_tag(tag)
+                if owned is None:
+                    continue
+                if not owned.affinity:
+                    # Legacy tags do not prove equal inputs. Treat every such
+                    # manifest independently, retaining their recency policy.
+                    preferred.add(manifest.digest)
+                elif now - self.max_age_seconds <= owned.created_at <= now:
+                    key = (owned.recipe, owned.affinity)
+                    candidate = (owned.created_at, tag, manifest.digest)
+                    if key not in newest or candidate > newest[key]:
+                        newest[key] = candidate
+        preferred.update(candidate[2] for candidate in newest.values())
+        return sorted(manifests, key=lambda entry: (
+            not entry.protected, entry.digest not in preferred,
+            -entry.created_at, entry.digest,
+        ))
 
     def _tags(self, *, deadline: float | None = None) -> list[str]:
         # RegistryClient.tags intentionally tolerates malformed entries for

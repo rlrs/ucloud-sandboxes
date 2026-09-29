@@ -559,6 +559,8 @@ def build_parser() -> argparse.ArgumentParser:
     builder_agent.add_argument("--environment-signing-key", type=Path)
     builder_agent.add_argument("--environment-allow-path", action="append", default=[])
     builder_agent.add_argument("--max-active-image-builds", type=int, default=DEFAULT_MAX_ACTIVE_IMAGE_BUILDS)
+    builder_agent.add_argument("--build-execution-timeout-seconds", type=float, default=1800.0,
+                               help="Total execution budget per accepted build, including image publication.")
     builder_agent.add_argument(
         "--max-concurrent-image-pulls",
         type=int,
@@ -1327,6 +1329,7 @@ def cmd_serve_builder_agent(args: argparse.Namespace) -> int:
             buildx_cache_registry_url=args.buildx_cache_registry_url,
         ),
         max_active_image_builds=args.max_active_image_builds,
+        build_execution_timeout_seconds=args.build_execution_timeout_seconds,
         max_concurrent_image_pulls=args.max_concurrent_image_pulls,
         node_control_bearer_token=read_required_token_file(
             args.node_control_bearer_token_file,
@@ -7081,6 +7084,7 @@ def vm_init_options_for_job(
         ),
         host_aliases=(host_alias,) if host_alias else (),
         buildx_cache_ref=(config.builder.buildx_cache_ref if role == "builder" else ""),
+        build_execution_timeout_seconds=config.builder.build_execution_timeout_seconds,
         buildx_cache_registry_url=(
             config.registry_worker_url if role == "builder" and config.builder.buildx_cache_ref else ""
         ),

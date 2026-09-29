@@ -403,10 +403,14 @@ class BuilderPoolConfig:
     buildx_cache_max_bytes: int = 32 * 1024**3
     buildx_cache_max_entries: int = 64
     buildx_cache_max_age_seconds: int = 7 * 86400
+    build_execution_timeout_seconds: float = 1800.0
 
     @classmethod
     def from_dict(cls, raw: object) -> "BuilderPoolConfig":
+        if isinstance(raw, dict):
+            raw = {"build_execution_timeout_seconds": cls.build_execution_timeout_seconds, **raw}
         result = cls(**_exact_dataclass_values("builder", raw, cls()))
+        _require_float("builder.build_execution_timeout_seconds", result.build_execution_timeout_seconds, minimum=0.01)
         _require_string("builder.product_id", result.product_id)
         for name in ("disk_gb", "max_concurrent_image_pulls"):
             _require_int(f"builder.{name}", getattr(result, name), minimum=1)

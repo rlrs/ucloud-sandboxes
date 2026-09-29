@@ -248,6 +248,91 @@ class RegistryBuildCacheTests(unittest.TestCase):
         self.assertEqual(result["deleted_manifests"], 1)
         self.assertEqual(self.registry.deleted, [(REPOSITORY, expected_old)])
 
+    def test_hot_affinity_export_burst_does_not_evict_distinct_contexts(self):
+        distinct = []
+        for number in range(20):
+            name = affinity_tag(f"distinct-{number}", age=100 + number,
+                                affinity=hashlib.sha256(str(number).encode()).hexdigest())
+            distinct.append(name)
+            self.registry.add(name, manifest(name, (("shared", 100),)))
+        burst = []
+        for number in range(60):
+            name = affinity_tag(f"hot-{number}", age=number, affinity="f" * 64)
+            burst.append(name)
+            self.registry.add(name, manifest(name, (("shared", 100),)))
+        result = self.cache(max_entries=21).prune(execute=True)
+        self.assertEqual(set(result["candidate_tags"]), set(burst[1:]))
+        self.assertTrue(set(distinct).isdisjoint(result["candidate_tags"]))
+        self.assertEqual(result["retained_entries"], 21)
+        self.assertEqual(result["retained_bytes"], 100 + 21 * 5)
+        self.assertEqual(result["deleted_manifests"], 59)
+
+    def test_affinity_retention_keeps_recipe_identity_and_legacy_inputs_distinct(self):
+        hot = affinity_tag("hot", affinity="a" * 64)
+        duplicate = affinity_tag("duplicate", affinity="a" * 64, age=1)
+        other_recipe = affinity_tag("other-recipe", affinity="a" * 64, recipe="other", age=20)
+        legacy = [tag("legacy-one", age=30), tag("legacy-two", age=40)]
+        for name in [hot, duplicate, other_recipe, *legacy]:
+            self.registry.add(name, manifest(name))
+        result = self.cache(max_entries=4).prune()
+        self.assertEqual(result["candidate_tags"], [duplicate])
+        self.assertEqual(result["retained_entries"], 4)
+
+    def test_affinity_representatives_preserve_byte_budget_before_duplicate_exports(self):
+        hot = affinity_tag("hot", affinity="a" * 64)
+        duplicate = affinity_tag("duplicate", affinity="a" * 64, age=1)
+        distinct = affinity_tag("distinct", affinity="b" * 64, age=20)
+        for name in [hot, duplicate, distinct]:
+            self.registry.add(name, manifest(name, (("shared", 100), (name, 20))))
+        result = self.cache(max_bytes=150).prune(execute=True)
+        self.assertEqual(result["candidate_tags"], [duplicate])
+        self.assertEqual(result["retained_entries"], 2)
+        self.assertEqual(result["retained_bytes"], 150)
+
+    def test_owned_aliases_share_digest_priority_but_each_consumes_an_entry(self):
+        older_a = affinity_tag("older-a", affinity="a" * 64, age=20)
+        newest_b = affinity_tag("newest-b", affinity="b" * 64)
+        aliased = self.registry.add(older_a, manifest("aliased"))
+        self.registry.tags_by_name[newest_b] = aliased
+        newest_a = affinity_tag("newest-a", affinity="a" * 64, age=5)
+        middle_a = affinity_tag("middle-a", affinity="a" * 64, age=10)
+        for name in (newest_a, middle_a):
+            self.registry.add(name, manifest(name))
+        result = self.cache(max_entries=3).prune(execute=True)
+        # The fresh B alias must not make the old A alias the A representative.
+        self.assertEqual(result["candidate_tags"], [middle_a])
+        self.assertEqual(result["retained_entries"], 3)
+        self.assertEqual(result["retained_bytes"], 10)
+        self.assertNotIn(aliased, result["deleted_digests"])
+
+    def test_protected_affinity_alias_precedes_diversity_and_cannot_be_deleted(self):
+        old = affinity_tag("old-protected", affinity="a" * 64, age=8 * 86400)
+        protected = self.registry.add(old, manifest("protected", (("shared", 100),)))
+        self.registry.tags_by_name["external-owner"] = protected
+        hot = affinity_tag("hot", affinity="a" * 64)
+        duplicate = affinity_tag("duplicate", affinity="a" * 64, age=1)
+        distinct = affinity_tag("distinct", affinity="b" * 64, age=20)
+        for name in (hot, duplicate, distinct):
+            self.registry.add(name, manifest(name, (("shared", 100),)))
+        result = self.cache(max_entries=3, max_bytes=115).prune(execute=True)
+        self.assertEqual(result["candidate_tags"], [duplicate])
+        self.assertEqual(result["protected_entries"], 1)
+        self.assertEqual(result["retained_entries"], 3)
+        self.assertEqual(result["retained_bytes"], 115)
+        self.assertNotIn(protected, result["deleted_digests"])
+
+    def test_affinity_duplicates_fill_unused_budget_after_representatives(self):
+        hot = affinity_tag("hot", affinity="a" * 64)
+        duplicate = affinity_tag("duplicate", affinity="a" * 64, age=1)
+        oldest = affinity_tag("oldest", affinity="a" * 64, age=2)
+        distinct = affinity_tag("distinct", affinity="b" * 64, age=20)
+        expired = affinity_tag("expired-distinct", affinity="c" * 64, age=8 * 86400)
+        for name in (hot, duplicate, oldest, distinct, expired):
+            self.registry.add(name, manifest(name))
+        result = self.cache(max_entries=3).prune()
+        self.assertEqual(result["candidate_tags"], sorted([oldest, expired]))
+        self.assertEqual(result["retained_entries"], 3)
+
     def test_entry_and_age_limits_retain_only_recent_entries(self) -> None:
         fresh = tag("fresh")
         previous = tag("previous", age=1)

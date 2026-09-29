@@ -1777,6 +1777,7 @@ def build_builder_node_agent_server(
     max_json_body_bytes: int = DEFAULT_MAX_JSON_BODY_BYTES,
     max_file_body_bytes: int = DEFAULT_MAX_FILE_BODY_BYTES,
     max_active_image_builds: int = DEFAULT_MAX_ACTIVE_IMAGE_BUILDS,
+    build_execution_timeout_seconds: float = 1800.0,
     max_concurrent_image_pulls: int = 8,
     physical_disk_path: Path | None = None,
     build_context_store_dir: Path | None = None,
@@ -1806,6 +1807,7 @@ def build_builder_node_agent_server(
         ImageStore(image_file),
         image_runtime,
         max_active_builds=max_active_image_builds,
+        build_execution_timeout_seconds=build_execution_timeout_seconds,
         queue_builds=True,
         # Atomically admit only execution capacity, including preparations.
         # Excess demand stays at the gateway so another builder can take it;

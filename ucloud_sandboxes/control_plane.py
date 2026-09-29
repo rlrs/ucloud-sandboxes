@@ -639,6 +639,18 @@ class ProxiedResponse:
         return decoded if isinstance(decoded, dict) else {}
 
 
+class ImageBuildLookupUnavailableError(RuntimeError):
+    """A failed status observation cannot establish that a build is absent."""
+
+    def __init__(self, upstream_status: int = HTTPStatus.SERVICE_UNAVAILABLE) -> None:
+        super().__init__("image build status is temporarily unavailable")
+        self.status = (
+            upstream_status
+            if upstream_status in {408, 429, 500, 502, 503, 504}
+            else HTTPStatus.BAD_GATEWAY
+        )
+
+
 class CreateImagePullTasks:
     """Share cold pulls without retaining HTTP admission slots indefinitely."""
 
@@ -2931,9 +2943,19 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         self._write_json({"builds": self._image_build_records_across_nodes()})
 
     def _get_image_build(self, build_key: str) -> None:
+        try:
+            builds = self._image_build_records_for_key(build_key)
+        except ImageBuildLookupUnavailableError as exc:
+            self._write_json(
+                {"error": str(exc), "error_code": "image_build_status_unavailable",
+                 "retryable": True},
+                status=exc.status,
+                headers={"Retry-After": "2", "X-UCloud-Sandbox-Retryable": "true"},
+            )
+            return
         matches = [
             build
-            for build in self._image_build_records_for_key(build_key)
+            for build in builds
             if build.get("build_id") == build_key or build.get("image_id") == build_key
         ]
         if not matches:
@@ -2960,6 +2982,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
 
         Image names deliberately search all builders: a later build can own the
         same name elsewhere. Hints are disposable and never cache build state.
+        Only explicit 404 responses establish absence. A failed known-owner
+        probe is retried without fanning out to unrelated overloaded builders.
         """
         builders = [
             h for h in self._ready_heartbeats() if "image-build" in h.capabilities
@@ -2977,13 +3001,15 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 method="GET",
                 timeout_seconds=NODE_RECONCILE_PROXY_TIMEOUT_SECONDS,
             )
-            if response.status >= 400:
+            if response.status == HTTPStatus.NOT_FOUND:
                 return None
+            if not 200 <= response.status < 300:
+                raise ImageBuildLookupUnavailableError(response.status)
             raw = response.json().get("build")
             if not isinstance(raw, dict) or build_key not in (
                 raw.get("build_id"), raw.get("image_id")
             ):
-                return None
+                raise ImageBuildLookupUnavailableError(HTTPStatus.BAD_GATEWAY)
             build = dict(raw)
             build.update(location=heartbeat.node_id, node=_node_metadata(heartbeat))
             if raw.get("build_id") == build_key:
@@ -2994,26 +3020,64 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                         self.image_build_owners.popitem(last=False)
             return build
 
+        def cached_matches() -> list[dict[str, Any]]:
+            return [
+                b for b in self._cached_image_build_records()
+                if build_key in (b.get("build_id"), b.get("image_id"))
+            ]
+
+        def terminal_exact_match() -> list[dict[str, Any]]:
+            return [
+                b for b in cached_matches()
+                if b.get("build_id") == build_key
+                and _image_build_response_terminal({"build": b})
+            ]
+
+        if owner is not None and not any(
+            identity(heartbeat)[:2] == owner[:2] for heartbeat in builders
+        ):
+            # A missing/stale heartbeat does not prove the owner's build gone.
+            # A new incarnation of the same node may still recover its record.
+            terminal = terminal_exact_match()
+            if terminal:
+                return terminal
+            raise ImageBuildLookupUnavailableError()
+
         tried = None
         for heartbeat in builders:
             if identity(heartbeat) == owner:
                 tried = identity(heartbeat)
-                build = fetch(heartbeat)
+                try:
+                    build = fetch(heartbeat)
+                except ImageBuildLookupUnavailableError:
+                    terminal = terminal_exact_match()
+                    if terminal:
+                        return terminal
+                    raise
                 if build is not None and build.get("build_id") == build_key:
                     return [build]
                 break
-        builds = [
-            b for b in self._cached_image_build_records()
-            if build_key in (b.get("build_id"), b.get("image_id"))
-        ]
+        builds = cached_matches()
+        exact = [b for b in builds if b.get("build_id") == build_key]
+        if exact:
+            return exact
+        failure = None
         for heartbeat in builders:
             if identity(heartbeat) == tried:
                 continue
-            build = fetch(heartbeat)
+            try:
+                build = fetch(heartbeat)
+            except ImageBuildLookupUnavailableError as exc:
+                failure = failure or exc
+                continue
             if build is not None:
                 builds.append(build)
                 if build.get("build_id") == build_key:
                     return [build]
+        if failure is not None:
+            # Partial image-name results cannot identify the latest build;
+            # partial exact-ID discovery cannot establish a negative result.
+            raise failure
         return builds
 
     def _image_build_records_across_nodes(self) -> list[dict[str, Any]]:

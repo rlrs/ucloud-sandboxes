@@ -18,6 +18,9 @@ from urllib import error, request
 from urllib.parse import quote, unquote, urlencode, urljoin, urlparse, urlunparse
 
 from .models import parse_iso_datetime
+from .build_deadline import (
+    remaining_build_execution_seconds, build_execution_deadline, without_build_execution_deadline,
+)
 
 
 MANIFEST_ACCEPT = ", ".join(
@@ -339,7 +342,7 @@ class RegistryClient:
                     headers={"Content-Type": "application/octet-stream", "Content-Length": str(size)},
                     # http.client reads file bodies 8 KiB at a time, holding the
                     # GIL per block; concurrent publications stream 1 MiB blocks.
-                    data=iter(lambda: body.read(_UPLOAD_BLOCK_BYTES), b""),
+                    data=_upload_blocks(body),
                     timeout_seconds=max(600.0, size / (8 * 1024 * 1024)),
                 )
             try:
@@ -348,7 +351,8 @@ class RegistryClient:
                 response.close()
         except BaseException:
             try:
-                self.abort_blob_upload(upload)
+                with without_build_execution_deadline(), build_execution_deadline(1):
+                    self.abort_blob_upload(upload)
             except Exception:
                 pass  # The upload's own error is the one to report.
             raise
@@ -464,7 +468,7 @@ class RegistryClient:
             headers={"Accept": MANIFEST_ACCEPT},
         )
         try:
-            manifest = response.read(MAX_REGISTRY_JSON_RESPONSE_BYTES + 1)
+            manifest = _read_response_bytes(response, MAX_REGISTRY_JSON_RESPONSE_BYTES + 1, deadline=None)
             content_type = str(response.headers.get("Content-Type") or "").strip()
         finally:
             response.close()
@@ -691,7 +695,7 @@ class RegistryClient:
     ) -> tuple[dict[str, Any], Any]:
         response = self._request(path, headers=headers)
         try:
-            body = response.read(MAX_REGISTRY_JSON_RESPONSE_BYTES + 1)
+            body = _read_response_bytes(response, MAX_REGISTRY_JSON_RESPONSE_BYTES + 1, deadline=None)
             response_headers = _CaseInsensitiveHeaders(response.headers.items())
         finally:
             response.close()
@@ -722,6 +726,7 @@ class RegistryClient:
             if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
                 raise ValueError("registry request timeout must be positive and finite")
             timeout = min(timeout, timeout_seconds)
+        timeout = remaining_build_execution_seconds(timeout)
         deadline = time.monotonic() + timeout_seconds if timeout_seconds is not None else None
         try:
             return request.urlopen(req, timeout=timeout)
@@ -743,21 +748,33 @@ def _read_response_bytes(response, limit: int, *, deadline: float | None) -> byt
     This is not a hard total network deadline: the final read can overshoot it
     by one socket timeout. read1 prevents a slow body from extending it forever.
     """
-    if deadline is None:
+    build_remaining = remaining_build_execution_seconds()
+    if deadline is None and build_remaining is None:
         return response.read(limit)
     chunks = []
     size = 0
     while size < limit:
-        if time.monotonic() >= deadline:
+        remaining_build_execution_seconds()
+        if deadline is not None and time.monotonic() >= deadline:
             raise TimeoutError("registry response read deadline exceeded")
-        chunk = response.read1(min(64 * 1024, limit - size))
-        if time.monotonic() >= deadline:
+        chunk = getattr(response, "read1", response.read)(min(64 * 1024, limit - size))
+        remaining_build_execution_seconds()
+        if deadline is not None and time.monotonic() >= deadline:
             raise TimeoutError("registry response read deadline exceeded")
         if not chunk:
             break
         chunks.append(chunk)
         size += len(chunk)
     return b"".join(chunks)
+
+
+def _upload_blocks(body):
+    while True:
+        remaining_build_execution_seconds()
+        chunk = body.read(_UPLOAD_BLOCK_BYTES)
+        if not chunk:
+            return
+        yield chunk
 
 
 class RegistryUsageStore:

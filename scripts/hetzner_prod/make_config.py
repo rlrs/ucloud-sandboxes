@@ -149,8 +149,9 @@ builder.update({"product_id": "ccx33", "disk_gb": 223, "docker_quota_image_gb": 
 builder.update({
     "buildx_cache_ref": f"{raw['gateway_private_host']}:{raw['registry_port']}/ucloud-build-cache:shared",
     "buildx_cache_max_bytes": 32 * 1024**3,
-    "buildx_cache_max_entries": 64,
+    "buildx_cache_max_entries": 512,
     "buildx_cache_max_age_seconds": 7 * 86400,
+    "build_execution_timeout_seconds": 1800,
 })
 policy = raw["policy"]
 policy.update({

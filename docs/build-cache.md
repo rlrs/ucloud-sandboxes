@@ -10,9 +10,11 @@ name this deployment's private registry and a repository whose final component
 is `ucloud-build-cache` or begins `ucloud-build-cache-`, for example
 `10.42.0.2:5000/ucloud-build-cache:shared`. The configured tag is a namespace
 placeholder, not a mutable shared export destination. Each build exports a
-unique `bc1-...` tag. Imports prefer a recent cache for the Dockerfile, then
-other recent caches, up to eight. BuildKit validates the actual build inputs;
-the Dockerfile hint does not authorize reusing a completed image.
+unique tag. A verified context archive, Dockerfile and build arguments select
+the newest matching `bc2-...` cache alone. Without an exact match, imports prefer
+the same Dockerfile and diverse recent recipes, up to eight. Legacy `bc1-...`
+tags remain readable. BuildKit validates the actual build inputs; these hints
+never authorize reusing a completed image.
 
 ## Storage and retention
 
@@ -30,8 +32,12 @@ Defaults, configurable in the `builder` section:
 | `buildx_cache_max_age_seconds` | 604,800 | Seven days since cache publication |
 
 Hourly `registry-prune` applies these rules separately from ordinary image and
-EROFS/snapshot retention. The newest entries that fit are retained, counting
-shared cache blobs once. Unknown aliases protect their manifest from deletion;
+EROFS/snapshot retention. The newest export for each distinct verified context
+is considered before duplicate exports of a hot context; spare capacity retains
+duplicates by recency. Legacy entries have no verified context equivalence and
+retain their recency policy. Shared cache blobs count once. The Hetzner production
+profile retains up to 512 tags within the same 32 GiB byte budget; this is not a
+guarantee that every context fits. Unknown aliases protect their manifest from deletion;
 ambiguous or changing inventories defer cleanup. A failed cache cleanup does
 not stop image/reference maintenance. These are logical retention targets,
 not hard storage quotas: active uploads, the pruning interval, protected aliases

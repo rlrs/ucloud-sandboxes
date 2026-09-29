@@ -257,9 +257,11 @@ class LayerEnvironmentComponent:
 
 
 def _chunk_image(image: Path):
+    from .build_deadline import remaining_build_execution_seconds
     chunks, digest = [], hashlib.sha256()
     with image.open("rb") as source:
         while payload := source.read(CHUNK_BYTES):
+            remaining_build_execution_seconds()
             digest.update(payload)
             chunks.append(Chunk(content_digest(payload), len(payload)))
     return tuple(chunks), "sha256:" + digest.hexdigest()
@@ -300,6 +302,7 @@ def _transient(exc: BaseException) -> bool:
 
 
 def _upload_blob(client, repository, payload, expected_digest):
+    from .build_deadline import build_execution_deadline, without_build_execution_deadline
     if content_digest(payload) != expected_digest:
         raise ValueError("environment changed after signing")
     for attempt in range(_UPLOAD_ATTEMPTS):
@@ -312,7 +315,8 @@ def _upload_blob(client, repository, payload, expected_digest):
             return
         except BaseException as exc:
             try:
-                client.abort_blob_upload(location)
+                with without_build_execution_deadline(), build_execution_deadline(1):
+                    client.abort_blob_upload(location)
             except Exception as abort_error:
                 # A failed cleanup must never replace the upload's own error;
                 # an abandoned upload follows ordinary registry GC.

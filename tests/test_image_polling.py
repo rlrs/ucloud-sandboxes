@@ -8,7 +8,11 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock
 
-from ucloud_sandboxes.control_plane import ControlPlaneHandler
+from ucloud_sandboxes.control_plane import (
+    ControlPlaneHandler,
+    ProxiedResponse,
+    _node_transport_error_response,
+)
 from ucloud_sandboxes.images import ImageRecord, ImageStore
 from ucloud_sandboxes.models import utc_now
 
@@ -264,6 +268,136 @@ class ImagePollingTests(unittest.TestCase):
         h._image_build_records_for_key("build-id")
         self.assertEqual(calls, ["http://a"])
 
+    def test_owner_timeout_is_retryable_without_fanout_and_recovers(self):
+        h = self.handler()
+        h._ready_heartbeats = lambda: [self.node("owner"), self.node("peer")]
+        h._write_json = Mock()
+        h._record_successful_build_image = Mock()
+        running = {"build_id": "build-id", "image_id": "image", "status": "running"}
+        success = SimpleNamespace(status=200, json=lambda: {"build": running})
+        h._proxy_request = Mock(side_effect=[
+            success,
+            _node_transport_error_response(TimeoutError("fixture timeout")),
+            success,
+        ])
+
+        h._get_image_build("build-id")
+        self.assertEqual(h.image_build_owners["build-id"], ("owner", "owner", "one"))
+        h._get_image_build("build-id")
+        response = h._write_json.call_args
+        self.assertEqual(response.kwargs["status"], 504)
+        self.assertTrue(response.args[0]["retryable"])
+        self.assertEqual(response.args[0]["error_code"], "image_build_status_unavailable")
+        self.assertEqual(response.kwargs["headers"]["Retry-After"], "2")
+        h._get_image_build("build-id")
+        self.assertEqual(h._write_json.call_args.args[0]["build"]["status"], "running")
+        self.assertEqual([call.args[0] for call in h._proxy_request.call_args_list],
+                         ["http://owner"] * 3)
+
+    def test_failed_owner_statuses_are_not_absence(self):
+        for upstream, expected in [(408, 408), (429, 429), (500, 500),
+                                   (502, 502), (503, 503), (400, 502), (403, 502)]:
+            with self.subTest(upstream=upstream):
+                h = self.handler()
+                h.image_build_owners["build-id"] = ("owner", "owner", "one")
+                h._ready_heartbeats = lambda: [self.node("owner"), self.node("peer")]
+                h._proxy_request = Mock(return_value=ProxiedResponse(
+                    upstream, {}, b'{"error":"private upstream detail","retryable":false}'
+                ))
+                h._write_json = Mock()
+                h._get_image_build("build-id")
+                response = h._write_json.call_args
+                self.assertEqual(response.kwargs["status"], expected)
+                self.assertTrue(response.args[0]["retryable"])
+                self.assertNotIn("private", response.args[0]["error"])
+                h._proxy_request.assert_called_once()
+
+    def test_missing_owner_heartbeat_is_retryable_without_peer_scan(self):
+        h = self.handler()
+        h.image_build_owners["build-id"] = ("owner", "owner", "one")
+        h._ready_heartbeats = lambda: [self.node("peer")]
+        h._proxy_request = Mock()
+        h._write_json = Mock()
+        h._get_image_build("build-id")
+        self.assertEqual(h._write_json.call_args.kwargs["status"], 503)
+        self.assertTrue(h._write_json.call_args.args[0]["retryable"])
+        h._proxy_request.assert_not_called()
+
+    def test_confirmed_absence_returns_404_after_owner_and_fallback_probes(self):
+        h = self.handler()
+        h.image_build_owners["build-id"] = ("owner", "owner", "one")
+        h._ready_heartbeats = lambda: [self.node("owner"), self.node("peer")]
+        h._proxy_request = Mock(return_value=ProxiedResponse(404, {}, b"{}"))
+        h._write_json = Mock()
+        h._get_image_build("build-id")
+        self.assertEqual(h._write_json.call_args.kwargs["status"], 404)
+        self.assertEqual([call.args[0] for call in h._proxy_request.call_args_list],
+                         ["http://owner", "http://peer"])
+
+    def test_failed_discovery_does_not_hide_exact_fallback_or_claim_absence(self):
+        for peer_found in (True, False):
+            with self.subTest(peer_found=peer_found):
+                h = self.handler()
+                h._ready_heartbeats = lambda: [self.node("a"), self.node("b")]
+                h._proxy_request = Mock(side_effect=[
+                    ProxiedResponse(503, {}, b"{}"),
+                    SimpleNamespace(
+                        status=200 if peer_found else 404,
+                        json=lambda: {"build": {"build_id": "build-id", "status": "running"}},
+                    ),
+                ])
+                h._write_json = Mock()
+                h._record_successful_build_image = Mock()
+                h._get_image_build("build-id")
+                response = h._write_json.call_args
+                if peer_found:
+                    self.assertEqual(response.args[0]["build"]["location"], "b")
+                else:
+                    self.assertEqual(response.kwargs["status"], 503)
+                    self.assertTrue(response.args[0]["retryable"])
+
+    def test_exact_terminal_local_record_survives_unavailable_owner(self):
+        for owner_ready in (True, False):
+            with self.subTest(owner_ready=owner_ready):
+                h = self.handler()
+                h.image_build_owners["build-id"] = ("owner", "owner", "one")
+                h._ready_heartbeats = lambda: [self.node("owner")] if owner_ready else []
+                terminal = {"build_id": "build-id", "image_id": "image", "status": "succeeded"}
+                h._cached_image_build_records = lambda: [terminal]
+                h._proxy_request = Mock(return_value=ProxiedResponse(504, {}, b"{}"))
+                h.routing_store = Mock()
+                h._write_json = Mock()
+                h._record_successful_build_image = Mock()
+                h._get_image_build("build-id")
+                self.assertEqual(h._write_json.call_args.args[0], {"build": terminal})
+                h.routing_store.clear_pending_image_build.assert_called_once_with("image")
+
+    def test_image_name_cannot_use_older_terminal_record_during_incomplete_scan(self):
+        h = self.handler()
+        h._ready_heartbeats = lambda: [self.node("a"), self.node("b")]
+        old = {"build_id": "older", "image_id": "image", "status": "succeeded"}
+        h._cached_image_build_records = lambda: [old]
+        h._proxy_request = Mock(side_effect=[
+            SimpleNamespace(status=200, json=lambda: {"build": old}),
+            ProxiedResponse(503, {}, b"{}"),
+        ])
+        h._write_json = Mock()
+        h._record_successful_build_image = Mock()
+        h._get_image_build("image")
+        self.assertEqual(h._write_json.call_args.kwargs["status"], 503)
+        h._record_successful_build_image.assert_not_called()
+
+    def test_malformed_success_is_retryable_not_confirmed_absence(self):
+        for body in (b"not-json", b"{}", b'{"build":[]}'):
+            with self.subTest(body=body):
+                h = self.handler()
+                h._ready_heartbeats = lambda: [self.node("a")]
+                h._proxy_request = Mock(return_value=ProxiedResponse(200, {}, body))
+                h._write_json = Mock()
+                h._get_image_build("build-id")
+                self.assertEqual(h._write_json.call_args.kwargs["status"], 502)
+                self.assertTrue(h._write_json.call_args.args[0]["retryable"])
+
     def test_image_name_discovers_all_builders_and_selects_latest(self):
         h = self.handler()
         h._ready_heartbeats = lambda: [self.node("a"), self.node("b")]
@@ -296,5 +430,6 @@ class ImagePollingTests(unittest.TestCase):
         h._record_successful_build_image = Mock()
         h._write_json = Mock()
         h._get_image_build("absent")
-        self.assertEqual(h._write_json.call_args.kwargs["status"], 404)
+        self.assertEqual(h._write_json.call_args.kwargs["status"], 502)
+        self.assertTrue(h._write_json.call_args.args[0]["retryable"])
         h._record_successful_build_image.assert_not_called()

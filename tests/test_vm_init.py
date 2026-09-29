@@ -102,6 +102,13 @@ def write_bundle(root: Path, role: str) -> dict:
 
 
 class VmInitTests(unittest.TestCase):
+    def test_builder_execution_budget_reaches_service_and_rejects_unbounded_values(self):
+        script = render_vm_init_script(self._options(role="builder", build_execution_timeout_seconds=123))
+        self.assertIn("--build-execution-timeout-seconds 123", script)
+        for value in (0, -1, True, float("inf"), float("nan")):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                render_vm_init_script(self._options(role="builder", build_execution_timeout_seconds=value))
+
     def test_shared_buildkit_is_opt_in_and_uses_agent_user(self):
         for role in ("sandbox", "builder"):
             script = render_vm_init_script(self._options(role=role))

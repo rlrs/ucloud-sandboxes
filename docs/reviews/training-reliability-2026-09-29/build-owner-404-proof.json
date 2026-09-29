@@ -1,0 +1,13 @@
+{
+  "initial_running_poll_status": 200,
+  "owner_hint_established": true,
+  "owner_timeout_http_status": 504,
+  "gateway_response_on_owner_timeout": 404,
+  "sdk_stopped_status": 404,
+  "sdk_status_poll_attempts_before_failure": 1,
+  "subsequent_running_poll_status": 200,
+  "node_poll_timeout_seconds": 5,
+  "build_continued_running": true,
+  "network_calls": 0,
+  "production_calls": 0
+}

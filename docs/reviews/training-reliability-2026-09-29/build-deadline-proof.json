@@ -1,0 +1,10 @@
+{
+  "proof": "local exact SDK wait + real bounded subprocess, no Docker/network",
+  "sdk_timeout_seconds": 0.1,
+  "client_error": "TimeoutError",
+  "server_status_after_client_timeout": "running",
+  "active_slots_after_client_timeout": 1,
+  "next_build_admission_error": "ImageBuildCapacityError",
+  "bounded_child_final_status": "succeeded",
+  "active_slots_after_completion": 0
+}

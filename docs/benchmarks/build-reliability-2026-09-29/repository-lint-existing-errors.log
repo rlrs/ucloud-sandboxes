@@ -1,0 +1,150 @@
+E401 [*] Multiple imports on one line
+ --> scripts/hetzner_prod/agent_probe.py:2:1
+  |
+1 | """Create N parkable managed-agent sandboxes running a small memory workload."""
+2 | import sys, time
+  | ^^^^^^^^^^^^^^^^
+3 | sys.path.insert(0, "/Users/Rasmus/Git/ucloud-sandboxes/ucloud-sandboxes-sdk/src")
+4 | from concurrent.futures import ThreadPoolExecutor
+  |
+help: Split imports
+  |
+1 | """Create N parkable managed-agent sandboxes running a small memory workload."""
+  - import sys, time
+2 + import sys
+3 + import time
+4 | sys.path.insert(0, "/Users/Rasmus/Git/ucloud-sandboxes/ucloud-sandboxes-sdk/src")
+  |
+
+F401 [*] `time` imported but unused
+ --> scripts/hetzner_prod/agent_probe.py:2:13
+  |
+1 | """Create N parkable managed-agent sandboxes running a small memory workload."""
+2 | import sys, time
+  |             ^^^^
+3 | sys.path.insert(0, "/Users/Rasmus/Git/ucloud-sandboxes/ucloud-sandboxes-sdk/src")
+4 | from concurrent.futures import ThreadPoolExecutor
+  |
+help: Remove unused import: `time`
+  |
+1 | """Create N parkable managed-agent sandboxes running a small memory workload."""
+  - import sys, time
+2 + import sys
+3 | sys.path.insert(0, "/Users/Rasmus/Git/ucloud-sandboxes/ucloud-sandboxes-sdk/src")
+  |
+
+E401 [*] Multiple imports on one line
+ --> scripts/hetzner_prod/relay_e2e.py:5:1
+  |
+3 | usage: relay_e2e.py <gateway-url> <relay-url> <token-dir>
+4 | """
+5 | import asyncio, json, sys, threading, uuid
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+6 | from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+7 | from pathlib import Path
+  |
+help: Split imports
+   |
+4  | """
+   - import asyncio, json, sys, threading, uuid
+5  + import asyncio
+6  + import json
+7  + import sys
+8  + import threading
+9  + import uuid
+10 | from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> scripts/hetzner_prod/relay_e2e.py:24:32
+   |
+22 |         out = json.dumps({"echo": json.loads(body or b"{}"), "path": self.path,
+23 |                           "auth": self.headers.get("Authorization")}).encode()
+24 |         self.send_response(200); self.send_header("Content-Type", "application/json")
+   |                                ^
+25 |         self.send_header("Content-Length", str(len(out))); self.end_headers(); self.wfile.write(out)
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> scripts/hetzner_prod/relay_e2e.py:25:58
+   |
+23 |                           "auth": self.headers.get("Authorization")}).encode()
+24 |         self.send_response(200); self.send_header("Content-Type", "application/json")
+25 |         self.send_header("Content-Length", str(len(out))); self.end_headers(); self.wfile.write(out)
+   |                                                          ^
+
+E702 Multiple statements on one line (semicolon)
+  --> scripts/hetzner_prod/relay_e2e.py:25:78
+   |
+23 |                           "auth": self.headers.get("Authorization")}).encode()
+24 |         self.send_response(200); self.send_header("Content-Type", "application/json")
+25 |         self.send_header("Content-Length", str(len(out))); self.end_headers(); self.wfile.write(out)
+   |                                                                              ^
+
+E702 Multiple statements on one line (semicolon)
+  --> scripts/hetzner_prod/relay_e2e.py:56:25
+   |
+54 |                     handle.delete()
+55 |             code, out, err = await asyncio.to_thread(in_sandbox)
+56 |             cancel.set(); worker.cancel()
+   |                         ^
+57 |             print("exit", code); print("stdout", (out.decode() if isinstance(out, bytes) else out)[:400])
+58 |             if code: print("stderr", (err.decode() if isinstance(err, bytes) else err)[-800:])
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> scripts/hetzner_prod/relay_e2e.py:57:32
+   |
+55 |             code, out, err = await asyncio.to_thread(in_sandbox)
+56 |             cancel.set(); worker.cancel()
+57 |             print("exit", code); print("stdout", (out.decode() if isinstance(out, bytes) else out)[:400])
+   |                                ^
+58 |             if code: print("stderr", (err.decode() if isinstance(err, bytes) else err)[-800:])
+   |
+
+E701 Multiple statements on one line (colon)
+  --> scripts/hetzner_prod/relay_e2e.py:58:20
+   |
+56 |             cancel.set(); worker.cancel()
+57 |             print("exit", code); print("stdout", (out.decode() if isinstance(out, bytes) else out)[:400])
+58 |             if code: print("stderr", (err.decode() if isinstance(err, bytes) else err)[-800:])
+   |                    ^
+59 |
+60 | asyncio.run(main())
+   |
+
+F401 [*] `ucloud_sandboxes.models.ResourceQuantity` imported but unused
+   --> tests/test_dynamic_disk_claims.py:185:45
+    |
+183 |     def _route(self, parkable=True, state="creating"):
+184 |         from tests import test_control_plane as fixtures
+185 |         from ucloud_sandboxes.models import ResourceQuantity
+    |                                             ^^^^^^^^^^^^^^^^
+186 |         spec = _spec("burst")
+187 |         return fixtures._sandbox_route(
+    |
+help: Remove unused import: `ucloud_sandboxes.models.ResourceQuantity`
+    |
+184 |         from tests import test_control_plane as fixtures
+    -         from ucloud_sandboxes.models import ResourceQuantity
+185 |         spec = _spec("burst")
+    |
+
+F401 [*] `json` imported but unused
+ --> tests/test_usage_history.py:4:8
+  |
+2 | from tempfile import TemporaryDirectory
+3 | from types import SimpleNamespace
+4 | import json
+  |        ^^^^
+5 | import unittest
+  |
+help: Remove unused import: `json`
+  |
+3 | from types import SimpleNamespace
+  - import json
+4 | import unittest
+  |
+
+Found 11 errors.
+[*] 5 fixable with the `--fix` option.

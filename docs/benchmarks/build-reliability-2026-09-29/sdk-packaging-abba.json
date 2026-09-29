@@ -1,0 +1,51 @@
+{
+  "order": "ABBA",
+  "fixture_bytes": 16777216,
+  "fixture_sha256": "46528142330599124ee173d4ea0ce0e107df54a812e49abbbe8fc0db1e3996c9",
+  "submissions_per_arm": 4,
+  "heartbeat_interval_seconds": 0.005,
+  "network_calls": 0,
+  "production_calls": 0,
+  "arms": [
+    {
+      "seconds": 1.3176675597205758,
+      "cpu_seconds": 1.317568558,
+      "max_heartbeat_gap_seconds": 1.309378928039223,
+      "requests": 12,
+      "source_sha256": "a0a0d996872ea826b4976cd657ddc51c444698fe27cf5cbe7fde0c3a077a95c6",
+      "version": "0.4.33",
+      "arm": "A"
+    },
+    {
+      "seconds": 0.6839559357613325,
+      "cpu_seconds": 1.330863213,
+      "max_heartbeat_gap_seconds": 0.005883195903152227,
+      "requests": 12,
+      "source_sha256": "f167d1d676e77bff46421286be63afebefa6e93eb898137698f3946360796cc3",
+      "version": "0.4.34",
+      "arm": "B"
+    },
+    {
+      "seconds": 0.6775516550987959,
+      "cpu_seconds": 1.32004079,
+      "max_heartbeat_gap_seconds": 0.008810891304165125,
+      "requests": 12,
+      "source_sha256": "f167d1d676e77bff46421286be63afebefa6e93eb898137698f3946360796cc3",
+      "version": "0.4.34",
+      "arm": "B"
+    },
+    {
+      "seconds": 1.3059656908735633,
+      "cpu_seconds": 1.3058223869999999,
+      "max_heartbeat_gap_seconds": 1.296813421882689,
+      "requests": 12,
+      "source_sha256": "a0a0d996872ea826b4976cd657ddc51c444698fe27cf5cbe7fde0c3a077a95c6",
+      "version": "0.4.33",
+      "arm": "A"
+    }
+  ],
+  "limits": [
+    "No-network local packaging microbenchmark, not full image build latency.",
+    "Same immutable16MiB incompressible fixture used for every arm."
+  ]
+}

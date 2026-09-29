@@ -5,6 +5,9 @@ latest optimization substantially improves repeated builds, but it does not yet
 qualify cold builds, dependency changes or a sustained build burst alongside
 500 running agents. Every end-to-end deadline must pass. This review made no production changes.
 
+The subsequent fixes, SDK release and production canary are recorded in the
+[build reliability release](../benchmarks/build-reliability-2026-09-29/README.md).
+
 ## Confirmed bug: transient status timeout becomes permanent build failure
 
 A [local proof](training-reliability-2026-09-29/build-owner-404-proof.json) exercises

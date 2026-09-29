@@ -1,0 +1,29 @@
+{
+  "verified_at": "2026-09-29T15:54:01.833249+00:00",
+  "runtime_source_commit": "da415f8eba6476a7674da3310eca9e7f05f4802d",
+  "wheel_sha256": "ac538d82a2536c29854e32fb8ee897103a03b4edb5c60892c5c3090bf77dc778",
+  "installed_files_match_wheel": 164,
+  "node_package_root": "/work/ucloud-sandboxes/build-reliability-20260929-r3",
+  "builder_execution_timeout_seconds": 1800,
+  "cache_max_entries": 512,
+  "cache_max_bytes": 34359738368,
+  "sdk_version": "0.4.34",
+  "sdk_sync_async_https_status_smoke": "passed",
+  "fleet_nodes": 0,
+  "prepared_builders": 0,
+  "active_builds": 0,
+  "sandboxes": 0,
+  "services": {
+    "ucloud-sandbox-gateway": "active",
+    "ucloud-sandbox-relay": "active",
+    "ucloud-sandbox-placement": "active",
+    "ucloud-sandbox-autoscaler": "active"
+  },
+  "automatic_upgrade_units": {
+    "apt-daily.timer": "masked",
+    "apt-daily-upgrade.timer": "masked",
+    "apt-daily.service": "masked",
+    "apt-daily-upgrade.service": "masked",
+    "unattended-upgrades.service": "masked"
+  }
+}

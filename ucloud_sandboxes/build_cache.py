@@ -38,7 +38,9 @@ MAX_CACHE_INVENTORY_PAGES = 16
 MAX_CACHE_LAYERS = 10_000
 CACHE_CONFIG_MEDIA_TYPE = "application/vnd.buildkit.cacheconfig.v0"
 CACHE_MANIFEST_MEDIA_TYPE = "application/vnd.oci.image.manifest.v1+json"
-_OWNED_TAG = re.compile(r"^bc1-([0-9a-f]{16})-([0-9]{10})-([0-9a-f]{32})$")
+_OWNED_TAG_V1 = re.compile(r"^bc1-([0-9a-f]{16})-([0-9]{10})-([0-9a-f]{32})$")
+_OWNED_TAG_V2 = re.compile(r"^bc2-([0-9a-f]{16})-([0-9a-f]{32})-([0-9]{10})-([0-9a-f]{32})$")
+_AFFINITY_KEY = re.compile(r"^[0-9a-f]{64}$")
 _TAG = re.compile(r"^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$")
 _REPOSITORY_PART = re.compile(r"^[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*$")
 _INVENTORY_TIMEOUT_SECONDS = 3.0
@@ -59,6 +61,7 @@ class BuildCachePlan:
     imports: tuple[str, ...]
     export_ref: str
     matching_ref: str = ""
+    affinity_match: bool = False
 
 
 @dataclass(frozen=True)
@@ -68,6 +71,22 @@ class _CacheManifest:
     created_at: int
     blobs: dict[str, int]
     protected: bool
+
+
+@dataclass(frozen=True)
+class _OwnedCacheTag:
+    recipe: str
+    affinity: str
+    created_at: int
+
+
+def _parse_owned_tag(tag: str) -> _OwnedCacheTag | None:
+    """One ownership definition for cache import, blob mounts and pruning."""
+    if match := _OWNED_TAG_V2.fullmatch(tag):
+        return _OwnedCacheTag(match[1], match[2], int(match[3]))
+    if match := _OWNED_TAG_V1.fullmatch(tag):
+        return _OwnedCacheTag(match[1], "", int(match[2]))
+    return None
 
 
 class _CacheRegistryClient(RegistryClient):
@@ -130,30 +149,56 @@ class RegistryBuildCache:
         self.client = client or _CacheRegistryClient(base_url, timeout_seconds=_INVENTORY_TIMEOUT_SECONDS)
         self._clock = clock
 
-    def prepare(self, recipe_key: str) -> BuildCachePlan:
+    def prepare(self, recipe_key: str, *, affinity_key: str = "") -> BuildCachePlan:
         """Choose recent caches and allocate an independent tag for this writer."""
+        if not isinstance(affinity_key, str) or (affinity_key and not _AFFINITY_KEY.fullmatch(affinity_key)):
+            raise ValueError("BuildKit cache affinity_key must be a lowercase SHA256 hex digest")
+        # This truncated digest is a cache-selection hint, never authority to
+        # reuse an image. BuildKit still validates the complete build graph.
+        affinity = affinity_key[:32]
         now = int(self._clock())
         recipe = hashlib.sha256(recipe_key.encode("utf-8")).hexdigest()[:16]
-        eligible: list[tuple[int, str, str]] = []
+        eligible: list[tuple[int, str, _OwnedCacheTag]] = []
         for tag in self._tags(deadline=time.monotonic() + _INVENTORY_TIMEOUT_SECONDS):
-            match = _OWNED_TAG.fullmatch(tag)
-            if match is None:
+            owned = _parse_owned_tag(tag)
+            if owned is None:
                 continue
-            timestamp = int(match[2])
+            timestamp = owned.created_at
             if now - self.max_age_seconds <= timestamp <= now:
-                eligible.append((timestamp, tag, match[1]))
+                eligible.append((timestamp, tag, owned))
         eligible.sort(reverse=True)
-        matching = next((entry for entry in eligible if entry[2] == recipe), None)
-        selected = ([matching] if matching else []) + [
-            entry for entry in eligible if entry != matching
-        ]
+        matching = next((entry for entry in eligible if entry[2].recipe == recipe), None)
+        exact = next((entry for entry in eligible if affinity and entry[2].recipe == recipe
+                      and entry[2].affinity == affinity), None)
+        selected = [exact] if exact else []
+        if matching is not None and matching != exact and len(selected) < self.import_limit:
+            selected.append(matching)
+        # Keep useful cross-recipe prefixes without letting a burst from one
+        # unrelated recipe occupy every fallback slot. Then fill by recency.
+        seen_recipes = {recipe}
+        for entry in eligible:
+            if len(selected) >= self.import_limit:
+                break
+            if entry[2].recipe not in seen_recipes:
+                selected.append(entry)
+                seen_recipes.add(entry[2].recipe)
+        selected_tags = {entry[1] for entry in selected}
+        for entry in eligible:
+            if len(selected) >= self.import_limit:
+                break
+            if entry[1] not in selected_tags:
+                selected.append(entry)
+                selected_tags.add(entry[1])
+        preferred = exact or matching
+        identity = f"bc2-{recipe}-{affinity}" if affinity else f"bc1-{recipe}"
         return BuildCachePlan(
             imports=tuple(
                 f"{self.repository_ref}:{entry[1]}"
                 for entry in selected[: self.import_limit]
             ),
-            export_ref=f"{self.repository_ref}:bc1-{recipe}-{now:010d}-{uuid4().hex}",
-            matching_ref=f"{self.repository_ref}:{matching[1]}" if matching else "",
+            export_ref=f"{self.repository_ref}:{identity}-{now:010d}-{uuid4().hex}",
+            matching_ref=f"{self.repository_ref}:{preferred[1]}" if preferred else "",
+            affinity_match=exact is not None,
         )
 
     def pre_mount(self, target_ref: str, matching_ref: str) -> dict[str, Any]:
@@ -177,7 +222,7 @@ class RegistryBuildCache:
                 result["skipped"] = True
                 return result
             tag = matching_ref[len(prefix):]
-            if not _OWNED_TAG.fullmatch(tag):
+            if _parse_owned_tag(tag) is None:
                 result["skipped"] = True
                 return result
             # A single bounded GET captures a complete manifest snapshot. Bind
@@ -396,11 +441,11 @@ class RegistryBuildCache:
         result: list[_CacheManifest] = []
         blob_sizes: dict[str, int] = {}
         for digest, tags in aliases.items():
-            owned = [(tag, _OWNED_TAG.fullmatch(tag)) for tag in tags]
+            owned = [(tag, _parse_owned_tag(tag)) for tag in tags]
             owned = [(tag, match) for tag, match in owned if match is not None]
             if not owned:
                 continue
-            created_at = max(int(match[2]) for _tag, match in owned)
+            created_at = max(parsed.created_at for _tag, parsed in owned)
             if created_at > now + 300:
                 raise ValueError("BuildKit cache tag has an invalid future timestamp")
             manifest, headers = self.client.manifest_document(self.repository, digest)

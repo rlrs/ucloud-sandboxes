@@ -29,6 +29,12 @@ def tag(value: str, *, age: int = 0, recipe: str = "recipe") -> str:
     return f"bc1-{recipe_hash}-{NOW - age:010d}-{identity}"
 
 
+def affinity_tag(value: str, *, affinity: str, age: int = 0, recipe: str = "recipe") -> str:
+    recipe_hash = hashlib.sha256(recipe.encode()).hexdigest()[:16]
+    identity = hashlib.sha256(value.encode()).hexdigest()[:32]
+    return f"bc2-{recipe_hash}-{affinity[:32]}-{NOW - age:010d}-{identity}"
+
+
 def manifest(value: str, layers: tuple[tuple[str, int], ...] = ()) -> dict:
     return {
         "schemaVersion": 2,
@@ -118,6 +124,86 @@ class RegistryBuildCacheTests(unittest.TestCase):
             plans = list(executor.map(cache.prepare, ["same recipe"] * 100))
         self.assertEqual(len({plan.export_ref for plan in plans}), 100)
         self.assertTrue(all(plan.imports == () for plan in plans))
+
+    def test_exact_affinity_outside_recent_eight_precedes_recipe_and_diverse_fallbacks(self):
+        affinity = hashlib.sha256(b"verified archive, dockerfile, args A").hexdigest()
+        exact = affinity_tag("exact", affinity=affinity, age=100, recipe="wanted")
+        newest_recipe = tag("newest-recipe", age=50, recipe="wanted")
+        self.registry.add(exact, manifest("exact"))
+        self.registry.add(newest_recipe, manifest("newest-recipe"))
+        for number in range(60):
+            self.registry.add(tag(f"burst-{number}", age=number, recipe="busy"), manifest(str(number)))
+        diverse = affinity_tag("diverse", affinity="c" * 64, age=200, recipe="other")
+        self.registry.add(diverse, manifest("diverse"))
+        self.registry.add(tag("legacy-old", age=300, recipe="legacy"), manifest("legacy-old"))
+        self.assertEqual(len(self.registry.tags_by_name), 64)
+        plan = self.cache().prepare("wanted", affinity_key=affinity)
+        refs = [value.rsplit(":", 1)[-1] for value in plan.imports]
+        self.assertEqual(refs[:5], [exact, newest_recipe, tag("burst-0", recipe="busy"), diverse,
+                                   tag("legacy-old", age=300, recipe="legacy")])
+        self.assertEqual(len(refs), 8)
+        self.assertEqual(len(set(refs)), 8)
+        self.assertEqual(plan.matching_ref, plan.imports[0])
+        self.assertTrue(plan.affinity_match)
+        exported = plan.export_ref.rsplit(":", 1)[-1]
+        self.assertEqual(len(exported), 97)
+        self.assertTrue(exported.startswith("bc2-" + hashlib.sha256(b"wanted").hexdigest()[:16] + "-" + affinity[:32] + "-"))
+        one = self.cache(import_limit=1).prepare("wanted", affinity_key=affinity)
+        self.assertEqual(one.imports, (plan.imports[0],))
+
+    def test_changed_affinity_or_recipe_cannot_claim_exact_match(self):
+        old_affinity = hashlib.sha256(b"same archive and dockerfile; args A").hexdigest()
+        new_affinity = hashlib.sha256(b"same archive and dockerfile; args B").hexdigest()
+        older = affinity_tag("older", affinity=old_affinity, age=10)
+        newer = tag("newer", age=1)
+        wrong_recipe = affinity_tag("other", affinity=new_affinity, recipe="other-recipe")
+        for name in (older, newer, wrong_recipe):
+            self.registry.add(name, manifest(name))
+        plan = self.cache().prepare("recipe", affinity_key=new_affinity)
+        self.assertFalse(plan.affinity_match)
+        self.assertTrue(plan.matching_ref.endswith(":" + newer))
+        self.assertTrue(plan.imports[0].endswith(":" + newer))
+        legacy = self.cache().prepare("recipe")
+        self.assertFalse(legacy.affinity_match)
+        self.assertIn(":bc1-", legacy.export_ref)
+
+    def test_affinity_validation_and_expired_future_or_unknown_tags_do_not_become_hits(self):
+        affinity = "a" * 64
+        for name in (affinity_tag("expired", affinity=affinity, age=8 * 86400),
+                     affinity_tag("future", affinity=affinity, age=-1),
+                     affinity_tag("unknown", affinity=affinity).replace("bc2-", "bc3-")):
+            self.registry.add(name, manifest(name))
+        plan = self.cache().prepare("recipe", affinity_key=affinity)
+        self.assertEqual(plan.imports, ())
+        self.assertFalse(plan.affinity_match)
+        for bad in (None, 1, "a" * 63, "A" * 64, "sha256:" + affinity, affinity + "\n"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                self.cache().prepare("recipe", affinity_key=bad)
+
+    def test_concurrent_affinity_exports_are_unique_and_keep_input_hint(self):
+        cache, affinity = self.cache(), "a" * 64
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            plans = list(executor.map(lambda _: cache.prepare("same recipe", affinity_key=affinity), range(100)))
+        self.assertEqual(len({plan.export_ref for plan in plans}), 100)
+        self.assertTrue(all(":bc2-" in plan.export_ref and "-" + affinity[:32] + "-" in plan.export_ref
+                            and not plan.affinity_match for plan in plans))
+
+    def test_mixed_schema_pruning_preserves_shared_blobs_aliases_and_newest_owned_timestamp(self):
+        oldest = affinity_tag("expired", affinity="a" * 64, age=8 * 86400)
+        expired_digest = self.registry.add(oldest, manifest("expired", (("shared", 100),)))
+        old_alias = tag("old-alias", age=9 * 86400)
+        current_alias = affinity_tag("current-alias", affinity="b" * 64, age=1)
+        retained_digest = self.registry.add(old_alias, manifest("aliased", (("shared", 100),)))
+        self.registry.tags_by_name[current_alias] = retained_digest
+        protected = affinity_tag("protected", affinity="c" * 64, age=10 * 86400)
+        protected_digest = self.registry.add(protected, manifest("protected", (("shared", 100),)))
+        self.registry.tags_by_name[protected.replace("bc2-", "bc3-")] = protected_digest
+        result = self.cache().prune(execute=True)
+        self.assertEqual(result["deleted_digests"], [expired_digest])
+        self.assertEqual(result["candidate_tags"], [oldest])
+        self.assertEqual(result["protected_entries"], 1)
+        self.assertEqual(result["retained_bytes"], 110)
+        self.assertEqual(result["retained_entries"], 3)
 
     def test_budget_counts_shared_blobs_once_and_config_blobs_too(self) -> None:
         expected_old = ""
@@ -367,6 +453,14 @@ class RegistryBuildCacheMountTests(unittest.TestCase):
         self.assertEqual(len(self.registry.requests), 1)
         self.assertTrue(self.registry.response.closed)
         self.assertEqual(self.registry.timeout_seconds, 30)
+
+    def test_affinity_cache_tags_use_same_verified_mount_path(self):
+        source = f"registry:5000/{REPOSITORY}:" + affinity_tag("source", affinity="a" * 64)
+        result = self.cache.pre_mount(self.target, source)
+        self.assertEqual(result["mounted"], 2)
+        self.assertEqual(result["mounted_descriptor_bytes"], 303)
+        self.assertEqual(len(self.registry.requests), 1)
+        self.assertTrue(self.registry.response.closed)
 
     def test_unmanaged_cross_registry_and_malformed_destinations_do_not_make_requests(self):
         for target in (

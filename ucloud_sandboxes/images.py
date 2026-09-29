@@ -46,6 +46,7 @@ MAX_BUILD_CONTEXT_MEMBER_BYTES = 512 * 1024**2
 MAX_BUILD_CONTEXT_MEMBERS = 100_000
 MAX_BUILD_CONTEXT_DECOMPRESSED_ARCHIVE_BYTES = 2 * 1024**3
 _CACHE_PHASE_TIMINGS = ContextVar("image_build_cache_phase_timings", default=None)
+_BUILD_CACHE_AFFINITY = ContextVar("image_build_cache_affinity", default="")
 
 
 @contextmanager
@@ -140,6 +141,20 @@ def image_build_fingerprint(
         sort_keys=True,
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def build_cache_affinity(spec: ImageBuildSpec, context_identity: str) -> str:
+    """Cache lookup hint from verified inputs, independent of destination labels.
+
+    BuildKit still checks its graph; this never authorizes image/result reuse.
+    """
+    if _UPLOADED_CONTEXT_IDENTITY_RE.fullmatch(context_identity) is None:
+        raise ValueError("cache affinity requires a verified uploaded context")
+    payload = {"version": 1, "context_identity": context_identity,
+               "dockerfile": _normalize_dockerfile_path(spec.dockerfile),
+               "build_args": dict(spec.build_args)}
+    return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True,
+        separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -342,9 +357,15 @@ class DockerImageRuntime:
                 with _cache_phase("cache_prepare_ms"):
                     dockerfile = Path(_dockerfile_path(spec.context_path, spec.dockerfile))
                     recipe = hashlib.sha256(dockerfile.read_bytes()).hexdigest()
-                    plan = self.build_cache.prepare(recipe)
+                    affinity = _BUILD_CACHE_AFFINITY.get()
+                    plan = (self.build_cache.prepare(recipe, affinity_key=affinity)
+                            if affinity else self.build_cache.prepare(recipe))
                 imports, export_ref = plan.imports, plan.export_ref
                 matching_ref = plan.matching_ref
+                if on_output is not None:
+                    on_output("stderr", "Shared build cache selection: " + json.dumps({
+                        "affinity_match": getattr(plan, "affinity_match", False) is True,
+                        "imports": len(imports)}, sort_keys=True) + "\n")
             except (OSError, ValueError, RuntimeError) as exc:
                 if on_output is not None:
                     on_output("stderr", f"Shared build cache unavailable ({type(exc).__name__}); building without it.\n")
@@ -976,6 +997,7 @@ class ImageManager:
                 spec,
                 context_path=str(materialized.path),
             )
+            cache_affinity = build_cache_affinity(effective_spec, materialized.context_identity)
             effective_command = (
                 self.runtime.build_command(effective_spec, push=True)
                 if direct_push
@@ -1018,6 +1040,7 @@ class ImageManager:
                 trace_context,
                 admitted_at,
                 queued_at,
+                cache_affinity,
             ),
             daemon=True,
         )
@@ -1135,6 +1158,7 @@ class ImageManager:
         trace_context: dict[str, str],
         admitted_at: float,
         queued_at: float,
+        cache_affinity: str = "",
     ) -> None:
         with self.telemetry.span(
             "image.build.worker",
@@ -1154,6 +1178,7 @@ class ImageManager:
                 cleanup,
                 admitted_at,
                 queued_at,
+                cache_affinity,
             )
             record = self.build_store.get(build_id)
             if record is not None:
@@ -1171,6 +1196,7 @@ class ImageManager:
         cleanup: Callable[[], None] | None,
         admitted_at: float,
         queued_at: float,
+        cache_affinity: str = "",
     ) -> None:
         build_result: CommandResult | None = None
         push_result: CommandResult | None = None
@@ -1197,6 +1223,7 @@ class ImageManager:
                                timings=timings())
             phase = time.monotonic()
             cache_timing_token = _CACHE_PHASE_TIMINGS.set(phases)
+            cache_affinity_token = _BUILD_CACHE_AFFINITY.set(cache_affinity)
             try:
                 build_result = self.runtime.build(
                     spec,
@@ -1204,6 +1231,7 @@ class ImageManager:
                     on_output=append_output,
                 )
             finally:
+                _BUILD_CACHE_AFFINITY.reset(cache_affinity_token)
                 _CACHE_PHASE_TIMINGS.reset(cache_timing_token)
                 phase_name = (
                     "docker_build_and_push_ms" if direct_push else "docker_build_ms"

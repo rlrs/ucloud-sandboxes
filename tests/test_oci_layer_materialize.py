@@ -469,5 +469,163 @@ class MaterializeLayersTests(unittest.TestCase):
                 self.extract([value])
 
 
+    def test_streams_into_only_quarantine_tar_and_authenticates_before_extract(self):
+        value = layer([member("payload", b"verified body")])
+        client = MemoryRegistry([value])
+        original_open, original_extract = Path.open, materialize._extract
+        written = []
+        def opening(path, mode='r', *args, **kwargs):
+            if mode == 'xb':
+                written.append(path.suffix)
+                self.assertNotEqual(path.suffix, '.blob')
+            return original_open(path, mode, *args, **kwargs)
+        def extracting(path, destination):
+            self.assertTrue(all(stream.closed for stream in client.streams))
+            self.assertEqual(sha256(path.read_bytes()), value[1])
+            self.assertFalse(destination.exists())
+            return original_extract(path, destination)
+        metrics = {}
+        with patch.object(Path, 'open', opening), patch.object(materialize, '_extract', extracting):
+            (output,), _ = self.extract([value], client=client, metrics=metrics)
+        self.assertEqual(written, ['.tar'])
+        self.assertEqual((output/'payload').read_bytes(), b'verified body')
+        self.assertEqual(metrics['oci_download_bytes_actual'], len(value[2]))
+        for name in ('oci_transfer_ms', 'oci_decompress_ms', 'oci_extract_ms'):
+            self.assertGreaterEqual(metrics[name], 0)
+
+    def test_forward_only_one_byte_response_is_supported(self):
+        value = layer([member('payload', b'short reads')])
+        class ForwardOnly:
+            def __init__(self):
+                self.position, self.closed = 0, False
+            def read(self, size):
+                self.assert_size = size
+                result = value[2][self.position:self.position+min(size,1)]
+                self.position += len(result)
+                return result
+            def close(self):
+                self.closed = True
+        response = ForwardOnly()
+        client = MemoryRegistry([value])
+        client.streams.append(response)
+        with patch.object(client, 'open_blob', return_value=response):
+            (output,), _ = self.extract([value], client=client)
+        self.assertEqual((output/'payload').read_bytes(), b'short reads')
+        self.assertEqual(response.position, len(value[2]))
+        self.assertTrue(response.closed)
+
+    def test_concatenated_gzip_and_zero_padding_are_fully_authenticated(self):
+        descriptor, diff_id, original = layer([member('payload', b'joined members')])
+        raw = gzip.decompress(original)
+        for blob in (original+b'\0'*31, gzip.compress(raw[:400],mtime=0)+gzip.compress(raw[400:],mtime=0)):
+            with self.subTest(size=len(blob)):
+                value = dict(descriptor, size=len(blob), digest=sha256(blob)), diff_id, blob
+                (output,), _ = self.extract([value])
+                self.assertEqual((output/'payload').read_bytes(), b'joined members')
+                corrupt_identity = dict(value[0], digest=sha256(blob+b'changed')), diff_id, blob
+                with patch.object(materialize,'_extract') as extraction:
+                    with self.assertRaisesRegex(ValueError,'blob content identity mismatch'):
+                        self.extract([corrupt_identity])
+                    extraction.assert_not_called()
+
+    def test_trailing_non_gzip_bytes_and_crc_error_do_not_extract(self):
+        descriptor, diff_id, original = layer([member('payload', b'body')])
+        corrupt_crc = original[:-8]+bytes([original[-8]^1])+original[-7:]
+        for blob in (original+b'not-gzip', corrupt_crc):
+            with self.subTest(size=len(blob)), patch.object(materialize,'_extract') as extraction:
+                value = dict(descriptor, size=len(blob), digest=sha256(blob)), diff_id, blob
+                with self.assertRaises(gzip.BadGzipFile):
+                    self.extract([value])
+                extraction.assert_not_called()
+
+    def test_compressed_corruption_precedes_gzip_or_expansion_fallback(self):
+        descriptor, diff_id, original = layer([member('payload', b'z'*100_000)])
+        for blob, limit in ((b'not gzip'+original, 1024**3),(original,4096)):
+            with self.subTest(limit=limit), patch.object(materialize,'_extract') as extraction:
+                value = dict(descriptor, size=len(blob), digest=sha256(b'wrong')), diff_id, blob
+                metrics = {}
+                with self.assertRaisesRegex(ValueError,'blob content identity mismatch') as raised:
+                    self.extract([value], max_unpacked_bytes=limit, metrics=metrics)
+                self.assertNotIsInstance(raised.exception, materialize.UnsupportedLayer)
+                self.assertEqual(metrics['oci_download_bytes_actual'],len(blob))
+                extraction.assert_not_called()
+
+    def test_actual_network_error_and_cancellation_close_response(self):
+        value = layer([member('payload',b'body')])
+        for error in (OSError('synthetic read failure'), KeyboardInterrupt()):
+            class Interrupted(io.BytesIO):
+                def read(self, size=-1):
+                    raise error
+            response = Interrupted(value[2])
+            client = MemoryRegistry([value])
+            client.streams.append(response)
+            with self.subTest(error=type(error).__name__), patch.object(client,'open_blob',return_value=response), \
+                    patch.object(materialize,'_extract') as extraction:
+                with self.assertRaises(type(error)):
+                    self.extract([value],client=client)
+                self.assertTrue(response.closed)
+                extraction.assert_not_called()
+
+    def test_deadline_after_network_read_stops_without_decompression_or_extract(self):
+        from ucloud_sandboxes import build_deadline
+        value = layer([member('payload',b'body')])
+        clock=[0.0]
+        class SlowResponse(io.BytesIO):
+            def read(self,size=-1):
+                result=super().read(size)
+                clock[0]+=.2
+                return result
+        response=SlowResponse(value[2])
+        client=MemoryRegistry([value])
+        client.streams.append(response)
+        metrics={}
+        with patch.object(build_deadline.time,'monotonic',side_effect=lambda:clock[0]), \
+                patch.object(client,'open_blob',return_value=response), patch.object(materialize,'_extract') as extraction:
+            with build_deadline.build_execution_deadline(.1):
+                with self.assertRaises(build_deadline.ImageBuildTimeoutError):
+                    self.extract([value],client=client,metrics=metrics)
+        self.assertTrue(response.closed)
+        self.assertGreater(metrics['oci_download_bytes_actual'],0)
+        extraction.assert_not_called()
+
+    def test_fallback_reasons_are_stable_and_default_remains_compatible(self):
+        self.assertEqual(materialize.UnsupportedLayer('old caller').reason,'unsupported')
+        self.assertEqual(materialize.UnsupportedLayer().args,())
+        self.assertTrue({'io','archive','collection_budget','request_budget'} <= materialize.FALLBACK_REASONS)
+        value=layer([member('payload',b'z'*100_000)])
+        for options,reason in (({'max_compressed_bytes':1},'compressed_budget'),
+                               ({'max_unpacked_bytes':4096},'unpacked_budget')):
+            with self.subTest(reason=reason), self.assertRaises(materialize.UnsupportedLayer) as raised:
+                self.extract([value],**options)
+            self.assertEqual(raised.exception.reason,reason)
+        with self.assertRaises(ValueError):
+            materialize.UnsupportedLayer('message',reason='unbounded payload string')
+
+    def test_default_compressed_budget_is_bounded_before_any_response(self):
+        value = layer([member('payload', b'body')])
+        oversized = dict(value[0], size=512 * 1024**2 + 1), value[1], value[2]
+        client = MemoryRegistry([oversized])
+        with self.assertRaises(materialize.UnsupportedLayer) as raised:
+            self.extract([oversized], client=client)
+        self.assertEqual(raised.exception.reason, 'compressed_budget')
+        self.assertEqual(client.streams, [])
+        # A descriptor at the new boundary reaches the transport. No large
+        # payload is allocated by this fixture; transport failure stops it.
+        boundary = dict(value[0], size=512 * 1024**2), value[1], value[2]
+        with patch.object(client, 'open_blob', side_effect=OSError('synthetic unavailable')) as opening:
+            with self.assertRaises(OSError):
+                self.extract([boundary], client=client)
+        opening.assert_called_once()
+
+    def test_transfer_timing_includes_open_failure_without_payload(self):
+        value = layer([member('payload', b'body')])
+        client, metrics = MemoryRegistry([value]), {}
+        with patch.object(materialize.time, 'monotonic', side_effect=[10.0, 10.25]), \
+                patch.object(client, 'open_blob', side_effect=OSError('synthetic unavailable')):
+            with self.assertRaises(OSError):
+                self.extract([value], client=client, metrics=metrics)
+        self.assertEqual(metrics, {'oci_transfer_ms': 250.0})
+
+
 if __name__ == "__main__":
     unittest.main()

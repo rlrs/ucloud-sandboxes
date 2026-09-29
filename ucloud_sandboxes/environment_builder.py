@@ -4,7 +4,7 @@ The only public input is the existing immutable Docker image adapter. No runtime
 workspace, memory directory, or checkpoint is accepted as a publication source.
 """
 from dataclasses import dataclass, field
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from contextvars import ContextVar
 import errno
 import fcntl
@@ -544,34 +544,41 @@ class FreshEnvironmentBuilder:
                              consume_private_diffs=False):
         tag = LAYER_TAG_PREFIX + layer_group_key(layer_format, parent, diff_ids)
         with self._group_lock(tag):
-            # Recheck after waiting: the preceding publisher may have filled it.
-            with _phase("component_lookup"):
-                existing = self._reuse_layer_component(tag, diff_ids, parent, layer_format)
-            if existing is not None:
-                _measure("groups_reused")
-                return existing, True
-            with TemporaryDirectory(dir=self.work_root) as temporary:
-                root = Path(temporary)
-                image = root / "component.erofs"
-                if len(directories) == 1:
-                    view = directories[0]
-                    if view.is_symlink() or not view.is_dir():
-                        raise ValueError("environment publication requires a real layer directory")
-                else:
-                    view = root / "view"
-                    with _phase("squash"):
-                        squash_layer_diffs(directories, view, lower_dirs=lower_dirs,
-                                           consume_private_diffs=consume_private_diffs)
-                with _phase("mkfs"):
-                    self._mkfs(image, view, exclude_runtime_mounts=True)
-                with _phase("sign"):
-                    component = sign_layer_component(image, source_layers=diff_ids, parent=parent,
-                                                     layer_format=layer_format, signing_key=self.signing_key)
-                with _phase("publish_component"):
-                    digest = self.registry.publish(image, component, tag=tag)
-                _measure("groups_built")
-                _measure("erofs_bytes_built", component.image_size)
-                return digest, False
+            return self._publish_claimed_layer_group(directories, diff_ids, lower_dirs=lower_dirs,
+                parent=parent, layer_format=layer_format, consume_private_diffs=consume_private_diffs)
+
+    def _publish_claimed_layer_group(self, directories, diff_ids, *, lower_dirs, parent, layer_format,
+                                     consume_private_diffs=False):
+        """Publish with the caller holding this exact group's filesystem claim."""
+        tag = LAYER_TAG_PREFIX + layer_group_key(layer_format, parent, diff_ids)
+        # Recheck after waiting: the preceding publisher may have filled it.
+        with _phase("component_lookup"):
+            existing = self._reuse_layer_component(tag, diff_ids, parent, layer_format)
+        if existing is not None:
+            _measure("groups_reused")
+            return existing, True
+        with TemporaryDirectory(dir=self.work_root) as temporary:
+            root = Path(temporary)
+            image = root / "component.erofs"
+            if len(directories) == 1:
+                view = directories[0]
+                if view.is_symlink() or not view.is_dir():
+                    raise ValueError("environment publication requires a real layer directory")
+            else:
+                view = root / "view"
+                with _phase("squash"):
+                    squash_layer_diffs(directories, view, lower_dirs=lower_dirs,
+                                       consume_private_diffs=consume_private_diffs)
+            with _phase("mkfs"):
+                self._mkfs(image, view, exclude_runtime_mounts=True)
+            with _phase("sign"):
+                component = sign_layer_component(image, source_layers=diff_ids, parent=parent,
+                                                 layer_format=layer_format, signing_key=self.signing_key)
+            with _phase("publish_component"):
+                digest = self.registry.publish(image, component, tag=tag)
+            _measure("groups_built")
+            _measure("erofs_bytes_built", component.image_size)
+            return digest, False
 
     def _reuse_image_layers(self, repository, reference, *, max_groups):
         """Use signed components before Docker pulls or extracts any image data.
@@ -646,6 +653,43 @@ class FreshEnvironmentBuilder:
 
     def _materialize_registry_groups(self, repository, source, groups, components,
                                      image_id, image_config, diff_ids, layer_format):
+        """Claim shared misses before downloading or extracting their OCI bytes.
+
+        Claim tags in one order across images, and retain only still-missing
+        claims. Docker publication takes one claim at a time; this selective
+        path holds its bounded set until all extraction has been validated and
+        publication completes. The claimed publisher must not lock them again.
+        """
+        if not any(components):
+            return None
+        missing = [index for index, component in enumerate(components) if component is None]
+        with ExitStack() as claims:
+            for index in sorted(missing, key=lambda index: groups[index][0]):
+                tag, group, parent, _start, _end = groups[index]
+                with ExitStack() as claim:
+                    claim.enter_context(self._group_lock(tag))
+                    with _phase("component_lookup"):
+                        component = self._reuse_layer_component(tag, group, parent, layer_format)
+                    if component is not None:
+                        components[index] = component
+                    else:
+                        claims.enter_context(claim.pop_all())
+            if all(component is not None for component in components):
+                # Refresh preflight hits too: waiting may outlast their GC grace.
+                for index, (tag, group, parent, _start, _end) in enumerate(groups):
+                    refreshed = self._reuse_layer_component(tag, group, parent, layer_format)
+                    if refreshed is None:
+                        return None
+                    components[index] = refreshed
+                _measure("groups_reused", len(components))
+                _measure("docker_pull_skipped")
+                return {"image_id": image_id, "image_config": image_config, "components": components,
+                        "diff_ids": diff_ids, "reused": len(components)}
+            return self._materialize_claimed_registry_groups(repository, source, groups, components,
+                image_id, image_config, diff_ids, layer_format)
+
+    def _materialize_claimed_registry_groups(self, repository, source, groups, components,
+                                             image_id, image_config, diff_ids, layer_format):
         """Fetch only small missing groups when no lower filesystem is needed.
 
         Cold images and unsupported diffs use the existing Docker path. The
@@ -672,15 +716,25 @@ class FreshEnvironmentBuilder:
                     for name, value in result.metrics.items():
                         _measure(name, value)
                     if result.fallback:
-                        raise UnsupportedLayer("isolated selective extraction requires Docker")
+                        raise UnsupportedLayer("isolated selective extraction requires Docker",
+                                               reason=result.fallback_reason or "unsupported")
                     prepared = dict(zip(missing, result.views))
                 else:
-                    with _phase("selective_materialization"):
-                        directories = materialize_layers(self.registry.client, repository,
-                            [item[2] for item in selected], [item[0] for item in selected], Path(temporary))
+                    transfer_metrics = {}
+                    try:
+                        with _phase("selective_materialization"):
+                            directories = materialize_layers(self.registry.client, repository,
+                                [item[2] for item in selected], [item[0] for item in selected],
+                                Path(temporary), metrics=transfer_metrics)
+                    finally:
+                        for name, value in transfer_metrics.items():
+                            _measure(name, value)
             except (UnsupportedLayer, OSError, EOFError, tarfile.TarError) as exc:
                 _measure("selective_fallbacks")
-                _LOG.info("selective layer materialization requires Docker: %s", type(exc).__name__)
+                reason = (exc.reason if isinstance(exc, UnsupportedLayer) else
+                          "io" if isinstance(exc, OSError) else "archive")
+                _measure("selective_fallback_" + reason)
+                _LOG.info("selective layer materialization requires Docker: %s", reason)
                 return None
             offset, reused = 0, 0
             for index, (tag, group, parent, start, end) in enumerate(groups):
@@ -695,7 +749,7 @@ class FreshEnvironmentBuilder:
                     continue
                 count = end - start
                 views = [prepared[index]] if prepared is not None else directories[offset:offset + count]
-                component, hit = self._publish_layer_group(views, group,
+                component, hit = self._publish_claimed_layer_group(views, group,
                     lower_dirs=(), parent=parent, layer_format=layer_format, consume_private_diffs=True)
                 components[index] = component
                 reused += hit

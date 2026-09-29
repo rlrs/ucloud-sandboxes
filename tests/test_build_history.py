@@ -69,6 +69,18 @@ class BuildHistoryTests(unittest.TestCase):
             self.assertFalse(store.record(raw))
         self.assertEqual(store.list_builds(), [])
 
+    def test_publication_diagnostics_keep_only_known_numeric_reason_counters(self):
+        raw = build(timings={"environment": {
+            "selective_fallback_compressed_budget": 1,
+            "selective_fallback_parent_context": 2,
+            "selective_fallback_private_payload": 1,
+            "oci_transfer_ms": 30, "oci_decompress_ms": 15, "oci_extract_ms": 20,
+            "oci_download_bytes_actual": 10_000_000,
+        }})
+        saved = terminal_build_summary(raw)["timings"]["environment"]
+        self.assertEqual(saved, {key: value for key, value in raw["timings"]["environment"].items()
+                                 if key != "selective_fallback_private_payload"})
+
     def test_idempotent_replay_and_newer_cleanup_revision_survive_restart(self):
         store = self.store()
         original = build()

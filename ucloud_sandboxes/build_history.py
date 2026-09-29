@@ -16,6 +16,8 @@ import sqlite3
 import stat
 import time
 
+from .oci_layer_materialize import FALLBACK_REASONS
+
 
 _APPLICATION_ID = 0x55434248  # UCBH
 _IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,255}\Z")
@@ -29,7 +31,9 @@ _ENVIRONMENT = frozenset(("total_ms", "preflight_ms", "docker_pull_ms", "layer_l
     "component_lookup_ms", "squash_ms", "mkfs_ms", "sign_ms", "publish_component_ms",
     "groups_reused", "groups_built", "erofs_bytes_built", "preflight_misses", "docker_pull_skipped",
     "selective_materialization_ms", "selective_subprocess_ms", "selective_materializations", "selective_fallbacks",
-    "oci_layers_materialized", "oci_download_bytes"))
+    "oci_layers_materialized", "oci_download_bytes", "oci_download_bytes_actual",
+    "oci_transfer_ms", "oci_decompress_ms", "oci_extract_ms")) | frozenset(
+        "selective_fallback_" + reason for reason in FALLBACK_REASONS)
 
 
 def _timestamp(value):

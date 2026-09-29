@@ -154,3 +154,51 @@ class PreparationProtocolTests(unittest.TestCase):
             with self.assertRaises(prepare.PreparationError) as caught:
                 self.invoke()
         self.assertNotIn("sensitive detail", str(caught.exception))
+
+    def test_fallback_reason_survives_child_protocol_without_exception_text(self):
+        def communicate(*args, **kwargs):
+            self.write_result({**self.response(status="fallback", groups=0),
+                               "fallback_reason": "parent_context"})
+        self.process.communicate.side_effect = communicate
+        with patch.object(prepare.subprocess, "Popen", return_value=self.process):
+            result = self.invoke()
+        self.assertTrue(result.fallback)
+        self.assertEqual(result.fallback_reason, "parent_context")
+
+    def test_unknown_or_misplaced_fallback_reason_fails_closed(self):
+        for status, reason in (("fallback", "private exception text"),
+                               ("fallback", []), ("ok", "parent_context")):
+            with self.subTest(status=status, reason=reason):
+                self.process.communicate.side_effect = lambda *a, **k: self.write_result(
+                    {**self.response(status=status, groups=0 if status == "fallback" else 1),
+                     "fallback_reason": reason})
+                with patch.object(prepare.subprocess, "Popen", return_value=self.process):
+                    with self.assertRaises(prepare.PreparationError):
+                        self.invoke()
+                (self.root / prepare.RESULT_NAME).unlink()
+
+    def test_compressed_budget_reason_is_available_before_child_spawn(self):
+        self.layers[0]["size"] = prepare.MAX_COMPRESSED_BYTES + 1
+        with patch.object(prepare.subprocess, "Popen") as launch:
+            with self.assertRaises(UnsupportedLayer) as caught:
+                self.invoke()
+        self.assertEqual(caught.exception.reason, "compressed_budget")
+        launch.assert_not_called()
+
+    def test_streaming_metrics_allow_bytes_above_time_limit_but_remain_bounded(self):
+        def communicate(*args, **kwargs):
+            (self.root / "view-0").mkdir(exist_ok=True)
+            self.write_result(self.response(metrics={
+                "selective_materialization_ms": 40, "squash_ms": 2,
+                "oci_transfer_ms": 10, "oci_decompress_ms": 20, "oci_extract_ms": 10,
+                "oci_download_bytes_actual": prepare.MAX_COMPRESSED_BYTES,
+            }))
+        self.process.communicate.side_effect = communicate
+        with patch.object(prepare.subprocess, "Popen", return_value=self.process):
+            result = self.invoke()
+        self.assertEqual(result.metrics["oci_download_bytes_actual"], prepare.MAX_COMPRESSED_BYTES)
+        value = self.response(metrics={"selective_materialization_ms": 1, "squash_ms": 0,
+                                       "oci_download_bytes_actual": prepare.MAX_COMPRESSED_BYTES + 2})
+        self.write_result(value)
+        with self.assertRaisesRegex(ValueError, "invalid preparation metrics"):
+            prepare._read_result(self.root, 1, 1)

@@ -194,7 +194,8 @@ class SelectiveEnvironmentPublicationTests(unittest.TestCase):
         self.add_image("isolated", [self.base, first, second])
         self.builder.preparation_subprocess = True
         scratch = []
-        def prepare(client, repository, layers, diff_ids, group_counts, root):
+        def prepare(client, repository, layers, diff_ids, group_counts, root, *, timeout_seconds):
+            self.assertEqual(timeout_seconds, 600)
             scratch.append(root)
             self.assertEqual(group_counts, [2])
             self.assertEqual(diff_ids, [first[1], second[1]])
@@ -238,7 +239,8 @@ class SelectiveEnvironmentPublicationTests(unittest.TestCase):
         self.assertIn("docker-materialized", self.mkfs_views[0])
         self.add_image("isolated-failed", [self.base, self.tail(b"distinct missing tail")])
         scratch = []
-        def fail(*args):
+        def fail(*args, timeout_seconds):
+            self.assertEqual(timeout_seconds, 600)
             scratch.append(args[-1])
             (args[-1] / "partial").write_bytes(b"discarded")
             raise PreparationError("child failed")

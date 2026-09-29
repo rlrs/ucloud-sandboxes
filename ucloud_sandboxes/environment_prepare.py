@@ -20,15 +20,19 @@ from urllib.parse import urlsplit
 
 from .environment_artifact import require_digest
 from .managed_registry import RegistryClient
-from .oci_layer_materialize import UnsupportedLayer, materialize_layers
+from .oci_layer_materialize import (
+    FALLBACK_REASONS, MAX_COMPRESSED_BYTES, UnsupportedLayer, materialize_layers,
+)
 
 MAX_REQUEST_BYTES = 1024 * 1024
 MAX_RESULT_BYTES = 4096
 MAX_LAYERS = 1024
 MAX_GROUPS = 24
-MAX_COMPRESSED_BYTES = 128 * 1024**2
 RESULT_NAME = "preparation-result.json"
 _TIMINGS = ("selective_materialization_ms", "squash_ms")
+_MATERIALIZATION_TIMINGS = ("oci_transfer_ms", "oci_decompress_ms", "oci_extract_ms")
+_METRIC_LIMITS = {**dict.fromkeys((*_TIMINGS, *_MATERIALIZATION_TIMINGS), 3_600_000),
+                  "oci_download_bytes_actual": MAX_COMPRESSED_BYTES + 1}
 
 
 class PreparationError(RuntimeError):
@@ -40,6 +44,7 @@ class PreparationResult:
     views: tuple[Path, ...]
     metrics: dict[str, float]
     fallback: bool = False
+    fallback_reason: str = ""
 
 
 def _elapsed(started):
@@ -84,7 +89,7 @@ def _validate_request(value):
             or not isinstance(counts, list) or len(layers) != len(diff_ids)):
         raise ValueError("invalid preparation layer binding")
     if not 1 <= len(layers) <= MAX_LAYERS or not 1 <= len(counts) <= MAX_GROUPS:
-        raise UnsupportedLayer("selective preparation collection exceeds its bound")
+        raise UnsupportedLayer("selective preparation collection exceeds its bound", reason="collection_budget")
     if any(type(count) is not int or count <= 0 for count in counts) or sum(counts) != len(layers):
         raise ValueError("invalid preparation group binding")
     for layer, diff_id in zip(layers, diff_ids):
@@ -95,7 +100,7 @@ def _validate_request(value):
         require_digest(layer["digest"])
         require_digest(diff_id)
     if sum(layer["size"] for layer in layers) > MAX_COMPRESSED_BYTES:
-        raise UnsupportedLayer("selective preparation byte budget exceeded")
+        raise UnsupportedLayer("selective preparation byte budget exceeded", reason="compressed_budget")
     return _private_root(value["root"], empty=True)
 
 
@@ -103,16 +108,19 @@ def _prepare(value, root):
     # Import the merger only in this fresh interpreter, after request validation.
     from .environment_builder import squash_layer_diffs
 
-    metrics = dict.fromkeys(_TIMINGS, 0.0)
+    metrics = dict.fromkeys(_METRIC_LIMITS, 0.0)
     started = time.monotonic()
     try:
         directories = materialize_layers(
             RegistryClient(value["registry_url"], timeout_seconds=value["registry_timeout_seconds"]),
-            value["repository"], value["layers"], value["diff_ids"], root / "diffs")
-    except (UnsupportedLayer, OSError, EOFError, tarfile.TarError):
+            value["repository"], value["layers"], value["diff_ids"], root / "diffs", metrics=metrics)
+    except (UnsupportedLayer, OSError, EOFError, tarfile.TarError) as error:
         # Match the existing extraction-only fallback boundary. Digest errors,
         # registry HTTP errors and later squash failures must fail closed.
-        return {"status": "fallback", "groups": 0, "metrics": metrics}
+        reason = (error.reason if isinstance(error, UnsupportedLayer) else
+                  "io" if isinstance(error, OSError) else "archive")
+        return {"status": "fallback", "groups": 0, "metrics": metrics,
+                "fallback_reason": reason}
     finally:
         metrics["selective_materialization_ms"] = _elapsed(started)
     offset = 0
@@ -138,18 +146,23 @@ def _read_result(root, groups, elapsed_ms):
     if len(raw) > MAX_RESULT_BYTES:
         raise ValueError("preparation result exceeds its bound")
     value = json.loads(raw)
-    if not isinstance(value, dict) or set(value) != {"status", "groups", "metrics"}:
+    if not isinstance(value, dict) or set(value) not in (
+            {"status", "groups", "metrics"}, {"status", "groups", "metrics", "fallback_reason"}):
         raise ValueError("invalid preparation result schema")
+    reason = value.get("fallback_reason", "unsupported" if value["status"] == "fallback" else "")
+    if (not isinstance(reason, str) or
+            (reason not in FALLBACK_REASONS if value["status"] == "fallback" else reason != "")):
+        raise ValueError("invalid preparation fallback reason")
     metrics = value["metrics"]
-    if (not isinstance(metrics, dict) or set(metrics) != set(_TIMINGS)
+    if (not isinstance(metrics, dict) or not set(_TIMINGS) <= set(metrics) <= set(_METRIC_LIMITS)
             or any(type(number) not in {int, float} or not math.isfinite(number)
-                   or not 0 <= number <= 3_600_000 for number in metrics.values())):
+                   or not 0 <= number <= _METRIC_LIMITS[key] for key, number in metrics.items())):
         raise ValueError("invalid preparation metrics")
     if type(value["groups"]) is not int:
         raise ValueError("invalid preparation result count")
     metrics["selective_subprocess_ms"] = elapsed_ms
     if value["status"] == "fallback" and value["groups"] == 0:
-        return PreparationResult((), metrics, fallback=True)
+        return PreparationResult((), metrics, fallback=True, fallback_reason=reason)
     if value["status"] != "ok" or value["groups"] != groups:
         raise ValueError("preparation child failed")
     _private_root(str(root), empty=False)
@@ -178,7 +191,7 @@ def prepare_in_subprocess(client, repository, layers, diff_ids, group_counts, ro
     root = _validate_request(value)
     data = json.dumps(value, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()
     if len(data) > MAX_REQUEST_BYTES:
-        raise UnsupportedLayer("selective preparation request exceeds its bound")
+        raise UnsupportedLayer("selective preparation request exceeds its bound", reason="request_budget")
     started = time.monotonic()
     try:
         # stdout/stderr cannot leak payloads or accumulate unbounded data. The

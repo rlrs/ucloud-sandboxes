@@ -98,7 +98,10 @@ class PreparationSubprocessIsolationTests(unittest.TestCase):
         self.assertEqual((result.views[1] / "second/run").stat().st_ino,
                          (result.views[1] / "second/alias").stat().st_ino)
         self.assertEqual(set(result.metrics),
-                         {"selective_materialization_ms", "squash_ms", "selective_subprocess_ms"})
+                         {"selective_materialization_ms", "squash_ms", "selective_subprocess_ms",
+                          "oci_transfer_ms", "oci_decompress_ms", "oci_extract_ms",
+                          "oci_download_bytes_actual"})
+        self.assertEqual(result.metrics["oci_download_bytes_actual"], sum(value[0]["size"] for value in layers))
         self.assertTrue(all(math.isfinite(value) and value >= 0 for value in result.metrics.values()))
 
     def test_actual_child_returns_fallback_for_unsupported_layer_semantics(self):

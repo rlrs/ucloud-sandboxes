@@ -152,6 +152,10 @@ builder.update({
     "buildx_cache_max_entries": 512,
     "buildx_cache_max_age_seconds": 7 * 86400,
     "build_execution_timeout_seconds": 1800,
+    # Keep four context/build slots busy while at most two builds finish
+    # publication/cleanup. Full finishing capacity applies backpressure.
+    # Same-node qualification: docs/benchmarks/build-pipeline-2026-09-29.
+    "max_finishing_builds": 2,
 })
 policy = raw["policy"]
 policy.update({

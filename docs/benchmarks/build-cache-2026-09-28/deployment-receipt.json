@@ -1,0 +1,22 @@
+{
+  "status": "deployed; production cold/warm build and fresh-worker execution canaries passed",
+  "base_commit": "4a5df3ab643a86bb77e1f15a97301247704ffbc4",
+  "sha256": {
+    "ucloud_sandboxes/environment_builder.py": "7b78f01316e69434555da849624dcda8e98b759017b055bf107bea10e1b8d068",
+    "ucloud_sandboxes/images.py": "d07cf61c60b25f6e363a147a3fa8a057c3a8e24b25d9012dd7cd5960fa6c5d58",
+    "ucloud_sandboxes/control_plane.py": "47c4db680c5e82a2df107a459615807fb8d47175994b893cacdfaa7c52be1bf1",
+    "ucloud_sandboxes/vm_init.py": "b29e11f334f7affaaf025961c82c7cd47bd00f8708e20bf49b6d643bc3359ff4",
+    "build/build-optimization/ucloud_sandboxes-0.7.0-py3-none-any.whl": "4ab87bfa42427b9418d61ba926ec1de6c96b201c3eba6cde87034e7bac95369b"
+  },
+  "deployed_at": "2026-09-28T12:30:15Z",
+  "bundles": {
+    "builder": "44bf369e8e1cea10f5fffaa8441a33849d116914bde98e59fc84022c8c0ac35d",
+    "sandbox": "5bf71486703240aec62071d0ff6c80fff3fe50b899485e7307d9647d2d771849"
+  },
+  "validated_at": "2026-09-28T12:35:41Z",
+  "update_policy_verified": [
+    "gateway",
+    "fresh builder 167818572",
+    "fresh sandbox worker 167818803"
+  ]
+}

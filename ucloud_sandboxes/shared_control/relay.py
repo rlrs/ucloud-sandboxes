@@ -8,6 +8,7 @@ owner authority during the relay cutover; this module never imports fixture owne
 from __future__ import annotations
 
 import asyncio
+from collections import Counter
 from contextlib import asynccontextmanager, suppress
 import hashlib
 import hmac
@@ -15,6 +16,7 @@ import json
 import logging
 import time
 from uuid import uuid4
+from weakref import WeakValueDictionary
 
 from aiohttp import web
 from opentelemetry import trace
@@ -103,13 +105,21 @@ class PostgresRelayState:
         self._closing = False
         self._active: set[asyncio.Task] = set()
         self._active_by_action = {action: set() for action in self.notifiers}
+        self._lifecycle_dirty: set[str] = set()
+        self._lifecycle_blocked: set[str] = set()
         self._active_claims: dict[tuple[str, str], object] = {}
         self._response_waiters: dict[str, set[asyncio.Future]] = {}
         self._delivery_event = asyncio.Event()
         self._dirty_deliveries: set[str] = set()
         self._notify_event = asyncio.Event()
         self._pending_notifications: set[str] = set()
+        # Pool return does not end a PostgreSQL backend's lifetime. Weak
+        # references identify our still-open publishers without remembering a
+        # closed backend PID that PostgreSQL could later give to another peer.
+        self._notification_publishers = WeakValueDictionary()
         self._poll_waiters: dict[asyncio.Event, tuple[str, str]] = {}
+        # Process-local diagnostic counts: bounded operation names, no IDs.
+        self._counters = Counter()
 
     @property
     def _delivery_store(self):
@@ -213,6 +223,15 @@ class PostgresRelayState:
             await self.store.close()
 
     def _signal(self, key):
+        if key == "l" or key in {"l:park", "l:wake"}:
+            actions = self.notifiers if key == "l" else (key[2:],)
+            for action in actions:
+                if self.notifiers[action] is not None:
+                    self._lifecycle_dirty.add(action)
+                    self._counters["lifecycle_" + action + "_hints"] += 1
+            # Action-specific hints are local. The legacy global key remains
+            # valid for peers, old binaries, and LISTEN reconnect recovery.
+            key = "l"
         if key.startswith("r:") and (
             key[2:] in self._response_waiters
             or key[2:] in self._active_parks
@@ -221,6 +240,17 @@ class PostgresRelayState:
             self._delivery_event.set()
         for event in tuple(self._waiters.get(key, ())):
             event.set()
+
+    def _receive_notification(self, notification):
+        publisher = self._notification_publishers.get(notification.pid)
+        if (publisher is not None and not publisher.closed
+                and publisher.info.backend_pid == notification.pid):
+            # The data transaction's after_commit callback already signalled
+            # these waiters, including before the publisher returned to pool.
+            self._counters["notification_self_ignored"] += 1
+            return
+        self._counters["notification_peer_received"] += 1
+        self._signal(notification.payload)
 
     @asynccontextmanager
     async def _watch(self, key):
@@ -251,14 +281,22 @@ class PostgresRelayState:
             await self._notify_event.wait()
             self._notify_event.clear()
             await asyncio.sleep(0.002)
-            keys = list(self._pending_notifications)
-            self._pending_notifications.difference_update(keys)
+            pending = set(self._pending_notifications)
+            self._pending_notifications.difference_update(pending)
+            # Keep the on-wire hint format understood by older relay processes.
+            # New local commits avoid scanning the unrelated action; peers use
+            # the global hint and retain exactly the existing reconciliation.
+            keys = list({"l" if key in {"l:park", "l:wake"} else key for key in pending})
             try:
                 async with self.store.transaction("relay_notify") as conn:
+                    if keys:
+                        self._notification_publishers[conn.info.backend_pid] = conn
                     await conn.execute(
                         "SELECT pg_notify(%s,key) FROM unnest(%s::text[]) AS key",
                         (self.channel, keys),
                     )
+                self._counters["notification_batches"] += 1
+                self._counters["notification_keys"] += len(keys)
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -283,7 +321,7 @@ class PostgresRelayState:
                     async for notification in conn.notifies():
                         if self._closing:
                             return
-                        self._signal(notification.payload)
+                        self._receive_notification(notification)
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -322,6 +360,8 @@ class PostgresRelayState:
                         (self.deployment, rollouts, self.deployment),
                     )).fetchall()
                 by_rollout = {row["rollout_id"]: row for row in rows}
+                self._counters["poll_readiness_queries"] += 1
+                self._counters["poll_readiness_rows"] += len(rows)
                 for event, (rollout, token) in waiting:
                     row = by_rollout[rollout]
                     if (row["ready"] or not row["enabled"]
@@ -689,7 +729,10 @@ class PostgresRelayState:
                     "INSERT INTO relay_lifecycle(deployment_id,request_id,action) VALUES (%s,%s,'park')",
                     (self.deployment, request_id),
                 )
-            await self._notify(conn, "q:" + rollout_id, "l")
+            await self._notify(
+                conn, "q:" + rollout_id,
+                *(("l:park",) if sandbox_id and self.notifiers["park"] else ()),
+            )
             request = await self._load(conn, request_id)
             # Take the byte-accounting lock LAST; never serialize payload writes
             # and lifecycle setup behind a deployment-wide quota row.
@@ -1030,7 +1073,9 @@ class PostgresRelayState:
                 ),
             )
         ).fetchone()
-        await self._notify(conn, "r:" + row["request_id"], "l")
+        await self._notify(
+            conn, "r:" + row["request_id"], *(("l:wake",) if pending else ()),
+        )
         return completed
 
     async def retry_worker_failure(self, *, request_id, registration_token, lease_id):
@@ -1123,6 +1168,8 @@ class PostgresRelayState:
                             (self.deployment, ids),
                         )
                     ).fetchall()
+                self._counters["delivery_status_queries"] += 1
+                self._counters["delivery_status_rows"] += len(rows)
                 # A park notifier may still be queued behind checkpoint work.
                 # Tell it when the durable result supersedes that work, just
                 # for the same durable request identity. This
@@ -1161,6 +1208,8 @@ class PostgresRelayState:
                                 (self.deployment, batch),
                             )
                         ).fetchall()
+                    self._counters["delivery_body_queries"] += 1
+                    self._counters["delivery_body_rows"] += len(results)
                     for result in results:
                         body = bytes(result["body"])
                         response = api.RelayWorkerResponse(
@@ -1380,12 +1429,14 @@ class PostgresRelayState:
                 if self._lifecycle_store is not None else None
             ),
             "limits": {"storage_budget_bytes": self.storage_budget},
-            "counters": {},
+            "counters": dict(self._counters),
             "timers": {},
             "averages": {},
         }
 
     async def _claim_lifecycle(self, limit, *, action=None):
+        operation = "lifecycle_" + (action or "all") + "_claim_"
+        self._counters[operation + "calls"] += 1
         async with self._delivery_store.transaction("relay_claim_lifecycle") as conn:
             # Requests are always locked before operations by mutation paths.
             # Claim only operation rows here and COMMIT before touching requests.
@@ -1412,20 +1463,39 @@ class PostgresRelayState:
                     ),
                 )
             ).fetchall()
-            return rows
+        self._counters[operation + "rows"] += len(rows)
+        if not rows:
+            self._counters[operation + "empty"] += 1
+        return rows
 
     async def _dispatch_loop(self):
         async with self._watch("l") as event:
+            next_reconcile = time.monotonic()
             while not self._closing:
                 event.clear()
+                if time.monotonic() >= next_reconcile:
+                    # Fixed schedule: unrelated hints cannot postpone retry,
+                    # lost-notification, or expired-claim recovery.
+                    self._lifecycle_dirty.update(
+                        action for action, notifier in self.notifiers.items()
+                        if notifier is not None
+                    )
+                    next_reconcile = time.monotonic() + 0.25
+                    self._counters["lifecycle_reconciliations"] += 1
                 try:
-                    claimed = False
                     # Waiting parks cannot consume wake dispatch admission.
                     # Each class retains durable overflow rather than rejecting work.
                     for action in ("wake", "park"):
-                        available = self.concurrency - len(self._active_by_action[action])
-                        if available <= 0 or self.notifiers[action] is None:
+                        if action not in self._lifecycle_dirty:
                             continue
+                        # Clear before awaiting SQL so hints received during a
+                        # claim still schedule another pass.
+                        self._lifecycle_dirty.discard(action)
+                        available = self.concurrency - len(self._active_by_action[action])
+                        if available <= 0:
+                            self._lifecycle_blocked.add(action)
+                            continue
+                        self._lifecycle_blocked.discard(action)
                         rows = await self._claim_lifecycle(available, action=action)
                         if self._closing:
                             return  # Any claimed work recovers after lease expiry.
@@ -1434,23 +1504,36 @@ class PostgresRelayState:
                             self._active.add(task)
                             self._active_by_action[action].add(task)
                             task.add_done_callback(self._dispatch_done)
-                        claimed |= bool(rows)
-                    if claimed:
-                        continue
+                        if len(rows) == available:
+                            # A full batch may leave durable overflow. Scan it
+                            # when capacity returns, not after every ordinary
+                            # completion and not for the unrelated action.
+                            if len(self._active_by_action[action]) < self.concurrency:
+                                self._lifecycle_dirty.add(action)
+                            else:
+                                self._lifecycle_blocked.add(action)
                 except asyncio.CancelledError:
                     raise
                 except Exception:
                     LOGGER.warning(
                         "relay lifecycle claim failed; durable work retained"
                     )
+                if self._lifecycle_dirty:
+                    continue
                 with suppress(asyncio.TimeoutError):
-                    await _wait_cancellable(event.wait(), 0.25)
+                    await _wait_cancellable(
+                        event.wait(), max(0, next_reconcile - time.monotonic()),
+                    )
 
     def _dispatch_done(self, task):
         self._active.discard(task)
-        for active in self._active_by_action.values():
-            active.discard(task)
-        self._signal("l")
+        for action, active in self._active_by_action.items():
+            if task in active:
+                active.discard(task)
+                if action in self._lifecycle_blocked:
+                    self._lifecycle_blocked.discard(action)
+                    self._counters["lifecycle_" + action + "_capacity_wakeups"] += 1
+                    self._signal("l:" + action)
         if not task.cancelled() and task.exception() is not None:
             LOGGER.warning(
                 "relay lifecycle dispatch interrupted; durable claim will recover (%s)",
@@ -1646,4 +1729,3 @@ class PostgresRelayState:
                     action,
                 ),
             )
-            await self._notify(conn, "l")

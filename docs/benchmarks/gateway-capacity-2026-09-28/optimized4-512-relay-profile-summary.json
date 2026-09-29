@@ -1,0 +1,378 @@
+{
+  "sample_count": 1096,
+  "leaf_categories": {
+    "psycopg": {
+      "samples": 443,
+      "percent": 40.41970802919708
+    },
+    "asyncio": {
+      "samples": 260,
+      "percent": 23.722627737226276
+    },
+    "application": {
+      "samples": 115,
+      "percent": 10.492700729927007
+    },
+    "aiohttp": {
+      "samples": 109,
+      "percent": 9.945255474452555
+    },
+    "other": {
+      "samples": 95,
+      "percent": 8.667883211678832
+    },
+    "psycopg_pool": {
+      "samples": 34,
+      "percent": 3.102189781021898
+    },
+    "json": {
+      "samples": 23,
+      "percent": 2.0985401459854014
+    },
+    "base64": {
+      "samples": 17,
+      "percent": 1.551094890510949
+    }
+  },
+  "transaction_roundtrip_callers": {
+    "_claim_lifecycle (ucloud_sandboxes/shared_control/relay.py:1389)": 96,
+    "_notify_loop (ucloud_sandboxes/shared_control/relay.py:257)": 24,
+    "_deliver_loop (ucloud_sandboxes/shared_control/relay.py:1119)": 23,
+    "poll (ucloud_sandboxes/shared_control/relay.py:858)": 17,
+    "respond (ucloud_sandboxes/shared_control/relay.py:975)": 15,
+    "_deliver_loop (ucloud_sandboxes/shared_control/relay.py:1157)": 10,
+    "enqueue (ucloud_sandboxes/shared_control/relay.py:635)": 10,
+    "require_current_registration (ucloud_sandboxes/shared_control/relay.py:533)": 9,
+    "_dispatch_claimed (ucloud_sandboxes/shared_control/relay.py:1572)": 3,
+    "_reconcile_poll_waiters (ucloud_sandboxes/shared_control/relay.py:308)": 1
+  },
+  "top_exclusive_frames": [
+    {
+      "frame": "_maybe_prepare_gen (psycopg/_cursor_base.py:312)",
+      "samples": 31,
+      "percent": 2.8284671532846715
+    },
+    {
+      "frame": "_select_current_result (psycopg/_cursor_base.py:514)",
+      "samples": 25,
+      "percent": 2.281021897810219
+    },
+    {
+      "frame": "_run (asyncio/events.py:94)",
+      "samples": 25,
+      "percent": 2.281021897810219
+    },
+    {
+      "frame": "dump (psycopg/_queries.py:103)",
+      "samples": 22,
+      "percent": 2.0072992700729926
+    },
+    {
+      "frame": "_start_query (psycopg/_connection_base.py:545)",
+      "samples": 13,
+      "percent": 1.1861313868613137
+    },
+    {
+      "frame": "b64decode (base64.py:85)",
+      "samples": 12,
+      "percent": 1.094890510948905
+    },
+    {
+      "frame": "<lambda> (<string>:1)",
+      "samples": 12,
+      "percent": 1.094890510948905
+    },
+    {
+      "frame": "fetchone (psycopg/cursor_async.py:252)",
+      "samples": 12,
+      "percent": 1.094890510948905
+    },
+    {
+      "frame": "_get_names (psycopg/rows.py:244)",
+      "samples": 12,
+      "percent": 1.094890510948905
+    },
+    {
+      "frame": "data_received (aiohttp/web_protocol.py:433)",
+      "samples": 12,
+      "percent": 1.094890510948905
+    },
+    {
+      "frame": "conn_encoding (psycopg/_encodings.py:87)",
+      "samples": 11,
+      "percent": 1.0036496350364963
+    },
+    {
+      "frame": "call_at (asyncio/base_events.py:813)",
+      "samples": 11,
+      "percent": 1.0036496350364963
+    },
+    {
+      "frame": "__init__ (psycopg/_cursor_base.py:73)",
+      "samples": 11,
+      "percent": 1.0036496350364963
+    },
+    {
+      "frame": "raw_decode (json/decoder.py:361)",
+      "samples": 9,
+      "percent": 0.8211678832116789
+    },
+    {
+      "frame": "wait (psycopg/connection_async.py:532)",
+      "samples": 9,
+      "percent": 0.8211678832116789
+    },
+    {
+      "frame": "cursor (psycopg/connection_async.py:282)",
+      "samples": 9,
+      "percent": 0.8211678832116789
+    },
+    {
+      "frame": "fetchall (psycopg/cursor_async.py:284)",
+      "samples": 8,
+      "percent": 0.7299270072992701
+    },
+    {
+      "frame": "add_reader (asyncio/selector_events.py:348)",
+      "samples": 8,
+      "percent": 0.7299270072992701
+    },
+    {
+      "frame": "_run_once (asyncio/base_events.py:2042)",
+      "samples": 8,
+      "percent": 0.7299270072992701
+    },
+    {
+      "frame": "wait_async (psycopg/waiting.py:231)",
+      "samples": 7,
+      "percent": 0.6386861313868614
+    },
+    {
+      "frame": "dict_row_ (psycopg/rows.py:121)",
+      "samples": 7,
+      "percent": 0.6386861313868614
+    },
+    {
+      "frame": "get (selectors.py:71)",
+      "samples": 7,
+      "percent": 0.6386861313868614
+    },
+    {
+      "frame": "transaction (ucloud_sandboxes/shared_control/database.py:179)",
+      "samples": 7,
+      "percent": 0.6386861313868614
+    },
+    {
+      "frame": "__init__ (asyncio/events.py:43)",
+      "samples": 7,
+      "percent": 0.6386861313868614
+    },
+    {
+      "frame": "iterencode (json/encoder.py:263)",
+      "samples": 6,
+      "percent": 0.5474452554744526
+    },
+    {
+      "frame": "call_later (asyncio/base_events.py:793)",
+      "samples": 6,
+      "percent": 0.5474452554744526
+    },
+    {
+      "frame": "_ensure_bytes (psycopg/_queries.py:167)",
+      "samples": 6,
+      "percent": 0.5474452554744526
+    },
+    {
+      "frame": "_send_query_prepared (psycopg/_cursor_base.py:602)",
+      "samples": 6,
+      "percent": 0.5474452554744526
+    },
+    {
+      "frame": "wait_async (psycopg/waiting.py:196)",
+      "samples": 6,
+      "percent": 0.5474452554744526
+    },
+    {
+      "frame": "get (psycopg/_preparing.py:68)",
+      "samples": 6,
+      "percent": 0.5474452554744526
+    }
+  ],
+  "top_inclusive_frames": [
+    {
+      "frame": "<module> (ucloud-sandboxes:8)",
+      "samples": 1083,
+      "percent": 98.8138686131387
+    },
+    {
+      "frame": "run_app (aiohttp/web.py:502)",
+      "samples": 1083,
+      "percent": 98.8138686131387
+    },
+    {
+      "frame": "cmd_serve_model_relay (ucloud_sandboxes/cli.py:1533)",
+      "samples": 1083,
+      "percent": 98.8138686131387
+    },
+    {
+      "frame": "run_until_complete (asyncio/base_events.py:706)",
+      "samples": 1083,
+      "percent": 98.8138686131387
+    },
+    {
+      "frame": "main (ucloud_sandboxes/cli.py:273)",
+      "samples": 1083,
+      "percent": 98.8138686131387
+    },
+    {
+      "frame": "run_forever (asyncio/base_events.py:677)",
+      "samples": 1080,
+      "percent": 98.54014598540147
+    },
+    {
+      "frame": "_run_once (asyncio/base_events.py:2057)",
+      "samples": 1025,
+      "percent": 93.52189781021897
+    },
+    {
+      "frame": "_run (asyncio/events.py:94)",
+      "samples": 1023,
+      "percent": 93.33941605839416
+    },
+    {
+      "frame": "execute (psycopg/connection_async.py:330)",
+      "samples": 460,
+      "percent": 41.97080291970803
+    },
+    {
+      "frame": "wait (psycopg/connection_async.py:532)",
+      "samples": 452,
+      "percent": 41.24087591240876
+    },
+    {
+      "frame": "execute (psycopg/cursor_async.py:113)",
+      "samples": 446,
+      "percent": 40.693430656934304
+    },
+    {
+      "frame": "_handle_request (aiohttp/web_protocol.py:575)",
+      "samples": 356,
+      "percent": 32.481751824817515
+    },
+    {
+      "frame": "_handle (aiohttp/web_app.py:559)",
+      "samples": 346,
+      "percent": 31.569343065693428
+    },
+    {
+      "frame": "impl (aiohttp/web_middlewares.py:117)",
+      "samples": 343,
+      "percent": 31.295620437956206
+    },
+    {
+      "frame": "_database_admission_middleware (ucloud_sandboxes/model_relay.py:345)",
+      "samples": 342,
+      "percent": 31.204379562043794
+    },
+    {
+      "frame": "_dispatch_loop (ucloud_sandboxes/shared_control/relay.py:1429)",
+      "samples": 249,
+      "percent": 22.71897810218978
+    },
+    {
+      "frame": "wait_async (psycopg/waiting.py:183)",
+      "samples": 179,
+      "percent": 16.33211678832117
+    },
+    {
+      "frame": "__aexit__ (contextlib.py:221)",
+      "samples": 164,
+      "percent": 14.963503649635038
+    },
+    {
+      "frame": "_execute_gen (psycopg/_cursor_base.py:206)",
+      "samples": 141,
+      "percent": 12.864963503649635
+    },
+    {
+      "frame": "_claim_lifecycle (ucloud_sandboxes/shared_control/relay.py:1389)",
+      "samples": 134,
+      "percent": 12.226277372262775
+    },
+    {
+      "frame": "__aenter__ (contextlib.py:214)",
+      "samples": 129,
+      "percent": 11.77007299270073
+    },
+    {
+      "frame": "transaction (ucloud_sandboxes/shared_control/database.py:182)",
+      "samples": 110,
+      "percent": 10.036496350364963
+    },
+    {
+      "frame": "wait_async (psycopg/waiting.py:231)",
+      "samples": 108,
+      "percent": 9.854014598540147
+    },
+    {
+      "frame": "tunnel_http_proxy (ucloud_sandboxes/model_relay.py:695)",
+      "samples": 108,
+      "percent": 9.854014598540147
+    },
+    {
+      "frame": "_claim_lifecycle (ucloud_sandboxes/shared_control/relay.py:1393)",
+      "samples": 108,
+      "percent": 9.854014598540147
+    },
+    {
+      "frame": "_execute_gen (psycopg/_cursor_base.py:205)",
+      "samples": 103,
+      "percent": 9.397810218978101
+    },
+    {
+      "frame": "transaction (ucloud_sandboxes/shared_control/database.py:179)",
+      "samples": 98,
+      "percent": 8.94160583941606
+    },
+    {
+      "frame": "_convert_query (psycopg/_cursor_base.py:465)",
+      "samples": 96,
+      "percent": 8.75912408759124
+    },
+    {
+      "frame": "worker_poll (ucloud_sandboxes/model_relay.py:491)",
+      "samples": 80,
+      "percent": 7.2992700729927
+    },
+    {
+      "frame": "worker_respond (ucloud_sandboxes/model_relay.py:570)",
+      "samples": 79,
+      "percent": 7.208029197080291
+    },
+    {
+      "frame": "_maybe_prepare_gen (psycopg/_cursor_base.py:318)",
+      "samples": 71,
+      "percent": 6.478102189781023
+    },
+    {
+      "frame": "_set_results (psycopg/_cursor_base.py:535)",
+      "samples": 65,
+      "percent": 5.930656934306569
+    },
+    {
+      "frame": "_notify (ucloud_sandboxes/relay_lifecycle.py:75)",
+      "samples": 64,
+      "percent": 5.839416058394161
+    },
+    {
+      "frame": "convert (psycopg/_queries.py:92)",
+      "samples": 64,
+      "percent": 5.839416058394161
+    },
+    {
+      "frame": "wait_async (psycopg/waiting.py:214)",
+      "samples": 61,
+      "percent": 5.565693430656935
+    }
+  ]
+}

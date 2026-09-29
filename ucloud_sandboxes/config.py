@@ -400,6 +400,9 @@ class BuilderPoolConfig:
     scale_down_idle_seconds: int = 900
     max_concurrent_image_pulls: int = 8
     buildx_cache_ref: str = ""
+    buildx_cache_max_bytes: int = 32 * 1024**3
+    buildx_cache_max_entries: int = 64
+    buildx_cache_max_age_seconds: int = 7 * 86400
 
     @classmethod
     def from_dict(cls, raw: object) -> "BuilderPoolConfig":
@@ -419,6 +422,11 @@ class BuilderPoolConfig:
             )
         if not isinstance(result.buildx_cache_ref, str):
             raise ValueError("builder.buildx_cache_ref must be a string")
+        for name in ("buildx_cache_max_bytes", "buildx_cache_max_entries", "buildx_cache_max_age_seconds"):
+            _require_int(f"builder.{name}", getattr(result, name), minimum=1)
+        if result.buildx_cache_ref:
+            from .build_cache import RegistryBuildCache
+            RegistryBuildCache(result.buildx_cache_ref)
         return result
 
 
@@ -741,6 +749,10 @@ class DeploymentConfig:
             result.relay_port == result.registry_port
         ):
             raise ValueError("gateway, relay, and registry ports must be distinct")
+        if result.builder.buildx_cache_ref:
+            authority = result.builder.buildx_cache_ref.partition("/")[0]
+            if authority != f"{result.registry_endpoint_host}:{result.registry_port}":
+                raise ValueError("builder.buildx_cache_ref must use this deployment's private registry")
         return result
 
     def control_state_file(self) -> Path:

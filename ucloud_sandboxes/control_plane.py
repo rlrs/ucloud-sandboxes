@@ -873,6 +873,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     registry_eviction_epoch: str = ""
     image_build_owners: OrderedDict[str, tuple[str, str, str]] = OrderedDict()
     image_build_owners_lock = RLock()
+    image_build_metrics_seen: OrderedDict[tuple[str, str], None] = OrderedDict()
     image_inventory_cache = ImageInventoryCache(
         ttl_seconds=IMAGE_INVENTORY_CACHE_TTL_SECONDS
     )
@@ -881,6 +882,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     metrics_response_lock: RLock
     fleet_response_lock: RLock
     fleet_response_future: Future | None
+    fleet_status_futures: dict[tuple[str, ...], Future]
     registry_layer_cache: RegistryLayerMetadataCache | None
     registry_usage_store: RegistryUsageStore | None
     registry_disk_monitor: RegistryDiskMonitor | None = None
@@ -1297,7 +1299,24 @@ class ControlPlaneHandler(BuildContextHttpHandler):
 
     def _route_to_nodes_unchecked(self, path: str) -> bool:
         if path == "/v1/sandboxes" and self.command == "GET":
-            if _truthy_query_param(urlparse(self.path), "refresh"):
+            parsed = urlparse(self.path)
+            query = parse_qs(parsed.query, keep_blank_values=True)
+            view = query.get("view", ["full"])
+            if len(view) != 1 or view[0] not in {"full", "status"}:
+                self._write_json({"error": "view must be full or status"}, status=400)
+            elif view[0] == "status":
+                from .fleet_reader import status_ids
+                try:
+                    ids = status_ids(query.get("id", []))
+                    if _truthy_query_param(parsed, "refresh"):
+                        raise ValueError("status view does not support refresh")
+                except ValueError as exc:
+                    self._write_json({"error": str(exc)}, status=400)
+                else:
+                    self._list_sandbox_statuses(ids)
+            elif "id" in query:
+                self._write_json({"error": "id filters require view=status"}, status=400)
+            elif _truthy_query_param(parsed, "refresh"):
                 self._list_sandboxes_across_nodes()
             else:
                 self._list_sandboxes_from_cache()
@@ -2660,6 +2679,32 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             return reader.read()
         return _sandbox_list_bytes(self.store, self.routing_store, self.heartbeat_ttl_seconds)
 
+    def _list_sandbox_statuses(self, sandbox_ids: tuple[str, ...]) -> None:
+        # Coalesce identical in-flight projections only; full reads and other
+        # filters must never receive this response. Completion retains no TTL.
+        handler_cls = type(self)
+        with handler_cls.fleet_response_lock:
+            future = handler_cls.fleet_status_futures.get(sandbox_ids)
+            owner = future is None
+            if owner:
+                future = Future()
+                handler_cls.fleet_status_futures[sandbox_ids] = future
+        if owner:
+            try:
+                reader = getattr(handler_cls, "fleet_snapshot_reader", None)
+                payload = (reader.read_status(sandbox_ids) if reader is not None else
+                           _sandbox_list_bytes(self.store, self.routing_store,
+                               self.heartbeat_ttl_seconds, status_only=True,
+                               sandbox_ids=sandbox_ids))
+                future.set_result(payload)
+            except BaseException as exc:
+                future.set_exception(exc)
+                raise
+            finally:
+                with handler_cls.fleet_response_lock:
+                    del handler_cls.fleet_status_futures[sandbox_ids]
+        self._write_bytes(future.result(), "application/json")
+
     def _list_sandboxes_across_nodes(self) -> None:
         sandboxes: list[dict[str, Any]] = []
         observed_ids: set[str] = set()
@@ -3066,7 +3111,49 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             handler_cls.registry_status_cache_at = now
             return result
 
+    def _record_terminal_build_metrics(self, build: dict[str, Any]) -> None:
+        """Retain observed terminal timings after an ephemeral builder exits."""
+        if build.get("status") not in {"succeeded", "failed"} or not build.get("build_id"):
+            return
+        history = getattr(self, "build_history", None)
+        if history is not None:
+            try:
+                history.record(build)
+            except (OSError, sqlite3.Error, ValueError):
+                # Retry on a subsequent observation even if metrics already
+                # accepted this result. Never fail a successful client poll.
+                pass
+        store = getattr(self, "metrics_store", None)
+        if store is None:
+            return
+        key = (str(build["build_id"]), str(build.get("updated_at", "")))
+        with self.image_build_owners_lock:
+            if key in self.image_build_metrics_seen:
+                return
+            timings = build.get("timings") or {}
+            if not isinstance(timings, dict):
+                return
+            summary = {name: build.get(name, "") for name in (
+                "build_id", "image_id", "status", "created_at", "started_at", "finished_at", "location")}
+            summary["timings"] = {
+                "total_ms": timings.get("total_ms"),
+                **{name: timings[name] for name in ("preparation_ms", "queue_wait_ms", "end_to_end_ms")
+                   if type(timings.get(name)) in {int, float}},
+                **{name: {k: v for k, v in (timings.get(name) or {}).items()
+                          if type(v) in {int, float}}
+                   for name in ("phases", "environment") if isinstance(timings.get(name), dict)},
+            }
+            try:
+                store.append("image_build_completed", summary)
+            except (OSError, sqlite3.Error, ValueError):
+                # Observability must not turn a successful build into a retry.
+                return
+            self.image_build_metrics_seen[key] = None
+            while len(self.image_build_metrics_seen) > 4096:
+                self.image_build_metrics_seen.popitem(last=False)
+
     def _record_successful_build_image(self, build: dict[str, Any]) -> None:
+        self._record_terminal_build_metrics(build)
         if build.get("status") != "succeeded":
             return
         raw_image = build.get("image")
@@ -4226,7 +4313,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                         root.set_attribute("pending_image_builds", pending_builds)
                         self._write_json(
                             {
-                                "error": "no ready builder node is available",
+                                "error": "no ready builder execution slot is available",
                                 "error_code": "builder_not_ready",
                                 "retryable": True,
                                 "pending_image_builds": pending_builds,
@@ -4290,6 +4377,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                         node_timings = response_payload.get("timings")
                         if isinstance(node_timings, dict):
                             span.add_event("node.timings", node_timings)
+                    if isinstance(response_payload.get("build"), dict):
+                        self._record_terminal_build_metrics(response_payload["build"])
                     accepted_build_response = 200 <= response.status < 300
                     terminal_build_response = _image_build_response_terminal(
                         response_payload
@@ -6505,7 +6594,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         # A retry must reach the active build's owner even when that node is
         # busier than its peers. Probe before balancing new work so node-local
         # build deduplication and conflicting-spec checks still apply.
-        if image_id and len(candidates) > 1:
+        if image_id:
             for heartbeat in candidates:
                 response = self._proxy_request(
                     heartbeat.node_url or "",
@@ -6525,46 +6614,47 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 }:
                     return None
                 if build["status"] == "running":
-                    return _reserve_builder_candidate([heartbeat], baseline, reserve=reserve)
-        if len(candidates) > 1:
-            # Periodic heartbeats can lag an entire burst of build submissions.
-            # Refresh load from the authenticated node before choosing a peer.
-            refreshed = []
-            for heartbeat in candidates:
-                response = self._proxy_request(
-                    heartbeat.node_url or "",
-                    "/v1/heartbeat",
-                    method="GET",
-                    timeout_seconds=NODE_RECONCILE_PROXY_TIMEOUT_SECONDS,
-                )
-                raw = response.json().get("heartbeat")
-                if response.status != HTTPStatus.OK or not isinstance(raw, dict):
-                    continue
-                try:
-                    current = heartbeat_from_dict(raw)
-                except (ValueError, TypeError):
-                    continue
-                if (
-                    current is None
-                    or current.job_id != heartbeat.job_id
-                    or current.node_id != heartbeat.node_id
-                    or current.deployment_id != heartbeat.deployment_id
-                    or current.node_epoch != heartbeat.node_epoch
-                    or current.draining
-                    or not current.admission_open
-                ):
-                    continue
-                refreshed.append(
-                    replace(
-                        heartbeat,
-                        active_image_builds=current.active_image_builds,
-                        physical_disk_free_mb=current.physical_disk_free_mb,
+                    # Joining/conflicting with an existing build is allowed
+                    # even at capacity; only new work needs another slot.
+                    return _reserve_builder_candidate(
+                        [heartbeat], baseline, reserve=reserve, allow_full=True,
                     )
+        # Periodic heartbeats can lag an entire burst, including on a one-node
+        # pool. Keep new work pending at the gateway until a live slot exists;
+        # accepted local queues otherwise strand work when peers become free.
+        refreshed = []
+        for heartbeat in candidates:
+            response = self._proxy_request(
+                heartbeat.node_url or "",
+                "/v1/heartbeat",
+                method="GET",
+                timeout_seconds=NODE_RECONCILE_PROXY_TIMEOUT_SECONDS,
+            )
+            raw = response.json().get("heartbeat")
+            if response.status != HTTPStatus.OK or not isinstance(raw, dict):
+                continue
+            try:
+                current = heartbeat_from_dict(raw)
+            except (ValueError, TypeError):
+                continue
+            if (
+                current is None
+                or current.job_id != heartbeat.job_id
+                or current.node_id != heartbeat.node_id
+                or current.deployment_id != heartbeat.deployment_id
+                or current.node_epoch != heartbeat.node_epoch
+                or current.draining
+                or not current.admission_open
+            ):
+                continue
+            refreshed.append(
+                replace(
+                    heartbeat,
+                    active_image_builds=current.active_image_builds,
+                    physical_disk_free_mb=current.physical_disk_free_mb,
                 )
-            candidates = refreshed
-            if not candidates:
-                return None
-        return _reserve_builder_candidate(candidates, baseline, reserve=reserve)
+            )
+        return _reserve_builder_candidate(refreshed, baseline, reserve=reserve)
 
     def _nodes_with_image(
         self,
@@ -7391,6 +7481,8 @@ def build_server(
     if routing_writer is not None:
         routing_store = routing_writer
     metrics_store = BufferedMetricsStore(metrics_file)
+    from .build_history import BuildHistoryStore
+    build_history = BuildHistoryStore(metrics_file.with_name("build-history.sqlite"))
     registry_usage_store = (
         RegistryUsageStore(registry_usage_file)
         if registry_usage_file is not None
@@ -7449,9 +7541,11 @@ def build_server(
     BoundHandler.heartbeat_ttl_seconds = heartbeat_ttl_seconds
     BoundHandler.image_manager = image_manager
     BoundHandler.image_build_owners = OrderedDict()
+    BoundHandler.image_build_metrics_seen = OrderedDict()
     BoundHandler.image_build_owners_lock = RLock()
     BoundHandler.build_context_store = build_context_store
     BoundHandler.metrics_store = metrics_store
+    BoundHandler.build_history = build_history
     BoundHandler.registry_url = registry_url
     BoundHandler.registry_worker_url = registry_worker_url
     BoundHandler.registry_status_cache = None
@@ -7472,6 +7566,7 @@ def build_server(
     BoundHandler.metrics_response_lock = RLock()
     BoundHandler.fleet_response_lock = RLock()
     BoundHandler.fleet_response_future = None
+    BoundHandler.fleet_status_futures = {}
     from .fleet_reader import FleetSnapshotReader
     fleet_reader = (FleetSnapshotReader(control_state_file, routing_file, heartbeat_ttl_seconds)
                     if isolate_fleet_reads else None)
@@ -7645,15 +7740,20 @@ def _async_proxy_response(response, transport_error):
     return proxied.status, proxied.headers, proxied.body
 
 
-def _sandbox_list_bytes(store, routing_store, heartbeat_ttl_seconds, *, renderer=None) -> bytes:
+def _sandbox_list_bytes(store, routing_store, heartbeat_ttl_seconds, *, renderer=None,
+                        status_only=False, sandbox_ids=()) -> bytes:
     from .fleet_reader import FleetResponseRenderer
 
-    heartbeats = store.load_heartbeats()
+    # Rendering only reads heartbeat data; retain inventory for absence checks
+    # without copying every sandbox descriptor on each fleet-list request.
+    heartbeats = store.load_heartbeats(shared=True)
     heartbeats_by_node_id = {
         heartbeat.node_id: heartbeat for heartbeat in heartbeats.values()
     }
-    return (renderer or FleetResponseRenderer()).render(
-        routing_store._sandbox_route_rows_readonly(background=True),
+    rows = (routing_store.sandbox_status_rows_readonly(sandbox_ids) if status_only else
+            routing_store._sandbox_route_rows_readonly(background=True))
+    return (renderer or FleetResponseRenderer(status_only=status_only)).render(
+        rows,
         heartbeats_by_node_id, heartbeat_ttl_seconds,
     )
 
@@ -8169,31 +8269,37 @@ def _cold_image_placement_cost_for_state(
 
 def _reserve_builder_candidate(
     candidates: list[NodeHeartbeat], baseline: dict[str, int], *, reserve: bool,
-) -> NodeHeartbeat:
+    allow_full: bool = False,
+) -> NodeHeartbeat | None:
     # Account for dispatches committed since the live-load sample began, even
     # if their HTTP response already returned. A stale simultaneous sample
     # must not make every request choose the same previously idle builder.
     with _BUILDER_DISPATCH_GUARD:
-        def rank(heartbeat: NodeHeartbeat):
+        def load(heartbeat: NodeHeartbeat):
             additions = (
                 _BUILDER_DISPATCH_COUNTS.get(heartbeat.job_id, 0)
                 - baseline.get(heartbeat.job_id, 0)
                 if reserve else 0
             )
-            load = heartbeat.active_image_builds + max(0, additions)
-            has_slot = load < DEFAULT_MAX_ACTIVE_IMAGE_BUILDS
+            return heartbeat.active_image_builds + max(0, additions)
+
+        eligible = [heartbeat for heartbeat in candidates
+                    if allow_full or load(heartbeat) < DEFAULT_MAX_ACTIVE_IMAGE_BUILDS]
+        if not eligible:
+            return None
+
+        def rank(heartbeat: NodeHeartbeat):
             # Pack: fill the busiest builder that still has a free slot, and
             # among idle ones the oldest, so surplus builders stay idle and
-            # scale down. Only when every builder is full, take the shortest
-            # queue.
+            # scale down. A full fleet leaves demand at the gateway where a
+            # retry can select whichever peer next becomes available.
             return (
-                0 if has_slot else 1,
-                -load if has_slot else load,
+                -load(heartbeat),
                 consolidation_rank(heartbeat),
                 -heartbeat.physical_disk_free_mb,
                 heartbeat.node_id,
             )
-        selected = min(candidates, key=rank)
+        selected = min(eligible, key=rank)
         if reserve:
             job_id = selected.job_id
             _BUILDER_DISPATCH_COUNTS[job_id] = _BUILDER_DISPATCH_COUNTS.get(job_id, 0) + 1

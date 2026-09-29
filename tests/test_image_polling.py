@@ -18,10 +18,53 @@ class ImagePollingTests(unittest.TestCase):
         class Handler(ControlPlaneHandler):
             image_build_owners = OrderedDict()
             image_build_owners_lock = RLock()
+            image_build_metrics_seen = OrderedDict()
 
         h = object.__new__(Handler)
         h._cached_image_build_records = lambda: []
         return h
+
+    def test_terminal_build_timings_survive_builder_removal_without_log_payloads(self):
+        from ucloud_sandboxes.metrics import MetricsStore
+        with TemporaryDirectory() as directory:
+            h = self.handler()
+            path = Path(directory) / "metrics.sqlite"
+            h.metrics_store = MetricsStore(path)
+            build = {"build_id": "build-1", "image_id": "image-1", "status": "failed",
+                     "updated_at": "2026-09-28T08:00:00+00:00",
+                     "log_tail": "private build output", "command": ["private command"],
+                     "timings": {"total_ms": 100, "phases": {"docker_build_and_push_ms": 90},
+                                 "environment": {"groups_reused": 3, "docker_pull_skipped": 1}}}
+            with ThreadPoolExecutor(4) as pool:
+                list(pool.map(lambda _: h._record_terminal_build_metrics(build), range(12)))
+            # Read a fresh store, without a builder or the original handler.
+            events = MetricsStore(path).load_events(kinds=("image_build_completed",))
+            self.assertEqual(len(events), 1)
+            self.assertEqual(events[0].data["timings"], build["timings"])
+            self.assertEqual(events[0].data["status"], "failed")
+            self.assertNotIn("log_tail", events[0].data)
+            self.assertNotIn("command", events[0].data)
+
+    def test_failed_metric_write_can_be_retried_without_failing_a_build(self):
+        h = self.handler()
+        h.metrics_store = Mock()
+        h.metrics_store.append.side_effect = [OSError("disk unavailable"), None]
+        build = {"build_id": "build-1", "status": "succeeded", "timings": {"total_ms": 12}}
+        h._record_terminal_build_metrics(build)
+        h._record_terminal_build_metrics(build)
+        h._record_terminal_build_metrics(build)
+        self.assertEqual(h.metrics_store.append.call_count, 2)
+
+    def test_history_write_retries_independently_of_metrics_deduplication(self):
+        h = self.handler()
+        h.metrics_store = Mock()
+        h.build_history = Mock()
+        h.build_history.record.side_effect = [OSError("disk unavailable"), True]
+        build = {"build_id": "build-1", "status": "succeeded", "timings": {"total_ms": 12}}
+        h._record_terminal_build_metrics(build)
+        h._record_terminal_build_metrics(build)
+        self.assertEqual(h.metrics_store.append.call_count, 1)
+        self.assertEqual(h.build_history.record.call_count, 2)
 
     def node(self, name, epoch="one"):
         return SimpleNamespace(

@@ -142,6 +142,108 @@ class ControlStateCacheTests(unittest.TestCase):
             ),),
         )
 
+    def test_unchanged_headers_do_not_reload_inventory_and_isolate_labels(self):
+        with TemporaryDirectory() as directory:
+            store = ControlStateStore(Path(directory) / "control.sqlite")
+            store.upsert_heartbeat(self.heartbeat())
+            store.get_heartbeat("job", include_inventory=False)
+            statements = []
+            with store._connection() as connection:
+                connection.set_trace_callback(statements.append)
+            first = store.get_heartbeat("job", include_inventory=False)
+            first.labels["pool"] = "changed"
+            second = store.get_heartbeat("job", include_inventory=False)
+            self.assertEqual(second.labels["pool"], "workers")
+            self.assertEqual(second.inventory, ())
+            self.assertFalse(second.inventory_complete)
+            self.assertFalse(any("SELECT payload" in sql for sql in statements))
+
+    def test_header_cache_observes_own_connection_writes_and_rollback(self):
+        with TemporaryDirectory() as directory:
+            store = ControlStateStore(Path(directory) / "control.sqlite")
+            store.upsert_heartbeat(self.heartbeat())
+            self.assertEqual(store.get_heartbeat("job", include_inventory=False).node_epoch, "boot-1")
+            with store._connection() as connection:
+                version = connection.execute("PRAGMA data_version").fetchone()[0]
+            store.upsert_heartbeat(replace(self.heartbeat(), node_epoch="boot-2"))
+            with store._connection() as connection:
+                self.assertEqual(connection.execute("PRAGMA data_version").fetchone()[0], version)
+            self.assertEqual(store.get_heartbeat("job", include_inventory=False).node_epoch, "boot-2")
+            with self.assertRaisesRegex(RuntimeError, "rollback"):
+                with store._transaction(write=True) as connection:
+                    connection.execute("DELETE FROM control_records")
+                    raise RuntimeError("rollback")
+            self.assertEqual(store.get_heartbeat("job", include_inventory=False).node_epoch, "boot-2")
+            with store._transaction(write=True) as connection:
+                connection.execute("DELETE FROM control_records")
+            self.assertIsNone(store.get_heartbeat("job", include_inventory=False))
+            store.upsert_heartbeat(self.heartbeat())
+            self.assertEqual(store.get_heartbeat("job", include_inventory=False).node_epoch, "boot-1")
+
+    def test_header_cache_does_not_lose_commit_racing_with_payload_load(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "control.sqlite"
+            reader, writer = ControlStateStore(path), ControlStateStore(path)
+            writer.upsert_heartbeat(self.heartbeat())
+            original = reader._read_heartbeat
+
+            def race(*args, **kwargs):
+                writer.upsert_heartbeat(replace(self.heartbeat(), node_epoch="boot-2"))
+                return original(*args, **kwargs)
+
+            with patch.object(reader, "_read_heartbeat", side_effect=race):
+                self.assertEqual(reader.get_heartbeat("job", include_inventory=False).node_epoch, "boot-1")
+            self.assertEqual(reader.get_heartbeat("job", include_inventory=False).node_epoch, "boot-2")
+
+    def test_transactional_header_does_not_cache_rolled_back_write(self):
+        with TemporaryDirectory() as directory:
+            store = ControlStateStore(Path(directory) / "control.sqlite")
+            store.upsert_heartbeat(self.heartbeat())
+            store.get_heartbeat("job", include_inventory=False)
+            with store._connection() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                _heartbeat, payload = control_state._encode_heartbeat(
+                    replace(self.heartbeat(), node_epoch="uncommitted"),
+                )
+                connection.execute("UPDATE control_records SET payload=?", (payload,))
+                self.assertEqual(store._heartbeat_header(connection, "job").node_epoch, "uncommitted")
+                connection.rollback()
+            self.assertEqual(store.get_heartbeat("job", include_inventory=False).node_epoch, "boot-1")
+
+    def test_transactional_header_preserves_snapshot_then_observes_new_commit(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "control.sqlite"
+            reader, writer = ControlStateStore(path), ControlStateStore(path)
+            writer.upsert_heartbeat(self.heartbeat())
+            reader.get_heartbeat("job", include_inventory=False)
+            with reader._connection() as connection:
+                connection.execute("BEGIN")
+                connection.execute("SELECT payload FROM control_records").fetchall()
+                writer.upsert_heartbeat(replace(self.heartbeat(), node_epoch="boot-2"))
+                self.assertEqual(reader._heartbeat_header(connection, "job").node_epoch, "boot-1")
+                connection.commit()
+            self.assertEqual(reader.get_heartbeat("job", include_inventory=False).node_epoch, "boot-2")
+
+    def test_header_cache_versions_remain_connection_local_and_bounded(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "control.sqlite"
+            reader, writer = ControlStateStore(path), ControlStateStore(path)
+            writer.upsert_heartbeat(self.heartbeat())
+            with reader._connection() as first, reader._connection() as second:
+                self.assertEqual(reader._heartbeat_header(first, "job").node_epoch, "boot-1")
+                self.assertEqual(reader._heartbeat_header(second, "job").node_epoch, "boot-1")
+                writer.upsert_heartbeat(replace(self.heartbeat(), node_epoch="boot-2"))
+                self.assertEqual(reader._heartbeat_header(second, "job").node_epoch, "boot-2")
+                self.assertEqual(reader._heartbeat_header(first, "job").node_epoch, "boot-2")
+                with patch.object(control_state, "_HEARTBEAT_CACHE_ENTRIES", 2):
+                    for index in range(4):
+                        self.assertIsNone(reader._heartbeat_header(first, f"absent-{index}"))
+                    self.assertLessEqual(len(first.heartbeat_headers[1]), 2)
+                first.heartbeat_headers = None
+                with patch.object(control_state, "_HEARTBEAT_HEADER_CACHE_BYTES", 1):
+                    self.assertEqual(reader._heartbeat_header(first, "job").node_epoch, "boot-2")
+                    self.assertNotIn("job", first.heartbeat_headers[1])
+
     def test_shared_fleet_read_reuses_cached_objects_until_payload_changes(self):
         with TemporaryDirectory() as directory:
             store = ControlStateStore(Path(directory) / "control.sqlite")

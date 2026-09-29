@@ -9,6 +9,22 @@ from ucloud_sandboxes.config import DeploymentConfig
 
 
 class ConfigTests(unittest.TestCase):
+    def test_managed_build_cache_is_bounded_and_uses_the_private_registry(self):
+        raw = self._raw()
+        raw["builder"]["buildx_cache_ref"] = f"{raw['gateway_private_host']}:{raw['registry_port']}/ucloud-build-cache:shared"
+        config = DeploymentConfig.from_dict(raw)
+        self.assertEqual(config.builder.buildx_cache_max_bytes, 32 * 1024**3)
+        self.assertEqual(DeploymentConfig.from_dict(config.to_dict()), config)
+        raw["builder"]["buildx_cache_ref"] = "external.invalid/ucloud-build-cache:shared"
+        with self.assertRaises(ValueError):
+            DeploymentConfig.from_dict(raw)
+        raw["builder"]["buildx_cache_ref"] = ""
+        for name in ("buildx_cache_max_bytes", "buildx_cache_max_entries", "buildx_cache_max_age_seconds"):
+            for value in (0, -1, True):
+                with self.subTest(name=name, value=value), self.assertRaises(ValueError):
+                    candidate = {**raw, "builder": {**raw["builder"], name: value}}
+                    DeploymentConfig.from_dict(candidate)
+
     @staticmethod
     def _raw() -> dict[str, object]:
         return DeploymentConfig.default(scope_id="project-1").to_dict()

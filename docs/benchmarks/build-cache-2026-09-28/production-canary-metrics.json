@@ -1,0 +1,56 @@
+[
+  {
+    "build_id": "3c2f7d92-eea1-43e1-80e7-49e71232c99d",
+    "created_at": "2026-09-28T12:32:33.304168+00:00",
+    "finished_at": "2026-09-28T12:32:37.153312+00:00",
+    "image_id": "build-opt-canary-20260928-cold",
+    "location": "",
+    "started_at": "2026-09-28T12:32:33.304168+00:00",
+    "status": "succeeded",
+    "timings": {
+      "environment": {
+        "component_lookup_ms": 1.48,
+        "docker_pull_ms": 69.928,
+        "erofs_bytes_built": 3837952,
+        "groups_built": 1,
+        "layer_lock_wait_ms": 0.008,
+        "mkfs_ms": 43.477,
+        "preflight_misses": 1,
+        "preflight_ms": 30.642,
+        "publish_component_ms": 228.724,
+        "sign_ms": 12.674,
+        "squash_ms": 47.599,
+        "total_ms": 944.648
+      },
+      "phases": {
+        "cleanup_ms": 0,
+        "docker_build_and_push_ms": 2888,
+        "immutable_environment_ms": 944
+      },
+      "total_ms": 3845
+    }
+  },
+  {
+    "build_id": "cfcbbe25-f682-4a3c-964a-eb620afa2dec",
+    "created_at": "2026-09-28T12:32:37.230386+00:00",
+    "finished_at": "2026-09-28T12:32:38.354899+00:00",
+    "image_id": "build-opt-canary-20260928-warm",
+    "location": "",
+    "started_at": "2026-09-28T12:32:37.230386+00:00",
+    "status": "succeeded",
+    "timings": {
+      "environment": {
+        "docker_pull_skipped": 1,
+        "groups_reused": 1,
+        "preflight_ms": 54.292,
+        "total_ms": 343.284
+      },
+      "phases": {
+        "cleanup_ms": 0,
+        "docker_build_and_push_ms": 765,
+        "immutable_environment_ms": 343
+      },
+      "total_ms": 1121
+    }
+  }
+]

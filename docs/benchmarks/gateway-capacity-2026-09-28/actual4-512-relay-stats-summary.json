@@ -1,0 +1,72 @@
+{
+  "run_id": "relay-load-bac0a6754690",
+  "requested_window": {
+    "all_agents_ready": "2026-09-28T14:31:33.281565+00:00",
+    "first_scenario_completed": "2026-09-28T14:35:15.983237+00:00",
+    "seconds": 222.70167207717896,
+    "scope": "Every512scenario active throughout; complete1s counter intervals strictly inside timestamps. Boundary fractions under1s are omitted, not extrapolated."
+  },
+  "samples": 45,
+  "probe_errors": 0,
+  "scope": "Relay request and lifecycle database pools; these do not expose gateway/placement/autoscaler pool waits. Counters are first-to-last5s snapshots strictly within full512plateau; absent error counters treated as no errors reported.",
+  "pools": {
+    "database_pool": {
+      "requests_num": 61825,
+      "requests_queued": 83,
+      "requests_wait_ms": 316,
+      "requests_errors": 0,
+      "connections_errors": 0,
+      "usage_ms": 199025,
+      "observed_seconds": 219.99998497962952,
+      "max_waiting": 0,
+      "max_pool_size": 16,
+      "pool_max": 16,
+      "wait_ms_per_request": 0.005111200970481197,
+      "connection_errors_counter_reported": false,
+      "request_errors_counter_reported": false
+    },
+    "lifecycle_database_pool": {
+      "requests_num": 108704,
+      "requests_queued": 389,
+      "requests_wait_ms": 1143,
+      "requests_errors": 0,
+      "connections_errors": 0,
+      "usage_ms": 132483,
+      "observed_seconds": 219.99998497962952,
+      "max_waiting": 0,
+      "max_pool_size": 4,
+      "pool_max": 4,
+      "wait_ms_per_request": 0.01051479246393877,
+      "connection_errors_counter_reported": false,
+      "request_errors_counter_reported": false
+    }
+  },
+  "inflight": {
+    "count": 45,
+    "min": 436,
+    "mean": 485.9111111111111,
+    "p95": 497,
+    "max": 499
+  },
+  "delivery_pending": {
+    "count": 45,
+    "min": 0,
+    "mean": 0.8888888888888888,
+    "p95": 3,
+    "max": 7
+  },
+  "reserved_storage_bytes": {
+    "count": 45,
+    "min": 19997878697,
+    "mean": 21309422894.244446,
+    "p95": 22030676153,
+    "max": 22133367780
+  },
+  "oldest_delivery_pending_seconds": {
+    "count": 45,
+    "min": 0.0,
+    "mean": 0.023094797134399415,
+    "p95": 0.09618687629699707,
+    "max": 0.16703104972839355
+  }
+}

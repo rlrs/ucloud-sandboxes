@@ -1,0 +1,479 @@
+{
+  "steady4_acceptance": {
+    "requested_window": {
+      "start": "2026-09-28T13:47:40+00:00",
+      "end": "2026-09-28T13:48:10+00:00"
+    },
+    "qdisc_interval_start": "2026-09-28T13:47:42.123311+00:00",
+    "qdisc_interval_end": "2026-09-28T13:48:07.123764+00:00",
+    "qdisc_deltas": {
+      "lo": {
+        "bytes": 0,
+        "packets": 0,
+        "drops": 0,
+        "requeues": 0,
+        "overlimits": 0
+      },
+      "eth0": {
+        "bytes": 470957549,
+        "packets": 332726,
+        "drops": 0,
+        "requeues": 24,
+        "overlimits": 0
+      },
+      "enp7s0": {
+        "bytes": 117180642,
+        "packets": 99672,
+        "drops": 0,
+        "requeues": 0,
+        "overlimits": 0
+      },
+      "docker0": {
+        "bytes": 0,
+        "packets": 0,
+        "drops": 0,
+        "requeues": 0,
+        "overlimits": 0
+      }
+    },
+    "online_cpus_seen": [
+      "0-3"
+    ],
+    "min_MemAvailable_GiB": 27.608455657958984,
+    "max_SwapUsed_bytes": 0,
+    "max_Dirty_bytes": 19697664,
+    "max_Writeback_bytes": 1048576,
+    "vmstat_delta": {
+      "pgmajfault": 0,
+      "pswpin": 0,
+      "pswpout": 0,
+      "compact_stall": 0,
+      "compact_fail": 0,
+      "compact_success": 0,
+      "allocstall_normal": 0,
+      "allocstall_movable": 0
+    },
+    "busy_cores": {
+      "mean": 1.95001875,
+      "p95": 2.8437,
+      "max": 2.8437,
+      "count": 16
+    },
+    "softirq_cores": {
+      "mean": 0.090075,
+      "p95": 0.1213,
+      "max": 0.1213,
+      "count": 16
+    },
+    "iowait_cores": {
+      "mean": 0.022350000000000002,
+      "p95": 0.0305,
+      "max": 0.0305,
+      "count": 16
+    },
+    "cpus": {
+      "0": {
+        "busy_percent": {
+          "mean": 47.36625,
+          "p95": 72.08,
+          "max": 72.08,
+          "count": 16
+        },
+        "softirq_percent": {
+          "mean": 0.575,
+          "p95": 1.03,
+          "max": 1.03,
+          "count": 16
+        },
+        "iowait_percent": {
+          "mean": 0.639375,
+          "p95": 1.02,
+          "max": 1.02,
+          "count": 16
+        }
+      },
+      "1": {
+        "busy_percent": {
+          "mean": 47.070625,
+          "p95": 69.89,
+          "max": 69.89,
+          "count": 16
+        },
+        "softirq_percent": {
+          "mean": 0.64,
+          "p95": 1.03,
+          "max": 1.03,
+          "count": 16
+        },
+        "iowait_percent": {
+          "mean": 0.576875,
+          "p95": 1.03,
+          "max": 1.03,
+          "count": 16
+        }
+      },
+      "2": {
+        "busy_percent": {
+          "mean": 51.030625,
+          "p95": 72.82,
+          "max": 72.82,
+          "count": 16
+        },
+        "softirq_percent": {
+          "mean": 4.068125,
+          "p95": 5.64,
+          "max": 5.64,
+          "count": 16
+        },
+        "iowait_percent": {
+          "mean": 0.540625,
+          "p95": 1.01,
+          "max": 1.01,
+          "count": 16
+        }
+      },
+      "3": {
+        "busy_percent": {
+          "mean": 49.534375,
+          "p95": 69.58,
+          "max": 69.58,
+          "count": 16
+        },
+        "softirq_percent": {
+          "mean": 3.724375,
+          "p95": 5.58,
+          "max": 5.58,
+          "count": 16
+        },
+        "iowait_percent": {
+          "mean": 0.478125,
+          "p95": 1.01,
+          "max": 1.01,
+          "count": 16
+        }
+      }
+    },
+    "notes": [
+      "Qdisc counter interval lies inside requested window and can omit up to five seconds at each boundary.",
+      "Host busy cores are summed per-CPU user,nice,system,irq,softirq, excluding iowait/steal."
+    ]
+  },
+  "strong4_acceptance": {
+    "requested_window": {
+      "start": "2026-09-28T13:48:17.160424+00:00",
+      "end": "2026-09-28T13:50:07.810828+00:00"
+    },
+    "qdisc_interval_start": "2026-09-28T13:48:22.124012+00:00",
+    "qdisc_interval_end": "2026-09-28T13:50:07.127645+00:00",
+    "qdisc_deltas": {
+      "lo": {
+        "bytes": 0,
+        "packets": 0,
+        "drops": 0,
+        "requeues": 0,
+        "overlimits": 0
+      },
+      "eth0": {
+        "bytes": 1960778850,
+        "packets": 1599164,
+        "drops": 0,
+        "requeues": 84,
+        "overlimits": 0
+      },
+      "enp7s0": {
+        "bytes": 17740366190,
+        "packets": 13423885,
+        "drops": 0,
+        "requeues": 190,
+        "overlimits": 0
+      },
+      "docker0": {
+        "bytes": 0,
+        "packets": 0,
+        "drops": 0,
+        "requeues": 0,
+        "overlimits": 0
+      }
+    },
+    "online_cpus_seen": [
+      "0-3"
+    ],
+    "min_MemAvailable_GiB": 27.533763885498047,
+    "max_SwapUsed_bytes": 0,
+    "max_Dirty_bytes": 53706752,
+    "max_Writeback_bytes": 33554432,
+    "vmstat_delta": {
+      "pgmajfault": 68,
+      "pswpin": 0,
+      "pswpout": 0,
+      "compact_stall": 28,
+      "compact_fail": 14,
+      "compact_success": 14,
+      "allocstall_normal": 0,
+      "allocstall_movable": 8
+    },
+    "busy_cores": {
+      "mean": 2.615558181818182,
+      "p95": 3.1826,
+      "max": 3.3873,
+      "count": 55
+    },
+    "softirq_cores": {
+      "mean": 0.24173636363636364,
+      "p95": 0.3063,
+      "max": 0.5473,
+      "count": 55
+    },
+    "iowait_cores": {
+      "mean": 0.3533036363636364,
+      "p95": 0.5311,
+      "max": 0.6109,
+      "count": 55
+    },
+    "cpus": {
+      "0": {
+        "busy_percent": {
+          "mean": 63.00418181818182,
+          "p95": 77.16999999999999,
+          "max": 81.63000000000001,
+          "count": 55
+        },
+        "softirq_percent": {
+          "mean": 0.6225454545454545,
+          "p95": 1.03,
+          "max": 1.53,
+          "count": 55
+        },
+        "iowait_percent": {
+          "mean": 9.594181818181818,
+          "p95": 18.04,
+          "max": 20.81,
+          "count": 55
+        }
+      },
+      "1": {
+        "busy_percent": {
+          "mean": 62.47909090909091,
+          "p95": 78.57,
+          "max": 79.38,
+          "count": 55
+        },
+        "softirq_percent": {
+          "mean": 0.6783636363636364,
+          "p95": 1.03,
+          "max": 1.52,
+          "count": 55
+        },
+        "iowait_percent": {
+          "mean": 9.070727272727273,
+          "p95": 17.95,
+          "max": 22.68,
+          "count": 55
+        }
+      },
+      "2": {
+        "busy_percent": {
+          "mean": 68.5150909090909,
+          "p95": 80.62,
+          "max": 89.84,
+          "count": 55
+        },
+        "softirq_percent": {
+          "mean": 12.141272727272728,
+          "p95": 15.31,
+          "max": 32.99,
+          "count": 55
+        },
+        "iowait_percent": {
+          "mean": 8.028181818181817,
+          "p95": 16.92,
+          "max": 19.29,
+          "count": 55
+        }
+      },
+      "3": {
+        "busy_percent": {
+          "mean": 67.55745454545455,
+          "p95": 80.2,
+          "max": 87.88000000000001,
+          "count": 55
+        },
+        "softirq_percent": {
+          "mean": 10.731454545454545,
+          "p95": 13.57,
+          "max": 20.2,
+          "count": 55
+        },
+        "iowait_percent": {
+          "mean": 8.637272727272727,
+          "p95": 15.9,
+          "max": 24.74,
+          "count": 55
+        }
+      }
+    },
+    "notes": [
+      "Qdisc counter interval lies inside requested window and can omit up to five seconds at each boundary.",
+      "Host busy cores are summed per-CPU user,nice,system,irq,softirq, excluding iowait/steal."
+    ]
+  },
+  "strong4_timeout_context": {
+    "requested_window": {
+      "start": "2026-09-28T13:48:25+00:00",
+      "end": "2026-09-28T13:48:40+00:00"
+    },
+    "qdisc_interval_start": "2026-09-28T13:48:27.124338+00:00",
+    "qdisc_interval_end": "2026-09-28T13:48:37.125025+00:00",
+    "qdisc_deltas": {
+      "lo": {
+        "bytes": 0,
+        "packets": 0,
+        "drops": 0,
+        "requeues": 0,
+        "overlimits": 0
+      },
+      "eth0": {
+        "bytes": 195515632,
+        "packets": 183057,
+        "drops": 0,
+        "requeues": 10,
+        "overlimits": 0
+      },
+      "enp7s0": {
+        "bytes": 2178362240,
+        "packets": 1656448,
+        "drops": 0,
+        "requeues": 13,
+        "overlimits": 0
+      },
+      "docker0": {
+        "bytes": 0,
+        "packets": 0,
+        "drops": 0,
+        "requeues": 0,
+        "overlimits": 0
+      }
+    },
+    "online_cpus_seen": [
+      "0-3"
+    ],
+    "min_MemAvailable_GiB": 27.675941467285156,
+    "max_SwapUsed_bytes": 0,
+    "max_Dirty_bytes": 51122176,
+    "max_Writeback_bytes": 4096,
+    "vmstat_delta": {
+      "pgmajfault": 12,
+      "pswpin": 0,
+      "pswpout": 0,
+      "compact_stall": 13,
+      "compact_fail": 13,
+      "compact_success": 0,
+      "allocstall_normal": 0,
+      "allocstall_movable": 7
+    },
+    "busy_cores": {
+      "mean": 2.5787750000000003,
+      "p95": 3.3873,
+      "max": 3.3873,
+      "count": 8
+    },
+    "softirq_cores": {
+      "mean": 0.2639,
+      "p95": 0.5473,
+      "max": 0.5473,
+      "count": 8
+    },
+    "iowait_cores": {
+      "mean": 0.3419125,
+      "p95": 0.506,
+      "max": 0.506,
+      "count": 8
+    },
+    "cpus": {
+      "0": {
+        "busy_percent": {
+          "mean": 62.057500000000005,
+          "p95": 81.63000000000001,
+          "max": 81.63000000000001,
+          "count": 8
+        },
+        "softirq_percent": {
+          "mean": 0.7025,
+          "p95": 1.53,
+          "max": 1.53,
+          "count": 8
+        },
+        "iowait_percent": {
+          "mean": 8.3525,
+          "p95": 20.81,
+          "max": 20.81,
+          "count": 8
+        }
+      },
+      "1": {
+        "busy_percent": {
+          "mean": 61.643750000000004,
+          "p95": 79.38,
+          "max": 79.38,
+          "count": 8
+        },
+        "softirq_percent": {
+          "mean": 0.8300000000000001,
+          "p95": 1.52,
+          "max": 1.52,
+          "count": 8
+        },
+        "iowait_percent": {
+          "mean": 8.706249999999999,
+          "p95": 18.65,
+          "max": 18.65,
+          "count": 8
+        }
+      },
+      "2": {
+        "busy_percent": {
+          "mean": 67.13374999999999,
+          "p95": 89.84,
+          "max": 89.84,
+          "count": 8
+        },
+        "softirq_percent": {
+          "mean": 13.04125,
+          "p95": 32.99,
+          "max": 32.99,
+          "count": 8
+        },
+        "iowait_percent": {
+          "mean": 9.31625,
+          "p95": 16.92,
+          "max": 16.92,
+          "count": 8
+        }
+      },
+      "3": {
+        "busy_percent": {
+          "mean": 67.0425,
+          "p95": 87.88000000000001,
+          "max": 87.88000000000001,
+          "count": 8
+        },
+        "softirq_percent": {
+          "mean": 11.81625,
+          "p95": 20.2,
+          "max": 20.2,
+          "count": 8
+        },
+        "iowait_percent": {
+          "mean": 7.81625,
+          "p95": 11.68,
+          "max": 11.68,
+          "count": 8
+        }
+      }
+    },
+    "notes": [
+      "Qdisc counter interval lies inside requested window and can omit up to five seconds at each boundary.",
+      "Host busy cores are summed per-CPU user,nice,system,irq,softirq, excluding iowait/steal."
+    ]
+  }
+}

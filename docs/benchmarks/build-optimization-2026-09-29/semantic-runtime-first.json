@@ -1,0 +1,75 @@
+{
+  "started_at": "2026-09-29T09:47:44.300663+00:00",
+  "source_receipt_sha256": "08339efd5f4e3b6f6af9e332945ad5ff71f7ed5285a2300fadd9d1d0043d5119",
+  "source_run_id": "6c9929b8899b4100",
+  "source_receipt_complete": false,
+  "owner": "6f77fb258e3f47d2",
+  "selected_cases": [
+    "links",
+    "whiteout-opaque",
+    "missing-parent"
+  ],
+  "cases": [
+    {
+      "case": "links",
+      "sandbox_id": "qs-6f77fb258e3f47d2-0",
+      "image_id": "qs-6f77fb258e3f47d2-0",
+      "source_manifest": "sha256:302c4082530a37a79e21835d1c2c8145ff33e94105f495ac3719382fe4a27161",
+      "source_tag": "qual-6c9929b8899b4100-links",
+      "started_at": "2026-09-29T09:47:44.300753+00:00",
+      "build": {
+        "build_id": "df4f5f02-e5f1-42e2-9404-363135e9bbe0",
+        "status": "succeeded",
+        "timings": {
+          "end_to_end_ms": 1203,
+          "environment": {
+            "docker_pull_skipped": 1,
+            "groups_reused": 6,
+            "preflight_ms": 294.656,
+            "total_ms": 752.529
+          },
+          "phases": {
+            "cleanup_ms": 0,
+            "docker_build_and_push_ms": 433,
+            "immutable_environment_ms": 752
+          },
+          "preparation_ms": 4,
+          "queue_wait_ms": 2,
+          "total_ms": 1197
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T09:47:45.938536+00:00",
+          "id": "qs-6f77fb258e3f47d2-0",
+          "labels": {},
+          "manifest_digest": "sha256:003afde6f9e6bf26ef58c3d5adf4809b391684e6a9786c172fbbbefbcb6db46f",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-fyz1kar8",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/qs-6f77fb258e3f47d2-0-c0cec07d9ca4:latest",
+          "updated_at": "2026-09-29T09:47:45.938536+00:00"
+        }
+      },
+      "exit_code": 1,
+      "fixture_failure": "Traceback (most recent call last):\n  File \"<string>\", line 9, in <module>\n  File \"/usr/local/lib/python3.12/pathlib.py\", line 847, in lstat\n    return self.stat(follow_symlinks=False)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/pathlib.py\", line 840, in stat\n    return os.stat(self, follow_symlinks=follow_symlinks)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nPermissionError: [Errno 13] Permission denied: '/ucloud-qual-6c9929b8899b4100/delete'\n",
+      "error": {
+        "type": "ValueError"
+      },
+      "cleanup": {
+        "deleted": true,
+        "absence_observed_twice": true
+      },
+      "finished_at": "2026-09-29T09:47:48.864957+00:00"
+    }
+  ],
+  "complete": false,
+  "limits": {
+    "concurrency": 1,
+    "cpus": 1,
+    "memory_mb": 512,
+    "disk_mb": 1024,
+    "sandbox_ttl_seconds": 600,
+    "suite_seconds_excluding_cleanup": 1200
+  },
+  "finished_at": "2026-09-29T09:47:48.865172+00:00"
+}

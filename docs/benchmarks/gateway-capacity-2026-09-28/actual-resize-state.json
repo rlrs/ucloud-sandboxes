@@ -1,0 +1,32 @@
+{
+  "original_shape": "ccx33",
+  "trial_shape": "ccx23",
+  "identity": {
+    "id": 167683409,
+    "name": "sandboxes-gateway",
+    "public_ipv4": "77.42.92.27",
+    "private_net": [
+      {
+        "ip": "10.42.0.2",
+        "alias_ips": [],
+        "mac_address": "86:00:00:28:fc:31",
+        "network": 12539764
+      }
+    ],
+    "volumes": [
+      106968761
+    ],
+    "primary_disk_size": 160
+  },
+  "preflight": {
+    "ready": true,
+    "backup_directory": "/work/ucloud-sandboxes/gateway-resize-trial-20260928",
+    "database_backup_bytes": 37566105,
+    "backup_sha256": "95c3f1a2bad81e580909c66fd3b54ea6e7ee7cc91926b76156bf8b1054299dda",
+    "config_sha256": "e82af76063c5f044477e06059d543ca389063733a09e5cf1d08fa8aff8487652",
+    "fleet_count": 0,
+    "relay_inflight": 0,
+    "active_builds": 0,
+    "at": "2026-09-28T14:27:51Z"
+  }
+}

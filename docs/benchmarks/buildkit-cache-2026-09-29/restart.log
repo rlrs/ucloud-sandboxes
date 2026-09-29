@@ -1,0 +1,68 @@
+#1 [internal] booting buildkit
+#1 starting container buildx_buildkit_ucloud-shared-cache0 0.1s done
+#1 DONE 0.1s
+Name:          ucloud-shared-cache
+Driver:        docker-container
+Last Activity: 2026-09-29 07:15:54 +0000 UTC
+
+Nodes:
+Name:                  ucloud-shared-cache0
+Endpoint:              unix:///var/run/docker.sock
+Driver Options:        image="moby/buildkit:v0.33.0@sha256:6c2fa84a6b61ccd72899dde4239f8d5717f05f9a8ca6f3cad185fb1a95a94de3" network="host"
+Status:                running
+BuildKit daemon flags: --allow-insecure-entitlement=network.host
+BuildKit version:      v0.33.0
+Platforms:             linux/amd64, linux/amd64/v2, linux/amd64/v3, linux/386
+Labels:
+ org.mobyproject.buildkit.worker.executor:         oci
+ org.mobyproject.buildkit.worker.hostname:         ucloud-sandbox-builder-3cbc1ad921-builder-1
+ org.mobyproject.buildkit.worker.network:          host
+ org.mobyproject.buildkit.worker.oci.process-mode: sandbox
+ org.mobyproject.buildkit.worker.selinux.enabled:  false
+ org.mobyproject.buildkit.worker.snapshotter:      overlayfs
+GC Policy rule#0:
+ All:            false
+ Filters:        type==source.local type==exec.cachemount type==source.git.checkout
+ Keep Duration:  48h0m0s
+ Max Used Space: 488.3MiB
+GC Policy rule#1:
+ All:            false
+ Keep Duration:  1440h0m0s
+ Reserved Space: 1GiB
+ Max Used Space: 20GiB
+ Min Free Space: 10GiB
+GC Policy rule#2:
+ All:            false
+ Reserved Space: 1GiB
+ Max Used Space: 20GiB
+ Min Free Space: 10GiB
+GC Policy rule#3:
+ All:            true
+ Reserved Space: 1GiB
+ Max Used Space: 20GiB
+ Min Free Space: 10GiB
+File#buildkitd.toml:
+ > [registry]
+ > [registry.'10.42.0.2:5000']
+ > http = true
+ > 
+ > [system]
+ > maxRegistryConcurrency = 4
+ > 
+ > [worker]
+ > [worker.oci]
+ > gc = true
+ > max-parallelism = 4
+ > maxUsedSpace = 21474836480
+ > minFreeSpace = 10737418240
+ > reservedSpace = 1073741824
+ > 
+ID                           RECLAIMABLE   SIZE      LAST ACCESSED
+fx4h79r46kzlmzkh1i0okq7vv*   true          0B        5 minutes ago
+76xstvbu76yb340f5axwol19v*   true          4.096kB   5 minutes ago
+wcvwbjzex85q3q7v2lch3v9du    true          4.315kB   5 minutes ago
+tbxrnq1kbp22167z9jyydydnw    true          6.697MB   5 minutes ago
+zflnkmr7031vo1zxks4tsb90o*   true          33.55MB   5 minutes ago
+qtfgv2wd7fnusgvqjpo5nw6ld    true          67.12MB   5 minutes ago
+Reclaimable:	107.4MB
+Total:		107.4MB

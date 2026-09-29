@@ -1807,6 +1807,11 @@ def build_builder_node_agent_server(
         image_runtime,
         max_active_builds=max_active_image_builds,
         queue_builds=True,
+        # Atomically admit only execution capacity, including preparations.
+        # Excess demand stays at the gateway so another builder can take it;
+        # stale load samples from different gateway processes cannot queue it
+        # behind slow work here. The queue still handles brief cleanup handoff.
+        max_queued_builds=0,
         max_concurrent_pulls=max_concurrent_image_pulls,
         telemetry=resolved_telemetry,
         environment_publisher=environment_publisher,

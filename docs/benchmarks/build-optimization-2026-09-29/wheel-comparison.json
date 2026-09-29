@@ -1,0 +1,18 @@
+{
+  "old_root": "/work/ucloud-sandboxes/buildkit-cache-optimization-20260929-r3",
+  "new_root": "/work/ucloud-sandboxes/build-optimization-20260929-r1",
+  "wheel_sha256": "f38db1aae25b0ddb14401fce61d80e299a2d8740b2586998e521b21ef0a26a2f",
+  "changed_members": [
+    "ucloud_sandboxes-0.7.0.dist-info/RECORD",
+    "ucloud_sandboxes/build_history.py",
+    "ucloud_sandboxes/control_plane.py",
+    "ucloud_sandboxes/environment_builder.py",
+    "ucloud_sandboxes/node_agent.py",
+    "ucloud_sandboxes/oci_layer_materialize.py"
+  ],
+  "repacker_sha256": "9fddb39307442fabea50f78c80b296a5c32b2e00952e7624af7c02709bd0da5b",
+  "source_bundles": {
+    "builder": "a9f16bfb811fadb330179f84459cfcb31f48c7e795b7b722a8eae6362fde749c",
+    "sandbox": "698f03fc15960df80b3f361ff42ef2e39d0fbab903c262ec04da9fe94f2e1953"
+  }
+}

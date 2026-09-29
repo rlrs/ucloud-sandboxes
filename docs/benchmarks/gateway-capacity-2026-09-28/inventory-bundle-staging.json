@@ -1,0 +1,25 @@
+{
+  "started_at": "2026-09-28T14:21:58Z",
+  "wheel_sha256": "50aca04fd4bc6415f3ac5cb3f61f0fe5670f4b26f773d8f562fcf754566c411b",
+  "runtime_deployed": false,
+  "node_package_root_changed": false,
+  "bundles": {
+    "builder": {
+      "source_sha256": "495e2729b033b769bba0ea39d5e20209b09085213c7a119a05e72ce8fe47f66b",
+      "sha256": "d7aa96fbcaafba16305937241fd2df208d0d40f1b711f0e3964693a9a9817f01",
+      "bytes": 164065500,
+      "agent_sha256": "0a664156c23ca1da7e0464392e391b82a2a47ae0ab35a46ad5ad51c5b2ede02a",
+      "native_files_unchanged": true,
+      "dependency_files_unchanged": true
+    },
+    "sandbox": {
+      "source_sha256": "b9c96570db2d7a0700aae19482756c98bd5afbd9ebe85accd6fe5e55b92a46bc",
+      "sha256": "67fdfd24afb2dea3bfd2bab5cdf18efe9f2a37aaee8977ddb4d9101e1866b00d",
+      "bytes": 313549629,
+      "agent_sha256": "0a664156c23ca1da7e0464392e391b82a2a47ae0ab35a46ad5ad51c5b2ede02a",
+      "native_files_unchanged": true,
+      "dependency_files_unchanged": true
+    }
+  },
+  "finished_at": "2026-09-28T14:22:16Z"
+}

@@ -1,0 +1,78 @@
+{
+  "run_id": "relay-load-cac265f5811c",
+  "all_agents_ready": "2026-09-28T13:47:29.894386+00:00",
+  "first_scenario_terminal": "2026-09-28T13:50:46.629393+00:00",
+  "benchmark_finished": "2026-09-28T13:51:53.120376+00:00",
+  "plateau_seconds": 196.7350070476532,
+  "stats_samples_total": 61,
+  "stats_error_count": 0,
+  "stats_samples_in_full_agent_plateau": 39,
+  "stats_note": "five-second point samples; pool counter deltas are from first through last sample strictly inside the full-agent plateau; final acceptance has no profiler and includes the designated network load",
+  "inflight": {
+    "count": 39,
+    "min": 460,
+    "median": 484,
+    "p95": 497,
+    "max": 497,
+    "mean": 484.43589743589746
+  },
+  "reserved_storage_bytes": {
+    "count": 39,
+    "min": 18679623380,
+    "median": 20322225039,
+    "p95": 21069563668,
+    "max": 21430934604,
+    "mean": 20266484040.102566
+  },
+  "storage_budget_bytes": 68719476736,
+  "delivery_pending": {
+    "count": 39,
+    "min": 0,
+    "median": 0,
+    "p95": 4,
+    "max": 6,
+    "mean": 0.9743589743589743
+  },
+  "oldest_delivery_pending_seconds": {
+    "count": 39,
+    "min": 0.0,
+    "median": 0.0,
+    "p95": 0.13433098793029785,
+    "max": 0.22471308708190918,
+    "mean": 0.0327916023058769
+  },
+  "stats_probe_seconds": {
+    "count": 39,
+    "min": 0.04043616399576422,
+    "median": 0.06625527200230863,
+    "p95": 0.12274741500004893,
+    "max": 0.24483721300202888,
+    "mean": 0.07251108187129154
+  },
+  "pools": {
+    "database_pool": {
+      "requests_num": 50230,
+      "requests_queued": 163,
+      "requests_wait_ms": 1565,
+      "requests_errors": 0,
+      "requests_waiting": 0,
+      "connections_errors": 0,
+      "usage_ms": 212354,
+      "observed_seconds": 190.00000596046448,
+      "max_waiting": 0,
+      "wait_ms_per_request": 0.031156679275333467
+    },
+    "lifecycle_database_pool": {
+      "requests_num": 81933,
+      "requests_queued": 876,
+      "requests_wait_ms": 3036,
+      "requests_errors": 0,
+      "requests_waiting": 0,
+      "connections_errors": 0,
+      "usage_ms": 118143,
+      "observed_seconds": 190.00000596046448,
+      "max_waiting": 1,
+      "wait_ms_per_request": 0.03705466661784629
+    }
+  }
+}

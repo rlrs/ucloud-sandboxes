@@ -147,6 +147,16 @@ rm -rf \
 systemctl daemon-reload
 
 echo "Cleaning package caches, logs, leases, and machine identity"
+# OS packages are updated only through explicit maintenance.
+install -d -m 0755 /etc/apt/apt.conf.d
+cat > /etc/apt/apt.conf.d/99zz-ucloud-no-unattended-upgrades <<'EOF'
+APT::Periodic::Enable "0";
+APT::Periodic::Update-Package-Lists "0";
+APT::Periodic::Unattended-Upgrade "0";
+EOF
+systemctl disable --now apt-daily.timer apt-daily-upgrade.timer
+systemctl mask apt-daily.timer apt-daily-upgrade.timer apt-daily.service apt-daily-upgrade.service unattended-upgrades.service
+
 apt-get clean
 rm -rf /var/lib/apt/lists/* /var/log/ucloud-sandboxes
 rm -f /var/lib/systemd/random-seed /var/lib/dhcp/*.lease /var/lib/dhcp/*.leases

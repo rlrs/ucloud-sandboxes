@@ -1,0 +1,83 @@
+{
+  "run_id": "relay-load-5ac0fcf05389",
+  "correct": true,
+  "slo_passed": false,
+  "completed_cycles": 128,
+  "errors": [],
+  "cleanup_errors": [],
+  "response_ready_to_usable_exec_seconds": {
+    "count": 96,
+    "p50": 0.388612792562526,
+    "p95": 0.43480876537796576,
+    "p99": 0.44008819584632874,
+    "max": 0.44008819584632874
+  },
+  "response_ready_to_guest_continuation_seconds": {
+    "count": 96,
+    "p50": 0.07735578430038004,
+    "p95": 0.08961326653661672,
+    "p99": 0.1016270817581244,
+    "max": 0.1016270817581244
+  },
+  "phase_latency_seconds": {
+    "during_provisioning": {
+      "count": 0,
+      "p50": null,
+      "p95": null,
+      "p99": null,
+      "max": null
+    },
+    "after_provisioning": {
+      "count": 128,
+      "p50": 0.38631014006841724,
+      "p95": 0.43480876537796576,
+      "p99": 0.4388607151704491,
+      "max": 0.44008819584632874
+    }
+  },
+  "fleet_health": {
+    "enabled": true,
+    "passed": true,
+    "status": "passed",
+    "used_jobs": [
+      "167860033"
+    ],
+    "observed_healthy_jobs": [
+      "167860033"
+    ],
+    "failure_count": 0,
+    "placement_grace_seconds": 30,
+    "freshness_seconds": 30
+  },
+  "inventory_load_process": {
+    "pollers": 3,
+    "main_process_pollers": 1,
+    "ready": true,
+    "failed": false,
+    "helper_sha256": "7f33bf5cdea8df8e356fb297bf24d915e4b5090fe08f7a0f72568279e6116f5a",
+    "view": "status",
+    "cadence": "SDK inventory GET, then one-second sleep per poller",
+    "pid": 10608,
+    "stopped_by_parent": true,
+    "completion": {
+      "event": "finished",
+      "reason": "stopped",
+      "completed_polls": 321,
+      "failed_polls": 0,
+      "elapsed_seconds": 107.05545099099982
+    },
+    "returncode": 0
+  },
+  "scope": "Functional canary only; driver on gateway; no creation-overlap cycles, so full SLO qualification rejects this run",
+  "configuration": {
+    "sandboxes": 32,
+    "cycles": 4,
+    "resident_mb": 512,
+    "dirty_mb": 128,
+    "fleet_pollers": 4,
+    "inventory_view": "status",
+    "startup_mode": "rolling"
+  },
+  "fleet_poll_count": 428,
+  "fleet_poll_errors": 0
+}

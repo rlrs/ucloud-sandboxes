@@ -1,0 +1,80 @@
+{
+  "profiles": [
+    {
+      "start_unix": 1790602122.7721431,
+      "finish_unix": 1790602196.477432,
+      "elapsed_seconds": 73.70281037899997,
+      "target_seconds": 110,
+      "bytes": {
+        "nat": 7874805760,
+        "registry_upload": 5301600256,
+        "registry_read": 5301600256
+      },
+      "requests": {
+        "nat": 116,
+        "registry_upload": 158,
+        "registry_read": 158
+      },
+      "errors": [
+        {
+          "kind": "nat",
+          "exception": "TimeoutError",
+          "at_seconds": 67.42
+        }
+      ],
+      "achieved_mib_per_second": {
+        "nat": 101.89570738729677,
+        "registry_upload": 68.59982643810552,
+        "registry_read": 68.59982643810552
+      },
+      "byte_cap": 38654705664,
+      "registry_repository": "gateway-network-qualification-20260928-167823398",
+      "registry_blob_digest": "sha256:fbb3f90235e8b4c09cc77edee184ae31567a64a4ccdf8132014964139362342d",
+      "registry_cleanup_status": "202",
+      "registry_fixture_bytes": 33554432,
+      "registry_reads_warm_cache": true,
+      "generator_cpu_seconds": 24.27
+    },
+    {
+      "start_unix": 1790602287.4991188,
+      "finish_unix": 1790602347.536505,
+      "elapsed_seconds": 60.03511643899998,
+      "target_seconds": 60,
+      "nat_streams": 8,
+      "requested_mib_per_second": {
+        "nat": 125,
+        "registry_upload": 75,
+        "registry_read": 75
+      },
+      "bytes": {
+        "nat": 7868514304,
+        "registry_upload": 4718592000,
+        "registry_read": 4718592000
+      },
+      "requests": {
+        "nat": 120,
+        "registry_upload": 140,
+        "registry_read": 142
+      },
+      "errors": [],
+      "achieved_mib_per_second": {
+        "nat": 124.99351121646623,
+        "registry_upload": 74.95613012714526,
+        "registry_read": 74.95613012714526
+      },
+      "byte_cap": 19327352832,
+      "registry_repository": "gateway-network-qualification-20260928-167823398",
+      "registry_blob_digest": "sha256:aba60ff5963805c49b539f11677236e28d824b09091ad86e000f84e498a8a225",
+      "registry_cleanup_status": "202",
+      "registry_fixture_bytes": 33554432,
+      "registry_reads_warm_cache": true,
+      "generator_cpu_seconds": 33.3
+    }
+  ],
+  "all_512_active_through_unix": 1790602361.150499,
+  "per_profile_completed_agent_cycles": [
+    1545,
+    1206
+  ],
+  "every_agent_progressed_in_each_window": true
+}

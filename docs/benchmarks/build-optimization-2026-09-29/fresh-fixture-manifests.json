@@ -1,0 +1,3330 @@
+[
+  {
+    "base_ref": "python:3.12-bookworm@sha256:dbbe4ceb97851e2e5fa83798b239811f871cb743b259ba3563737349f6bcfaa0",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/agent/revision.py"
+    ],
+    "context_bytes": 861439,
+    "context_files": 1510,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/python-agent/app-change-29",
+    "context_sha256": "ebd9432749955108dbaf34a1778ecea91590d4ae24de51dda35e7b000697a29c",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/pip-install-report.json",
+      "/opt/fixture/resolved-requirements.txt"
+    ],
+    "dependency_resolution": "provided-requirements-lock",
+    "direct_dependencies": {
+      "fastapi": "0.115.12",
+      "httpx": "0.28.1",
+      "ipython": "9.2.0",
+      "jupyterlab": "4.4.3",
+      "matplotlib": "3.10.3",
+      "numpy": "2.2.6",
+      "opencv-python-headless": "4.11.0.86",
+      "pandas": "2.2.3",
+      "pillow": "11.2.1",
+      "pyarrow": "20.0.0",
+      "pydantic": "2.11.7",
+      "pytest": "8.3.5",
+      "requests": "2.32.4",
+      "rich": "14.0.0",
+      "scikit-learn": "1.6.1",
+      "scipy": "1.15.3",
+      "setuptools": "80.9.0",
+      "sympy": "1.14.0",
+      "uvicorn": "0.34.2",
+      "wheel": "0.45.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "python-agent",
+    "revision": 29,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "python",
+      "-m",
+      "agent.smoke"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 29,
+      "score": 716528,
+      "source_modules": 1500
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/agent/revision.py": "08c11665bce3ce5282063607e5997fefe1ba555f3cf72784da3e98a909e3d251"
+    },
+    "source_files": 1500,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-29"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1144790,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-tools/app-change-29",
+    "context_sha256": "c773b64937f7cc755830ca16d60d78ce48a1bf93e3006857298f22891d621fc8",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-tools",
+    "revision": 29,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/dist/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 29,
+      "score": 964539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "f046bd0a79a708092506ef20739569550ccf5a59dd4b58149376ca1c2c4358db"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-29"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1145188,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-multistage/app-change-29",
+    "context_sha256": "c55090672ba4adc17e16b97e0fd0819fe5d65f93984a18465423d083d396ca6c",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/resolved-package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": false,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-multistage",
+    "revision": 29,
+    "runtime_base_ref": "node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c",
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 29,
+      "score": 964539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "f046bd0a79a708092506ef20739569550ccf5a59dd4b58149376ca1c2c4358db"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-29"
+  },
+  {
+    "base_ref": "python:3.12-bookworm@sha256:dbbe4ceb97851e2e5fa83798b239811f871cb743b259ba3563737349f6bcfaa0",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/agent/revision.py"
+    ],
+    "context_bytes": 861439,
+    "context_files": 1510,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/python-agent/app-change-30",
+    "context_sha256": "3e60f7818f6227aab6cac7b7cf6e064f23753d4d69ebc74b2701ca643368624f",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/pip-install-report.json",
+      "/opt/fixture/resolved-requirements.txt"
+    ],
+    "dependency_resolution": "provided-requirements-lock",
+    "direct_dependencies": {
+      "fastapi": "0.115.12",
+      "httpx": "0.28.1",
+      "ipython": "9.2.0",
+      "jupyterlab": "4.4.3",
+      "matplotlib": "3.10.3",
+      "numpy": "2.2.6",
+      "opencv-python-headless": "4.11.0.86",
+      "pandas": "2.2.3",
+      "pillow": "11.2.1",
+      "pyarrow": "20.0.0",
+      "pydantic": "2.11.7",
+      "pytest": "8.3.5",
+      "requests": "2.32.4",
+      "rich": "14.0.0",
+      "scikit-learn": "1.6.1",
+      "scipy": "1.15.3",
+      "setuptools": "80.9.0",
+      "sympy": "1.14.0",
+      "uvicorn": "0.34.2",
+      "wheel": "0.45.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "python-agent",
+    "revision": 30,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "python",
+      "-m",
+      "agent.smoke"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 30,
+      "score": 718028,
+      "source_modules": 1500
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/agent/revision.py": "2b5656be451a7416e1f2a4083fcb0d200e9b7d93905b80e434b17f9ca5dc61bc"
+    },
+    "source_files": 1500,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-30"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1144790,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-tools/app-change-30",
+    "context_sha256": "f80ec6cd98fae0261931c8984f01b85368b15bf5ef3a583ee4e36a019031857b",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-tools",
+    "revision": 30,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/dist/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 30,
+      "score": 966539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "d162aeeb0fe08fcab59385ecd2431917426a6c0898b425034a558300f75e684f"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-30"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1145188,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-multistage/app-change-30",
+    "context_sha256": "595c0fb462b270b67cf1b3416acc9de8ba46b3e0f102f81cc117e46447dd4cfc",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/resolved-package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": false,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-multistage",
+    "revision": 30,
+    "runtime_base_ref": "node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c",
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 30,
+      "score": 966539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "d162aeeb0fe08fcab59385ecd2431917426a6c0898b425034a558300f75e684f"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-30"
+  },
+  {
+    "base_ref": "python:3.12-bookworm@sha256:dbbe4ceb97851e2e5fa83798b239811f871cb743b259ba3563737349f6bcfaa0",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/agent/revision.py"
+    ],
+    "context_bytes": 861439,
+    "context_files": 1510,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/python-agent/app-change-31",
+    "context_sha256": "bb0a004aca600881e09bf5b64a2e1ba35463da7dc325edc032b2f6df2640907f",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/pip-install-report.json",
+      "/opt/fixture/resolved-requirements.txt"
+    ],
+    "dependency_resolution": "provided-requirements-lock",
+    "direct_dependencies": {
+      "fastapi": "0.115.12",
+      "httpx": "0.28.1",
+      "ipython": "9.2.0",
+      "jupyterlab": "4.4.3",
+      "matplotlib": "3.10.3",
+      "numpy": "2.2.6",
+      "opencv-python-headless": "4.11.0.86",
+      "pandas": "2.2.3",
+      "pillow": "11.2.1",
+      "pyarrow": "20.0.0",
+      "pydantic": "2.11.7",
+      "pytest": "8.3.5",
+      "requests": "2.32.4",
+      "rich": "14.0.0",
+      "scikit-learn": "1.6.1",
+      "scipy": "1.15.3",
+      "setuptools": "80.9.0",
+      "sympy": "1.14.0",
+      "uvicorn": "0.34.2",
+      "wheel": "0.45.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "python-agent",
+    "revision": 31,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "python",
+      "-m",
+      "agent.smoke"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 31,
+      "score": 719528,
+      "source_modules": 1500
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/agent/revision.py": "fb1605f1368da57194ca991e6b8346588d2380c119496d69d57794e215e8c5ea"
+    },
+    "source_files": 1500,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-31"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1144790,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-tools/app-change-31",
+    "context_sha256": "65a90e2f757eaab6a814bce10198d86d9b6d844f0f34e92f717f4464e2b5aeea",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-tools",
+    "revision": 31,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/dist/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 31,
+      "score": 968539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "07626a74c84688ef614b6920589cd76fa93c66a6d41a603e0de8475e53b88dec"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-31"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1145188,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-multistage/app-change-31",
+    "context_sha256": "624a5bd6f2d52e3877b1c42f6bdd548a971fd62109484569f5e1aa4f8c1be545",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/resolved-package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": false,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-multistage",
+    "revision": 31,
+    "runtime_base_ref": "node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c",
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 31,
+      "score": 968539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "07626a74c84688ef614b6920589cd76fa93c66a6d41a603e0de8475e53b88dec"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-31"
+  },
+  {
+    "base_ref": "python:3.12-bookworm@sha256:dbbe4ceb97851e2e5fa83798b239811f871cb743b259ba3563737349f6bcfaa0",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/agent/revision.py"
+    ],
+    "context_bytes": 861439,
+    "context_files": 1510,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/python-agent/app-change-32",
+    "context_sha256": "2364b92b7a845ef4a03fda9879593724418f97c22b3a67c80dfc3e70e796ef75",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/pip-install-report.json",
+      "/opt/fixture/resolved-requirements.txt"
+    ],
+    "dependency_resolution": "provided-requirements-lock",
+    "direct_dependencies": {
+      "fastapi": "0.115.12",
+      "httpx": "0.28.1",
+      "ipython": "9.2.0",
+      "jupyterlab": "4.4.3",
+      "matplotlib": "3.10.3",
+      "numpy": "2.2.6",
+      "opencv-python-headless": "4.11.0.86",
+      "pandas": "2.2.3",
+      "pillow": "11.2.1",
+      "pyarrow": "20.0.0",
+      "pydantic": "2.11.7",
+      "pytest": "8.3.5",
+      "requests": "2.32.4",
+      "rich": "14.0.0",
+      "scikit-learn": "1.6.1",
+      "scipy": "1.15.3",
+      "setuptools": "80.9.0",
+      "sympy": "1.14.0",
+      "uvicorn": "0.34.2",
+      "wheel": "0.45.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "python-agent",
+    "revision": 32,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "python",
+      "-m",
+      "agent.smoke"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 32,
+      "score": 721028,
+      "source_modules": 1500
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/agent/revision.py": "662c57823e32dce39f6daf7ea5b31fefb23cf0de7c5eddbddded27cf9a4ce53e"
+    },
+    "source_files": 1500,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-32"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1144790,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-tools/app-change-32",
+    "context_sha256": "1f6bdfa054e4b1315ae8690b40babc65c465646ba8d47d1f9887070fc8b8d5b9",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-tools",
+    "revision": 32,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/dist/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 32,
+      "score": 970539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "edf419434cd7f4eab215e1551f76aa0b61b33eaa2f70db37ca365613ea7cc08e"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-32"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1145188,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-multistage/app-change-32",
+    "context_sha256": "881701f1314dbd9fe332f1733327aee02c51b5763fc39185ad358cf3c247df63",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/resolved-package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": false,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-multistage",
+    "revision": 32,
+    "runtime_base_ref": "node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c",
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 32,
+      "score": 970539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "edf419434cd7f4eab215e1551f76aa0b61b33eaa2f70db37ca365613ea7cc08e"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-32"
+  },
+  {
+    "base_ref": "python:3.12-bookworm@sha256:dbbe4ceb97851e2e5fa83798b239811f871cb743b259ba3563737349f6bcfaa0",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/agent/revision.py"
+    ],
+    "context_bytes": 861439,
+    "context_files": 1510,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/python-agent/app-change-33",
+    "context_sha256": "43842c933aa144b56cdd684e1f8bfccbdcf44582247291a06f17ecd054dd2edc",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/pip-install-report.json",
+      "/opt/fixture/resolved-requirements.txt"
+    ],
+    "dependency_resolution": "provided-requirements-lock",
+    "direct_dependencies": {
+      "fastapi": "0.115.12",
+      "httpx": "0.28.1",
+      "ipython": "9.2.0",
+      "jupyterlab": "4.4.3",
+      "matplotlib": "3.10.3",
+      "numpy": "2.2.6",
+      "opencv-python-headless": "4.11.0.86",
+      "pandas": "2.2.3",
+      "pillow": "11.2.1",
+      "pyarrow": "20.0.0",
+      "pydantic": "2.11.7",
+      "pytest": "8.3.5",
+      "requests": "2.32.4",
+      "rich": "14.0.0",
+      "scikit-learn": "1.6.1",
+      "scipy": "1.15.3",
+      "setuptools": "80.9.0",
+      "sympy": "1.14.0",
+      "uvicorn": "0.34.2",
+      "wheel": "0.45.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "python-agent",
+    "revision": 33,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "python",
+      "-m",
+      "agent.smoke"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 33,
+      "score": 722528,
+      "source_modules": 1500
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/agent/revision.py": "807ac06b6b63ba4d0d88071bc7f29a3fd21e84d0ceac1a4351eee4ef2a8287ef"
+    },
+    "source_files": 1500,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-33"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1144790,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-tools/app-change-33",
+    "context_sha256": "bf634ce3d45ee7dc67dccb8a444b3e96601c53b2da0f466141ded9b84a4a7230",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-tools",
+    "revision": 33,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/dist/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 33,
+      "score": 972539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "747eda61cb790e300de857a1459bdcb2044dd23dea42ca1d3e245da9030d5d9d"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-33"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1145188,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-multistage/app-change-33",
+    "context_sha256": "5c1f7ef22686071f1a11962b6f789717e60e31f01b597af45c22c639f27bd1b9",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/resolved-package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": false,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-multistage",
+    "revision": 33,
+    "runtime_base_ref": "node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c",
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 33,
+      "score": 972539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "747eda61cb790e300de857a1459bdcb2044dd23dea42ca1d3e245da9030d5d9d"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-33"
+  },
+  {
+    "base_ref": "python:3.12-bookworm@sha256:dbbe4ceb97851e2e5fa83798b239811f871cb743b259ba3563737349f6bcfaa0",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/agent/revision.py"
+    ],
+    "context_bytes": 861439,
+    "context_files": 1510,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/python-agent/app-change-34",
+    "context_sha256": "8af05d007dcee0bda6f5d2e20af6f4fa4dc78b92ad37d72a1c4e9735c6ab14db",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/pip-install-report.json",
+      "/opt/fixture/resolved-requirements.txt"
+    ],
+    "dependency_resolution": "provided-requirements-lock",
+    "direct_dependencies": {
+      "fastapi": "0.115.12",
+      "httpx": "0.28.1",
+      "ipython": "9.2.0",
+      "jupyterlab": "4.4.3",
+      "matplotlib": "3.10.3",
+      "numpy": "2.2.6",
+      "opencv-python-headless": "4.11.0.86",
+      "pandas": "2.2.3",
+      "pillow": "11.2.1",
+      "pyarrow": "20.0.0",
+      "pydantic": "2.11.7",
+      "pytest": "8.3.5",
+      "requests": "2.32.4",
+      "rich": "14.0.0",
+      "scikit-learn": "1.6.1",
+      "scipy": "1.15.3",
+      "setuptools": "80.9.0",
+      "sympy": "1.14.0",
+      "uvicorn": "0.34.2",
+      "wheel": "0.45.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "python-agent",
+    "revision": 34,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "python",
+      "-m",
+      "agent.smoke"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 34,
+      "score": 724028,
+      "source_modules": 1500
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/agent/revision.py": "1014e8051d5fcd83e3bb6bf661073aeac1f7ec396cbe104c6abadb54b3106c85"
+    },
+    "source_files": 1500,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-34"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1144790,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-tools/app-change-34",
+    "context_sha256": "8346ad489e62f9beddb796a2ab054dc46943f4726936a2ba1c4ee16d270fc8f1",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-tools",
+    "revision": 34,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/dist/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 34,
+      "score": 974539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "ecb08b8b0cca255c10e339bf62c585e338b1de3f4419069014c3f80051dac440"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-34"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1145188,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-multistage/app-change-34",
+    "context_sha256": "a0199c5ab581765ead7beeb84c65f80648343919f2903a447c7331175f011179",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/resolved-package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": false,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-multistage",
+    "revision": 34,
+    "runtime_base_ref": "node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c",
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 34,
+      "score": 974539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "ecb08b8b0cca255c10e339bf62c585e338b1de3f4419069014c3f80051dac440"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-34"
+  },
+  {
+    "base_ref": "python:3.12-bookworm@sha256:dbbe4ceb97851e2e5fa83798b239811f871cb743b259ba3563737349f6bcfaa0",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/agent/revision.py"
+    ],
+    "context_bytes": 861439,
+    "context_files": 1510,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/python-agent/app-change-35",
+    "context_sha256": "d35c10398af12b86df925a3e9df9e8f8e31341aba0dd9f348644bf43e0ff09f9",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/pip-install-report.json",
+      "/opt/fixture/resolved-requirements.txt"
+    ],
+    "dependency_resolution": "provided-requirements-lock",
+    "direct_dependencies": {
+      "fastapi": "0.115.12",
+      "httpx": "0.28.1",
+      "ipython": "9.2.0",
+      "jupyterlab": "4.4.3",
+      "matplotlib": "3.10.3",
+      "numpy": "2.2.6",
+      "opencv-python-headless": "4.11.0.86",
+      "pandas": "2.2.3",
+      "pillow": "11.2.1",
+      "pyarrow": "20.0.0",
+      "pydantic": "2.11.7",
+      "pytest": "8.3.5",
+      "requests": "2.32.4",
+      "rich": "14.0.0",
+      "scikit-learn": "1.6.1",
+      "scipy": "1.15.3",
+      "setuptools": "80.9.0",
+      "sympy": "1.14.0",
+      "uvicorn": "0.34.2",
+      "wheel": "0.45.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "python-agent",
+    "revision": 35,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "python",
+      "-m",
+      "agent.smoke"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 35,
+      "score": 725528,
+      "source_modules": 1500
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/agent/revision.py": "501a5889110fe8937fbd2d845c879fb921f835da4c5962c9e500df1751a0f703"
+    },
+    "source_files": 1500,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-35"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1144790,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-tools/app-change-35",
+    "context_sha256": "c36016d154d1f01e85d3f932b992057038530d460e55bd3e8691375021f60060",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-tools",
+    "revision": 35,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/dist/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 35,
+      "score": 976539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "5cda068217f9d41bb644b88065c8931ccf09273dde3c95a862f41411bfb3453c"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-35"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1145188,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-multistage/app-change-35",
+    "context_sha256": "721c60e8800c0dfe9f76b1ea956fd9e5cc6e4bc4cc26d278b6d593fedce97e21",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/resolved-package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": false,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-multistage",
+    "revision": 35,
+    "runtime_base_ref": "node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c",
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 35,
+      "score": 976539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "5cda068217f9d41bb644b88065c8931ccf09273dde3c95a862f41411bfb3453c"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-35"
+  },
+  {
+    "base_ref": "python:3.12-bookworm@sha256:dbbe4ceb97851e2e5fa83798b239811f871cb743b259ba3563737349f6bcfaa0",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/agent/revision.py"
+    ],
+    "context_bytes": 861439,
+    "context_files": 1510,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/python-agent/app-change-36",
+    "context_sha256": "47e527da74252f1bdd286a84fa0410ccd34b8bb479588ccd6274c41cd9119231",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/pip-install-report.json",
+      "/opt/fixture/resolved-requirements.txt"
+    ],
+    "dependency_resolution": "provided-requirements-lock",
+    "direct_dependencies": {
+      "fastapi": "0.115.12",
+      "httpx": "0.28.1",
+      "ipython": "9.2.0",
+      "jupyterlab": "4.4.3",
+      "matplotlib": "3.10.3",
+      "numpy": "2.2.6",
+      "opencv-python-headless": "4.11.0.86",
+      "pandas": "2.2.3",
+      "pillow": "11.2.1",
+      "pyarrow": "20.0.0",
+      "pydantic": "2.11.7",
+      "pytest": "8.3.5",
+      "requests": "2.32.4",
+      "rich": "14.0.0",
+      "scikit-learn": "1.6.1",
+      "scipy": "1.15.3",
+      "setuptools": "80.9.0",
+      "sympy": "1.14.0",
+      "uvicorn": "0.34.2",
+      "wheel": "0.45.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "python-agent",
+    "revision": 36,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "python",
+      "-m",
+      "agent.smoke"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 36,
+      "score": 727028,
+      "source_modules": 1500
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/agent/revision.py": "61c88022c845fe0ddb5f233214f855c9857a262658f26ddcbd2ecf78ba29c9ec"
+    },
+    "source_files": 1500,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-36"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1144790,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-tools/app-change-36",
+    "context_sha256": "00dae4e71147b9167fb02191d64c89bd5b4fc1f25343dda4e26e9249146ddfc7",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-tools",
+    "revision": 36,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/dist/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 36,
+      "score": 978539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "dc111be8812a4e3f10ee4d67278b59fae824104c9048e850d23eedb82e013e8a"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-36"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1145188,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-multistage/app-change-36",
+    "context_sha256": "385b8b54532a98d0a7cf9c45db65fb4f960b024e690f1049e0519c9a84c1770f",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/resolved-package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": false,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-multistage",
+    "revision": 36,
+    "runtime_base_ref": "node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c",
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 36,
+      "score": 978539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "dc111be8812a4e3f10ee4d67278b59fae824104c9048e850d23eedb82e013e8a"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-36"
+  },
+  {
+    "base_ref": "python:3.12-bookworm@sha256:dbbe4ceb97851e2e5fa83798b239811f871cb743b259ba3563737349f6bcfaa0",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/agent/revision.py"
+    ],
+    "context_bytes": 861439,
+    "context_files": 1510,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/python-agent/app-change-37",
+    "context_sha256": "4793862e840454c55564a4b66df33b342db3974c56020c6926b81a96fb00200b",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/pip-install-report.json",
+      "/opt/fixture/resolved-requirements.txt"
+    ],
+    "dependency_resolution": "provided-requirements-lock",
+    "direct_dependencies": {
+      "fastapi": "0.115.12",
+      "httpx": "0.28.1",
+      "ipython": "9.2.0",
+      "jupyterlab": "4.4.3",
+      "matplotlib": "3.10.3",
+      "numpy": "2.2.6",
+      "opencv-python-headless": "4.11.0.86",
+      "pandas": "2.2.3",
+      "pillow": "11.2.1",
+      "pyarrow": "20.0.0",
+      "pydantic": "2.11.7",
+      "pytest": "8.3.5",
+      "requests": "2.32.4",
+      "rich": "14.0.0",
+      "scikit-learn": "1.6.1",
+      "scipy": "1.15.3",
+      "setuptools": "80.9.0",
+      "sympy": "1.14.0",
+      "uvicorn": "0.34.2",
+      "wheel": "0.45.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "python-agent",
+    "revision": 37,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "python",
+      "-m",
+      "agent.smoke"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 37,
+      "score": 728528,
+      "source_modules": 1500
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/agent/revision.py": "c318ae917678266c0d39ac181fc0f2037643e2c209c4c8cb3c0c8137aef67908"
+    },
+    "source_files": 1500,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-37"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1144790,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-tools/app-change-37",
+    "context_sha256": "cfb425e1518991811a6d4edf19f07706762a7cfb9fdc8dc0409d3f5932f41965",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-tools",
+    "revision": 37,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/dist/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 37,
+      "score": 980539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "40eec216db7614eaf58336dc2a6bdc0380aa6a459833884243986851cb0aa052"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-37"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1145188,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-multistage/app-change-37",
+    "context_sha256": "d0edcac70e3cd2afa9d73abc2a5d047f9b568db2fb85c682a4fe5e82e86f7383",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/resolved-package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": false,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-multistage",
+    "revision": 37,
+    "runtime_base_ref": "node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c",
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 37,
+      "score": 980539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "40eec216db7614eaf58336dc2a6bdc0380aa6a459833884243986851cb0aa052"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-37"
+  },
+  {
+    "base_ref": "python:3.12-bookworm@sha256:dbbe4ceb97851e2e5fa83798b239811f871cb743b259ba3563737349f6bcfaa0",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/agent/revision.py"
+    ],
+    "context_bytes": 861439,
+    "context_files": 1510,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/python-agent/app-change-38",
+    "context_sha256": "69f6854aee361b48312fba098ba43ea7078f54a68417e1e6d3a7388b6d5a3aec",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/pip-install-report.json",
+      "/opt/fixture/resolved-requirements.txt"
+    ],
+    "dependency_resolution": "provided-requirements-lock",
+    "direct_dependencies": {
+      "fastapi": "0.115.12",
+      "httpx": "0.28.1",
+      "ipython": "9.2.0",
+      "jupyterlab": "4.4.3",
+      "matplotlib": "3.10.3",
+      "numpy": "2.2.6",
+      "opencv-python-headless": "4.11.0.86",
+      "pandas": "2.2.3",
+      "pillow": "11.2.1",
+      "pyarrow": "20.0.0",
+      "pydantic": "2.11.7",
+      "pytest": "8.3.5",
+      "requests": "2.32.4",
+      "rich": "14.0.0",
+      "scikit-learn": "1.6.1",
+      "scipy": "1.15.3",
+      "setuptools": "80.9.0",
+      "sympy": "1.14.0",
+      "uvicorn": "0.34.2",
+      "wheel": "0.45.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "python-agent",
+    "revision": 38,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "python",
+      "-m",
+      "agent.smoke"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 38,
+      "score": 730028,
+      "source_modules": 1500
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/agent/revision.py": "e16de46079ba1217d79d676800f762341aaa3c2ecf1edfa739abfaef34344cd9"
+    },
+    "source_files": 1500,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-38"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1144790,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-tools/app-change-38",
+    "context_sha256": "352e2eec6169c66eabb2b1d6c721c08f093cadbb2c4d1e43ea50cb51acafe432",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-tools",
+    "revision": 38,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/dist/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 38,
+      "score": 982539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "356b9d3493daca30b8bc193a99faa4f90593053ee0031c7f413ac9fa5e098b69"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-38"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1145188,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-multistage/app-change-38",
+    "context_sha256": "2602febabeb352d3335c005aa48b3636aa2d865268290a3858c3badec1372c3c",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/resolved-package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": false,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-multistage",
+    "revision": 38,
+    "runtime_base_ref": "node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c",
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 38,
+      "score": 982539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "356b9d3493daca30b8bc193a99faa4f90593053ee0031c7f413ac9fa5e098b69"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-38"
+  },
+  {
+    "base_ref": "python:3.12-bookworm@sha256:dbbe4ceb97851e2e5fa83798b239811f871cb743b259ba3563737349f6bcfaa0",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/agent/revision.py"
+    ],
+    "context_bytes": 861439,
+    "context_files": 1510,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/python-agent/app-change-39",
+    "context_sha256": "06aff883f6a3f558279c4c1b3d6b4231c1a63ef3d09cea4ade3477f15890e2dc",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/pip-install-report.json",
+      "/opt/fixture/resolved-requirements.txt"
+    ],
+    "dependency_resolution": "provided-requirements-lock",
+    "direct_dependencies": {
+      "fastapi": "0.115.12",
+      "httpx": "0.28.1",
+      "ipython": "9.2.0",
+      "jupyterlab": "4.4.3",
+      "matplotlib": "3.10.3",
+      "numpy": "2.2.6",
+      "opencv-python-headless": "4.11.0.86",
+      "pandas": "2.2.3",
+      "pillow": "11.2.1",
+      "pyarrow": "20.0.0",
+      "pydantic": "2.11.7",
+      "pytest": "8.3.5",
+      "requests": "2.32.4",
+      "rich": "14.0.0",
+      "scikit-learn": "1.6.1",
+      "scipy": "1.15.3",
+      "setuptools": "80.9.0",
+      "sympy": "1.14.0",
+      "uvicorn": "0.34.2",
+      "wheel": "0.45.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "python-agent",
+    "revision": 39,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "python",
+      "-m",
+      "agent.smoke"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 39,
+      "score": 731528,
+      "source_modules": 1500
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/agent/revision.py": "593574a12691529776c535377f9709762e62f3a29aa809e24778b59e2978f5d0"
+    },
+    "source_files": 1500,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-39"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1144790,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-tools/app-change-39",
+    "context_sha256": "c14eda70728e72a12f43d9a607cfbeda9f6a9c4a21f37610c9d38eb40180b085",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-tools",
+    "revision": 39,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/dist/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 39,
+      "score": 984539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "0e48b690e66bf73b93e501d051fc0f4c63666a182267f2204b251439f10c45bf"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-39"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1145188,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-multistage/app-change-39",
+    "context_sha256": "26c4b0e414d76421283b2c915e0e98181a15e39214722f310acaabeda348e53c",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/resolved-package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": false,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-multistage",
+    "revision": 39,
+    "runtime_base_ref": "node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c",
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 39,
+      "score": 984539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "0e48b690e66bf73b93e501d051fc0f4c63666a182267f2204b251439f10c45bf"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-39"
+  },
+  {
+    "base_ref": "python:3.12-bookworm@sha256:dbbe4ceb97851e2e5fa83798b239811f871cb743b259ba3563737349f6bcfaa0",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/agent/revision.py"
+    ],
+    "context_bytes": 861439,
+    "context_files": 1510,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/python-agent/app-change-40",
+    "context_sha256": "ed1d3435c5d4db8a80afe52c7f707eaf3d193151a309ae75d8b4113166c1c35c",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/pip-install-report.json",
+      "/opt/fixture/resolved-requirements.txt"
+    ],
+    "dependency_resolution": "provided-requirements-lock",
+    "direct_dependencies": {
+      "fastapi": "0.115.12",
+      "httpx": "0.28.1",
+      "ipython": "9.2.0",
+      "jupyterlab": "4.4.3",
+      "matplotlib": "3.10.3",
+      "numpy": "2.2.6",
+      "opencv-python-headless": "4.11.0.86",
+      "pandas": "2.2.3",
+      "pillow": "11.2.1",
+      "pyarrow": "20.0.0",
+      "pydantic": "2.11.7",
+      "pytest": "8.3.5",
+      "requests": "2.32.4",
+      "rich": "14.0.0",
+      "scikit-learn": "1.6.1",
+      "scipy": "1.15.3",
+      "setuptools": "80.9.0",
+      "sympy": "1.14.0",
+      "uvicorn": "0.34.2",
+      "wheel": "0.45.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "python-agent",
+    "revision": 40,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "python",
+      "-m",
+      "agent.smoke"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 40,
+      "score": 733028,
+      "source_modules": 1500
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/agent/revision.py": "99da7663358d5f40e3eb38adb107ac183e66079bd437545ff781873301028209"
+    },
+    "source_files": 1500,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-40"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1144790,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-tools/app-change-40",
+    "context_sha256": "601ba292b6297ce4f3bedc16a45c8f8ab76d52581f36d5056d71258990e4a4f8",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-tools",
+    "revision": 40,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/dist/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 40,
+      "score": 986539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "3a250af032486e37d24ad81dc5d2875999d1622b7568d69cc49d0c308331c6a9"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-40"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1145188,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-multistage/app-change-40",
+    "context_sha256": "58cd78d43f88ad34c110d69950970ca7742a4cde1b790e67423cc23353121661",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/resolved-package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": false,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-multistage",
+    "revision": 40,
+    "runtime_base_ref": "node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c",
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 40,
+      "score": 986539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "3a250af032486e37d24ad81dc5d2875999d1622b7568d69cc49d0c308331c6a9"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-40"
+  },
+  {
+    "base_ref": "python:3.12-bookworm@sha256:dbbe4ceb97851e2e5fa83798b239811f871cb743b259ba3563737349f6bcfaa0",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/agent/revision.py"
+    ],
+    "context_bytes": 861439,
+    "context_files": 1510,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/python-agent/app-change-41",
+    "context_sha256": "ae92d0508ecc9d9b7a577ffdfd2ea42009f9c8cc851aa528bcf43cbe2b6a8ec7",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/pip-install-report.json",
+      "/opt/fixture/resolved-requirements.txt"
+    ],
+    "dependency_resolution": "provided-requirements-lock",
+    "direct_dependencies": {
+      "fastapi": "0.115.12",
+      "httpx": "0.28.1",
+      "ipython": "9.2.0",
+      "jupyterlab": "4.4.3",
+      "matplotlib": "3.10.3",
+      "numpy": "2.2.6",
+      "opencv-python-headless": "4.11.0.86",
+      "pandas": "2.2.3",
+      "pillow": "11.2.1",
+      "pyarrow": "20.0.0",
+      "pydantic": "2.11.7",
+      "pytest": "8.3.5",
+      "requests": "2.32.4",
+      "rich": "14.0.0",
+      "scikit-learn": "1.6.1",
+      "scipy": "1.15.3",
+      "setuptools": "80.9.0",
+      "sympy": "1.14.0",
+      "uvicorn": "0.34.2",
+      "wheel": "0.45.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "python-agent",
+    "revision": 41,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "python",
+      "-m",
+      "agent.smoke"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 41,
+      "score": 734528,
+      "source_modules": 1500
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/agent/revision.py": "0f9fa1b452b6c4c4d8853e87fcd1c5ef6e2764cb71e979c8ab86a0e576b5e787"
+    },
+    "source_files": 1500,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-41"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1144790,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-tools/app-change-41",
+    "context_sha256": "ac511ee5bfe0accbe9eaace9c352c005083c8a6bd52682395d279e002ad57dc1",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-tools",
+    "revision": 41,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/dist/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 41,
+      "score": 988539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "5460b487c29cc1b25017d03390bd7917a8d28204f20e1c2e066f4f3deb333c2d"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-41"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1145188,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-multistage/app-change-41",
+    "context_sha256": "90f8dabb4bdb7cbf0cca3fc525590f179e00ad6528616b5acc3d6bbb2693aeac",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/resolved-package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": false,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-multistage",
+    "revision": 41,
+    "runtime_base_ref": "node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c",
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 41,
+      "score": 988539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "5460b487c29cc1b25017d03390bd7917a8d28204f20e1c2e066f4f3deb333c2d"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-41"
+  },
+  {
+    "base_ref": "python:3.12-bookworm@sha256:dbbe4ceb97851e2e5fa83798b239811f871cb743b259ba3563737349f6bcfaa0",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/agent/revision.py"
+    ],
+    "context_bytes": 861439,
+    "context_files": 1510,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/python-agent/app-change-42",
+    "context_sha256": "78e6645af3cd449c43bcab167f5ac297bbab23281ec5bf548bddf5fdadd9b10e",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/pip-install-report.json",
+      "/opt/fixture/resolved-requirements.txt"
+    ],
+    "dependency_resolution": "provided-requirements-lock",
+    "direct_dependencies": {
+      "fastapi": "0.115.12",
+      "httpx": "0.28.1",
+      "ipython": "9.2.0",
+      "jupyterlab": "4.4.3",
+      "matplotlib": "3.10.3",
+      "numpy": "2.2.6",
+      "opencv-python-headless": "4.11.0.86",
+      "pandas": "2.2.3",
+      "pillow": "11.2.1",
+      "pyarrow": "20.0.0",
+      "pydantic": "2.11.7",
+      "pytest": "8.3.5",
+      "requests": "2.32.4",
+      "rich": "14.0.0",
+      "scikit-learn": "1.6.1",
+      "scipy": "1.15.3",
+      "setuptools": "80.9.0",
+      "sympy": "1.14.0",
+      "uvicorn": "0.34.2",
+      "wheel": "0.45.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "python-agent",
+    "revision": 42,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "python",
+      "-m",
+      "agent.smoke"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 42,
+      "score": 736028,
+      "source_modules": 1500
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/agent/revision.py": "74a0ae0fd608c0bde47153f29393b40b460f1b72cdab6e621c5350576e81c506"
+    },
+    "source_files": 1500,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-42"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1144790,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-tools/app-change-42",
+    "context_sha256": "d15c0bce6287afbb2bbf0fae00f4075ee4a0a704c5c25d6f57e21bfc84c72816",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-tools",
+    "revision": 42,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/dist/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 42,
+      "score": 990539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "7a02d3fb0a54b58532d1e6c0a5b8561a6260908092d2e9b3eb8740a16bb41ca2"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-42"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1145188,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-multistage/app-change-42",
+    "context_sha256": "1dfd244b293816cd250d4fe8af3052c09a2ef3801b523afe1e0726b03539c9f7",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/resolved-package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": false,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-multistage",
+    "revision": 42,
+    "runtime_base_ref": "node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c",
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 42,
+      "score": 990539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "7a02d3fb0a54b58532d1e6c0a5b8561a6260908092d2e9b3eb8740a16bb41ca2"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-42"
+  },
+  {
+    "base_ref": "python:3.12-bookworm@sha256:dbbe4ceb97851e2e5fa83798b239811f871cb743b259ba3563737349f6bcfaa0",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/agent/revision.py"
+    ],
+    "context_bytes": 861439,
+    "context_files": 1510,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/python-agent/app-change-43",
+    "context_sha256": "1d6d8f55e2634dd64442a966dc2390401ea4cddec847d6686acf16c370a4c3ed",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/pip-install-report.json",
+      "/opt/fixture/resolved-requirements.txt"
+    ],
+    "dependency_resolution": "provided-requirements-lock",
+    "direct_dependencies": {
+      "fastapi": "0.115.12",
+      "httpx": "0.28.1",
+      "ipython": "9.2.0",
+      "jupyterlab": "4.4.3",
+      "matplotlib": "3.10.3",
+      "numpy": "2.2.6",
+      "opencv-python-headless": "4.11.0.86",
+      "pandas": "2.2.3",
+      "pillow": "11.2.1",
+      "pyarrow": "20.0.0",
+      "pydantic": "2.11.7",
+      "pytest": "8.3.5",
+      "requests": "2.32.4",
+      "rich": "14.0.0",
+      "scikit-learn": "1.6.1",
+      "scipy": "1.15.3",
+      "setuptools": "80.9.0",
+      "sympy": "1.14.0",
+      "uvicorn": "0.34.2",
+      "wheel": "0.45.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "python-agent",
+    "revision": 43,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "python",
+      "-m",
+      "agent.smoke"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 43,
+      "score": 737528,
+      "source_modules": 1500
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/agent/revision.py": "df815e2d3a80f61146286a66580f02c2af3e8ea7c3db45a0412d4e0b17e83e12"
+    },
+    "source_files": 1500,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-43"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1144790,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-tools/app-change-43",
+    "context_sha256": "1242a501a9152140e1a0d8bfe1af7305738e7698efec5f87f570d721058a3400",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-tools",
+    "revision": 43,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/dist/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 43,
+      "score": 992539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "d8753cb6591eff4eaca458d7adb95e205acae782b467cfd5ea46fc4c9a7a0c97"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-43"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1145188,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-multistage/app-change-43",
+    "context_sha256": "5d6c17980268235890460a0d3c6496c7355e99d1cb61a581c7389aff136ae340",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/resolved-package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": false,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-multistage",
+    "revision": 43,
+    "runtime_base_ref": "node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c",
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 43,
+      "score": 992539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "d8753cb6591eff4eaca458d7adb95e205acae782b467cfd5ea46fc4c9a7a0c97"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-43"
+  },
+  {
+    "base_ref": "python:3.12-bookworm@sha256:dbbe4ceb97851e2e5fa83798b239811f871cb743b259ba3563737349f6bcfaa0",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/agent/revision.py"
+    ],
+    "context_bytes": 861439,
+    "context_files": 1510,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/python-agent/app-change-44",
+    "context_sha256": "d3928a07fb96ffb1a5bd73ce486b4446bfa557bae341ef88c053cc9befee04a2",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/pip-install-report.json",
+      "/opt/fixture/resolved-requirements.txt"
+    ],
+    "dependency_resolution": "provided-requirements-lock",
+    "direct_dependencies": {
+      "fastapi": "0.115.12",
+      "httpx": "0.28.1",
+      "ipython": "9.2.0",
+      "jupyterlab": "4.4.3",
+      "matplotlib": "3.10.3",
+      "numpy": "2.2.6",
+      "opencv-python-headless": "4.11.0.86",
+      "pandas": "2.2.3",
+      "pillow": "11.2.1",
+      "pyarrow": "20.0.0",
+      "pydantic": "2.11.7",
+      "pytest": "8.3.5",
+      "requests": "2.32.4",
+      "rich": "14.0.0",
+      "scikit-learn": "1.6.1",
+      "scipy": "1.15.3",
+      "setuptools": "80.9.0",
+      "sympy": "1.14.0",
+      "uvicorn": "0.34.2",
+      "wheel": "0.45.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "python-agent",
+    "revision": 44,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "python",
+      "-m",
+      "agent.smoke"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 44,
+      "score": 739028,
+      "source_modules": 1500
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/agent/revision.py": "4e37b1d34489501d672184222814cff8f5ebca624f540e050031fe13132bf117"
+    },
+    "source_files": 1500,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-44"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1144790,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-tools/app-change-44",
+    "context_sha256": "03e825993350f65002358c857d3159c80f1870ce3ab654137965d0eec677990b",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": true,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-tools",
+    "revision": 44,
+    "runtime_base_ref": null,
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/dist/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 44,
+      "score": 994539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "8db2c14784770e1a66497d5f028b7b995af72d85b0272c8115b9dbc69136b21a"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-44"
+  },
+  {
+    "base_ref": "node:22-bookworm@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7",
+    "bases_digest_pinned": true,
+    "changed_files_from_frozen_baseline": [
+      "src/revision.ts"
+    ],
+    "context_bytes": 1145188,
+    "context_files": 2013,
+    "context_path": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh/contexts/typescript-multistage/app-change-44",
+    "context_sha256": "c1905c6089457cf2533c192ccdde05d4c3ec62c83f407edee566744102b20c4c",
+    "dependency_change": null,
+    "dependency_evidence_paths": [
+      "/opt/fixture/npm-resolved.json",
+      "/opt/fixture/resolved-package-lock.json"
+    ],
+    "dependency_resolution": "npm-lock-provided",
+    "direct_dependencies": {
+      "lodash": "4.17.21",
+      "zod": "3.24.4"
+    },
+    "direct_dev_dependencies": {
+      "@types/lodash": "4.17.17",
+      "@types/node": "22.15.29",
+      "esbuild": "0.25.5",
+      "eslint": "9.28.0",
+      "jest": "29.7.0",
+      "prettier": "3.5.3",
+      "ts-loader": "9.5.2",
+      "typescript": "5.8.3",
+      "typescript-eslint": "8.33.0",
+      "vite": "6.3.5",
+      "webpack": "5.99.9",
+      "webpack-cli": "6.0.1"
+    },
+    "expected_unpacked_image_gib": [
+      1,
+      3
+    ],
+    "generated_large_padding_files": false,
+    "image_size_is_estimate": true,
+    "intermediate_install_in_final_image": false,
+    "local_build_parallelism": {
+      "jest_workers": 1,
+      "python_blas_threads": 2,
+      "typescript_heap_mb": 2048
+    },
+    "recipe": "typescript-multistage",
+    "revision": 44,
+    "runtime_base_ref": "node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c",
+    "schema_version": 1,
+    "smoke_command": [
+      "node",
+      "/opt/fixture/bundle.cjs"
+    ],
+    "smoke_expected_json": {
+      "grouped_rows": 11,
+      "revision": 44,
+      "score": 994539,
+      "source_modules": 2000
+    },
+    "smoke_output_format": "one JSON object; compare expected fields",
+    "source_file_sha256": {
+      "src/revision.ts": "8db2c14784770e1a66497d5f028b7b995af72d85b0272c8115b9dbc69136b21a"
+    },
+    "source_files": 2000,
+    "unchanged_non_source_files": true,
+    "variant": "app-change-44"
+  }
+]

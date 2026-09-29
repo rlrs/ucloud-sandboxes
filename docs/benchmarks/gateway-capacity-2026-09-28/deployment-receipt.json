@@ -1,0 +1,20 @@
+{
+  "deployed_at": "2026-09-28T13:20:47Z",
+  "wheel_sha256": "7b2d209a026e2efef2b0a55e0a4c5f350624a5be5121595bf1e2ff0128180654",
+  "relay_storage_budget_bytes": 68719476736,
+  "node_package_root": "/work/ucloud-sandboxes/gateway-optimization-20260928",
+  "rollback": "/work/ucloud-sandboxes/gateway-optimization-20260928/rollback",
+  "public_gateway_health": true,
+  "public_relay_health": true,
+  "nginx": {
+    "deployed_at": "2026-09-28T13:23:57Z",
+    "backup": "/etc/nginx/ucloud-candidate-backups/20260928T132357Z-nti3maqb",
+    "health": "passed",
+    "site_sha256": "341281449820bbf9a16c7afd91a9df1f244c4a6a821f60edb874431831eb482d",
+    "main_sha256": "cda45841b01de7ad603647e85b310e22325c9a36105bda2a2691436e5d97b102",
+    "worker_connections": 4096,
+    "worker_rlimit_nofile": 65536,
+    "relay_keepalive_per_worker": 8,
+    "relay_keepalive_timeout_seconds": 1
+  }
+}

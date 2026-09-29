@@ -140,8 +140,101 @@ install -d -m 0755 "$acme_webroot/.well-known/acme-challenge"
 rm -f /etc/nginx/sites-enabled/default
 
 nginx_site=/etc/nginx/sites-available/ucloud-sandbox-gateway
+nginx_enabled=/etc/nginx/sites-enabled/ucloud-sandbox-gateway
+nginx_main=/etc/nginx/nginx.conf
 temporary_site="$(mktemp)"
-trap 'rm -f "$temporary_site"' EXIT
+temporary_main="$(mktemp /etc/nginx/nginx.conf.ucloud.XXXXXX)"
+previous_site="$(mktemp)"
+trap 'rm -f "$temporary_site" "$temporary_main" "$previous_site"' EXIT
+
+install_nginx_site() {
+  # These limits apply per worker. Shrinking worker_processes=auto must not
+  # shrink ingress below the sockets needed by 500 agents and their proxies.
+  # Preserve the rest of the administrator's nginx configuration verbatim.
+  python3 - "$nginx_main" "$temporary_main" <<'PY_NGINX_CAPACITY'
+from pathlib import Path
+import re
+import sys
+
+source = Path(sys.argv[1]).read_text()
+tokens = list(re.finditer(r'''"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\#[^\n]*|[{};]|[^\s{};\#]+''', source))
+contexts, statement, edits = [], [], []
+found = set()
+events_open = None
+for token in tokens:
+    word = token.group()
+    if word.startswith("#"):
+        continue
+    if word == "{":
+        name = statement[0].group() if statement else ""
+        if not contexts and name == "events":
+            if events_open is not None:
+                raise SystemExit("nginx configuration has multiple events blocks")
+            events_open = token.end()
+        contexts.append(name)
+        statement = []
+    elif word == "}":
+        if not contexts:
+            raise SystemExit("nginx configuration has an unmatched closing brace")
+        contexts.pop()
+        statement = []
+    elif word == ";":
+        name = statement[0].group() if statement else ""
+        target = ((not contexts and name == "worker_rlimit_nofile")
+                  or (contexts == ["events"] and name == "worker_connections"))
+        if target:
+            if name in found or len(statement) != 2:
+                raise SystemExit("nginx capacity directive is ambiguous: " + name)
+            found.add(name)
+            if not statement[1].group().isdigit():
+                raise SystemExit("nginx capacity directive must be numeric: " + name)
+            minimum = 65536 if name == "worker_rlimit_nofile" else 4096
+            value = str(max(minimum, int(statement[1].group())))
+            edits.append((statement[1].start(), statement[1].end(), value))
+        statement = []
+    else:
+        statement.append(token)
+if contexts or events_open is None:
+    raise SystemExit("nginx configuration must contain one complete events block")
+if "worker_connections" not in found:
+    edits.append((events_open, events_open, "\n    worker_connections 4096;"))
+if "worker_rlimit_nofile" not in found:
+    edits.append((len(source), len(source), "\nworker_rlimit_nofile 65536;\n"))
+for start, end, replacement in sorted(edits, reverse=True):
+    source = source[:start] + replacement + source[end:]
+Path(sys.argv[2]).write_text(source)
+PY_NGINX_CAPACITY
+
+  local site_existed=false
+  if [[ -f "$nginx_site" ]]; then
+    cp -p "$nginx_site" "$previous_site"
+    site_existed=true
+    if ! cmp -s "$nginx_site" "$temporary_site"; then
+      local site_backup
+      site_backup="$(mktemp "${nginx_site}.ucloud-backup.XXXXXX")"
+      cp -p "$nginx_site" "$site_backup"
+    fi
+  fi
+  install -m 0644 "$temporary_site" "$nginx_site"
+  ln -sfn "$nginx_site" "$nginx_enabled"
+  # The running nginx keeps its old configuration throughout validation.
+  # Validate the new site and limits together before replacing nginx.conf.
+  if ! nginx -t -c "$temporary_main"; then
+    if [[ "$site_existed" == true ]]; then
+      cp -p "$previous_site" "$nginx_site"
+    else
+      rm -f "$nginx_site" "$nginx_enabled"
+    fi
+    return 1
+  fi
+  if ! cmp -s "$nginx_main" "$temporary_main"; then
+    local main_backup
+    main_backup="$(mktemp "${nginx_main}.ucloud-backup.XXXXXX")"
+    cp -p "$nginx_main" "$main_backup"
+    install -m 0644 "$temporary_main" "$nginx_main"
+  fi
+}
+
 cat >"$temporary_site" <<EOF
 server {
     listen 80;
@@ -159,9 +252,7 @@ server {
     }
 }
 EOF
-install -m 0644 "$temporary_site" "$nginx_site"
-ln -sfn "$nginx_site" /etc/nginx/sites-enabled/ucloud-sandbox-gateway
-nginx -t
+install_nginx_site
 systemctl enable --now nginx.service
 systemctl reload nginx.service
 
@@ -194,6 +285,16 @@ if [[ ! -s "$certificate_dir/fullchain.pem" || ! -s "$certificate_dir/privkey.pe
 fi
 
 cat >"$temporary_site" <<EOF
+# The aiohttp relay releases request admission between keep-alive requests.
+# Cache only a small idle pool per nginx worker, below its five-second timeout.
+# The threaded gateway deliberately closes responses and is not pooled here.
+upstream ucloud_model_relay {
+    server 127.0.0.1:$relay_port;
+    keepalive 8;
+    keepalive_requests 100;
+    keepalive_timeout 1s;
+}
+
 # The model relay is published under /relay/ for inference workers outside
 # the private network. The raw request URI is forwarded without the prefix:
 # nginx must not decode percent-encoded rollout ids in tunnel paths.
@@ -239,8 +340,9 @@ server {
     proxy_read_timeout 3600s;
 
     location /relay/ {
-        proxy_pass http://127.0.0.1:$relay_port\$ucloud_relay_uri;
+        proxy_pass http://ucloud_model_relay\$ucloud_relay_uri;
         proxy_http_version 1.1;
+        proxy_set_header Connection "";
         proxy_set_header Host \$host;
         proxy_set_header X-Forwarded-Proto https;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -257,7 +359,7 @@ server {
     }
 }
 EOF
-install -m 0644 "$temporary_site" "$nginx_site"
+install_nginx_site
 
 install -d -m 0755 /etc/systemd/system
 cat >/etc/systemd/system/ucloud-sandbox-certbot-renew.service <<EOF

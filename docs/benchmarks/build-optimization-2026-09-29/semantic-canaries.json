@@ -1,0 +1,695 @@
+{
+  "run_id": "6c9929b8899b4100",
+  "started_at": "2026-09-29T09:36:17.778354+00:00",
+  "source_repository": "ucloud-managed/bl20260929-warm-000-9e34334d2b28",
+  "base_manifest": "sha256:3840979d2dbc30a5e8ab13215dc9a255e4ede96f5e254ed134c1c2b142772e8a",
+  "new_blob_bytes_uploaded": 39231,
+  "max_new_blob_bytes": 2097152,
+  "registry_cleanup": "Owned qual-* source tags and Docker-produced EROFS groups retained; no GC or deletes.",
+  "cases": [
+    {
+      "case": "links",
+      "tag": "qual-6c9929b8899b4100-links",
+      "expected_path": "selective",
+      "manifest": "sha256:302c4082530a37a79e21835d1c2c8145ff33e94105f495ac3719382fe4a27161",
+      "tar_proof": [
+        {
+          "diff_id": "sha256:f3ee0012a61ed69eb18feda7b88913b83099132c40ca72979cca61e44f0145bc",
+          "tar_bytes": 10240,
+          "members": [
+            {
+              "name": "ucloud-qual-6c9929b8899b4100",
+              "kind": "directory",
+              "link": "",
+              "mode": 488,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/delete",
+              "kind": "directory",
+              "link": "",
+              "mode": 488,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/delete/gone",
+              "kind": "file",
+              "link": "",
+              "mode": 416,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 15,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:142ada6f57d7d0bb56cfee3dee494f02ef8b5968b6b3f20c94fa43f8b1ed89bf"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/opaque",
+              "kind": "directory",
+              "link": "",
+              "mode": 488,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/opaque/old",
+              "kind": "file",
+              "link": "",
+              "mode": 416,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 15,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:7efe6099a2b3db8a1ace2f2262b5ae76bd60351244af1844b1d0e3e804f0bbb7"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/implicit",
+              "kind": "directory",
+              "link": "",
+              "mode": 488,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/hard-target",
+              "kind": "file",
+              "link": "",
+              "mode": 416,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 28,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:8e2fa47ad445aa61fb85ef33e3cc4bbf7c14961e9aa3086b5091c77419f01f99"
+            }
+          ],
+          "descriptor": {
+            "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+            "digest": "sha256:06a20143bb8a6d7ee763c9b95b595287493bd80daee756990f4e7584a1efcadd",
+            "size": 287
+          }
+        },
+        {
+          "diff_id": "sha256:115f79013372f033d515cccbcd47dafa73da532143cd9f4a5841b31baf7aa9e7",
+          "tar_bytes": 10240,
+          "members": [
+            {
+              "name": "ucloud-qual-6c9929b8899b4100",
+              "kind": "directory",
+              "link": "",
+              "mode": 488,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/links",
+              "kind": "directory",
+              "link": "",
+              "mode": 488,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/links/executable",
+              "kind": "file",
+              "link": "",
+              "mode": 489,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 31,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:c1ad609d0a4f95252245d1e7b07d34e46a7579f0d493281e886a983e647d2ef3"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/links/hard",
+              "kind": "hardlink",
+              "link": "ucloud-qual-6c9929b8899b4100/links/executable",
+              "mode": 489,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/links/relative",
+              "kind": "symlink",
+              "link": "executable",
+              "mode": 511,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/links/dangling",
+              "kind": "symlink",
+              "link": "../missing",
+              "mode": 511,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/links/absolute",
+              "kind": "symlink",
+              "link": "/missing/qualification-target",
+              "mode": 511,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          ],
+          "descriptor": {
+            "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+            "digest": "sha256:4fa6af089d92a2f587cc39baaa2b0552d5b1d60363852a1b3321cd9410101f6f",
+            "size": 305
+          }
+        }
+      ],
+      "baseline_metrics": {
+        "layer_lock_wait_ms": 0.021,
+        "component_lookup_ms": 41.295,
+        "groups_reused": 5,
+        "squash_ms": 261.498,
+        "mkfs_ms": 85.761,
+        "sign_ms": 7.446,
+        "publish_component_ms": 205.025,
+        "groups_built": 1,
+        "erofs_bytes_built": 5345280
+      },
+      "baseline_seconds": 0.9164735260000043,
+      "baseline_components": [
+        "sha256:99f3cd99d7e53b3000ae511daf325f248a04cb0088b30244415e260c6a63f489",
+        "sha256:02bdb7cb1f271e7370dff31998852c2d226a46c777c78a0675c9d8d84c2c6362",
+        "sha256:1f5d370ff4345b3ddcc01e54cc8fc9f5895a538f7ad0118a77028a3270efd515",
+        "sha256:970cf00eeec1d27e1c1e2a76d044c75d575a43c6e46c321a9d5d964325bbf40e",
+        "sha256:bc04338ad1ae064fa1798465fbaac5a6420cd25252ef5da439790751eeb50a9a",
+        "sha256:bdaa481a2ed5b3e9abe248aa68456342b79235538ec1334dc6341ae38bb3e056"
+      ],
+      "equivalent": true,
+      "local_image_cleanup_returncode": 0
+    },
+    {
+      "case": "whiteout-opaque",
+      "tag": "qual-6c9929b8899b4100-whiteout-opaque",
+      "expected_path": "fallback",
+      "manifest": "sha256:e62787a62e41ed5e547b6dc30d7a7f9671e061918100efd197235cc3f348c0d6",
+      "tar_proof": [
+        {
+          "diff_id": "sha256:f3ee0012a61ed69eb18feda7b88913b83099132c40ca72979cca61e44f0145bc",
+          "tar_bytes": 10240,
+          "members": [
+            {
+              "name": "ucloud-qual-6c9929b8899b4100",
+              "kind": "directory",
+              "link": "",
+              "mode": 488,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/delete",
+              "kind": "directory",
+              "link": "",
+              "mode": 488,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/delete/gone",
+              "kind": "file",
+              "link": "",
+              "mode": 416,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 15,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:142ada6f57d7d0bb56cfee3dee494f02ef8b5968b6b3f20c94fa43f8b1ed89bf"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/opaque",
+              "kind": "directory",
+              "link": "",
+              "mode": 488,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/opaque/old",
+              "kind": "file",
+              "link": "",
+              "mode": 416,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 15,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:7efe6099a2b3db8a1ace2f2262b5ae76bd60351244af1844b1d0e3e804f0bbb7"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/implicit",
+              "kind": "directory",
+              "link": "",
+              "mode": 488,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/hard-target",
+              "kind": "file",
+              "link": "",
+              "mode": 416,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 28,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:8e2fa47ad445aa61fb85ef33e3cc4bbf7c14961e9aa3086b5091c77419f01f99"
+            }
+          ],
+          "descriptor": {
+            "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+            "digest": "sha256:06a20143bb8a6d7ee763c9b95b595287493bd80daee756990f4e7584a1efcadd",
+            "size": 287
+          }
+        },
+        {
+          "diff_id": "sha256:a2ef02720933e439e3db7f3a7304d5f134e44eee22cdf5e1d06bf902a022d6f6",
+          "tar_bytes": 10240,
+          "members": [
+            {
+              "name": "ucloud-qual-6c9929b8899b4100",
+              "kind": "directory",
+              "link": "",
+              "mode": 488,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/delete",
+              "kind": "directory",
+              "link": "",
+              "mode": 488,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/opaque",
+              "kind": "directory",
+              "link": "",
+              "mode": 488,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/delete/.wh.gone",
+              "kind": "file",
+              "link": "",
+              "mode": 416,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/opaque/.wh..wh..opq",
+              "kind": "file",
+              "link": "",
+              "mode": 416,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/opaque/new",
+              "kind": "file",
+              "link": "",
+              "mode": 416,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 20,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e377bea174b1e686d399e8bfb723e4db8a425bac8647b7ffe19ae29bd0037eae"
+            }
+          ],
+          "descriptor": {
+            "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+            "digest": "sha256:cb5fc1732172d87ef34a048a1699efbbd6aa8bc1f84afa6c0c9e653661d4c476",
+            "size": 230
+          }
+        }
+      ],
+      "baseline_metrics": {
+        "layer_lock_wait_ms": 0.035,
+        "component_lookup_ms": 33.644,
+        "groups_reused": 5,
+        "squash_ms": 287.33,
+        "mkfs_ms": 88.663,
+        "sign_ms": 7.929,
+        "publish_component_ms": 204.945,
+        "groups_built": 1,
+        "erofs_bytes_built": 5345280
+      },
+      "baseline_seconds": 0.9445971669999835,
+      "baseline_components": [
+        "sha256:99f3cd99d7e53b3000ae511daf325f248a04cb0088b30244415e260c6a63f489",
+        "sha256:02bdb7cb1f271e7370dff31998852c2d226a46c777c78a0675c9d8d84c2c6362",
+        "sha256:1f5d370ff4345b3ddcc01e54cc8fc9f5895a538f7ad0118a77028a3270efd515",
+        "sha256:970cf00eeec1d27e1c1e2a76d044c75d575a43c6e46c321a9d5d964325bbf40e",
+        "sha256:bc04338ad1ae064fa1798465fbaac5a6420cd25252ef5da439790751eeb50a9a",
+        "sha256:d93ff59059d2d7efe6cf70da7affd156d982fef51b9dc16fd636e41e011d8d55"
+      ],
+      "equivalent": true,
+      "local_image_cleanup_returncode": 0
+    },
+    {
+      "case": "missing-parent",
+      "tag": "qual-6c9929b8899b4100-missing-parent",
+      "expected_path": "fallback",
+      "manifest": "sha256:2fb5815e46454763dedd2342bd3498405d699846c7c2233ae8d2f4875ce1e0b5",
+      "tar_proof": [
+        {
+          "diff_id": "sha256:f3ee0012a61ed69eb18feda7b88913b83099132c40ca72979cca61e44f0145bc",
+          "tar_bytes": 10240,
+          "members": [
+            {
+              "name": "ucloud-qual-6c9929b8899b4100",
+              "kind": "directory",
+              "link": "",
+              "mode": 488,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/delete",
+              "kind": "directory",
+              "link": "",
+              "mode": 488,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/delete/gone",
+              "kind": "file",
+              "link": "",
+              "mode": 416,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 15,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:142ada6f57d7d0bb56cfee3dee494f02ef8b5968b6b3f20c94fa43f8b1ed89bf"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/opaque",
+              "kind": "directory",
+              "link": "",
+              "mode": 488,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/opaque/old",
+              "kind": "file",
+              "link": "",
+              "mode": 416,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 15,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:7efe6099a2b3db8a1ace2f2262b5ae76bd60351244af1844b1d0e3e804f0bbb7"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/implicit",
+              "kind": "directory",
+              "link": "",
+              "mode": 488,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/hard-target",
+              "kind": "file",
+              "link": "",
+              "mode": 416,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 28,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:8e2fa47ad445aa61fb85ef33e3cc4bbf7c14961e9aa3086b5091c77419f01f99"
+            }
+          ],
+          "descriptor": {
+            "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+            "digest": "sha256:06a20143bb8a6d7ee763c9b95b595287493bd80daee756990f4e7584a1efcadd",
+            "size": 287
+          }
+        },
+        {
+          "diff_id": "sha256:5625cf859fb442426d49a16f77f49b79a26a43f1995affe67a0bfb0856320472",
+          "tar_bytes": 10240,
+          "members": [
+            {
+              "name": "ucloud-qual-6c9929b8899b4100",
+              "kind": "directory",
+              "link": "",
+              "mode": 488,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/implicit/child",
+              "kind": "file",
+              "link": "",
+              "mode": 416,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 29,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e5f975c3f97ca5c5c393d5714d40c709ea534f4cd1ffc217f5c5a836a9edd15f"
+            }
+          ],
+          "descriptor": {
+            "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+            "digest": "sha256:b050fbf129da02b607ed552b62545c286972ae11cd119d7165facc4a860481b2",
+            "size": 187
+          }
+        }
+      ],
+      "baseline_metrics": {
+        "layer_lock_wait_ms": 0.020999999999999998,
+        "component_lookup_ms": 35.413,
+        "groups_reused": 5,
+        "squash_ms": 320.327,
+        "mkfs_ms": 85.044,
+        "sign_ms": 7.442,
+        "publish_component_ms": 195.61,
+        "groups_built": 1,
+        "erofs_bytes_built": 5345280
+      },
+      "baseline_seconds": 0.9415905340000563,
+      "baseline_components": [
+        "sha256:99f3cd99d7e53b3000ae511daf325f248a04cb0088b30244415e260c6a63f489",
+        "sha256:02bdb7cb1f271e7370dff31998852c2d226a46c777c78a0675c9d8d84c2c6362",
+        "sha256:1f5d370ff4345b3ddcc01e54cc8fc9f5895a538f7ad0118a77028a3270efd515",
+        "sha256:970cf00eeec1d27e1c1e2a76d044c75d575a43c6e46c321a9d5d964325bbf40e",
+        "sha256:bc04338ad1ae064fa1798465fbaac5a6420cd25252ef5da439790751eeb50a9a",
+        "sha256:21dd36e628e442e6c925f98e1b7c9197477f9fe20913551dab0865f7d2ae9c57"
+      ],
+      "equivalent": true,
+      "local_image_cleanup_returncode": 0
+    },
+    {
+      "case": "cross-layer-hardlink",
+      "tag": "qual-6c9929b8899b4100-cross-layer-hardlink",
+      "expected_path": "fallback",
+      "manifest": "sha256:7e0c5cced47a0dfa625e3a3f5259530110ad6d935afc8645bc313d5132cb4ee9",
+      "tar_proof": [
+        {
+          "diff_id": "sha256:f3ee0012a61ed69eb18feda7b88913b83099132c40ca72979cca61e44f0145bc",
+          "tar_bytes": 10240,
+          "members": [
+            {
+              "name": "ucloud-qual-6c9929b8899b4100",
+              "kind": "directory",
+              "link": "",
+              "mode": 488,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/delete",
+              "kind": "directory",
+              "link": "",
+              "mode": 488,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/delete/gone",
+              "kind": "file",
+              "link": "",
+              "mode": 416,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 15,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:142ada6f57d7d0bb56cfee3dee494f02ef8b5968b6b3f20c94fa43f8b1ed89bf"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/opaque",
+              "kind": "directory",
+              "link": "",
+              "mode": 488,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/opaque/old",
+              "kind": "file",
+              "link": "",
+              "mode": 416,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 15,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:7efe6099a2b3db8a1ace2f2262b5ae76bd60351244af1844b1d0e3e804f0bbb7"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/implicit",
+              "kind": "directory",
+              "link": "",
+              "mode": 488,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/hard-target",
+              "kind": "file",
+              "link": "",
+              "mode": 416,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 28,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:8e2fa47ad445aa61fb85ef33e3cc4bbf7c14961e9aa3086b5091c77419f01f99"
+            }
+          ],
+          "descriptor": {
+            "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+            "digest": "sha256:06a20143bb8a6d7ee763c9b95b595287493bd80daee756990f4e7584a1efcadd",
+            "size": 287
+          }
+        },
+        {
+          "diff_id": "sha256:eb417b71ca4be660b5688f588d10641a47bf30756f7812c8ad1830e6855168d8",
+          "tar_bytes": 10240,
+          "members": [
+            {
+              "name": "ucloud-qual-6c9929b8899b4100",
+              "kind": "directory",
+              "link": "",
+              "mode": 488,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "ucloud-qual-6c9929b8899b4100/cross",
+              "kind": "hardlink",
+              "link": "ucloud-qual-6c9929b8899b4100/hard-target",
+              "mode": 416,
+              "uid": 23123,
+              "gid": 23124,
+              "size": 0,
+              "mtime": 1700000000,
+              "content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          ],
+          "descriptor": {
+            "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+            "digest": "sha256:dd6a35e5720e3650909515f65c7000f326484f5c99f1c33e055e63e4a66d6bd5",
+            "size": 158
+          }
+        }
+      ],
+      "local_image_cleanup_returncode": 1
+    }
+  ],
+  "complete": false,
+  "finished_at": "2026-09-29T09:36:27.041414+00:00"
+}

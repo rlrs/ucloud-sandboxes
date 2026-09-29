@@ -1,0 +1,720 @@
+{
+  "steady8": {
+    "requested_window": {
+      "start": "2026-09-28T13:30:05+00:00",
+      "end": "2026-09-28T13:31:20+00:00",
+      "description": "All512active; quiet interval after first mixed phase, before high-NAT phase"
+    },
+    "qdisc_interval_start": "2026-09-28T13:30:06.067830+00:00",
+    "qdisc_interval_end": "2026-09-28T13:31:16.069781+00:00",
+    "qdisc_deltas": {
+      "lo": {
+        "bytes": 0,
+        "packets": 0,
+        "drops": 0,
+        "requeues": 0,
+        "overlimits": 0
+      },
+      "eth0": {
+        "bytes": 1212717771,
+        "packets": 862136,
+        "drops": 0,
+        "requeues": 60,
+        "overlimits": 0
+      },
+      "enp7s0": {
+        "bytes": 159583856,
+        "packets": 158423,
+        "drops": 0,
+        "requeues": 2,
+        "overlimits": 0
+      },
+      "docker0": {
+        "bytes": 0,
+        "packets": 0,
+        "drops": 0,
+        "requeues": 0,
+        "overlimits": 0
+      }
+    },
+    "online_cpus_seen": [
+      "0-7"
+    ],
+    "min_MemAvailable_GiB": 27.794048309326172,
+    "max_SwapUsed_bytes": 0,
+    "max_Dirty_bytes": 11010048,
+    "max_Writeback_bytes": 8192,
+    "vmstat_delta": {
+      "pgmajfault": 0,
+      "pswpin": 0,
+      "pswpout": 0,
+      "compact_stall": 0,
+      "compact_fail": 0,
+      "compact_success": 0,
+      "allocstall_normal": 0,
+      "allocstall_movable": 0
+    },
+    "busy_cores": {
+      "mean": 1.6369394736842104,
+      "p95": 1.9463000000000001,
+      "max": 2.0173,
+      "count": 38
+    },
+    "softirq_cores": {
+      "mean": 0.0745157894736842,
+      "p95": 0.0969,
+      "max": 0.1116,
+      "count": 38
+    },
+    "iowait_cores": {
+      "mean": 0.02955526315789474,
+      "p95": 0.0407,
+      "max": 0.045700000000000005,
+      "count": 38
+    },
+    "cpus": {
+      "0": {
+        "busy_percent": {
+          "mean": 21.391578947368423,
+          "p95": 27.64,
+          "max": 29.650000000000002,
+          "count": 38
+        },
+        "softirq_percent": {
+          "mean": 0.4144736842105263,
+          "p95": 1.02,
+          "max": 1.02,
+          "count": 38
+        },
+        "iowait_percent": {
+          "mean": 0.40157894736842104,
+          "p95": 0.51,
+          "max": 0.52,
+          "count": 38
+        }
+      },
+      "1": {
+        "busy_percent": {
+          "mean": 18.82578947368421,
+          "p95": 23.240000000000006,
+          "max": 23.62,
+          "count": 38
+        },
+        "softirq_percent": {
+          "mean": 0.42605263157894735,
+          "p95": 1.01,
+          "max": 1.02,
+          "count": 38
+        },
+        "iowait_percent": {
+          "mean": 0.3331578947368421,
+          "p95": 0.51,
+          "max": 0.51,
+          "count": 38
+        }
+      },
+      "2": {
+        "busy_percent": {
+          "mean": 23.760263157894737,
+          "p95": 29.81,
+          "max": 35.9,
+          "count": 38
+        },
+        "softirq_percent": {
+          "mean": 2.8623684210526315,
+          "p95": 4.04,
+          "max": 4.57,
+          "count": 38
+        },
+        "iowait_percent": {
+          "mean": 0.3892105263157895,
+          "p95": 0.52,
+          "max": 0.52,
+          "count": 38
+        }
+      },
+      "3": {
+        "busy_percent": {
+          "mean": 20.832631578947368,
+          "p95": 28.43,
+          "max": 33.33,
+          "count": 38
+        },
+        "softirq_percent": {
+          "mean": 2.561578947368421,
+          "p95": 3.5,
+          "max": 4.04,
+          "count": 38
+        },
+        "iowait_percent": {
+          "mean": 0.2942105263157895,
+          "p95": 0.51,
+          "max": 0.51,
+          "count": 38
+        }
+      },
+      "4": {
+        "busy_percent": {
+          "mean": 21.47421052631579,
+          "p95": 28.430000000000003,
+          "max": 35.86,
+          "count": 38
+        },
+        "softirq_percent": {
+          "mean": 0.2942105263157895,
+          "p95": 0.51,
+          "max": 1.02,
+          "count": 38
+        },
+        "iowait_percent": {
+          "mean": 0.4286842105263158,
+          "p95": 0.51,
+          "max": 1.01,
+          "count": 38
+        }
+      },
+      "5": {
+        "busy_percent": {
+          "mean": 18.42421052631579,
+          "p95": 23.35,
+          "max": 23.98,
+          "count": 38
+        },
+        "softirq_percent": {
+          "mean": 0.3192105263157895,
+          "p95": 0.51,
+          "max": 0.51,
+          "count": 38
+        },
+        "iowait_percent": {
+          "mean": 0.32,
+          "p95": 0.51,
+          "max": 0.51,
+          "count": 38
+        }
+      },
+      "6": {
+        "busy_percent": {
+          "mean": 20.393684210526317,
+          "p95": 28.430000000000003,
+          "max": 28.93,
+          "count": 38
+        },
+        "softirq_percent": {
+          "mean": 0.2810526315789474,
+          "p95": 0.52,
+          "max": 0.52,
+          "count": 38
+        },
+        "iowait_percent": {
+          "mean": 0.45552631578947367,
+          "p95": 1.02,
+          "max": 1.02,
+          "count": 38
+        }
+      },
+      "7": {
+        "busy_percent": {
+          "mean": 18.591578947368422,
+          "p95": 24.76,
+          "max": 27.279999999999998,
+          "count": 38
+        },
+        "softirq_percent": {
+          "mean": 0.2926315789473684,
+          "p95": 0.51,
+          "max": 1.0,
+          "count": 38
+        },
+        "iowait_percent": {
+          "mean": 0.3331578947368421,
+          "p95": 0.51,
+          "max": 0.51,
+          "count": 38
+        }
+      }
+    },
+    "notes": [
+      "Qdisc counter interval lies inside requested window and can omit up to five seconds at each boundary.",
+      "Host busy cores are summed per-CPU user,nice,system,irq,softirq, excluding iowait/steal."
+    ]
+  },
+  "mixed8_first": {
+    "requested_window": {
+      "start": "2026-09-28T13:28:42.772143+00:00",
+      "end": "2026-09-28T13:29:56.477432+00:00"
+    },
+    "qdisc_interval_start": "2026-09-28T13:28:46.066460+00:00",
+    "qdisc_interval_end": "2026-09-28T13:29:56.067647+00:00",
+    "qdisc_deltas": {
+      "lo": {
+        "bytes": 0,
+        "packets": 0,
+        "drops": 0,
+        "requeues": 0,
+        "overlimits": 0
+      },
+      "eth0": {
+        "bytes": 1309068069,
+        "packets": 1089854,
+        "drops": 0,
+        "requeues": 71,
+        "overlimits": 0
+      },
+      "enp7s0": {
+        "bytes": 13495151362,
+        "packets": 9957699,
+        "drops": 0,
+        "requeues": 94,
+        "overlimits": 0
+      },
+      "docker0": {
+        "bytes": 0,
+        "packets": 0,
+        "drops": 0,
+        "requeues": 0,
+        "overlimits": 0
+      }
+    },
+    "online_cpus_seen": [
+      "0-7"
+    ],
+    "min_MemAvailable_GiB": 27.825984954833984,
+    "max_SwapUsed_bytes": 0,
+    "max_Dirty_bytes": 72781824,
+    "max_Writeback_bytes": 67108864,
+    "vmstat_delta": {
+      "pgmajfault": 2,
+      "pswpin": 0,
+      "pswpout": 0,
+      "compact_stall": 0,
+      "compact_fail": 0,
+      "compact_success": 0,
+      "allocstall_normal": 0,
+      "allocstall_movable": 0
+    },
+    "busy_cores": {
+      "mean": 2.098027027027027,
+      "p95": 2.6995,
+      "max": 2.8258000000000005,
+      "count": 37
+    },
+    "softirq_cores": {
+      "mean": 0.18916216216216214,
+      "p95": 0.3346,
+      "max": 0.39,
+      "count": 37
+    },
+    "iowait_cores": {
+      "mean": 0.34375405405405407,
+      "p95": 0.5203,
+      "max": 0.5589999999999999,
+      "count": 37
+    },
+    "cpus": {
+      "0": {
+        "busy_percent": {
+          "mean": 25.68945945945946,
+          "p95": 31.61,
+          "max": 36.61000000000001,
+          "count": 37
+        },
+        "softirq_percent": {
+          "mean": 0.49567567567567566,
+          "p95": 1.02,
+          "max": 1.02,
+          "count": 37
+        },
+        "iowait_percent": {
+          "mean": 5.186216216216216,
+          "p95": 13.2,
+          "max": 13.78,
+          "count": 37
+        }
+      },
+      "1": {
+        "busy_percent": {
+          "mean": 22.971891891891893,
+          "p95": 30.310000000000002,
+          "max": 31.48,
+          "count": 37
+        },
+        "softirq_percent": {
+          "mean": 0.4681081081081081,
+          "p95": 1.02,
+          "max": 1.03,
+          "count": 37
+        },
+        "iowait_percent": {
+          "mean": 3.3394594594594595,
+          "p95": 8.67,
+          "max": 9.6,
+          "count": 37
+        }
+      },
+      "2": {
+        "busy_percent": {
+          "mean": 33.65216216216216,
+          "p95": 45.989999999999995,
+          "max": 46.32000000000001,
+          "count": 37
+        },
+        "softirq_percent": {
+          "mean": 8.841621621621622,
+          "p95": 17.37,
+          "max": 22.46,
+          "count": 37
+        },
+        "iowait_percent": {
+          "mean": 3.6797297297297296,
+          "p95": 11.79,
+          "max": 12.44,
+          "count": 37
+        }
+      },
+      "3": {
+        "busy_percent": {
+          "mean": 30.794864864864863,
+          "p95": 40.91,
+          "max": 41.92,
+          "count": 37
+        },
+        "softirq_percent": {
+          "mean": 7.776486486486487,
+          "p95": 13.64,
+          "max": 14.51,
+          "count": 37
+        },
+        "iowait_percent": {
+          "mean": 4.4105405405405405,
+          "p95": 11.68,
+          "max": 12.5,
+          "count": 37
+        }
+      },
+      "4": {
+        "busy_percent": {
+          "mean": 25.345135135135138,
+          "p95": 32.650000000000006,
+          "max": 37.05,
+          "count": 37
+        },
+        "softirq_percent": {
+          "mean": 0.33,
+          "p95": 0.52,
+          "max": 1.01,
+          "count": 37
+        },
+        "iowait_percent": {
+          "mean": 4.6786486486486485,
+          "p95": 10.26,
+          "max": 10.77,
+          "count": 37
+        }
+      },
+      "5": {
+        "busy_percent": {
+          "mean": 22.95918918918919,
+          "p95": 29.3,
+          "max": 29.91,
+          "count": 37
+        },
+        "softirq_percent": {
+          "mean": 0.37108108108108107,
+          "p95": 0.52,
+          "max": 1.01,
+          "count": 37
+        },
+        "iowait_percent": {
+          "mean": 3.2621621621621624,
+          "p95": 8.72,
+          "max": 8.76,
+          "count": 37
+        }
+      },
+      "6": {
+        "busy_percent": {
+          "mean": 25.394054054054056,
+          "p95": 33.339999999999996,
+          "max": 34.87,
+          "count": 37
+        },
+        "softirq_percent": {
+          "mean": 0.3310810810810811,
+          "p95": 0.52,
+          "max": 1.02,
+          "count": 37
+        },
+        "iowait_percent": {
+          "mean": 4.9972972972972975,
+          "p95": 12.24,
+          "max": 12.76,
+          "count": 37
+        }
+      },
+      "7": {
+        "busy_percent": {
+          "mean": 22.995945945945948,
+          "p95": 34.18,
+          "max": 36.37,
+          "count": 37
+        },
+        "softirq_percent": {
+          "mean": 0.3021621621621622,
+          "p95": 1.01,
+          "max": 1.02,
+          "count": 37
+        },
+        "iowait_percent": {
+          "mean": 4.8213513513513515,
+          "p95": 11.11,
+          "max": 11.73,
+          "count": 37
+        }
+      }
+    },
+    "notes": [
+      "Qdisc counter interval lies inside requested window and can omit up to five seconds at each boundary.",
+      "Host busy cores are summed per-CPU user,nice,system,irq,softirq, excluding iowait/steal."
+    ]
+  },
+  "mixed8_highnat": {
+    "requested_window": {
+      "start": "2026-09-28T13:31:27.499119+00:00",
+      "end": "2026-09-28T13:32:27.536505+00:00"
+    },
+    "qdisc_interval_start": "2026-09-28T13:31:31.070053+00:00",
+    "qdisc_interval_end": "2026-09-28T13:32:26.071066+00:00",
+    "qdisc_deltas": {
+      "lo": {
+        "bytes": 0,
+        "packets": 0,
+        "drops": 0,
+        "requeues": 0,
+        "overlimits": 0
+      },
+      "eth0": {
+        "bytes": 900170779,
+        "packets": 744805,
+        "drops": 0,
+        "requeues": 58,
+        "overlimits": 0
+      },
+      "enp7s0": {
+        "bytes": 12284222144,
+        "packets": 9023581,
+        "drops": 0,
+        "requeues": 86,
+        "overlimits": 0
+      },
+      "docker0": {
+        "bytes": 0,
+        "packets": 0,
+        "drops": 0,
+        "requeues": 0,
+        "overlimits": 0
+      }
+    },
+    "online_cpus_seen": [
+      "0-7"
+    ],
+    "min_MemAvailable_GiB": 27.705223083496094,
+    "max_SwapUsed_bytes": 0,
+    "max_Dirty_bytes": 70098944,
+    "max_Writeback_bytes": 33554432,
+    "vmstat_delta": {
+      "pgmajfault": 4,
+      "pswpin": 0,
+      "pswpout": 0,
+      "compact_stall": 0,
+      "compact_fail": 0,
+      "compact_success": 0,
+      "allocstall_normal": 0,
+      "allocstall_movable": 0
+    },
+    "busy_cores": {
+      "mean": 1.9895066666666668,
+      "p95": 2.2084,
+      "max": 2.4714000000000005,
+      "count": 30
+    },
+    "softirq_cores": {
+      "mean": 0.17334333333333332,
+      "p95": 0.20929999999999999,
+      "max": 0.21699999999999997,
+      "count": 30
+    },
+    "iowait_cores": {
+      "mean": 0.36388,
+      "p95": 0.5029999999999999,
+      "max": 0.5206,
+      "count": 30
+    },
+    "cpus": {
+      "0": {
+        "busy_percent": {
+          "mean": 24.187,
+          "p95": 29.349999999999998,
+          "max": 30.310000000000006,
+          "count": 30
+        },
+        "softirq_percent": {
+          "mean": 0.459,
+          "p95": 1.01,
+          "max": 1.02,
+          "count": 30
+        },
+        "iowait_percent": {
+          "mean": 4.173,
+          "p95": 8.12,
+          "max": 9.18,
+          "count": 30
+        }
+      },
+      "1": {
+        "busy_percent": {
+          "mean": 21.439666666666668,
+          "p95": 25.63,
+          "max": 26.53,
+          "count": 30
+        },
+        "softirq_percent": {
+          "mean": 0.356,
+          "p95": 0.51,
+          "max": 1.02,
+          "count": 30
+        },
+        "iowait_percent": {
+          "mean": 4.312333333333333,
+          "p95": 9.18,
+          "max": 12.69,
+          "count": 30
+        }
+      },
+      "2": {
+        "busy_percent": {
+          "mean": 32.39566666666666,
+          "p95": 39.379999999999995,
+          "max": 45.910000000000004,
+          "count": 30
+        },
+        "softirq_percent": {
+          "mean": 8.518666666666666,
+          "p95": 10.42,
+          "max": 12.24,
+          "count": 30
+        },
+        "iowait_percent": {
+          "mean": 3.679666666666667,
+          "p95": 8.25,
+          "max": 8.72,
+          "count": 30
+        }
+      },
+      "3": {
+        "busy_percent": {
+          "mean": 29.365333333333332,
+          "p95": 37.19,
+          "max": 37.43,
+          "count": 30
+        },
+        "softirq_percent": {
+          "mean": 6.8486666666666665,
+          "p95": 8.72,
+          "max": 8.72,
+          "count": 30
+        },
+        "iowait_percent": {
+          "mean": 5.379666666666667,
+          "p95": 11.68,
+          "max": 13.33,
+          "count": 30
+        }
+      },
+      "4": {
+        "busy_percent": {
+          "mean": 23.987333333333336,
+          "p95": 27.41,
+          "max": 29.810000000000002,
+          "count": 30
+        },
+        "softirq_percent": {
+          "mean": 0.28833333333333333,
+          "p95": 0.51,
+          "max": 0.51,
+          "count": 30
+        },
+        "iowait_percent": {
+          "mean": 3.7276666666666665,
+          "p95": 10.15,
+          "max": 10.61,
+          "count": 30
+        }
+      },
+      "5": {
+        "busy_percent": {
+          "mean": 21.354333333333333,
+          "p95": 25.390000000000004,
+          "max": 26.160000000000004,
+          "count": 30
+        },
+        "softirq_percent": {
+          "mean": 0.305,
+          "p95": 1.02,
+          "max": 1.02,
+          "count": 30
+        },
+        "iowait_percent": {
+          "mean": 4.248333333333333,
+          "p95": 9.69,
+          "max": 11.68,
+          "count": 30
+        }
+      },
+      "6": {
+        "busy_percent": {
+          "mean": 24.242333333333335,
+          "p95": 28.29,
+          "max": 30.610000000000003,
+          "count": 30
+        },
+        "softirq_percent": {
+          "mean": 0.305,
+          "p95": 0.51,
+          "max": 0.51,
+          "count": 30
+        },
+        "iowait_percent": {
+          "mean": 5.915,
+          "p95": 16.16,
+          "max": 17.86,
+          "count": 30
+        }
+      },
+      "7": {
+        "busy_percent": {
+          "mean": 21.979,
+          "p95": 29.15,
+          "max": 34.67,
+          "count": 30
+        },
+        "softirq_percent": {
+          "mean": 0.25366666666666665,
+          "p95": 0.51,
+          "max": 0.51,
+          "count": 30
+        },
+        "iowait_percent": {
+          "mean": 4.952333333333334,
+          "p95": 12.31,
+          "max": 14.36,
+          "count": 30
+        }
+      }
+    },
+    "notes": [
+      "Qdisc counter interval lies inside requested window and can omit up to five seconds at each boundary.",
+      "Host busy cores are summed per-CPU user,nice,system,irq,softirq, excluding iowait/steal."
+    ]
+  }
+}

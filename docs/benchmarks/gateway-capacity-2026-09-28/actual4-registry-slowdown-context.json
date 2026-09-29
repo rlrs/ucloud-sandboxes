@@ -1,0 +1,372 @@
+{
+  "early_first70s": {
+    "window": [
+      "2026-09-28T14:33:25.791280+00:00",
+      "2026-09-28T14:34:35.795000+00:00"
+    ],
+    "metrics": {
+      "host/busy_cores": {
+        "count": 69,
+        "mean": 2.7404980713509057,
+        "p95": 3.2596918776252393,
+        "max": 3.3893626540785062,
+        "covered_seconds": 69.01300240900002,
+        "cpu_seconds": 189.12999999999997
+      },
+      "host/cpu_some_pressure_fraction": {
+        "count": 69,
+        "mean": 0.3182112389467074,
+        "p95": 0.5070725838325861,
+        "max": 0.5335275683066012,
+        "covered_seconds": 69.01300240900002
+      },
+      "host/io_some_pressure_fraction": {
+        "count": 69,
+        "mean": 0.25896606981511805,
+        "p95": 0.3231914149663546,
+        "max": 0.3966530232669319,
+        "covered_seconds": 69.01300240900002
+      },
+      "host/memory_some_pressure_fraction": {
+        "count": 69,
+        "mean": 1.0143016179060085e-07,
+        "p95": 9.99420492024208e-07,
+        "max": 3.999656293536194e-06,
+        "covered_seconds": 69.01300240900002
+      },
+      "cgroup/postgresql@18-main.service/cores": {
+        "count": 69,
+        "mean": 0.6292297318503116,
+        "p95": 0.796154501225233,
+        "max": 1.4300918678777088,
+        "covered_seconds": 69.01300240900002,
+        "cpu_seconds": 43.42503299999999
+      },
+      "cgroup/ucloud-sandbox-gateway.service/cores": {
+        "count": 69,
+        "mean": 0.7827528163439996,
+        "p95": 0.9630112393827847,
+        "max": 1.103794845348451,
+        "covered_seconds": 69.01300240900002,
+        "cpu_seconds": 54.020122
+      },
+      "cgroup/ucloud-sandbox-relay.service/cores": {
+        "count": 69,
+        "mean": 0.5613419449629381,
+        "p95": 0.6953461104425719,
+        "max": 0.757948195969697,
+        "covered_seconds": 69.01300240900002,
+        "cpu_seconds": 38.739893
+      },
+      "cgroup/container:ucloud-sandbox-registry/cores": {
+        "count": 69,
+        "mean": 0.46640505232970914,
+        "p95": 0.6249263142193006,
+        "max": 0.710590510869646,
+        "covered_seconds": 69.01300240900002,
+        "cpu_seconds": 32.188013
+      }
+    },
+    "disk": {
+      "rkB": {
+        "mean": 40.17142857142857,
+        "max": 298.0
+      },
+      "wkB": {
+        "mean": 150854.2857142857,
+        "max": 183478.0
+      },
+      "await": {
+        "mean": 18.818,
+        "max": 27.61
+      },
+      "aqu-sz": {
+        "mean": 5.6577142857142855,
+        "max": 8.55
+      },
+      "util-percent": {
+        "mean": 62.49285714285715,
+        "max": 78.95
+      }
+    },
+    "hottest_processes": [
+      {
+        "identity": "1098:882",
+        "name": "ucloud-sandboxe",
+        "cgroup": "/system.slice/ucloud-sandbox-relay.service",
+        "count": 69,
+        "mean": 0.5614883956265406,
+        "p95": 0.6999407213203821,
+        "max": 0.7595993250288386,
+        "covered_seconds": 69.01300240900002,
+        "cpu_seconds": 38.75000000000001
+      },
+      {
+        "identity": "1639:1055",
+        "name": "registry",
+        "cgroup": "/system.slice/docker-0bfcaf1c61759f6a1e08445bf24c2d12722b782418ce31082c9721e1fad8a036.scope",
+        "count": 69,
+        "mean": 0.46657874423676393,
+        "p95": 0.6499462448958929,
+        "max": 0.7099365692973636,
+        "covered_seconds": 69.01300240900002,
+        "cpu_seconds": 32.199999999999996
+      },
+      {
+        "identity": "1643:1056",
+        "name": "python",
+        "cgroup": "/system.slice/ucloud-sandbox-gateway.service",
+        "count": 69,
+        "mean": 0.10606696918674259,
+        "p95": 0.13998694999655745,
+        "max": 0.15998614615966245,
+        "covered_seconds": 69.01300240900002,
+        "cpu_seconds": 7.319999999999998
+      },
+      {
+        "identity": "1634:1055",
+        "name": "python",
+        "cgroup": "/system.slice/ucloud-sandbox-gateway.service",
+        "count": 69,
+        "mean": 0.1050526675688366,
+        "p95": 0.14998625660932435,
+        "max": 0.23993545832145613,
+        "covered_seconds": 69.01300240900002,
+        "cpu_seconds": 7.249999999999999
+      },
+      {
+        "identity": "1635:1055",
+        "name": "python",
+        "cgroup": "/system.slice/ucloud-sandbox-gateway.service",
+        "count": 69,
+        "mean": 0.10476286710657776,
+        "p95": 0.1499670690312466,
+        "max": 0.17998531013893612,
+        "covered_seconds": 69.01300240900002,
+        "cpu_seconds": 7.2299999999999995
+      },
+      {
+        "identity": "1083:880",
+        "name": "ucloud-sandboxe",
+        "cgroup": "/system.slice/ucloud-sandbox-gateway.service",
+        "count": 69,
+        "mean": 0.10316896456415403,
+        "p95": 0.1463515564961808,
+        "max": 0.2499795499229557,
+        "covered_seconds": 69.01300240900002,
+        "cpu_seconds": 7.12
+      },
+      {
+        "identity": "1637:1055",
+        "name": "python",
+        "cgroup": "/system.slice/ucloud-sandbox-gateway.service",
+        "count": 69,
+        "mean": 0.10143016179060087,
+        "p95": 0.13998814426407644,
+        "max": 0.2499795824176547,
+        "covered_seconds": 69.01300240900002,
+        "cpu_seconds": 7.0
+      },
+      {
+        "identity": "1636:1055",
+        "name": "python",
+        "cgroup": "/system.slice/ucloud-sandbox-gateway.service",
+        "count": 69,
+        "mean": 0.1004158601726949,
+        "p95": 0.1399883293129762,
+        "max": 0.16998415356724833,
+        "covered_seconds": 69.01300240900002,
+        "cpu_seconds": 6.930000000000002
+      }
+    ]
+  },
+  "late_last40s": {
+    "window": [
+      "2026-09-28T14:34:35.795000+00:00",
+      "2026-09-28T14:35:15.983237+00:00"
+    ],
+    "metrics": {
+      "host/busy_cores": {
+        "count": 39,
+        "mean": 2.79190890976578,
+        "p95": 3.6233936800832915,
+        "max": 3.859667092134277,
+        "covered_seconds": 39.009152347,
+        "cpu_seconds": 108.90999999999998
+      },
+      "host/cpu_some_pressure_fraction": {
+        "count": 39,
+        "mean": 0.3431964345421003,
+        "p95": 0.6379658345338716,
+        "max": 0.7681727427964108,
+        "covered_seconds": 39.009152347
+      },
+      "host/io_some_pressure_fraction": {
+        "count": 39,
+        "mean": 0.2643312756010961,
+        "p95": 0.37044337306741726,
+        "max": 0.37688392692391853,
+        "covered_seconds": 39.009152347
+      },
+      "host/memory_some_pressure_fraction": {
+        "count": 39,
+        "mean": 0.006604501366967373,
+        "p95": 0.015066755229883542,
+        "max": 0.015821739893347325,
+        "covered_seconds": 39.009152347
+      },
+      "cgroup/postgresql@18-main.service/cores": {
+        "count": 39,
+        "mean": 0.6848267237997157,
+        "p95": 1.3831362093545052,
+        "max": 1.4126451551174268,
+        "covered_seconds": 39.009152347,
+        "cpu_seconds": 26.714509999999997
+      },
+      "cgroup/ucloud-sandbox-gateway.service/cores": {
+        "count": 39,
+        "mean": 0.7815293377515441,
+        "p95": 1.0508773628155026,
+        "max": 1.0711142749379832,
+        "covered_seconds": 39.009152347,
+        "cpu_seconds": 30.486797
+      },
+      "cgroup/ucloud-sandbox-relay.service/cores": {
+        "count": 39,
+        "mean": 0.5591417574516312,
+        "p95": 0.6467826793838578,
+        "max": 0.6585929524225911,
+        "covered_seconds": 39.009152347,
+        "cpu_seconds": 21.811646000000003
+      },
+      "cgroup/container:ucloud-sandbox-registry/cores": {
+        "count": 39,
+        "mean": 0.4366408387571622,
+        "p95": 0.5601627210364898,
+        "max": 0.5957237943430366,
+        "covered_seconds": 39.009152347,
+        "cpu_seconds": 17.032989
+      }
+    },
+    "disk": {
+      "rkB": {
+        "mean": 3383.799,
+        "max": 32768.0
+      },
+      "wkB": {
+        "mean": 115528.9355,
+        "max": 150738.0
+      },
+      "await": {
+        "mean": 20.3615,
+        "max": 25.48
+      },
+      "aqu-sz": {
+        "mean": 4.8425,
+        "max": 5.98
+      },
+      "util-percent": {
+        "mean": 65.6175,
+        "max": 75.55
+      }
+    },
+    "hottest_processes": [
+      {
+        "identity": "1098:882",
+        "name": "ucloud-sandboxe",
+        "cgroup": "/system.slice/ucloud-sandbox-relay.service",
+        "count": 39,
+        "mean": 0.5590995622256144,
+        "p95": 0.6399475703754632,
+        "max": 0.649944688407155,
+        "covered_seconds": 39.009152347,
+        "cpu_seconds": 21.81
+      },
+      {
+        "identity": "1639:1055",
+        "name": "registry",
+        "cgroup": "/system.slice/docker-0bfcaf1c61759f6a1e08445bf24c2d12722b782418ce31082c9721e1fad8a036.scope",
+        "count": 39,
+        "mean": 0.43605151551846405,
+        "p95": 0.5899512599967673,
+        "max": 0.6098247418576298,
+        "covered_seconds": 39.009152347,
+        "cpu_seconds": 17.009999999999998
+      },
+      {
+        "identity": "1643:1056",
+        "name": "python",
+        "cgroup": "/system.slice/ucloud-sandbox-gateway.service",
+        "count": 39,
+        "mean": 0.10664164047953034,
+        "p95": 0.13998762005483303,
+        "max": 0.13998792562145052,
+        "covered_seconds": 39.009152347,
+        "cpu_seconds": 4.160000000000001
+      },
+      {
+        "identity": "1083:880",
+        "name": "ucloud-sandboxe",
+        "cgroup": "/system.slice/ucloud-sandbox-gateway.service",
+        "count": 39,
+        "mean": 0.10535988999299752,
+        "p95": 0.16992027493628592,
+        "max": 0.17998858674371845,
+        "covered_seconds": 39.009152347,
+        "cpu_seconds": 4.11
+      },
+      {
+        "identity": "1637:1055",
+        "name": "python",
+        "cgroup": "/system.slice/ucloud-sandbox-gateway.service",
+        "count": 39,
+        "mean": 0.10484718979838437,
+        "p95": 0.1599863160504133,
+        "max": 0.25997700867326134,
+        "covered_seconds": 39.009152347,
+        "cpu_seconds": 4.09
+      },
+      {
+        "identity": "1634:1055",
+        "name": "python",
+        "cgroup": "/system.slice/ucloud-sandbox-gateway.service",
+        "count": 39,
+        "mean": 0.10382178940915812,
+        "p95": 0.13998802654411166,
+        "max": 0.14972701157368973,
+        "covered_seconds": 39.009152347,
+        "cpu_seconds": 4.05
+      },
+      {
+        "identity": "1635:1055",
+        "name": "python",
+        "cgroup": "/system.slice/ucloud-sandbox-gateway.service",
+        "count": 39,
+        "mean": 0.10279638901993189,
+        "p95": 0.14998475494956193,
+        "max": 0.15970881234526904,
+        "covered_seconds": 39.009152347,
+        "cpu_seconds": 4.010000000000001
+      },
+      {
+        "identity": "1636:1055",
+        "name": "python",
+        "cgroup": "/system.slice/ucloud-sandbox-gateway.service",
+        "count": 39,
+        "mean": 0.0956185862953481,
+        "p95": 0.13998808127477225,
+        "max": 0.14998706316583982,
+        "covered_seconds": 39.009152347,
+        "cpu_seconds": 3.73
+      }
+    ]
+  },
+  "registry_operation_timing_evidence": {
+    "summary": "build/gateway-qualification/strong-network-actual-four-registry-timing-summary.json",
+    "raw": "build/gateway-qualification/strong-network-actual-four-registry-timing.json",
+    "interpretation": "Registry server timings show manifest PUT mean increasing112.7ms to214.6ms and p95289.7ms to453.5ms, while blob PUT mean falls377.4ms to335.9ms (p95656.9ms to579.9ms). The fixture serializes increasingly large manifest publications;140late PUTs occupy about30s of its serial lock. This supports server-side manifest/metadata work plus fixture serialization contributing to lower offered blob throughput, rather than a raw blob-transfer ceiling; it is not merely client overhead.",
+    "host_correlation": "Gateway and relay CPU stay nearly flat across the late slowdown; physical read activity and memory PSI rise modestly, while disk await changes18.82ms to20.36ms.",
+    "durable_combined_report": "docs/benchmarks/gateway-capacity-2026-09-28/strong-network-actual-ccx23.json",
+    "source_scope": "Registry server request logs filtered to the owned fixture repository."
+  }
+}

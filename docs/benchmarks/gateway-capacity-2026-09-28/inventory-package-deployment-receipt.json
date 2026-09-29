@@ -1,0 +1,9 @@
+{
+  "deployed_at": "2026-09-28T14:23:58Z",
+  "wheel_sha256": "50aca04fd4bc6415f3ac5cb3f61f0fe5670f4b26f773d8f562fcf754566c411b",
+  "relay_storage_budget_bytes": 68719476736,
+  "node_package_root": "/work/ucloud-sandboxes/gateway-inventory-optimization-20260928",
+  "rollback": "/work/ucloud-sandboxes/gateway-inventory-optimization-20260928/package-rollback",
+  "public_gateway_health": true,
+  "public_relay_health": true
+}

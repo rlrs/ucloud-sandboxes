@@ -1,0 +1,31 @@
+{
+  "cold": {
+    "seconds": 0.7168907457962632,
+    "metrics": {
+      "preflight_misses": 1,
+      "preflight_ms": 0.202,
+      "docker_pull_ms": 0.002,
+      "layer_lock_wait_ms": 0.023,
+      "component_lookup_ms": 0.024,
+      "squash_ms": 0.548,
+      "mkfs_ms": 581.3990000000001,
+      "sign_ms": 62.770999999999994,
+      "publish_component_ms": 58.71,
+      "groups_built": 3,
+      "erofs_bytes_built": 67121152,
+      "total_ms": 716.862
+    },
+    "manifest": "sha256:5f7fd8275398911ece2ab9b6bc3c7db2205e6de65e71da2995b4902190c69665"
+  },
+  "warm": {
+    "seconds": 0.00455572921782732,
+    "metrics": {
+      "groups_reused": 3,
+      "docker_pull_skipped": 1,
+      "preflight_ms": 2.855,
+      "total_ms": 4.54
+    },
+    "manifest": "sha256:5f7fd8275398911ece2ab9b6bc3c7db2205e6de65e71da2995b4902190c69665"
+  },
+  "scope": "64 MiB incompressible fixture; real mkfs.erofs 1.4; in-memory registry; simulated Docker adapter; not production end-to-end latency"
+}

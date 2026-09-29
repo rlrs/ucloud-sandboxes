@@ -1,0 +1,33 @@
+{
+  "at": "2026-09-29T07:24:58Z",
+  "health": {
+    "database_pools": {
+      "database_pool": {
+        "connections_ms": 6,
+        "connections_num": 1,
+        "pool_available": 1,
+        "pool_max": 16,
+        "pool_min": 1,
+        "pool_size": 1,
+        "requests_num": 5,
+        "requests_waiting": 0,
+        "usage_ms": 15
+      },
+      "lifecycle_database_pool": {
+        "connections_ms": 10,
+        "connections_num": 1,
+        "pool_available": 1,
+        "pool_max": 4,
+        "pool_min": 1,
+        "pool_size": 1,
+        "requests_num": 10,
+        "requests_waiting": 0,
+        "usage_ms": 25
+      }
+    },
+    "gateway_https": true,
+    "metrics_ok": true,
+    "relay_https": true,
+    "relay_storage_budget_bytes": 68719476736
+  }
+}

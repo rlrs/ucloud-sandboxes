@@ -1,0 +1,161 @@
+{
+  "captured_at": "2026-09-29T07:38:37Z",
+  "health": {
+    "gateway_https": true,
+    "relay_https": true,
+    "metrics_ok": true,
+    "relay_storage_budget_bytes": 68719476736,
+    "database_pools": {
+      "database_pool": {
+        "connections_num": 1,
+        "connections_ms": 3,
+        "requests_num": 968,
+        "usage_ms": 66,
+        "pool_min": 1,
+        "pool_max": 16,
+        "pool_size": 1,
+        "pool_available": 1,
+        "requests_waiting": 0
+      },
+      "lifecycle_database_pool": {
+        "connections_num": 1,
+        "connections_ms": 3,
+        "requests_num": 3848,
+        "usage_ms": 139,
+        "pool_min": 1,
+        "pool_max": 4,
+        "pool_size": 1,
+        "pool_available": 1,
+        "requests_waiting": 0
+      }
+    }
+  },
+  "sandbox_count": 0,
+  "prepared_builders": {
+    "prepared_builders": [],
+    "demand": {
+      "pending_resources": {
+        "vcpu": 0.0,
+        "memory_mb": 0,
+        "disk_mb": 0
+      },
+      "suppressed_pending_resources": {
+        "vcpu": 0.0,
+        "memory_mb": 0,
+        "disk_mb": 0
+      },
+      "pending_count": 0,
+      "suppressed_pending_count": 0,
+      "prepared_resources": {
+        "vcpu": 0.0,
+        "memory_mb": 0,
+        "disk_mb": 0
+      },
+      "desired_resources": {
+        "vcpu": 0.0,
+        "memory_mb": 0,
+        "disk_mb": 0
+      },
+      "oldest_pending_seconds": 0,
+      "pending_image_builds": 0,
+      "prepared_builder_count": 0,
+      "desired_builders": 0,
+      "pending": [],
+      "prepared": [],
+      "prepared_builders": [],
+      "image_warmups": []
+    }
+  },
+  "active_builds": 0,
+  "heartbeats": [
+    {
+      "job_id": "167925809",
+      "updated_at": "2026-09-29 07:38:16.758939+00:00",
+      "node_url": "http://10.42.0.4:8090",
+      "active_sandboxes": 0,
+      "active_image_builds": 0,
+      "idle_since": "2026-09-29 07:34:12.027543+00:00"
+    }
+  ],
+  "history_after_builder_retirement": true,
+  "durable_history": {
+    "build_id": "e88ee9b7-8a3d-48df-93cd-5458a85e3d77",
+    "created_at": "2026-09-29T07:32:26.047492+00:00",
+    "execution_started_at": "2026-09-29T07:32:26.086164+00:00",
+    "finished_at": "2026-09-29T07:32:27.763763+00:00",
+    "image_id": "buildkit-cache-production-20260929",
+    "queued_at": "2026-09-29T07:32:26.083695+00:00",
+    "started_at": "2026-09-29T07:32:26.047492+00:00",
+    "status": "succeeded",
+    "timings": {
+      "end_to_end_ms": 1725,
+      "environment": {
+        "docker_pull_skipped": 1,
+        "groups_reused": 1,
+        "preflight_ms": 47.219,
+        "total_ms": 201.705
+      },
+      "phases": {
+        "cleanup_ms": 6,
+        "docker_build_and_push_ms": 1471,
+        "immutable_environment_ms": 201
+      },
+      "preparation_ms": 36,
+      "queue_wait_ms": 2,
+      "total_ms": 1687
+    },
+    "updated_at": "2026-09-29T07:32:27.773777+00:00"
+  },
+  "cache_prune": {
+    "age_basis": "last_used_at",
+    "keep_per_repository": 2,
+    "repository_prefix": "ucloud-build-cache",
+    "max_age_days": 30.0,
+    "usage_generation": 56998,
+    "active_lease_count": 11,
+    "tags": [],
+    "delete": [],
+    "execute": false,
+    "usage_file": "/var/lib/ucloud-sandboxes/state/registry-usage.sqlite",
+    "image_file": "/var/lib/ucloud-sandboxes/state/images.sqlite",
+    "reference_retention": {
+      "grace_seconds": 3600,
+      "decisions": []
+    },
+    "build_cache": {
+      "repository": "ucloud-build-cache",
+      "execute": false,
+      "inventoried_tags": 3,
+      "retained_entries": 3,
+      "retained_bytes": 35777593,
+      "protected_entries": 0,
+      "candidate_tags": [],
+      "candidate_digests": [],
+      "deleted_digests": [],
+      "deleted_manifests": 0,
+      "max_bytes": 34359738368,
+      "max_entries": 64,
+      "max_age_seconds": 604800,
+      "physical_reclamation_requires_registry_gc": true
+    },
+    "registry_disk": {
+      "path": "/mnt/ucloud-registry/docker-registry",
+      "total_bytes": 1055735832576,
+      "used_bytes": 149356396544,
+      "available_bytes": 852675567616,
+      "used_percent": 14.91,
+      "cleanup_percent": 70.0,
+      "target_percent": 60.0,
+      "refuse_percent": 90.0,
+      "state": "ok"
+    }
+  },
+  "blob_accounting": {
+    "image_tags_scanned": 3,
+    "cache_tags": 3,
+    "unique_cache_blob_bytes": 35777593,
+    "cache_blob_bytes_also_in_fixture_images": 35776579,
+    "cache_only_blob_bytes": 1014,
+    "scope": "Descriptor accounting; excludes manifests, filesystem metadata, uploads and pending GC."
+  }
+}

@@ -1,0 +1,125 @@
+{
+  "scope": "Exactly one production inventory GET; payload and credentials retained only in process memory, never output. Timing repeats parse same bytes; retained completed5120cycle report approximates driver heap.",
+  "at_unix": 1790603933.4117305,
+  "body_bytes": 850792,
+  "status": 200,
+  "fetch_seconds": 0.23409863002598286,
+  "records": 512,
+  "retained_cycles": 5120,
+  "cases": [
+    {
+      "decoder": "stdlib_utf8",
+      "gc_enabled": true,
+      "decode_seconds": {
+        "count": 96,
+        "mean": 0.003821819797546292,
+        "p95": 0.013206761796027422,
+        "max": 0.01406567171216011
+      },
+      "bookkeeping_seconds": {
+        "count": 96,
+        "mean": 0.0002570628178849195,
+        "p95": 0.00042547984048724174,
+        "max": 0.000573428813368082
+      },
+      "gc_seconds": {
+        "0": {
+          "count": 964,
+          "mean": 1.7570921981173925e-05,
+          "p95": 3.654696047306061e-05,
+          "max": 6.649317219853401e-05
+        },
+        "1": {
+          "count": 87,
+          "mean": 0.0003219845319359467,
+          "p95": 0.0005203066393733025,
+          "max": 0.0008164150640368462
+        },
+        "2": {
+          "count": 7,
+          "mean": 0.009734559804201126,
+          "p95": 0.010440255980938673,
+          "max": 0.010440255980938673
+        }
+      }
+    },
+    {
+      "decoder": "stdlib_utf8",
+      "gc_enabled": false,
+      "decode_seconds": {
+        "count": 96,
+        "mean": 0.002651549856333683,
+        "p95": 0.002882556989789009,
+        "max": 0.003806327935308218
+      },
+      "bookkeeping_seconds": {
+        "count": 96,
+        "mean": 0.00024592400101634365,
+        "p95": 0.0002768677659332752,
+        "max": 0.0003874697722494602
+      },
+      "gc_seconds": {
+        "0": {},
+        "1": {},
+        "2": {}
+      }
+    },
+    {
+      "decoder": "orjson_bytes",
+      "gc_enabled": true,
+      "decode_seconds": {
+        "count": 96,
+        "mean": 0.002833608610671945,
+        "p95": 0.012376205064356327,
+        "max": 0.017293302342295647
+      },
+      "bookkeeping_seconds": {
+        "count": 96,
+        "mean": 0.00025838126506035525,
+        "p95": 0.0004004109650850296,
+        "max": 0.0005081379786133766
+      },
+      "gc_seconds": {
+        "0": {
+          "count": 962,
+          "mean": 1.7212917776526632e-05,
+          "p95": 3.881892189383507e-05,
+          "max": 0.00011413684114813805
+        },
+        "1": {
+          "count": 87,
+          "mean": 0.0003120243634985781,
+          "p95": 0.000518683809787035,
+          "max": 0.0006401506252586842
+        },
+        "2": {
+          "count": 7,
+          "mean": 0.010462281493736165,
+          "p95": 0.013635707087814808,
+          "max": 0.013635707087814808
+        }
+      }
+    },
+    {
+      "decoder": "orjson_bytes",
+      "gc_enabled": false,
+      "decode_seconds": {
+        "count": 96,
+        "mean": 0.0014081205445108935,
+        "p95": 0.0014569777995347977,
+        "max": 0.0022821850143373013
+      },
+      "bookkeeping_seconds": {
+        "count": 96,
+        "mean": 0.00023960899852681905,
+        "p95": 0.0002494659274816513,
+        "max": 0.0003260951489210129
+      },
+      "gc_seconds": {
+        "0": {},
+        "1": {},
+        "2": {}
+      }
+    }
+  ]
+}

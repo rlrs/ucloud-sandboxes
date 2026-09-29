@@ -1,0 +1,177 @@
+{
+  "baseline": "4a5df3ab643a86bb77e1f15a97301247704ffbc4",
+  "python": "3.10.13",
+  "platform": "Linux-5.15.0-190-generic-x86_64-with-glibc2.35",
+  "reads_per_sample": 6000,
+  "repeat": 5,
+  "results": [
+    {
+      "nodes": 3,
+      "inventory_per_node": 0,
+      "total_heartbeat_payload_bytes": 2928,
+      "median_cpu_us_per_header_read": {
+        "before": 27.81269216666665,
+        "after": 26.807528666666673
+      },
+      "cpu_reduction_percent": 3.6140460404788133,
+      "samples": {
+        "before": [
+          {
+            "cpu_us_per_read": 29.039518499999996,
+            "wall_us_per_read": 29.04091930637757
+          },
+          {
+            "cpu_us_per_read": 27.81269216666665,
+            "wall_us_per_read": 27.81416685320437
+          },
+          {
+            "cpu_us_per_read": 27.618617666666676,
+            "wall_us_per_read": 27.620039181783795
+          },
+          {
+            "cpu_us_per_read": 28.286137833333335,
+            "wall_us_per_read": 28.287707129493356
+          },
+          {
+            "cpu_us_per_read": 27.661089666666697,
+            "wall_us_per_read": 27.662540165086586
+          }
+        ],
+        "after": [
+          {
+            "cpu_us_per_read": 26.807528666666673,
+            "wall_us_per_read": 26.808897343774635
+          },
+          {
+            "cpu_us_per_read": 26.796730666666654,
+            "wall_us_per_read": 26.800577839215595
+          },
+          {
+            "cpu_us_per_read": 26.84162633333335,
+            "wall_us_per_read": 26.843051969384152
+          },
+          {
+            "cpu_us_per_read": 27.929649499999986,
+            "wall_us_per_read": 27.93120127171278
+          },
+          {
+            "cpu_us_per_read": 26.62557866666667,
+            "wall_us_per_read": 26.62791187564532
+          }
+        ]
+      }
+    },
+    {
+      "nodes": 3,
+      "inventory_per_node": 170,
+      "total_heartbeat_payload_bytes": 332055,
+      "median_cpu_us_per_header_read": {
+        "before": 51.80030299999998,
+        "after": 27.515220666666675
+      },
+      "cpu_reduction_percent": 46.88212409362416,
+      "samples": {
+        "before": [
+          {
+            "cpu_us_per_read": 51.82818650000002,
+            "wall_us_per_read": 51.83212412521243
+          },
+          {
+            "cpu_us_per_read": 51.80030299999998,
+            "wall_us_per_read": 51.802965657164656
+          },
+          {
+            "cpu_us_per_read": 52.1002183333333,
+            "wall_us_per_read": 52.10292370369037
+          },
+          {
+            "cpu_us_per_read": 51.78799116666669,
+            "wall_us_per_read": 51.79195540646712
+          },
+          {
+            "cpu_us_per_read": 51.760164499999945,
+            "wall_us_per_read": 51.76420222657422
+          }
+        ],
+        "after": [
+          {
+            "cpu_us_per_read": 28.25700600000003,
+            "wall_us_per_read": 28.259386696542304
+          },
+          {
+            "cpu_us_per_read": 27.10754883333329,
+            "wall_us_per_read": 27.108908786127966
+          },
+          {
+            "cpu_us_per_read": 27.771850833333335,
+            "wall_us_per_read": 27.773342017705243
+          },
+          {
+            "cpu_us_per_read": 27.515220666666675,
+            "wall_us_per_read": 27.517742322136957
+          },
+          {
+            "cpu_us_per_read": 26.91269466666668,
+            "wall_us_per_read": 26.914080372080207
+          }
+        ]
+      }
+    },
+    {
+      "nodes": 3,
+      "inventory_per_node": 512,
+      "total_heartbeat_payload_bytes": 994851,
+      "median_cpu_us_per_header_read": {
+        "before": 100.06019733333328,
+        "after": 26.94025266666659
+      },
+      "cpu_reduction_percent": 73.07595489051477,
+      "samples": {
+        "before": [
+          {
+            "cpu_us_per_read": 100.21644516666672,
+            "wall_us_per_read": 100.2229288375626
+          },
+          {
+            "cpu_us_per_read": 99.93533816666654,
+            "wall_us_per_read": 99.94496265426278
+          },
+          {
+            "cpu_us_per_read": 100.06019733333328,
+            "wall_us_per_read": 100.0660873639087
+          },
+          {
+            "cpu_us_per_read": 100.22355083333335,
+            "wall_us_per_read": 100.22871266119182
+          },
+          {
+            "cpu_us_per_read": 99.6357686666666,
+            "wall_us_per_read": 99.64082165000339
+          }
+        ],
+        "after": [
+          {
+            "cpu_us_per_read": 27.194746333333374,
+            "wall_us_per_read": 27.196234324947
+          },
+          {
+            "cpu_us_per_read": 26.856098000000106,
+            "wall_us_per_read": 26.85750601813197
+          },
+          {
+            "cpu_us_per_read": 26.91920283333345,
+            "wall_us_per_read": 26.92060366583367
+          },
+          {
+            "cpu_us_per_read": 26.94025266666659,
+            "wall_us_per_read": 26.941646356135607
+          },
+          {
+            "cpu_us_per_read": 27.220829000000002,
+            "wall_us_per_read": 27.222286133716505
+          }
+        ]
+      }
+    }
+  ]
+}

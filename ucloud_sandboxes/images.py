@@ -224,9 +224,13 @@ class ImageBuildRecord:
     timings: dict[str, Any] = field(default_factory=dict)
     owner_pid: int = 0
     request_fingerprint: str = ""
+    queued_at: str = ""
+    execution_started_at: str = ""
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "ImageBuildRecord | None":
+        # Older persisted records predate the additive queue timestamps.
+        raw = {"queued_at": "", "execution_started_at": "", **raw}
         fields = set(cls.__dataclass_fields__)
         structured = set(
             "command exit_code image owner_pid push push_command push_exit_code timings".split()
@@ -284,6 +288,8 @@ class DockerImageRuntime:
         dry_run: bool = False,
         buildx_direct_push: bool = False,
         buildx_cache_ref: str | None = None,
+        buildx_builder: str = "",
+        buildx_cache_registry_url: str | None = None,
     ) -> None:
         normalized_cache_ref = (buildx_cache_ref or "").strip()
         if normalized_cache_ref and not buildx_direct_push:
@@ -295,6 +301,15 @@ class DockerImageRuntime:
         self.dry_run = dry_run
         self.buildx_direct_push = buildx_direct_push
         self.buildx_cache_ref = normalized_cache_ref
+        self.buildx_builder = buildx_builder.strip()
+        if self.buildx_builder and not buildx_direct_push:
+            raise ValueError("buildx_builder requires buildx_direct_push to be enabled.")
+        self.build_cache = None
+        if normalized_cache_ref:
+            from .build_cache import RegistryBuildCache
+            self.build_cache = RegistryBuildCache(
+                normalized_cache_ref, registry_url=buildx_cache_registry_url,
+            )
 
     def build(
         self,
@@ -303,7 +318,23 @@ class DockerImageRuntime:
         push: bool = False,
         on_output: Callable[[str, str], None] | None = None,
     ) -> CommandResult:
-        return self._run(self.build_command(spec, push=push), on_output=on_output)
+        imports: tuple[str, ...] = ()
+        export_ref = ""
+        if push and self.build_cache is not None and not self.dry_run:
+            try:
+                # Affinity only affects which caches are offered. BuildKit still
+                # validates all build inputs; this is not an image-result cache.
+                dockerfile = Path(_dockerfile_path(spec.context_path, spec.dockerfile))
+                recipe = hashlib.sha256(dockerfile.read_bytes()).hexdigest()
+                plan = self.build_cache.prepare(recipe)
+                imports, export_ref = plan.imports, plan.export_ref
+            except (OSError, ValueError, RuntimeError) as exc:
+                if on_output is not None:
+                    on_output("stderr", f"Shared build cache unavailable ({type(exc).__name__}); building without it.\n")
+        return self._run(
+            self.build_command(spec, push=push, cache_imports=imports, cache_export=export_ref),
+            on_output=on_output,
+        )
 
     def pull(self, image: str) -> CommandResult:
         if not image.strip():
@@ -330,12 +361,19 @@ class DockerImageRuntime:
         spec: ImageBuildSpec,
         *,
         push: bool = False,
+        cache_imports: tuple[str, ...] = (),
+        cache_export: str = "",
     ) -> tuple[str, ...]:
         spec.validate()
         dockerfile = _dockerfile_path(spec.context_path, spec.dockerfile)
         direct_push = push and self.buildx_direct_push
         argv = [self.docker_binary]
         argv.extend(("buildx", "build") if direct_push else ("build",))
+        if direct_push and self.buildx_builder:
+            argv.extend(["--builder", self.buildx_builder])
+            # Managed environment attachment currently uses a single image
+            # manifest, not a provenance index emitted by docker-container.
+            argv.append("--provenance=false")
         argv.extend(
             [
                 "-f",
@@ -354,10 +392,10 @@ class DockerImageRuntime:
             argv.extend(["--label", f"{key}={spec.labels[key]}"])
         if direct_push:
             argv.append("--push")
-            if self.buildx_cache_ref:
-                cache = f"type=registry,ref={self.buildx_cache_ref}"
-                argv.extend(["--cache-from", cache])
-                argv.extend(["--cache-to", f"{cache},mode=max"])
+            for cache in cache_imports:
+                argv.extend(["--cache-from", f"type=registry,ref={cache}"])
+            if cache_export:
+                argv.extend(["--cache-to", f"type=registry,ref={cache_export},mode=min,oci-mediatypes=true,image-manifest=true,ignore-error=true"])
         argv.append(spec.context_path)
         return tuple(argv)
 
@@ -839,6 +877,7 @@ class ImageManager:
         push: bool = False,
         cleanup: Callable[[], None] | None = None,
     ) -> tuple[ImageBuildRecord, bool]:
+        admitted_at = time.monotonic()
         spec.validate()
         spec = replace(
             spec,
@@ -925,7 +964,9 @@ class ImageManager:
                 context_path=effective_spec.context_path,
                 command=effective_command,
                 updated_at=utc_now().isoformat(),
+                queued_at=utc_now().isoformat(),
             )
+            queued_at = time.monotonic()
             self.build_store.upsert(record)
         except Exception as exc:
             failure: Exception = exc
@@ -953,6 +994,8 @@ class ImageManager:
                 direct_push,
                 effective_cleanup,
                 trace_context,
+                admitted_at,
+                queued_at,
             ),
             daemon=True,
         )
@@ -1068,6 +1111,8 @@ class ImageManager:
         direct_push: bool,
         cleanup: Callable[[], None] | None,
         trace_context: dict[str, str],
+        admitted_at: float,
+        queued_at: float,
     ) -> None:
         with self.telemetry.span(
             "image.build.worker",
@@ -1085,6 +1130,8 @@ class ImageManager:
                 push,
                 direct_push,
                 cleanup,
+                admitted_at,
+                queued_at,
             )
             record = self.build_store.get(build_id)
             if record is not None:
@@ -1100,16 +1147,32 @@ class ImageManager:
         push: bool,
         direct_push: bool,
         cleanup: Callable[[], None] | None,
+        admitted_at: float,
+        queued_at: float,
     ) -> None:
         build_result: CommandResult | None = None
         push_result: CommandResult | None = None
         started = time.monotonic()
+        queue_wait_ms = max(0, int((started - queued_at) * 1000))
+        preparation_ms = max(0, int((queued_at - admitted_at) * 1000))
         phases: dict[str, int] = {}
+        environment_metrics: dict = {}
+
+        def timings():
+            return _build_timings(phases, started, environment_metrics,
+                queue_wait_ms=queue_wait_ms, preparation_ms=preparation_ms)
+
+        def update_timings():
+            self._update_build(build_id, timings=timings())
 
         def append_output(stream: str, chunk: str) -> None:
             self._append_build_log(build_id, stream, chunk)
 
         try:
+            # Preserve started_at's existing admission semantics. This separate
+            # timestamp proves when a queued build actually received a worker.
+            self._update_build(build_id, execution_started_at=utc_now().isoformat(),
+                               timings=timings())
             phase = time.monotonic()
             try:
                 build_result = self.runtime.build(
@@ -1122,7 +1185,7 @@ class ImageManager:
                     "docker_build_and_push_ms" if direct_push else "docker_build_ms"
                 )
                 phases[phase_name] = _elapsed_ms(phase)
-                self._update_build_timings(build_id, phases, started)
+                update_timings()
             if push and not direct_push:
                 phase = time.monotonic()
                 try:
@@ -1136,14 +1199,18 @@ class ImageManager:
                     )
                 finally:
                     phases["docker_push_ms"] = _elapsed_ms(phase)
-                    self._update_build_timings(build_id, phases, started)
+                    update_timings()
             manifest_digest = ""
             if push and not self.runtime.dry_run and self.environment_publisher is not None:
                 phase = time.monotonic()
-                manifest_digest = self.environment_publisher(spec)
-                if not normalize_manifest_digest(manifest_digest):
-                    raise ValueError("immutable environment publisher returned an invalid image digest")
-                phases["immutable_environment_ms"] = _elapsed_ms(phase)
+                from .environment_builder import publication_metrics
+                try:
+                    with publication_metrics() as environment_metrics:
+                        manifest_digest = self.environment_publisher(spec)
+                    if not normalize_manifest_digest(manifest_digest):
+                        raise ValueError("immutable environment publisher returned an invalid image digest")
+                finally:
+                    phases["immutable_environment_ms"] = _elapsed_ms(phase)
             now = utc_now()
             image_record = ImageRecord(
                 id=spec.id,
@@ -1160,25 +1227,27 @@ class ImageManager:
             self._update_build(
                 build_id,
                 status="succeeded",
+                command=build_result.argv,
                 exit_code=build_result.exit_code,
                 push_exit_code=push_result.exit_code
                 if push_result is not None
                 else None,
                 image=image_record.to_dict(),
                 finished_at=now.isoformat(),
-                timings=_build_timings(phases, started),
+                timings=timings(),
             )
         except Exception as exc:
             self._update_build(
                 build_id,
                 status="failed",
+                **({"command": build_result.argv} if build_result is not None else {}),
                 error=str(exc),
                 exit_code=build_result.exit_code if build_result is not None else None,
                 push_exit_code=push_result.exit_code
                 if push_result is not None
                 else None,
                 finished_at=utc_now().isoformat(),
-                timings=_build_timings(phases, started),
+                timings=timings(),
             )
         finally:
             try:
@@ -1188,7 +1257,7 @@ class ImageManager:
                         cleanup()
                     finally:
                         phases["cleanup_ms"] = _elapsed_ms(phase)
-                        self._update_build_timings(build_id, phases, started)
+                        update_timings()
             finally:
                 with self._build_lock:
                     self._active_threads.pop(build_id, None)
@@ -1271,8 +1340,9 @@ class ImageManager:
         build_id: str,
         phases: dict[str, int],
         started: float,
+        environment: dict | None = None,
     ) -> None:
-        self._update_build(build_id, timings=_build_timings(phases, started))
+        self._update_build(build_id, timings=_build_timings(phases, started, environment))
 
 
 def image_id_from_tag(image: str) -> str:
@@ -1293,11 +1363,18 @@ def image_id_from_tag(image: str) -> str:
     return prefix + suffix
 
 
-def _build_timings(phases: dict[str, int], started: float) -> dict[str, Any]:
-    return {
+def _build_timings(phases: dict[str, int], started: float, environment: dict | None = None,
+                   *, queue_wait_ms: int | None = None,
+                   preparation_ms: int | None = None) -> dict[str, Any]:
+    result = {
         "total_ms": _elapsed_ms(started),
         "phases": dict(phases),
+        **({"environment": dict(environment)} if environment else {}),
     }
+    if queue_wait_ms is not None and preparation_ms is not None:
+        result.update(queue_wait_ms=queue_wait_ms, preparation_ms=preparation_ms,
+                      end_to_end_ms=result["total_ms"] + queue_wait_ms + preparation_ms)
+    return result
 
 
 def _elapsed_ms(started: float) -> int:

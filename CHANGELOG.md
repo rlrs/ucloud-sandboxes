@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+- Materialize bounded partial EROFS cache misses directly from authenticated OCI
+  layers, preserving signed output and falling back to Docker for unsupported
+  filesystem semantics. Admit four builds per builder so excess work can choose
+  the next available builder instead of waiting in a busy owner's local queue.
+- Add bounded shared BuildKit caching for ephemeral builders, with immutable
+  concurrent exports, final-layer cache mode, dedicated driver provisioning and
+  separate registry retention. Preserve Docker overlay2 for EROFS publication.
+- Persist observed terminal build summaries separately from autoscaler metrics
+  and expose preparation, queue wait and execution timing independently.
+- Reduce relay lifecycle queue scans with action-specific local hints, suppression
+  of self-published notification echoes, and capacity-aware dispatch. Preserve
+  periodic durable recovery and expose operation counts in relay statistics.
+- Add `GET /v1/sandboxes?view=status` with optional exact `id` filters for compact
+  fleet monitoring, omitting full specifications and attached snapshot metadata
+  from database reads while preserving current state and worker freshness.
+- Reuse authenticated EROFS layer components before pulling a completed build
+  into Docker. Complete cache hits preserve the signed environment identity
+  without image extraction or temporary mounts.
+- Coordinate conversion of identical layer groups across threads and processes
+  on one builder, rechecking the registry after acquiring the group lock.
+- Record publication phase timings and component reuse counters in build results;
+  retain observed terminal build timings in gateway metrics after builders exit.
+
 ## 0.5.114rc24
 
 Resident continuations no longer occupy restore I/O permits. Cached backing placement reads no longer wait for allocator I/O. Exec output applies bounded cursor-acknowledged backpressure instead of evicting unread events; stalled consumers fail explicitly and completion waits for buffered output. Pair large-stdin exec workloads with SDK 0.4.27.

@@ -1,0 +1,104 @@
+{
+  "steady4_isolated": {
+    "window": {
+      "start": "2026-09-28T14:14:40+00:00",
+      "end": "2026-09-28T14:15:10+00:00",
+      "description": "All512active, before mixed traffic"
+    },
+    "registry_sdb": {
+      "rkB": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "wkB": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "await": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "aqu-sz": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "util-percent": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      }
+    },
+    "network_error_drop_deltas": {
+      "eth0": {
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0
+      },
+      "enp7s0": {
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0
+      }
+    },
+    "softnet_drops": 0.0,
+    "softnet_time_squeeze": 2.0,
+    "note": "Disk rkB/wkB in KiB/s, await milliseconds, device util busy-time percent not saturated-capacity fraction. Two-second samples may overlap phase boundaries."
+  },
+  "strong4_isolated": {
+    "window": {
+      "start": "2026-09-28T14:15:16.754427+00:00",
+      "end": "2026-09-28T14:16:13.987394+00:00",
+      "description": "Actual57.23s transfer, ended after public NAT source HTTP429; target110s not completed"
+    },
+    "registry_sdb": {
+      "rkB": {
+        "mean": 1.7213793103448276,
+        "p95": 15.92,
+        "max": 18.0
+      },
+      "wkB": {
+        "mean": 153471.19379310345,
+        "p95": 183124.0,
+        "max": 199716.0
+      },
+      "await": {
+        "mean": 22.09344827586207,
+        "p95": 28.79,
+        "max": 32.8
+      },
+      "aqu-sz": {
+        "mean": 6.426551724137931,
+        "p95": 8.88,
+        "max": 9.12
+      },
+      "util-percent": {
+        "mean": 61.17206896551724,
+        "p95": 69.65,
+        "max": 71.95
+      }
+    },
+    "network_error_drop_deltas": {
+      "eth0": {
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0
+      },
+      "enp7s0": {
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0
+      }
+    },
+    "softnet_drops": 0.0,
+    "softnet_time_squeeze": 3.0,
+    "note": "Disk rkB/wkB in KiB/s, await milliseconds, device util busy-time percent not saturated-capacity fraction. Two-second samples may overlap phase boundaries."
+  }
+}

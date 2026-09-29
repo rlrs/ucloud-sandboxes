@@ -1,0 +1,10 @@
+[
+  "ucloud_sandboxes-0.7.0.dist-info/RECORD",
+  "ucloud_sandboxes/build_cache.py",
+  "ucloud_sandboxes/build_history.py",
+  "ucloud_sandboxes/cli.py",
+  "ucloud_sandboxes/config.py",
+  "ucloud_sandboxes/control_plane.py",
+  "ucloud_sandboxes/images.py",
+  "ucloud_sandboxes/vm_init.py"
+]

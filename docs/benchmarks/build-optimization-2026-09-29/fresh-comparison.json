@@ -1,0 +1,2866 @@
+{
+  "baseline": {
+    "batch_wall_seconds": 172.18982215900178,
+    "cache": {
+      "multistage_compile_hits": [
+        {
+          "build_id": "10f4f4a4-8070-4e8a-81d4-ac025b655acd",
+          "description": "[compile 8/8] RUN npm run lint && npm run build && npm test  && node dist/bundle.cjs > /opt/fixture/build-smoke.json",
+          "owner": "167927367"
+        }
+      ],
+      "multistage_records_with_compile_hit": 1,
+      "records_by_step_category": {
+        "application_compile": 1,
+        "copy": 47,
+        "dependency_install": 46,
+        "other": 47
+      },
+      "records_with_observed_cached_steps": 48,
+      "records_without_observed_cached_steps": 0,
+      "step_descriptions": {
+        "[2/8] WORKDIR /opt/fixture": 46,
+        "[3/8] COPY package.json package-lock.json ./": 15,
+        "[3/8] COPY requirements.txt ./requirements.txt": 15,
+        "[4/8] RUN npm ci --no-audit --no-fund --cache /tmp/npm-cache  && npm ls --all --json > /opt/fixture/npm-resolved.json  && rm -rf /tmp/npm-cache": 15,
+        "[4/8] RUN python -m pip install --no-cache-dir --only-binary=:all: --report /opt/fixture/pip-install-report.json -r requirements.txt  && python -m pip check  && python -m pip freeze --all > /opt/fixture/resolved-requirements.txt": 15,
+        "[5/8] COPY native ./native": 15,
+        "[5/8] COPY tsconfig.json build.cjs webpack.config.cjs eslint.config.cjs jest.config.cjs ./": 15,
+        "[6/8] COPY tests ./tests": 38,
+        "[6/8] RUN python -m pip install --no-cache-dir --no-build-isolation --no-deps ./native": 23,
+        "[compile 2/8] WORKDIR /opt/fixture": 1,
+        "[compile 3/8] COPY package.json package-lock.json ./": 16,
+        "[compile 4/8] RUN npm ci --no-audit --no-fund --cache /tmp/npm-cache  && npm ls --all --json > /opt/fixture/npm-resolved.json  && rm -rf /tmp/npm-cache": 16,
+        "[compile 5/8] COPY tsconfig.json build.cjs webpack.config.cjs eslint.config.cjs jest.config.cjs ./": 16,
+        "[compile 6/8] COPY tests ./tests": 16,
+        "[compile 7/8] COPY src ./src": 1,
+        "[compile 8/8] RUN npm run lint && npm run build && npm test  && node dist/bundle.cjs > /opt/fixture/build-smoke.json": 1,
+        "[stage-1 2/6] WORKDIR /opt/fixture": 16
+      }
+    },
+    "cases": 48,
+    "client_errors": 0,
+    "concurrency": 48,
+    "distinct_fixture_hashes": 48,
+    "duplicate_build_ids": 0,
+    "durable_history": {
+      "complete": true,
+      "reported_records": 48
+    },
+    "environment": {
+      "component_lookup_ms": {
+        "distribution": {
+          "count": 48,
+          "max": 3840.557,
+          "mean": 255.92114583333333,
+          "min": 29.284,
+          "p50": 159.4395,
+          "p95": 369.6103499999999
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 12284.215
+      },
+      "docker_pull_ms": {
+        "distribution": {
+          "count": 48,
+          "max": 20005.389,
+          "mean": 3835.7916874999996,
+          "min": 108.813,
+          "p50": 1448.915,
+          "p95": 19477.8804
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 184118.00100000008
+      },
+      "docker_pull_skipped": {
+        "distribution": {
+          "count": 0,
+          "max": null,
+          "mean": null,
+          "min": null,
+          "p50": null,
+          "p95": null
+        },
+        "records_positive": 0,
+        "records_reporting": 0,
+        "total": null
+      },
+      "erofs_bytes_built": {
+        "distribution": {
+          "count": 48,
+          "max": 618655744,
+          "mean": 20767061.333333332,
+          "min": 3702784,
+          "p50": 5345280.0,
+          "p95": 14921728.0
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 996818944
+      },
+      "groups_built": {
+        "distribution": {
+          "count": 48,
+          "max": 3,
+          "mean": 1.0416666666666667,
+          "min": 1,
+          "p50": 1.0,
+          "p95": 1.0
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 50
+      },
+      "groups_reused": {
+        "distribution": {
+          "count": 48,
+          "max": 5,
+          "mean": 3.2916666666666665,
+          "min": 1,
+          "p50": 4.0,
+          "p95": 5.0
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 158
+      },
+      "layer_lock_wait_ms": {
+        "distribution": {
+          "count": 48,
+          "max": 2957.6769999999997,
+          "mean": 184.6859375,
+          "min": 0.007,
+          "p50": 0.0315,
+          "p95": 1853.5605999999962
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 8864.925
+      },
+      "mkfs_ms": {
+        "distribution": {
+          "count": 48,
+          "max": 1515.9479999999999,
+          "mean": 202.6178541666667,
+          "min": 30.279,
+          "p50": 103.475,
+          "p95": 431.35585
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 9725.657
+      },
+      "oci_download_bytes": {
+        "distribution": {
+          "count": 0,
+          "max": null,
+          "mean": null,
+          "min": null,
+          "p50": null,
+          "p95": null
+        },
+        "records_positive": 0,
+        "records_reporting": 0,
+        "total": null
+      },
+      "oci_layers_materialized": {
+        "distribution": {
+          "count": 0,
+          "max": null,
+          "mean": null,
+          "min": null,
+          "p50": null,
+          "p95": null
+        },
+        "records_positive": 0,
+        "records_reporting": 0,
+        "total": null
+      },
+      "preflight_misses": {
+        "distribution": {
+          "count": 48,
+          "max": 1,
+          "mean": 1.0,
+          "min": 1,
+          "p50": 1.0,
+          "p95": 1.0
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 48
+      },
+      "preflight_ms": {
+        "distribution": {
+          "count": 48,
+          "max": 94.51,
+          "mean": 40.04558333333333,
+          "min": 7.922,
+          "p50": 38.615,
+          "p95": 77.50615
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 1922.188
+      },
+      "publish_component_ms": {
+        "distribution": {
+          "count": 48,
+          "max": 2383.862,
+          "mean": 303.7391875,
+          "min": 154.536,
+          "p50": 252.4855,
+          "p95": 380.35609999999997
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 14579.481000000003
+      },
+      "selective_fallbacks": {
+        "distribution": {
+          "count": 0,
+          "max": null,
+          "mean": null,
+          "min": null,
+          "p50": null,
+          "p95": null
+        },
+        "records_positive": 0,
+        "records_reporting": 0,
+        "total": null
+      },
+      "selective_materializations": {
+        "distribution": {
+          "count": 0,
+          "max": null,
+          "mean": null,
+          "min": null,
+          "p50": null,
+          "p95": null
+        },
+        "records_positive": 0,
+        "records_reporting": 0,
+        "total": null
+      },
+      "sign_ms": {
+        "distribution": {
+          "count": 48,
+          "max": 780.609,
+          "mean": 29.263687500000003,
+          "min": 4.98,
+          "p50": 9.004999999999999,
+          "p95": 30.536849999999998
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 1404.6569999999997
+      },
+      "squash_ms": {
+        "distribution": {
+          "count": 48,
+          "max": 8794.203,
+          "mean": 1684.820479166667,
+          "min": 9.149,
+          "p50": 1379.4995,
+          "p95": 7642.528799999998
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 80871.38299999999
+      },
+      "total_ms": {
+        "distribution": {
+          "count": 48,
+          "max": 25340.951,
+          "mean": 7121.263291666666,
+          "min": 802.574,
+          "p50": 5098.689,
+          "p95": 24775.965449999996
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 341820.638
+      }
+    },
+    "failed_or_incomplete": 0,
+    "failures": [],
+    "fixture_hashes": [
+      "0ab651dd9dbaec0431484e7ab57477fa53b0350ebc3dc15f5435780f4433117f",
+      "1de44c9f5940a4ff0abb335467dfd7f29675be34801e28078205dd2127840673",
+      "1f7a585de306827ba0dc3b1c3bdff03e7e2e0e7726562da1209c40dc773ec2b3",
+      "26229482e6b33759bb04b85670da8aab5dbcbc5916aedc1d97cfeeb12e84a97c",
+      "2ddc9efda6b8331fbfad48b2a7fc858c8d88d220e980de709317e202007e209e",
+      "318fd1c21eb03407e01db4fbfb4d0cafc7ae074523e457516ba94604d14069ce",
+      "37765a91d9345372c423554ed3c3c7066d8f804c7a588705cca7f220b4f0da0a",
+      "3943e7d1a73f86835225feb4bd18df65375a92de23b2765ffc4044ef8cff3f8d",
+      "407bd23ed3ff4f3c66c259fc3ae6f6f5d919f2ee5a755e9e3c9ff6a15e167289",
+      "46f9216b46c6689acc8ab3ea72ced50d772944c8e07525a8347200e5b281ad83",
+      "4adab3a68fc8c71dd5380057e9da05e67e493529941d326753b507c189b85d0f",
+      "4d2522a4c1686fa68f7d61da7949f2a386ba9794e9f69f14d9c54f2721d3a586",
+      "5bd620357ceb7dff1c3c594fbcfdb74cecb837601466a07db9ebcb58ed710dc3",
+      "5c456fcaf6784a55ff41656c2bb9c16d1ec16151357b95945ec012fb291e2782",
+      "628e69f4457f887391463168fdd9ec8727ffcef496dd28f9551fdca4e7054d2f",
+      "781bb34cbb95a7646db63103ba1da63c16f91f0367330a57686b6e0887e18222",
+      "798cce6e4b1200de1cff61a3382a44fb61abc93c48a38d63e257bb351ea4e9ed",
+      "7b55e7cb1a334f9efc2d1363f4ce5551a3ca53081d2a8b7d7577b79196e3af6f",
+      "7d36b931c89ee793b3d447a794a1817c40b4c48c9aa986af0802efe2813bd3b8",
+      "89b20c8550c7d6c3e0f40883e2e95f9b3ede1f8b72e1c0e70c584e007017a9c8",
+      "8bc25f6ecf4c8e8efbccba169f8b99de4d4b75da5b33401f760dd666fc296ff2",
+      "8ec3e04e5921839fc916cfd74f2362952047a83e26a81337334c958cedcaa9ca",
+      "8f264218c553fd9eb33ddde01e334f74e4499762a0f2a1d0690a361cc6687293",
+      "97feebe3ac98ccdb8e2bf22cdc9845d3b24f2d6f8e46ba291794641e19fb76db",
+      "a3a63a2e3f438571878d64b783e72d6acbc48e9926b314ada5642ff43cd0a5d2",
+      "a550d45f1cfd4696bc6c99579ed92d9d5881f500a2b0ed609b468cae0759dd2e",
+      "a586d8e7cf2f8ec0af14e6a50a1e0f8f5d6c9d678a381ce3ea492edebe1b548f",
+      "ab2aaf66db064e888f029ed2152274f239898ddc0b54301566b689e44f447ecf",
+      "ad71fe352636e3b5ee4c9d2b4356413fbc6fd41367248730ac9e10d420c96ce3",
+      "b501744a58da9b46a912f44c003033b1fd9b47e35ec2732c6c015bb8740dd601",
+      "b63d320f94281cbe05558114a46c88e918b34199d465c181a94ea9ee03f4e3eb",
+      "ba61c41a8024474491c81dd30c132d56030cf869bdbbc865586c5a5c689190c7",
+      "c2201186b6128a8235cdb25f52e415f8494d8ec72b2281907fa5b478f48b430a",
+      "c51fd44cefedc69d72d6f50d03b952d9db392333a76e404c2d328eab90370b13",
+      "c6cf5286ab6dab194e540c52449cedb8a27455b4555c341b29e7847c7691abf3",
+      "ce5feb424e4034d2f9cb5f0919875d090747223265fb3159d994e49d5032d0e5",
+      "d06435b935db68f5c5a263dc38e78f878ffe0da5f94ed6b27ce859c6e735916d",
+      "db5434ef579d6c66bea0a7fb044fe92f9aa3bc1c7a3e40c5ce91dd7b0500d1fd",
+      "e10c4cb94f351a9714130c481c6e541b794c3bf98283c1c0c9af7bcb040a44a9",
+      "e342e4f402f85eca91565b529dcd4cb5a5073fc29aa4c21f10802bd09b8f63af",
+      "e70009da3ade5b45cf732a62191831ffae384d48b0bf038e740311f369387c3f",
+      "eafa3cab4512cf95274c1e6a8d68e6c23044ab847e7546d8f8c860d0f9a91e33",
+      "ebc7fad86b19af7fd0398fbfcc9ddc6481cb0f7b0dd6d2222514074d82437aac",
+      "ef1352543240a6f379f84f9e1658ab1420ec95e697497a5485e10f903ce658c5",
+      "f7698f9f9021730a6e8a3e585971b5d4edbe8567628089f24788e92dafa2fe26",
+      "f98338d1777c0118ac3ae79962c0aae8d55af449c30b327cb02d6f4a4ba09596",
+      "fcf6017236ecdbcb85bc90ada48b8e789870a7f4fdc0f7872ac00fa10e1986fe",
+      "feda02588beec436a339b46e0c68e93a9096876d2ca2e7dad4d629f33738441e"
+    ],
+    "gateway_loopback_client": true,
+    "http": {
+      "by_category": {
+        "context": {
+          "201": 48,
+          "404": 48
+        },
+        "poll": {
+          "200": 3056
+        },
+        "submit": {
+          "202": 48,
+          "503": 133
+        }
+      },
+      "cases_with_503": 16,
+      "repeated_submit_attempts": 133,
+      "responses_503": 133,
+      "statuses": {
+        "200": 3056,
+        "201": 48,
+        "202": 48,
+        "404": 48,
+        "503": 133
+      },
+      "time_to_headers_seconds": {
+        "context": {
+          "count": 96,
+          "max": 0.09164477300510043,
+          "mean": 0.02881757556262225,
+          "min": 0.0027300370056764223,
+          "p50": 0.02646317900143913,
+          "p95": 0.06013938425166998
+        },
+        "poll": {
+          "count": 3056,
+          "max": 0.9127398330019787,
+          "mean": 0.008647272134495749,
+          "min": 0.002711652996367775,
+          "p50": 0.005954363499768078,
+          "p95": 0.018576121248770505
+        },
+        "submit": {
+          "count": 181,
+          "max": 2.3976831330001005,
+          "mean": 0.38813006439802106,
+          "min": 0.04325827299908269,
+          "p50": 0.08580272900144337,
+          "p95": 1.5253864179976517
+        }
+      }
+    },
+    "measurements": {
+      "build_push_seconds": {
+        "count": 48,
+        "max": 87.153,
+        "mean": 31.318145833333332,
+        "min": 4.543,
+        "p50": 33.504000000000005,
+        "p95": 85.6141
+      },
+      "cleanup_seconds": {
+        "count": 48,
+        "max": 0.151,
+        "mean": 0.02958333333333334,
+        "min": 0.012,
+        "p50": 0.023,
+        "p95": 0.057
+      },
+      "client_wall_seconds": {
+        "count": 48,
+        "max": 172.17875690499932,
+        "mean": 80.2695607052289,
+        "min": 17.581792886994663,
+        "p50": 77.34457824449782,
+        "p95": 162.45538256149922
+      },
+      "erofs_publication_seconds": {
+        "count": 48,
+        "max": 25.341,
+        "mean": 7.120874999999999,
+        "min": 0.802,
+        "p50": 5.098,
+        "p95": 24.775949999999998
+      },
+      "execution_seconds": {
+        "count": 48,
+        "max": 111.219,
+        "mean": 38.50908333333333,
+        "min": 5.567,
+        "p50": 38.311,
+        "p95": 110.95815
+      },
+      "polling_seconds": {
+        "count": 48,
+        "max": 160.99453998600075,
+        "mean": 63.23556339560415,
+        "min": 10.196652115002507,
+        "p50": 57.509022949998325,
+        "p95": 151.70138832009835
+      },
+      "preparation_seconds": {
+        "count": 48,
+        "max": 2.235,
+        "mean": 0.8520208333333333,
+        "min": 0.122,
+        "p50": 0.6955,
+        "p95": 1.83765
+      },
+      "queue_seconds": {
+        "count": 48,
+        "max": 108.98,
+        "mean": 24.19664583333333,
+        "min": 0.002,
+        "p50": 9.3235,
+        "p95": 108.3773
+      },
+      "submission_seconds": {
+        "count": 48,
+        "max": 60.42723458199907,
+        "mean": 17.033753660207974,
+        "min": 7.384850079994067,
+        "p50": 11.327123221002694,
+        "p95": 55.69306675719853
+      },
+      "worker_end_to_end_seconds": {
+        "count": 48,
+        "max": 160.687,
+        "mean": 63.55774999999999,
+        "min": 9.966,
+        "p50": 57.3025,
+        "p95": 151.59885
+      }
+    },
+    "overlap": {
+      "admitted": {
+        "by_owner": {
+          "167927353": {
+            "first_peak_at": "2026-09-29T08:12:20.213764+00:00",
+            "peak": 8
+          },
+          "167927354": {
+            "first_peak_at": "2026-09-29T08:12:20.161537+00:00",
+            "peak": 8
+          },
+          "167927367": {
+            "first_peak_at": "2026-09-29T08:12:19.665181+00:00",
+            "peak": 8
+          },
+          "167927368": {
+            "first_peak_at": "2026-09-29T08:12:20.161242+00:00",
+            "peak": 8
+          }
+        },
+        "complete_intervals": 48,
+        "duplicate_build_ids_ignored": 0,
+        "first_peak_at": "2026-09-29T08:12:20.213764+00:00",
+        "missing_or_invalid_intervals": 0,
+        "peak": 32
+      },
+      "executing": {
+        "by_owner": {
+          "167927353": {
+            "first_peak_at": "2026-09-29T08:12:18.655677+00:00",
+            "peak": 4
+          },
+          "167927354": {
+            "first_peak_at": "2026-09-29T08:12:19.495887+00:00",
+            "peak": 4
+          },
+          "167927367": {
+            "first_peak_at": "2026-09-29T08:12:18.903023+00:00",
+            "peak": 4
+          },
+          "167927368": {
+            "first_peak_at": "2026-09-29T08:12:18.184189+00:00",
+            "peak": 4
+          }
+        },
+        "complete_intervals": 48,
+        "duplicate_build_ids_ignored": 0,
+        "first_peak_at": "2026-09-29T08:12:19.495887+00:00",
+        "missing_or_invalid_intervals": 0,
+        "peak": 16
+      }
+    },
+    "owners": {
+      "167927353": 14,
+      "167927354": 13,
+      "167927367": 13,
+      "167927368": 8
+    },
+    "path": "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-load-2026-09-29/overload/summary.json",
+    "phase": "overload",
+    "queue_fairness": {
+      "build_intervals": [
+        {
+          "build_id": "156e4106-0f0e-4fbe-933d-aa8066b9bb53",
+          "created_at": "2026-09-29T08:12:17.279559+00:00",
+          "execution_started_at": "2026-09-29T08:12:18.873597+00:00",
+          "finished_at": "2026-09-29T08:12:30.170337+00:00",
+          "index": 0,
+          "owner": "167927367",
+          "queue_seconds_from_timestamps": 0.008757829666137695,
+          "queued_at": "2026-09-29T08:12:18.864839+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 8
+        },
+        {
+          "build_id": "5ee478e0-5731-4c1b-9a08-b1efb69f3eb4",
+          "created_at": "2026-09-29T08:12:30.333998+00:00",
+          "execution_started_at": "2026-09-29T08:13:09.502139+00:00",
+          "finished_at": "2026-09-29T08:14:02.575351+00:00",
+          "index": 1,
+          "owner": "167927367",
+          "queue_seconds_from_timestamps": 38.8395140171051,
+          "queued_at": "2026-09-29T08:12:30.662625+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 38839
+        },
+        {
+          "build_id": "cb3fc017-f82a-41de-8f1f-bbf5703d3b82",
+          "created_at": "2026-09-29T08:13:06.468163+00:00",
+          "execution_started_at": "2026-09-29T08:13:46.795224+00:00",
+          "finished_at": "2026-09-29T08:14:14.698708+00:00",
+          "index": 2,
+          "owner": "167927353",
+          "queue_seconds_from_timestamps": 40.062849044799805,
+          "queued_at": "2026-09-29T08:13:06.732375+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 40062
+        },
+        {
+          "build_id": "1c2df099-d14e-419c-bc0b-01cfd527b175",
+          "created_at": "2026-09-29T08:12:17.007158+00:00",
+          "execution_started_at": "2026-09-29T08:12:18.141043+00:00",
+          "finished_at": "2026-09-29T08:12:30.747763+00:00",
+          "index": 3,
+          "owner": "167927354",
+          "queue_seconds_from_timestamps": 0.027544021606445312,
+          "queued_at": "2026-09-29T08:12:18.113499+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 27
+        },
+        {
+          "build_id": "c73e7c87-515b-4407-98bb-2f2b0aae02b0",
+          "created_at": "2026-09-29T08:12:19.278094+00:00",
+          "execution_started_at": "2026-09-29T08:12:29.688297+00:00",
+          "finished_at": "2026-09-29T08:13:16.207038+00:00",
+          "index": 4,
+          "owner": "167927367",
+          "queue_seconds_from_timestamps": 10.102581024169922,
+          "queued_at": "2026-09-29T08:12:19.585716+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 10102
+        },
+        {
+          "build_id": "c2cd867f-42d8-44de-9c70-9f5a0c17b873",
+          "created_at": "2026-09-29T08:12:20.213764+00:00",
+          "execution_started_at": "2026-09-29T08:12:30.283381+00:00",
+          "finished_at": "2026-09-29T08:13:04.794295+00:00",
+          "index": 5,
+          "owner": "167927353",
+          "queue_seconds_from_timestamps": 9.445163011550903,
+          "queued_at": "2026-09-29T08:12:20.838218+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 9445
+        },
+        {
+          "build_id": "5ae35459-f9f0-48f5-bd79-846ec98d6c9f",
+          "created_at": "2026-09-29T08:12:16.655779+00:00",
+          "execution_started_at": "2026-09-29T08:12:16.794189+00:00",
+          "finished_at": "2026-09-29T08:12:26.570435+00:00",
+          "index": 6,
+          "owner": "167927353",
+          "queue_seconds_from_timestamps": 0.00406193733215332,
+          "queued_at": "2026-09-29T08:12:16.790127+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 4
+        },
+        {
+          "build_id": "6a9d0045-d08c-4c0c-bf1e-3bfddaa6de5e",
+          "created_at": "2026-09-29T08:12:31.908407+00:00",
+          "execution_started_at": "2026-09-29T08:13:07.618324+00:00",
+          "finished_at": "2026-09-29T08:13:44.949897+00:00",
+          "index": 7,
+          "owner": "167927354",
+          "queue_seconds_from_timestamps": 34.908504009246826,
+          "queued_at": "2026-09-29T08:12:32.709820+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 34908
+        },
+        {
+          "build_id": "d25def21-7c39-4fe3-972d-6cb27bb3b71d",
+          "created_at": "2026-09-29T08:12:20.161537+00:00",
+          "execution_started_at": "2026-09-29T08:13:01.821825+00:00",
+          "finished_at": "2026-09-29T08:13:33.528302+00:00",
+          "index": 8,
+          "owner": "167927354",
+          "queue_seconds_from_timestamps": 39.849098920822144,
+          "queued_at": "2026-09-29T08:12:21.972726+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 39849
+        },
+        {
+          "build_id": "210bbba0-ad4e-488f-9a0f-4e7525d7ce3c",
+          "created_at": "2026-09-29T08:12:17.240355+00:00",
+          "execution_started_at": "2026-09-29T08:12:17.807784+00:00",
+          "finished_at": "2026-09-29T08:14:08.897071+00:00",
+          "index": 9,
+          "owner": "167927368",
+          "queue_seconds_from_timestamps": 0.003219127655029297,
+          "queued_at": "2026-09-29T08:12:17.804565+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 3
+        },
+        {
+          "build_id": "43036321-1cb8-4e43-9f9e-6383a3f05a75",
+          "created_at": "2026-09-29T08:12:31.920198+00:00",
+          "execution_started_at": "2026-09-29T08:13:07.546226+00:00",
+          "finished_at": "2026-09-29T08:13:48.000739+00:00",
+          "index": 10,
+          "owner": "167927354",
+          "queue_seconds_from_timestamps": 34.85901093482971,
+          "queued_at": "2026-09-29T08:12:32.687215+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 34858
+        },
+        {
+          "build_id": "751d71b0-371e-4f48-8f2d-35a28a35e3a1",
+          "created_at": "2026-09-29T08:12:19.665181+00:00",
+          "execution_started_at": "2026-09-29T08:12:30.240639+00:00",
+          "finished_at": "2026-09-29T08:13:09.414659+00:00",
+          "index": 11,
+          "owner": "167927367",
+          "queue_seconds_from_timestamps": 9.249396085739136,
+          "queued_at": "2026-09-29T08:12:20.991243+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 9249
+        },
+        {
+          "build_id": "06e2ec44-214f-4832-b90e-43d7a00333a6",
+          "created_at": "2026-09-29T08:12:16.839128+00:00",
+          "execution_started_at": "2026-09-29T08:12:17.670911+00:00",
+          "finished_at": "2026-09-29T08:12:27.619366+00:00",
+          "index": 12,
+          "owner": "167927353",
+          "queue_seconds_from_timestamps": 0.01781010627746582,
+          "queued_at": "2026-09-29T08:12:17.653101+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 17
+        },
+        {
+          "build_id": "89f1f8e8-6999-4844-b596-9205b24e824d",
+          "created_at": "2026-09-29T08:12:19.509793+00:00",
+          "execution_started_at": "2026-09-29T08:12:30.237956+00:00",
+          "finished_at": "2026-09-29T08:13:11.838345+00:00",
+          "index": 13,
+          "owner": "167927353",
+          "queue_seconds_from_timestamps": 9.595700979232788,
+          "queued_at": "2026-09-29T08:12:20.642255+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 9595
+        },
+        {
+          "build_id": "84f0574d-1258-4fa1-9b7d-c6d52c48fedb",
+          "created_at": "2026-09-29T08:12:19.628585+00:00",
+          "execution_started_at": "2026-09-29T08:12:30.054896+00:00",
+          "finished_at": "2026-09-29T08:13:09.379583+00:00",
+          "index": 14,
+          "owner": "167927367",
+          "queue_seconds_from_timestamps": 9.147722005844116,
+          "queued_at": "2026-09-29T08:12:20.907174+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 9147
+        },
+        {
+          "build_id": "845b0672-50af-412b-bec1-92fe89c3a75c",
+          "created_at": "2026-09-29T08:12:16.864493+00:00",
+          "execution_started_at": "2026-09-29T08:12:18.178810+00:00",
+          "finished_at": "2026-09-29T08:12:30.168318+00:00",
+          "index": 15,
+          "owner": "167927353",
+          "queue_seconds_from_timestamps": 0.013167858123779297,
+          "queued_at": "2026-09-29T08:12:18.165642+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 13
+        },
+        {
+          "build_id": "40a4b6fb-a24a-4a99-8c3a-629b7a7a8622",
+          "created_at": "2026-09-29T08:12:19.158766+00:00",
+          "execution_started_at": "2026-09-29T08:12:19.495887+00:00",
+          "finished_at": "2026-09-29T08:13:01.782061+00:00",
+          "index": 16,
+          "owner": "167927354",
+          "queue_seconds_from_timestamps": 0.02067399024963379,
+          "queued_at": "2026-09-29T08:12:19.475213+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 20
+        },
+        {
+          "build_id": "09037931-5b1f-494c-815b-95af6d89e6af",
+          "created_at": "2026-09-29T08:12:19.648067+00:00",
+          "execution_started_at": "2026-09-29T08:12:30.208688+00:00",
+          "finished_at": "2026-09-29T08:13:09.473142+00:00",
+          "index": 17,
+          "owner": "167927367",
+          "queue_seconds_from_timestamps": 9.228703022003174,
+          "queued_at": "2026-09-29T08:12:20.979985+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 9228
+        },
+        {
+          "build_id": "8395ce00-6a12-4552-a66f-419903a25093",
+          "created_at": "2026-09-29T08:12:17.267778+00:00",
+          "execution_started_at": "2026-09-29T08:12:17.817766+00:00",
+          "finished_at": "2026-09-29T08:14:08.894793+00:00",
+          "index": 18,
+          "owner": "167927368",
+          "queue_seconds_from_timestamps": 0.002168893814086914,
+          "queued_at": "2026-09-29T08:12:17.815597+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 2
+        },
+        {
+          "build_id": "8f5a95c6-85f0-4f67-8e26-6493a8d05402",
+          "created_at": "2026-09-29T08:12:32.047958+00:00",
+          "execution_started_at": "2026-09-29T08:13:16.248194+00:00",
+          "finished_at": "2026-09-29T08:14:03.031899+00:00",
+          "index": 19,
+          "owner": "167927367",
+          "queue_seconds_from_timestamps": 43.843981981277466,
+          "queued_at": "2026-09-29T08:12:32.404212+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 43843
+        },
+        {
+          "build_id": "e1b7e574-677f-4b70-9730-93df9efb414e",
+          "created_at": "2026-09-29T08:13:01.855660+00:00",
+          "execution_started_at": "2026-09-29T08:13:33.566106+00:00",
+          "finished_at": "2026-09-29T08:14:02.781268+00:00",
+          "index": 20,
+          "owner": "167927354",
+          "queue_seconds_from_timestamps": 31.489650011062622,
+          "queued_at": "2026-09-29T08:13:02.076456+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 31489
+        },
+        {
+          "build_id": "05e52f59-21cb-4499-8f0e-b66bb0cfca4d",
+          "created_at": "2026-09-29T08:12:17.264290+00:00",
+          "execution_started_at": "2026-09-29T08:12:18.903023+00:00",
+          "finished_at": "2026-09-29T08:12:30.098438+00:00",
+          "index": 21,
+          "owner": "167927367",
+          "queue_seconds_from_timestamps": 0.0032188892364501953,
+          "queued_at": "2026-09-29T08:12:18.899804+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 3
+        },
+        {
+          "build_id": "8ec6de82-fac4-4bbf-bf3b-7719935f9bed",
+          "created_at": "2026-09-29T08:12:36.637526+00:00",
+          "execution_started_at": "2026-09-29T08:13:17.971252+00:00",
+          "finished_at": "2026-09-29T08:13:58.864506+00:00",
+          "index": 22,
+          "owner": "167927353",
+          "queue_seconds_from_timestamps": 40.99717688560486,
+          "queued_at": "2026-09-29T08:12:36.974075+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 40997
+        },
+        {
+          "build_id": "fcfd6db5-2f38-4647-b0b1-72f65e9614c3",
+          "created_at": "2026-09-29T08:12:19.536935+00:00",
+          "execution_started_at": "2026-09-29T08:12:30.787441+00:00",
+          "finished_at": "2026-09-29T08:13:07.583557+00:00",
+          "index": 23,
+          "owner": "167927354",
+          "queue_seconds_from_timestamps": 9.398555040359497,
+          "queued_at": "2026-09-29T08:12:21.388886+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 9398
+        },
+        {
+          "build_id": "6dc3835a-be7e-4cc2-aa64-d26c1b81500c",
+          "created_at": "2026-09-29T08:12:16.987040+00:00",
+          "execution_started_at": "2026-09-29T08:12:18.117648+00:00",
+          "finished_at": "2026-09-29T08:12:30.809452+00:00",
+          "index": 24,
+          "owner": "167927354",
+          "queue_seconds_from_timestamps": 0.006269931793212891,
+          "queued_at": "2026-09-29T08:12:18.111378+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 6
+        },
+        {
+          "build_id": "0569b1c2-276f-4f30-bc8e-0f781c3cb362",
+          "created_at": "2026-09-29T08:12:30.555090+00:00",
+          "execution_started_at": "2026-09-29T08:13:09.530387+00:00",
+          "finished_at": "2026-09-29T08:14:02.522491+00:00",
+          "index": 25,
+          "owner": "167927367",
+          "queue_seconds_from_timestamps": 38.6965708732605,
+          "queued_at": "2026-09-29T08:12:30.833816+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 38696
+        },
+        {
+          "build_id": "8c9548a8-18e4-4423-94d0-e60cdd16e154",
+          "created_at": "2026-09-29T08:12:19.406100+00:00",
+          "execution_started_at": "2026-09-29T08:14:08.940431+00:00",
+          "finished_at": "2026-09-29T08:14:51.240791+00:00",
+          "index": 26,
+          "owner": "167927368",
+          "queue_seconds_from_timestamps": 108.980553150177,
+          "queued_at": "2026-09-29T08:12:19.959878+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 108980
+        },
+        {
+          "build_id": "28337329-4815-472d-9d50-ba5ee0a0922b",
+          "created_at": "2026-09-29T08:12:17.211391+00:00",
+          "execution_started_at": "2026-09-29T08:12:17.732412+00:00",
+          "finished_at": "2026-09-29T08:14:08.896917+00:00",
+          "index": 27,
+          "owner": "167927368",
+          "queue_seconds_from_timestamps": 0.0034711360931396484,
+          "queued_at": "2026-09-29T08:12:17.728941+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 3
+        },
+        {
+          "build_id": "7ec884f6-7962-4ffe-9664-6544ce7499d5",
+          "created_at": "2026-09-29T08:12:27.100801+00:00",
+          "execution_started_at": "2026-09-29T08:12:35.999840+00:00",
+          "finished_at": "2026-09-29T08:13:17.931250+00:00",
+          "index": 28,
+          "owner": "167927353",
+          "queue_seconds_from_timestamps": 7.480288982391357,
+          "queued_at": "2026-09-29T08:12:28.519551+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 7480
+        },
+        {
+          "build_id": "e3b9111e-8b65-4055-8cba-228511ff7048",
+          "created_at": "2026-09-29T08:12:19.731964+00:00",
+          "execution_started_at": "2026-09-29T08:12:30.875242+00:00",
+          "finished_at": "2026-09-29T08:13:07.307269+00:00",
+          "index": 29,
+          "owner": "167927354",
+          "queue_seconds_from_timestamps": 8.907551050186157,
+          "queued_at": "2026-09-29T08:12:21.967691+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 8907
+        },
+        {
+          "build_id": "a99977db-9c97-4c66-81ed-c36bb3de8b9e",
+          "created_at": "2026-09-29T08:12:17.112256+00:00",
+          "execution_started_at": "2026-09-29T08:12:18.742460+00:00",
+          "finished_at": "2026-09-29T08:12:29.973869+00:00",
+          "index": 30,
+          "owner": "167927367",
+          "queue_seconds_from_timestamps": 0.009969949722290039,
+          "queued_at": "2026-09-29T08:12:18.732490+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 9
+        },
+        {
+          "build_id": "30c3bf0e-5027-4a24-8804-6048895bb60b",
+          "created_at": "2026-09-29T08:12:19.493289+00:00",
+          "execution_started_at": "2026-09-29T08:12:27.833397+00:00",
+          "finished_at": "2026-09-29T08:13:10.380888+00:00",
+          "index": 31,
+          "owner": "167927353",
+          "queue_seconds_from_timestamps": 7.244057893753052,
+          "queued_at": "2026-09-29T08:12:20.589339+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 7244
+        },
+        {
+          "build_id": "f8756628-3001-4e2b-82d7-cf21df8d90d7",
+          "created_at": "2026-09-29T08:12:30.992873+00:00",
+          "execution_started_at": "2026-09-29T08:13:07.369689+00:00",
+          "finished_at": "2026-09-29T08:13:43.715362+00:00",
+          "index": 32,
+          "owner": "167927354",
+          "queue_seconds_from_timestamps": 36.143455028533936,
+          "queued_at": "2026-09-29T08:12:31.226234+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 36143
+        },
+        {
+          "build_id": "5e75979a-6923-4954-a45a-548ffa24b5b0",
+          "created_at": "2026-09-29T08:12:18.058928+00:00",
+          "execution_started_at": "2026-09-29T08:12:18.184189+00:00",
+          "finished_at": "2026-09-29T08:14:08.829551+00:00",
+          "index": 33,
+          "owner": "167927368",
+          "queue_seconds_from_timestamps": 0.0028519630432128906,
+          "queued_at": "2026-09-29T08:12:18.181337+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 2
+        },
+        {
+          "build_id": "7bda3993-37a9-4167-83c0-b07ab5356cfd",
+          "created_at": "2026-09-29T08:12:31.991823+00:00",
+          "execution_started_at": "2026-09-29T08:13:11.886575+00:00",
+          "finished_at": "2026-09-29T08:13:53.517444+00:00",
+          "index": 34,
+          "owner": "167927353",
+          "queue_seconds_from_timestamps": 39.59378695487976,
+          "queued_at": "2026-09-29T08:12:32.292788+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 39593
+        },
+        {
+          "build_id": "1efd424f-5120-42f0-8f37-d5334a78201b",
+          "created_at": "2026-09-29T08:12:19.773997+00:00",
+          "execution_started_at": "2026-09-29T08:12:30.873602+00:00",
+          "finished_at": "2026-09-29T08:13:07.497722+00:00",
+          "index": 35,
+          "owner": "167927354",
+          "queue_seconds_from_timestamps": 8.957485914230347,
+          "queued_at": "2026-09-29T08:12:21.916116+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 8957
+        },
+        {
+          "build_id": "c1182ed8-c0c6-4938-91b4-b6d80d976675",
+          "created_at": "2026-09-29T08:12:16.912444+00:00",
+          "execution_started_at": "2026-09-29T08:12:17.953971+00:00",
+          "finished_at": "2026-09-29T08:12:30.789507+00:00",
+          "index": 36,
+          "owner": "167927354",
+          "queue_seconds_from_timestamps": 0.006338834762573242,
+          "queued_at": "2026-09-29T08:12:17.947632+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 6
+        },
+        {
+          "build_id": "8d9756d0-9755-48de-988a-6cbf27fcfd16",
+          "created_at": "2026-09-29T08:12:29.778623+00:00",
+          "execution_started_at": "2026-09-29T08:13:09.448168+00:00",
+          "finished_at": "2026-09-29T08:14:01.590023+00:00",
+          "index": 37,
+          "owner": "167927367",
+          "queue_seconds_from_timestamps": 39.22939610481262,
+          "queued_at": "2026-09-29T08:12:30.218772+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 39229
+        },
+        {
+          "build_id": "10f4f4a4-8070-4e8a-81d4-ac025b655acd",
+          "created_at": "2026-09-29T08:13:09.573445+00:00",
+          "execution_started_at": "2026-09-29T08:14:01.652797+00:00",
+          "finished_at": "2026-09-29T08:14:07.177645+00:00",
+          "index": 38,
+          "owner": "167927367",
+          "queue_seconds_from_timestamps": 51.803247928619385,
+          "queued_at": "2026-09-29T08:13:09.849549+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 51803
+        },
+        {
+          "build_id": "45dbb2d6-3dbb-4fe9-945b-0cd1fe56c3cc",
+          "created_at": "2026-09-29T08:12:17.077971+00:00",
+          "execution_started_at": "2026-09-29T08:12:18.359718+00:00",
+          "finished_at": "2026-09-29T08:12:29.631789+00:00",
+          "index": 39,
+          "owner": "167927367",
+          "queue_seconds_from_timestamps": 0.007941007614135742,
+          "queued_at": "2026-09-29T08:12:18.351777+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 7
+        },
+        {
+          "build_id": "a4dd569d-37ea-4927-b1fc-801e0af51edf",
+          "created_at": "2026-09-29T08:12:20.161242+00:00",
+          "execution_started_at": "2026-09-29T08:14:08.966691+00:00",
+          "finished_at": "2026-09-29T08:15:00.828078+00:00",
+          "index": 40,
+          "owner": "167927368",
+          "queue_seconds_from_timestamps": 108.36366105079651,
+          "queued_at": "2026-09-29T08:12:20.603030+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 108363
+        },
+        {
+          "build_id": "d5d524ba-7bc1-420b-83b1-7938ddde5cc7",
+          "created_at": "2026-09-29T08:12:30.481395+00:00",
+          "execution_started_at": "2026-09-29T08:13:10.436798+00:00",
+          "finished_at": "2026-09-29T08:13:46.752063+00:00",
+          "index": 41,
+          "owner": "167927353",
+          "queue_seconds_from_timestamps": 39.70455598831177,
+          "queued_at": "2026-09-29T08:12:30.732242+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 39704
+        },
+        {
+          "build_id": "a6f18f83-0632-48a9-9a2a-670972901277",
+          "created_at": "2026-09-29T08:12:17.445564+00:00",
+          "execution_started_at": "2026-09-29T08:12:26.642636+00:00",
+          "finished_at": "2026-09-29T08:12:35.956095+00:00",
+          "index": 42,
+          "owner": "167927353",
+          "queue_seconds_from_timestamps": 7.957417964935303,
+          "queued_at": "2026-09-29T08:12:18.685218+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 7957
+        },
+        {
+          "build_id": "801d6cb7-e0b3-4233-a41b-181e30e183b7",
+          "created_at": "2026-09-29T08:12:27.777606+00:00",
+          "execution_started_at": "2026-09-29T08:13:04.836870+00:00",
+          "finished_at": "2026-09-29T08:13:47.988224+00:00",
+          "index": 43,
+          "owner": "167927353",
+          "queue_seconds_from_timestamps": 35.91713190078735,
+          "queued_at": "2026-09-29T08:12:28.919738+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 35917
+        },
+        {
+          "build_id": "4cd0f3d1-ebe9-446b-9d46-ce8beb4d3057",
+          "created_at": "2026-09-29T08:12:19.399652+00:00",
+          "execution_started_at": "2026-09-29T08:14:08.855268+00:00",
+          "finished_at": "2026-09-29T08:14:51.312976+00:00",
+          "index": 44,
+          "owner": "167927368",
+          "queue_seconds_from_timestamps": 108.89989590644836,
+          "queued_at": "2026-09-29T08:12:19.955372+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 108899
+        },
+        {
+          "build_id": "5f76cf91-0d54-4e08-a97c-e708e4a303bd",
+          "created_at": "2026-09-29T08:12:17.490502+00:00",
+          "execution_started_at": "2026-09-29T08:12:18.655677+00:00",
+          "finished_at": "2026-09-29T08:12:30.183636+00:00",
+          "index": 45,
+          "owner": "167927353",
+          "queue_seconds_from_timestamps": 0.007802009582519531,
+          "queued_at": "2026-09-29T08:12:18.647875+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 7
+        },
+        {
+          "build_id": "1503f47a-ea76-46e4-b430-6eb460af9ebf",
+          "created_at": "2026-09-29T08:13:09.451639+00:00",
+          "execution_started_at": "2026-09-29T08:13:43.762764+00:00",
+          "finished_at": "2026-09-29T08:14:19.002762+00:00",
+          "index": 46,
+          "owner": "167927354",
+          "queue_seconds_from_timestamps": 34.03603196144104,
+          "queued_at": "2026-09-29T08:13:09.726732+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 34036
+        },
+        {
+          "build_id": "5fbf1d05-e83b-4f17-8fa7-9e135f37583b",
+          "created_at": "2026-09-29T08:12:20.129024+00:00",
+          "execution_started_at": "2026-09-29T08:14:08.953177+00:00",
+          "finished_at": "2026-09-29T08:14:51.218220+00:00",
+          "index": 47,
+          "owner": "167927368",
+          "queue_seconds_from_timestamps": 108.38516902923584,
+          "queued_at": "2026-09-29T08:12:20.568008+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 108385
+        }
+      ],
+      "complete_intervals": 48,
+      "coverage_complete": true,
+      "duplicate_build_ids_ignored": [],
+      "missing_or_invalid_intervals": [],
+      "owners_considered": [
+        "167927353",
+        "167927354",
+        "167927367",
+        "167927368"
+      ],
+      "owners_include_fleet_after": true,
+      "queued_behind_full_owner_with_free_peer": {
+        "affected_queued_build_seconds": 129.5194616317749,
+        "longest_finished_at": "2026-09-29T08:14:08.829551+00:00",
+        "longest_seconds": 23.879653930664062,
+        "longest_started_at": "2026-09-29T08:13:44.949897+00:00",
+        "spans": [
+          {
+            "finished_at": "2026-09-29T08:12:19.495887+00:00",
+            "seconds": 0.8106689453125,
+            "started_at": "2026-09-29T08:12:18.685218+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:12:26.642636+00:00",
+            "seconds": 0.07220101356506348,
+            "started_at": "2026-09-29T08:12:26.570435+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:12:27.833397+00:00",
+            "seconds": 0.21403098106384277,
+            "started_at": "2026-09-29T08:12:27.619366+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:12:29.688297+00:00",
+            "seconds": 0.05650806427001953,
+            "started_at": "2026-09-29T08:12:29.631789+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:12:30.054896+00:00",
+            "seconds": 0.08102703094482422,
+            "started_at": "2026-09-29T08:12:29.973869+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:12:30.283381+00:00",
+            "seconds": 0.18494296073913574,
+            "started_at": "2026-09-29T08:12:30.098438+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:12:30.787441+00:00",
+            "seconds": 0.039678096771240234,
+            "started_at": "2026-09-29T08:12:30.747763+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:12:30.875242+00:00",
+            "seconds": 0.08573508262634277,
+            "started_at": "2026-09-29T08:12:30.789507+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:12:35.999840+00:00",
+            "seconds": 0.04374504089355469,
+            "started_at": "2026-09-29T08:12:35.956095+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:13:01.821825+00:00",
+            "seconds": 0.0397639274597168,
+            "started_at": "2026-09-29T08:13:01.782061+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:13:04.836870+00:00",
+            "seconds": 0.04257488250732422,
+            "started_at": "2026-09-29T08:13:04.794295+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:13:07.369689+00:00",
+            "seconds": 0.062419891357421875,
+            "started_at": "2026-09-29T08:13:07.307269+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:13:07.546226+00:00",
+            "seconds": 0.04850411415100098,
+            "started_at": "2026-09-29T08:13:07.497722+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:13:07.618324+00:00",
+            "seconds": 0.03476715087890625,
+            "started_at": "2026-09-29T08:13:07.583557+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:13:09.530387+00:00",
+            "seconds": 0.1508040428161621,
+            "started_at": "2026-09-29T08:13:09.379583+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:13:10.436798+00:00",
+            "seconds": 0.05591011047363281,
+            "started_at": "2026-09-29T08:13:10.380888+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:13:11.886575+00:00",
+            "seconds": 0.04822993278503418,
+            "started_at": "2026-09-29T08:13:11.838345+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:13:16.248194+00:00",
+            "seconds": 0.04115605354309082,
+            "started_at": "2026-09-29T08:13:16.207038+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:13:17.971252+00:00",
+            "seconds": 0.040001869201660156,
+            "started_at": "2026-09-29T08:13:17.931250+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:13:33.566106+00:00",
+            "seconds": 0.03780412673950195,
+            "started_at": "2026-09-29T08:13:33.528302+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:13:43.762764+00:00",
+            "seconds": 0.04740190505981445,
+            "started_at": "2026-09-29T08:13:43.715362+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:14:08.829551+00:00",
+            "seconds": 23.879653930664062,
+            "started_at": "2026-09-29T08:13:44.949897+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:14:08.894793+00:00",
+            "seconds": 0.03952503204345703,
+            "started_at": "2026-09-29T08:14:08.855268+00:00"
+          }
+        ],
+        "total_seconds": 26.15705418586731
+      },
+      "queued_with_free_peer": {
+        "longest_finished_at": "2026-09-29T08:14:08.966691+00:00",
+        "longest_seconds": 24.016793966293335,
+        "longest_started_at": "2026-09-29T08:13:44.949897+00:00",
+        "spans": [
+          {
+            "finished_at": "2026-09-29T08:12:16.794189+00:00",
+            "seconds": 0.00406193733215332,
+            "started_at": "2026-09-29T08:12:16.790127+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:12:17.670911+00:00",
+            "seconds": 0.01781010627746582,
+            "started_at": "2026-09-29T08:12:17.653101+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:12:17.732412+00:00",
+            "seconds": 0.0034711360931396484,
+            "started_at": "2026-09-29T08:12:17.728941+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:12:17.807784+00:00",
+            "seconds": 0.003219127655029297,
+            "started_at": "2026-09-29T08:12:17.804565+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:12:17.817766+00:00",
+            "seconds": 0.002168893814086914,
+            "started_at": "2026-09-29T08:12:17.815597+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:12:17.953971+00:00",
+            "seconds": 0.006338834762573242,
+            "started_at": "2026-09-29T08:12:17.947632+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:12:18.141043+00:00",
+            "seconds": 0.029664993286132812,
+            "started_at": "2026-09-29T08:12:18.111378+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:12:18.178810+00:00",
+            "seconds": 0.013167858123779297,
+            "started_at": "2026-09-29T08:12:18.165642+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:12:18.184189+00:00",
+            "seconds": 0.0028519630432128906,
+            "started_at": "2026-09-29T08:12:18.181337+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:12:18.359718+00:00",
+            "seconds": 0.007941007614135742,
+            "started_at": "2026-09-29T08:12:18.351777+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:12:18.655677+00:00",
+            "seconds": 0.007802009582519531,
+            "started_at": "2026-09-29T08:12:18.647875+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:12:19.495887+00:00",
+            "seconds": 0.8106689453125,
+            "started_at": "2026-09-29T08:12:18.685218+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:12:26.642636+00:00",
+            "seconds": 0.07220101356506348,
+            "started_at": "2026-09-29T08:12:26.570435+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:12:27.833397+00:00",
+            "seconds": 0.21403098106384277,
+            "started_at": "2026-09-29T08:12:27.619366+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:12:29.688297+00:00",
+            "seconds": 0.05650806427001953,
+            "started_at": "2026-09-29T08:12:29.631789+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:12:30.054896+00:00",
+            "seconds": 0.08102703094482422,
+            "started_at": "2026-09-29T08:12:29.973869+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:12:30.283381+00:00",
+            "seconds": 0.18494296073913574,
+            "started_at": "2026-09-29T08:12:30.098438+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:12:30.787441+00:00",
+            "seconds": 0.039678096771240234,
+            "started_at": "2026-09-29T08:12:30.747763+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:12:30.875242+00:00",
+            "seconds": 0.08573508262634277,
+            "started_at": "2026-09-29T08:12:30.789507+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:12:35.999840+00:00",
+            "seconds": 0.04374504089355469,
+            "started_at": "2026-09-29T08:12:35.956095+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:13:01.821825+00:00",
+            "seconds": 0.0397639274597168,
+            "started_at": "2026-09-29T08:13:01.782061+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:13:04.836870+00:00",
+            "seconds": 0.04257488250732422,
+            "started_at": "2026-09-29T08:13:04.794295+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:13:07.369689+00:00",
+            "seconds": 0.062419891357421875,
+            "started_at": "2026-09-29T08:13:07.307269+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:13:07.546226+00:00",
+            "seconds": 0.04850411415100098,
+            "started_at": "2026-09-29T08:13:07.497722+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:13:07.618324+00:00",
+            "seconds": 0.03476715087890625,
+            "started_at": "2026-09-29T08:13:07.583557+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:13:09.530387+00:00",
+            "seconds": 0.1508040428161621,
+            "started_at": "2026-09-29T08:13:09.379583+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:13:10.436798+00:00",
+            "seconds": 0.05591011047363281,
+            "started_at": "2026-09-29T08:13:10.380888+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:13:11.886575+00:00",
+            "seconds": 0.04822993278503418,
+            "started_at": "2026-09-29T08:13:11.838345+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:13:16.248194+00:00",
+            "seconds": 0.04115605354309082,
+            "started_at": "2026-09-29T08:13:16.207038+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:13:17.971252+00:00",
+            "seconds": 0.040001869201660156,
+            "started_at": "2026-09-29T08:13:17.931250+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:13:33.566106+00:00",
+            "seconds": 0.03780412673950195,
+            "started_at": "2026-09-29T08:13:33.528302+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:13:43.762764+00:00",
+            "seconds": 0.04740190505981445,
+            "started_at": "2026-09-29T08:13:43.715362+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T08:14:08.966691+00:00",
+            "seconds": 24.016793966293335,
+            "started_at": "2026-09-29T08:13:44.949897+00:00"
+          }
+        ],
+        "total_seconds": 26.353167057037354
+      }
+    },
+    "refresh_errors": 0,
+    "statuses": {
+      "succeeded": 48
+    },
+    "unique_build_ids": 48,
+    "unique_known_owners": 4,
+    "variants": {
+      "app-change-13": 3,
+      "app-change-14": 3,
+      "app-change-15": 3,
+      "app-change-16": 3,
+      "app-change-17": 3,
+      "app-change-18": 3,
+      "app-change-19": 3,
+      "app-change-20": 3,
+      "app-change-21": 3,
+      "app-change-22": 3,
+      "app-change-23": 3,
+      "app-change-24": 3,
+      "app-change-25": 3,
+      "app-change-26": 3,
+      "app-change-27": 3,
+      "app-change-28": 3
+    }
+  },
+  "candidate": {
+    "batch_wall_seconds": 106.05083801900037,
+    "cache": {
+      "multistage_compile_hits": [
+        {
+          "build_id": "9fda062b-3462-48d7-ba7c-9f0039bf76f6",
+          "description": "[compile 8/8] RUN npm run lint && npm run build && npm test  && node dist/bundle.cjs > /opt/fixture/build-smoke.json",
+          "owner": "167941801"
+        },
+        {
+          "build_id": "62c01e18-1a03-4697-8301-d1b09700a748",
+          "description": "[compile 8/8] RUN npm run lint && npm run build && npm test  && node dist/bundle.cjs > /opt/fixture/build-smoke.json",
+          "owner": "167941786"
+        },
+        {
+          "build_id": "d1c0b9cf-02ab-4dd8-a967-92b84759719b",
+          "description": "[compile 8/8] RUN npm run lint && npm run build && npm test  && node dist/bundle.cjs > /opt/fixture/build-smoke.json",
+          "owner": "167941801"
+        }
+      ],
+      "multistage_records_with_compile_hit": 3,
+      "records_by_step_category": {
+        "application_compile": 3,
+        "copy": 48,
+        "dependency_install": 48,
+        "other": 48
+      },
+      "records_with_observed_cached_steps": 48,
+      "records_without_observed_cached_steps": 0,
+      "step_descriptions": {
+        "[2/8] WORKDIR /opt/fixture": 31,
+        "[3/8] COPY package.json package-lock.json ./": 16,
+        "[3/8] COPY requirements.txt ./requirements.txt": 16,
+        "[4/8] RUN npm ci --no-audit --no-fund --cache /tmp/npm-cache  && npm ls --all --json > /opt/fixture/npm-resolved.json  && rm -rf /tmp/npm-cache": 16,
+        "[4/8] RUN python -m pip install --no-cache-dir --only-binary=:all: --report /opt/fixture/pip-install-report.json -r requirements.txt  && python -m pip check  && python -m pip freeze --all > /opt/fixture/resolved-requirements.txt": 16,
+        "[5/8] COPY native ./native": 16,
+        "[5/8] COPY tsconfig.json build.cjs webpack.config.cjs eslint.config.cjs jest.config.cjs ./": 16,
+        "[6/8] COPY tests ./tests": 28,
+        "[6/8] RUN python -m pip install --no-cache-dir --no-build-isolation --no-deps ./native": 27,
+        "[compile 2/8] WORKDIR /opt/fixture": 17,
+        "[compile 3/8] COPY package.json package-lock.json ./": 16,
+        "[compile 4/8] RUN npm ci --no-audit --no-fund --cache /tmp/npm-cache  && npm ls --all --json > /opt/fixture/npm-resolved.json  && rm -rf /tmp/npm-cache": 16,
+        "[compile 5/8] COPY tsconfig.json build.cjs webpack.config.cjs eslint.config.cjs jest.config.cjs ./": 16,
+        "[compile 6/8] COPY tests ./tests": 30,
+        "[compile 7/8] COPY src ./src": 3,
+        "[compile 8/8] RUN npm run lint && npm run build && npm test  && node dist/bundle.cjs > /opt/fixture/build-smoke.json": 3,
+        "[stage-1 2/6] WORKDIR /opt/fixture": 16
+      }
+    },
+    "cases": 48,
+    "client_errors": 0,
+    "concurrency": 48,
+    "distinct_fixture_hashes": 48,
+    "duplicate_build_ids": 0,
+    "durable_history": {
+      "complete": true,
+      "reported_records": 48
+    },
+    "environment": {
+      "component_lookup_ms": {
+        "distribution": {
+          "count": 48,
+          "max": 6.263,
+          "mean": 1.4820208333333333,
+          "min": 0.842,
+          "p50": 1.2080000000000002,
+          "p95": 2.8383999999999996
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 71.13700000000001
+      },
+      "docker_pull_skipped": {
+        "distribution": {
+          "count": 48,
+          "max": 1,
+          "mean": 1.0,
+          "min": 1,
+          "p50": 1.0,
+          "p95": 1.0
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 48
+      },
+      "erofs_bytes_built": {
+        "distribution": {
+          "count": 48,
+          "max": 14921728,
+          "mean": 7989930.666666667,
+          "min": 3702784,
+          "p50": 5345280.0,
+          "p95": 14921728.0
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 383516672
+      },
+      "groups_built": {
+        "distribution": {
+          "count": 48,
+          "max": 1,
+          "mean": 1.0,
+          "min": 1,
+          "p50": 1.0,
+          "p95": 1.0
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 48
+      },
+      "groups_reused": {
+        "distribution": {
+          "count": 48,
+          "max": 5,
+          "mean": 3.3333333333333335,
+          "min": 1,
+          "p50": 4.0,
+          "p95": 5.0
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 160
+      },
+      "layer_lock_wait_ms": {
+        "distribution": {
+          "count": 48,
+          "max": 0.714,
+          "mean": 0.026458333333333337,
+          "min": 0.005,
+          "p50": 0.008,
+          "p95": 0.05274999999999995
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 1.2699999999999998
+      },
+      "mkfs_ms": {
+        "distribution": {
+          "count": 48,
+          "max": 459.827,
+          "mean": 170.5154375,
+          "min": 27.545,
+          "p50": 99.7425,
+          "p95": 425.21605
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 8184.741
+      },
+      "oci_download_bytes": {
+        "distribution": {
+          "count": 48,
+          "max": 3395634,
+          "mean": 2020886.0,
+          "min": 790893,
+          "p50": 1876975.0,
+          "p95": 3395460.2
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 97002528
+      },
+      "oci_layers_materialized": {
+        "distribution": {
+          "count": 48,
+          "max": 7,
+          "mean": 5.0,
+          "min": 4,
+          "p50": 4.0,
+          "p95": 7.0
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 240
+      },
+      "preflight_misses": {
+        "distribution": {
+          "count": 48,
+          "max": 1,
+          "mean": 1.0,
+          "min": 1,
+          "p50": 1.0,
+          "p95": 1.0
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 48
+      },
+      "preflight_ms": {
+        "distribution": {
+          "count": 48,
+          "max": 7644.872,
+          "mean": 3088.7449791666672,
+          "min": 343.281,
+          "p50": 3417.5735000000004,
+          "p95": 6967.05555
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 148259.75900000002
+      },
+      "publish_component_ms": {
+        "distribution": {
+          "count": 48,
+          "max": 545.915,
+          "mean": 307.1345625000001,
+          "min": 156.848,
+          "p50": 295.968,
+          "p95": 492.3991
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 14742.458999999999
+      },
+      "selective_fallbacks": {
+        "distribution": {
+          "count": 0,
+          "max": null,
+          "mean": null,
+          "min": null,
+          "p50": null,
+          "p95": null
+        },
+        "records_positive": 0,
+        "records_reporting": 0,
+        "total": null
+      },
+      "selective_materialization_ms": {
+        "distribution": {
+          "count": 48,
+          "max": 3079.873,
+          "mean": 1002.8836458333334,
+          "min": 58.539,
+          "p50": 1152.181,
+          "p95": 2669.6348
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 48138.415
+      },
+      "selective_materializations": {
+        "distribution": {
+          "count": 48,
+          "max": 1,
+          "mean": 1.0,
+          "min": 1,
+          "p50": 1.0,
+          "p95": 1.0
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 48
+      },
+      "sign_ms": {
+        "distribution": {
+          "count": 48,
+          "max": 22.06,
+          "mean": 11.416145833333331,
+          "min": 5.01,
+          "p50": 8.049,
+          "p95": 21.145199999999996
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 547.975
+      },
+      "squash_ms": {
+        "distribution": {
+          "count": 48,
+          "max": 3247.658,
+          "mean": 1074.0493958333334,
+          "min": 8.575,
+          "p50": 1168.7795,
+          "p95": 2818.07895
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 51554.37100000001
+      },
+      "total_ms": {
+        "distribution": {
+          "count": 48,
+          "max": 7970.725,
+          "mean": 3349.6509583333336,
+          "min": 492.354,
+          "p50": 3877.837,
+          "p95": 7168.910699999999
+        },
+        "records_positive": 48,
+        "records_reporting": 48,
+        "total": 160783.24599999998
+      }
+    },
+    "failed_or_incomplete": 0,
+    "failures": [],
+    "fixture_hashes": [
+      "00dae4e71147b9167fb02191d64c89bd5b4fc1f25343dda4e26e9249146ddfc7",
+      "03e825993350f65002358c857d3159c80f1870ce3ab654137965d0eec677990b",
+      "06aff883f6a3f558279c4c1b3d6b4231c1a63ef3d09cea4ade3477f15890e2dc",
+      "1242a501a9152140e1a0d8bfe1af7305738e7698efec5f87f570d721058a3400",
+      "1d6d8f55e2634dd64442a966dc2390401ea4cddec847d6686acf16c370a4c3ed",
+      "1dfd244b293816cd250d4fe8af3052c09a2ef3801b523afe1e0726b03539c9f7",
+      "1f6bdfa054e4b1315ae8690b40babc65c465646ba8d47d1f9887070fc8b8d5b9",
+      "2364b92b7a845ef4a03fda9879593724418f97c22b3a67c80dfc3e70e796ef75",
+      "2602febabeb352d3335c005aa48b3636aa2d865268290a3858c3badec1372c3c",
+      "26c4b0e414d76421283b2c915e0e98181a15e39214722f310acaabeda348e53c",
+      "352e2eec6169c66eabb2b1d6c721c08f093cadbb2c4d1e43ea50cb51acafe432",
+      "385b8b54532a98d0a7cf9c45db65fb4f960b024e690f1049e0519c9a84c1770f",
+      "3e60f7818f6227aab6cac7b7cf6e064f23753d4d69ebc74b2701ca643368624f",
+      "43842c933aa144b56cdd684e1f8bfccbdcf44582247291a06f17ecd054dd2edc",
+      "4793862e840454c55564a4b66df33b342db3974c56020c6926b81a96fb00200b",
+      "47e527da74252f1bdd286a84fa0410ccd34b8bb479588ccd6274c41cd9119231",
+      "58cd78d43f88ad34c110d69950970ca7742a4cde1b790e67423cc23353121661",
+      "595c0fb462b270b67cf1b3416acc9de8ba46b3e0f102f81cc117e46447dd4cfc",
+      "5c1f7ef22686071f1a11962b6f789717e60e31f01b597af45c22c639f27bd1b9",
+      "5d6c17980268235890460a0d3c6496c7355e99d1cb61a581c7389aff136ae340",
+      "601ba292b6297ce4f3bedc16a45c8f8ab76d52581f36d5056d71258990e4a4f8",
+      "624a5bd6f2d52e3877b1c42f6bdd548a971fd62109484569f5e1aa4f8c1be545",
+      "65a90e2f757eaab6a814bce10198d86d9b6d844f0f34e92f717f4464e2b5aeea",
+      "69f6854aee361b48312fba098ba43ea7078f54a68417e1e6d3a7388b6d5a3aec",
+      "721c60e8800c0dfe9f76b1ea956fd9e5cc6e4bc4cc26d278b6d593fedce97e21",
+      "78e6645af3cd449c43bcab167f5ac297bbab23281ec5bf548bddf5fdadd9b10e",
+      "8346ad489e62f9beddb796a2ab054dc46943f4726936a2ba1c4ee16d270fc8f1",
+      "881701f1314dbd9fe332f1733327aee02c51b5763fc39185ad358cf3c247df63",
+      "8af05d007dcee0bda6f5d2e20af6f4fa4dc78b92ad37d72a1c4e9735c6ab14db",
+      "90f8dabb4bdb7cbf0cca3fc525590f179e00ad6528616b5acc3d6bbb2693aeac",
+      "a0199c5ab581765ead7beeb84c65f80648343919f2903a447c7331175f011179",
+      "ac511ee5bfe0accbe9eaace9c352c005083c8a6bd52682395d279e002ad57dc1",
+      "ae92d0508ecc9d9b7a577ffdfd2ea42009f9c8cc851aa528bcf43cbe2b6a8ec7",
+      "bb0a004aca600881e09bf5b64a2e1ba35463da7dc325edc032b2f6df2640907f",
+      "bf634ce3d45ee7dc67dccb8a444b3e96601c53b2da0f466141ded9b84a4a7230",
+      "c14eda70728e72a12f43d9a607cfbeda9f6a9c4a21f37610c9d38eb40180b085",
+      "c1905c6089457cf2533c192ccdde05d4c3ec62c83f407edee566744102b20c4c",
+      "c36016d154d1f01e85d3f932b992057038530d460e55bd3e8691375021f60060",
+      "c55090672ba4adc17e16b97e0fd0819fe5d65f93984a18465423d083d396ca6c",
+      "c773b64937f7cc755830ca16d60d78ce48a1bf93e3006857298f22891d621fc8",
+      "cfb425e1518991811a6d4edf19f07706762a7cfb9fdc8dc0409d3f5932f41965",
+      "d0edcac70e3cd2afa9d73abc2a5d047f9b568db2fb85c682a4fe5e82e86f7383",
+      "d15c0bce6287afbb2bbf0fae00f4075ee4a0a704c5c25d6f57e21bfc84c72816",
+      "d35c10398af12b86df925a3e9df9e8f8e31341aba0dd9f348644bf43e0ff09f9",
+      "d3928a07fb96ffb1a5bd73ce486b4446bfa557bae341ef88c053cc9befee04a2",
+      "ebd9432749955108dbaf34a1778ecea91590d4ae24de51dda35e7b000697a29c",
+      "ed1d3435c5d4db8a80afe52c7f707eaf3d193151a309ae75d8b4113166c1c35c",
+      "f80ec6cd98fae0261931c8984f01b85368b15bf5ef3a583ee4e36a019031857b"
+    ],
+    "gateway_loopback_client": true,
+    "http": {
+      "by_category": {
+        "context": {
+          "201": 48,
+          "404": 48
+        },
+        "poll": {
+          "200": 1346
+        },
+        "submit": {
+          "202": 48,
+          "503": 396
+        }
+      },
+      "cases_with_503": 32,
+      "repeated_submit_attempts": 396,
+      "responses_503": 396,
+      "statuses": {
+        "200": 1346,
+        "201": 48,
+        "202": 48,
+        "404": 48,
+        "503": 396
+      },
+      "time_to_headers_seconds": {
+        "context": {
+          "count": 96,
+          "max": 0.07500472699757665,
+          "mean": 0.02627178788513144,
+          "min": 0.0010796410060720518,
+          "p50": 0.02467180999519769,
+          "p95": 0.06554834125563502
+        },
+        "poll": {
+          "count": 1346,
+          "max": 0.14532231198973022,
+          "mean": 0.009146856933182283,
+          "min": 0.0027945789915975183,
+          "p50": 0.005468561997986399,
+          "p95": 0.02491678650767426
+        },
+        "submit": {
+          "count": 444,
+          "max": 1.2837923830084037,
+          "mean": 0.09454064961313191,
+          "min": 0.022654013999272138,
+          "p50": 0.04013059900898952,
+          "p95": 0.39453470205480684
+        }
+      }
+    },
+    "measurements": {
+      "build_push_seconds": {
+        "count": 48,
+        "max": 39.523,
+        "mean": 23.383520833333325,
+        "min": 4.348,
+        "p50": 30.972,
+        "p95": 38.997
+      },
+      "cleanup_seconds": {
+        "count": 48,
+        "max": 0.119,
+        "mean": 0.03512500000000002,
+        "min": 0.011,
+        "p50": 0.02,
+        "p95": 0.11024999999999999
+      },
+      "client_wall_seconds": {
+        "count": 48,
+        "max": 106.03870965099486,
+        "mean": 55.623516589937026,
+        "min": 13.993885207004496,
+        "p50": 58.92936889849807,
+        "p95": 102.75445013625139
+      },
+      "erofs_publication_seconds": {
+        "count": 48,
+        "max": 7.97,
+        "mean": 3.349229166666667,
+        "min": 0.492,
+        "p50": 3.8775,
+        "p95": 7.1686
+      },
+      "execution_seconds": {
+        "count": 48,
+        "max": 46.771,
+        "mean": 26.79579166666667,
+        "min": 4.932,
+        "p50": 32.8995,
+        "p95": 44.7677
+      },
+      "polling_seconds": {
+        "count": 48,
+        "max": 47.42960373099777,
+        "mean": 27.307223684646488,
+        "min": 5.120385194997652,
+        "p50": 33.22239945000183,
+        "p95": 45.00228792319249
+      },
+      "preparation_seconds": {
+        "count": 48,
+        "max": 1.176,
+        "mean": 0.41229166666666667,
+        "min": 0.146,
+        "p50": 0.301,
+        "p95": 0.87225
+      },
+      "queue_seconds": {
+        "count": 48,
+        "max": 0.09,
+        "mean": 0.006520833333333337,
+        "min": 0.002,
+        "p50": 0.0035,
+        "p95": 0.009649999999999999
+      },
+      "submission_seconds": {
+        "count": 48,
+        "max": 67.54910846499843,
+        "mean": 28.316070449707997,
+        "min": 6.8470484069985105,
+        "p50": 18.055438507493818,
+        "p95": 63.154909654000946
+      },
+      "worker_end_to_end_seconds": {
+        "count": 48,
+        "max": 46.972,
+        "mean": 27.214604166666664,
+        "min": 5.146,
+        "p50": 33.326,
+        "p95": 45.42265
+      }
+    },
+    "overlap": {
+      "admitted": {
+        "by_owner": {
+          "167941784": {
+            "first_peak_at": "2026-09-29T09:45:02.984223+00:00",
+            "peak": 4
+          },
+          "167941786": {
+            "first_peak_at": "2026-09-29T09:45:03.485889+00:00",
+            "peak": 4
+          },
+          "167941801": {
+            "first_peak_at": "2026-09-29T09:45:05.237716+00:00",
+            "peak": 4
+          },
+          "167941802": {
+            "first_peak_at": "2026-09-29T09:45:03.265774+00:00",
+            "peak": 4
+          }
+        },
+        "complete_intervals": 48,
+        "duplicate_build_ids_ignored": 0,
+        "first_peak_at": "2026-09-29T09:45:05.237716+00:00",
+        "missing_or_invalid_intervals": 0,
+        "peak": 16
+      },
+      "executing": {
+        "by_owner": {
+          "167941784": {
+            "first_peak_at": "2026-09-29T09:45:03.675336+00:00",
+            "peak": 4
+          },
+          "167941786": {
+            "first_peak_at": "2026-09-29T09:45:03.905442+00:00",
+            "peak": 4
+          },
+          "167941801": {
+            "first_peak_at": "2026-09-29T09:45:05.494679+00:00",
+            "peak": 4
+          },
+          "167941802": {
+            "first_peak_at": "2026-09-29T09:45:04.149961+00:00",
+            "peak": 4
+          }
+        },
+        "complete_intervals": 48,
+        "duplicate_build_ids_ignored": 0,
+        "first_peak_at": "2026-09-29T09:45:05.494679+00:00",
+        "missing_or_invalid_intervals": 0,
+        "peak": 16
+      }
+    },
+    "owners": {
+      "167941784": 12,
+      "167941786": 13,
+      "167941801": 11,
+      "167941802": 12
+    },
+    "path": "/home/alex-admin/ucloud-sandboxes/docs/benchmarks/build-optimization-2026-09-29/opt-fresh/summary.json",
+    "phase": "opt-fresh",
+    "queue_fairness": {
+      "build_intervals": [
+        {
+          "build_id": "3f2693a4-c830-44ef-a0fe-e4222e54b1da",
+          "created_at": "2026-09-29T09:45:03.014795+00:00",
+          "execution_started_at": "2026-09-29T09:45:03.401026+00:00",
+          "finished_at": "2026-09-29T09:45:13.394432+00:00",
+          "index": 0,
+          "owner": "167941786",
+          "queue_seconds_from_timestamps": 0.003000974655151367,
+          "queued_at": "2026-09-29T09:45:03.398025+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 2
+        },
+        {
+          "build_id": "f28b6993-0225-4eaf-9bac-f7d19208fde5",
+          "created_at": "2026-09-29T09:46:02.569186+00:00",
+          "execution_started_at": "2026-09-29T09:46:02.768429+00:00",
+          "finished_at": "2026-09-29T09:46:41.356387+00:00",
+          "index": 1,
+          "owner": "167941802",
+          "queue_seconds_from_timestamps": 0.003782987594604492,
+          "queued_at": "2026-09-29T09:46:02.764646+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 3
+        },
+        {
+          "build_id": "a982479d-ef0e-4c37-9c69-1bee0e1940d5",
+          "created_at": "2026-09-29T09:45:54.197420+00:00",
+          "execution_started_at": "2026-09-29T09:45:54.439417+00:00",
+          "finished_at": "2026-09-29T09:46:24.083029+00:00",
+          "index": 2,
+          "owner": "167941784",
+          "queue_seconds_from_timestamps": 0.00477290153503418,
+          "queued_at": "2026-09-29T09:45:54.434644+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 4
+        },
+        {
+          "build_id": "e9c038fb-2a7f-4c4b-9a9a-e39a86f90282",
+          "created_at": "2026-09-29T09:45:02.748394+00:00",
+          "execution_started_at": "2026-09-29T09:45:02.915705+00:00",
+          "finished_at": "2026-09-29T09:45:09.430189+00:00",
+          "index": 3,
+          "owner": "167941784",
+          "queue_seconds_from_timestamps": 0.0027480125427246094,
+          "queued_at": "2026-09-29T09:45:02.912957+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 2
+        },
+        {
+          "build_id": "a41a7a6b-ac49-4278-bfd9-2d6d10bb480e",
+          "created_at": "2026-09-29T09:45:55.616821+00:00",
+          "execution_started_at": "2026-09-29T09:45:55.779379+00:00",
+          "finished_at": "2026-09-29T09:46:38.216741+00:00",
+          "index": 4,
+          "owner": "167941786",
+          "queue_seconds_from_timestamps": 0.0031518936157226562,
+          "queued_at": "2026-09-29T09:45:55.776227+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 3
+        },
+        {
+          "build_id": "6a5a51c4-b501-47d6-8768-79c6a6dad786",
+          "created_at": "2026-09-29T09:45:15.046138+00:00",
+          "execution_started_at": "2026-09-29T09:45:15.393776+00:00",
+          "finished_at": "2026-09-29T09:45:55.569310+00:00",
+          "index": 5,
+          "owner": "167941802",
+          "queue_seconds_from_timestamps": 0.004072904586791992,
+          "queued_at": "2026-09-29T09:45:15.389703+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 4
+        },
+        {
+          "build_id": "036cb0b8-5f6c-4a58-b267-a3d46eabfb2d",
+          "created_at": "2026-09-29T09:45:03.220141+00:00",
+          "execution_started_at": "2026-09-29T09:45:03.992554+00:00",
+          "finished_at": "2026-09-29T09:45:14.316828+00:00",
+          "index": 6,
+          "owner": "167941802",
+          "queue_seconds_from_timestamps": 0.005038022994995117,
+          "queued_at": "2026-09-29T09:45:03.987516+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 5
+        },
+        {
+          "build_id": "9bdf3f26-658b-4aee-a4fe-ffeb33de214c",
+          "created_at": "2026-09-29T09:45:14.861710+00:00",
+          "execution_started_at": "2026-09-29T09:45:15.136532+00:00",
+          "finished_at": "2026-09-29T09:46:01.638336+00:00",
+          "index": 7,
+          "owner": "167941802",
+          "queue_seconds_from_timestamps": 0.003350973129272461,
+          "queued_at": "2026-09-29T09:45:15.133181+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 3
+        },
+        {
+          "build_id": "9fda062b-3462-48d7-ba7c-9f0039bf76f6",
+          "created_at": "2026-09-29T09:45:57.141058+00:00",
+          "execution_started_at": "2026-09-29T09:45:57.453051+00:00",
+          "finished_at": "2026-09-29T09:46:03.741322+00:00",
+          "index": 8,
+          "owner": "167941801",
+          "queue_seconds_from_timestamps": 0.0061609745025634766,
+          "queued_at": "2026-09-29T09:45:57.446890+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 6
+        },
+        {
+          "build_id": "48b4fbbd-fe00-4fd0-8f81-7c58c4813223",
+          "created_at": "2026-09-29T09:45:03.265774+00:00",
+          "execution_started_at": "2026-09-29T09:45:04.149961+00:00",
+          "finished_at": "2026-09-29T09:45:14.583998+00:00",
+          "index": 9,
+          "owner": "167941802",
+          "queue_seconds_from_timestamps": 0.009964942932128906,
+          "queued_at": "2026-09-29T09:45:04.139996+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 9
+        },
+        {
+          "build_id": "44cec01f-3205-4489-8695-95624eadb8ef",
+          "created_at": "2026-09-29T09:45:14.801451+00:00",
+          "execution_started_at": "2026-09-29T09:45:15.003090+00:00",
+          "finished_at": "2026-09-29T09:45:58.125767+00:00",
+          "index": 10,
+          "owner": "167941801",
+          "queue_seconds_from_timestamps": 0.00606083869934082,
+          "queued_at": "2026-09-29T09:45:14.997029+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 6
+        },
+        {
+          "build_id": "36bbc56b-7880-409c-b145-48756ee3d6bc",
+          "created_at": "2026-09-29T09:45:13.363980+00:00",
+          "execution_started_at": "2026-09-29T09:45:13.727067+00:00",
+          "finished_at": "2026-09-29T09:45:51.857133+00:00",
+          "index": 11,
+          "owner": "167941786",
+          "queue_seconds_from_timestamps": 0.0032808780670166016,
+          "queued_at": "2026-09-29T09:45:13.723786+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 3
+        },
+        {
+          "build_id": "87df93dc-7eb5-41ce-b87d-9db179219a91",
+          "created_at": "2026-09-29T09:45:02.835350+00:00",
+          "execution_started_at": "2026-09-29T09:45:03.439904+00:00",
+          "finished_at": "2026-09-29T09:45:13.061872+00:00",
+          "index": 12,
+          "owner": "167941784",
+          "queue_seconds_from_timestamps": 0.0072460174560546875,
+          "queued_at": "2026-09-29T09:45:03.432658+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 7
+        },
+        {
+          "build_id": "60a85b73-0bf4-4fe7-91ec-ac233fb1bb5e",
+          "created_at": "2026-09-29T09:45:12.709920+00:00",
+          "execution_started_at": "2026-09-29T09:45:13.013433+00:00",
+          "finished_at": "2026-09-29T09:45:56.703790+00:00",
+          "index": 13,
+          "owner": "167941801",
+          "queue_seconds_from_timestamps": 0.005919933319091797,
+          "queued_at": "2026-09-29T09:45:13.007513+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 5
+        },
+        {
+          "build_id": "62c01e18-1a03-4697-8301-d1b09700a748",
+          "created_at": "2026-09-29T09:45:51.576685+00:00",
+          "execution_started_at": "2026-09-29T09:45:51.846755+00:00",
+          "finished_at": "2026-09-29T09:45:57.741321+00:00",
+          "index": 14,
+          "owner": "167941786",
+          "queue_seconds_from_timestamps": 0.006700992584228516,
+          "queued_at": "2026-09-29T09:45:51.840054+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 6
+        },
+        {
+          "build_id": "47083456-707d-414e-b166-c66f9107857a",
+          "created_at": "2026-09-29T09:45:03.105645+00:00",
+          "execution_started_at": "2026-09-29T09:45:03.328494+00:00",
+          "finished_at": "2026-09-29T09:45:12.650600+00:00",
+          "index": 15,
+          "owner": "167941801",
+          "queue_seconds_from_timestamps": 0.0034940242767333984,
+          "queued_at": "2026-09-29T09:45:03.325000+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 3
+        },
+        {
+          "build_id": "fb6af226-8162-4b48-9933-ef1ce3fa197b",
+          "created_at": "2026-09-29T09:45:05.237716+00:00",
+          "execution_started_at": "2026-09-29T09:45:05.494679+00:00",
+          "finished_at": "2026-09-29T09:45:47.121929+00:00",
+          "index": 16,
+          "owner": "167941801",
+          "queue_seconds_from_timestamps": 0.00456690788269043,
+          "queued_at": "2026-09-29T09:45:05.490112+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 4
+        },
+        {
+          "build_id": "0d781cdd-e938-4c04-a3a0-736f97cb3a56",
+          "created_at": "2026-09-29T09:45:13.470745+00:00",
+          "execution_started_at": "2026-09-29T09:45:13.792669+00:00",
+          "finished_at": "2026-09-29T09:45:51.424481+00:00",
+          "index": 17,
+          "owner": "167941786",
+          "queue_seconds_from_timestamps": 0.0024869441986083984,
+          "queued_at": "2026-09-29T09:45:13.790182+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 2
+        },
+        {
+          "build_id": "2b10632e-86c9-47de-9df4-e77d4ae95a3b",
+          "created_at": "2026-09-29T09:45:03.485889+00:00",
+          "execution_started_at": "2026-09-29T09:45:03.899688+00:00",
+          "finished_at": "2026-09-29T09:45:13.380467+00:00",
+          "index": 18,
+          "owner": "167941786",
+          "queue_seconds_from_timestamps": 0.003832101821899414,
+          "queued_at": "2026-09-29T09:45:03.895856+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 3
+        },
+        {
+          "build_id": "f9c6cae0-442b-41d9-88e7-f940259108a7",
+          "created_at": "2026-09-29T09:46:03.405313+00:00",
+          "execution_started_at": "2026-09-29T09:46:03.638351+00:00",
+          "finished_at": "2026-09-29T09:46:41.640325+00:00",
+          "index": 19,
+          "owner": "167941802",
+          "queue_seconds_from_timestamps": 0.0038309097290039062,
+          "queued_at": "2026-09-29T09:46:03.634520+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 3
+        },
+        {
+          "build_id": "6c278d30-b7e4-446b-a3c9-38abd93a1ec7",
+          "created_at": "2026-09-29T09:45:14.268742+00:00",
+          "execution_started_at": "2026-09-29T09:45:14.486688+00:00",
+          "finished_at": "2026-09-29T09:45:51.417608+00:00",
+          "index": 20,
+          "owner": "167941786",
+          "queue_seconds_from_timestamps": 0.002834796905517578,
+          "queued_at": "2026-09-29T09:45:14.483853+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 2
+        },
+        {
+          "build_id": "3da2c14a-71d6-4c12-b288-f7583739a3e2",
+          "created_at": "2026-09-29T09:45:03.198118+00:00",
+          "execution_started_at": "2026-09-29T09:45:03.422997+00:00",
+          "finished_at": "2026-09-29T09:45:13.891869+00:00",
+          "index": 21,
+          "owner": "167941801",
+          "queue_seconds_from_timestamps": 0.002847909927368164,
+          "queued_at": "2026-09-29T09:45:03.420149+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 2
+        },
+        {
+          "build_id": "f8f791e4-058f-4d75-a743-3bc7833308ce",
+          "created_at": "2026-09-29T09:45:52.098863+00:00",
+          "execution_started_at": "2026-09-29T09:45:52.944116+00:00",
+          "finished_at": "2026-09-29T09:46:38.220176+00:00",
+          "index": 22,
+          "owner": "167941786",
+          "queue_seconds_from_timestamps": 0.005209207534790039,
+          "queued_at": "2026-09-29T09:45:52.938907+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 5
+        },
+        {
+          "build_id": "686ef98e-fd22-4187-9f87-e326dbce27ae",
+          "created_at": "2026-09-29T09:45:55.629666+00:00",
+          "execution_started_at": "2026-09-29T09:45:56.171978+00:00",
+          "finished_at": "2026-09-29T09:46:32.851508+00:00",
+          "index": 23,
+          "owner": "167941802",
+          "queue_seconds_from_timestamps": 0.008044958114624023,
+          "queued_at": "2026-09-29T09:45:56.163933+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 8
+        },
+        {
+          "build_id": "cf4197dd-30b4-4212-a637-0bf3d9beabcf",
+          "created_at": "2026-09-29T09:45:02.984223+00:00",
+          "execution_started_at": "2026-09-29T09:45:03.675336+00:00",
+          "finished_at": "2026-09-29T09:45:12.702178+00:00",
+          "index": 24,
+          "owner": "167941784",
+          "queue_seconds_from_timestamps": 0.010681867599487305,
+          "queued_at": "2026-09-29T09:45:03.664654+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 10
+        },
+        {
+          "build_id": "ab39a9a6-2e6e-4cf9-9a09-58d8d3b38516",
+          "created_at": "2026-09-29T09:45:53.931783+00:00",
+          "execution_started_at": "2026-09-29T09:45:54.126028+00:00",
+          "finished_at": "2026-09-29T09:46:27.143150+00:00",
+          "index": 25,
+          "owner": "167941784",
+          "queue_seconds_from_timestamps": 0.003281116485595703,
+          "queued_at": "2026-09-29T09:45:54.122747+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 3
+        },
+        {
+          "build_id": "a7fefed1-f6ed-49b9-8b4b-6d23fd92644f",
+          "created_at": "2026-09-29T09:45:58.851425+00:00",
+          "execution_started_at": "2026-09-29T09:45:59.074977+00:00",
+          "finished_at": "2026-09-29T09:46:33.272380+00:00",
+          "index": 26,
+          "owner": "167941786",
+          "queue_seconds_from_timestamps": 0.007426023483276367,
+          "queued_at": "2026-09-29T09:45:59.067551+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 7
+        },
+        {
+          "build_id": "aa038ab8-f967-4eff-832d-7bbd573654b1",
+          "created_at": "2026-09-29T09:45:03.456068+00:00",
+          "execution_started_at": "2026-09-29T09:45:03.616388+00:00",
+          "finished_at": "2026-09-29T09:45:13.895957+00:00",
+          "index": 27,
+          "owner": "167941801",
+          "queue_seconds_from_timestamps": 0.003170013427734375,
+          "queued_at": "2026-09-29T09:45:03.613218+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 3
+        },
+        {
+          "build_id": "51c113b9-41d5-486b-b56a-15578d3394e9",
+          "created_at": "2026-09-29T09:45:12.584465+00:00",
+          "execution_started_at": "2026-09-29T09:45:13.013457+00:00",
+          "finished_at": "2026-09-29T09:45:55.278191+00:00",
+          "index": 28,
+          "owner": "167941786",
+          "queue_seconds_from_timestamps": 0.020234107971191406,
+          "queued_at": "2026-09-29T09:45:12.993223+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 20
+        },
+        {
+          "build_id": "30a238b2-4cdf-4948-b16a-f62e1df09eaa",
+          "created_at": "2026-09-29T09:45:46.869682+00:00",
+          "execution_started_at": "2026-09-29T09:45:48.055355+00:00",
+          "finished_at": "2026-09-29T09:46:18.481074+00:00",
+          "index": 29,
+          "owner": "167941784",
+          "queue_seconds_from_timestamps": 0.009550094604492188,
+          "queued_at": "2026-09-29T09:45:48.045805+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 9
+        },
+        {
+          "build_id": "00aa82c7-e14a-42d8-ae26-51d4203bad57",
+          "created_at": "2026-09-29T09:45:14.587488+00:00",
+          "execution_started_at": "2026-09-29T09:45:14.736785+00:00",
+          "finished_at": "2026-09-29T09:45:23.030499+00:00",
+          "index": 30,
+          "owner": "167941801",
+          "queue_seconds_from_timestamps": 0.0030748844146728516,
+          "queued_at": "2026-09-29T09:45:14.733710+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 3
+        },
+        {
+          "build_id": "b66161e4-f2cf-4f77-b210-ee4a14f30e51",
+          "created_at": "2026-09-29T09:45:56.466238+00:00",
+          "execution_started_at": "2026-09-29T09:45:57.025159+00:00",
+          "finished_at": "2026-09-29T09:46:36.519261+00:00",
+          "index": 31,
+          "owner": "167941802",
+          "queue_seconds_from_timestamps": 0.005926847457885742,
+          "queued_at": "2026-09-29T09:45:57.019232+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 5
+        },
+        {
+          "build_id": "6cc2e841-e999-4f9f-9d1f-e0ebe1985095",
+          "created_at": "2026-09-29T09:45:09.971359+00:00",
+          "execution_started_at": "2026-09-29T09:45:10.667044+00:00",
+          "finished_at": "2026-09-29T09:45:42.689444+00:00",
+          "index": 32,
+          "owner": "167941784",
+          "queue_seconds_from_timestamps": 0.0054149627685546875,
+          "queued_at": "2026-09-29T09:45:10.661629+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 5
+        },
+        {
+          "build_id": "dac0ca82-25b0-43b7-9208-f35a76e8c4cf",
+          "created_at": "2026-09-29T09:45:03.251327+00:00",
+          "execution_started_at": "2026-09-29T09:45:04.142346+00:00",
+          "finished_at": "2026-09-29T09:45:14.526679+00:00",
+          "index": 33,
+          "owner": "167941802",
+          "queue_seconds_from_timestamps": 0.003823995590209961,
+          "queued_at": "2026-09-29T09:45:04.138522+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 3
+        },
+        {
+          "build_id": "728d892e-661f-45a5-be86-82d0def10735",
+          "created_at": "2026-09-29T09:45:47.212657+00:00",
+          "execution_started_at": "2026-09-29T09:45:47.402804+00:00",
+          "finished_at": "2026-09-29T09:46:21.450532+00:00",
+          "index": 34,
+          "owner": "167941801",
+          "queue_seconds_from_timestamps": 0.007122993469238281,
+          "queued_at": "2026-09-29T09:45:47.395681+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 7
+        },
+        {
+          "build_id": "a1762643-cbf2-4b55-8525-81a2adcd0399",
+          "created_at": "2026-09-29T09:45:13.098037+00:00",
+          "execution_started_at": "2026-09-29T09:45:13.757682+00:00",
+          "finished_at": "2026-09-29T09:45:46.396302+00:00",
+          "index": 35,
+          "owner": "167941784",
+          "queue_seconds_from_timestamps": 0.003432035446166992,
+          "queued_at": "2026-09-29T09:45:13.754250+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 3
+        },
+        {
+          "build_id": "e27c191d-60b7-4456-9524-76067e89e879",
+          "created_at": "2026-09-29T09:45:02.956864+00:00",
+          "execution_started_at": "2026-09-29T09:45:03.666865+00:00",
+          "finished_at": "2026-09-29T09:45:13.044753+00:00",
+          "index": 36,
+          "owner": "167941784",
+          "queue_seconds_from_timestamps": 0.003031015396118164,
+          "queued_at": "2026-09-29T09:45:03.663834+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 3
+        },
+        {
+          "build_id": "6ff69584-95db-4610-8b33-2ff5db493e78",
+          "created_at": "2026-09-29T09:45:24.084648+00:00",
+          "execution_started_at": "2026-09-29T09:45:24.351173+00:00",
+          "finished_at": "2026-09-29T09:46:05.476983+00:00",
+          "index": 37,
+          "owner": "167941801",
+          "queue_seconds_from_timestamps": 0.004122018814086914,
+          "queued_at": "2026-09-29T09:45:24.347051+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 4
+        },
+        {
+          "build_id": "4ab0d183-0454-4167-a600-b53ef304ad38",
+          "created_at": "2026-09-29T09:45:42.748584+00:00",
+          "execution_started_at": "2026-09-29T09:45:42.948501+00:00",
+          "finished_at": "2026-09-29T09:46:13.264280+00:00",
+          "index": 38,
+          "owner": "167941784",
+          "queue_seconds_from_timestamps": 0.002801179885864258,
+          "queued_at": "2026-09-29T09:45:42.945700+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 2
+        },
+        {
+          "build_id": "0fd403db-c6d7-4d1a-aeed-21b7bc03478b",
+          "created_at": "2026-09-29T09:45:03.048086+00:00",
+          "execution_started_at": "2026-09-29T09:45:03.442163+00:00",
+          "finished_at": "2026-09-29T09:45:12.467126+00:00",
+          "index": 39,
+          "owner": "167941786",
+          "queue_seconds_from_timestamps": 0.0024449825286865234,
+          "queued_at": "2026-09-29T09:45:03.439718+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 2
+        },
+        {
+          "build_id": "8f355356-58a1-42dc-8e42-07029e047ea8",
+          "created_at": "2026-09-29T09:45:12.753976+00:00",
+          "execution_started_at": "2026-09-29T09:45:12.982779+00:00",
+          "finished_at": "2026-09-29T09:45:53.703314+00:00",
+          "index": 40,
+          "owner": "167941784",
+          "queue_seconds_from_timestamps": 0.003596067428588867,
+          "queued_at": "2026-09-29T09:45:12.979183+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 3
+        },
+        {
+          "build_id": "3699ff11-eea7-43ed-81da-3c574fbe9bde",
+          "created_at": "2026-09-29T09:45:52.105449+00:00",
+          "execution_started_at": "2026-09-29T09:45:53.057929+00:00",
+          "finished_at": "2026-09-29T09:46:32.046121+00:00",
+          "index": 41,
+          "owner": "167941786",
+          "queue_seconds_from_timestamps": 0.09102511405944824,
+          "queued_at": "2026-09-29T09:45:52.966904+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 90
+        },
+        {
+          "build_id": "758b0833-f266-4bc7-9821-f787a8d27109",
+          "created_at": "2026-09-29T09:45:03.257835+00:00",
+          "execution_started_at": "2026-09-29T09:45:04.131329+00:00",
+          "finished_at": "2026-09-29T09:45:14.595781+00:00",
+          "index": 42,
+          "owner": "167941802",
+          "queue_seconds_from_timestamps": 0.003801107406616211,
+          "queued_at": "2026-09-29T09:45:04.127528+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 3
+        },
+        {
+          "build_id": "3e323c0c-6d60-47ed-a203-5fe302a64844",
+          "created_at": "2026-09-29T09:45:13.116210+00:00",
+          "execution_started_at": "2026-09-29T09:45:13.767753+00:00",
+          "finished_at": "2026-09-29T09:45:53.870580+00:00",
+          "index": 43,
+          "owner": "167941784",
+          "queue_seconds_from_timestamps": 0.009955883026123047,
+          "queued_at": "2026-09-29T09:45:13.757797+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 9
+        },
+        {
+          "build_id": "387b85a7-7f43-491f-9c43-9fed98c0c7a5",
+          "created_at": "2026-09-29T09:45:15.449322+00:00",
+          "execution_started_at": "2026-09-29T09:45:15.676007+00:00",
+          "finished_at": "2026-09-29T09:45:55.571342+00:00",
+          "index": 44,
+          "owner": "167941802",
+          "queue_seconds_from_timestamps": 0.0031719207763671875,
+          "queued_at": "2026-09-29T09:45:15.672835+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 3
+        },
+        {
+          "build_id": "c816c4f8-d22f-4b45-a5ba-8fae4e121f7d",
+          "created_at": "2026-09-29T09:45:03.481158+00:00",
+          "execution_started_at": "2026-09-29T09:45:03.905442+00:00",
+          "finished_at": "2026-09-29T09:45:13.302509+00:00",
+          "index": 45,
+          "owner": "167941786",
+          "queue_seconds_from_timestamps": 0.007467031478881836,
+          "queued_at": "2026-09-29T09:45:03.897975+00:00",
+          "recipe": "python-agent",
+          "reported_queue_ms": 7
+        },
+        {
+          "build_id": "fce4053c-ad6b-46fe-a6f2-2cd56fd2f116",
+          "created_at": "2026-09-29T09:45:14.734433+00:00",
+          "execution_started_at": "2026-09-29T09:45:14.936048+00:00",
+          "finished_at": "2026-09-29T09:46:01.675244+00:00",
+          "index": 46,
+          "owner": "167941802",
+          "queue_seconds_from_timestamps": 0.0034689903259277344,
+          "queued_at": "2026-09-29T09:45:14.932579+00:00",
+          "recipe": "typescript-tools",
+          "reported_queue_ms": 3
+        },
+        {
+          "build_id": "d1c0b9cf-02ab-4dd8-a967-92b84759719b",
+          "created_at": "2026-09-29T09:45:59.111152+00:00",
+          "execution_started_at": "2026-09-29T09:45:59.325707+00:00",
+          "finished_at": "2026-09-29T09:46:04.223886+00:00",
+          "index": 47,
+          "owner": "167941801",
+          "queue_seconds_from_timestamps": 0.006722927093505859,
+          "queued_at": "2026-09-29T09:45:59.318984+00:00",
+          "recipe": "typescript-multistage",
+          "reported_queue_ms": 6
+        }
+      ],
+      "complete_intervals": 48,
+      "coverage_complete": true,
+      "duplicate_build_ids_ignored": [],
+      "missing_or_invalid_intervals": [],
+      "owners_considered": [
+        "167941784",
+        "167941786",
+        "167941801",
+        "167941802"
+      ],
+      "owners_include_fleet_after": true,
+      "queued_behind_full_owner_with_free_peer": {
+        "affected_queued_build_seconds": 0.0,
+        "longest_finished_at": null,
+        "longest_seconds": 0,
+        "longest_started_at": null,
+        "spans": [],
+        "total_seconds": 0
+      },
+      "queued_with_free_peer": {
+        "longest_finished_at": "2026-09-29T09:45:13.013433+00:00",
+        "longest_seconds": 0.02021002769470215,
+        "longest_started_at": "2026-09-29T09:45:12.993223+00:00",
+        "spans": [
+          {
+            "finished_at": "2026-09-29T09:45:02.915705+00:00",
+            "seconds": 0.0027480125427246094,
+            "started_at": "2026-09-29T09:45:02.912957+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T09:45:03.328494+00:00",
+            "seconds": 0.0034940242767333984,
+            "started_at": "2026-09-29T09:45:03.325000+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T09:45:03.401026+00:00",
+            "seconds": 0.003000974655151367,
+            "started_at": "2026-09-29T09:45:03.398025+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T09:45:03.422997+00:00",
+            "seconds": 0.002847909927368164,
+            "started_at": "2026-09-29T09:45:03.420149+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T09:45:03.442163+00:00",
+            "seconds": 0.009505033493041992,
+            "started_at": "2026-09-29T09:45:03.432658+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T09:45:03.616388+00:00",
+            "seconds": 0.003170013427734375,
+            "started_at": "2026-09-29T09:45:03.613218+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T09:45:03.675336+00:00",
+            "seconds": 0.011501789093017578,
+            "started_at": "2026-09-29T09:45:03.663834+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T09:45:03.905442+00:00",
+            "seconds": 0.009586095809936523,
+            "started_at": "2026-09-29T09:45:03.895856+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T09:45:03.992554+00:00",
+            "seconds": 0.005038022994995117,
+            "started_at": "2026-09-29T09:45:03.987516+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T09:45:04.131329+00:00",
+            "seconds": 0.003801107406616211,
+            "started_at": "2026-09-29T09:45:04.127528+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T09:45:04.149961+00:00",
+            "seconds": 0.011439085006713867,
+            "started_at": "2026-09-29T09:45:04.138522+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T09:45:12.982779+00:00",
+            "seconds": 0.003596067428588867,
+            "started_at": "2026-09-29T09:45:12.979183+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T09:45:13.013433+00:00",
+            "seconds": 0.02021002769470215,
+            "started_at": "2026-09-29T09:45:12.993223+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T09:45:13.727067+00:00",
+            "seconds": 0.0032808780670166016,
+            "started_at": "2026-09-29T09:45:13.723786+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T09:45:13.757682+00:00",
+            "seconds": 0.003432035446166992,
+            "started_at": "2026-09-29T09:45:13.754250+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T09:45:13.767753+00:00",
+            "seconds": 0.009955883026123047,
+            "started_at": "2026-09-29T09:45:13.757797+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T09:45:14.486688+00:00",
+            "seconds": 0.002834796905517578,
+            "started_at": "2026-09-29T09:45:14.483853+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T09:45:14.736785+00:00",
+            "seconds": 0.0030748844146728516,
+            "started_at": "2026-09-29T09:45:14.733710+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T09:45:14.936048+00:00",
+            "seconds": 0.0034689903259277344,
+            "started_at": "2026-09-29T09:45:14.932579+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T09:45:15.003090+00:00",
+            "seconds": 0.00606083869934082,
+            "started_at": "2026-09-29T09:45:14.997029+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T09:45:47.402804+00:00",
+            "seconds": 0.007122993469238281,
+            "started_at": "2026-09-29T09:45:47.395681+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T09:45:55.779379+00:00",
+            "seconds": 0.0031518936157226562,
+            "started_at": "2026-09-29T09:45:55.776227+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T09:45:57.025159+00:00",
+            "seconds": 0.005926847457885742,
+            "started_at": "2026-09-29T09:45:57.019232+00:00"
+          },
+          {
+            "finished_at": "2026-09-29T09:45:59.074977+00:00",
+            "seconds": 0.007426023483276367,
+            "started_at": "2026-09-29T09:45:59.067551+00:00"
+          }
+        ],
+        "total_seconds": 0.1456742286682129
+      }
+    },
+    "refresh_errors": 0,
+    "statuses": {
+      "succeeded": 48
+    },
+    "unique_build_ids": 48,
+    "unique_known_owners": 4,
+    "variants": {
+      "app-change-29": 3,
+      "app-change-30": 3,
+      "app-change-31": 3,
+      "app-change-32": 3,
+      "app-change-33": 3,
+      "app-change-34": 3,
+      "app-change-35": 3,
+      "app-change-36": 3,
+      "app-change-37": 3,
+      "app-change-38": 3,
+      "app-change-39": 3,
+      "app-change-40": 3,
+      "app-change-41": 3,
+      "app-change-42": 3,
+      "app-change-43": 3,
+      "app-change-44": 3
+    }
+  },
+  "candidate_evidence_gates": {
+    "all_succeeded": true,
+    "complete_client_timings": true,
+    "durable_history_complete": true,
+    "expected_builder_owners": true,
+    "expected_cases": true,
+    "expected_concurrency": true,
+    "maximum_admitted_per_owner": true,
+    "maximum_executing_per_owner": true,
+    "queue_intervals_complete": true,
+    "unique_build_ids": true
+  },
+  "limitations": [
+    "This historical comparison is descriptive: context sets, cache warmth, fleet age and release changes can confound latency deltas.",
+    "Admission is created_at to finished_at, including preparation; execution is execution_started_at to finished_at, including publication but excluding later cleanup.",
+    "Nonzero queue time can reflect cleanup handoff. Qualification checks the four-nonterminal admission limit, not literal zero queue_wait_ms.",
+    "An unused measured execution slot does not prove memory/disk/cache readiness or quantify avoidable client delay. Cross-owner timestamps require synchronized clocks.",
+    "Gateway admission waiting is part of submission/client latency and is not included in the node queue intervals.",
+    "Missing environment counters are unreported, not zero. OCI bytes count selected compressed descriptors, not measured physical registry I/O.",
+    "HTTP 503 counts do not identify error_code when the harness did not capture response bodies. Retry counts alone do not decide acceptance.",
+    "Durable history completeness uses the harness's per-build lookup count; this report does not independently query the database or validate row contents.",
+    "This report does not establish real-sandbox correctness, source/bundle identity, host resource headroom, or fleet-wide production capacity."
+  ],
+  "limits": {
+    "execution_slots_per_builder": 4,
+    "expected_builders": 4,
+    "expected_cases": 48,
+    "maximum_admitted_per_builder": 4
+  },
+  "observed_deltas_not_causal": {
+    "batch_wall_seconds": {
+      "baseline": 172.18982215900178,
+      "candidate": 106.05083801900037,
+      "candidate_minus_baseline": -66.13898414000141,
+      "candidate_over_baseline": 0.615894927407916
+    },
+    "build_push_seconds.max": {
+      "baseline": 87.153,
+      "candidate": 39.523,
+      "candidate_minus_baseline": -47.63,
+      "candidate_over_baseline": 0.45348983970718165
+    },
+    "build_push_seconds.p50": {
+      "baseline": 33.504000000000005,
+      "candidate": 30.972,
+      "candidate_minus_baseline": -2.5320000000000036,
+      "candidate_over_baseline": 0.9244269340974212
+    },
+    "build_push_seconds.p95": {
+      "baseline": 85.6141,
+      "candidate": 38.997,
+      "candidate_minus_baseline": -46.61709999999999,
+      "candidate_over_baseline": 0.4554974005450037
+    },
+    "client_wall_seconds.max": {
+      "baseline": 172.17875690499932,
+      "candidate": 106.03870965099486,
+      "candidate_minus_baseline": -66.14004725400446,
+      "candidate_over_baseline": 0.615864068001736
+    },
+    "client_wall_seconds.p50": {
+      "baseline": 77.34457824449782,
+      "candidate": 58.92936889849807,
+      "candidate_minus_baseline": -18.415209345999756,
+      "candidate_over_baseline": 0.7619069136586858
+    },
+    "client_wall_seconds.p95": {
+      "baseline": 162.45538256149922,
+      "candidate": 102.75445013625139,
+      "candidate_minus_baseline": -59.70093242524783,
+      "candidate_over_baseline": 0.6325087449617288
+    },
+    "erofs_publication_seconds.max": {
+      "baseline": 25.341,
+      "candidate": 7.97,
+      "candidate_minus_baseline": -17.371000000000002,
+      "candidate_over_baseline": 0.3145100824750404
+    },
+    "erofs_publication_seconds.p50": {
+      "baseline": 5.098,
+      "candidate": 3.8775,
+      "candidate_minus_baseline": -1.2205,
+      "candidate_over_baseline": 0.7605923891722244
+    },
+    "erofs_publication_seconds.p95": {
+      "baseline": 24.775949999999998,
+      "candidate": 7.1686,
+      "candidate_minus_baseline": -17.607349999999997,
+      "candidate_over_baseline": 0.28933703853939
+    },
+    "queue_seconds.max": {
+      "baseline": 108.98,
+      "candidate": 0.09,
+      "candidate_minus_baseline": -108.89,
+      "candidate_over_baseline": 0.0008258396035969902
+    },
+    "queue_seconds.p50": {
+      "baseline": 9.3235,
+      "candidate": 0.0035,
+      "candidate_minus_baseline": -9.319999999999999,
+      "candidate_over_baseline": 0.0003753955059795142
+    },
+    "queue_seconds.p95": {
+      "baseline": 108.3773,
+      "candidate": 0.009649999999999999,
+      "candidate_minus_baseline": -108.36765000000001,
+      "candidate_over_baseline": 8.904078621630174e-05
+    },
+    "submission_seconds.max": {
+      "baseline": 60.42723458199907,
+      "candidate": 67.54910846499843,
+      "candidate_minus_baseline": 7.121873882999353,
+      "candidate_over_baseline": 1.117858676344605
+    },
+    "submission_seconds.p50": {
+      "baseline": 11.327123221002694,
+      "candidate": 18.055438507493818,
+      "candidate_minus_baseline": 6.728315286491124,
+      "candidate_over_baseline": 1.5940003613640856
+    },
+    "submission_seconds.p95": {
+      "baseline": 55.69306675719853,
+      "candidate": 63.154909654000946,
+      "candidate_minus_baseline": 7.461842896802416,
+      "candidate_over_baseline": 1.1339815408142873
+    }
+  },
+  "same_fixture_hash_set": false,
+  "schema_version": 1
+}

@@ -21,6 +21,16 @@ import sys
 import time
 from uuid import uuid4
 
+if __package__:
+    from .live_inventory_load import isolated_inventory_load, list_inventory
+else:
+    from live_inventory_load import isolated_inventory_load, list_inventory
+
+try:
+    import orjson as _report_orjson
+except ImportError:
+    _report_orjson = None
+
 SDK_SRC = Path(__file__).resolve().parents[1] / "ucloud-sandboxes-sdk" / "src"
 if SDK_SRC.is_dir():
     sys.path.insert(0, str(SDK_SRC))
@@ -43,6 +53,21 @@ for offset in range(0,len(resident),1024*1024):
  resident[offset:offset+1024*1024]=os.urandom(min(1024*1024,len(resident)-offset))
 nonce=uuid.uuid4().hex
 transactions=config.get('sqlite_transactions',0)
+def transport_failure(exc,counts,codes):
+ status=getattr(exc,'code',None)
+ kind=f'http_{status}' if type(status)==int and 100<=status<=599 else 'transport_'+type(exc).__name__
+ counts[kind]=counts.get(kind,0)+1
+ if status==429:
+  try:
+   body=exc.read(512)
+   if b'relay durable storage budget is exhausted' in body.lower():
+    codes['relay_durable_storage_budget_exhausted']=codes.get('relay_durable_storage_budget_exhausted',0)+1
+  except (OSError,AttributeError):pass
+ if hasattr(exc,'close'):exc.close()
+def exhausted(phase,cycle,counts,codes,started):
+ evidence={'phase':phase,'cycle':cycle,'failed_attempts_by_kind':counts,'error_codes':codes,'elapsed_seconds':time.monotonic()-started}
+ print('GUEST_TRANSPORT_FAILURE '+json.dumps(evidence,sort_keys=True),file=sys.stderr,flush=True)
+ return RuntimeError(f'{phase} relay failed after 120 attempts; failures={json.dumps(counts,sort_keys=True)}')
 def transaction_bytes(cycle,transaction):
  return hashlib.shake_256(f'{nonce}:{cycle}:{transaction}'.encode()).digest(config['sqlite_payload_bytes'])
 if transactions:
@@ -73,15 +98,18 @@ for cycle in range(config['cycles']):
     writer.execute('INSERT INTO changes VALUES(?,?,?)',(cycle,transaction,transaction_bytes(cycle,transaction)))
  until=time.process_time()+config['cpu_ms']/1000
  while time.process_time()<until:hashlib.sha256(data).digest()
- body=json.dumps({'cycle':cycle,'nonce':nonce,'digest':memory_digest,'padding':'x'*config['payload_kib']*1024}).encode()
+ request_started=time.monotonic();request_started_unix=time.time()
+ body=json.dumps({'cycle':cycle,'nonce':nonce,'digest':memory_digest,'request_started_unix':request_started_unix,'padding':'x'*config['payload_kib']*1024}).encode()
  stable=uuid.uuid4().hex
+ model_failures={};model_error_codes={}
  for attempt in range(120):
   req=urllib.request.Request(os.environ['RELAY_URL'],data=body,headers={'Content-Type':'application/json','X-UCloud-Relay-Request-Id':stable},method='POST')
   try:
    with urllib.request.urlopen(req,timeout=180) as response:reply=json.load(response)
    break
-  except OSError:
-   if attempt==119:raise
+  except OSError as exc:
+   transport_failure(exc,model_failures,model_error_codes)
+   if attempt==119:raise exhausted('model',cycle,model_failures,model_error_codes,request_started) from None
    time.sleep(min(1,.05*(attempt+1)))
  received=time.monotonic();received_unix=time.time()
  assert reply['cycle']==cycle and reply['nonce']==nonce and reply['digest']==memory_digest
@@ -98,14 +126,17 @@ for cycle in range(config['cycles']):
  # driver must see this continuation before any file/exec probe can cause a wake.
  usable.update(response_received_unix=received_unix,tool_finished_unix=tool_finished_unix,receipt_started_unix=time.time())
  receipt_id=uuid.uuid4().hex
+ receipt_started=time.monotonic();receipt_failures={};receipt_error_codes={}
  for receipt_attempt in range(120):
   receipt=urllib.request.Request(os.environ['OBSERVER_URL'],data=json.dumps(usable).encode(),headers={'Content-Type':'application/json','X-UCloud-Relay-Request-Id':receipt_id},method='POST')
   try:
    with urllib.request.urlopen(receipt,timeout=180) as response:json.load(response)
    break
-  except OSError:
-   if receipt_attempt==119:raise
+  except OSError as exc:
+   transport_failure(exc,receipt_failures,receipt_error_codes)
+   if receipt_attempt==119:raise exhausted('continuation',cycle,receipt_failures,receipt_error_codes,receipt_started) from None
    time.sleep(min(1,.05*(receipt_attempt+1)))
+ receipt_finished=time.monotonic()
  verification_started=time.monotonic()
  assert hashlib.sha256(resident).hexdigest()==memory_digest,'resident memory changed during park'
  assert (root/'file-0').read_bytes()==data[:config['file_kib']*1024],'filesystem changed during park'
@@ -125,6 +156,9 @@ for cycle in range(config['cycles']):
   sqlite_digest=digest.hexdigest()
  verified=time.monotonic()
  result={'cycle':cycle,'nonce':nonce,'digest':memory_digest,'tool':tool,'pid':os.getpid(),'transport_retries':attempt,'verification_seconds':verified-verification_started,'tool_seconds':tool_finished-received,'sqlite_rows':sqlite_rows,'sqlite_digest':sqlite_digest}
+ result.update(model_failed_attempts_by_kind=model_failures,model_error_codes=model_error_codes,model_request_seconds=received-request_started,
+               receipt_transport_retries=receipt_attempt,receipt_failed_attempts_by_kind=receipt_failures,receipt_error_codes=receipt_error_codes,
+               receipt_request_seconds=receipt_finished-receipt_started)
  tmp=root/'result.tmp';tmp.write_text(json.dumps(result));os.replace(tmp,root/('result-'+str(cycle)+'.json'))
 # The primary finishes after its final integrity proof. Retaining completed
 # heaps forever would prevent an overcommitted fleet from finishing later jobs.
@@ -156,6 +190,38 @@ def summary(values):
         return ordered[max(0, math.ceil(len(ordered) * q) - 1)] if ordered else None
     return {"count": len(ordered), "p50": statistics.median(ordered) if ordered else None,
             "p95": percentile(.95), "p99": percentile(.99), "max": max(ordered, default=None)}
+
+
+
+def encode_report(payload):
+    """Encode a coherent snapshot on the event-loop thread, without custom hooks."""
+    if _report_orjson is not None:
+        return _report_orjson.dumps(payload, option=_report_orjson.OPT_INDENT_2 | _report_orjson.OPT_APPEND_NEWLINE)
+    return (json.dumps(payload, indent=2) + "\n").encode("utf-8")
+
+
+def persist_report(path, report, completed):
+    """Keep atomic checkpoints and expose their measured cost to qualification."""
+    started, started_unix = time.perf_counter(), time.time()
+    report['report_serializer'] = ({'name': 'orjson', 'version': _report_orjson.__version__}
+                                   if _report_orjson is not None else {'name': 'stdlib-json', 'version': sys.version.split()[0]})
+    report['report_persistence'] = {
+        'completed_checkpoints': len(completed),
+        'samples': list(completed),
+        **{field: summary([row[field] for row in completed])
+           for field in ('serialization_seconds', 'write_seconds', 'total_seconds')},
+        'coverage': 'Each checkpoint contains earlier completed writes; the current write appears in the next checkpoint.',
+    }
+    encoding_started = time.perf_counter()
+    payload = encode_report(report)
+    serialized = time.perf_counter()
+    temporary = path.with_suffix(path.suffix + '.tmp')
+    temporary.write_bytes(payload)
+    temporary.replace(path)
+    finished = time.perf_counter()
+    completed.append({'started_unix': started_unix, 'bytes': len(payload),
+                      'serialization_seconds': serialized - encoding_started,
+                      'write_seconds': finished - serialized, 'total_seconds': finished - started})
 
 
 def resource_sample(nodes, now):
@@ -331,6 +397,8 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--gateway-url", required=True)
     parser.add_argument("--relay-url", required=True)
+    parser.add_argument("--agent-relay-url",
+                        help="Optional worker-reachable relay URL for guest requests; defaults to --relay-url")
     parser.add_argument("--sandbox-token-file", type=Path, required=True)
     parser.add_argument("--gateway-token-file", type=Path,
                         help="Gateway control credential; required for explicit forced parking")
@@ -363,6 +431,8 @@ def parse_args(argv=None):
     parser.add_argument("--create-concurrency", type=int, default=32)
     parser.add_argument("--fleet-pollers", type=int, default=1,
                         help="Concurrent fleet inventory pollers; exercises listing/lifecycle contention")
+    parser.add_argument("--inventory-view", choices=("full", "status"), default="full",
+                        help="Inventory API projection; full preserves the historical qualification workload")
     parser.add_argument("--warmup-cycles", type=int, default=1)
     parser.add_argument("--deadline-seconds", type=float, default=1800)
     parser.add_argument("--sandbox-request-timeout-seconds", type=float, default=180,
@@ -402,6 +472,78 @@ def parse_args(argv=None):
 def safe_error(exc):
     # A transport exception can include its authenticated tunnel URL.
     return re.sub(r"/_relay/[^/\s'\"]+", "/_relay/REDACTED", f"{type(exc).__name__}: {exc}")[:1200]
+
+
+def exception_status(exc):
+    for name in ('status_code', 'status', 'code'):
+        value = getattr(exc, name, None)
+        if type(value) is int and 100 <= value <= 599:
+            return value
+    return None
+
+
+def guest_retry_summary(cycles, warmup_cycles):
+    def summarize(rows):
+        counts = {}
+        for row in rows:
+            for field in ('model_failed_attempts_by_kind', 'model_error_codes',
+                          'receipt_failed_attempts_by_kind', 'receipt_error_codes'):
+                target = counts.setdefault(field, {})
+                for key, value in (row.get('guest_' + field) or {}).items():
+                    target[key] = target.get(key, 0) + value
+        return {'completed_cycles': len(rows), **counts,
+                'model_retries': sum(row.get('guest_transport_retries', 0) for row in rows),
+                'receipt_retries': sum(row.get('guest_receipt_transport_retries') or 0 for row in rows),
+                'request_to_claim_seconds': summary([row['guest_request_to_claim_seconds'] for row in rows
+                    if row.get('guest_request_to_claim_seconds') is not None]),
+                'model_request_seconds': summary([row['guest_model_request_seconds'] for row in rows
+                    if row.get('guest_model_request_seconds') is not None])}
+    return {'scope': 'Completed cycles only; terminal guest failures remain in errors. Request-to-claim requires synchronized clocks.',
+            'initial_cycle': summarize([row for row in cycles if row['cycle'] == 0]),
+            'measured_cycles': summarize([row for row in cycles if row['cycle'] >= warmup_cycles]),
+            'all_cycles': summarize(cycles)}
+
+
+class MeasuredRelayClient(AsyncRelayWorkerClient):
+    """Count each response attempt while preserving the SDK's retry decisions."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.response_attempts = {}
+
+    def model_request(self, request, cycle):
+        self.response_attempts[request.request_id] = {'scope': 'model', 'cycle': cycle,
+                                                     'attempts': 0, 'status_counts': {}}
+
+    async def respond_to(self, relay_request, response, *, status=200, headers=None):
+        row = self.response_attempts.setdefault(relay_request.request_id,
+            {'scope': 'observer', 'attempts': 0, 'status_counts': {}})
+        row['attempts'] += 1
+        outcome = 'success'
+        try:
+            return await super().respond_to(relay_request, response, status=status, headers=headers)
+        except asyncio.CancelledError:
+            outcome = 'cancelled'
+            raise
+        except Exception as exc:
+            code = exception_status(exc)
+            outcome = 'http_' + str(code) if code is not None else 'transport_' + type(exc).__name__
+            raise
+        finally:
+            row['status_counts'][outcome] = row['status_counts'].get(outcome, 0) + 1
+
+
+def response_retry_summary(attempts):
+    result = {}
+    for scope in ('model', 'observer'):
+        rows = [row for row in attempts.values() if row['scope'] == scope]
+        statuses = {}
+        for row in rows:
+            for key, count in row['status_counts'].items():
+                statuses[key] = statuses.get(key, 0) + count
+        result[scope] = {'requests': len(rows), 'attempts': sum(row['attempts'] for row in rows),
+                         'retries': sum(max(0, row['attempts'] - 1) for row in rows), 'status_counts': statuses}
+    return result
 
 
 async def probe_response_diagnostic(response, *, redact=()):
@@ -450,7 +592,7 @@ async def retry_control(operation, *, deadline, on_retry, active_delete=False):
         try:
             return await asyncio.wait_for(operation(), max(.001, deadline - time.monotonic()))
         except Exception as exc:
-            status = getattr(exc, 'status_code', None)
+            status = exception_status(exc)
             transient = status in {429, 502, 503, 504} or isinstance(exc, (aiohttp.ClientError, TimeoutError))
             transient |= active_delete and status == 409 and 'active exec/file activity' in str(exc)
             if not transient or time.monotonic() >= deadline:
@@ -560,10 +702,11 @@ class ContinuationObserver:
     an upper bound on guest continuation, not a pure runtime-restore duration.
     """
 
-    def __init__(self, relay, rollout_id):
+    def __init__(self, relay, rollout_id, on_retry=None):
         self.relay, self.rollout_id = relay, rollout_id
         self.expected = {}
         self.receipts = {}
+        self.on_retry = on_retry or (lambda *_: None)
 
     def expect(self, payload):
         key = (payload['nonce'], payload['cycle'])
@@ -578,7 +721,7 @@ class ContinuationObserver:
             polled = await retry_control(
                 lambda: self.relay.poll(self.rollout_id, timeout_seconds=1,
                                        limit=64, lease_seconds=120),
-                deadline=time.monotonic() + 180, on_retry=lambda *_: None,
+                deadline=time.monotonic() + 180, on_retry=self.on_retry,
             )
             observed = time.monotonic()
             for request in polled.requests:
@@ -623,7 +766,7 @@ async def run(args):
     worker_token = args.relay_worker_token_file.read_text().strip()
     config = {k: v for k, v in vars(args).items() if not k.endswith("token_file") and k != "output"}
     fleet_health = FleetHealthQualification(enabled=args.gateway_token_file is not None)
-    result = {"report_version": 4, "run_id": prefix, "started_at": datetime.now(timezone.utc).isoformat(),
+    result = {"report_version": 5, "run_id": prefix, "started_at": datetime.now(timezone.utc).isoformat(),
               "configuration": config, "cycles": [], "completed_scenarios": [], "errors": [], "cleanup_errors": [],
               "health": [], "driver_event_loop_lag_seconds": [], "fleet_polls": [], "placements": {}, "control_retries": [],
               "resource_samples": [], "resource_errors": [],
@@ -636,10 +779,9 @@ async def run(args):
               "harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     last_persist = 0.0
+    persistence_samples = []
     def persist():
-        temp = args.output.with_suffix(args.output.suffix + ".tmp")
-        temp.write_text(json.dumps(result, indent=2) + "\n")
-        temp.replace(args.output)
+        persist_report(args.output, result, persistence_samples)
     def event(name, **fields):
         nonlocal last_persist
         print(json.dumps({"event": name, "run_id": prefix, "at": datetime.now(timezone.utc).isoformat(), **fields}), flush=True)
@@ -664,7 +806,7 @@ async def run(args):
             timeout=aiohttp.ClientTimeout(total=180),
         ) as lifecycle,
         AsyncSandboxClient(args.gateway_url, api_token=token, timeout_seconds=180) as operator,
-        AsyncRelayWorkerClient(args.relay_url, worker_token=worker_token,
+        MeasuredRelayClient(args.relay_url, worker_token=worker_token,
                                timeout_seconds=180, forward_timeout_seconds=180) as relay,
     ):
         if await operator.list_sandboxes():
@@ -672,9 +814,12 @@ async def run(args):
         result['deployed_health'] = await operator.health()
         observer_id = prefix + '-observer'
         observer_registration = await relay.register_rollout(observer_id, metadata={'benchmark': prefix, 'purpose': 'continuation-observation'})
-        observer_url = http_tunnel_url(args.relay_url, observer_id, 'continued',
+        observer_url = http_tunnel_url(args.agent_relay_url or args.relay_url, observer_id, 'continued',
                                       registration_token=observer_registration['rollout']['registration_token'])
-        observer = ContinuationObserver(relay, observer_id)
+        result['relay_response_attempts'] = relay.response_attempts
+        observer = ContinuationObserver(relay, observer_id,
+            on_retry=lambda attempt, status: result['control_retries'].append(
+                dict(operation='observer_poll', attempt=attempt, status=status)))
         observer_task = asyncio.create_task(observer.run())
         async def health_probe():
             while True:
@@ -728,7 +873,7 @@ async def run(args):
             while True:
                 started = time.monotonic()
                 try:
-                    records = await operator.list_sandboxes()
+                    records = await list_inventory(operator, args.inventory_view)
                     result['fleet_polls'].append({'seconds': time.monotonic() - started, 'ok': True})
                 except Exception as exc:
                     result['fleet_polls'].append({'seconds': time.monotonic() - started, 'ok': False, 'error': safe_error(exc)})
@@ -743,7 +888,17 @@ async def run(args):
                         result['placements'][sid] = record.get('node', {}).get('job_id')
                         fleet_health.placed(sid, result['placements'][sid], monotonic_now=observed)
                 await asyncio.sleep(1)
-        inventory_tasks = [asyncio.create_task(inventory_probe()) for _ in range(args.fleet_pollers)]
+        # One observer owns placement evidence; independent load clients retain
+        # the same gateway request cadence without blocking agent latency timers.
+        inventory_tasks = [asyncio.create_task(inventory_probe())]
+        if args.fleet_pollers > 1:
+            result['inventory_load_process'] = {}
+            inventory_tasks.append(asyncio.create_task(isolated_inventory_load(
+                args.gateway_url, args.sandbox_token_file, args.fleet_pollers - 1,
+                min(args.deadline_seconds + 300, 86400), result['fleet_polls'],
+                result['inventory_load_process'],
+                view=args.inventory_view,
+            )))
         async def scenario(index):
             sid = f"{prefix}-{index:04d}"
             rng = random.Random(args.seed + index)
@@ -770,7 +925,7 @@ async def run(args):
                     registration = await relay.register_agent_rollout(sid, handle, metadata={'benchmark': prefix})
                     registrations.add(sid)
                     event('relay_registered', sandbox_id=sid)
-                    tunnel = http_tunnel_url(args.relay_url, sid, 'chat/completions',
+                    tunnel = http_tunnel_url(args.agent_relay_url or args.relay_url, sid, 'chat/completions',
                                             registration_token=registration['rollout']['registration_token'])
                     stage = 'agent_upload'
                     await handle.upload_file('/workspace/relay-load.py', AGENT)
@@ -828,6 +983,8 @@ async def run(args):
                             raise TimeoutError('agent did not issue its model request')
                     payload = json.loads(request.body_bytes)
                     claimed_at = time.monotonic()
+                    claimed_unix = time.time()
+                    relay.model_request(request, cycle)
                     if payload['cycle'] != cycle or (identity is not None and payload['nonce'] != identity):
                         raise RuntimeError('cycle or process identity mismatch')
                     identity = payload['nonce']
@@ -927,6 +1084,14 @@ async def run(args):
                                              'post_continuation_exec_start_seconds': probe_dispatched - uploaded,
                                              'post_continuation_exec_wait_seconds': finished - probe_dispatched,
                                              'guest_transport_retries': ack['transport_retries'],
+                                             'guest_request_started_unix': payload.get('request_started_unix'),
+                                             'request_claimed_unix': claimed_unix,
+                                             'guest_request_to_claim_seconds': (claimed_unix - payload['request_started_unix']
+                                                 if payload.get('request_started_unix') is not None else None),
+                                             **{'guest_' + field: ack.get(field) for field in (
+                                                 'model_failed_attempts_by_kind', 'model_error_codes', 'model_request_seconds',
+                                                 'receipt_transport_retries', 'receipt_failed_attempts_by_kind',
+                                                 'receipt_error_codes', 'receipt_request_seconds')},
                                              'guest_verification_seconds': ack['verification_seconds'],
                                              'guest_tool_seconds': ack['tool_seconds'],
                                              'sqlite_rows': ack['sqlite_rows'],
@@ -1026,6 +1191,8 @@ async def run(args):
             for name, provisioning in [('during_provisioning', True), ('after_provisioning', False)]
         }
         result['completed_cycles'] = len(result['cycles'])
+        result['guest_retry_summary'] = guest_retry_summary(result['cycles'], args.warmup_cycles)
+        result['relay_response_retry_summary'] = response_retry_summary(relay.response_attempts)
         result['resource_summary'] = resource_summary(result['resource_samples'])
         result['fleet_health'] = fleet_health.summary()
         result['correct'] = (not result.get('failure') and not result['errors'] and not result['cleanup_errors']

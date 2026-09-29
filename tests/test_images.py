@@ -8,10 +8,11 @@ import tarfile
 import time
 import unittest
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from threading import Event, Lock, Thread
+from threading import Barrier, Event, Lock, Thread
 from unittest.mock import patch
 
 from hypothesis import given, settings, strategies as st
@@ -38,6 +39,88 @@ from ucloud_sandboxes.sandbox import CommandResult
 
 
 class ImageTests(unittest.TestCase):
+    def test_completed_build_records_the_runtime_resolved_command(self):
+        class Runtime(DockerImageRuntime):
+            def build(self, spec, *, push=False, on_output=None):
+                return CommandResult(argv=(*self.build_command(spec, push=push), "resolved-cache"), exit_code=0)
+
+        with TemporaryDirectory() as raw_dir:
+            manager = ImageManager(ImageStore(Path(raw_dir) / "images.sqlite"), Runtime(dry_run=True))
+            identity, materialize = _uploaded_context(("Dockerfile", b"FROM scratch\n"))
+            initial, _ = manager.start_build(
+                ImageBuildSpec(id="planned", tag="local/planned:latest", context_path="."),
+                context_identity=identity, materialize_context=materialize)
+            completed = manager.wait_for_build(initial.build_id, timeout_seconds=5)
+            self.assertEqual(completed.status, "succeeded")
+            self.assertNotIn("resolved-cache", initial.command)
+            self.assertEqual(completed.command[-1], "resolved-cache")
+
+    def test_queued_build_reports_preparation_queue_and_execution_separately(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            entered, release = Event(), Event()
+
+            class Executor:
+                def run(self, argv):
+                    if "local/first:latest" in argv:
+                        entered.set()
+                        self_waited = release.wait(10)
+                        if not self_waited:
+                            raise TimeoutError("test did not release first build")
+                    return CommandResult(argv=argv, exit_code=0)
+
+            manager = ImageManager(ImageStore(Path(raw_dir) / "images.sqlite"),
+                DockerImageRuntime(executor=Executor()), max_active_builds=1, queue_builds=True)
+            identity, materialize = _uploaded_context(("Dockerfile", b"FROM scratch\n"))
+            records = []
+            try:
+                first, _ = manager.start_build(
+                    ImageBuildSpec(id="first", tag="local/first:latest", context_path="."),
+                    context_identity=identity, materialize_context=materialize)
+                records.append(first)
+                self.assertTrue(entered.wait(2))
+
+                def prepare():
+                    # Preparation must not be misreported as waiting for a slot.
+                    Event().wait(0.06)
+                    return materialize()
+
+                second, _ = manager.start_build(
+                    ImageBuildSpec(id="second", tag="local/second:latest", context_path="."),
+                    context_identity=identity, materialize_context=prepare)
+                records.append(second)
+                queued = manager.get_build(second.build_id)
+                self.assertEqual(queued.started_at, queued.created_at)
+                self.assertTrue(queued.queued_at)
+                self.assertEqual(queued.execution_started_at, "")
+                Event().wait(0.06)
+            finally:
+                release.set()
+                for record in records:
+                    self.assertEqual(manager.wait_for_build(record.build_id, timeout_seconds=5).status, "succeeded")
+            completed = manager.get_build(second.build_id)
+            self.assertGreaterEqual(completed.execution_started_at, completed.queued_at)
+            self.assertEqual(completed.started_at, second.started_at)
+            self.assertGreaterEqual(completed.timings["preparation_ms"], 50)
+            self.assertGreaterEqual(completed.timings["queue_wait_ms"], 50)
+            self.assertEqual(completed.timings["end_to_end_ms"],
+                completed.timings["total_ms"] + completed.timings["queue_wait_ms"] + completed.timings["preparation_ms"])
+
+    def test_build_record_accepts_legacy_persisted_timestamps_without_changing_started_at(self):
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "images.sqlite"
+            store = ImageBuildStore(path)
+            record = _build_record("legacy", status="succeeded", timestamp="2026-09-29T00:00:00+00:00")
+            payload = record.to_dict()
+            payload.pop("queued_at")
+            payload.pop("execution_started_at")
+            payload["started_at"] = payload["created_at"]
+            with sqlite3.connect(path) as db:
+                db.execute("INSERT INTO image_state_v1_builds VALUES (?, ?)", (record.build_id, json.dumps(payload)))
+            saved = store.get("legacy")
+            self.assertEqual(saved.queued_at, "")
+            self.assertEqual(saved.execution_started_at, "")
+            self.assertEqual(saved.started_at, payload["started_at"])
+
     def test_builder_queue_accepts_burst_and_bounds_execution(self) -> None:
         with TemporaryDirectory() as raw_dir:
             release = Event()
@@ -130,6 +213,57 @@ class ImageTests(unittest.TestCase):
                     self.assertEqual(
                         manager.wait_for_build(record.build_id, timeout_seconds=5).status, "succeeded",
                     )
+
+    def test_zero_queue_admission_counts_context_preparation_before_execution(self):
+        with TemporaryDirectory() as raw_dir:
+            manager = ImageManager(
+                ImageStore(Path(raw_dir) / "images.sqlite"), DockerImageRuntime(dry_run=True),
+                max_active_builds=4, queue_builds=True, max_queued_builds=0)
+            identity, materialize = _uploaded_context(("Dockerfile", b"FROM scratch\n"))
+            start, release, full, rejected = Barrier(8), Event(), Event(), Event()
+            lock = Lock()
+            preparing = refused = 0
+
+            def prepare():
+                nonlocal preparing
+                with lock:
+                    preparing += 1
+                    if preparing == 4:
+                        full.set()
+                if not release.wait(5):
+                    raise TimeoutError("test did not release context preparation")
+                return materialize()
+
+            def submit(index):
+                nonlocal refused
+                start.wait(5)
+                try:
+                    return manager.start_build(
+                        ImageBuildSpec(id=f"prep-{index}", tag=f"local/prep-{index}:latest", context_path="."),
+                        context_identity=identity, materialize_context=prepare)[0]
+                except ImageBuildCapacityError:
+                    with lock:
+                        refused += 1
+                        if refused == 4:
+                            rejected.set()
+                    return None
+
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                futures = [executor.submit(submit, index) for index in range(8)]
+                try:
+                    self.assertTrue(full.wait(2))
+                    self.assertTrue(rejected.wait(2))
+                    self.assertEqual(manager.active_build_count(), 4)
+                    self.assertEqual(len(manager._active_threads), 0)
+                    self.assertTrue(all(not build.execution_started_at for build in manager.list_builds()))
+                finally:
+                    release.set()
+                results = [future.result(timeout=5) for future in futures]
+                accepted = [record for record in results if record is not None]
+                for record in accepted:
+                    self.assertEqual(manager.wait_for_build(record.build_id, timeout_seconds=5).status, "succeeded")
+            self.assertEqual((len(accepted), preparing, refused), (4, 4, 4))
+            self.assertTrue(all(not Path(record.context_path).exists() for record in accepted))
 
     def test_cold_pull_slots_bound_concurrency_without_losing_drain_fence(self) -> None:
         with TemporaryDirectory() as raw_dir:

@@ -1,0 +1,5612 @@
+{
+  "submitted_cases": 24,
+  "succeeded": 24,
+  "failed_or_incomplete": 0,
+  "batch_wall_seconds": 63.171867780001776,
+  "successful_builds_per_minute": 22.794956847165736,
+  "measurements": {
+    "client_wall_seconds": {
+      "count": 24,
+      "min": 6.075224961001368,
+      "p50": 14.4657333594987,
+      "p95": 61.65038035210091,
+      "max": 63.16308514800039
+    },
+    "submission_seconds": {
+      "count": 24,
+      "min": 2.967586778999248,
+      "p50": 5.4886887519969605,
+      "p95": 7.607257511999341,
+      "max": 7.6184785419973196
+    },
+    "polling_seconds": {
+      "count": 24,
+      "min": 2.0594238649937324,
+      "p50": 7.296594944997196,
+      "p95": 57.31719575910029,
+      "max": 57.49080416600191
+    },
+    "preparation_ms": {
+      "count": 24,
+      "min": 152,
+      "p50": 1159.5,
+      "p95": 2313.6,
+      "max": 2358
+    },
+    "queue_wait_ms": {
+      "count": 24,
+      "min": 2,
+      "p50": 6.0,
+      "p95": 2940.5999999999967,
+      "max": 5804
+    },
+    "total_ms": {
+      "count": 24,
+      "min": 1162,
+      "p50": 4865.0,
+      "p95": 56923.7,
+      "max": 57279
+    },
+    "end_to_end_ms": {
+      "count": 24,
+      "min": 1328,
+      "p50": 7892.5,
+      "p95": 57593.049999999996,
+      "max": 57691
+    },
+    "docker_build_and_push_ms": {
+      "count": 24,
+      "min": 734,
+      "p50": 3983.0,
+      "p95": 29621.7,
+      "max": 30040
+    },
+    "immutable_environment_ms": {
+      "count": 24,
+      "min": 234,
+      "p50": 960.5,
+      "p95": 34164.549999999974,
+      "max": 35801
+    },
+    "cleanup_ms": {
+      "count": 24,
+      "min": 14,
+      "p50": 24.0,
+      "p95": 568.4499999999999,
+      "max": 574
+    }
+  },
+  "builders": {
+    "167927353": 7,
+    "167927367": 7,
+    "167927368": 4,
+    "167927354": 6
+  },
+  "http_statuses": {
+    "200": 476,
+    "202": 24
+  },
+  "environment_totals": {
+    "groups_reused": 94,
+    "groups_built": 10,
+    "erofs_bytes_built": 253526016,
+    "docker_pull_skipped": 14
+  },
+  "records": [
+    {
+      "index": 0,
+      "recipe": "python-agent",
+      "variant": "app-change-1",
+      "image_id": "bl20260929-warm-000",
+      "context_sha256": "74d00665a83100449a8541b2132668c4abc337311728fd5725ed6c0b43f79d1e",
+      "started_at": "2026-09-29T08:01:53Z",
+      "start_offset_seconds": 0.0038358050005626865,
+      "submission_seconds": 2.967586778999248,
+      "build_id": "2ab3b4a8-a556-4071-804f-6e721102e2bd",
+      "polling_seconds": 3.1073638730013045,
+      "build": {
+        "build_id": "2ab3b4a8-a556-4071-804f-6e721102e2bd",
+        "image_id": "bl20260929-warm-000",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:01:56.234906+00:00",
+        "started_at": "2026-09-29T08:01:56.234906+00:00",
+        "queued_at": "2026-09-29T08:01:56.387237+00:00",
+        "execution_started_at": "2026-09-29T08:01:56.390810+00:00",
+        "finished_at": "2026-09-29T08:01:59.302258+00:00",
+        "timings": {
+          "end_to_end_ms": 3675,
+          "environment": {
+            "docker_pull_skipped": 1,
+            "groups_reused": 6,
+            "preflight_ms": 580.587,
+            "total_ms": 941.068
+          },
+          "phases": {
+            "cleanup_ms": 574,
+            "docker_build_and_push_ms": 1938,
+            "immutable_environment_ms": 941
+          },
+          "preparation_ms": 152,
+          "queue_wait_ms": 3,
+          "total_ms": 3520
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:01:59.302258+00:00",
+          "id": "bl20260929-warm-000",
+          "labels": {},
+          "manifest_digest": "sha256:3840979d2dbc30a5e8ab13215dc9a255e4ede96f5e254ed134c1c2b142772e8a",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-7wet3z1z",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-warm-000-9e34334d2b28:latest",
+          "updated_at": "2026-09-29T08:01:59.302258+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.3",
+          "job_id": "167927353",
+          "node_url": "http://10.42.0.3:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.3"
+      },
+      "cached_steps_in_retained_tail": 7,
+      "cached_steps_observed": [
+        {
+          "id": "#14",
+          "description": "[7/8] COPY src ./src"
+        },
+        {
+          "id": "#15",
+          "description": "[5/8] COPY native ./native"
+        },
+        {
+          "id": "#16",
+          "description": "[2/8] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#17",
+          "description": "[3/8] COPY requirements.txt ./requirements.txt"
+        },
+        {
+          "id": "#18",
+          "description": "[4/8] RUN python -m pip install --no-cache-dir --only-binary=:all: --report /opt/fixture/pip-install-report.json -r requirements.txt  && python -m pip check  && python -m pip freeze --all > /opt/fixture/resolved-requirements.txt"
+        },
+        {
+          "id": "#19",
+          "description": "[6/8] RUN python -m pip install --no-cache-dir --no-build-isolation --no-deps ./native"
+        },
+        {
+          "id": "#20",
+          "description": "[8/8] RUN python -m compileall -q -j 4 --invalidation-mode checked-hash src  && python -m agent.smoke > /opt/fixture/build-smoke.json"
+        }
+      ],
+      "client_wall_seconds": 6.075224961001368,
+      "finish_offset_seconds": 6.079061026001,
+      "finished_at": "2026-09-29T08:01:59Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 200,
+          "headers_seconds": 0.007160944995121099
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 0.2117848199995933
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010835556000529323
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006782933000067715
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.018946482996398117
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.06243979999999283
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "recipe": "typescript-tools",
+      "variant": "app-change-1",
+      "image_id": "bl20260929-warm-001",
+      "context_sha256": "d79e8887d7b754eab6040d56940c1e0fd0aff4c7ed562b9cea0ff7285dd5ab82",
+      "started_at": "2026-09-29T08:01:53Z",
+      "start_offset_seconds": 0.004023754001536872,
+      "submission_seconds": 5.080421509999724,
+      "build_id": "d74b66ba-8ea1-44cf-a073-47b5fb66b084",
+      "polling_seconds": 37.41709539099975,
+      "build": {
+        "build_id": "d74b66ba-8ea1-44cf-a073-47b5fb66b084",
+        "image_id": "bl20260929-warm-001",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:01:58.239559+00:00",
+        "started_at": "2026-09-29T08:01:58.239559+00:00",
+        "queued_at": "2026-09-29T08:01:58.501346+00:00",
+        "execution_started_at": "2026-09-29T08:01:58.504560+00:00",
+        "finished_at": "2026-09-29T08:02:35.484891+00:00",
+        "timings": {
+          "end_to_end_ms": 37275,
+          "environment": {
+            "component_lookup_ms": 204.08200000000002,
+            "docker_pull_ms": 4562.094,
+            "erofs_bytes_built": 14921728,
+            "groups_built": 1,
+            "groups_reused": 4,
+            "layer_lock_wait_ms": 0.031,
+            "mkfs_ms": 346.959,
+            "preflight_misses": 1,
+            "preflight_ms": 42.842,
+            "publish_component_ms": 241.491,
+            "sign_ms": 32.591,
+            "squash_ms": 1293.981,
+            "total_ms": 7500.999
+          },
+          "phases": {
+            "cleanup_ms": 21,
+            "docker_build_and_push_ms": 29467,
+            "immutable_environment_ms": 7501
+          },
+          "preparation_ms": 261,
+          "queue_wait_ms": 3,
+          "total_ms": 37011
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:02:35.484891+00:00",
+          "id": "bl20260929-warm-001",
+          "labels": {},
+          "manifest_digest": "sha256:6bdbada363a5220534efb0c6de3d5e1f454ee41576d47306334a1cf810a6e2e0",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-4qxl0nlr",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-warm-001-022f07fae0a2:latest",
+          "updated_at": "2026-09-29T08:02:35.484891+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.5",
+          "job_id": "167927367",
+          "node_url": "http://10.42.0.5:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.5"
+      },
+      "cached_steps_in_retained_tail": 5,
+      "cached_steps_observed": [
+        {
+          "id": "#14",
+          "description": "[4/8] RUN npm ci --no-audit --no-fund --cache /tmp/npm-cache  && npm ls --all --json > /opt/fixture/npm-resolved.json  && rm -rf /tmp/npm-cache"
+        },
+        {
+          "id": "#15",
+          "description": "[5/8] COPY tsconfig.json build.cjs webpack.config.cjs eslint.config.cjs jest.config.cjs ./"
+        },
+        {
+          "id": "#16",
+          "description": "[2/8] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#17",
+          "description": "[3/8] COPY package.json package-lock.json ./"
+        },
+        {
+          "id": "#18",
+          "description": "[6/8] COPY tests ./tests"
+        }
+      ],
+      "client_wall_seconds": 42.4977389889973,
+      "finish_offset_seconds": 42.50176299300074,
+      "finished_at": "2026-09-29T08:02:35Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 200,
+          "headers_seconds": 0.0015600550032104366
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 0.32839582699671155
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.05130557099619182
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.04471648500475567
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.018498515004466753
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.013013984003919177
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010829148995981086
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005450724995171186
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004342264001024887
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0045959249982843176
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.01229880700702779
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0045296530006453395
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003946308002923615
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006572833000973333
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004345197994553018
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009433942999748979
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003962720002164133
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005187329996260814
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00467425199894933
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00550325600488577
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006028540999977849
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004447639999852981
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005882789999304805
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005035041001974605
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0047767029973329045
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005370964005123824
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0067232610017526895
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007151702004193794
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0050246860046172515
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004722418998426292
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005620037998596672
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006768292994820513
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005954439999186434
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005333922999852803
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005487144000653643
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006062307998945471
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005170126001758035
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008053655998082832
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007367460995737929
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.08172342699981527
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "recipe": "typescript-multistage",
+      "variant": "app-change-1",
+      "image_id": "bl20260929-warm-002",
+      "context_sha256": "b3134f70b0b90df1468d00443552ae1a6921240f4c99a0abb7fe196ebbdca4f8",
+      "started_at": "2026-09-29T08:01:53Z",
+      "start_offset_seconds": 0.007468689000234008,
+      "submission_seconds": 5.001312772001256,
+      "build_id": "f42a384d-c4cd-49e9-aa84-f5d8508e4496",
+      "polling_seconds": 2.1389964830013923,
+      "build": {
+        "build_id": "f42a384d-c4cd-49e9-aa84-f5d8508e4496",
+        "image_id": "bl20260929-warm-002",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:01:58.262339+00:00",
+        "started_at": "2026-09-29T08:01:58.262339+00:00",
+        "queued_at": "2026-09-29T08:01:58.426424+00:00",
+        "execution_started_at": "2026-09-29T08:01:58.428535+00:00",
+        "finished_at": "2026-09-29T08:01:59.570706+00:00",
+        "timings": {
+          "end_to_end_ms": 1328,
+          "environment": {
+            "docker_pull_skipped": 1,
+            "groups_reused": 2,
+            "preflight_ms": 180.539,
+            "total_ms": 399.369
+          },
+          "phases": {
+            "cleanup_ms": 16,
+            "docker_build_and_push_ms": 734,
+            "immutable_environment_ms": 399
+          },
+          "preparation_ms": 164,
+          "queue_wait_ms": 2,
+          "total_ms": 1162
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:01:59.570706+00:00",
+          "id": "bl20260929-warm-002",
+          "labels": {},
+          "manifest_digest": "sha256:adef6ff74427924f0c646f1f9bea18abc96077777243f8656dccb72c8460490c",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-8ljcnul4",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-warm-002-c3d3bac1462a:latest",
+          "updated_at": "2026-09-29T08:01:59.570706+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.6",
+          "job_id": "167927368",
+          "node_url": "http://10.42.0.6:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.6"
+      },
+      "cached_steps_in_retained_tail": 12,
+      "cached_steps_observed": [
+        {
+          "id": "#16",
+          "description": "[stage-1 4/6] COPY --from=compile /opt/fixture/package-lock.json ./resolved-package-lock.json"
+        },
+        {
+          "id": "#17",
+          "description": "[stage-1 5/6] COPY --from=compile /opt/fixture/npm-resolved.json ./npm-resolved.json"
+        },
+        {
+          "id": "#18",
+          "description": "[compile 6/8] COPY tests ./tests"
+        },
+        {
+          "id": "#19",
+          "description": "[stage-1 2/6] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#20",
+          "description": "[compile 3/8] COPY package.json package-lock.json ./"
+        },
+        {
+          "id": "#21",
+          "description": "[compile 7/8] COPY src ./src"
+        },
+        {
+          "id": "#22",
+          "description": "[compile 4/8] RUN npm ci --no-audit --no-fund --cache /tmp/npm-cache  && npm ls --all --json > /opt/fixture/npm-resolved.json  && rm -rf /tmp/npm-cache"
+        },
+        {
+          "id": "#23",
+          "description": "[compile 2/8] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#24",
+          "description": "[stage-1 3/6] COPY --from=compile /opt/fixture/dist/bundle.cjs ./bundle.cjs"
+        },
+        {
+          "id": "#25",
+          "description": "[compile 5/8] COPY tsconfig.json build.cjs webpack.config.cjs eslint.config.cjs jest.config.cjs ./"
+        },
+        {
+          "id": "#26",
+          "description": "[compile 8/8] RUN npm run lint && npm run build && npm test  && node dist/bundle.cjs > /opt/fixture/build-smoke.json"
+        },
+        {
+          "id": "#27",
+          "description": "[stage-1 6/6] COPY --from=compile /opt/fixture/build-smoke.json ./build-smoke.json"
+        }
+      ],
+      "client_wall_seconds": 7.140508129996306,
+      "finish_offset_seconds": 7.147976979002124,
+      "finished_at": "2026-09-29T08:02:00Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 200,
+          "headers_seconds": 0.01625957400392508
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 0.2202111610022257
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.042354744000476785
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.03440911700454308
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.06129960500402376
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "recipe": "python-agent",
+      "variant": "app-change-2",
+      "image_id": "bl20260929-warm-003",
+      "context_sha256": "f86c656337e674989f4b52156e43a898811fa4bd895775d67dc8a3d2a22189b6",
+      "started_at": "2026-09-29T08:01:53Z",
+      "start_offset_seconds": 0.00492682999902172,
+      "submission_seconds": 4.160230050998507,
+      "build_id": "0b4095e1-c585-4283-8a6e-61e12406e942",
+      "polling_seconds": 57.49080416600191,
+      "build": {
+        "build_id": "0b4095e1-c585-4283-8a6e-61e12406e942",
+        "image_id": "bl20260929-warm-003",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:01:57.194437+00:00",
+        "started_at": "2026-09-29T08:01:57.194437+00:00",
+        "queued_at": "2026-09-29T08:01:57.580012+00:00",
+        "execution_started_at": "2026-09-29T08:01:57.583315+00:00",
+        "finished_at": "2026-09-29T08:02:54.816806+00:00",
+        "timings": {
+          "end_to_end_ms": 57667,
+          "environment": {
+            "component_lookup_ms": 322.06999999999994,
+            "docker_pull_ms": 33748.324,
+            "erofs_bytes_built": 5345280,
+            "groups_built": 1,
+            "groups_reused": 5,
+            "layer_lock_wait_ms": 21.703000000000003,
+            "mkfs_ms": 112.281,
+            "preflight_misses": 1,
+            "preflight_ms": 74.533,
+            "publish_component_ms": 176.066,
+            "sign_ms": 7.221,
+            "squash_ms": 717.571,
+            "total_ms": 35797.463
+          },
+          "phases": {
+            "cleanup_ms": 25,
+            "docker_build_and_push_ms": 21417,
+            "immutable_environment_ms": 35797
+          },
+          "preparation_ms": 385,
+          "queue_wait_ms": 3,
+          "total_ms": 57279
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:02:54.816806+00:00",
+          "id": "bl20260929-warm-003",
+          "labels": {},
+          "manifest_digest": "sha256:6aaab49f75354ae10a4804edcb2fcbeb7046cb6c9bb252a8500aaf380e90ee9b",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-bz4xwi93",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-warm-003-c2a76cfa4b14:latest",
+          "updated_at": "2026-09-29T08:02:54.816806+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.5",
+          "job_id": "167927367",
+          "node_url": "http://10.42.0.5:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.5"
+      },
+      "cached_steps_in_retained_tail": 5,
+      "cached_steps_observed": [
+        {
+          "id": "#14",
+          "description": "[2/8] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#15",
+          "description": "[4/8] RUN python -m pip install --no-cache-dir --only-binary=:all: --report /opt/fixture/pip-install-report.json -r requirements.txt  && python -m pip check  && python -m pip freeze --all > /opt/fixture/resolved-requirements.txt"
+        },
+        {
+          "id": "#16",
+          "description": "[5/8] COPY native ./native"
+        },
+        {
+          "id": "#17",
+          "description": "[3/8] COPY requirements.txt ./requirements.txt"
+        },
+        {
+          "id": "#18",
+          "description": "[6/8] RUN python -m pip install --no-cache-dir --no-build-isolation --no-deps ./native"
+        }
+      ],
+      "client_wall_seconds": 61.65118072900077,
+      "finish_offset_seconds": 61.65610768899933,
+      "finished_at": "2026-09-29T08:02:55Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 200,
+          "headers_seconds": 0.017064656000002287
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 0.4529944069945486
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.02317837499867892
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.02236078600253677
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.013732786996115465
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.021232348000921775
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.011129383994557429
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003791965005802922
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.015308751993870828
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00536318399826996
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004160163000051398
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004896778998954687
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004067955000209622
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004437666000740137
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.011960730000282638
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004076307006471325
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00401702499948442
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0083056849980494
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004477809998206794
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004703783000877593
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005347662001440767
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005512087998795323
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0038763400007155724
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0061803310018149205
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006201470998348668
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0054088460019556805
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0044491619992186315
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008484301004500594
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005084838994662277
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004756825001095422
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00450097300199559
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005084507996798493
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004363132997241337
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006228427002497483
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005671238002832979
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00809213100001216
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004637901998648886
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0038087770008132793
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003966305004723836
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0037569159976555966
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0038411219939007424
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004784623997693416
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006575026003702078
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00675538599898573
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0066785499948309734
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007074845998431556
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009297354001319036
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006786197001929395
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007477690996893216
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006615081998461392
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007033137997495942
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006108272005803883
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0073131739991367795
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006768393999664113
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006010457000229508
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005598447001830209
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00534178399539087
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006363553999108262
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00673420599923702
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.07161439400078962
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "recipe": "typescript-tools",
+      "variant": "app-change-2",
+      "image_id": "bl20260929-warm-004",
+      "context_sha256": "8e1d7c4eca5e31f97ef5476dba6f811070eaf311e9dbe0887fcf7d1043335c5e",
+      "started_at": "2026-09-29T08:01:53Z",
+      "start_offset_seconds": 0.00632136499916669,
+      "submission_seconds": 7.531876660999842,
+      "build_id": "722c1926-d543-47eb-aa1f-a2db344fd07c",
+      "polling_seconds": 8.169609693002712,
+      "build": {
+        "build_id": "722c1926-d543-47eb-aa1f-a2db344fd07c",
+        "image_id": "bl20260929-warm-004",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:01:58.598053+00:00",
+        "started_at": "2026-09-29T08:01:58.598053+00:00",
+        "queued_at": "2026-09-29T08:02:00.956006+00:00",
+        "execution_started_at": "2026-09-29T08:02:06.760528+00:00",
+        "finished_at": "2026-09-29T08:02:08.823156+00:00",
+        "timings": {
+          "end_to_end_ms": 10261,
+          "environment": {
+            "docker_pull_skipped": 1,
+            "groups_reused": 5,
+            "preflight_ms": 432.681,
+            "total_ms": 651.509
+          },
+          "phases": {
+            "cleanup_ms": 24,
+            "docker_build_and_push_ms": 1398,
+            "immutable_environment_ms": 651
+          },
+          "preparation_ms": 2358,
+          "queue_wait_ms": 5804,
+          "total_ms": 2099
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:02:08.823156+00:00",
+          "id": "bl20260929-warm-004",
+          "labels": {},
+          "manifest_digest": "sha256:e0bde732511840f3b6a198327a8f7f6dc5cd67e21491aff152bb025a94cae94a",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-hev4ey8q",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-warm-004-66d35d3c238f:latest",
+          "updated_at": "2026-09-29T08:02:08.823156+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.5",
+          "job_id": "167927367",
+          "node_url": "http://10.42.0.5:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.5"
+      },
+      "cached_steps_in_retained_tail": 8,
+      "cached_steps_observed": [
+        {
+          "id": "#14",
+          "description": "[6/8] COPY tests ./tests"
+        },
+        {
+          "id": "#15",
+          "description": "[4/8] RUN npm ci --no-audit --no-fund --cache /tmp/npm-cache  && npm ls --all --json > /opt/fixture/npm-resolved.json  && rm -rf /tmp/npm-cache"
+        },
+        {
+          "id": "#16",
+          "description": "[3/8] COPY package.json package-lock.json ./"
+        },
+        {
+          "id": "#17",
+          "description": "[2/8] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#18",
+          "description": "[5/8] COPY tsconfig.json build.cjs webpack.config.cjs eslint.config.cjs jest.config.cjs ./"
+        },
+        {
+          "id": "#19",
+          "description": "[7/8] COPY src ./src"
+        },
+        {
+          "id": "#20",
+          "description": "[6/8] COPY tests ./tests"
+        },
+        {
+          "id": "#21",
+          "description": "[8/8] RUN npm run lint && npm run build && npm test  && node dist/bundle.cjs > /opt/fixture/build-smoke.json"
+        }
+      ],
+      "client_wall_seconds": 15.701670738002576,
+      "finish_offset_seconds": 15.707992242998444,
+      "finished_at": "2026-09-29T08:02:09Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 200,
+          "headers_seconds": 0.021744375000707805
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 2.501578678995429
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.06024532100127544
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003092608996666968
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.011120670002128463
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006118085002526641
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004091818002052605
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004501723997236695
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004213046006043442
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010942474000330549
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.06300628200551728
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "recipe": "typescript-multistage",
+      "variant": "app-change-2",
+      "image_id": "bl20260929-warm-005",
+      "context_sha256": "4d1eeea78da5b53e8e70614ceb6533204f98d47ba0cbb36993549f8bea4f2043",
+      "started_at": "2026-09-29T08:01:53Z",
+      "start_offset_seconds": 0.0057807699995464645,
+      "submission_seconds": 7.399760499996773,
+      "build_id": "91851381-890c-4a73-8280-a7ba239fb851",
+      "polling_seconds": 2.248769590005395,
+      "build": {
+        "build_id": "91851381-890c-4a73-8280-a7ba239fb851",
+        "image_id": "bl20260929-warm-005",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:01:58.585721+00:00",
+        "started_at": "2026-09-29T08:01:58.585721+00:00",
+        "queued_at": "2026-09-29T08:02:00.811842+00:00",
+        "execution_started_at": "2026-09-29T08:02:00.826836+00:00",
+        "finished_at": "2026-09-29T08:02:02.530572+00:00",
+        "timings": {
+          "end_to_end_ms": 3972,
+          "environment": {
+            "docker_pull_skipped": 1,
+            "groups_reused": 2,
+            "preflight_ms": 112.774,
+            "total_ms": 300.241
+          },
+          "phases": {
+            "cleanup_ms": 18,
+            "docker_build_and_push_ms": 1389,
+            "immutable_environment_ms": 300
+          },
+          "preparation_ms": 2226,
+          "queue_wait_ms": 14,
+          "total_ms": 1732
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:02:02.530572+00:00",
+          "id": "bl20260929-warm-005",
+          "labels": {},
+          "manifest_digest": "sha256:c5e457ea5b3e5e1c5f80adfeff0f2541ad3ee1c8582175cac97449e2e04603d2",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-fyyxjxds",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-warm-005-1b4bcd89cbdf:latest",
+          "updated_at": "2026-09-29T08:02:02.530572+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.5",
+          "job_id": "167927367",
+          "node_url": "http://10.42.0.5:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.5"
+      },
+      "cached_steps_in_retained_tail": 13,
+      "cached_steps_observed": [
+        {
+          "id": "#16",
+          "description": "[6/8] COPY tests ./tests"
+        },
+        {
+          "id": "#17",
+          "description": "[stage-1 3/6] COPY --from=compile /opt/fixture/dist/bundle.cjs ./bundle.cjs"
+        },
+        {
+          "id": "#18",
+          "description": "[stage-1 2/6] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#19",
+          "description": "[2/8] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#20",
+          "description": "[compile 7/8] COPY src ./src"
+        },
+        {
+          "id": "#21",
+          "description": "[stage-1 4/6] COPY --from=compile /opt/fixture/package-lock.json ./resolved-package-lock.json"
+        },
+        {
+          "id": "#22",
+          "description": "[compile 6/8] COPY tests ./tests"
+        },
+        {
+          "id": "#23",
+          "description": "[compile 5/8] COPY tsconfig.json build.cjs webpack.config.cjs eslint.config.cjs jest.config.cjs ./"
+        },
+        {
+          "id": "#24",
+          "description": "[compile 8/8] RUN npm run lint && npm run build && npm test  && node dist/bundle.cjs > /opt/fixture/build-smoke.json"
+        },
+        {
+          "id": "#25",
+          "description": "[compile 3/8] COPY package.json package-lock.json ./"
+        },
+        {
+          "id": "#26",
+          "description": "[stage-1 5/6] COPY --from=compile /opt/fixture/npm-resolved.json ./npm-resolved.json"
+        },
+        {
+          "id": "#27",
+          "description": "[compile 4/8] RUN npm ci --no-audit --no-fund --cache /tmp/npm-cache  && npm ls --all --json > /opt/fixture/npm-resolved.json  && rm -rf /tmp/npm-cache"
+        },
+        {
+          "id": "#28",
+          "description": "[stage-1 6/6] COPY --from=compile /opt/fixture/build-smoke.json ./build-smoke.json"
+        }
+      ],
+      "client_wall_seconds": 9.648765746002027,
+      "finish_offset_seconds": 9.654546707002737,
+      "finished_at": "2026-09-29T08:02:03Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 200,
+          "headers_seconds": 0.007437106003635563
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 2.378428446005273
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.014756729004147928
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008824572003504727
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.22431484600383556
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "recipe": "python-agent",
+      "variant": "app-change-3",
+      "image_id": "bl20260929-warm-006",
+      "context_sha256": "856b1af98f34de5d697d7eacc2f9571faceb0dff759b8334191e19a461f66e8e",
+      "started_at": "2026-09-29T08:01:53Z",
+      "start_offset_seconds": 0.0050402769993525,
+      "submission_seconds": 4.814068206003867,
+      "build_id": "4f1ad3d2-511a-4d6b-80a1-3222106feb8e",
+      "polling_seconds": 11.22532317799778,
+      "build": {
+        "build_id": "4f1ad3d2-511a-4d6b-80a1-3222106feb8e",
+        "image_id": "bl20260929-warm-006",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:01:57.069566+00:00",
+        "started_at": "2026-09-29T08:01:57.069566+00:00",
+        "queued_at": "2026-09-29T08:01:58.229476+00:00",
+        "execution_started_at": "2026-09-29T08:01:58.236757+00:00",
+        "finished_at": "2026-09-29T08:02:08.600454+00:00",
+        "timings": {
+          "end_to_end_ms": 11565,
+          "environment": {
+            "component_lookup_ms": 453.502,
+            "docker_pull_ms": 1498.846,
+            "erofs_bytes_built": 5345280,
+            "groups_built": 1,
+            "groups_reused": 5,
+            "layer_lock_wait_ms": 0.051,
+            "mkfs_ms": 100.001,
+            "preflight_misses": 1,
+            "preflight_ms": 45.878,
+            "publish_component_ms": 538.083,
+            "sign_ms": 15.948,
+            "squash_ms": 376.121,
+            "total_ms": 3668.309
+          },
+          "phases": {
+            "cleanup_ms": 24,
+            "docker_build_and_push_ms": 6682,
+            "immutable_environment_ms": 3668
+          },
+          "preparation_ms": 1160,
+          "queue_wait_ms": 7,
+          "total_ms": 10398
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:02:08.600454+00:00",
+          "id": "bl20260929-warm-006",
+          "labels": {},
+          "manifest_digest": "sha256:43067cb8876e5ca59e0f088f7c13c7f0aac865c7645616637f577c7b4c956d84",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-oz7a6nxa",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-warm-006-3521228f11af:latest",
+          "updated_at": "2026-09-29T08:02:08.600454+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.4",
+          "job_id": "167927354",
+          "node_url": "http://10.42.0.4:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.4"
+      },
+      "cached_steps_in_retained_tail": 1,
+      "cached_steps_observed": [
+        {
+          "id": "#14",
+          "description": "[6/8] RUN python -m pip install --no-cache-dir --no-build-isolation --no-deps ./native"
+        }
+      ],
+      "client_wall_seconds": 16.039518910998595,
+      "finish_offset_seconds": 16.04455929800315,
+      "finished_at": "2026-09-29T08:02:09Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 200,
+          "headers_seconds": 0.024653401000250597
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 1.21823971500271
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.01376460000028601
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.013444948999676853
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00729167499957839
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009060456999577582
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007920012998511083
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0034264700007042848
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00526658000308089
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00367470299534034
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008668554997711908
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00444967200019164
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0073158779996447265
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.13797061899822438
+        }
+      ]
+    },
+    {
+      "index": 7,
+      "recipe": "typescript-tools",
+      "variant": "app-change-3",
+      "image_id": "bl20260929-warm-007",
+      "context_sha256": "ffc862192ccf9a2aad7e764726526ad999b37129381c59e1a48b628a45d81258",
+      "started_at": "2026-09-29T08:01:53Z",
+      "start_offset_seconds": 0.005918750001001172,
+      "submission_seconds": 5.436976935998246,
+      "build_id": "d34e2d0b-8c44-4b3b-8818-903d0475b3d6",
+      "polling_seconds": 6.437523202999728,
+      "build": {
+        "build_id": "d34e2d0b-8c44-4b3b-8818-903d0475b3d6",
+        "image_id": "bl20260929-warm-007",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:01:58.497475+00:00",
+        "started_at": "2026-09-29T08:01:58.497475+00:00",
+        "queued_at": "2026-09-29T08:01:58.860490+00:00",
+        "execution_started_at": "2026-09-29T08:01:58.863156+00:00",
+        "finished_at": "2026-09-29T08:02:05.049266+00:00",
+        "timings": {
+          "end_to_end_ms": 6575,
+          "environment": {
+            "docker_pull_skipped": 1,
+            "groups_reused": 5,
+            "preflight_ms": 298.744,
+            "total_ms": 453.188
+          },
+          "phases": {
+            "cleanup_ms": 17,
+            "docker_build_and_push_ms": 5727,
+            "immutable_environment_ms": 453
+          },
+          "preparation_ms": 363,
+          "queue_wait_ms": 2,
+          "total_ms": 6210
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:02:05.049266+00:00",
+          "id": "bl20260929-warm-007",
+          "labels": {},
+          "manifest_digest": "sha256:0cfc470ec1b12e25eda744d510e23c69180748a5940a51036ef0f755e617fec6",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-2fgkc4z5",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-warm-007-25ce15b8e197:latest",
+          "updated_at": "2026-09-29T08:02:05.049266+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.6",
+          "job_id": "167927368",
+          "node_url": "http://10.42.0.6:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.6"
+      },
+      "cached_steps_in_retained_tail": 5,
+      "cached_steps_observed": [
+        {
+          "id": "#14",
+          "description": "[3/8] COPY package.json package-lock.json ./"
+        },
+        {
+          "id": "#15",
+          "description": "[compile 2/8] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#16",
+          "description": "[4/8] RUN npm ci --no-audit --no-fund --cache /tmp/npm-cache  && npm ls --all --json > /opt/fixture/npm-resolved.json  && rm -rf /tmp/npm-cache"
+        },
+        {
+          "id": "#17",
+          "description": "[5/8] COPY tsconfig.json build.cjs webpack.config.cjs eslint.config.cjs jest.config.cjs ./"
+        },
+        {
+          "id": "#18",
+          "description": "[6/8] COPY tests ./tests"
+        }
+      ],
+      "client_wall_seconds": 11.874694277001254,
+      "finish_offset_seconds": 11.880613166998955,
+      "finished_at": "2026-09-29T08:02:05Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 200,
+          "headers_seconds": 0.002035028002865147
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 0.4521584829999483
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.03596962200390408
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.025556297005095985
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.09430012800294207
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010615824001433793
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004281059998902492
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.02235935399949085
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.24190647900104523
+        }
+      ]
+    },
+    {
+      "index": 8,
+      "recipe": "typescript-multistage",
+      "variant": "app-change-3",
+      "image_id": "bl20260929-warm-008",
+      "context_sha256": "774f0a533762d117b0fd66e2b192e9c0b687bc33694a16ea571887c25496fa32",
+      "started_at": "2026-09-29T08:01:53Z",
+      "start_offset_seconds": 0.005171158001758158,
+      "submission_seconds": 7.067368149000686,
+      "build_id": "165f5a9a-2fab-4c99-8c08-b7661ef4de29",
+      "polling_seconds": 8.155666686994664,
+      "build": {
+        "build_id": "165f5a9a-2fab-4c99-8c08-b7661ef4de29",
+        "image_id": "bl20260929-warm-008",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:02:00.309252+00:00",
+        "started_at": "2026-09-29T08:02:00.309252+00:00",
+        "queued_at": "2026-09-29T08:02:00.491856+00:00",
+        "execution_started_at": "2026-09-29T08:02:00.494517+00:00",
+        "finished_at": "2026-09-29T08:02:07.948506+00:00",
+        "timings": {
+          "end_to_end_ms": 7662,
+          "environment": {
+            "component_lookup_ms": 169.948,
+            "docker_pull_ms": 105.643,
+            "erofs_bytes_built": 3702784,
+            "groups_built": 1,
+            "groups_reused": 1,
+            "layer_lock_wait_ms": 0.013000000000000001,
+            "mkfs_ms": 31.264,
+            "preflight_misses": 1,
+            "preflight_ms": 14.554,
+            "publish_component_ms": 173.767,
+            "sign_ms": 5.079,
+            "squash_ms": 10.497,
+            "total_ms": 1235.764
+          },
+          "phases": {
+            "cleanup_ms": 18,
+            "docker_build_and_push_ms": 6213,
+            "immutable_environment_ms": 1235
+          },
+          "preparation_ms": 182,
+          "queue_wait_ms": 2,
+          "total_ms": 7478
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:02:07.948506+00:00",
+          "id": "bl20260929-warm-008",
+          "labels": {},
+          "manifest_digest": "sha256:de6d7b9bdca8d2fd7c5c20175c11d754e23e5941269ee7c172b2a17e584a438a",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-c2lvaxhl",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-warm-008-9a0cbb48a536:latest",
+          "updated_at": "2026-09-29T08:02:07.948506+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.6",
+          "job_id": "167927368",
+          "node_url": "http://10.42.0.6:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.6"
+      },
+      "cached_steps_in_retained_tail": 7,
+      "cached_steps_observed": [
+        {
+          "id": "#16",
+          "description": "[compile 2/8] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#17",
+          "description": "[compile 6/8] COPY tests ./tests"
+        },
+        {
+          "id": "#18",
+          "description": "[compile 3/8] COPY package.json package-lock.json ./"
+        },
+        {
+          "id": "#19",
+          "description": "[compile 5/8] COPY tsconfig.json build.cjs webpack.config.cjs eslint.config.cjs jest.config.cjs ./"
+        },
+        {
+          "id": "#20",
+          "description": "[compile 4/8] RUN npm ci --no-audit --no-fund --cache /tmp/npm-cache  && npm ls --all --json > /opt/fixture/npm-resolved.json  && rm -rf /tmp/npm-cache"
+        },
+        {
+          "id": "#21",
+          "description": "[compile 7/8] COPY src ./src"
+        },
+        {
+          "id": "#23",
+          "description": "[compile 8/8] RUN npm run lint && npm run build && npm test  && node dist/bundle.cjs > /opt/fixture/build-smoke.json"
+        }
+      ],
+      "client_wall_seconds": 15.223277610995865,
+      "finish_offset_seconds": 15.22844895900198,
+      "finished_at": "2026-09-29T08:02:08Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 200,
+          "headers_seconds": 0.00642830399738159
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 1.9946488509958726
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.022398738001356833
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.01162380499590654
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004179778996331152
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.018375445004494395
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003803349994996097
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004590045995428227
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.013917331998527516
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.012423547996149864
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0614958869991824
+        }
+      ]
+    },
+    {
+      "index": 9,
+      "recipe": "python-agent",
+      "variant": "app-change-4",
+      "image_id": "bl20260929-warm-009",
+      "context_sha256": "20edcef90eaa3f7ed73ebd99b821127c1b8a694d411d6713a25fb559909b4247",
+      "started_at": "2026-09-29T08:01:53Z",
+      "start_offset_seconds": 0.004205915996863041,
+      "submission_seconds": 3.364468070001749,
+      "build_id": "6146e0ee-3ca5-4dae-a0b3-ad61c3f41ae3",
+      "polling_seconds": 3.101599465000618,
+      "build": {
+        "build_id": "6146e0ee-3ca5-4dae-a0b3-ad61c3f41ae3",
+        "image_id": "bl20260929-warm-009",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:01:56.617048+00:00",
+        "started_at": "2026-09-29T08:01:56.617048+00:00",
+        "queued_at": "2026-09-29T08:01:56.782215+00:00",
+        "execution_started_at": "2026-09-29T08:01:56.785524+00:00",
+        "finished_at": "2026-09-29T08:01:59.270760+00:00",
+        "timings": {
+          "end_to_end_ms": 3222,
+          "environment": {
+            "docker_pull_skipped": 1,
+            "groups_reused": 6,
+            "preflight_ms": 534.615,
+            "total_ms": 980.08
+          },
+          "phases": {
+            "cleanup_ms": 537,
+            "docker_build_and_push_ms": 1493,
+            "immutable_environment_ms": 980
+          },
+          "preparation_ms": 165,
+          "queue_wait_ms": 3,
+          "total_ms": 3054
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:01:59.270760+00:00",
+          "id": "bl20260929-warm-009",
+          "labels": {},
+          "manifest_digest": "sha256:e87ef5570b99897bb06b23e4f6d04a8dcc68c3f175812ce65379ac3187427c65",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-xscktn4n",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-warm-009-880fc3d6b6b5:latest",
+          "updated_at": "2026-09-29T08:01:59.270760+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.3",
+          "job_id": "167927353",
+          "node_url": "http://10.42.0.3:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.3"
+      },
+      "cached_steps_in_retained_tail": 7,
+      "cached_steps_observed": [
+        {
+          "id": "#14",
+          "description": "[5/8] COPY native ./native"
+        },
+        {
+          "id": "#15",
+          "description": "[7/8] COPY src ./src"
+        },
+        {
+          "id": "#16",
+          "description": "[6/8] RUN python -m pip install --no-cache-dir --no-build-isolation --no-deps ./native"
+        },
+        {
+          "id": "#17",
+          "description": "[2/8] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#18",
+          "description": "[3/8] COPY requirements.txt ./requirements.txt"
+        },
+        {
+          "id": "#19",
+          "description": "[4/8] RUN python -m pip install --no-cache-dir --only-binary=:all: --report /opt/fixture/pip-install-report.json -r requirements.txt  && python -m pip check  && python -m pip freeze --all > /opt/fixture/resolved-requirements.txt"
+        },
+        {
+          "id": "#20",
+          "description": "[8/8] RUN python -m compileall -q -j 4 --invalidation-mode checked-hash src  && python -m agent.smoke > /opt/fixture/build-smoke.json"
+        }
+      ],
+      "client_wall_seconds": 6.466269654003554,
+      "finish_offset_seconds": 6.470475800997519,
+      "finished_at": "2026-09-29T08:01:59Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 200,
+          "headers_seconds": 0.0066960429976461455
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 0.21366541599854827
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005873817004612647
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00984713299840223
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.01435376399604138
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.06838000000425382
+        }
+      ]
+    },
+    {
+      "index": 10,
+      "recipe": "typescript-tools",
+      "variant": "app-change-4",
+      "image_id": "bl20260929-warm-010",
+      "context_sha256": "7da53985a8ceff29f5aec56a5711c22e885ce8b0bb68916af5769c3ea7406d65",
+      "started_at": "2026-09-29T08:01:53Z",
+      "start_offset_seconds": 0.005484250003064517,
+      "submission_seconds": 5.540400567995675,
+      "build_id": "62409dc7-480c-4fa7-bbf1-ae0616ebde0a",
+      "polling_seconds": 42.346893097004795,
+      "build": {
+        "build_id": "62409dc7-480c-4fa7-bbf1-ae0616ebde0a",
+        "image_id": "bl20260929-warm-010",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:01:58.612280+00:00",
+        "started_at": "2026-09-29T08:01:58.612280+00:00",
+        "queued_at": "2026-09-29T08:01:58.965898+00:00",
+        "execution_started_at": "2026-09-29T08:01:58.968007+00:00",
+        "finished_at": "2026-09-29T08:02:40.907364+00:00",
+        "timings": {
+          "end_to_end_ms": 42316,
+          "environment": {
+            "component_lookup_ms": 177.64,
+            "docker_pull_ms": 7668.033,
+            "erofs_bytes_built": 14921728,
+            "groups_built": 1,
+            "groups_reused": 4,
+            "layer_lock_wait_ms": 0.028999999999999998,
+            "mkfs_ms": 313.217,
+            "preflight_misses": 1,
+            "preflight_ms": 31.241,
+            "publish_component_ms": 889.279,
+            "sign_ms": 19.73,
+            "squash_ms": 1120.734,
+            "total_ms": 13014.637
+          },
+          "phases": {
+            "cleanup_ms": 16,
+            "docker_build_and_push_ms": 28919,
+            "immutable_environment_ms": 13014
+          },
+          "preparation_ms": 353,
+          "queue_wait_ms": 2,
+          "total_ms": 41961
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:02:40.907364+00:00",
+          "id": "bl20260929-warm-010",
+          "labels": {},
+          "manifest_digest": "sha256:525473b23d3880693124f4da99626284740a3b920cfb047ae563cc57ba13c7cb",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-ibp99p7b",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-warm-010-90b2c3db6886:latest",
+          "updated_at": "2026-09-29T08:02:40.907364+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.6",
+          "job_id": "167927368",
+          "node_url": "http://10.42.0.6:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.6"
+      },
+      "cached_steps_in_retained_tail": 5,
+      "cached_steps_observed": [
+        {
+          "id": "#15",
+          "description": "[3/8] COPY package.json package-lock.json ./"
+        },
+        {
+          "id": "#16",
+          "description": "[5/8] COPY tsconfig.json build.cjs webpack.config.cjs eslint.config.cjs jest.config.cjs ./"
+        },
+        {
+          "id": "#17",
+          "description": "[4/8] RUN npm ci --no-audit --no-fund --cache /tmp/npm-cache  && npm ls --all --json > /opt/fixture/npm-resolved.json  && rm -rf /tmp/npm-cache"
+        },
+        {
+          "id": "#18",
+          "description": "[6/8] COPY tests ./tests"
+        },
+        {
+          "id": "#19",
+          "description": "[compile 2/8] WORKDIR /opt/fixture"
+        }
+      ],
+      "client_wall_seconds": 47.88754723499733,
+      "finish_offset_seconds": 47.89303168599872,
+      "finished_at": "2026-09-29T08:02:41Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 200,
+          "headers_seconds": 0.01001424300193321
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 0.48693804199865554
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.026731099998869468
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0517424839999876
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.011995146996923722
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.002888748000259511
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0032486839991179295
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.012492494999605697
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.011400827002944425
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.011783344998548273
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004495275003137067
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0031866989957052283
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0030755660045542754
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00354110800253693
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003395028004888445
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003100689995335415
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003674261999549344
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00356371900124941
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003386645003047306
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003796051001700107
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003503046005789656
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003162184999382589
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0035130700052832253
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007839020996470936
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0034387160048936494
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0030161439935909584
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004002796005806886
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00389617800101405
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0042177520008408464
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005420752000645734
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0043475010024849325
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004268843003956135
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00460386600025231
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004659331003495026
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004154054004175123
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004724701000668574
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004454068002814893
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004368969995994121
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004028461000416428
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004335804995207582
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004130081993935164
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003891511994879693
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004177577000518795
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004335393998189829
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.06621192600141512
+        }
+      ]
+    },
+    {
+      "index": 11,
+      "recipe": "typescript-multistage",
+      "variant": "app-change-4",
+      "image_id": "bl20260929-warm-011",
+      "context_sha256": "13865bc6253da8607f8716f7c57ef3ed178e9cca3af2fb089b6d909c8388e162",
+      "started_at": "2026-09-29T08:01:53Z",
+      "start_offset_seconds": 0.0060365129975252785,
+      "submission_seconds": 6.7160022650059545,
+      "build_id": "9c75819f-b15d-41d2-beeb-46656ed7dc99",
+      "polling_seconds": 2.0594238649937324,
+      "build": {
+        "build_id": "9c75819f-b15d-41d2-beeb-46656ed7dc99",
+        "image_id": "bl20260929-warm-011",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:01:58.486950+00:00",
+        "started_at": "2026-09-29T08:01:58.486950+00:00",
+        "queued_at": "2026-09-29T08:02:00.133515+00:00",
+        "execution_started_at": "2026-09-29T08:02:00.143890+00:00",
+        "finished_at": "2026-09-29T08:02:01.832279+00:00",
+        "timings": {
+          "end_to_end_ms": 3376,
+          "environment": {
+            "docker_pull_skipped": 1,
+            "groups_reused": 2,
+            "preflight_ms": 96.023,
+            "total_ms": 234.158
+          },
+          "phases": {
+            "cleanup_ms": 23,
+            "docker_build_and_push_ms": 1438,
+            "immutable_environment_ms": 234
+          },
+          "preparation_ms": 1646,
+          "queue_wait_ms": 10,
+          "total_ms": 1720
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:02:01.832279+00:00",
+          "id": "bl20260929-warm-011",
+          "labels": {},
+          "manifest_digest": "sha256:3e8a9af40c13e1d024b4a7bdbdcdbc1321e46e4d0d4cd1c29581b722c01745f5",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-zylngdno",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-warm-011-51f5c6a8afe0:latest",
+          "updated_at": "2026-09-29T08:02:01.832279+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.4",
+          "job_id": "167927354",
+          "node_url": "http://10.42.0.4:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.4"
+      },
+      "cached_steps_in_retained_tail": 13,
+      "cached_steps_observed": [
+        {
+          "id": "#16",
+          "description": "[stage-1 3/6] COPY --from=compile /opt/fixture/dist/bundle.cjs ./bundle.cjs"
+        },
+        {
+          "id": "#17",
+          "description": "[compile 3/8] COPY package.json package-lock.json ./"
+        },
+        {
+          "id": "#18",
+          "description": "[compile 7/8] COPY src ./src"
+        },
+        {
+          "id": "#19",
+          "description": "[compile 8/8] RUN npm run lint && npm run build && npm test  && node dist/bundle.cjs > /opt/fixture/build-smoke.json"
+        },
+        {
+          "id": "#20",
+          "description": "[stage-1 5/6] COPY --from=compile /opt/fixture/npm-resolved.json ./npm-resolved.json"
+        },
+        {
+          "id": "#21",
+          "description": "[compile 2/8] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#22",
+          "description": "[compile 4/8] RUN npm ci --no-audit --no-fund --cache /tmp/npm-cache  && npm ls --all --json > /opt/fixture/npm-resolved.json  && rm -rf /tmp/npm-cache"
+        },
+        {
+          "id": "#23",
+          "description": "[stage-1 4/6] COPY --from=compile /opt/fixture/package-lock.json ./resolved-package-lock.json"
+        },
+        {
+          "id": "#24",
+          "description": "[stage-1 2/6] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#25",
+          "description": "[compile 5/8] COPY tsconfig.json build.cjs webpack.config.cjs eslint.config.cjs jest.config.cjs ./"
+        },
+        {
+          "id": "#26",
+          "description": "[compile 6/8] COPY tests ./tests"
+        },
+        {
+          "id": "#27",
+          "description": "[stage-1 6/6] COPY --from=compile /opt/fixture/build-smoke.json ./build-smoke.json"
+        }
+      ],
+      "client_wall_seconds": 8.775611675999244,
+      "finish_offset_seconds": 8.781648368996684,
+      "finished_at": "2026-09-29T08:02:02Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 200,
+          "headers_seconds": 0.005179350002435967
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 1.7566965090009035
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.014302783005405217
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0057799369969870895
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.038458347000414506
+        }
+      ]
+    },
+    {
+      "index": 12,
+      "recipe": "python-agent",
+      "variant": "app-change-1",
+      "image_id": "bl20260929-warm-012",
+      "context_sha256": "74d00665a83100449a8541b2132668c4abc337311728fd5725ed6c0b43f79d1e",
+      "started_at": "2026-09-29T08:01:53Z",
+      "start_offset_seconds": 0.005312663000950124,
+      "submission_seconds": 4.842445156995382,
+      "build_id": "f2054055-bfb7-45a5-84b5-a45ed1185a47",
+      "polling_seconds": 3.108178176000365,
+      "build": {
+        "build_id": "f2054055-bfb7-45a5-84b5-a45ed1185a47",
+        "image_id": "bl20260929-warm-012",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:01:57.057507+00:00",
+        "started_at": "2026-09-29T08:01:57.057507+00:00",
+        "queued_at": "2026-09-29T08:01:58.262984+00:00",
+        "execution_started_at": "2026-09-29T08:01:58.266506+00:00",
+        "finished_at": "2026-09-29T08:02:00.610036+00:00",
+        "timings": {
+          "end_to_end_ms": 3589,
+          "environment": {
+            "docker_pull_skipped": 1,
+            "groups_reused": 6,
+            "preflight_ms": 372.493,
+            "total_ms": 598.058
+          },
+          "phases": {
+            "cleanup_ms": 21,
+            "docker_build_and_push_ms": 1732,
+            "immutable_environment_ms": 598
+          },
+          "preparation_ms": 1205,
+          "queue_wait_ms": 3,
+          "total_ms": 2381
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:02:00.610036+00:00",
+          "id": "bl20260929-warm-012",
+          "labels": {},
+          "manifest_digest": "sha256:1d6b723d2ac9161a6693e4cddf873c9aeedf05982f2446596b70efe254759714",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-9tw9mjq7",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-warm-012-3753579126af:latest",
+          "updated_at": "2026-09-29T08:02:00.610036+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.4",
+          "job_id": "167927354",
+          "node_url": "http://10.42.0.4:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.4"
+      },
+      "cached_steps_in_retained_tail": 8,
+      "cached_steps_observed": [
+        {
+          "id": "#14",
+          "description": "[6/8] RUN python -m pip install --no-cache-dir --no-build-isolation --no-deps ./native"
+        },
+        {
+          "id": "#15",
+          "description": "[3/8] COPY requirements.txt ./requirements.txt"
+        },
+        {
+          "id": "#16",
+          "description": "[4/8] RUN python -m pip install --no-cache-dir --only-binary=:all: --report /opt/fixture/pip-install-report.json -r requirements.txt  && python -m pip check  && python -m pip freeze --all > /opt/fixture/resolved-requirements.txt"
+        },
+        {
+          "id": "#17",
+          "description": "[5/8] COPY native ./native"
+        },
+        {
+          "id": "#18",
+          "description": "[2/8] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#19",
+          "description": "[6/8] RUN python -m pip install --no-cache-dir --no-build-isolation --no-deps ./native"
+        },
+        {
+          "id": "#20",
+          "description": "[7/8] COPY src ./src"
+        },
+        {
+          "id": "#21",
+          "description": "[8/8] RUN python -m compileall -q -j 4 --invalidation-mode checked-hash src  && python -m agent.smoke > /opt/fixture/build-smoke.json"
+        }
+      ],
+      "client_wall_seconds": 7.950837889002287,
+      "finish_offset_seconds": 7.956150712001545,
+      "finished_at": "2026-09-29T08:02:01Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 200,
+          "headers_seconds": 0.03701551500125788
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 1.2690948620002018
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.019292971002869308
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008685959001013543
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.012487086998589803
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.061340902000665665
+        }
+      ]
+    },
+    {
+      "index": 13,
+      "recipe": "typescript-tools",
+      "variant": "app-change-1",
+      "image_id": "bl20260929-warm-013",
+      "context_sha256": "d79e8887d7b754eab6040d56940c1e0fd0aff4c7ed562b9cea0ff7285dd5ab82",
+      "started_at": "2026-09-29T08:01:53Z",
+      "start_offset_seconds": 0.007219033999717794,
+      "submission_seconds": 6.7567427629983285,
+      "build_id": "6b1a2026-d1f0-4865-a6e9-a997bd5b30cb",
+      "polling_seconds": 56.40611472000455,
+      "build": {
+        "build_id": "6b1a2026-d1f0-4865-a6e9-a997bd5b30cb",
+        "image_id": "bl20260929-warm-013",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:01:58.480684+00:00",
+        "started_at": "2026-09-29T08:01:58.480684+00:00",
+        "queued_at": "2026-09-29T08:02:00.179138+00:00",
+        "execution_started_at": "2026-09-29T08:02:00.654238+00:00",
+        "finished_at": "2026-09-29T08:02:55.623918+00:00",
+        "timings": {
+          "end_to_end_ms": 57174,
+          "environment": {
+            "component_lookup_ms": 131.87199999999999,
+            "docker_pull_ms": 18113.991,
+            "erofs_bytes_built": 185315328,
+            "groups_built": 2,
+            "groups_reused": 3,
+            "layer_lock_wait_ms": 0.033999999999999996,
+            "mkfs_ms": 1041.263,
+            "preflight_misses": 1,
+            "preflight_ms": 39.955,
+            "publish_component_ms": 1175.499,
+            "sign_ms": 260.271,
+            "squash_ms": 3137.6459999999997,
+            "total_ms": 24914.447
+          },
+          "phases": {
+            "cleanup_ms": 21,
+            "docker_build_and_push_ms": 30040,
+            "immutable_environment_ms": 24914
+          },
+          "preparation_ms": 1698,
+          "queue_wait_ms": 475,
+          "total_ms": 55001
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:02:55.623918+00:00",
+          "id": "bl20260929-warm-013",
+          "labels": {},
+          "manifest_digest": "sha256:6ea0f19b9c2b247e52760a4e4130c8cb0b9a91e5b22618deb1bd0fcb20fe215c",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-s2j2jjuo",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-warm-013-e81732b9039a:latest",
+          "updated_at": "2026-09-29T08:02:55.623918+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.4",
+          "job_id": "167927354",
+          "node_url": "http://10.42.0.4:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.4"
+      },
+      "cached_steps_in_retained_tail": 6,
+      "cached_steps_observed": [
+        {
+          "id": "#14",
+          "description": "[compile 6/8] COPY tests ./tests"
+        },
+        {
+          "id": "#15",
+          "description": "[compile 2/8] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#16",
+          "description": "[3/8] COPY package.json package-lock.json ./"
+        },
+        {
+          "id": "#17",
+          "description": "[5/8] COPY tsconfig.json build.cjs webpack.config.cjs eslint.config.cjs jest.config.cjs ./"
+        },
+        {
+          "id": "#18",
+          "description": "[4/8] RUN npm ci --no-audit --no-fund --cache /tmp/npm-cache  && npm ls --all --json > /opt/fixture/npm-resolved.json  && rm -rf /tmp/npm-cache"
+        },
+        {
+          "id": "#19",
+          "description": "[6/8] COPY tests ./tests"
+        }
+      ],
+      "client_wall_seconds": 63.16308514800039,
+      "finish_offset_seconds": 63.17030438200163,
+      "finished_at": "2026-09-29T08:02:56Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 200,
+          "headers_seconds": 0.004003185997135006
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 1.8029364280009759
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.019250662997364998
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0071288100007222965
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008130944006552454
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007300035998923704
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004324279994762037
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004116892996535171
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0058317609946243465
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010757028001535218
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00821568000537809
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004385463005746715
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004856804000155535
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0048802960009197704
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005505619999894407
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005532576993573457
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008732463997148443
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0057667109940666705
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005544154002564028
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005947570003627334
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005245852000371087
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005981515998428222
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005174911995709408
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005081645002064761
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0051380219956627116
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00575589499931084
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005252780996670481
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005195150995859876
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004543721996014938
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005421153000497725
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005067754995252471
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005282011996314395
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005787759000668302
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004991119996702764
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006275872998230625
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006306055001914501
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004950123999151401
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0052085490024182945
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004764215998875443
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005368090998672415
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00499697800114518
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00575415299681481
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004409077002492268
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006097466000937857
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007064010998874437
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008317510997585487
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006391363000147976
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005322656994394492
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005455890997836832
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004501322997384705
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0060875220005982555
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005489606999617536
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005980384994472843
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006695221003610641
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006117222998000216
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006155226001283154
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004448810999747366
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004839581000851467
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.05160733700176934
+        }
+      ]
+    },
+    {
+      "index": 14,
+      "recipe": "typescript-multistage",
+      "variant": "app-change-1",
+      "image_id": "bl20260929-warm-014",
+      "context_sha256": "b3134f70b0b90df1468d00443552ae1a6921240f4c99a0abb7fe196ebbdca4f8",
+      "started_at": "2026-09-29T08:01:53Z",
+      "start_offset_seconds": 0.004380637001304422,
+      "submission_seconds": 6.77512235299946,
+      "build_id": "405f51c5-9116-492c-9acb-0fe120017f84",
+      "polling_seconds": 27.27414355699875,
+      "build": {
+        "build_id": "405f51c5-9116-492c-9acb-0fe120017f84",
+        "image_id": "bl20260929-warm-014",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:01:58.468366+00:00",
+        "started_at": "2026-09-29T08:01:58.468366+00:00",
+        "queued_at": "2026-09-29T08:02:00.198914+00:00",
+        "execution_started_at": "2026-09-29T08:02:01.868247+00:00",
+        "finished_at": "2026-09-29T08:02:26.875416+00:00",
+        "timings": {
+          "end_to_end_ms": 28442,
+          "environment": {
+            "docker_pull_skipped": 1,
+            "groups_reused": 2,
+            "preflight_ms": 203.734,
+            "total_ms": 543.763
+          },
+          "phases": {
+            "cleanup_ms": 26,
+            "docker_build_and_push_ms": 24453,
+            "immutable_environment_ms": 543
+          },
+          "preparation_ms": 1730,
+          "queue_wait_ms": 1669,
+          "total_ms": 25043
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:02:26.875416+00:00",
+          "id": "bl20260929-warm-014",
+          "labels": {},
+          "manifest_digest": "sha256:ad217c875ab952edf19820c7ccbdf299011bbae0010569690c19be468a978536",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-c879tovp",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-warm-014-e3d252482b98:latest",
+          "updated_at": "2026-09-29T08:02:26.875416+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.4",
+          "job_id": "167927354",
+          "node_url": "http://10.42.0.4:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.4"
+      },
+      "cached_steps_in_retained_tail": 13,
+      "cached_steps_observed": [
+        {
+          "id": "#16",
+          "description": "[compile 6/8] COPY tests ./tests"
+        },
+        {
+          "id": "#19",
+          "description": "[stage-1 2/6] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#20",
+          "description": "[compile 3/8] COPY package.json package-lock.json ./"
+        },
+        {
+          "id": "#21",
+          "description": "[compile 7/8] COPY src ./src"
+        },
+        {
+          "id": "#22",
+          "description": "[stage-1 3/6] COPY --from=compile /opt/fixture/dist/bundle.cjs ./bundle.cjs"
+        },
+        {
+          "id": "#23",
+          "description": "[compile 2/8] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#24",
+          "description": "[compile 5/8] COPY tsconfig.json build.cjs webpack.config.cjs eslint.config.cjs jest.config.cjs ./"
+        },
+        {
+          "id": "#25",
+          "description": "[compile 6/8] COPY tests ./tests"
+        },
+        {
+          "id": "#26",
+          "description": "[compile 8/8] RUN npm run lint && npm run build && npm test  && node dist/bundle.cjs > /opt/fixture/build-smoke.json"
+        },
+        {
+          "id": "#27",
+          "description": "[stage-1 5/6] COPY --from=compile /opt/fixture/npm-resolved.json ./npm-resolved.json"
+        },
+        {
+          "id": "#28",
+          "description": "[compile 4/8] RUN npm ci --no-audit --no-fund --cache /tmp/npm-cache  && npm ls --all --json > /opt/fixture/npm-resolved.json  && rm -rf /tmp/npm-cache"
+        },
+        {
+          "id": "#29",
+          "description": "[stage-1 4/6] COPY --from=compile /opt/fixture/package-lock.json ./resolved-package-lock.json"
+        },
+        {
+          "id": "#30",
+          "description": "[stage-1 6/6] COPY --from=compile /opt/fixture/build-smoke.json ./build-smoke.json"
+        }
+      ],
+      "client_wall_seconds": 34.04949265199684,
+      "finish_offset_seconds": 34.05387342999893,
+      "finished_at": "2026-09-29T08:02:27Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 200,
+          "headers_seconds": 0.002017855003941804
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 1.8366654359997483
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.021573931000602897
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008792137996351812
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009042751997185405
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004495105997193605
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00891564699850278
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0035614160005934536
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.011187693002284504
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006072381998819765
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.012838361995818559
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009077249997062609
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0047088190040085465
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004676814998674672
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0032749500023783185
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004754243003844749
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003930635000870097
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004976289004844148
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003840882003714796
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004023993998998776
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.002923645995906554
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00494882099883398
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005340461997548118
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0038799749963800423
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004401235004479531
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0038823290014988743
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003653264000604395
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004410938003275078
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003925008000805974
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.09896333600045182
+        }
+      ]
+    },
+    {
+      "index": 15,
+      "recipe": "python-agent",
+      "variant": "app-change-2",
+      "image_id": "bl20260929-warm-015",
+      "context_sha256": "f86c656337e674989f4b52156e43a898811fa4bd895775d67dc8a3d2a22189b6",
+      "started_at": "2026-09-29T08:01:53Z",
+      "start_offset_seconds": 0.006460718002927024,
+      "submission_seconds": 3.750137683993671,
+      "build_id": "948d52a8-9222-4152-aa82-a795f9418b2e",
+      "polling_seconds": 3.1201820260030217,
+      "build": {
+        "build_id": "948d52a8-9222-4152-aa82-a795f9418b2e",
+        "image_id": "bl20260929-warm-015",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:01:56.998382+00:00",
+        "started_at": "2026-09-29T08:01:56.998382+00:00",
+        "queued_at": "2026-09-29T08:01:57.170441+00:00",
+        "execution_started_at": "2026-09-29T08:01:57.174452+00:00",
+        "finished_at": "2026-09-29T08:01:59.385097+00:00",
+        "timings": {
+          "end_to_end_ms": 2984,
+          "environment": {
+            "docker_pull_skipped": 1,
+            "groups_reused": 6,
+            "preflight_ms": 644.687,
+            "total_ms": 1006.931
+          },
+          "phases": {
+            "cleanup_ms": 574,
+            "docker_build_and_push_ms": 1162,
+            "immutable_environment_ms": 1006
+          },
+          "preparation_ms": 172,
+          "queue_wait_ms": 3,
+          "total_ms": 2809
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:01:59.385097+00:00",
+          "id": "bl20260929-warm-015",
+          "labels": {},
+          "manifest_digest": "sha256:95f26c6c1cc7174cd9edde1f9fb14019cffdd1dd03c76e81aaaa2d0b6bd5a554",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-wprbtzpt",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-warm-015-587142f66e29:latest",
+          "updated_at": "2026-09-29T08:01:59.385097+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.3",
+          "job_id": "167927353",
+          "node_url": "http://10.42.0.3:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.3"
+      },
+      "cached_steps_in_retained_tail": 7,
+      "cached_steps_observed": [
+        {
+          "id": "#14",
+          "description": "[6/8] RUN python -m pip install --no-cache-dir --no-build-isolation --no-deps ./native"
+        },
+        {
+          "id": "#15",
+          "description": "[7/8] COPY src ./src"
+        },
+        {
+          "id": "#16",
+          "description": "[2/8] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#17",
+          "description": "[3/8] COPY requirements.txt ./requirements.txt"
+        },
+        {
+          "id": "#18",
+          "description": "[4/8] RUN python -m pip install --no-cache-dir --only-binary=:all: --report /opt/fixture/pip-install-report.json -r requirements.txt  && python -m pip check  && python -m pip freeze --all > /opt/fixture/resolved-requirements.txt"
+        },
+        {
+          "id": "#19",
+          "description": "[5/8] COPY native ./native"
+        },
+        {
+          "id": "#20",
+          "description": "[8/8] RUN python -m compileall -q -j 4 --invalidation-mode checked-hash src  && python -m agent.smoke > /opt/fixture/build-smoke.json"
+        }
+      ],
+      "client_wall_seconds": 6.870513777997985,
+      "finish_offset_seconds": 6.876974667000468,
+      "finished_at": "2026-09-29T08:02:00Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 200,
+          "headers_seconds": 0.0035602450006990694
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 0.22467445299844258
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010481588004040532
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010532348998822272
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007651621999684721
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0858927439985564
+        }
+      ]
+    },
+    {
+      "index": 16,
+      "recipe": "typescript-tools",
+      "variant": "app-change-2",
+      "image_id": "bl20260929-warm-016",
+      "context_sha256": "8e1d7c4eca5e31f97ef5476dba6f811070eaf311e9dbe0887fcf7d1043335c5e",
+      "started_at": "2026-09-29T08:01:53Z",
+      "start_offset_seconds": 0.004517164998105727,
+      "submission_seconds": 7.610356700999546,
+      "build_id": "a84c88ac-7531-49c6-8af2-745fe4034003",
+      "polling_seconds": 36.54902944499918,
+      "build": {
+        "build_id": "a84c88ac-7531-49c6-8af2-745fe4034003",
+        "image_id": "bl20260929-warm-016",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:01:58.633649+00:00",
+        "started_at": "2026-09-29T08:01:58.633649+00:00",
+        "queued_at": "2026-09-29T08:02:00.924601+00:00",
+        "execution_started_at": "2026-09-29T08:02:01.015151+00:00",
+        "finished_at": "2026-09-29T08:02:36.251589+00:00",
+        "timings": {
+          "end_to_end_ms": 37641,
+          "environment": {
+            "component_lookup_ms": 162.537,
+            "docker_pull_ms": 6182.524,
+            "erofs_bytes_built": 14925824,
+            "groups_built": 1,
+            "groups_reused": 4,
+            "layer_lock_wait_ms": 0.034999999999999996,
+            "mkfs_ms": 379.881,
+            "preflight_misses": 1,
+            "preflight_ms": 54.994,
+            "publish_component_ms": 346.356,
+            "sign_ms": 18.635,
+            "squash_ms": 1267.575,
+            "total_ms": 9309.535
+          },
+          "phases": {
+            "cleanup_ms": 14,
+            "docker_build_and_push_ms": 25903,
+            "immutable_environment_ms": 9309
+          },
+          "preparation_ms": 2291,
+          "queue_wait_ms": 90,
+          "total_ms": 35260
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:02:36.251589+00:00",
+          "id": "bl20260929-warm-016",
+          "labels": {},
+          "manifest_digest": "sha256:58e5a43452a72757e93ef81bc6058fea98871ce9fce80eeaa94b3cf47858adcf",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-_q1ojwoo",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-warm-016-e0ac932cfbbf:latest",
+          "updated_at": "2026-09-29T08:02:36.251589+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.3",
+          "job_id": "167927353",
+          "node_url": "http://10.42.0.3:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.3"
+      },
+      "cached_steps_in_retained_tail": 6,
+      "cached_steps_observed": [
+        {
+          "id": "#14",
+          "description": "[6/8] COPY tests ./tests"
+        },
+        {
+          "id": "#15",
+          "description": "[6/8] COPY tests ./tests"
+        },
+        {
+          "id": "#16",
+          "description": "[2/8] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#17",
+          "description": "[3/8] COPY package.json package-lock.json ./"
+        },
+        {
+          "id": "#18",
+          "description": "[4/8] RUN npm ci --no-audit --no-fund --cache /tmp/npm-cache  && npm ls --all --json > /opt/fixture/npm-resolved.json  && rm -rf /tmp/npm-cache"
+        },
+        {
+          "id": "#19",
+          "description": "[5/8] COPY tsconfig.json build.cjs webpack.config.cjs eslint.config.cjs jest.config.cjs ./"
+        }
+      ],
+      "client_wall_seconds": 44.15961398999934,
+      "finish_offset_seconds": 44.16413129599823,
+      "finished_at": "2026-09-29T08:02:37Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 200,
+          "headers_seconds": 0.0024542059982195497
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 2.5561427569991793
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009739314999023918
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0033055729945772327
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006211393003468402
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0054938939938438125
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005101823000586592
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005079230999399442
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004081032995600253
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00647608900180785
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004084997999598272
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003452705997915473
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0037151990036363713
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005381597999075893
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005419720997451805
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0068044519939576276
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0038357950033969246
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009094943998206872
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0038144860009197146
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006969299996853806
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008124464999127667
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0068628629960585386
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006205885998497251
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006356163001328241
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006585110997548327
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0054682580012013204
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004744629004562739
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005588544001511764
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006057920996681787
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004486673999053892
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006806845995015465
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005809618996863719
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007296151001355611
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006095513999753166
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0030132690008031204
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00325424199400004
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005645001998345833
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008009986995602958
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.33740665400546277
+        }
+      ]
+    },
+    {
+      "index": 17,
+      "recipe": "typescript-multistage",
+      "variant": "app-change-2",
+      "image_id": "bl20260929-warm-017",
+      "context_sha256": "4d1eeea78da5b53e8e70614ceb6533204f98d47ba0cbb36993549f8bea4f2043",
+      "started_at": "2026-09-29T08:01:53Z",
+      "start_offset_seconds": 0.004634256998542696,
+      "submission_seconds": 7.5896954409981845,
+      "build_id": "e00e06c8-524b-4d73-89af-ab61df83230a",
+      "polling_seconds": 40.311637181999686,
+      "build": {
+        "build_id": "e00e06c8-524b-4d73-89af-ab61df83230a",
+        "image_id": "bl20260929-warm-017",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:01:58.705904+00:00",
+        "started_at": "2026-09-29T08:01:58.705904+00:00",
+        "queued_at": "2026-09-29T08:02:01.003142+00:00",
+        "execution_started_at": "2026-09-29T08:02:01.015461+00:00",
+        "finished_at": "2026-09-29T08:02:41.058561+00:00",
+        "timings": {
+          "end_to_end_ms": 42393,
+          "environment": {
+            "component_lookup_ms": 326.877,
+            "docker_pull_ms": 6960.586,
+            "erofs_bytes_built": 3702784,
+            "groups_built": 1,
+            "groups_reused": 1,
+            "layer_lock_wait_ms": 0.015,
+            "mkfs_ms": 57.882,
+            "preflight_misses": 1,
+            "preflight_ms": 20.948,
+            "publish_component_ms": 1885.664,
+            "sign_ms": 12.004,
+            "squash_ms": 18.16,
+            "total_ms": 10360.37
+          },
+          "phases": {
+            "cleanup_ms": 29,
+            "docker_build_and_push_ms": 29649,
+            "immutable_environment_ms": 10360
+          },
+          "preparation_ms": 2297,
+          "queue_wait_ms": 12,
+          "total_ms": 40084
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:02:41.058561+00:00",
+          "id": "bl20260929-warm-017",
+          "labels": {},
+          "manifest_digest": "sha256:0e073740aa677368109e946bfcae29424d3a21fc5b26aaf0cc3bdcecde948042",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-qloumsb2",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-warm-017-baa5d42f8b18:latest",
+          "updated_at": "2026-09-29T08:02:41.058561+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.3",
+          "job_id": "167927353",
+          "node_url": "http://10.42.0.3:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.3"
+      },
+      "cached_steps_in_retained_tail": 9,
+      "cached_steps_observed": [
+        {
+          "id": "#16",
+          "description": "[6/8] COPY tests ./tests"
+        },
+        {
+          "id": "#19",
+          "description": "[stage-1 2/6] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#20",
+          "description": "[compile 4/8] RUN npm ci --no-audit --no-fund --cache /tmp/npm-cache  && npm ls --all --json > /opt/fixture/npm-resolved.json  && rm -rf /tmp/npm-cache"
+        },
+        {
+          "id": "#21",
+          "description": "[compile 5/8] COPY tsconfig.json build.cjs webpack.config.cjs eslint.config.cjs jest.config.cjs ./"
+        },
+        {
+          "id": "#22",
+          "description": "[compile 6/8] COPY tests ./tests"
+        },
+        {
+          "id": "#23",
+          "description": "[compile 7/8] COPY src ./src"
+        },
+        {
+          "id": "#24",
+          "description": "[2/8] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#25",
+          "description": "[compile 3/8] COPY package.json package-lock.json ./"
+        },
+        {
+          "id": "#26",
+          "description": "[compile 8/8] RUN npm run lint && npm run build && npm test  && node dist/bundle.cjs > /opt/fixture/build-smoke.json"
+        }
+      ],
+      "client_wall_seconds": 47.90157038200414,
+      "finish_offset_seconds": 47.90620478899655,
+      "finished_at": "2026-09-29T08:02:41Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 200,
+          "headers_seconds": 0.011602306003624108
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 2.5134681109993835
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.020371749997138977
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0052110329997958615
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005598207004368305
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00489556799584534
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0054578440031036735
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004800665999937337
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007220606996270362
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0065694090008037165
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005486011999892071
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004369021000456996
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004529842997726519
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0055301440006587654
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006482117998530157
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005566503001318779
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0049644430037005804
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007666100995265879
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004974967996531632
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007015734001470264
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007115102001989726
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006279799003095832
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006115932003012858
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0061719589939457364
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006311392004135996
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004641427003662102
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0052006600017193705
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006318833002296742
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006605768998269923
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004232671999488957
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005689443998562638
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007113339001080021
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005868390995601658
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004010566000943072
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003918709000572562
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004343975997471716
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006637361999310087
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0070183080024435185
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007820095001079608
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005411550002463628
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005109742996864952
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005617774004349485
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.057313413999509066
+        }
+      ]
+    },
+    {
+      "index": 18,
+      "recipe": "python-agent",
+      "variant": "app-change-3",
+      "image_id": "bl20260929-warm-018",
+      "context_sha256": "856b1af98f34de5d697d7eacc2f9571faceb0dff759b8334191e19a461f66e8e",
+      "started_at": "2026-09-29T08:01:53Z",
+      "start_offset_seconds": 0.004749384999740869,
+      "submission_seconds": 4.7952632480009925,
+      "build_id": "816424c9-7bc0-42c5-aef3-f6b9bfcae92e",
+      "polling_seconds": 11.24256689199683,
+      "build": {
+        "build_id": "816424c9-7bc0-42c5-aef3-f6b9bfcae92e",
+        "image_id": "bl20260929-warm-018",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:01:57.051107+00:00",
+        "started_at": "2026-09-29T08:01:57.051107+00:00",
+        "queued_at": "2026-09-29T08:01:58.210716+00:00",
+        "execution_started_at": "2026-09-29T08:01:58.217551+00:00",
+        "finished_at": "2026-09-29T08:02:08.622846+00:00",
+        "timings": {
+          "end_to_end_ms": 11606,
+          "environment": {
+            "component_lookup_ms": 519.783,
+            "docker_pull_ms": 1519.588,
+            "groups_reused": 6,
+            "layer_lock_wait_ms": 1064.426,
+            "preflight_misses": 1,
+            "preflight_ms": 44.104,
+            "total_ms": 3703.331
+          },
+          "phases": {
+            "cleanup_ms": 25,
+            "docker_build_and_push_ms": 6687,
+            "immutable_environment_ms": 3703
+          },
+          "preparation_ms": 1159,
+          "queue_wait_ms": 6,
+          "total_ms": 10441
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:02:08.622846+00:00",
+          "id": "bl20260929-warm-018",
+          "labels": {},
+          "manifest_digest": "sha256:612dd842deb1dc60d9828c59533829502227fafeae426d4e968bb4e0ab7b26b8",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-53wiri53",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-warm-018-29fbaad6239f:latest",
+          "updated_at": "2026-09-29T08:02:08.622846+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.4",
+          "job_id": "167927354",
+          "node_url": "http://10.42.0.4:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.4"
+      },
+      "cached_steps_in_retained_tail": 5,
+      "cached_steps_observed": [
+        {
+          "id": "#14",
+          "description": "[4/8] RUN python -m pip install --no-cache-dir --only-binary=:all: --report /opt/fixture/pip-install-report.json -r requirements.txt  && python -m pip check  && python -m pip freeze --all > /opt/fixture/resolved-requirements.txt"
+        },
+        {
+          "id": "#15",
+          "description": "[5/8] COPY native ./native"
+        },
+        {
+          "id": "#16",
+          "description": "[2/8] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#17",
+          "description": "[3/8] COPY requirements.txt ./requirements.txt"
+        },
+        {
+          "id": "#18",
+          "description": "[6/8] RUN python -m pip install --no-cache-dir --no-build-isolation --no-deps ./native"
+        }
+      ],
+      "client_wall_seconds": 16.038059926999267,
+      "finish_offset_seconds": 16.04280959299649,
+      "finished_at": "2026-09-29T08:02:09Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 200,
+          "headers_seconds": 0.02188700200349558
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 1.2232338780013379
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.012979826002265327
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010107612004503608
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.026191573997493833
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007002466998528689
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004628549999324605
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0045418599984259345
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009253352996893227
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00766204599494813
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004728036998130847
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005274269999063108
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004292175006412435
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.1429441849977593
+        }
+      ]
+    },
+    {
+      "index": 19,
+      "recipe": "typescript-tools",
+      "variant": "app-change-3",
+      "image_id": "bl20260929-warm-019",
+      "context_sha256": "ffc862192ccf9a2aad7e764726526ad999b37129381c59e1a48b628a45d81258",
+      "started_at": "2026-09-29T08:01:53Z",
+      "start_offset_seconds": 0.006161104000057094,
+      "submission_seconds": 4.790414435003186,
+      "build_id": "839ed975-29c8-4dfc-984e-8244be270a16",
+      "polling_seconds": 2.0972911739954725,
+      "build": {
+        "build_id": "839ed975-29c8-4dfc-984e-8244be270a16",
+        "image_id": "bl20260929-warm-019",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:01:57.985213+00:00",
+        "started_at": "2026-09-29T08:01:57.985213+00:00",
+        "queued_at": "2026-09-29T08:01:58.212545+00:00",
+        "execution_started_at": "2026-09-29T08:01:58.215682+00:00",
+        "finished_at": "2026-09-29T08:01:59.988243+00:00",
+        "timings": {
+          "end_to_end_ms": 2474,
+          "environment": {
+            "docker_pull_skipped": 1,
+            "groups_reused": 5,
+            "preflight_ms": 360.876,
+            "total_ms": 675.984
+          },
+          "phases": {
+            "cleanup_ms": 434,
+            "docker_build_and_push_ms": 1073,
+            "immutable_environment_ms": 676
+          },
+          "preparation_ms": 227,
+          "queue_wait_ms": 3,
+          "total_ms": 2244
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:01:59.988243+00:00",
+          "id": "bl20260929-warm-019",
+          "labels": {},
+          "manifest_digest": "sha256:1127e6c545f7317d79dd7adacd64380bb0cc189f86890631e42d8918412f5186",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-8w5rwdyf",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-warm-019-03920194531b:latest",
+          "updated_at": "2026-09-29T08:01:59.988243+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.3",
+          "job_id": "167927353",
+          "node_url": "http://10.42.0.3:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.3"
+      },
+      "cached_steps_in_retained_tail": 7,
+      "cached_steps_observed": [
+        {
+          "id": "#14",
+          "description": "[4/8] RUN npm ci --no-audit --no-fund --cache /tmp/npm-cache  && npm ls --all --json > /opt/fixture/npm-resolved.json  && rm -rf /tmp/npm-cache"
+        },
+        {
+          "id": "#15",
+          "description": "[5/8] COPY tsconfig.json build.cjs webpack.config.cjs eslint.config.cjs jest.config.cjs ./"
+        },
+        {
+          "id": "#16",
+          "description": "[7/8] COPY src ./src"
+        },
+        {
+          "id": "#17",
+          "description": "[2/8] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#18",
+          "description": "[3/8] COPY package.json package-lock.json ./"
+        },
+        {
+          "id": "#19",
+          "description": "[6/8] COPY tests ./tests"
+        },
+        {
+          "id": "#20",
+          "description": "[8/8] RUN npm run lint && npm run build && npm test  && node dist/bundle.cjs > /opt/fixture/build-smoke.json"
+        }
+      ],
+      "client_wall_seconds": 6.888126359997841,
+      "finish_offset_seconds": 6.894287773997348,
+      "finished_at": "2026-09-29T08:02:00Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 200,
+          "headers_seconds": 0.005566855004872195
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 0.28433444499387406
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008971112998551689
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.011897764001332689
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.07562606099963887
+        }
+      ]
+    },
+    {
+      "index": 20,
+      "recipe": "typescript-multistage",
+      "variant": "app-change-3",
+      "image_id": "bl20260929-warm-020",
+      "context_sha256": "774f0a533762d117b0fd66e2b192e9c0b687bc33694a16ea571887c25496fa32",
+      "started_at": "2026-09-29T08:01:53Z",
+      "start_offset_seconds": 0.006846709999081213,
+      "submission_seconds": 7.493643624999095,
+      "build_id": "a9bf6305-4ceb-496e-b0aa-5ad841b9a9ef",
+      "polling_seconds": 3.242060912998568,
+      "build": {
+        "build_id": "a9bf6305-4ceb-496e-b0aa-5ad841b9a9ef",
+        "image_id": "bl20260929-warm-020",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:01:58.621533+00:00",
+        "started_at": "2026-09-29T08:01:58.621533+00:00",
+        "queued_at": "2026-09-29T08:02:00.912095+00:00",
+        "execution_started_at": "2026-09-29T08:02:02.563559+00:00",
+        "finished_at": "2026-09-29T08:02:04.037017+00:00",
+        "timings": {
+          "end_to_end_ms": 5467,
+          "environment": {
+            "docker_pull_skipped": 1,
+            "groups_reused": 2,
+            "preflight_ms": 156.011,
+            "total_ms": 356.531
+          },
+          "phases": {
+            "cleanup_ms": 34,
+            "docker_build_and_push_ms": 1106,
+            "immutable_environment_ms": 356
+          },
+          "preparation_ms": 2290,
+          "queue_wait_ms": 1651,
+          "total_ms": 1526
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:02:04.037017+00:00",
+          "id": "bl20260929-warm-020",
+          "labels": {},
+          "manifest_digest": "sha256:b36683ceae67cec30b3ace1dd9717c297aba73ee6999385c06f7fe8e437623d7",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-_up_o6cb",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-warm-020-8b5b13193d0d:latest",
+          "updated_at": "2026-09-29T08:02:04.037017+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.5",
+          "job_id": "167927367",
+          "node_url": "http://10.42.0.5:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.5"
+      },
+      "cached_steps_in_retained_tail": 13,
+      "cached_steps_observed": [
+        {
+          "id": "#16",
+          "description": "[6/8] COPY tests ./tests"
+        },
+        {
+          "id": "#17",
+          "description": "[compile 7/8] COPY src ./src"
+        },
+        {
+          "id": "#18",
+          "description": "[compile 6/8] COPY tests ./tests"
+        },
+        {
+          "id": "#19",
+          "description": "[2/8] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#20",
+          "description": "[stage-1 2/6] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#21",
+          "description": "[compile 3/8] COPY package.json package-lock.json ./"
+        },
+        {
+          "id": "#22",
+          "description": "[stage-1 3/6] COPY --from=compile /opt/fixture/dist/bundle.cjs ./bundle.cjs"
+        },
+        {
+          "id": "#23",
+          "description": "[stage-1 5/6] COPY --from=compile /opt/fixture/npm-resolved.json ./npm-resolved.json"
+        },
+        {
+          "id": "#24",
+          "description": "[compile 5/8] COPY tsconfig.json build.cjs webpack.config.cjs eslint.config.cjs jest.config.cjs ./"
+        },
+        {
+          "id": "#25",
+          "description": "[compile 8/8] RUN npm run lint && npm run build && npm test  && node dist/bundle.cjs > /opt/fixture/build-smoke.json"
+        },
+        {
+          "id": "#26",
+          "description": "[stage-1 4/6] COPY --from=compile /opt/fixture/package-lock.json ./resolved-package-lock.json"
+        },
+        {
+          "id": "#27",
+          "description": "[compile 4/8] RUN npm ci --no-audit --no-fund --cache /tmp/npm-cache  && npm ls --all --json > /opt/fixture/npm-resolved.json  && rm -rf /tmp/npm-cache"
+        },
+        {
+          "id": "#28",
+          "description": "[stage-1 6/6] COPY --from=compile /opt/fixture/build-smoke.json ./build-smoke.json"
+        }
+      ],
+      "client_wall_seconds": 10.735943708998093,
+      "finish_offset_seconds": 10.74279067900352,
+      "finished_at": "2026-09-29T08:02:04Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 200,
+          "headers_seconds": 0.03531065199786099
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 2.457460108002124
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.09430935200362
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009989578997192439
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009332381996500771
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.12751632800063817
+        }
+      ]
+    },
+    {
+      "index": 21,
+      "recipe": "python-agent",
+      "variant": "app-change-4",
+      "image_id": "bl20260929-warm-021",
+      "context_sha256": "20edcef90eaa3f7ed73ebd99b821127c1b8a694d411d6713a25fb559909b4247",
+      "started_at": "2026-09-29T08:01:53Z",
+      "start_offset_seconds": 0.006582424997759517,
+      "submission_seconds": 4.167637807004212,
+      "build_id": "edee420c-07c3-46c8-928b-45d73f63a5ed",
+      "polling_seconds": 57.477974765999534,
+      "build": {
+        "build_id": "edee420c-07c3-46c8-928b-45d73f63a5ed",
+        "image_id": "bl20260929-warm-021",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:01:57.165593+00:00",
+        "started_at": "2026-09-29T08:01:57.165593+00:00",
+        "queued_at": "2026-09-29T08:01:57.587720+00:00",
+        "execution_started_at": "2026-09-29T08:01:57.594312+00:00",
+        "finished_at": "2026-09-29T08:02:54.814004+00:00",
+        "timings": {
+          "end_to_end_ms": 57691,
+          "environment": {
+            "component_lookup_ms": 302.679,
+            "docker_pull_ms": 33741.477,
+            "erofs_bytes_built": 5345280,
+            "groups_built": 1,
+            "groups_reused": 5,
+            "layer_lock_wait_ms": 0.07,
+            "mkfs_ms": 97.867,
+            "preflight_misses": 1,
+            "preflight_ms": 81.268,
+            "publish_component_ms": 166.126,
+            "sign_ms": 14.171,
+            "squash_ms": 794.589,
+            "total_ms": 35801.542
+          },
+          "phases": {
+            "cleanup_ms": 28,
+            "docker_build_and_push_ms": 21399,
+            "immutable_environment_ms": 35801
+          },
+          "preparation_ms": 422,
+          "queue_wait_ms": 6,
+          "total_ms": 57263
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:02:54.814004+00:00",
+          "id": "bl20260929-warm-021",
+          "labels": {},
+          "manifest_digest": "sha256:5abe161dce9fd22fed9f5b34cecdfc1b8d7c453698715147ee2ed8cc7fc3d6c6",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-2_iosnjt",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-warm-021-81a4af00ba69:latest",
+          "updated_at": "2026-09-29T08:02:54.814004+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.5",
+          "job_id": "167927367",
+          "node_url": "http://10.42.0.5:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.5"
+      },
+      "cached_steps_in_retained_tail": 6,
+      "cached_steps_observed": [
+        {
+          "id": "#14",
+          "description": "[6/8] RUN python -m pip install --no-cache-dir --no-build-isolation --no-deps ./native"
+        },
+        {
+          "id": "#15",
+          "description": "[6/8] RUN python -m pip install --no-cache-dir --no-build-isolation --no-deps ./native"
+        },
+        {
+          "id": "#16",
+          "description": "[2/8] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#17",
+          "description": "[3/8] COPY requirements.txt ./requirements.txt"
+        },
+        {
+          "id": "#18",
+          "description": "[5/8] COPY native ./native"
+        },
+        {
+          "id": "#19",
+          "description": "[4/8] RUN python -m pip install --no-cache-dir --only-binary=:all: --report /opt/fixture/pip-install-report.json -r requirements.txt  && python -m pip check  && python -m pip freeze --all > /opt/fixture/resolved-requirements.txt"
+        }
+      ],
+      "client_wall_seconds": 61.6458448830017,
+      "finish_offset_seconds": 61.65242745899741,
+      "finished_at": "2026-09-29T08:02:55Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 200,
+          "headers_seconds": 0.018851963002816774
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 0.4855510179986595
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.020535827999992762
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.03443799699743977
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.041431050005485304
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.015689847998146433
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004260700996383093
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004307275994506199
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003833301001577638
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003765098001167644
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003941870003473014
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0060424609982874244
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0040745039950707
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005038374998548534
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009330059001513291
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004379294994578231
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004092538998520467
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010710834001656622
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003750576994207222
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003669975994853303
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004089166002813727
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00540140599332517
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004751129003125243
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005841663005412556
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0048923430003924295
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0038662560036755167
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003900083996995818
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004226883997034747
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005935213004704565
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004132034002395812
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006588815005670767
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003747682996618096
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004286525996576529
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005151110999577213
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005030292995797936
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005679438996594399
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005404379000538029
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004892302997177467
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003669464997074101
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005607630002486985
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0026731899997685105
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004720125994936097
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004666011001972947
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005582375997619238
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005952587001956999
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0059014860016759485
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010433892995934002
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007513591001043096
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00819038599729538
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004950705006194767
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006978283003263641
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005745139998907689
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007454899998265319
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008618017003755085
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004845737996220123
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00590754600125365
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004206237004837021
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007234235999931116
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008154094997735228
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.06467693900049198
+        }
+      ]
+    },
+    {
+      "index": 22,
+      "recipe": "typescript-tools",
+      "variant": "app-change-4",
+      "image_id": "bl20260929-warm-022",
+      "context_sha256": "7da53985a8ceff29f5aec56a5711c22e885ce8b0bb68916af5769c3ea7406d65",
+      "started_at": "2026-09-29T08:01:53Z",
+      "start_offset_seconds": 0.005664028001774568,
+      "submission_seconds": 7.6184785419973196,
+      "build_id": "9a164d77-de1b-40ac-8f26-1467b68ed347",
+      "polling_seconds": 3.1206292240021867,
+      "build": {
+        "build_id": "9a164d77-de1b-40ac-8f26-1467b68ed347",
+        "image_id": "bl20260929-warm-022",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:01:58.645289+00:00",
+        "started_at": "2026-09-29T08:01:58.645289+00:00",
+        "queued_at": "2026-09-29T08:02:00.961588+00:00",
+        "execution_started_at": "2026-09-29T08:02:01.036727+00:00",
+        "finished_at": "2026-09-29T08:02:03.948224+00:00",
+        "timings": {
+          "end_to_end_ms": 5343,
+          "environment": {
+            "docker_pull_skipped": 1,
+            "groups_reused": 5,
+            "preflight_ms": 344.39,
+            "total_ms": 657.948
+          },
+          "phases": {
+            "cleanup_ms": 30,
+            "docker_build_and_push_ms": 2239,
+            "immutable_environment_ms": 658
+          },
+          "preparation_ms": 2316,
+          "queue_wait_ms": 75,
+          "total_ms": 2952
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:02:03.948224+00:00",
+          "id": "bl20260929-warm-022",
+          "labels": {},
+          "manifest_digest": "sha256:146c707866555f25a3646f940d23b4f97d112e01baefa59c9086cd992995dab0",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-tmayqf5n",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-warm-022-976871e911e6:latest",
+          "updated_at": "2026-09-29T08:02:03.948224+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.3",
+          "job_id": "167927353",
+          "node_url": "http://10.42.0.3:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.3"
+      },
+      "cached_steps_in_retained_tail": 8,
+      "cached_steps_observed": [
+        {
+          "id": "#14",
+          "description": "[3/8] COPY package.json package-lock.json ./"
+        },
+        {
+          "id": "#15",
+          "description": "[4/8] RUN npm ci --no-audit --no-fund --cache /tmp/npm-cache  && npm ls --all --json > /opt/fixture/npm-resolved.json  && rm -rf /tmp/npm-cache"
+        },
+        {
+          "id": "#16",
+          "description": "[5/8] COPY tsconfig.json build.cjs webpack.config.cjs eslint.config.cjs jest.config.cjs ./"
+        },
+        {
+          "id": "#17",
+          "description": "[7/8] COPY src ./src"
+        },
+        {
+          "id": "#18",
+          "description": "[2/8] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#19",
+          "description": "[6/8] COPY tests ./tests"
+        },
+        {
+          "id": "#20",
+          "description": "[8/8] RUN npm run lint && npm run build && npm test  && node dist/bundle.cjs > /opt/fixture/build-smoke.json"
+        }
+      ],
+      "client_wall_seconds": 10.739248949998,
+      "finish_offset_seconds": 10.744913109003392,
+      "finished_at": "2026-09-29T08:02:04Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 200,
+          "headers_seconds": 0.007632707005541306
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 2.5436309659999097
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005929965001996607
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0036689050029963255
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005431108002085239
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.10483989799831761
+        }
+      ]
+    },
+    {
+      "index": 23,
+      "recipe": "typescript-multistage",
+      "variant": "app-change-4",
+      "image_id": "bl20260929-warm-023",
+      "context_sha256": "13865bc6253da8607f8716f7c57ef3ed178e9cca3af2fb089b6d909c8388e162",
+      "started_at": "2026-09-29T08:01:53Z",
+      "start_offset_seconds": 0.0035641290014609694,
+      "submission_seconds": 7.51162938199559,
+      "build_id": "0ee1a349-f397-4bce-8908-bc7df9e19348",
+      "polling_seconds": 6.196361132002494,
+      "build": {
+        "build_id": "0ee1a349-f397-4bce-8908-bc7df9e19348",
+        "image_id": "bl20260929-warm-023",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:01:58.631360+00:00",
+        "started_at": "2026-09-29T08:01:58.631360+00:00",
+        "queued_at": "2026-09-29T08:02:00.931812+00:00",
+        "execution_started_at": "2026-09-29T08:02:04.096932+00:00",
+        "finished_at": "2026-09-29T08:02:06.729729+00:00",
+        "timings": {
+          "end_to_end_ms": 8123,
+          "environment": {
+            "docker_pull_skipped": 1,
+            "groups_reused": 2,
+            "preflight_ms": 210.084,
+            "total_ms": 490.986
+          },
+          "phases": {
+            "cleanup_ms": 17,
+            "docker_build_and_push_ms": 2129,
+            "immutable_environment_ms": 491
+          },
+          "preparation_ms": 2300,
+          "queue_wait_ms": 3165,
+          "total_ms": 2658
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:02:06.729729+00:00",
+          "id": "bl20260929-warm-023",
+          "labels": {},
+          "manifest_digest": "sha256:5317a48c779310b05f889e344c5f8ab07713fd1d5ef2b68ad4dd49c1336d7413",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-zrl8286d",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-warm-023-126bc1383429:latest",
+          "updated_at": "2026-09-29T08:02:06.729729+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.5",
+          "job_id": "167927367",
+          "node_url": "http://10.42.0.5:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.5"
+      },
+      "cached_steps_in_retained_tail": 13,
+      "cached_steps_observed": [
+        {
+          "id": "#16",
+          "description": "[6/8] COPY tests ./tests"
+        },
+        {
+          "id": "#17",
+          "description": "[compile 3/8] COPY package.json package-lock.json ./"
+        },
+        {
+          "id": "#18",
+          "description": "[compile 5/8] COPY tsconfig.json build.cjs webpack.config.cjs eslint.config.cjs jest.config.cjs ./"
+        },
+        {
+          "id": "#19",
+          "description": "[2/8] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#20",
+          "description": "[compile 4/8] RUN npm ci --no-audit --no-fund --cache /tmp/npm-cache  && npm ls --all --json > /opt/fixture/npm-resolved.json  && rm -rf /tmp/npm-cache"
+        },
+        {
+          "id": "#21",
+          "description": "[compile 6/8] COPY tests ./tests"
+        },
+        {
+          "id": "#22",
+          "description": "[compile 7/8] COPY src ./src"
+        },
+        {
+          "id": "#23",
+          "description": "[compile 8/8] RUN npm run lint && npm run build && npm test  && node dist/bundle.cjs > /opt/fixture/build-smoke.json"
+        },
+        {
+          "id": "#24",
+          "description": "[stage-1 5/6] COPY --from=compile /opt/fixture/npm-resolved.json ./npm-resolved.json"
+        },
+        {
+          "id": "#25",
+          "description": "[stage-1 3/6] COPY --from=compile /opt/fixture/dist/bundle.cjs ./bundle.cjs"
+        },
+        {
+          "id": "#26",
+          "description": "[stage-1 2/6] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#27",
+          "description": "[stage-1 4/6] COPY --from=compile /opt/fixture/package-lock.json ./resolved-package-lock.json"
+        },
+        {
+          "id": "#28",
+          "description": "[stage-1 6/6] COPY --from=compile /opt/fixture/build-smoke.json ./build-smoke.json"
+        }
+      ],
+      "client_wall_seconds": 13.708189108001534,
+      "finish_offset_seconds": 13.711753397998109,
+      "finished_at": "2026-09-29T08:02:07Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 200,
+          "headers_seconds": 0.023670804002904333
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 2.4608346770037315
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.08060730699799024
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.011422578005294781
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004704312996182125
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009151252001174726
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010178812000958715
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009914235000906046
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.06882998999935808
+        }
+      ]
+    }
+  ],
+  "phase": "warm",
+  "finished_at": "2026-09-29T08:02:56Z",
+  "fleet_after": [
+    {
+      "job_id": "167927353",
+      "node_url": "http://10.42.0.3:8090",
+      "active_image_builds": 2,
+      "active_sandboxes": 0,
+      "physical_disk_free_mb": 210889,
+      "updated_at": "2026-09-29 08:02:36.179195+00:00",
+      "capabilities": [
+        "image-cache",
+        "image-build",
+        "request-body-keepalive-v1"
+      ]
+    },
+    {
+      "job_id": "167927354",
+      "node_url": "http://10.42.0.4:8090",
+      "active_image_builds": 1,
+      "active_sandboxes": 0,
+      "physical_disk_free_mb": 210773,
+      "updated_at": "2026-09-29 08:02:48.472541+00:00",
+      "capabilities": [
+        "image-cache",
+        "image-build",
+        "request-body-keepalive-v1"
+      ]
+    },
+    {
+      "job_id": "167927367",
+      "node_url": "http://10.42.0.5:8090",
+      "active_image_builds": 2,
+      "active_sandboxes": 0,
+      "physical_disk_free_mb": 211181,
+      "updated_at": "2026-09-29 08:02:43.712202+00:00",
+      "capabilities": [
+        "image-cache",
+        "image-build",
+        "request-body-keepalive-v1"
+      ]
+    },
+    {
+      "job_id": "167927368",
+      "node_url": "http://10.42.0.6:8090",
+      "active_image_builds": 0,
+      "active_sandboxes": 0,
+      "physical_disk_free_mb": 213089,
+      "updated_at": "2026-09-29 08:02:51.178492+00:00",
+      "capabilities": [
+        "image-cache",
+        "image-build",
+        "request-body-keepalive-v1"
+      ]
+    },
+    {
+      "job_id": "167929368",
+      "node_url": "http://10.42.0.7:8090",
+      "active_image_builds": 0,
+      "active_sandboxes": 0,
+      "physical_disk_free_mb": 605019,
+      "updated_at": "2026-09-29 08:02:43.230534+00:00",
+      "capabilities": [
+        "request-body-keepalive-v1",
+        "environment-contract-v1",
+        "sandbox",
+        "image-cache",
+        "disk-quota",
+        "hibernate-local-v2",
+        "relay-wake-fence-v1",
+        "resource-phase-advice-v1",
+        "direct-runsc-v1",
+        "network-policy-relay-v1:default",
+        "managed-primary-v1",
+        "static-file-management-v1",
+        "storage-native-v1",
+        "sandbox-detach-published-v1",
+        "sandbox-migrate-storage-native-v1",
+        "sandbox-checkpoint-v3",
+        "runtime-compatibility-sha256:8e689189ddd3e7ac4d6bb82a83b4ff3cf5bfb448c9b961fbd2cfe20de1354ab2",
+        "runtime-cpu-features-sha256:7caa1f7c2807e6e4a5dfea7e392b246753e6be75257a9e00591756f4e39e52e4",
+        "immutable-environment-host-erofs-v1"
+      ]
+    }
+  ],
+  "concurrency": 24,
+  "recipes": [
+    "python-agent",
+    "typescript-tools",
+    "typescript-multistage"
+  ],
+  "variants": [
+    "app-change-1",
+    "app-change-2",
+    "app-change-3",
+    "app-change-4"
+  ],
+  "gateway_loopback_client": true,
+  "durable_history_records": 24
+}

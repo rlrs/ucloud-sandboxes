@@ -1,0 +1,585 @@
+{
+  "diagnostic_only": true,
+  "capacity_qualification": false,
+  "guard_note": "Started after first scenario completion; active agent count changes across the window, all512sandbox records remain retained until benchmark cleanup.",
+  "run_id": "relay-load-e0ee174f3326",
+  "all_agents_ready": "2026-09-28T13:58:52.807950+00:00",
+  "local_guard_before": {
+    "started_agents": 512,
+    "completed_agents": 465,
+    "active_agents": 47,
+    "retained_sandbox_count": 512,
+    "terminal_events": [],
+    "log_age_seconds": 0.1039423942565918,
+    "active": true
+  },
+  "local_guard_after": {
+    "started_agents": 512,
+    "completed_agents": 504,
+    "active_agents": 8,
+    "retained_sandbox_count": 512,
+    "terminal_events": [],
+    "log_age_seconds": 1.1268761157989502,
+    "active": true
+  },
+  "local_guard_samples": [
+    {
+      "started_agents": 512,
+      "completed_agents": 465,
+      "active_agents": 47,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 0.010483741760253906,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:22.020469+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 467,
+      "active_agents": 45,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 0.05218839645385742,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:22.534135+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 469,
+      "active_agents": 43,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 0.005787849426269531,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:23.047807+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 472,
+      "active_agents": 40,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 0.39972972869873047,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:23.561733+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 474,
+      "active_agents": 38,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 0.1807858943939209,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:24.074832+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 480,
+      "active_agents": 32,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 0.0218048095703125,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:24.587792+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 482,
+      "active_agents": 30,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 0.09129977226257324,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:25.101492+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 488,
+      "active_agents": 24,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 0.16120171546936035,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:25.615301+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 489,
+      "active_agents": 23,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 0.2464005947113037,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:26.128523+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 492,
+      "active_agents": 20,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 0.15155887603759766,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:26.641670+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 495,
+      "active_agents": 17,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 0.14069533348083496,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:27.154826+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 497,
+      "active_agents": 15,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 0.013610363006591797,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:27.667752+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 500,
+      "active_agents": 12,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 0.10387277603149414,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:28.182096+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 500,
+      "active_agents": 12,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 0.6170310974121094,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:28.695203+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 501,
+      "active_agents": 11,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 0.14996719360351562,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:29.208214+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 503,
+      "active_agents": 9,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 0.16315484046936035,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:29.721384+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 503,
+      "active_agents": 9,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 0.6760609149932861,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:30.234318+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 503,
+      "active_agents": 9,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 1.1891562938690186,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:30.747380+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 503,
+      "active_agents": 9,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 1.702172040939331,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:31.260419+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 503,
+      "active_agents": 9,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 2.215113401412964,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:31.773376+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 503,
+      "active_agents": 9,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 2.72910475730896,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:32.287553+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 503,
+      "active_agents": 9,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 3.24219012260437,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:32.800417+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 503,
+      "active_agents": 9,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 3.755250930786133,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:33.313486+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 503,
+      "active_agents": 9,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 4.268626928329468,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:33.826978+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 503,
+      "active_agents": 9,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 4.782739162445068,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:34.341132+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 503,
+      "active_agents": 9,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 5.29632043838501,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:34.854581+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 503,
+      "active_agents": 9,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 5.809673070907593,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:35.368081+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 503,
+      "active_agents": 9,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 6.322908878326416,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:35.881148+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 503,
+      "active_agents": 9,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 6.836284637451172,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:36.394632+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 503,
+      "active_agents": 9,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 7.34968113899231,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:36.907937+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 503,
+      "active_agents": 9,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 7.863004207611084,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:37.421374+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 503,
+      "active_agents": 9,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 8.38052773475647,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:37.939295+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 503,
+      "active_agents": 9,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 8.89418911933899,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:38.452436+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 503,
+      "active_agents": 9,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 9.407886743545532,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:38.966277+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 504,
+      "active_agents": 8,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 0.3689870834350586,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:39.479873+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 504,
+      "active_agents": 8,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 0.8825047016143799,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:39.993229+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 504,
+      "active_agents": 8,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 1.395653247833252,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:40.506351+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 504,
+      "active_agents": 8,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 1.9088404178619385,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:41.019616+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 504,
+      "active_agents": 8,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 2.422243595123291,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:41.532949+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 504,
+      "active_agents": 8,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 2.935378074645996,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:42.046089+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 504,
+      "active_agents": 8,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 3.448687791824341,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:42.559466+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 504,
+      "active_agents": 8,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 0.0970907211303711,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:43.076126+00:00"
+    },
+    {
+      "started_agents": 512,
+      "completed_agents": 504,
+      "active_agents": 8,
+      "retained_sandbox_count": 512,
+      "terminal_events": [],
+      "log_age_seconds": 0.6127538681030273,
+      "active": true,
+      "checked_at": "2026-09-28T14:00:43.591938+00:00"
+    }
+  ],
+  "local_abort": null,
+  "ssh_exit_code": 0,
+  "started_at": "2026-09-28T14:00:23.143528+00:00",
+  "finished_at": "2026-09-28T14:00:43.589137+00:00",
+  "elapsed_seconds": 20.445589274000668,
+  "duration_seconds": 20,
+  "sample_rate_hz": 99,
+  "gil_only": true,
+  "stop_reason": null,
+  "cpu_seconds": 7.09,
+  "profiles": [
+    {
+      "pid": 46833,
+      "cpu_before": {
+        "ticks": 11080,
+        "start_ticks": 6254517
+      },
+      "started_at": "2026-09-28T14:00:23.143600+00:00",
+      "remote_profile": "/work/ucloud-sandboxes/gateway-qualification-20260928/driver-diagnostic512-gateway-gil-46833.txt",
+      "is_main": true,
+      "finished_at": "2026-09-28T14:00:43.588663+00:00",
+      "cpu_after": {
+        "ticks": 11193,
+        "start_ticks": 6254517
+      },
+      "exit_code": 0,
+      "profiler_output": "py-spy> Sampling process 99 times a second for 20 seconds. Press Control-C to exit.\n\npy-spy> Wrote raw flamegraph data to '/work/ucloud-sandboxes/gateway-qualification-20260928/driver-diagnostic512-gateway-gil-46833.txt'. Samples: 13 Errors: 0\npy-spy> You can use the flamegraph.pl script from https://github.com/brendangregg/flamegraph to generate a SVG\n",
+      "same_process": true,
+      "cpu_seconds": 1.13
+    },
+    {
+      "pid": 46890,
+      "cpu_before": {
+        "ticks": 10716,
+        "start_ticks": 6254634
+      },
+      "started_at": "2026-09-28T14:00:23.143951+00:00",
+      "remote_profile": "/work/ucloud-sandboxes/gateway-qualification-20260928/driver-diagnostic512-gateway-gil-46890.txt",
+      "is_main": false,
+      "finished_at": "2026-09-28T14:00:43.588854+00:00",
+      "cpu_after": {
+        "ticks": 10833,
+        "start_ticks": 6254634
+      },
+      "exit_code": 0,
+      "profiler_output": "py-spy> Sampling process 99 times a second for 20 seconds. Press Control-C to exit.\n\npy-spy> Wrote raw flamegraph data to '/work/ucloud-sandboxes/gateway-qualification-20260928/driver-diagnostic512-gateway-gil-46890.txt'. Samples: 12 Errors: 0\npy-spy> You can use the flamegraph.pl script from https://github.com/brendangregg/flamegraph to generate a SVG\n",
+      "same_process": true,
+      "cpu_seconds": 1.17
+    },
+    {
+      "pid": 46891,
+      "cpu_before": {
+        "ticks": 10993,
+        "start_ticks": 6254634
+      },
+      "started_at": "2026-09-28T14:00:23.144269+00:00",
+      "remote_profile": "/work/ucloud-sandboxes/gateway-qualification-20260928/driver-diagnostic512-gateway-gil-46891.txt",
+      "is_main": false,
+      "finished_at": "2026-09-28T14:00:43.588926+00:00",
+      "cpu_after": {
+        "ticks": 11107,
+        "start_ticks": 6254634
+      },
+      "exit_code": 0,
+      "profiler_output": "py-spy> Sampling process 99 times a second for 20 seconds. Press Control-C to exit.\n\npy-spy> Wrote raw flamegraph data to '/work/ucloud-sandboxes/gateway-qualification-20260928/driver-diagnostic512-gateway-gil-46891.txt'. Samples: 14 Errors: 0\npy-spy> You can use the flamegraph.pl script from https://github.com/brendangregg/flamegraph to generate a SVG\n",
+      "same_process": true,
+      "cpu_seconds": 1.14
+    },
+    {
+      "pid": 46892,
+      "cpu_before": {
+        "ticks": 10842,
+        "start_ticks": 6254634
+      },
+      "started_at": "2026-09-28T14:00:23.144505+00:00",
+      "remote_profile": "/work/ucloud-sandboxes/gateway-qualification-20260928/driver-diagnostic512-gateway-gil-46892.txt",
+      "is_main": false,
+      "finished_at": "2026-09-28T14:00:43.588980+00:00",
+      "cpu_after": {
+        "ticks": 10950,
+        "start_ticks": 6254634
+      },
+      "exit_code": 0,
+      "profiler_output": "py-spy> Sampling process 99 times a second for 20 seconds. Press Control-C to exit.\n\npy-spy> Wrote raw flamegraph data to '/work/ucloud-sandboxes/gateway-qualification-20260928/driver-diagnostic512-gateway-gil-46892.txt'. Samples: 18 Errors: 0\npy-spy> You can use the flamegraph.pl script from https://github.com/brendangregg/flamegraph to generate a SVG\n",
+      "same_process": true,
+      "cpu_seconds": 1.08
+    },
+    {
+      "pid": 46893,
+      "cpu_before": {
+        "ticks": 10987,
+        "start_ticks": 6254634
+      },
+      "started_at": "2026-09-28T14:00:23.144976+00:00",
+      "remote_profile": "/work/ucloud-sandboxes/gateway-qualification-20260928/driver-diagnostic512-gateway-gil-46893.txt",
+      "is_main": false,
+      "finished_at": "2026-09-28T14:00:43.589029+00:00",
+      "cpu_after": {
+        "ticks": 11115,
+        "start_ticks": 6254634
+      },
+      "exit_code": 0,
+      "profiler_output": "py-spy> Sampling process 99 times a second for 20 seconds. Press Control-C to exit.\n\npy-spy> Wrote raw flamegraph data to '/work/ucloud-sandboxes/gateway-qualification-20260928/driver-diagnostic512-gateway-gil-46893.txt'. Samples: 20 Errors: 0\npy-spy> You can use the flamegraph.pl script from https://github.com/brendangregg/flamegraph to generate a SVG\n",
+      "same_process": true,
+      "cpu_seconds": 1.28
+    },
+    {
+      "pid": 46894,
+      "cpu_before": {
+        "ticks": 11117,
+        "start_ticks": 6254634
+      },
+      "started_at": "2026-09-28T14:00:23.147357+00:00",
+      "remote_profile": "/work/ucloud-sandboxes/gateway-qualification-20260928/driver-diagnostic512-gateway-gil-46894.txt",
+      "is_main": false,
+      "finished_at": "2026-09-28T14:00:43.589107+00:00",
+      "cpu_after": {
+        "ticks": 11246,
+        "start_ticks": 6254634
+      },
+      "exit_code": 0,
+      "profiler_output": "py-spy> Sampling process 99 times a second for 20 seconds. Press Control-C to exit.\n\npy-spy> Wrote raw flamegraph data to '/work/ucloud-sandboxes/gateway-qualification-20260928/driver-diagnostic512-gateway-gil-46894.txt'. Samples: 12 Errors: 0\npy-spy> You can use the flamegraph.pl script from https://github.com/brendangregg/flamegraph to generate a SVG\n",
+      "same_process": true,
+      "cpu_seconds": 1.29
+    }
+  ],
+  "online_cpus": "0-7",
+  "valid_hotpath_window": true
+}

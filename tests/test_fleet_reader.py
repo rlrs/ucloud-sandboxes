@@ -1,6 +1,8 @@
 import json
 import sqlite3
+from copy import deepcopy
 from dataclasses import replace
+from datetime import timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -8,12 +10,70 @@ import unittest
 from tests.test_registry import build_heartbeat
 from ucloud_sandboxes.control_state import ControlStateStore
 from ucloud_sandboxes.control_plane import _sandbox_list_bytes
-from ucloud_sandboxes.fleet_reader import FleetSnapshotReader
-from ucloud_sandboxes.models import ResourceQuantity, utc_now
+from ucloud_sandboxes.fleet_reader import FleetResponseRenderer, FleetSnapshotReader
+from ucloud_sandboxes.models import ResourceQuantity, SandboxInventoryEntry, utc_now
+from ucloud_sandboxes.registry import heartbeat_to_dict
 from ucloud_sandboxes.routing import RoutingStore, SandboxRoute
 
 
 class FleetReaderTests(unittest.TestCase):
+    def test_render_preserves_shared_inputs_and_rechecks_external_inventory(self):
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            control = ControlStateStore(root / 'control.sqlite')
+            writer = ControlStateStore(control.path)
+            routes = RoutingStore(root / 'routes.sqlite')
+            entry = SandboxInventoryEntry(
+                sandbox_id='agent', generation=1, operation_id='create',
+                spec_hash='a' * 64, state='parked',
+                storage_schema='storage-native-v1',
+                snapshot_manifest_digest='sha256:' + 'b' * 64,
+                snapshot_repository='snapshots', snapshot_tag='agent',
+                storage_snapshot={'version': 1, 'layers': [{'digest': 'original'}]},
+                storage_dependency={'layers': [{'digest': 'base', 'parents': ['root']}]},
+            )
+            heartbeat = replace(
+                build_heartbeat(job_id='job'), node_id='node',
+                node_url='http://node:8090', updated_at=utc_now(),
+                active_sandboxes=0, inventory=(entry,), inventory_complete=True,
+                labels={'pool': 'workers'},
+            )
+            writer.upsert_heartbeat(heartbeat)
+            route_time = (utc_now() - timedelta(seconds=10)).isoformat()
+            routes.upsert_sandbox(SandboxRoute(
+                sandbox_id='agent', node_id='node', job_id='job',
+                node_url='http://node:8090', resources=ResourceQuantity(),
+                spec={'id': 'agent', 'image': 'python', 'labels': {'owner': 'original'}},
+                state='parked', generation=1, create_operation_id='create',
+                spec_hash='a' * 64, created_at=route_time, updated_at=route_time,
+            ))
+            cached = control.load_heartbeats(shared=True)['job']
+            original = deepcopy(heartbeat_to_dict(cached))
+            renderer = FleetResponseRenderer()
+
+            def render():
+                return json.loads(_sandbox_list_bytes(control, routes, 120, renderer=renderer))
+
+            first = render()
+            # Zero active processes must not hide a sandbox still in complete
+            # inventory. The renderer must preserve these shared descriptors.
+            self.assertEqual(first['sandboxes'][0]['state'], 'parked')
+            first['sandboxes'][0]['spec']['labels']['owner'] = 'client mutation'
+            self.assertEqual(render()['sandboxes'][0]['spec']['labels']['owner'], 'original')
+            self.assertEqual(heartbeat_to_dict(cached), original)
+
+            # A separate database connection changes inventory without changing
+            # the route. Shared reads still observe that durable invalidation.
+            writer.upsert_heartbeat(replace(heartbeat, inventory=(), updated_at=utc_now()))
+            self.assertEqual(render()['sandboxes'][0]['state'], 'unknown')
+            writer.quarantine_node('job', 'untrusted inventory')
+            self.assertEqual(render()['sandboxes'][0]['state'], 'parked')
+            self.assertEqual(heartbeat_to_dict(cached), original)
+            with sqlite3.connect(control.path) as db:
+                db.execute("UPDATE control_records SET payload='broken' WHERE namespace='heartbeat'")
+            with self.assertRaises(ValueError):
+                render()
+
     def test_reads_fresh_external_changes_and_recovers_dead_child(self):
         with TemporaryDirectory() as raw:
             root = Path(raw)

@@ -1,0 +1,95 @@
+{
+  "full512_actual4_plateau": {
+    "sdb": {
+      "rkB": {
+        "mean": 622.3601801801802,
+        "p95": 158.0,
+        "max": 32768.0
+      },
+      "wkB": {
+        "mean": 68382.69108108108,
+        "p95": 175756.0,
+        "max": 183478.0
+      },
+      "await": {
+        "mean": 9.602342342342343,
+        "p95": 23.77,
+        "max": 27.61
+      },
+      "aqu-sz": {
+        "mean": 2.6564864864864863,
+        "p95": 6.58,
+        "max": 8.55
+      },
+      "util-percent": {
+        "mean": 31.527927927927927,
+        "p95": 70.75,
+        "max": 78.95
+      }
+    },
+    "scope": "sdb rkB/wkB KiB/s, await milliseconds, busy-percent not saturation-capacity percent",
+    "hottest_cpu_peak_percent": 94.98
+  },
+  "steady_actual4": {
+    "sdb": {
+      "rkB": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "wkB": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "await": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "aqu-sz": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "util-percent": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      }
+    },
+    "scope": "sdb rkB/wkB KiB/s, await milliseconds, busy-percent not saturation-capacity percent",
+    "hottest_cpu_peak_percent": 77.39
+  },
+  "mixed_actual4": {
+    "sdb": {
+      "rkB": {
+        "mean": 1256.036,
+        "p95": 16384.0,
+        "max": 32768.0
+      },
+      "wkB": {
+        "mean": 138008.70381818182,
+        "p95": 182934.0,
+        "max": 183478.0
+      },
+      "await": {
+        "mean": 19.379272727272728,
+        "p95": 24.44,
+        "max": 27.61
+      },
+      "aqu-sz": {
+        "mean": 5.361272727272727,
+        "p95": 7.13,
+        "max": 8.55
+      },
+      "util-percent": {
+        "mean": 63.62909090909091,
+        "p95": 74.15,
+        "max": 78.95
+      }
+    },
+    "scope": "sdb rkB/wkB KiB/s, await milliseconds, busy-percent not saturation-capacity percent",
+    "hottest_cpu_peak_percent": 94.98
+  }
+}

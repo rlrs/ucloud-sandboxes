@@ -1,0 +1,9 @@
+...........................................per-layer environment publication of registry.example/ucloud-managed/base:base failed; publishing the whole image: special file
+....environment tag layer-cd90b2f8b7159a55ce1859369ef1c1155a2bf8ef242dba912d7394fd31716711 names another component; rebuilding it
+.registry manifest of registry.example/ucloud-managed/base:base lists 1 layers, Docker 4; not splitting
+.per-layer environment publication of registry.example/ucloud-managed/base:base failed; publishing the whole image: no version option
+.s....s......................................
+----------------------------------------------------------------------
+Ran 94 tests in 3.670s
+
+OK (skipped=2)

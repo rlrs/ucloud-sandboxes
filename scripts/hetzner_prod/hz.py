@@ -111,7 +111,7 @@ if __name__ == "__main__":
     command, *args = sys.argv[1:]
     if command == "gateway":
         ip = ledger()["primary_ips"].get("sandboxes-gateway-ipv4") or primary_ip("sandboxes-gateway-ipv4")
-        server("sandboxes-gateway", "ccx33", "ubuntu-26.04", private_ip="10.42.0.2",
+        server("sandboxes-gateway", "ccx23", "ubuntu-26.04", private_ip="10.42.0.2",
                firewall_ids=[11457260], primary_ipv4=ip["id"])
     elif command == "server":
         name, server_type, image, private_ip, public = args

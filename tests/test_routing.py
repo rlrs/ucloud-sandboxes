@@ -145,6 +145,51 @@ def seed_routing_state(store: RoutingStore, state: RoutingState) -> None:
 
 
 class RoutingStoreTests(unittest.TestCase):
+    def test_capacity_snapshot_omits_exec_history_without_changing_state(self):
+        with routing_store() as store:
+            route = store.upsert_sandbox(sandbox_route(
+                sandbox_id="running", node_id="node", job_id="job",
+                node_url="http://node", state="running",
+            ))
+            store.upsert_exec(ExecRoute(
+                session_id="retained-exec", sandbox_id=route.sandbox_id,
+                node_id=route.node_id, job_id=route.job_id, node_url=route.node_url,
+            ))
+            session = store.get_exec("retained-exec")
+            resources = ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024)
+            expired_at = utc_now() - timedelta(seconds=PENDING_DEMAND_TTL_SECONDS + 1)
+            with patch("ucloud_sandboxes.routing.utc_now", return_value=expired_at):
+                store.upsert_pending("expired", resources)
+                store.upsert_prepared_builder("expired-builder", count=1, ttl_seconds=1)
+            store.upsert_pending("pending", resources)
+            store.upsert_pending_image_build("build", "registry.example/image:latest")
+            store.upsert_prepared_capacity(
+                "prepared", resources, count=2, ttl_seconds=600,
+                image="registry.example/image:latest",
+            )
+            store.upsert_image_warmup(
+                "prepared", "registry.example/image:latest", resources,
+                count=2, ttl_seconds=600,
+            )
+            store.upsert_prepared_builder("builder", count=1, ttl_seconds=600)
+
+            snapshot = store.load(include_exec_sessions=False)
+
+            self.assertEqual(snapshot.exec_sessions, {})
+            self.assertEqual(set(snapshot.sandboxes), {"running"})
+            self.assertEqual(set(snapshot.pending), {"pending"})
+            self.assertEqual(set(snapshot.image_builds), {"build"})
+            self.assertEqual(set(snapshot.prepared), {"prepared"})
+            self.assertEqual(set(snapshot.prepared_builders), {"builder"})
+            self.assertEqual(set(snapshot.image_warmups), {"prepared"})
+            full = store.load()
+            self.assertEqual(full.exec_sessions, {session.session_id: session})
+            self.assertEqual(snapshot, replace(full, exec_sessions={}))
+            self.assertEqual(
+                sandbox_demand_from_routing_state(snapshot),
+                sandbox_demand_from_routing_state(full),
+            )
+
     def test_observation_cannot_recreate_deleted_or_deleting_incarnation(self):
         with routing_store() as store:
             route=store.upsert_sandbox(sandbox_route(sandbox_id='late-create',node_id='n',job_id='j',node_url='http://n'))

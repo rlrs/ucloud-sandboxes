@@ -1,0 +1,553 @@
+{
+  "at": "2026-09-28T14:26:01.332607+00:00",
+  "read_only": true,
+  "hostname": "sandboxes-gateway",
+  "kernel": "7.0.0-30-generic",
+  "boot_id": "3478ade0-662a-4b3e-b9d4-79d795fad4d0",
+  "online_cpus": "0-7",
+  "memory": {
+    "MemTotal_bytes": 32851804160,
+    "MemAvailable_bytes": 30842408960,
+    "SwapTotal_bytes": 0,
+    "SwapFree_bytes": 0,
+    "Dirty_bytes": 8323072,
+    "Writeback_bytes": 0
+  },
+  "config_sha256": "e82af76063c5f044477e06059d543ca389063733a09e5cf1d08fa8aff8487652",
+  "control_plane_sha256": "3f5e2bff8aa8cfd74efe19a19590804c5ecb597e8f1ff93cb6623f18ae57bd40",
+  "policy": {
+    "node_package_root": "/work/ucloud-sandboxes/gateway-inventory-optimization-20260928",
+    "gateway_processes": 6,
+    "gateway_max_http_request_threads": 1536
+  },
+  "root_mount": {
+    "filesystems": [
+      {
+        "source": "/dev/sda1",
+        "target": "/",
+        "fstype": "ext4",
+        "uuid": "9e4ec673-4345-4852-8a69-0f7f3df29989",
+        "options": "rw,relatime"
+      }
+    ]
+  },
+  "registry_mount": {
+    "filesystems": [
+      {
+        "source": "/dev/sdb",
+        "target": "/mnt/ucloud-registry",
+        "fstype": "ext4",
+        "uuid": "3b424a37-1f15-4399-8818-1e1b207a0f5d",
+        "options": "rw,relatime"
+      }
+    ]
+  },
+  "registry_is_mountpoint": {
+    "returncode": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  "block_devices": {
+    "blockdevices": [
+      {
+        "name": "sda",
+        "type": "disk",
+        "size": 163842097152,
+        "fstype": null,
+        "uuid": null,
+        "mountpoints": [],
+        "children": [
+          {
+            "name": "sda1",
+            "type": "part",
+            "size": 163571547648,
+            "fstype": "ext4",
+            "uuid": "9e4ec673-4345-4852-8a69-0f7f3df29989",
+            "mountpoints": [
+              "/"
+            ]
+          },
+          {
+            "name": "sda14",
+            "type": "part",
+            "size": 1048576,
+            "fstype": null,
+            "uuid": null,
+            "mountpoints": []
+          },
+          {
+            "name": "sda15",
+            "type": "part",
+            "size": 268435456,
+            "fstype": "vfat",
+            "uuid": "A948-365C",
+            "mountpoints": [
+              "/boot/efi"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "sdb",
+        "type": "disk",
+        "size": 1073741824000,
+        "fstype": "ext4",
+        "uuid": "3b424a37-1f15-4399-8818-1e1b207a0f5d",
+        "mountpoints": [
+          "/mnt/ucloud-registry"
+        ]
+      },
+      {
+        "name": "sr0",
+        "type": "rom",
+        "size": 1073741312,
+        "fstype": null,
+        "uuid": null,
+        "mountpoints": []
+      }
+    ]
+  },
+  "disk_free": {
+    "returncode": 0,
+    "stdout": "Filesystem         1B-blocks         Used    Available Use% Mounted on\n/dev/sda1       160921083904   6977560576 147368546304   5% /\n/dev/sdb       1055735832576 172556652544 829475311616  18% /mnt/ucloud-registry",
+    "stderr": ""
+  },
+  "services": {
+    "postgresql.service": {
+      "returncode": 0,
+      "stdout": "RequiresMountsFor=\nActiveState=active\nSubState=exited\nUnitFileState=enabled\nNRestarts=0\nLimitNOFILE=524288",
+      "stderr": ""
+    },
+    "ucloud-sandbox-gateway.service": {
+      "returncode": 0,
+      "stdout": "RequiresMountsFor=/work/ucloud-sandboxes\nActiveState=active\nSubState=running\nUnitFileState=enabled\nNRestarts=0\nLimitNOFILE=65536",
+      "stderr": ""
+    },
+    "ucloud-sandbox-relay.service": {
+      "returncode": 0,
+      "stdout": "RequiresMountsFor=/work/ucloud-sandboxes\nActiveState=active\nSubState=running\nUnitFileState=enabled\nNRestarts=0\nLimitNOFILE=65536",
+      "stderr": ""
+    },
+    "ucloud-sandbox-placement.service": {
+      "returncode": 0,
+      "stdout": "RequiresMountsFor=/work/ucloud-sandboxes\nActiveState=active\nSubState=running\nUnitFileState=enabled\nNRestarts=0\nLimitNOFILE=65536",
+      "stderr": ""
+    },
+    "ucloud-sandbox-autoscaler.service": {
+      "returncode": 0,
+      "stdout": "RequiresMountsFor=/work/ucloud-sandboxes\nActiveState=active\nSubState=running\nUnitFileState=enabled\nNRestarts=0\nLimitNOFILE=524288",
+      "stderr": ""
+    },
+    "ucloud-sandbox-registry.service": {
+      "returncode": 0,
+      "stdout": "RequiresMountsFor=/mnt/ucloud-registry\nActiveState=active\nSubState=running\nUnitFileState=enabled\nNRestarts=0\nLimitNOFILE=524288",
+      "stderr": ""
+    },
+    "ucloud-sandboxes-nat.service": {
+      "returncode": 0,
+      "stdout": "RequiresMountsFor=\nActiveState=active\nSubState=exited\nUnitFileState=enabled\nNRestarts=0\nLimitNOFILE=524288",
+      "stderr": ""
+    },
+    "nginx.service": {
+      "returncode": 0,
+      "stdout": "RequiresMountsFor=\nActiveState=active\nSubState=running\nUnitFileState=enabled\nNRestarts=0\nLimitNOFILE=524288",
+      "stderr": ""
+    },
+    "docker.service": {
+      "returncode": 0,
+      "stdout": "RequiresMountsFor=\nActiveState=active\nSubState=running\nUnitFileState=enabled\nNRestarts=0\nLimitNOFILE=infinity",
+      "stderr": ""
+    },
+    "ucloud-sandbox-registry-prune.timer": {
+      "returncode": 0,
+      "stdout": "RequiresMountsFor=/var/lib/systemd/timers\nActiveState=active\nSubState=waiting\nUnitFileState=enabled",
+      "stderr": ""
+    },
+    "apt-daily.timer": {
+      "returncode": 0,
+      "stdout": "RequiresMountsFor=\nActiveState=inactive\nSubState=dead\nUnitFileState=masked",
+      "stderr": ""
+    },
+    "apt-daily-upgrade.timer": {
+      "returncode": 0,
+      "stdout": "RequiresMountsFor=\nActiveState=inactive\nSubState=dead\nUnitFileState=masked",
+      "stderr": ""
+    },
+    "apt-daily.service": {
+      "returncode": 0,
+      "stdout": "RequiresMountsFor=\nActiveState=inactive\nSubState=dead\nUnitFileState=masked\nNRestarts=0\nLimitNOFILE=2147483584",
+      "stderr": ""
+    },
+    "apt-daily-upgrade.service": {
+      "returncode": 0,
+      "stdout": "RequiresMountsFor=\nActiveState=inactive\nSubState=dead\nUnitFileState=masked\nNRestarts=0\nLimitNOFILE=2147483584",
+      "stderr": ""
+    },
+    "unattended-upgrades.service": {
+      "returncode": 0,
+      "stdout": "RequiresMountsFor=\nActiveState=inactive\nSubState=dead\nUnitFileState=masked\nNRestarts=0\nLimitNOFILE=2147483584",
+      "stderr": ""
+    }
+  },
+  "failed_units": {
+    "returncode": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  "apt_periodic": {
+    "returncode": 0,
+    "stdout": "APT::Periodic::Update-Package-Lists \"0\";\nAPT::Periodic::Download-Upgradeable-Packages \"0\";\nAPT::Periodic::AutocleanInterval \"0\";\nAPT::Periodic::Unattended-Upgrade \"0\";\nAPT::Periodic::Enable \"0\";",
+    "stderr": ""
+  },
+  "registry_prune": {
+    "returncode": 0,
+    "stdout": "NextElapseUSecRealtime=Mon 2026-09-28 15:01:18 UTC\nLastTriggerUSec=Mon 2026-09-28 14:03:36 UTC",
+    "stderr": ""
+  },
+  "nat_rules": {
+    "returncode": 0,
+    "stdout": "table inet ucloud_sandboxes_nat {\n\tchain postrouting {\n\t\ttype nat hook postrouting priority srcnat; policy accept;\n\t\toifname \"eth0\" ip saddr 10.42.0.0/24 masquerade\n\t}\n}",
+    "stderr": ""
+  },
+  "docker_forwarding": {
+    "returncode": 0,
+    "stdout": "-N UCLOUD-SANDBOXES\n-A UCLOUD-SANDBOXES -s 10.42.0.0/24 -i enp7s0 -o eth0 -j ACCEPT\n-A UCLOUD-SANDBOXES -d 10.42.0.0/24 -i eth0 -o enp7s0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT\n-A UCLOUD-SANDBOXES -j RETURN",
+    "stderr": ""
+  },
+  "docker_user_jump": {
+    "returncode": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  "ip_forward": "1",
+  "addresses": [
+    {
+      "ifindex": 1,
+      "ifname": "lo",
+      "flags": [
+        "LOOPBACK",
+        "UP",
+        "LOWER_UP"
+      ],
+      "mtu": 65536,
+      "qdisc": "noqueue",
+      "operstate": "UNKNOWN",
+      "group": "default",
+      "txqlen": 1000,
+      "addr_info": [
+        {
+          "family": "inet",
+          "local": "127.0.0.1",
+          "prefixlen": 8,
+          "scope": "host",
+          "label": "lo",
+          "valid_life_time": 4294967295,
+          "preferred_life_time": 4294967295
+        }
+      ]
+    },
+    {
+      "ifindex": 2,
+      "ifname": "eth0",
+      "flags": [
+        "BROADCAST",
+        "MULTICAST",
+        "UP",
+        "LOWER_UP"
+      ],
+      "mtu": 1500,
+      "qdisc": "fq_codel",
+      "operstate": "UP",
+      "group": "default",
+      "txqlen": 1000,
+      "altnames": [
+        "enx920009fea551"
+      ],
+      "addr_info": [
+        {
+          "family": "inet",
+          "local": "77.42.92.27",
+          "prefixlen": 32,
+          "metric": 100,
+          "scope": "global",
+          "dynamic": true,
+          "label": "eth0",
+          "valid_life_time": 58695,
+          "preferred_life_time": 58695
+        }
+      ]
+    },
+    {
+      "ifindex": 3,
+      "ifname": "enp7s0",
+      "flags": [
+        "BROADCAST",
+        "MULTICAST",
+        "UP",
+        "LOWER_UP"
+      ],
+      "mtu": 1450,
+      "qdisc": "fq_codel",
+      "operstate": "UP",
+      "group": "default",
+      "txqlen": 1000,
+      "altnames": [
+        "enx86000028fc31"
+      ],
+      "addr_info": [
+        {
+          "family": "inet",
+          "local": "10.42.0.2",
+          "prefixlen": 32,
+          "metric": 100,
+          "scope": "global",
+          "dynamic": true,
+          "label": "enp7s0",
+          "valid_life_time": 58695,
+          "preferred_life_time": 58695
+        }
+      ]
+    },
+    {
+      "ifindex": 4,
+      "ifname": "docker0",
+      "flags": [
+        "NO-CARRIER",
+        "BROADCAST",
+        "MULTICAST",
+        "UP"
+      ],
+      "mtu": 1500,
+      "qdisc": "noqueue",
+      "operstate": "DOWN",
+      "group": "default",
+      "addr_info": [
+        {
+          "family": "inet",
+          "local": "172.17.0.1",
+          "prefixlen": 16,
+          "broadcast": "172.17.255.255",
+          "scope": "global",
+          "label": "docker0",
+          "valid_life_time": 4294967295,
+          "preferred_life_time": 4294967295
+        }
+      ]
+    }
+  ],
+  "routes": [
+    {
+      "dst": "default",
+      "gateway": "172.31.1.1",
+      "dev": "eth0",
+      "protocol": "dhcp",
+      "prefsrc": "77.42.92.27",
+      "metric": 100,
+      "flags": []
+    },
+    {
+      "dst": "10.42.0.0/16",
+      "gateway": "10.42.0.1",
+      "dev": "enp7s0",
+      "protocol": "dhcp",
+      "prefsrc": "10.42.0.2",
+      "metric": 100,
+      "flags": []
+    },
+    {
+      "dst": "10.42.0.1",
+      "dev": "enp7s0",
+      "protocol": "dhcp",
+      "scope": "link",
+      "prefsrc": "10.42.0.2",
+      "metric": 100,
+      "flags": []
+    },
+    {
+      "dst": "172.17.0.0/16",
+      "dev": "docker0",
+      "protocol": "kernel",
+      "scope": "link",
+      "prefsrc": "172.17.0.1",
+      "flags": [
+        "linkdown"
+      ]
+    },
+    {
+      "dst": "172.31.1.1",
+      "dev": "eth0",
+      "protocol": "dhcp",
+      "scope": "link",
+      "prefsrc": "77.42.92.27",
+      "metric": 100,
+      "flags": []
+    },
+    {
+      "dst": "185.12.64.1",
+      "gateway": "172.31.1.1",
+      "dev": "eth0",
+      "protocol": "dhcp",
+      "prefsrc": "77.42.92.27",
+      "metric": 100,
+      "flags": []
+    },
+    {
+      "dst": "185.12.64.2",
+      "gateway": "172.31.1.1",
+      "dev": "eth0",
+      "protocol": "dhcp",
+      "prefsrc": "77.42.92.27",
+      "metric": 100,
+      "flags": []
+    }
+  ],
+  "postgres": {
+    "returncode": 0,
+    "stdout": "1GB|4GB|f",
+    "stderr": ""
+  },
+  "gateway_health": {
+    "ok": true,
+    "service": "control-plane",
+    "version": "0.7.0"
+  },
+  "relay_health": {
+    "ok": true,
+    "service": "model-relay",
+    "version": "0.7.0"
+  },
+  "registry_health": {},
+  "builds": {
+    "status_counts": {},
+    "reported_count": 0,
+    "nonterminal_count": 0
+  },
+  "heartbeat_activity": [
+    {
+      "active_image_builds": 0,
+      "active_sandbox_creates": 0,
+      "active_sandboxes": 0,
+      "received_at": "2026-09-28T14:25:43.654457+00:00",
+      "updated_at": "2026-09-28T14:25:43.654457+00:00"
+    }
+  ],
+  "fleet": {
+    "sandbox_count": 0
+  },
+  "relay": {
+    "inflight": 0,
+    "delivery_pending": 0,
+    "limits": {
+      "storage_budget_bytes": 68719476736
+    },
+    "error_type": null,
+    "http_status": null
+  },
+  "nginx_capacity": {
+    "returncode": 0,
+    "stdout": "worker_processes auto;\n\tworker_connections 4096;\n\nworker_rlimit_nofile 65536;",
+    "stderr": ""
+  },
+  "generator_167826942_connectivity": {
+    "returncode": 0,
+    "stdout": "{\"registry\": {\"http_status\": 200}, \"gateway\": {\"http_status\": 200}, \"relay\": {\"http_status\": 200}}",
+    "stderr": ""
+  },
+  "provider": {
+    "server": {
+      "id": 167683409,
+      "name": "sandboxes-gateway",
+      "status": "running",
+      "primary_disk_size": 160,
+      "location": {
+        "id": 3,
+        "name": "hel1",
+        "description": "Helsinki DC Park 1",
+        "city": "Helsinki",
+        "country": "FI",
+        "latitude": 60.169855,
+        "longitude": 24.938379,
+        "network_zone": "eu-central"
+      },
+      "private_net": [
+        {
+          "ip": "10.42.0.2",
+          "alias_ips": [],
+          "mac_address": "86:00:00:28:fc:31",
+          "network": 12539764
+        }
+      ],
+      "volumes": [
+        106968761
+      ]
+    },
+    "server_type": {
+      "id": 98,
+      "name": "ccx33",
+      "cores": 8,
+      "memory": 32,
+      "disk": 240,
+      "cpu_type": "dedicated",
+      "architecture": "x86"
+    },
+    "public_ipv4": {
+      "id": 151767304,
+      "ip": "77.42.92.27",
+      "blocked": false
+    },
+    "firewalls": [
+      {
+        "id": 11457260,
+        "status": "applied"
+      }
+    ],
+    "volumes": [
+      {
+        "id": 106968761,
+        "name": "sandboxes-registry",
+        "size": 1000,
+        "server": 167683409,
+        "linux_device": "/dev/disk/by-id/scsi-0HC_Volume_106968761",
+        "status": "available",
+        "format": "ext4",
+        "location": {
+          "city": "Helsinki",
+          "country": "FI",
+          "description": "Helsinki DC Park 1",
+          "id": 3,
+          "latitude": 60.169855,
+          "longitude": 24.938379,
+          "name": "hel1",
+          "network_zone": "eu-central"
+        }
+      }
+    ],
+    "target_shapes": {
+      "ccx23": [
+        {
+          "id": 97,
+          "name": "ccx23",
+          "cores": 4,
+          "memory": 16,
+          "disk": 160,
+          "cpu_type": "dedicated",
+          "architecture": "x86",
+          "deprecated": false
+        }
+      ],
+      "ccx33": [
+        {
+          "id": 98,
+          "name": "ccx33",
+          "cores": 8,
+          "memory": 32,
+          "disk": 240,
+          "cpu_type": "dedicated",
+          "architecture": "x86",
+          "deprecated": false
+        }
+      ]
+    },
+    "note": "Catalog presence does not guarantee available CCX33 rollback capacity."
+  }
+}

@@ -1,0 +1,125 @@
+{
+  "scope": "Disposable local PostgreSQL17, direct state API; includes driver CPU; no real sandbox or HTTP latency claim.",
+  "cases": [
+    {
+      "label": "before-1",
+      "cycles": 200,
+      "requested_cycles_per_second": 25,
+      "elapsed_seconds": 9.092634703032672,
+      "python_process_cpu_seconds": 3.714057318,
+      "operations": {
+        "relay_enqueue": 400,
+        "relay_claim_lifecycle": 4384,
+        "relay_notify": 1000,
+        "relay_delivery_status": 1015,
+        "relay_claim_inference": 400,
+        "relay_dispatch_complete": 400,
+        "relay_commit_result": 400,
+        "relay_delivery_bodies": 400,
+        "relay_poll_readiness": 1
+      },
+      "claims": {
+        "wake_calls": 2192,
+        "wake_rows": 200,
+        "wake_empty": 1992,
+        "park_calls": 2192,
+        "park_rows": 200,
+        "park_empty": 1992
+      },
+      "response_to_delivery_p95_seconds": 0.014623058959841728,
+      "delivered_responses": 200,
+      "errors": 0
+    },
+    {
+      "label": "after-1",
+      "cycles": 200,
+      "requested_cycles_per_second": 25,
+      "elapsed_seconds": 9.096924825105816,
+      "python_process_cpu_seconds": 2.4880747100000002,
+      "operations": {
+        "relay_enqueue": 400,
+        "relay_notify": 1000,
+        "relay_claim_lifecycle": 471,
+        "relay_delivery_status": 929,
+        "relay_claim_inference": 400,
+        "relay_dispatch_complete": 400,
+        "relay_poll_readiness": 2,
+        "relay_commit_result": 400,
+        "relay_delivery_bodies": 400
+      },
+      "claims": {
+        "park_calls": 235,
+        "park_rows": 200,
+        "park_empty": 35,
+        "wake_calls": 236,
+        "wake_rows": 200,
+        "wake_empty": 36
+      },
+      "response_to_delivery_p95_seconds": 0.013426139950752258,
+      "delivered_responses": 200,
+      "errors": 0
+    },
+    {
+      "label": "after-2",
+      "cycles": 200,
+      "requested_cycles_per_second": 25,
+      "elapsed_seconds": 9.09561924310401,
+      "python_process_cpu_seconds": 2.4645946370000003,
+      "operations": {
+        "relay_enqueue": 400,
+        "relay_claim_lifecycle": 474,
+        "relay_notify": 1000,
+        "relay_delivery_status": 917,
+        "relay_claim_inference": 401,
+        "relay_dispatch_complete": 400,
+        "relay_poll_readiness": 6,
+        "relay_commit_result": 400,
+        "relay_delivery_bodies": 399
+      },
+      "claims": {
+        "park_calls": 237,
+        "park_rows": 200,
+        "park_empty": 37,
+        "wake_calls": 237,
+        "wake_rows": 200,
+        "wake_empty": 37
+      },
+      "response_to_delivery_p95_seconds": 0.01313481805846095,
+      "delivered_responses": 200,
+      "errors": 0
+    },
+    {
+      "label": "before-2",
+      "cycles": 200,
+      "requested_cycles_per_second": 25,
+      "elapsed_seconds": 9.091874990146607,
+      "python_process_cpu_seconds": 3.7862534080000003,
+      "operations": {
+        "relay_enqueue": 400,
+        "relay_claim_lifecycle": 4376,
+        "relay_notify": 999,
+        "relay_delivery_status": 1010,
+        "relay_claim_inference": 400,
+        "relay_dispatch_complete": 400,
+        "relay_poll_readiness": 2,
+        "relay_commit_result": 400,
+        "relay_delivery_bodies": 400
+      },
+      "claims": {
+        "wake_calls": 2188,
+        "wake_rows": 200,
+        "wake_empty": 1988,
+        "park_calls": 2188,
+        "park_rows": 200,
+        "park_empty": 1988
+      },
+      "response_to_delivery_p95_seconds": 0.01472238963469863,
+      "delivered_responses": 200,
+      "errors": 0
+    }
+  ],
+  "source_sha256": {
+    "before": "7ef5be560d61b600c0606d3e5b7991404a42af72830220fbd8601eb4da73759a",
+    "after": "ddbac212609ad755667473161dd676eaf4e25b8b8c97da101587503286d90d6b"
+  }
+}

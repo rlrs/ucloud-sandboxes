@@ -1,0 +1,11 @@
+.............................................................................................................................................................registry disk pressure evicted 1 least-recently-used managed images
+...................................registry disk /registry is 93.0% full (refuse threshold 90%); refusing image builds and imports
+.......registry disk /registry is 85.0% full (cleanup threshold 70%); pruning
+registry disk /registry is 85.0% full after pruning; evicting least-recently-used managed images down to 60%
+.registry disk /registry is 75.0% full (cleanup threshold 70%); pruning
+.registry disk /registry is 75.0% full (cleanup threshold 70%); pruning
+...........
+----------------------------------------------------------------------
+Ran 212 tests in 8.724s
+
+OK

@@ -1,0 +1,1 @@
+{"at": "2026-09-29T09:23:43Z", "fleet": [{"job_id": "167939304", "node_url": "http://10.42.0.3:8090", "active_image_builds": 0, "active_sandboxes": 0, "physical_disk_free_mb": 217315, "updated_at": "2026-09-29 09:23:25.273065+00:00", "capabilities": ["image-cache", "image-build", "request-body-keepalive-v1"]}]}

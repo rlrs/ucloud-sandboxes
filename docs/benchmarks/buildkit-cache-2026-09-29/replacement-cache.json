@@ -1,0 +1,76 @@
+{
+  "case": "replacement-cache",
+  "builder": "ucloud-cache-replacement-cache-20260929",
+  "started_at": "2026-09-29T07:17:12Z",
+  "wheel_sha256": "e6b19c91e1d43cd90ce90f99248c4dec557a45547f42e36ac49af234fda4fb0b",
+  "payload_sha256": "b9eeeb7be9a5a710617e704d93e5265fd19d7dfde375d68f8d3e9b2bd188ab9d",
+  "payload_bytes": 33554432,
+  "buildkit_image": "moby/buildkit:v0.33.0@sha256:6c2fa84a6b61ccd72899dde4239f8d5717f05f9a8ca6f3cad185fb1a95a94de3",
+  "initial_usage": "ID        RECLAIMABLE   SIZE      LAST ACCESSED\nReclaimable:\t0B\nTotal:\t\t0B",
+  "wall_seconds": 1.7580718199999978,
+  "status": "succeeded",
+  "build_id": "b462eda4-4331-4a8b-b39f-8b719994c84e",
+  "image_id": "buildkit-cache-replacement-cache-20260929",
+  "timings": {
+    "end_to_end_ms": 1715,
+    "environment": {
+      "docker_pull_skipped": 1,
+      "groups_reused": 1,
+      "preflight_ms": 45.962,
+      "total_ms": 183.568
+    },
+    "phases": {
+      "cleanup_ms": 0,
+      "docker_build_and_push_ms": 1521,
+      "immutable_environment_ms": 183
+    },
+    "preparation_ms": 2,
+    "queue_wait_ms": 1,
+    "total_ms": 1712
+  },
+  "cached_step_lines": [
+    "#7 CACHED",
+    "#8 CACHED"
+  ],
+  "command": [
+    "docker",
+    "buildx",
+    "build",
+    "--builder",
+    "ucloud-cache-replacement-cache-20260929",
+    "--provenance=false",
+    "-f",
+    "/work/ucloud-sandboxes/buildkit-cache-qualification-20260929/context/Dockerfile",
+    "-t",
+    "10.42.0.2:5000/ucloud-managed/buildkit-cache-replacement-cache-20260929:latest",
+    "--label",
+    "ucloud-sandboxes.image=true",
+    "--label",
+    "ucloud-sandboxes.image-id=buildkit-cache-replacement-cache-20260929",
+    "--push",
+    "--cache-from",
+    "type=registry,ref=10.42.0.2:5000/ucloud-build-cache:bc1-1b692f4969400058-1790666154-7d229c105e0647daa9af68d9a220d305",
+    "--cache-to",
+    "type=registry,ref=10.42.0.2:5000/ucloud-build-cache:bc1-1b692f4969400058-1790666232-c8a3158ffa434d0688181f11d927ba66,mode=min,oci-mediatypes=true,image-manifest=true,ignore-error=true",
+    "/work/ucloud-sandboxes/buildkit-cache-qualification-20260929/context"
+  ],
+  "final_usage": "ID                           RECLAIMABLE   SIZE      LAST ACCESSED\n4ciw90a5977qrk24o3t9w6744    true          0B        Less than a second ago\nefuom22oqwx4l74u4hp41seu0    true          0B        Less than a second ago\njd58ykrebqgnwsqcghrccgw2n    true          0B        Less than a second ago\nti1jetp0fol4eqku7nlkxss1t*   true          0B        Less than a second ago\nfqws8k9gwj7v3828lb4utioth*   true          4.096kB   Less than a second ago\nqd68i2oq80kznliv2xib755js*   true          33.55MB   Less than a second ago\nReclaimable:\t33.56MB\nTotal:\t\t33.56MB",
+  "published_image_manifest": "sha256:5e2cffab4615fad1d9e0cd9c40de7f355a45c64df42faf36a464520305484804",
+  "environment_attached": true,
+  "cache": {
+    "repository": "ucloud-build-cache",
+    "execute": false,
+    "inventoried_tags": 2,
+    "retained_entries": 2,
+    "retained_bytes": 35777593,
+    "protected_entries": 0,
+    "candidate_tags": [],
+    "candidate_digests": [],
+    "deleted_digests": [],
+    "deleted_manifests": 0,
+    "max_bytes": 34359738368,
+    "max_entries": 64,
+    "max_age_seconds": 604800,
+    "physical_reclamation_requires_registry_gc": true
+  }
+}

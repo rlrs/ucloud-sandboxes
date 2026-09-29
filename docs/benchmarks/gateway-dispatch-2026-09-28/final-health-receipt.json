@@ -1,0 +1,47 @@
+{
+  "checked_at": "2026-09-28T18:57:38.244361+00:00",
+  "public_health": {
+    "https://77.42.92.27/healthz": true,
+    "https://77.42.92.27/relay/healthz": true
+  },
+  "services": {
+    "ucloud-sandbox-gateway": "active",
+    "ucloud-sandbox-relay": "active",
+    "ucloud-sandbox-placement": "active",
+    "ucloud-sandbox-autoscaler": "active"
+  },
+  "sandboxes": 0,
+  "relay_inflight": 0,
+  "delivery_pending": 0,
+  "lifecycle": [],
+  "active_canary_or_sampler_pids": [],
+  "gateway_update_policy": {
+    "unattended-upgrades.service": "masked",
+    "apt-daily.service": "masked",
+    "apt-daily-upgrade.service": "masked",
+    "apt-daily.timer": "masked",
+    "apt-daily-upgrade.timer": "masked"
+  },
+  "node_package_root": "/work/ucloud-sandboxes/gateway-dispatch-optimization-20260928",
+  "relay_counters": {
+    "lifecycle_reconciliations": 2438,
+    "lifecycle_wake_claim_calls": 2694,
+    "lifecycle_park_hints": 257,
+    "lifecycle_wake_hints": 257,
+    "lifecycle_wake_claim_rows": 256,
+    "lifecycle_wake_claim_empty": 2438,
+    "lifecycle_park_claim_calls": 2693,
+    "lifecycle_park_claim_rows": 256,
+    "lifecycle_park_claim_empty": 2442,
+    "notification_batches": 1407,
+    "notification_keys": 1909,
+    "notification_self_ignored": 1909,
+    "poll_readiness_queries": 814,
+    "poll_readiness_rows": 1534,
+    "delivery_status_queries": 1647,
+    "delivery_status_rows": 12770,
+    "delivery_body_queries": 504,
+    "delivery_body_rows": 512
+  },
+  "source_scope": "final read-only checks; no config or service changes"
+}

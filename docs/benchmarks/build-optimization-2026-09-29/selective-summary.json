@@ -1,0 +1,257 @@
+[
+  {
+    "fixture": "python-abba",
+    "equivalent": true,
+    "source_manifest": "sha256:3840979d2dbc30a5e8ab13215dc9a255e4ede96f5e254ed134c1c2b142772e8a",
+    "trials": [
+      {
+        "arm": "A",
+        "wall_seconds": 36.56288731500001,
+        "docker_used": true,
+        "metrics": {
+          "preflight_misses": 1,
+          "layer_lock_wait_ms": 0.028999999999999998,
+          "component_lookup_ms": 31.43,
+          "groups_reused": 5,
+          "squash_ms": 270.785,
+          "mkfs_ms": 85.071,
+          "sign_ms": 7.659,
+          "publish_component_ms": 5.02,
+          "groups_built": 1,
+          "erofs_bytes_built": 5345280
+        }
+      },
+      {
+        "arm": "B",
+        "wall_seconds": 0.8914445719999549,
+        "docker_used": false,
+        "metrics": {
+          "preflight_misses": 1,
+          "selective_materialization_ms": 293.648,
+          "groups_reused": 5,
+          "layer_lock_wait_ms": 0.006,
+          "component_lookup_ms": 0.021,
+          "squash_ms": 276.211,
+          "mkfs_ms": 85.161,
+          "sign_ms": 7.331,
+          "publish_component_ms": 4.929,
+          "groups_built": 1,
+          "erofs_bytes_built": 5345280,
+          "selective_materializations": 1,
+          "oci_layers_materialized": 4,
+          "oci_download_bytes": 790906,
+          "docker_pull_skipped": 1
+        }
+      },
+      {
+        "arm": "B",
+        "wall_seconds": 0.8473535530000049,
+        "docker_used": false,
+        "metrics": {
+          "preflight_misses": 1,
+          "selective_materialization_ms": 272.524,
+          "groups_reused": 5,
+          "layer_lock_wait_ms": 0.007,
+          "component_lookup_ms": 0.018,
+          "squash_ms": 260.946,
+          "mkfs_ms": 92.635,
+          "sign_ms": 7.358,
+          "publish_component_ms": 4.863,
+          "groups_built": 1,
+          "erofs_bytes_built": 5345280,
+          "selective_materializations": 1,
+          "oci_layers_materialized": 4,
+          "oci_download_bytes": 790906,
+          "docker_pull_skipped": 1
+        }
+      },
+      {
+        "arm": "A",
+        "wall_seconds": 0.7533010419999755,
+        "docker_used": true,
+        "metrics": {
+          "preflight_misses": 1,
+          "layer_lock_wait_ms": 0.022,
+          "component_lookup_ms": 30.284,
+          "groups_reused": 5,
+          "squash_ms": 268.846,
+          "mkfs_ms": 90.285,
+          "sign_ms": 7.405,
+          "publish_component_ms": 5.118,
+          "groups_built": 1,
+          "erofs_bytes_built": 5345280
+        }
+      }
+    ]
+  },
+  {
+    "fixture": "node-tools-abba",
+    "equivalent": true,
+    "source_manifest": "sha256:6bdbada363a5220534efb0c6de3d5e1f454ee41576d47306334a1cf810a6e2e0",
+    "trials": [
+      {
+        "arm": "A",
+        "wall_seconds": 14.622843176999993,
+        "docker_used": true,
+        "metrics": {
+          "preflight_misses": 1,
+          "layer_lock_wait_ms": 0.023,
+          "component_lookup_ms": 21.897000000000002,
+          "groups_reused": 4,
+          "squash_ms": 1154.082,
+          "mkfs_ms": 345.515,
+          "sign_ms": 20.14,
+          "publish_component_ms": 11.78,
+          "groups_built": 1,
+          "erofs_bytes_built": 14921728
+        }
+      },
+      {
+        "arm": "B",
+        "wall_seconds": 3.1459468259999994,
+        "docker_used": false,
+        "metrics": {
+          "preflight_misses": 1,
+          "selective_materialization_ms": 1103.282,
+          "groups_reused": 4,
+          "layer_lock_wait_ms": 0.007,
+          "component_lookup_ms": 0.016,
+          "squash_ms": 1094.142,
+          "mkfs_ms": 362.158,
+          "sign_ms": 20.269,
+          "publish_component_ms": 10.791,
+          "groups_built": 1,
+          "erofs_bytes_built": 14921728,
+          "selective_materializations": 1,
+          "oci_layers_materialized": 4,
+          "oci_download_bytes": 3393496,
+          "docker_pull_skipped": 1
+        }
+      },
+      {
+        "arm": "B",
+        "wall_seconds": 3.213540304999981,
+        "docker_used": false,
+        "metrics": {
+          "preflight_misses": 1,
+          "selective_materialization_ms": 1148.4,
+          "groups_reused": 4,
+          "layer_lock_wait_ms": 0.007,
+          "component_lookup_ms": 0.019,
+          "squash_ms": 1150.114,
+          "mkfs_ms": 327.891,
+          "sign_ms": 20.022,
+          "publish_component_ms": 10.627,
+          "groups_built": 1,
+          "erofs_bytes_built": 14921728,
+          "selective_materializations": 1,
+          "oci_layers_materialized": 4,
+          "oci_download_bytes": 3393496,
+          "docker_pull_skipped": 1
+        }
+      },
+      {
+        "arm": "A",
+        "wall_seconds": 1.9619986729999823,
+        "docker_used": true,
+        "metrics": {
+          "preflight_misses": 1,
+          "layer_lock_wait_ms": 0.033,
+          "component_lookup_ms": 25.532,
+          "groups_reused": 4,
+          "squash_ms": 1110.929,
+          "mkfs_ms": 318.42,
+          "sign_ms": 18.912,
+          "publish_component_ms": 10.143,
+          "groups_built": 1,
+          "erofs_bytes_built": 14921728
+        }
+      }
+    ]
+  },
+  {
+    "fixture": "node-runtime-abba",
+    "equivalent": true,
+    "source_manifest": "sha256:adef6ff74427924f0c646f1f9bea18abc96077777243f8656dccb72c8460490c",
+    "trials": [
+      {
+        "arm": "A",
+        "wall_seconds": 4.630010754000011,
+        "docker_used": true,
+        "metrics": {
+          "preflight_misses": 1,
+          "layer_lock_wait_ms": 0.012,
+          "component_lookup_ms": 5.116,
+          "groups_reused": 1,
+          "squash_ms": 10.639,
+          "mkfs_ms": 31.374,
+          "sign_ms": 5.556,
+          "publish_component_ms": 3.933,
+          "groups_built": 1,
+          "erofs_bytes_built": 3702784
+        }
+      },
+      {
+        "arm": "B",
+        "wall_seconds": 0.1548366730000339,
+        "docker_used": false,
+        "metrics": {
+          "preflight_misses": 1,
+          "selective_materialization_ms": 63.291,
+          "groups_reused": 1,
+          "layer_lock_wait_ms": 0.007,
+          "component_lookup_ms": 0.038,
+          "squash_ms": 10.788,
+          "mkfs_ms": 31.881,
+          "sign_ms": 5.744,
+          "publish_component_ms": 3.86,
+          "groups_built": 1,
+          "erofs_bytes_built": 3702784,
+          "selective_materializations": 1,
+          "oci_layers_materialized": 7,
+          "oci_download_bytes": 1876954,
+          "docker_pull_skipped": 1
+        }
+      },
+      {
+        "arm": "B",
+        "wall_seconds": 0.1541871590000028,
+        "docker_used": false,
+        "metrics": {
+          "preflight_misses": 1,
+          "selective_materialization_ms": 67.161,
+          "groups_reused": 1,
+          "layer_lock_wait_ms": 0.006,
+          "component_lookup_ms": 0.028,
+          "squash_ms": 9.603,
+          "mkfs_ms": 32.753,
+          "sign_ms": 5.669,
+          "publish_component_ms": 3.91,
+          "groups_built": 1,
+          "erofs_bytes_built": 3702784,
+          "selective_materializations": 1,
+          "oci_layers_materialized": 7,
+          "oci_download_bytes": 1876954,
+          "docker_pull_skipped": 1
+        }
+      },
+      {
+        "arm": "A",
+        "wall_seconds": 0.36238951399997177,
+        "docker_used": true,
+        "metrics": {
+          "preflight_misses": 1,
+          "layer_lock_wait_ms": 0.012,
+          "component_lookup_ms": 7.744000000000001,
+          "groups_reused": 1,
+          "squash_ms": 11.785,
+          "mkfs_ms": 30.292,
+          "sign_ms": 5.544,
+          "publish_component_ms": 4.005,
+          "groups_built": 1,
+          "erofs_bytes_built": 3702784
+        }
+      }
+    ]
+  }
+]

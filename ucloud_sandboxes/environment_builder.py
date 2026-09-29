@@ -4,23 +4,61 @@ The only public input is the existing immutable Docker image adapter. No runtime
 workspace, memory directory, or checkpoint is accepted as a publication source.
 """
 from dataclasses import dataclass, field
+from contextlib import contextmanager
+from contextvars import ContextVar
+import fcntl
+import json
 import logging
 import os
 from pathlib import Path, PurePosixPath
 import shutil
 import stat
 import subprocess
+import tarfile
+import time
 from tempfile import TemporaryDirectory
 
 from .direct_warden import DirectWardenError
 from .environment_artifact import (
     EMPTY_LAYER_DIFF_ID, LAYER_TAG_PREFIX, OCI_IMAGE, LayerEnvironmentComponent, canonical_bytes,
-    content_digest, layer_chain_id, layer_group_key, sign_component, sign_layer_component,
+    MAX_INDEX_BYTES, content_digest, layer_chain_id, layer_group_key, require_digest,
+    sign_component, sign_layer_component,
 )
-from .image_rootfs import DockerOverlay2RootfsStore
+from .image_rootfs import DockerImageConfig, DockerOverlay2RootfsStore
 from .managed_registry import RegistryRequestError
 
 _LOG = logging.getLogger(__name__)
+_PUBLICATION_METRICS = ContextVar("environment_publication_metrics", default=None)
+
+
+@contextmanager
+def publication_metrics():
+    """Collect per-publication measurements without mixing concurrent builds."""
+    current = _PUBLICATION_METRICS.get()
+    if current is not None:
+        yield current
+        return
+    values = {}
+    token = _PUBLICATION_METRICS.set(values)
+    try:
+        yield values
+    finally:
+        _PUBLICATION_METRICS.reset(token)
+
+
+def _measure(name, value=1):
+    values = _PUBLICATION_METRICS.get()
+    if values is not None:
+        values[name] = values.get(name, 0) + value
+
+
+@contextmanager
+def _phase(name):
+    started = time.monotonic()
+    try:
+        yield
+    finally:
+        _measure(name + "_ms", round((time.monotonic() - started) * 1000, 3))
 
 
 def _copy_metadata(source, destination, info, *, skip_xattrs=()):
@@ -432,29 +470,172 @@ class FreshEnvironmentBuilder:
             if image_id is not None:
                 self.image_store.collect_image(image_id, is_referenced=lambda _: False)
 
+    @contextmanager
+    def _group_lock(self, tag):
+        # flock coordinates both threads and processes sharing this builder's
+        # work root. Keep lock files: unlinking can split waiters across inodes.
+        locks = self.work_root / "layer-locks"
+        locks.mkdir(mode=0o700, parents=True, exist_ok=True)
+        fd = os.open(locks / tag, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        try:
+            with _phase("layer_lock_wait"):
+                fcntl.flock(fd, fcntl.LOCK_EX)
+            yield
+        finally:
+            os.close(fd)
+
     def _publish_layer_group(self, directories, diff_ids, *, lower_dirs, parent, layer_format):
         tag = LAYER_TAG_PREFIX + layer_group_key(layer_format, parent, diff_ids)
-        existing = self._reuse_layer_component(tag, diff_ids, parent, layer_format)
-        if existing is not None:
-            return existing, True
-        with TemporaryDirectory(dir=self.work_root) as temporary:
-            root = Path(temporary)
-            image = root / "component.erofs"
-            if len(directories) == 1:
-                # A Docker diff directory already is an overlay layer: its
-                # whiteouts and opaque xattrs pass through mkfs unchanged.
-                view = directories[0]
-                if view.is_symlink() or not view.is_dir():
-                    raise ValueError("environment publication requires a real layer directory")
-            else:
-                view = root / "view"
-                squash_layer_diffs(directories, view, lower_dirs=lower_dirs)
-            self._mkfs(image, view, exclude_runtime_mounts=True)
-            component = sign_layer_component(image, source_layers=diff_ids, parent=parent,
-                                             layer_format=layer_format, signing_key=self.signing_key)
-            return self.registry.publish(image, component, tag=tag), False
+        with self._group_lock(tag):
+            # Recheck after waiting: the preceding publisher may have filled it.
+            with _phase("component_lookup"):
+                existing = self._reuse_layer_component(tag, diff_ids, parent, layer_format)
+            if existing is not None:
+                _measure("groups_reused")
+                return existing, True
+            with TemporaryDirectory(dir=self.work_root) as temporary:
+                root = Path(temporary)
+                image = root / "component.erofs"
+                if len(directories) == 1:
+                    view = directories[0]
+                    if view.is_symlink() or not view.is_dir():
+                        raise ValueError("environment publication requires a real layer directory")
+                else:
+                    view = root / "view"
+                    with _phase("squash"):
+                        squash_layer_diffs(directories, view, lower_dirs=lower_dirs)
+                with _phase("mkfs"):
+                    self._mkfs(image, view, exclude_runtime_mounts=True)
+                with _phase("sign"):
+                    component = sign_layer_component(image, source_layers=diff_ids, parent=parent,
+                                                     layer_format=layer_format, signing_key=self.signing_key)
+                with _phase("publish_component"):
+                    digest = self.registry.publish(image, component, tag=tag)
+                _measure("groups_built")
+                _measure("erofs_bytes_built", component.image_size)
+                return digest, False
 
-    def _reuse_layer_component(self, tag, diff_ids, parent, layer_format):
+    def _reuse_image_layers(self, repository, reference, *, max_groups):
+        """Use signed components before Docker pulls or extracts any image data.
+
+        Unsupported manifest layouts take the existing Docker path. Config
+        bytes must match their OCI digest before they can bind a new signed root.
+        """
+        client = self.registry.client
+        document, _ = client.manifest_document(repository, reference)
+        descriptor = document.get("config", {})
+        layers = document.get("layers")
+        if (document.get("schemaVersion") != 2
+                or document.get("mediaType") not in {OCI_IMAGE, "application/vnd.docker.distribution.manifest.v2+json"}
+                or not isinstance(descriptor, dict)
+                or type(descriptor.get("size")) is not int
+                or not 0 < descriptor["size"] <= MAX_INDEX_BYTES
+                or not isinstance(layers, list)):
+            return None
+        image_id = require_digest(descriptor.get("digest"))
+        raw = client.blob_bytes(repository, image_id, max_bytes=descriptor["size"])
+        if len(raw) != descriptor["size"] or content_digest(raw) != image_id:
+            raise ValueError("source OCI config content identity mismatch")
+        config = json.loads(raw)
+        if not isinstance(config, dict):
+            raise ValueError("invalid source OCI config")
+        rootfs = config.get("rootfs", {})
+        diff_ids = rootfs.get("diff_ids") if isinstance(rootfs, dict) else None
+        if (not isinstance(diff_ids, list) or rootfs.get("type") != "layers"
+                or len(diff_ids) != len(layers) or not diff_ids):
+            return None
+        for diff_id in diff_ids:
+            require_digest(diff_id)
+        if any(not isinstance(layer, dict) or type(layer.get("size")) is not int
+               or layer["size"] < 0 for layer in layers):
+            return None
+        source = [(diff_id, layer["size"], layer) for diff_id, layer in zip(diff_ids, layers)
+                  if diff_id != EMPTY_LAYER_DIFF_ID]
+        if not source:
+            return None
+        image_config = DockerImageConfig.from_inspection(config.get("config"))
+        try:
+            layer_format = self.layer_format()
+        except (OSError, subprocess.SubprocessError):
+            # Older mkfs versions can still publish a whole-image component
+            # through the existing fallback even if version discovery fails.
+            return None
+        components, groups = [], []
+        for start, end in plan_layer_groups([item[1] for item in source], max_groups=max_groups):
+            group = [item[0] for item in source[start:end]]
+            parent = layer_chain_id(item[0] for item in source[:start])
+            tag = LAYER_TAG_PREFIX + layer_group_key(layer_format, parent, group)
+            component = self._reuse_layer_component(tag, group, parent, layer_format, refresh=False)
+            if component is None:
+                _measure("preflight_misses")
+            components.append(component)
+            groups.append((tag, group, parent, start, end))
+        if any(component is None for component in components):
+            return self._materialize_registry_groups(repository, source, groups, components,
+                image_id, image_config, diff_ids, layer_format)
+        # Refresh only complete hits, retaining the existing blob-presence and
+        # retention-grace check before committing the referencing root.
+        for index, (tag, group, parent, _start, _end) in enumerate(groups):
+            refreshed = self._reuse_layer_component(tag, group, parent, layer_format)
+            if refreshed is None:
+                _measure("preflight_misses")
+                return None
+            components[index] = refreshed
+        _measure("groups_reused", len(components))
+        _measure("docker_pull_skipped")
+        return {"image_id": image_id, "image_config": image_config,
+                "components": components, "diff_ids": diff_ids, "reused": len(components)}
+
+    def _materialize_registry_groups(self, repository, source, groups, components,
+                                     image_id, image_config, diff_ids, layer_format):
+        """Fetch only small missing groups when no lower filesystem is needed.
+
+        Cold images and unsupported diffs use the existing Docker path. The
+        direct extractor authenticates both compressed and uncompressed bytes,
+        refuses lower-dependent semantics, and completes before any component
+        is signed. Cached groups are never downloaded or unpacked here.
+        """
+        from .oci_layer_materialize import UnsupportedLayer, materialize_layers
+
+        if not any(components):
+            return None
+        missing = [index for index, component in enumerate(components) if component is None]
+        selected = [item for index in missing for item in source[groups[index][3]:groups[index][4]]]
+        self.work_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with TemporaryDirectory(dir=self.work_root) as temporary:
+            try:
+                with _phase("selective_materialization"):
+                    directories = materialize_layers(self.registry.client, repository,
+                        [item[2] for item in selected], [item[0] for item in selected], Path(temporary))
+            except (UnsupportedLayer, OSError, EOFError, tarfile.TarError) as exc:
+                _measure("selective_fallbacks")
+                _LOG.info("selective layer materialization requires Docker: %s", type(exc).__name__)
+                return None
+            offset, reused = 0, 0
+            for index, (tag, group, parent, start, end) in enumerate(groups):
+                if components[index] is not None:
+                    refreshed = self._reuse_layer_component(tag, group, parent, layer_format)
+                    if refreshed is None:
+                        # Its blob was swept while the missing diff was read.
+                        return None
+                    components[index] = refreshed
+                    _measure("groups_reused")
+                    reused += 1
+                    continue
+                count = end - start
+                component, hit = self._publish_layer_group(directories[offset:offset + count], group,
+                    lower_dirs=(), parent=parent, layer_format=layer_format)
+                components[index] = component
+                reused += hit
+                offset += count
+            _measure("selective_materializations")
+            _measure("oci_layers_materialized", len(selected))
+            _measure("oci_download_bytes", sum(item[1] for item in selected))
+            _measure("docker_pull_skipped")
+            return {"image_id": image_id, "image_config": image_config, "components": components,
+                    "diff_ids": diff_ids, "reused": reused}
+
+    def _reuse_layer_component(self, tag, diff_ids, parent, layer_format, *, refresh=True):
         """The published component for this group, or None to build it.
 
         The tag is only an index: a stale, foreign or unloadable entry is
@@ -475,6 +656,8 @@ class FreshEnvironmentBuilder:
                 or component.parent != parent or component.format != layer_format):
             _LOG.warning("environment tag %s names another component; rebuilding it", tag)
             return None
+        if not refresh:
+            return digest
         try:
             # The registry refuses this when a blob is gone (swept after the
             # manifest was deleted); the group is then built again.
@@ -486,6 +669,14 @@ class FreshEnvironmentBuilder:
         return digest
 
     def publish_image(self, image_ref, *, allowlist, toolkits=()):
+        with publication_metrics() as metrics:
+            try:
+                with _phase("total"):
+                    return self._publish_image(image_ref, allowlist=allowlist, toolkits=toolkits)
+            finally:
+                _LOG.info("environment publication metrics %s", json.dumps(metrics, sort_keys=True))
+
+    def _publish_image(self, image_ref, *, allowlist, toolkits=()):
         """Publish fresh build output and attach it to the existing image tag."""
         import uuid
         from .environment_artifact import attach_environment_to_image, publish_environment
@@ -495,16 +686,21 @@ class FreshEnvironmentBuilder:
         if coordinates is None or "@" in image_ref:
             raise ValueError("environment publication requires an owned image tag")
         repository, tag = coordinates
-        # Buildx direct-push deliberately leaves no local image. Pull this
-        # completed immutable build input before constructing the fresh view.
-        self.image_store._checked(self.image_store.docker_binary, "pull", image_ref, timeout=600)
         toolkits = tuple(toolkits)
+        allowlist = tuple(allowlist)
+        max_groups = min(MAX_LAYER_GROUPS, 33 - len(toolkits))
         layered = None
         if _whole_image(allowlist):
+            with _phase("preflight"):
+                layered = self._reuse_image_layers(repository, tag, max_groups=max_groups)
+        if layered is None:
+            with _phase("docker_pull"):
+                self.image_store._checked(self.image_store.docker_binary, "pull", image_ref, timeout=600)
+        if layered is None and _whole_image(allowlist):
             try:
                 # The manifest holds the base and at most 32 more components.
                 layered = self.build_layers(image_ref, repository=repository, reference=tag,
-                                            max_groups=min(MAX_LAYER_GROUPS, 33 - len(toolkits)))
+                                            max_groups=max_groups)
             except RegistryRequestError:
                 raise
             except (ValueError, DirectWardenError, subprocess.SubprocessError, OSError) as exc:

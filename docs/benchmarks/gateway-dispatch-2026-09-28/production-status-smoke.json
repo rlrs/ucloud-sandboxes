@@ -1,0 +1,10 @@
+{
+  "scope": "Single paired read during the 32-sandbox post-deployment canary; not a throughput measurement",
+  "unauthenticated_status": 401,
+  "visible_ids_match": true,
+  "records": 32,
+  "full_bytes": 53206,
+  "status_bytes": 12071,
+  "exact_filter_ok": true,
+  "installed_sources_match_wheel_comparison": true
+}

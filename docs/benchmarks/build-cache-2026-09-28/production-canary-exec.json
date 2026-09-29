@@ -1,0 +1,55 @@
+{
+  "session": {
+    "id": "exec-f74bce1526ee4ac7a26d69435d12918d",
+    "spec": {
+      "sandbox_id": "build-opt-canary-20260928",
+      "command": [
+        "sh",
+        "-c",
+        "test \"$(wc -c < /build-opt-payload)\" -eq 524288 && echo build-cache-canary-ok"
+      ],
+      "env": {},
+      "working_dir": null,
+      "stdin": false,
+      "tty": false
+    },
+    "argv": [
+      "/usr/local/libexec/ucloud-gvisor/runsc",
+      "--root=/work/ucloud-sandboxes/state/direct-runtime/runsc",
+      "exec",
+      "c3034805146d660bf648d4500a133f700fba441c48a399fac68d1f7612a9ff9c",
+      "sh",
+      "-c",
+      "test \"$(wc -c < /build-opt-payload)\" -eq 524288 && echo build-cache-canary-ok"
+    ],
+    "status": "exited",
+    "exit_code": 0,
+    "stdin_open": false,
+    "created_at": "2026-09-28T12:35:41.234422+00:00",
+    "updated_at": "2026-09-28T12:35:41.311857+00:00",
+    "final_sequence": 3
+  },
+  "events": [
+    {
+      "sequence": 1,
+      "stream": "status",
+      "data": "started",
+      "exit_code": null,
+      "created_at": "2026-09-28T12:35:41.234472+00:00"
+    },
+    {
+      "sequence": 2,
+      "stream": "stdout",
+      "data": "build-cache-canary-ok\n",
+      "exit_code": null,
+      "created_at": "2026-09-28T12:35:41.309199+00:00"
+    },
+    {
+      "sequence": 3,
+      "stream": "exit",
+      "data": "",
+      "exit_code": 0,
+      "created_at": "2026-09-28T12:35:41.311851+00:00"
+    }
+  ]
+}

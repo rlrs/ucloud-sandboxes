@@ -1,0 +1,2145 @@
+{
+  "transfer": {
+    "start_unix": 1790606005.7912798,
+    "transfer_finish_unix": 1790606116.0895116,
+    "cleanup_finish_unix": 1790606117.4937248,
+    "elapsed_seconds": 110.2982380049998,
+    "target_seconds": 110,
+    "load_started": true,
+    "nat_streams": 2,
+    "registry_upload_streams": 4,
+    "nat_source_host": "77.42.64.23",
+    "requested_mib_per_second": {
+      "nat": 125,
+      "registry_upload": 150,
+      "registry_read": 25
+    },
+    "bytes": {
+      "nat": 14417920000,
+      "registry_upload": 15367929856,
+      "registry_read": 2877292544
+    },
+    "requests": {
+      "nat": 14,
+      "registry_upload": 458,
+      "registry_read": 86
+    },
+    "errors": [],
+    "cleanup_errors": [],
+    "achieved_mib_per_second": {
+      "nat": 124.66200955428421,
+      "registry_upload": 132.8761026929156,
+      "registry_read": 24.878003943051336
+    },
+    "byte_cap": 38654705664,
+    "registry_repository": "gateway-network-actual-four-69a73a87",
+    "unique_blob_count_retained_through_load": 459,
+    "unique_blob_bytes_retained_through_load": 15401484288,
+    "registry_reads_from_recently_written_blobs": true,
+    "global_gc_reclamation_pending": true,
+    "generator_cpu_seconds": 85.96000000000001
+  },
+  "host_block": {
+    "node_id": 167826942,
+    "private_ip": "10.42.0.3",
+    "registry_volume": "/dev/sdb",
+    "remote_returncode": 0,
+    "observations": [
+      {
+        "at_unix": 1790606004.5976398,
+        "registry_device": "sdb",
+        "block_stat": [
+          1256,
+          614,
+          150250,
+          3319,
+          11,
+          1,
+          64,
+          17,
+          0,
+          718,
+          3336,
+          0,
+          0,
+          0,
+          0,
+          7,
+          0
+        ],
+        "memory": {
+          "MemAvailable_kib": 13449088,
+          "Cached_kib": 1462664,
+          "Dirty_kib": 7084,
+          "Writeback_kib": 0
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606006.598781,
+        "registry_device": "sdb",
+        "block_stat": [
+          1269,
+          683,
+          150906,
+          3333,
+          142,
+          258,
+          68448,
+          2328,
+          0,
+          1144,
+          5668,
+          0,
+          0,
+          0,
+          0,
+          93,
+          6
+        ],
+        "memory": {
+          "MemAvailable_kib": 13426840,
+          "Cached_kib": 1608084,
+          "Dirty_kib": 118300,
+          "Writeback_kib": 0
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606008.5991778,
+        "registry_device": "sdb",
+        "block_stat": [
+          1288,
+          712,
+          151290,
+          3348,
+          685,
+          1177,
+          798792,
+          15058,
+          1,
+          2469,
+          19019,
+          0,
+          0,
+          0,
+          0,
+          337,
+          612
+        ],
+        "memory": {
+          "MemAvailable_kib": 13381292,
+          "Cached_kib": 1860452,
+          "Dirty_kib": 9588,
+          "Writeback_kib": 0
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606010.5995853,
+        "registry_device": "sdb",
+        "block_stat": [
+          1317,
+          831,
+          152474,
+          3378,
+          1223,
+          2202,
+          1393696,
+          25174,
+          3,
+          3734,
+          29556,
+          0,
+          0,
+          0,
+          0,
+          602,
+          1002
+        ],
+        "memory": {
+          "MemAvailable_kib": 13331744,
+          "Cached_kib": 2156244,
+          "Dirty_kib": 9280,
+          "Writeback_kib": 8200
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606012.5999792,
+        "registry_device": "sdb",
+        "block_stat": [
+          1339,
+          888,
+          153106,
+          3400,
+          1786,
+          3323,
+          1935104,
+          36568,
+          0,
+          4854,
+          41736,
+          0,
+          0,
+          0,
+          0,
+          891,
+          1768
+        ],
+        "memory": {
+          "MemAvailable_kib": 13270348,
+          "Cached_kib": 2490704,
+          "Dirty_kib": 80616,
+          "Writeback_kib": 0
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606014.6007192,
+        "registry_device": "sdb",
+        "block_stat": [
+          1353,
+          916,
+          153442,
+          3413,
+          2356,
+          4259,
+          2665792,
+          51914,
+          1,
+          6251,
+          57652,
+          0,
+          0,
+          0,
+          0,
+          1148,
+          2324
+        ],
+        "memory": {
+          "MemAvailable_kib": 13203532,
+          "Cached_kib": 2806044,
+          "Dirty_kib": 34480,
+          "Writeback_kib": 96
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606016.601117,
+        "registry_device": "sdb",
+        "block_stat": [
+          1375,
+          945,
+          153850,
+          3433,
+          2923,
+          5315,
+          3266656,
+          64282,
+          0,
+          7530,
+          70544,
+          0,
+          0,
+          0,
+          0,
+          1430,
+          2828
+        ],
+        "memory": {
+          "MemAvailable_kib": 13195224,
+          "Cached_kib": 3082108,
+          "Dirty_kib": 14832,
+          "Writeback_kib": 200
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606018.6015584,
+        "registry_device": "sdb",
+        "block_stat": [
+          1387,
+          945,
+          153946,
+          3442,
+          3458,
+          6303,
+          3801488,
+          76558,
+          0,
+          8714,
+          83266,
+          0,
+          0,
+          0,
+          0,
+          1710,
+          3265
+        ],
+        "memory": {
+          "MemAvailable_kib": 13157396,
+          "Cached_kib": 3400832,
+          "Dirty_kib": 70180,
+          "Writeback_kib": 0
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606020.6019673,
+        "registry_device": "sdb",
+        "block_stat": [
+          1399,
+          945,
+          154042,
+          3453,
+          4042,
+          7288,
+          4532704,
+          90072,
+          0,
+          10002,
+          97336,
+          0,
+          0,
+          0,
+          0,
+          1971,
+          3811
+        ],
+        "memory": {
+          "MemAvailable_kib": 13126804,
+          "Cached_kib": 3716624,
+          "Dirty_kib": 21572,
+          "Writeback_kib": 4
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606022.6023712,
+        "registry_device": "sdb",
+        "block_stat": [
+          1406,
+          945,
+          154098,
+          3458,
+          4619,
+          8359,
+          5133856,
+          101629,
+          0,
+          11243,
+          109375,
+          0,
+          0,
+          0,
+          0,
+          2262,
+          4287
+        ],
+        "memory": {
+          "MemAvailable_kib": 13059204,
+          "Cached_kib": 4013504,
+          "Dirty_kib": 20668,
+          "Writeback_kib": 0
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606024.6028113,
+        "registry_device": "sdb",
+        "block_stat": [
+          1413,
+          945,
+          154154,
+          3463,
+          5171,
+          9399,
+          5734552,
+          110961,
+          1,
+          12398,
+          119128,
+          0,
+          0,
+          0,
+          0,
+          2534,
+          4702
+        ],
+        "memory": {
+          "MemAvailable_kib": 13024900,
+          "Cached_kib": 4328776,
+          "Dirty_kib": 39584,
+          "Writeback_kib": 28
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606026.603239,
+        "registry_device": "sdb",
+        "block_stat": [
+          1425,
+          974,
+          154482,
+          3474,
+          5736,
+          10461,
+          6400928,
+          122218,
+          1,
+          13734,
+          131159,
+          0,
+          0,
+          0,
+          0,
+          2794,
+          5466
+        ],
+        "memory": {
+          "MemAvailable_kib": 12959064,
+          "Cached_kib": 4628476,
+          "Dirty_kib": 10820,
+          "Writeback_kib": 0
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606028.6036537,
+        "registry_device": "sdb",
+        "block_stat": [
+          1434,
+          974,
+          154554,
+          3480,
+          6283,
+          11547,
+          7002096,
+          131731,
+          1,
+          14826,
+          141176,
+          0,
+          0,
+          0,
+          0,
+          3071,
+          5964
+        ],
+        "memory": {
+          "MemAvailable_kib": 12920840,
+          "Cached_kib": 4941068,
+          "Dirty_kib": 27624,
+          "Writeback_kib": 12
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606030.6040685,
+        "registry_device": "sdb",
+        "block_stat": [
+          1447,
+          1002,
+          154882,
+          3491,
+          6851,
+          12649,
+          7595488,
+          144027,
+          25,
+          15959,
+          153867,
+          0,
+          0,
+          0,
+          0,
+          3361,
+          6348
+        ],
+        "memory": {
+          "MemAvailable_kib": 12867464,
+          "Cached_kib": 5281728,
+          "Dirty_kib": 42608,
+          "Writeback_kib": 40740
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606032.6044254,
+        "registry_device": "sdb",
+        "block_stat": [
+          1452,
+          1002,
+          154922,
+          3494,
+          7426,
+          13685,
+          8324400,
+          157414,
+          6,
+          17228,
+          167769,
+          0,
+          0,
+          0,
+          0,
+          3620,
+          6860
+        ],
+        "memory": {
+          "MemAvailable_kib": 12821488,
+          "Cached_kib": 5582116,
+          "Dirty_kib": 13500,
+          "Writeback_kib": 27972
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606034.604808,
+        "registry_device": "sdb",
+        "block_stat": [
+          1463,
+          1002,
+          155010,
+          3502,
+          8006,
+          14864,
+          8872296,
+          168157,
+          0,
+          18402,
+          179002,
+          0,
+          0,
+          0,
+          0,
+          3940,
+          7343
+        ],
+        "memory": {
+          "MemAvailable_kib": 12789028,
+          "Cached_kib": 5870532,
+          "Dirty_kib": 33236,
+          "Writeback_kib": 0
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606036.6052294,
+        "registry_device": "sdb",
+        "block_stat": [
+          1469,
+          1002,
+          155058,
+          3505,
+          8948,
+          16580,
+          9485992,
+          181105,
+          21,
+          19666,
+          192519,
+          0,
+          0,
+          0,
+          0,
+          4182,
+          7908
+        ],
+        "memory": {
+          "MemAvailable_kib": 12748372,
+          "Cached_kib": 6175900,
+          "Dirty_kib": 3792,
+          "Writeback_kib": 32556
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606038.605628,
+        "registry_device": "sdb",
+        "block_stat": [
+          1479,
+          1002,
+          155138,
+          3512,
+          9520,
+          17702,
+          10148736,
+          191461,
+          1,
+          20983,
+          203706,
+          0,
+          0,
+          0,
+          0,
+          4455,
+          8731
+        ],
+        "memory": {
+          "MemAvailable_kib": 12750588,
+          "Cached_kib": 6473364,
+          "Dirty_kib": 5756,
+          "Writeback_kib": 4
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606040.6066089,
+        "registry_device": "sdb",
+        "block_stat": [
+          1487,
+          1032,
+          155442,
+          3520,
+          10128,
+          18976,
+          10751928,
+          199820,
+          1,
+          22104,
+          212601,
+          0,
+          0,
+          0,
+          0,
+          4769,
+          9261
+        ],
+        "memory": {
+          "MemAvailable_kib": 12734604,
+          "Cached_kib": 6796748,
+          "Dirty_kib": 33588,
+          "Writeback_kib": 24
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606042.6069527,
+        "registry_device": "sdb",
+        "block_stat": [
+          1491,
+          1032,
+          155474,
+          3522,
+          10709,
+          20137,
+          11407288,
+          209100,
+          28,
+          23307,
+          222379,
+          0,
+          0,
+          0,
+          0,
+          5050,
+          9755
+        ],
+        "memory": {
+          "MemAvailable_kib": 12741048,
+          "Cached_kib": 7133072,
+          "Dirty_kib": 8236,
+          "Writeback_kib": 40960
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606044.6072736,
+        "registry_device": "sdb",
+        "block_stat": [
+          1499,
+          1032,
+          155538,
+          3527,
+          11219,
+          21150,
+          12019968,
+          219928,
+          1,
+          24603,
+          233848,
+          0,
+          0,
+          0,
+          0,
+          5293,
+          10392
+        ],
+        "memory": {
+          "MemAvailable_kib": 12726908,
+          "Cached_kib": 7397396,
+          "Dirty_kib": 9584,
+          "Writeback_kib": 196
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606046.607661,
+        "registry_device": "sdb",
+        "block_stat": [
+          1502,
+          1032,
+          155562,
+          3531,
+          11710,
+          22133,
+          12489224,
+          228087,
+          0,
+          26089,
+          242550,
+          0,
+          0,
+          0,
+          0,
+          5554,
+          10931
+        ],
+        "memory": {
+          "MemAvailable_kib": 12722756,
+          "Cached_kib": 7646204,
+          "Dirty_kib": 28424,
+          "Writeback_kib": 0
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606048.6080236,
+        "registry_device": "sdb",
+        "block_stat": [
+          1509,
+          1032,
+          155618,
+          3536,
+          12345,
+          23456,
+          13169208,
+          238358,
+          39,
+          27435,
+          253399,
+          0,
+          0,
+          0,
+          0,
+          5859,
+          11504
+        ],
+        "memory": {
+          "MemAvailable_kib": 12728400,
+          "Cached_kib": 8021564,
+          "Dirty_kib": 10076,
+          "Writeback_kib": 65420
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606050.6083686,
+        "registry_device": "sdb",
+        "block_stat": [
+          1512,
+          1032,
+          155642,
+          3539,
+          12961,
+          24630,
+          13891760,
+          254967,
+          1,
+          28728,
+          270432,
+          0,
+          0,
+          0,
+          0,
+          6147,
+          11925
+        ],
+        "memory": {
+          "MemAvailable_kib": 12712948,
+          "Cached_kib": 8347384,
+          "Dirty_kib": 37136,
+          "Writeback_kib": 8
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606052.6089313,
+        "registry_device": "sdb",
+        "block_stat": [
+          1517,
+          1032,
+          155682,
+          3542,
+          13499,
+          25663,
+          14492568,
+          267104,
+          0,
+          30139,
+          282920,
+          0,
+          0,
+          0,
+          0,
+          6408,
+          12272
+        ],
+        "memory": {
+          "MemAvailable_kib": 12741176,
+          "Cached_kib": 8617964,
+          "Dirty_kib": 11444,
+          "Writeback_kib": 16
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606054.609348,
+        "registry_device": "sdb",
+        "block_stat": [
+          1522,
+          1032,
+          155722,
+          3545,
+          14089,
+          26855,
+          15095136,
+          275522,
+          0,
+          31397,
+          291991,
+          0,
+          0,
+          0,
+          0,
+          6706,
+          12923
+        ],
+        "memory": {
+          "MemAvailable_kib": 12760776,
+          "Cached_kib": 8922552,
+          "Dirty_kib": 18512,
+          "Writeback_kib": 4
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606056.6109762,
+        "registry_device": "sdb",
+        "block_stat": [
+          1524,
+          1032,
+          155738,
+          3546,
+          14678,
+          28077,
+          15697912,
+          284773,
+          1,
+          32700,
+          301808,
+          0,
+          0,
+          0,
+          0,
+          7002,
+          13487
+        ],
+        "memory": {
+          "MemAvailable_kib": 12758068,
+          "Cached_kib": 9234032,
+          "Dirty_kib": 33976,
+          "Writeback_kib": 0
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606058.611788,
+        "registry_device": "sdb",
+        "block_stat": [
+          1526,
+          1032,
+          155754,
+          3548,
+          15289,
+          29284,
+          16366216,
+          294763,
+          0,
+          33941,
+          312409,
+          0,
+          0,
+          0,
+          0,
+          7298,
+          14098
+        ],
+        "memory": {
+          "MemAvailable_kib": 12757160,
+          "Cached_kib": 9582212,
+          "Dirty_kib": 53368,
+          "Writeback_kib": 168
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606060.6124065,
+        "registry_device": "sdb",
+        "block_stat": [
+          1529,
+          1032,
+          155778,
+          3550,
+          15801,
+          30235,
+          17025984,
+          305159,
+          4,
+          35187,
+          323338,
+          0,
+          0,
+          0,
+          0,
+          7522,
+          14629
+        ],
+        "memory": {
+          "MemAvailable_kib": 12752872,
+          "Cached_kib": 9870960,
+          "Dirty_kib": 13212,
+          "Writeback_kib": 8404
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606062.6129131,
+        "registry_device": "sdb",
+        "block_stat": [
+          1530,
+          1032,
+          155786,
+          3551,
+          16337,
+          31338,
+          17567864,
+          314658,
+          1,
+          36396,
+          333408,
+          0,
+          0,
+          0,
+          0,
+          7795,
+          15198
+        ],
+        "memory": {
+          "MemAvailable_kib": 12725024,
+          "Cached_kib": 10158772,
+          "Dirty_kib": 37668,
+          "Writeback_kib": 0
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606064.6136174,
+        "registry_device": "sdb",
+        "block_stat": [
+          1531,
+          1032,
+          155794,
+          3552,
+          16805,
+          32258,
+          18101944,
+          323584,
+          1,
+          37826,
+          342887,
+          0,
+          0,
+          0,
+          0,
+          8017,
+          15750
+        ],
+        "memory": {
+          "MemAvailable_kib": 12724420,
+          "Cached_kib": 10414592,
+          "Dirty_kib": 23192,
+          "Writeback_kib": 0
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606066.6139534,
+        "registry_device": "sdb",
+        "block_stat": [
+          1533,
+          1032,
+          155810,
+          3553,
+          17394,
+          33405,
+          18769616,
+          333527,
+          0,
+          39165,
+          353375,
+          0,
+          0,
+          0,
+          0,
+          8294,
+          16294
+        ],
+        "memory": {
+          "MemAvailable_kib": 12778072,
+          "Cached_kib": 10728976,
+          "Dirty_kib": 8252,
+          "Writeback_kib": 0
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606068.6143994,
+        "registry_device": "sdb",
+        "block_stat": [
+          1534,
+          1032,
+          155818,
+          3554,
+          18412,
+          35610,
+          19514528,
+          350636,
+          1,
+          40577,
+          371068,
+          0,
+          0,
+          0,
+          0,
+          8627,
+          16877
+        ],
+        "memory": {
+          "MemAvailable_kib": 12788808,
+          "Cached_kib": 11091824,
+          "Dirty_kib": 4516,
+          "Writeback_kib": 172
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606070.6148036,
+        "registry_device": "sdb",
+        "block_stat": [
+          1536,
+          1032,
+          155834,
+          3555,
+          18790,
+          36392,
+          19850936,
+          356767,
+          1,
+          41981,
+          377992,
+          0,
+          0,
+          0,
+          0,
+          8834,
+          17668
+        ],
+        "memory": {
+          "MemAvailable_kib": 12783524,
+          "Cached_kib": 11265540,
+          "Dirty_kib": 13468,
+          "Writeback_kib": 0
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606072.615188,
+        "registry_device": "sdb",
+        "block_stat": [
+          1539,
+          1032,
+          155858,
+          3557,
+          19331,
+          37410,
+          20451816,
+          367690,
+          0,
+          43257,
+          389659,
+          0,
+          0,
+          0,
+          0,
+          9090,
+          18411
+        ],
+        "memory": {
+          "MemAvailable_kib": 12789488,
+          "Cached_kib": 11567192,
+          "Dirty_kib": 19192,
+          "Writeback_kib": 0
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606074.615654,
+        "registry_device": "sdb",
+        "block_stat": [
+          1541,
+          1032,
+          155874,
+          3558,
+          19939,
+          38659,
+          21120560,
+          377040,
+          1,
+          44558,
+          399433,
+          0,
+          0,
+          0,
+          0,
+          9388,
+          18834
+        ],
+        "memory": {
+          "MemAvailable_kib": 12775940,
+          "Cached_kib": 11890956,
+          "Dirty_kib": 14428,
+          "Writeback_kib": 0
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606076.6161206,
+        "registry_device": "sdb",
+        "block_stat": [
+          1542,
+          1032,
+          155882,
+          3559,
+          20485,
+          39696,
+          21665528,
+          385519,
+          33,
+          45719,
+          408448,
+          0,
+          0,
+          0,
+          0,
+          9665,
+          19369
+        ],
+        "memory": {
+          "MemAvailable_kib": 12790116,
+          "Cached_kib": 12213652,
+          "Dirty_kib": 8176,
+          "Writeback_kib": 65588
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606078.616654,
+        "registry_device": "sdb",
+        "block_stat": [
+          1542,
+          1032,
+          155882,
+          3559,
+          20962,
+          40632,
+          22256248,
+          396696,
+          1,
+          47039,
+          420302,
+          0,
+          0,
+          0,
+          0,
+          9881,
+          20046
+        ],
+        "memory": {
+          "MemAvailable_kib": 12774804,
+          "Cached_kib": 12443968,
+          "Dirty_kib": 8572,
+          "Writeback_kib": 172
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606080.6170547,
+        "registry_device": "sdb",
+        "block_stat": [
+          1550,
+          1052,
+          156106,
+          3571,
+          21455,
+          41589,
+          22790992,
+          406915,
+          0,
+          48302,
+          431176,
+          0,
+          0,
+          0,
+          0,
+          10120,
+          20689
+        ],
+        "memory": {
+          "MemAvailable_kib": 13029872,
+          "Cached_kib": 12591844,
+          "Dirty_kib": 10040,
+          "Writeback_kib": 0
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606082.6176548,
+        "registry_device": "sdb",
+        "block_stat": [
+          1558,
+          1052,
+          156170,
+          3580,
+          21812,
+          42377,
+          23127312,
+          414580,
+          17,
+          49664,
+          439686,
+          0,
+          0,
+          0,
+          0,
+          10306,
+          21525
+        ],
+        "memory": {
+          "MemAvailable_kib": 13417720,
+          "Cached_kib": 12791436,
+          "Dirty_kib": 20232,
+          "Writeback_kib": 24296
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606084.6180618,
+        "registry_device": "sdb",
+        "block_stat": [
+          1559,
+          1052,
+          156178,
+          3581,
+          22208,
+          43110,
+          23594120,
+          423668,
+          1,
+          51025,
+          449501,
+          0,
+          0,
+          0,
+          0,
+          10498,
+          22251
+        ],
+        "memory": {
+          "MemAvailable_kib": 13409296,
+          "Cached_kib": 12990868,
+          "Dirty_kib": 11244,
+          "Writeback_kib": 72
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606086.6184301,
+        "registry_device": "sdb",
+        "block_stat": [
+          1561,
+          1052,
+          156194,
+          3582,
+          22578,
+          43881,
+          23995648,
+          431901,
+          0,
+          52394,
+          458463,
+          0,
+          0,
+          0,
+          0,
+          10676,
+          22978
+        ],
+        "memory": {
+          "MemAvailable_kib": 13389760,
+          "Cached_kib": 13089940,
+          "Dirty_kib": 12404,
+          "Writeback_kib": 12
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606088.6189415,
+        "registry_device": "sdb",
+        "block_stat": [
+          1561,
+          1052,
+          156194,
+          3582,
+          22946,
+          44561,
+          24426136,
+          441792,
+          16,
+          53836,
+          469257,
+          0,
+          0,
+          0,
+          0,
+          10845,
+          23881
+        ],
+        "memory": {
+          "MemAvailable_kib": 13420600,
+          "Cached_kib": 13116256,
+          "Dirty_kib": 10476,
+          "Writeback_kib": 24764
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606090.619304,
+        "registry_device": "sdb",
+        "block_stat": [
+          1561,
+          1052,
+          156194,
+          3582,
+          23394,
+          45453,
+          24864952,
+          451311,
+          0,
+          55106,
+          479493,
+          0,
+          0,
+          0,
+          0,
+          11071,
+          24598
+        ],
+        "memory": {
+          "MemAvailable_kib": 13407144,
+          "Cached_kib": 13125820,
+          "Dirty_kib": 29688,
+          "Writeback_kib": 0
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606092.6197143,
+        "registry_device": "sdb",
+        "block_stat": [
+          1561,
+          1052,
+          156194,
+          3582,
+          23825,
+          46289,
+          25332880,
+          460804,
+          0,
+          56419,
+          489713,
+          0,
+          0,
+          0,
+          0,
+          11276,
+          25325
+        ],
+        "memory": {
+          "MemAvailable_kib": 13380696,
+          "Cached_kib": 13138692,
+          "Dirty_kib": 25184,
+          "Writeback_kib": 0
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606094.6201022,
+        "registry_device": "sdb",
+        "block_stat": [
+          1561,
+          1052,
+          156194,
+          3582,
+          24080,
+          46775,
+          25600408,
+          467699,
+          1,
+          57975,
+          497575,
+          0,
+          0,
+          0,
+          0,
+          11400,
+          26292
+        ],
+        "memory": {
+          "MemAvailable_kib": 13400280,
+          "Cached_kib": 13082076,
+          "Dirty_kib": 36740,
+          "Writeback_kib": 0
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606096.6204705,
+        "registry_device": "sdb",
+        "block_stat": [
+          1562,
+          1052,
+          156202,
+          3584,
+          24538,
+          47700,
+          26103024,
+          477049,
+          13,
+          59301,
+          507623,
+          0,
+          0,
+          0,
+          0,
+          11620,
+          26989
+        ],
+        "memory": {
+          "MemAvailable_kib": 13386788,
+          "Cached_kib": 13024448,
+          "Dirty_kib": 8900,
+          "Writeback_kib": 24768
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606098.6208296,
+        "registry_device": "sdb",
+        "block_stat": [
+          1563,
+          1052,
+          156210,
+          3584,
+          25372,
+          49488,
+          26679016,
+          488737,
+          24,
+          60525,
+          519846,
+          0,
+          0,
+          0,
+          0,
+          11875,
+          27524
+        ],
+        "memory": {
+          "MemAvailable_kib": 13374896,
+          "Cached_kib": 13116776,
+          "Dirty_kib": 3004,
+          "Writeback_kib": 32928
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606100.6212206,
+        "registry_device": "sdb",
+        "block_stat": [
+          1564,
+          1052,
+          156218,
+          3585,
+          25890,
+          50653,
+          27226552,
+          497413,
+          19,
+          61657,
+          529104,
+          0,
+          0,
+          0,
+          0,
+          12128,
+          28106
+        ],
+        "memory": {
+          "MemAvailable_kib": 13367484,
+          "Cached_kib": 13076216,
+          "Dirty_kib": 4000,
+          "Writeback_kib": 32824
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606102.621612,
+        "registry_device": "sdb",
+        "block_stat": [
+          1565,
+          1052,
+          156226,
+          3586,
+          26431,
+          51830,
+          27818200,
+          506742,
+          0,
+          62751,
+          538993,
+          0,
+          0,
+          0,
+          0,
+          12389,
+          28664
+        ],
+        "memory": {
+          "MemAvailable_kib": 13390280,
+          "Cached_kib": 13040028,
+          "Dirty_kib": 9620,
+          "Writeback_kib": 0
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606104.6222641,
+        "registry_device": "sdb",
+        "block_stat": [
+          1567,
+          1052,
+          156242,
+          3591,
+          26813,
+          52595,
+          28267160,
+          515666,
+          6,
+          64121,
+          548453,
+          0,
+          0,
+          0,
+          0,
+          12553,
+          29195
+        ],
+        "memory": {
+          "MemAvailable_kib": 13389052,
+          "Cached_kib": 13065884,
+          "Dirty_kib": 7700,
+          "Writeback_kib": 16560
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606106.6226666,
+        "registry_device": "sdb",
+        "block_stat": [
+          1567,
+          1052,
+          156242,
+          3591,
+          27342,
+          53606,
+          28624832,
+          524416,
+          19,
+          65466,
+          558168,
+          0,
+          0,
+          0,
+          0,
+          12755,
+          30160
+        ],
+        "memory": {
+          "MemAvailable_kib": 13400516,
+          "Cached_kib": 13062844,
+          "Dirty_kib": 1676,
+          "Writeback_kib": 32780
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606108.6230233,
+        "registry_device": "sdb",
+        "block_stat": [
+          1567,
+          1052,
+          156242,
+          3591,
+          27722,
+          54337,
+          29064504,
+          533193,
+          10,
+          66900,
+          567551,
+          0,
+          0,
+          0,
+          0,
+          12930,
+          30766
+        ],
+        "memory": {
+          "MemAvailable_kib": 13399192,
+          "Cached_kib": 13058552,
+          "Dirty_kib": 2900,
+          "Writeback_kib": 24580
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606110.6234038,
+        "registry_device": "sdb",
+        "block_stat": [
+          1576,
+          1052,
+          229970,
+          3729,
+          28155,
+          55234,
+          29515168,
+          543293,
+          3,
+          68206,
+          578496,
+          0,
+          0,
+          0,
+          0,
+          13148,
+          31472
+        ],
+        "memory": {
+          "MemAvailable_kib": 13375508,
+          "Cached_kib": 13042984,
+          "Dirty_kib": 43204,
+          "Writeback_kib": 4096
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606112.6238894,
+        "registry_device": "sdb",
+        "block_stat": [
+          1584,
+          1052,
+          295506,
+          3830,
+          28511,
+          55938,
+          29895712,
+          549661,
+          0,
+          69483,
+          585677,
+          0,
+          0,
+          0,
+          0,
+          13323,
+          32185
+        ],
+        "memory": {
+          "MemAvailable_kib": 13389968,
+          "Cached_kib": 13038300,
+          "Dirty_kib": 22676,
+          "Writeback_kib": 68
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606114.624311,
+        "registry_device": "sdb",
+        "block_stat": [
+          1601,
+          1053,
+          426578,
+          4079,
+          28953,
+          56866,
+          30399944,
+          556594,
+          3,
+          70778,
+          593475,
+          0,
+          0,
+          0,
+          0,
+          13535,
+          32801
+        ],
+        "memory": {
+          "MemAvailable_kib": 13414840,
+          "Cached_kib": 13048628,
+          "Dirty_kib": 17564,
+          "Writeback_kib": 15228
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606116.6246834,
+        "registry_device": "sdb",
+        "block_stat": [
+          1613,
+          1054,
+          492138,
+          4201,
+          29295,
+          57644,
+          30701064,
+          561899,
+          0,
+          71697,
+          599429,
+          0,
+          0,
+          0,
+          0,
+          13719,
+          33328
+        ],
+        "memory": {
+          "MemAvailable_kib": 13387732,
+          "Cached_kib": 13112500,
+          "Dirty_kib": 11980,
+          "Writeback_kib": 36
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606118.6259854,
+        "registry_device": "sdb",
+        "block_stat": [
+          1613,
+          1054,
+          492138,
+          4201,
+          29295,
+          57644,
+          30701064,
+          561899,
+          0,
+          71697,
+          599429,
+          0,
+          0,
+          0,
+          0,
+          13719,
+          33328
+        ],
+        "memory": {
+          "MemAvailable_kib": 13389984,
+          "Cached_kib": 13114948,
+          "Dirty_kib": 17512,
+          "Writeback_kib": 0
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606118.6261952,
+        "registry_device": "sdb",
+        "block_stat": [
+          1613,
+          1054,
+          492138,
+          4201,
+          29295,
+          57644,
+          30701064,
+          561899,
+          0,
+          71697,
+          599429,
+          0,
+          0,
+          0,
+          0,
+          13719,
+          33328
+        ],
+        "memory": {
+          "MemAvailable_kib": 13389984,
+          "Cached_kib": 13114948,
+          "Dirty_kib": 17512,
+          "Writeback_kib": 0
+        },
+        "online_cpus": "0-3"
+      },
+      {
+        "at_unix": 1790606128.6265433,
+        "registry_device": "sdb",
+        "block_stat": [
+          1613,
+          1054,
+          492138,
+          4201,
+          29300,
+          58407,
+          30707208,
+          561987,
+          0,
+          71726,
+          599517,
+          0,
+          0,
+          0,
+          0,
+          13721,
+          33328
+        ],
+        "memory": {
+          "MemAvailable_kib": 13394364,
+          "Cached_kib": 13020540,
+          "Dirty_kib": 21512,
+          "Writeback_kib": 4
+        },
+        "online_cpus": "0-3"
+      }
+    ],
+    "registry_physical_write_bytes": 15722057728,
+    "registry_physical_read_bytes": 175046656,
+    "note": "Whole registry-volume counters include concurrent production activity and final10s writeback observation; transfers reported separately by generator."
+  },
+  "overlap": {
+    "start_utc": "2026-09-28T14:33:25.791280+00:00",
+    "end_utc": "2026-09-28T14:35:16.089512+00:00",
+    "first_scenario_completed_utc": "2026-09-28T14:35:15.983237+00:00",
+    "full_512_overlap_seconds": 110.1919572353363,
+    "after_first_completion_seconds": 0.10627460479736328,
+    "cycles_during_full512": 2361,
+    "distinct_agents_progressing": 512,
+    "registry_physical_write_gib": 14.64230728149414,
+    "registry_physical_read_mib": 166.9375,
+    "max_dirty_mib": 115.52734375,
+    "final_writeback_kib": 4,
+    "min_available_gib": 12.124011993408203,
+    "online_masks": [
+      "0-3"
+    ]
+  },
+  "pacing": [
+    {
+      "elapsed_seconds": 10.303,
+      "interval_seconds": 10.303,
+      "mibps": {
+        "nat": 125.01,
+        "registry_upload": 145.78,
+        "registry_read": 24.46
+      },
+      "completed_new_blobs": 44,
+      "upload_pacing_deficit_mib": 43.45
+    },
+    {
+      "elapsed_seconds": 20.352,
+      "interval_seconds": 10.049,
+      "mibps": {
+        "nat": 124.99,
+        "registry_upload": 146.28,
+        "registry_read": 24.98
+      },
+      "completed_new_blobs": 46,
+      "upload_pacing_deficit_mib": 80.8
+    },
+    {
+      "elapsed_seconds": 30.394,
+      "interval_seconds": 10.042,
+      "mibps": {
+        "nat": 125.07,
+        "registry_upload": 150.17,
+        "registry_read": 25.0
+      },
+      "completed_new_blobs": 46,
+      "upload_pacing_deficit_mib": 79.1
+    },
+    {
+      "elapsed_seconds": 40.44,
+      "interval_seconds": 10.046,
+      "mibps": {
+        "nat": 125.02,
+        "registry_upload": 144.63,
+        "registry_read": 24.99
+      },
+      "completed_new_blobs": 46,
+      "upload_pacing_deficit_mib": 133.0
+    },
+    {
+      "elapsed_seconds": 49.569,
+      "interval_seconds": 9.129,
+      "mibps": {
+        "nat": 124.88,
+        "registry_upload": 147.33,
+        "registry_read": 24.98
+      },
+      "completed_new_blobs": 43,
+      "upload_pacing_deficit_mib": 157.35
+    },
+    {
+      "elapsed_seconds": 59.807,
+      "interval_seconds": 10.238,
+      "mibps": {
+        "nat": 124.24,
+        "registry_upload": 147.69,
+        "registry_read": 24.91
+      },
+      "completed_new_blobs": 47,
+      "upload_pacing_deficit_mib": 181.05
+    },
+    {
+      "elapsed_seconds": 70.004,
+      "interval_seconds": 10.197,
+      "mibps": {
+        "nat": 124.94,
+        "registry_upload": 145.34,
+        "registry_read": 25.01
+      },
+      "completed_new_blobs": 46,
+      "upload_pacing_deficit_mib": 228.6
+    },
+    {
+      "elapsed_seconds": 80.024,
+      "interval_seconds": 10.02,
+      "mibps": {
+        "nat": 125.95,
+        "registry_upload": 111.78,
+        "registry_read": 24.05
+      },
+      "completed_new_blobs": 35,
+      "upload_pacing_deficit_mib": 611.6
+    },
+    {
+      "elapsed_seconds": 90.109,
+      "interval_seconds": 10.085,
+      "mibps": {
+        "nat": 124.94,
+        "registry_upload": 101.54,
+        "registry_read": 25.38
+      },
+      "completed_new_blobs": 32,
+      "upload_pacing_deficit_mib": 1100.35
+    },
+    {
+      "elapsed_seconds": 100.214,
+      "interval_seconds": 10.105,
+      "mibps": {
+        "nat": 124.89,
+        "registry_upload": 120.34,
+        "registry_read": 25.33
+      },
+      "completed_new_blobs": 38,
+      "upload_pacing_deficit_mib": 1400.1
+    },
+    {
+      "elapsed_seconds": 110.297,
+      "interval_seconds": 10.083,
+      "mibps": {
+        "nat": 121.39,
+        "registry_upload": 101.56,
+        "registry_read": 24.6
+      },
+      "completed_new_blobs": 35,
+      "upload_pacing_deficit_mib": 1888.55
+    }
+  ],
+  "registry_request_timing": [
+    {
+      "period": "first70seconds",
+      "method": "DELETE",
+      "path_type": "manifest",
+      "count": 318,
+      "mean_seconds": 0.00083,
+      "p95_seconds": 0.00212,
+      "max_seconds": 0.00973
+    },
+    {
+      "period": "first70seconds",
+      "method": "GET",
+      "path_type": "blob",
+      "count": 54,
+      "mean_seconds": 0.80732,
+      "p95_seconds": 1.03879,
+      "max_seconds": 1.07894
+    },
+    {
+      "period": "first70seconds",
+      "method": "POST",
+      "path_type": "upload",
+      "count": 323,
+      "mean_seconds": 0.07392,
+      "p95_seconds": 0.26453,
+      "max_seconds": 0.80162
+    },
+    {
+      "period": "first70seconds",
+      "method": "PUT",
+      "path_type": "manifest",
+      "count": 319,
+      "mean_seconds": 0.11267,
+      "p95_seconds": 0.28971,
+      "max_seconds": 0.83648
+    },
+    {
+      "period": "first70seconds",
+      "method": "PUT",
+      "path_type": "upload",
+      "count": 323,
+      "mean_seconds": 0.3774,
+      "p95_seconds": 0.65687,
+      "max_seconds": 0.93366
+    },
+    {
+      "period": "last40seconds",
+      "method": "DELETE",
+      "path_type": "manifest",
+      "count": 140,
+      "mean_seconds": 0.00084,
+      "p95_seconds": 0.00211,
+      "max_seconds": 0.00646
+    },
+    {
+      "period": "last40seconds",
+      "method": "DELETE",
+      "path_type": "upload",
+      "count": 1,
+      "mean_seconds": 0.0337,
+      "p95_seconds": 0.0337,
+      "max_seconds": 0.0337
+    },
+    {
+      "period": "last40seconds",
+      "method": "GET",
+      "path_type": "blob",
+      "count": 32,
+      "mean_seconds": 0.52049,
+      "p95_seconds": 0.75608,
+      "max_seconds": 0.85254
+    },
+    {
+      "period": "last40seconds",
+      "method": "GET",
+      "path_type": "upload",
+      "count": 1,
+      "mean_seconds": 0.01302,
+      "p95_seconds": 0.01302,
+      "max_seconds": 0.01302
+    },
+    {
+      "period": "last40seconds",
+      "method": "POST",
+      "path_type": "upload",
+      "count": 138,
+      "mean_seconds": 0.09776,
+      "p95_seconds": 0.29973,
+      "max_seconds": 0.51016
+    },
+    {
+      "period": "last40seconds",
+      "method": "PUT",
+      "path_type": "manifest",
+      "count": 140,
+      "mean_seconds": 0.21456,
+      "p95_seconds": 0.45345,
+      "max_seconds": 0.7245
+    },
+    {
+      "period": "last40seconds",
+      "method": "PUT",
+      "path_type": "upload",
+      "count": 138,
+      "mean_seconds": 0.33589,
+      "p95_seconds": 0.5799,
+      "max_seconds": 0.68974
+    }
+  ],
+  "cleanup": {
+    "repository": {
+      "repository": "gateway-network-actual-four-69a73a87",
+      "link_count": 0,
+      "upload_sessions": 0,
+      "cleanup_errors": [],
+      "global_orphan_gc": "normal registry policy; not manually triggered"
+    },
+    "source": {
+      "name": "gateway-qual-source-20260928-1425",
+      "firewall_id": 11696212,
+      "created_at_utc": "2026-09-28T14:26:42Z",
+      "cleanup_required": false,
+      "data": "generated nonprivate random bytes only",
+      "allowed_ingress_source": "77.42.92.27/32",
+      "server_id": 167832212,
+      "server_type": "ccx13",
+      "action_id": 658177975258501,
+      "public_ipv4": "77.42.64.23",
+      "primary_ipv4_id": 152128468,
+      "primary_ipv4_auto_delete": true,
+      "delete_action_id": 658177975277564,
+      "deleted_at_utc": "2026-09-28T14:39:11Z"
+    },
+    "generator": {
+      "id": 167826942,
+      "name": "gateway-qual-net-20260928-1357",
+      "server_type": "ccx23",
+      "created_at_utc": "2026-09-28T13:57:08Z",
+      "purpose": "temporary private-only NAT and registry load generator",
+      "action_id": 658169385278200,
+      "cleanup_required": false,
+      "private_ip": "10.42.0.3",
+      "s3_cleanup": {
+        "bucket": "ucloud-sandboxes-prod-20260926",
+        "key": "gateway-qualification/20260928/network-payload-167826942.bin"
+      },
+      "s3_deleted_at_utc": "2026-09-28T14:39:21Z",
+      "delete_action_id": 658177975278029,
+      "deleted_at_utc": "2026-09-28T14:39:21Z"
+    }
+  }
+}

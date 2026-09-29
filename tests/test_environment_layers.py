@@ -1,5 +1,6 @@
 """Per-layer EROFS publication: schema, planning, squash, reuse and mounting."""
 from contextlib import contextmanager
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 import hashlib
 import os
@@ -7,6 +8,7 @@ from pathlib import Path
 import stat
 import subprocess
 import sys
+from threading import Event
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
@@ -26,7 +28,7 @@ from ucloud_sandboxes.environment_artifact import (
 )
 from ucloud_sandboxes.environment_backend import NO_BLOCK_DEVICE, mount_has_dependents
 from ucloud_sandboxes.environment_builder import (
-    LAYER_GROUP_BYTES, FreshEnvironmentBuilder, plan_layer_groups, squash_layer_diffs,
+    LAYER_GROUP_BYTES, FreshEnvironmentBuilder, plan_layer_groups, publication_metrics, squash_layer_diffs,
 )
 from ucloud_sandboxes.environment_manifest import EnvironmentManifest, HOST_EROFS_ABI
 from ucloud_sandboxes.environment_rootfs import EnvironmentDeviceCapacityError, EnvironmentRootfsStore
@@ -315,6 +317,7 @@ class FakeDockerStore(DockerOverlay2RootfsStore):
         self.docker_binary = "docker"
         self.root = root
         self.images = {}
+        self.configs = {}
 
     def _checked(self, *argv, timeout=60):
         return ""
@@ -332,7 +335,8 @@ class FakeDockerStore(DockerOverlay2RootfsStore):
     def operation_lease(self, image_ref):
         image_id, rootfs, _layers = self._record(image_ref)
         yield SimpleNamespace(image_id=image_id, rootfs=rootfs,
-                              image_config=DockerImageConfig.from_inspection({"Cmd": ["/bin/sh"]}))
+                              image_config=DockerImageConfig.from_inspection(
+                                  self.configs.get(image_ref.rsplit(":", 1)[1], {"Cmd": ["/bin/sh"]})))
 
     def layer_diffs(self, image_ref):
         image_id, _rootfs, layers = self._record(image_ref)
@@ -386,6 +390,109 @@ class LayerPublicationTests(unittest.TestCase):
                                                    allowlist=("*",))
         _root, environment = load_image_environment(self.registry, "ucloud-managed/" + tag, annotated)
         return annotated, [self.registry.load(component) for component in environment.components], environment
+
+    def registry_config(self, tag="base"):
+        layers = self.base_layers
+        raw = canonical_bytes({"rootfs": {"type": "layers", "diff_ids": [v[0] for v in layers]},
+                               "config": {"Cmd": ["/bin/sh"], "Env": ["FIXTURE=1"]}})
+        image_id = content_digest(raw)
+        self.client.blobs[image_id] = raw
+        self.client.manifests[tag] = canonical_bytes({
+            "schemaVersion": 2, "mediaType": OCI_IMAGE,
+            "config": {"digest": image_id, "size": len(raw)},
+            "layers": [{"digest": v[0], "size": v[2]} for v in layers]})
+        _, rootfs, diffs = self.store.images[tag]
+        self.store.images[tag] = image_id, rootfs, diffs
+        self.store.configs[tag] = {"Cmd": ["/bin/sh"], "Env": ["FIXTURE=1"]}
+        return image_id
+
+    def test_complete_layer_hit_skips_docker_and_preserves_signed_configuration(self):
+        image_id = self.registry_config()
+        _, _, cold = self.publish("base")
+        self.views.clear()
+        with publication_metrics() as metrics, \
+             patch.object(self.store, "_checked", side_effect=AssertionError("must not pull")), \
+             patch.object(self.store, "operation_lease", side_effect=AssertionError("must not mount")):
+            _, _, warm = self.publish("base")
+        self.assertEqual(warm.source_image, image_id)
+        self.assertEqual(warm, cold)
+        self.assertEqual(warm.image_config["Env"], ["FIXTURE=1"])
+        self.assertEqual(self.views, [])
+        self.assertEqual(metrics["docker_pull_skipped"], 1)
+        self.assertEqual(metrics["groups_reused"], 3)
+        self.assertNotIn("mkfs_ms", metrics)
+
+    def test_partial_cache_miss_pulls_and_builds_only_the_missing_group(self):
+        self.registry_config()
+        _, base, _ = self.publish("base")
+        self.client.tags.pop("layer-" + base[-1].group_key)
+        self.views.clear()
+        with patch.object(self.store, "_checked", wraps=self.store._checked) as pull, \
+             publication_metrics() as metrics:
+            _, components, _ = self.publish("base")
+        self.assertEqual(pull.call_count, 1)
+        self.assertEqual(len(self.views), 1)
+        self.assertEqual(components, base)
+        self.assertEqual(metrics["groups_built"], 1)
+        self.assertEqual(metrics["groups_reused"], 2)
+        self.assertIn("docker_pull_ms", metrics)
+
+    def test_corrupt_oci_config_cannot_be_signed_from_a_cache_hit(self):
+        image_id = self.registry_config()
+        self.publish("base")
+        self.client.blobs[image_id] = self.client.blobs[image_id].replace(b"FIXTURE=1", b"FIXTURE=2")
+        with patch.object(self.store, "_checked", side_effect=AssertionError("must fail closed")), \
+             self.assertRaisesRegex(ValueError, "config content identity"):
+            self.publish("base")
+
+    def test_unsupported_mkfs_version_query_retains_whole_image_fallback(self):
+        self.registry_config()
+        with patch.object(self.builder, "layer_format", side_effect=OSError("no version option")):
+            _, components, _ = self.publish("base")
+        self.assertEqual(len(components), 1)
+        self.assertNotIsInstance(components[0], LayerEnvironmentComponent)
+
+    def test_concurrent_builders_share_one_conversion_and_release_failed_lock(self):
+        first_entered, release, duplicate_entered, second_started = (Event() for _ in range(4))
+        other = FreshEnvironmentBuilder(self.store, self.registry, self.keys.key, self.builder.work_root)
+        calls = []
+
+        def mkfs(image, view, **kwargs):
+            calls.append(view)
+            if len(calls) > 1:
+                duplicate_entered.set()
+            first_entered.set()
+            if not release.wait(3):
+                raise TimeoutError("test did not release conversion")
+            image.write_bytes(b"x" * 4096)
+
+        def publish(builder):
+            if builder is other:
+                second_started.set()
+            return builder._publish_layer_group([self.base_layers[2][1]], [diff_id("b2")],
+                lower_dirs=[], parent=None, layer_format=FORMAT)
+
+        with patch.object(FreshEnvironmentBuilder, "_mkfs", side_effect=mkfs), \
+             ThreadPoolExecutor(2) as pool:
+            first = pool.submit(publish, self.builder)
+            self.assertTrue(first_entered.wait(2))
+            second = pool.submit(publish, other)
+            try:
+                self.assertTrue(second_started.wait(2))
+                self.assertFalse(duplicate_entered.wait(0.1))
+            finally:
+                release.set()
+            first_result, second_result = first.result(timeout=3), second.result(timeout=3)
+        self.assertEqual(first_result[0], second_result[0])
+        self.assertEqual((first_result[1], second_result[1]), (False, True))
+        self.assertEqual(len(calls), 1)
+        # A failed owner leaves neither a held lock nor an apparently ready tag.
+        self.client.tags.clear()
+        with patch.object(self.builder, "_mkfs", side_effect=OSError("conversion failed")), \
+             self.assertRaises(OSError):
+            publish(self.builder)
+        with patch.object(other, "_mkfs", side_effect=lambda image, *a, **kw: image.write_bytes(b"x" * 4096)):
+            self.assertFalse(publish(other)[1])
 
     def test_images_sharing_a_base_share_its_layer_components(self):
         _annotated, base, base_environment = self.publish("base")

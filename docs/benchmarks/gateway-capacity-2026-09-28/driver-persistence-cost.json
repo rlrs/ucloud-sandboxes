@@ -1,0 +1,140 @@
+{
+  "baseline_measurement": {
+    "python": "3.10.13",
+    "report_bytes": 18657438,
+    "completed_cycles": 6540,
+    "json_indent2_seconds": 0.5553745129145682,
+    "json_compact_seconds": 0.16944107599556446,
+    "atomic_file_write_seconds": 0.011717746965587139,
+    "measured_at_unix": 1790602326.4629445
+  },
+  "candidate_measurement": {
+    "source_harness_sha256": "b5bb9068c9f79ed7611393a38f052c916173e8c42ae2392d460d9cbddc92ccc6",
+    "candidate_sha256": "33c33a914684a2278748e9522836d75804f36e772624e80cfdd63627b5f645d4",
+    "orjson_version": "3.11.9",
+    "report_bytes": 23414641,
+    "report_cycles": 8192,
+    "encode_seconds": 0.03221575915813446,
+    "structurally_equal": true,
+    "candidate_applied": true,
+    "driver_orjson_verified": "3.11.9",
+    "validation": "36 harness and persistence tests pass; Ruff passes"
+  },
+  "interpretation": "The frozen matched runs synchronously serialized their growing report once per second on the driver event loop. These encoding microbenchmarks diagnose driver overhead, not corrected live sandbox latency. The optional orjson encoder was applied after the frozen four-core run finished at 13:43:15 UTC; a fresh four-core acceptance uses the updated encoder and records checkpoint timings.",
+  "acceptance": {
+    "run_id": "relay-load-cac265f5811c",
+    "harness_sha256": "33c33a914684a2278748e9522836d75804f36e772624e80cfdd63627b5f645d4",
+    "serializer": {
+      "name": "orjson",
+      "version": "3.11.9"
+    },
+    "completed_cycles": 5120,
+    "correct": true,
+    "slo_passed": false,
+    "response_ready_to_usable_exec_seconds": {
+      "count": 4608,
+      "p50": 0.7923342685680836,
+      "p95": 1.0342077133245766,
+      "p99": 1.2155616385862231,
+      "max": 2.413925431203097
+    },
+    "driver_event_loop_lag_summary": {
+      "count": 2422,
+      "p50": 0.0008668566588312387,
+      "p95": 0.12083890289068222,
+      "p99": 0.15223461668938398,
+      "max": 0.21484007500112057
+    },
+    "report_persistence": {
+      "completed_checkpoints": 274,
+      "serialization_seconds": {
+        "count": 274,
+        "p50": 0.012736077420413494,
+        "p95": 0.025800454895943403,
+        "p99": 0.027034074999392033,
+        "max": 0.027404580265283585
+      },
+      "write_seconds": {
+        "count": 274,
+        "p50": 0.006927268113940954,
+        "p95": 0.01355198584496975,
+        "p99": 0.014244521036744118,
+        "max": 0.01649175165221095
+      },
+      "total_seconds": {
+        "count": 274,
+        "p50": 0.01964117237366736,
+        "p95": 0.03939507668837905,
+        "p99": 0.04128122888505459,
+        "max": 0.04367776168510318
+      },
+      "coverage": "Each checkpoint contains earlier completed writes; the current write appears in the next checkpoint."
+    },
+    "interpretation": "The encoder reduces checkpoint cost; the final strict latency SLO still fails. Remaining event-loop lag and observer transport remain measured limitations."
+  },
+  "isolated_inventory_validation": {
+    "run_id": "relay-load-55d5cf062e75",
+    "harness_sha256": "3d72b0e0b49f3f7563bcb57bd373ab4600b88dc9e12bf70b9ebcec677d85b03f",
+    "completed_cycles": 6144,
+    "correct": true,
+    "slo_passed": true,
+    "response_ready_to_usable_exec_seconds": {
+      "count": 5632,
+      "p50": 0.564311507390812,
+      "p95": 0.7097827787511051,
+      "p99": 0.7743706093169749,
+      "max": 1.1056646923534572
+    },
+    "driver_event_loop_lag_summary": {
+      "count": 4369,
+      "p50": 0.0005472349002957344,
+      "p95": 0.0020290305837988853,
+      "p99": 0.023982123006135225,
+      "max": 0.10994829703122377
+    },
+    "inventory_load_process": {
+      "pollers": 23,
+      "main_process_pollers": 1,
+      "ready": true,
+      "failed": false,
+      "helper_sha256": "314697b3425cee31db8b4b6f1d537c156506e1f868ddd09ace9dbd3c8a70c778",
+      "cadence": "Same SDK list_sandboxes GET, then one-second sleep per poller",
+      "pid": 3452548,
+      "stopped_by_parent": true,
+      "completion": {
+        "event": "finished",
+        "reason": "stopped",
+        "completed_polls": 9014,
+        "failed_polls": 0,
+        "elapsed_seconds": 442.25204059807584
+      },
+      "returncode": 0
+    },
+    "report_persistence": {
+      "completed_checkpoints": 337,
+      "serialization_seconds": {
+        "count": 337,
+        "p50": 0.013513802085071802,
+        "p95": 0.0361917819827795,
+        "p99": 0.038668458350002766,
+        "max": 0.042514145374298096
+      },
+      "write_seconds": {
+        "count": 337,
+        "p50": 0.00891567999497056,
+        "p95": 0.01711986819282174,
+        "p99": 0.018084604293107986,
+        "max": 0.019074054900556803
+      },
+      "total_seconds": {
+        "count": 337,
+        "p50": 0.022860068827867508,
+        "p95": 0.053721155039966106,
+        "p99": 0.056130397133529186,
+        "max": 0.05983626702800393
+      },
+      "coverage": "Each checkpoint contains earlier completed writes; the current write appears in the next checkpoint."
+    },
+    "interpretation": "Final four-core validation preserves24 SDK inventory clients while isolating23 from the latency driver. Gateway code also changed, so the before/after is not a controlled single-change latency comparison."
+  }
+}

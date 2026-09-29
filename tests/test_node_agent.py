@@ -7,7 +7,7 @@ import unittest
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from threading import Thread
+from threading import Event, Lock, Thread
 from types import SimpleNamespace
 from unittest.mock import Mock
 from urllib import error, request
@@ -22,6 +22,7 @@ from ucloud_sandboxes.node_agent import (
 )
 from ucloud_sandboxes.sandbox import (
     SandboxDeleteBusyError,
+    CommandResult,
     SandboxOperation,
     SandboxRestoreBusyError,
     SandboxSpec,
@@ -202,6 +203,62 @@ class BuilderNodeAgentTests(unittest.TestCase):
         self.assertEqual(status, 201)
         self.assertEqual(payload["build"]["status"], "succeeded")
         self.assertFalse(Path(payload["build"]["context_path"]).exists())
+
+    def test_full_builder_rejects_new_work_but_preserves_retry_conflict_and_drain(self):
+        archive, digest = self._upload_context({"Dockerfile": b"FROM scratch\n"})
+        manager = self.server.RequestHandlerClass.image_manager
+        release, full, lock = Event(), Event(), Lock()
+        active = 0
+
+        class Executor:
+            def run(self, argv):
+                nonlocal active
+                with lock:
+                    active += 1
+                    if active == 4:
+                        full.set()
+                if not release.wait(5):
+                    raise TimeoutError("test did not release builds")
+                return CommandResult(argv=argv, exit_code=0)
+
+        manager.runtime = DockerImageRuntime(executor=Executor())
+        payload = {"context_path": ".", "context_archive_digest": digest,
+                   "context_archive_format": "tar.gz", "context_archive_size": len(archive), "wait": False}
+        builds = []
+        try:
+            self.assertEqual(manager.max_active_builds, 4)
+            self.assertEqual(manager.max_queued_builds, 0)
+            for index in range(4):
+                spec = {**payload, "id": f"slot-{index}", "tag": f"local/slot-{index}:latest"}
+                status, result = self._json("/v1/images/build", method="POST", payload=spec)
+                self.assertEqual(status, 202)
+                builds.append(result["build"])
+            self.assertTrue(full.wait(2))
+            with self.assertRaises(error.HTTPError) as rejected:
+                self._json("/v1/images/build", method="POST",
+                           payload={**payload, "id": "pending", "tag": "local/pending:latest"})
+            with rejected.exception as response:
+                self.assertEqual(response.status, 503)
+                self.assertEqual(json.load(response)["error_code"], "builder_busy")
+            self.assertIsNone(manager.get_build("pending"))
+            self.assertEqual(len(manager._queued_builds), 0)
+            # Rejection does not consume the reusable uploaded context.
+            self.assertEqual(self._json(f"/v1/image-contexts/{digest}")[0], 200)
+            _, duplicate = self._json("/v1/images/build", method="POST", payload=spec)
+            self.assertFalse(duplicate["started"])
+            self.assertEqual(duplicate["build"]["build_id"], builds[-1]["build_id"])
+            with self.assertRaises(error.HTTPError) as conflict:
+                self._json("/v1/images/build", method="POST", payload={**spec, "build_args": {"X": "changed"}})
+            with conflict.exception as response:
+                self.assertEqual(response.status, 409)
+            _, draining = self._json("/v1/drain", method="POST", payload={"draining": True, "token": "active-builds"})
+            self.assertFalse(draining["drain"]["ready"])
+        finally:
+            release.set()
+            for build in builds:
+                self.assertEqual(manager.wait_for_build(build["build_id"], timeout_seconds=5).status, "succeeded")
+        _, drained = self._json("/v1/drain", method="POST", payload={"draining": True, "token": "active-builds"})
+        self.assertTrue(drained["drain"]["ready"])
 
 
 class RetryableErrorMappingTests(unittest.TestCase):

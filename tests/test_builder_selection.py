@@ -81,10 +81,32 @@ class BuilderSelectionTests(unittest.TestCase):
         ]
         self.assertEqual(self.handler._select_builder_node(image_id="again"), self.idle)
 
-    def test_single_builder_needs_no_owner_probe(self):
+    def test_single_full_builder_leaves_new_work_pending(self):
         self.handler._ready_heartbeats.return_value = [self.busy]
-        self.assertEqual(self.handler._select_builder_node(image_id="only"), self.busy)
-        self.handler._proxy_request.assert_not_called()
+        self.assertIsNone(self.handler._select_builder_node(image_id="only"))
+        self.assertEqual(self.handler._proxy_request.call_count, 2)
+
+    def test_single_full_builder_still_receives_existing_build_retry(self):
+        self.handler._ready_heartbeats.return_value = [self.busy]
+        self.handler._proxy_request.side_effect = None
+        self.handler._proxy_request.return_value = self.response(200, {"build": {"status": "running"}})
+        self.assertEqual(self.handler._select_builder_node(image_id="existing"), self.busy)
+
+    def test_all_full_builders_leave_work_unassigned_until_a_peer_frees(self):
+        self.idle = replace(self.idle, active_image_builds=4)
+        self.handler._ready_heartbeats.return_value = [self.busy, self.idle]
+        with (
+            patch.dict(control_plane._BUILDER_DISPATCH_COUNTS, {}, clear=True),
+            patch.dict(control_plane._BUILDER_DISPATCH_INFLIGHT, {}, clear=True),
+        ):
+            self.assertIsNone(self.handler._select_builder_node(image_id="waiting", reserve=True))
+            self.assertEqual(control_plane._BUILDER_DISPATCH_COUNTS, {})
+            # The periodic heartbeat remains full. The retry sees the newly
+            # free live slot and has no previous queued owner to pin it.
+            self.idle = replace(self.idle, active_image_builds=3)
+            selected = self.handler._select_builder_node(image_id="waiting", reserve=True)
+            self.assertEqual(selected.job_id, self.idle.job_id)
+            self.assertEqual(control_plane._BUILDER_DISPATCH_INFLIGHT, {self.idle.job_id: 1})
 
     def test_burst_uses_live_load_instead_of_stale_periodic_heartbeat(self):
         stale = replace(self.busy, active_image_builds=0, physical_disk_free_mb=999999)
@@ -103,16 +125,14 @@ class BuilderSelectionTests(unittest.TestCase):
                     self.probe(self.busy.node_url, "/v1/heartbeat"),
                     self.response(200, {"heartbeat": heartbeat_to_dict(changed)}),
                 ]
-                self.assertEqual(
-                    self.handler._select_builder_node(image_id="new"), self.busy
-                )
+                self.assertIsNone(self.handler._select_builder_node(image_id="new"))
 
     def test_simultaneous_live_samples_reserve_distinct_builder_capacity(self):
         nodes = [
             replace(self.idle, node_id=f"node-{i}", job_id=f"job-{i}", node_url=f"http://node-{i}")
             for i in range(4)
         ]
-        sampled = Barrier(16)
+        sampled = Barrier(20)
         self.handler._ready_heartbeats.return_value = nodes
 
         def probe(url, path, **kwargs):
@@ -128,14 +148,16 @@ class BuilderSelectionTests(unittest.TestCase):
         ):
             def dispatch(_):
                 chosen = self.handler._select_builder_node(reserve=True)
+                if chosen is None:
+                    return None
                 # A response may finish before another stale sample chooses.
                 with control_plane._BUILDER_DISPATCH_GUARD:
                     control_plane._BUILDER_DISPATCH_INFLIGHT[chosen.job_id] -= 1
                 return chosen.job_id
 
-            with ThreadPoolExecutor(max_workers=16) as pool:
-                selected = list(pool.map(dispatch, range(16)))
-            self.assertEqual(Counter(selected), {h.job_id: 4 for h in nodes})
+            with ThreadPoolExecutor(max_workers=20) as pool:
+                selected = list(pool.map(dispatch, range(20)))
+            self.assertEqual(Counter(selected), {**{h.job_id: 4 for h in nodes}, None: 4})
             self.assertTrue(all(v == 0 for v in control_plane._BUILDER_DISPATCH_INFLIGHT.values()))
 
     def test_selection_counts_dispatch_still_waiting_for_builder_acceptance(self):

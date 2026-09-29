@@ -1,0 +1,106 @@
+{
+  "profiles": [
+    {
+      "start_unix": 1790602617.9677637,
+      "finish_unix": 1790602728.0094976,
+      "elapsed_seconds": 110.03948370199998,
+      "target_seconds": 110,
+      "nat_streams": 4,
+      "requested_mib_per_second": {
+        "nat": 125,
+        "registry_upload": 75,
+        "registry_read": 75
+      },
+      "bytes": {
+        "nat": 14371782656,
+        "registry_upload": 8650752000,
+        "registry_read": 8650752000
+      },
+      "requests": {
+        "nat": 216,
+        "registry_upload": 256,
+        "registry_read": 258
+      },
+      "errors": [],
+      "achieved_mib_per_second": {
+        "nat": 124.55529178160704,
+        "registry_upload": 74.97308895361579,
+        "registry_read": 74.97308895361579
+      },
+      "byte_cap": 38654705664,
+      "registry_repository": "gateway-network-qualification-20260928-167823398",
+      "registry_blob_digest": "sha256:71bfebf3b06caa1a95c2b407d836cade70059b227967a30c11abd6263e032d3e",
+      "registry_cleanup_status": "202",
+      "registry_fixture_bytes": 33554432,
+      "registry_reads_warm_cache": true,
+      "generator_cpu_seconds": 49.15
+    },
+    {
+      "start_unix": 1790602736.6348057,
+      "finish_unix": 1790602797.2802954,
+      "elapsed_seconds": 60.64326043400001,
+      "target_seconds": 60,
+      "nat_streams": 8,
+      "requested_mib_per_second": {
+        "nat": 125,
+        "registry_upload": 75,
+        "registry_read": 75
+      },
+      "bytes": {
+        "nat": 7247757312,
+        "registry_upload": 4718592000,
+        "registry_read": 4718592000
+      },
+      "requests": {
+        "nat": 116,
+        "registry_upload": 140,
+        "registry_read": 142
+      },
+      "errors": [
+        {
+          "kind": "nat",
+          "exception": "TimeoutError",
+          "at_seconds": 40.804
+        },
+        {
+          "kind": "nat",
+          "exception": "TimeoutError",
+          "at_seconds": 40.808
+        },
+        {
+          "kind": "nat",
+          "exception": "TimeoutError",
+          "at_seconds": 40.809
+        },
+        {
+          "kind": "nat",
+          "exception": "TimeoutError",
+          "at_seconds": 40.811
+        },
+        {
+          "kind": "nat",
+          "exception": "TimeoutError",
+          "at_seconds": 40.812
+        }
+      ],
+      "achieved_mib_per_second": {
+        "nat": 113.97804060226197,
+        "registry_upload": 74.20445351709763,
+        "registry_read": 74.20445351709763
+      },
+      "byte_cap": 19327352832,
+      "registry_repository": "gateway-network-qualification-20260928-167823398",
+      "registry_blob_digest": "sha256:b0d2824f5a7fb44444ea53fbc80c64fd7b6f0ebc99c4fe52400be71dafc178c7",
+      "registry_cleanup_status": "202",
+      "registry_fixture_bytes": 33554432,
+      "registry_reads_warm_cache": true,
+      "generator_cpu_seconds": 27.689999999999998
+    }
+  ],
+  "all_512_active_in_each_window": true,
+  "per_profile_completed_agent_cycles": [
+    2311,
+    1266
+  ],
+  "every_agent_progressed_in_each_window": true
+}

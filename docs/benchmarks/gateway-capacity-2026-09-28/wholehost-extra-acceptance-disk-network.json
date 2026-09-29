@@ -1,0 +1,1394 @@
+{
+  "steady4_acceptance": {
+    "registry_sdb": {
+      "rkB": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "wkB": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "await": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "aqu-sz": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "util-percent": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      }
+    },
+    "interval_seconds": 32,
+    "sampled_write_bytes": 0.0,
+    "notes": [
+      "Disk rates are KiB/s, await milliseconds, aqu-sz queue depth, util-percent device busy time (not saturation)."
+    ]
+  },
+  "strong4_acceptance": {
+    "registry_sdb": {
+      "rkB": {
+        "mean": 0.2545454545454545,
+        "p95": 2.0,
+        "max": 2.0
+      },
+      "wkB": {
+        "mean": 128273.12545454546,
+        "p95": 163632.0,
+        "max": 166894.0
+      },
+      "await": {
+        "mean": 17.779818181818182,
+        "p95": 26.85,
+        "max": 36.52
+      },
+      "aqu-sz": {
+        "mean": 4.722727272727273,
+        "p95": 5.86,
+        "max": 6.12
+      },
+      "util-percent": {
+        "mean": 59.37072727272727,
+        "p95": 75.25,
+        "max": 78.75
+      }
+    },
+    "interval_seconds": 110,
+    "sampled_write_bytes": 14448684851.2,
+    "notes": [
+      "Disk rates are KiB/s, await milliseconds, aqu-sz queue depth, util-percent device busy time (not saturation)."
+    ]
+  },
+  "strong4_timeout_context": {
+    "registry_sdb": {
+      "rkB": {
+        "mean": 0.25,
+        "p95": 2.0,
+        "max": 2.0
+      },
+      "wkB": {
+        "mean": 133220.25,
+        "p95": 149988.0,
+        "max": 149988.0
+      },
+      "await": {
+        "mean": 18.40375,
+        "p95": 20.83,
+        "max": 20.83
+      },
+      "aqu-sz": {
+        "mean": 5.05375,
+        "p95": 5.54,
+        "max": 5.54
+      },
+      "util-percent": {
+        "mean": 59.08125,
+        "p95": 64.95,
+        "max": 64.95
+      }
+    },
+    "interval_seconds": 16,
+    "sampled_write_bytes": 2182680576.0,
+    "notes": [
+      "Disk rates are KiB/s, await milliseconds, aqu-sz queue depth, util-percent device busy time (not saturation)."
+    ],
+    "samples": [
+      {
+        "at": {
+          "date": "2026-09-28",
+          "time": "13:48:26",
+          "tz": "UTC",
+          "interval": 2
+        },
+        "busy_cores": 2.0121999999999995,
+        "network": {
+          "net-dev": [
+            {
+              "iface": "lo",
+              "rxpck": 3478.5,
+              "txpck": 3478.5,
+              "rxkB": 19953.66,
+              "txkB": 19953.66,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            },
+            {
+              "iface": "eth0",
+              "rxpck": 2663.5,
+              "txpck": 2853.0,
+              "rxkB": 13088.94,
+              "txkB": 17310.68,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            },
+            {
+              "iface": "enp7s0",
+              "rxpck": 8759.5,
+              "txpck": 3857.0,
+              "rxkB": 134412.17,
+              "txkB": 39490.6,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            },
+            {
+              "iface": "docker0",
+              "rxpck": 0.0,
+              "txpck": 0.0,
+              "rxkB": 0.0,
+              "txkB": 0.0,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            }
+          ],
+          "net-edev": [
+            {
+              "iface": "lo",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            },
+            {
+              "iface": "eth0",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            },
+            {
+              "iface": "enp7s0",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            },
+            {
+              "iface": "docker0",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            }
+          ],
+          "net-etcp": {
+            "atmptf": 0.0,
+            "estres": 0.0,
+            "retrseg": 12.0,
+            "isegerr": 0.0,
+            "orsts": 0.0
+          },
+          "softnet": [
+            {
+              "cpu": "all",
+              "total": 10820.5,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "0",
+              "total": 782.0,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "1",
+              "total": 1370.0,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "2",
+              "total": 3250.5,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "3",
+              "total": 5418.0,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            }
+          ]
+        }
+      },
+      {
+        "at": {
+          "date": "2026-09-28",
+          "time": "13:48:28",
+          "tz": "UTC",
+          "interval": 2
+        },
+        "busy_cores": 2.1482,
+        "network": {
+          "net-dev": [
+            {
+              "iface": "lo",
+              "rxpck": 2998.5,
+              "txpck": 2998.5,
+              "rxkB": 18017.13,
+              "txkB": 18017.13,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            },
+            {
+              "iface": "eth0",
+              "rxpck": 5939.5,
+              "txpck": 4320.0,
+              "rxkB": 53069.86,
+              "txkB": 19349.33,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            },
+            {
+              "iface": "enp7s0",
+              "rxpck": 10627.5,
+              "txpck": 7401.5,
+              "rxkB": 158009.18,
+              "txkB": 78415.71,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            },
+            {
+              "iface": "docker0",
+              "rxpck": 0.0,
+              "txpck": 0.0,
+              "rxkB": 0.0,
+              "txkB": 0.0,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            }
+          ],
+          "net-edev": [
+            {
+              "iface": "lo",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            },
+            {
+              "iface": "eth0",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            },
+            {
+              "iface": "enp7s0",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            },
+            {
+              "iface": "docker0",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            }
+          ],
+          "net-etcp": {
+            "atmptf": 0.0,
+            "estres": 0.0,
+            "retrseg": 9.0,
+            "isegerr": 0.0,
+            "orsts": 0.0
+          },
+          "softnet": [
+            {
+              "cpu": "all",
+              "total": 15506.5,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "0",
+              "total": 1010.0,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "1",
+              "total": 881.0,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "2",
+              "total": 6412.5,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "3",
+              "total": 7203.0,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            }
+          ]
+        }
+      },
+      {
+        "at": {
+          "date": "2026-09-28",
+          "time": "13:48:30",
+          "tz": "UTC",
+          "interval": 2
+        },
+        "busy_cores": 2.2259,
+        "network": {
+          "net-dev": [
+            {
+              "iface": "lo",
+              "rxpck": 3331.0,
+              "txpck": 3331.0,
+              "rxkB": 17818.48,
+              "txkB": 17818.48,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            },
+            {
+              "iface": "eth0",
+              "rxpck": 3284.5,
+              "txpck": 2824.5,
+              "rxkB": 17041.07,
+              "txkB": 15857.29,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            },
+            {
+              "iface": "enp7s0",
+              "rxpck": 8035.5,
+              "txpck": 4174.0,
+              "rxkB": 117721.93,
+              "txkB": 41950.55,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            },
+            {
+              "iface": "docker0",
+              "rxpck": 0.0,
+              "txpck": 0.0,
+              "rxkB": 0.0,
+              "txkB": 0.0,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            }
+          ],
+          "net-edev": [
+            {
+              "iface": "lo",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            },
+            {
+              "iface": "eth0",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            },
+            {
+              "iface": "enp7s0",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            },
+            {
+              "iface": "docker0",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            }
+          ],
+          "net-etcp": {
+            "atmptf": 0.0,
+            "estres": 0.5,
+            "retrseg": 10.0,
+            "isegerr": 0.0,
+            "orsts": 0.5
+          },
+          "softnet": [
+            {
+              "cpu": "all",
+              "total": 10936.5,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "0",
+              "total": 654.0,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "1",
+              "total": 861.0,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "2",
+              "total": 4145.5,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "3",
+              "total": 5276.0,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            }
+          ]
+        }
+      },
+      {
+        "at": {
+          "date": "2026-09-28",
+          "time": "13:48:32",
+          "tz": "UTC",
+          "interval": 2
+        },
+        "busy_cores": 2.5242999999999998,
+        "network": {
+          "net-dev": [
+            {
+              "iface": "lo",
+              "rxpck": 4081.5,
+              "txpck": 4081.5,
+              "rxkB": 23282.85,
+              "txkB": 23282.85,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            },
+            {
+              "iface": "eth0",
+              "rxpck": 2835.5,
+              "txpck": 3121.0,
+              "rxkB": 2456.28,
+              "txkB": 20515.43,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            },
+            {
+              "iface": "enp7s0",
+              "rxpck": 7002.0,
+              "txpck": 3336.0,
+              "rxkB": 122334.21,
+              "txkB": 28791.18,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            },
+            {
+              "iface": "docker0",
+              "rxpck": 0.0,
+              "txpck": 0.0,
+              "rxkB": 0.0,
+              "txkB": 0.0,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            }
+          ],
+          "net-edev": [
+            {
+              "iface": "lo",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            },
+            {
+              "iface": "eth0",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            },
+            {
+              "iface": "enp7s0",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            },
+            {
+              "iface": "docker0",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            }
+          ],
+          "net-etcp": {
+            "atmptf": 0.0,
+            "estres": 0.0,
+            "retrseg": 36.5,
+            "isegerr": 0.0,
+            "orsts": 0.0
+          },
+          "softnet": [
+            {
+              "cpu": "all",
+              "total": 10952.5,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "0",
+              "total": 739.0,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "1",
+              "total": 1360.5,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "2",
+              "total": 4163.0,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "3",
+              "total": 4690.0,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            }
+          ]
+        }
+      },
+      {
+        "at": {
+          "date": "2026-09-28",
+          "time": "13:48:34",
+          "tz": "UTC",
+          "interval": 2
+        },
+        "busy_cores": 2.7382999999999997,
+        "network": {
+          "net-dev": [
+            {
+              "iface": "lo",
+              "rxpck": 4258.5,
+              "txpck": 4258.5,
+              "rxkB": 19785.36,
+              "txkB": 19785.36,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            },
+            {
+              "iface": "eth0",
+              "rxpck": 11514.0,
+              "txpck": 6915.5,
+              "rxkB": 163073.57,
+              "txkB": 15302.84,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            },
+            {
+              "iface": "enp7s0",
+              "rxpck": 14062.0,
+              "txpck": 12306.0,
+              "rxkB": 132357.49,
+              "txkB": 187695.81,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            },
+            {
+              "iface": "docker0",
+              "rxpck": 0.0,
+              "txpck": 0.0,
+              "rxkB": 0.0,
+              "txkB": 0.0,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            }
+          ],
+          "net-edev": [
+            {
+              "iface": "lo",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            },
+            {
+              "iface": "eth0",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            },
+            {
+              "iface": "enp7s0",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            },
+            {
+              "iface": "docker0",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            }
+          ],
+          "net-etcp": {
+            "atmptf": 0.0,
+            "estres": 0.0,
+            "retrseg": 187.0,
+            "isegerr": 0.0,
+            "orsts": 0.0
+          },
+          "softnet": [
+            {
+              "cpu": "all",
+              "total": 25198.5,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "0",
+              "total": 1215.5,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "1",
+              "total": 1400.0,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "2",
+              "total": 12367.0,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "3",
+              "total": 10216.0,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            }
+          ]
+        }
+      },
+      {
+        "at": {
+          "date": "2026-09-28",
+          "time": "13:48:36",
+          "tz": "UTC",
+          "interval": 2
+        },
+        "busy_cores": 3.3873,
+        "network": {
+          "net-dev": [
+            {
+              "iface": "lo",
+              "rxpck": 4618.0,
+              "txpck": 4618.0,
+              "rxkB": 20019.13,
+              "txkB": 20019.13,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            },
+            {
+              "iface": "eth0",
+              "rxpck": 28202.5,
+              "txpck": 17565.0,
+              "rxkB": 491127.69,
+              "txkB": 19796.53,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            },
+            {
+              "iface": "enp7s0",
+              "rxpck": 24044.0,
+              "txpck": 28998.0,
+              "rxkB": 123206.7,
+              "txkB": 520250.75,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            },
+            {
+              "iface": "docker0",
+              "rxpck": 0.0,
+              "txpck": 0.0,
+              "rxkB": 0.0,
+              "txkB": 0.0,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            }
+          ],
+          "net-edev": [
+            {
+              "iface": "lo",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            },
+            {
+              "iface": "eth0",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            },
+            {
+              "iface": "enp7s0",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            },
+            {
+              "iface": "docker0",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            }
+          ],
+          "net-etcp": {
+            "atmptf": 0.0,
+            "estres": 0.5,
+            "retrseg": 114.0,
+            "isegerr": 0.0,
+            "orsts": 0.5
+          },
+          "softnet": [
+            {
+              "cpu": "all",
+              "total": 52264.0,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "0",
+              "total": 929.0,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "1",
+              "total": 1263.5,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "2",
+              "total": 29413.0,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "3",
+              "total": 20658.5,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            }
+          ]
+        }
+      },
+      {
+        "at": {
+          "date": "2026-09-28",
+          "time": "13:48:38",
+          "tz": "UTC",
+          "interval": 2
+        },
+        "busy_cores": 2.5595000000000003,
+        "network": {
+          "net-dev": [
+            {
+              "iface": "lo",
+              "rxpck": 3707.0,
+              "txpck": 3707.0,
+              "rxkB": 19366.86,
+              "txkB": 19366.86,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            },
+            {
+              "iface": "eth0",
+              "rxpck": 14682.5,
+              "txpck": 8083.0,
+              "rxkB": 258456.89,
+              "txkB": 16927.21,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            },
+            {
+              "iface": "enp7s0",
+              "rxpck": 13695.5,
+              "txpck": 15348.0,
+              "rxkB": 127422.4,
+              "txkB": 280739.12,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            },
+            {
+              "iface": "docker0",
+              "rxpck": 0.0,
+              "txpck": 0.0,
+              "rxkB": 0.0,
+              "txkB": 0.0,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            }
+          ],
+          "net-edev": [
+            {
+              "iface": "lo",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            },
+            {
+              "iface": "eth0",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            },
+            {
+              "iface": "enp7s0",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            },
+            {
+              "iface": "docker0",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            }
+          ],
+          "net-etcp": {
+            "atmptf": 0.0,
+            "estres": 0.0,
+            "retrseg": 34.0,
+            "isegerr": 0.0,
+            "orsts": 0.0
+          },
+          "softnet": [
+            {
+              "cpu": "all",
+              "total": 28126.5,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "0",
+              "total": 719.5,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "1",
+              "total": 1219.0,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "2",
+              "total": 15632.0,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "3",
+              "total": 10556.0,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            }
+          ]
+        }
+      },
+      {
+        "at": {
+          "date": "2026-09-28",
+          "time": "13:48:40",
+          "tz": "UTC",
+          "interval": 2
+        },
+        "busy_cores": 3.0345000000000004,
+        "network": {
+          "net-dev": [
+            {
+              "iface": "lo",
+              "rxpck": 4837.0,
+              "txpck": 4837.0,
+              "rxkB": 22246.5,
+              "txkB": 22246.5,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            },
+            {
+              "iface": "eth0",
+              "rxpck": 8353.0,
+              "txpck": 4912.0,
+              "rxkB": 132039.41,
+              "txkB": 18145.28,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            },
+            {
+              "iface": "enp7s0",
+              "rxpck": 10287.0,
+              "txpck": 8910.5,
+              "rxkB": 133153.96,
+              "txkB": 157890.83,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            },
+            {
+              "iface": "docker0",
+              "rxpck": 0.0,
+              "txpck": 0.0,
+              "rxkB": 0.0,
+              "txkB": 0.0,
+              "rxcmp": 0.0,
+              "txcmp": 0.0,
+              "rxmcst": 0.0,
+              "ifutil-percent": 0.0
+            }
+          ],
+          "net-edev": [
+            {
+              "iface": "lo",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            },
+            {
+              "iface": "eth0",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            },
+            {
+              "iface": "enp7s0",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            },
+            {
+              "iface": "docker0",
+              "rxerr": 0.0,
+              "txerr": 0.0,
+              "coll": 0.0,
+              "rxdrop": 0.0,
+              "txdrop": 0.0,
+              "txcarr": 0.0,
+              "rxfram": 0.0,
+              "rxfifo": 0.0,
+              "txfifo": 0.0
+            }
+          ],
+          "net-etcp": {
+            "atmptf": 0.0,
+            "estres": 0.5,
+            "retrseg": 37.0,
+            "isegerr": 0.0,
+            "orsts": 0.5
+          },
+          "softnet": [
+            {
+              "cpu": "all",
+              "total": 19653.5,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "0",
+              "total": 1116.5,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "1",
+              "total": 1426.0,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "2",
+              "total": 9604.5,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            },
+            {
+              "cpu": "3",
+              "total": 7506.5,
+              "dropd": 0.0,
+              "squeezd": 0.0,
+              "rx_rps": 0.0,
+              "flw_lim": 0.0,
+              "blg_len": 0
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

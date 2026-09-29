@@ -80,6 +80,22 @@ telemetry exporter records `ucloud.platform.postgres.duration`, with operation,
 phase (`pool_wait`, `transaction`, `commit`, `lock_query`) and status labels.
 There are no request-ID metric labels.
 
+The `counters` object adds process-local operation counts, reset on relay
+restart: `lifecycle_{park,wake}_claim_{calls,rows,empty}`, per-action hints and
+capacity wakeups, `lifecycle_reconciliations`, notification batches/keys and
+self/peer deliveries, and delivery/readiness query and row counts. Missing
+keys mean zero. Claim calls count attempted acquisitions, including failures;
+row and empty counts record successful committed claims. Use their deltas to
+distinguish useful dispatch from redundant scans rather than treating pool
+acquisitions as SQL statement counts.
+
+Local lifecycle hints name only the affected action. PostgreSQL notifications
+retain the legacy global hint for older peers; the publishing process ignores
+its own echo while that backend connection remains open. A full dispatch batch
+resumes when capacity becomes available. Fixed 250 ms reconciliation still
+recovers lost notifications, due retries and expired claims. These hints do not
+replace durable claim ownership or transaction fencing.
+
 ## Configuration and deployment
 
 Install the server wheel with the `postgres` extra. Both UCloud and Hetzner

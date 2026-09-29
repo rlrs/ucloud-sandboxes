@@ -29,9 +29,10 @@ _APPLICATION_ID = 0x55435331  # UCS1
 _SCHEMA_VERSION = 1
 _ERROR = "control state is unreadable"
 # These bound retained decoding work, not fleet size or admission. SQLite is
-# still read on every lookup; only identical validated payloads can be reused.
+# still checked on every lookup; only unchanged validated records can be reused.
 _HEARTBEAT_CACHE_ENTRIES = 64
 _HEARTBEAT_CACHE_BYTES = 16 * 1024**2
+_HEARTBEAT_HEADER_CACHE_BYTES = 1024**2
 # Controller-owned metadata uses the existing extensible heartbeat labels so
 # workers and the durable heartbeat schema remain wire-compatible.
 QUARANTINE_REASON = "ucloud-sandboxes/controller-quarantine"
@@ -90,6 +91,13 @@ _TABLE_SQL = """CREATE TABLE control_records (
     PRIMARY KEY (namespace, record_id)
 ) STRICT, WITHOUT ROWID"""
 _CONNECTION_FILE_RECHECK_SECONDS = 1.0
+
+
+class _ControlStateConnection(sqlite3.Connection):
+    # SQLite data_version belongs to one connection, so its cache must too.
+    # Keeping the cache on the connection also releases it when a failed lease
+    # is discarded, without retaining dead connections in the store.
+    heartbeat_headers = None
 
 
 class ControlStateStore:
@@ -176,6 +184,8 @@ class ControlStateStore:
         # BEGIN/COMMIT and repeated WAL permission stats add several GIL
         # handoffs to every routed request without strengthening this read.
         with self._connection() as connection:
+            if not include_inventory:
+                return self._heartbeat_header(connection, job_id)
             row = connection.execute(
                 "SELECT payload FROM control_records "
                 "WHERE namespace = 'heartbeat' AND record_id = ?",
@@ -186,6 +196,66 @@ class ControlStateStore:
             return _placement_heartbeat(self._read_heartbeat(
                 job_id, row[0], include_inventory=include_inventory,
             ))
+
+    def _heartbeat_header(self, connection, job_id):
+        if connection.in_transaction:
+            # Normal callers hold clean pooled leases. If a future caller uses
+            # an explicit snapshot, read that snapshot without publishing its
+            # rows into the autocommit cache. In particular total_changes does
+            # not decrease after rollback of an observed, uncommitted write.
+            connection.heartbeat_headers = None
+            row = connection.execute(
+                "SELECT payload FROM control_records "
+                "WHERE namespace = 'heartbeat' AND record_id = ?",
+                (job_id,),
+            ).fetchone()
+            return (
+                _placement_heartbeat(self._read_heartbeat(job_id, row[0], include_inventory=False))
+                if row is not None else None
+            )
+        # data_version detects commits by other connections/processes, while
+        # total_changes detects this connection's own writes (also rollbacks,
+        # which merely cause a harmless reload). No time-based staleness is
+        # introduced: this check observes committed state on every poll.
+        version = (
+            connection.execute("PRAGMA data_version").fetchone()[0],
+            connection.total_changes,
+        )
+        cached = connection.heartbeat_headers
+        if cached is None or cached[0] != version:
+            cached = [version, OrderedDict(), 0]
+            connection.heartbeat_headers = cached
+        records = cached[1]
+        if job_id in records:
+            heartbeat, _size = records[job_id]
+            records.move_to_end(job_id)
+        else:
+            row = connection.execute(
+                "SELECT payload FROM control_records "
+                "WHERE namespace = 'heartbeat' AND record_id = ?",
+                (job_id,),
+            ).fetchone()
+            # A changed or new row still passes complete payload validation,
+            # including inventory, before publishing its header projection.
+            heartbeat = (
+                self._read_heartbeat(job_id, row[0], include_inventory=False)
+                if row is not None else None
+            )
+            size = len(row[0]) if row is not None else 0
+            if size <= _HEARTBEAT_HEADER_CACHE_BYTES:
+                records[job_id] = (heartbeat, size)
+                cached[2] += size
+                while (len(records) > _HEARTBEAT_CACHE_ENTRIES
+                       or cached[2] > _HEARTBEAT_HEADER_CACHE_BYTES):
+                    _job_id, (_heartbeat, removed_size) = records.popitem(last=False)
+                    cached[2] -= removed_size
+        # The version was sampled before SELECT. A concurrent commit after
+        # that sample forces a reload on the next call, even if SELECT already
+        # saw its newer row. Callers never receive mutable cached labels.
+        return (
+            _placement_heartbeat(detached_heartbeat(heartbeat, include_inventory=False))
+            if heartbeat is not None else None
+        )
 
     def quarantine_node(self, job_id: str, reason: str) -> NodeHeartbeat | None:
         """Close placement durably without discarding authenticated inventory."""
@@ -437,6 +507,7 @@ class ControlStateStore:
         try:
             connection = sqlite3.connect(
                 self.path, timeout=30, isolation_level=None, check_same_thread=False,
+                factory=_ControlStateConnection,
             )
             connection.execute("PRAGMA busy_timeout = 30000")
             connection.execute("PRAGMA synchronous = FULL")

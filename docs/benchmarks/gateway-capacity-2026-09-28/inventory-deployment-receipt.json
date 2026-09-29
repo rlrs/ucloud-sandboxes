@@ -1,0 +1,8 @@
+{
+  "deployed_at": "2026-09-28T14:11:10Z",
+  "change": "Fleet renderer uses existing validated shared heartbeat snapshot; no inventory copying",
+  "old_sha256": "47c4db680c5e82a2df107a459615807fb8d47175994b893cacdfaa7c52be1bf1",
+  "new_sha256": "03f41671cdc9cf15a04ea3b310a6336673b8d378ad912a028f0b6f3c97e0b987",
+  "backup": "/work/ucloud-sandboxes/gateway-inventory-optimization-20260928/control_plane.py.before",
+  "gateway_and_relay_https_healthy": true
+}

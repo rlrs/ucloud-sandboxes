@@ -1,0 +1,120 @@
+{
+  "steady8": {
+    "window": {
+      "start": "2026-09-28T13:30:05+00:00",
+      "end": "2026-09-28T13:31:20+00:00",
+      "description": "All512active; quiet interval after first mixed phase, before high-NAT phase"
+    },
+    "psi_interval_percent": {
+      "psi-cpu/some_avg": {
+        "mean_percent": 2.3376315789473683,
+        "p95_percent": 3.78,
+        "max_percent": 4.11,
+        "samples": 38
+      },
+      "psi-io/some_avg": {
+        "mean_percent": 0.4789473684210526,
+        "p95_percent": 0.62,
+        "max_percent": 0.64,
+        "samples": 38
+      },
+      "psi-io/full_avg": {
+        "mean_percent": 0.40210526315789474,
+        "p95_percent": 0.52,
+        "max_percent": 0.53,
+        "samples": 38
+      },
+      "psi-mem/some_avg": {
+        "mean_percent": 0.0,
+        "p95_percent": 0.0,
+        "max_percent": 0.0,
+        "samples": 38
+      },
+      "psi-mem/full_avg": {
+        "mean_percent": 0.0,
+        "p95_percent": 0.0,
+        "max_percent": 0.0,
+        "samples": 38
+      }
+    },
+    "note": "Interval PSI is time with some/full tasks stalled; it is not fraction of CPU capacity. Two-second intervals selected by end timestamp may overlap requested boundaries."
+  },
+  "mixed8_first": {
+    "window": {
+      "start": "2026-09-28T13:28:42.772143+00:00",
+      "end": "2026-09-28T13:29:56.477432+00:00"
+    },
+    "psi_interval_percent": {
+      "psi-cpu/some_avg": {
+        "mean_percent": 2.9654054054054053,
+        "p95_percent": 4.74,
+        "max_percent": 4.87,
+        "samples": 37
+      },
+      "psi-io/some_avg": {
+        "mean_percent": 6.526486486486487,
+        "p95_percent": 9.32,
+        "max_percent": 11.53,
+        "samples": 37
+      },
+      "psi-io/full_avg": {
+        "mean_percent": 5.135675675675675,
+        "p95_percent": 7.98,
+        "max_percent": 9.13,
+        "samples": 37
+      },
+      "psi-mem/some_avg": {
+        "mean_percent": 0.001081081081081081,
+        "p95_percent": 0.01,
+        "max_percent": 0.03,
+        "samples": 37
+      },
+      "psi-mem/full_avg": {
+        "mean_percent": 0.001081081081081081,
+        "p95_percent": 0.01,
+        "max_percent": 0.03,
+        "samples": 37
+      }
+    },
+    "note": "Interval PSI is time with some/full tasks stalled; it is not fraction of CPU capacity. Two-second intervals selected by end timestamp may overlap requested boundaries."
+  },
+  "mixed8_highnat": {
+    "window": {
+      "start": "2026-09-28T13:31:27.499119+00:00",
+      "end": "2026-09-28T13:32:27.536505+00:00"
+    },
+    "psi_interval_percent": {
+      "psi-cpu/some_avg": {
+        "mean_percent": 3.437,
+        "p95_percent": 4.73,
+        "max_percent": 5.0,
+        "samples": 30
+      },
+      "psi-io/some_avg": {
+        "mean_percent": 6.831,
+        "p95_percent": 9.73,
+        "max_percent": 10.04,
+        "samples": 30
+      },
+      "psi-io/full_avg": {
+        "mean_percent": 5.514,
+        "p95_percent": 7.87,
+        "max_percent": 8.06,
+        "samples": 30
+      },
+      "psi-mem/some_avg": {
+        "mean_percent": 0.0023333333333333335,
+        "p95_percent": 0.02,
+        "max_percent": 0.05,
+        "samples": 30
+      },
+      "psi-mem/full_avg": {
+        "mean_percent": 0.0023333333333333335,
+        "p95_percent": 0.02,
+        "max_percent": 0.05,
+        "samples": 30
+      }
+    },
+    "note": "Interval PSI is time with some/full tasks stalled; it is not fraction of CPU capacity. Two-second intervals selected by end timestamp may overlap requested boundaries."
+  }
+}

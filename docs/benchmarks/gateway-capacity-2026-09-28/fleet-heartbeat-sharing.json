@@ -1,0 +1,64 @@
+{
+  "python": "3.10.13",
+  "platform": "Linux-5.15.0-190-generic-x86_64-with-glibc2.35",
+  "reads_per_sample": 100,
+  "repeats": 5,
+  "scope": "unchanged full fleet reads, including SQLite route/heartbeat reads; not production or end-to-end qualification",
+  "nodes": 3,
+  "inventory_entries": 500,
+  "routes": 500,
+  "heartbeat_payload_bytes": 661431,
+  "response_bytes": 402554,
+  "response_bytes_identical": true,
+  "median_cpu_ms_per_read": {
+    "detached": 15.758173190000004,
+    "shared": 5.381332419999998
+  },
+  "cpu_reduction_percent": 65.85053130768392,
+  "samples": {
+    "detached": [
+      {
+        "cpu_ms_per_read": 16.80103392,
+        "wall_ms_per_read": 16.79680516012013
+      },
+      {
+        "cpu_ms_per_read": 16.044400900000003,
+        "wall_ms_per_read": 16.045514470897615
+      },
+      {
+        "cpu_ms_per_read": 15.707306800000005,
+        "wall_ms_per_read": 15.708255218341947
+      },
+      {
+        "cpu_ms_per_read": 15.758173190000004,
+        "wall_ms_per_read": 15.759134260006249
+      },
+      {
+        "cpu_ms_per_read": 15.704042430000005,
+        "wall_ms_per_read": 15.705107040703297
+      }
+    ],
+    "shared": [
+      {
+        "cpu_ms_per_read": 5.479909890000001,
+        "wall_ms_per_read": 5.480186566710472
+      },
+      {
+        "cpu_ms_per_read": 5.30973124,
+        "wall_ms_per_read": 5.310378638096154
+      },
+      {
+        "cpu_ms_per_read": 5.381332419999998,
+        "wall_ms_per_read": 5.3816949017345905
+      },
+      {
+        "cpu_ms_per_read": 5.283758579999995,
+        "wall_ms_per_read": 5.28409477788955
+      },
+      {
+        "cpu_ms_per_read": 5.383010240000008,
+        "wall_ms_per_read": 5.383280590176582
+      }
+    ]
+  }
+}

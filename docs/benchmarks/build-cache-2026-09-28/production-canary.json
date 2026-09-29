@@ -1,0 +1,78 @@
+[
+  {
+    "build_id": "3c2f7d92-eea1-43e1-80e7-49e71232c99d",
+    "image_id": "build-opt-canary-20260928-cold",
+    "status": "succeeded",
+    "error": "",
+    "timings": {
+      "environment": {
+        "component_lookup_ms": 1.48,
+        "docker_pull_ms": 69.928,
+        "erofs_bytes_built": 3837952,
+        "groups_built": 1,
+        "layer_lock_wait_ms": 0.008,
+        "mkfs_ms": 43.477,
+        "preflight_misses": 1,
+        "preflight_ms": 30.642,
+        "publish_component_ms": 228.724,
+        "sign_ms": 12.674,
+        "squash_ms": 47.599,
+        "total_ms": 944.648
+      },
+      "phases": {
+        "cleanup_ms": 0,
+        "docker_build_and_push_ms": 2888,
+        "immutable_environment_ms": 944
+      },
+      "total_ms": 3845
+    },
+    "image": {
+      "id": "build-opt-canary-20260928-cold",
+      "tag": "10.42.0.2:5000/ucloud-managed/build-opt-canary-20260928-cold-e0819c82f40f:latest",
+      "source": "build:/tmp/ucloud-image-context-3prqcwf1",
+      "state": "available",
+      "created_at": "2026-09-28T12:32:37.153312+00:00",
+      "updated_at": "2026-09-28T12:32:37.153312+00:00",
+      "labels": {},
+      "pushed": true,
+      "manifest_digest": "sha256:21d591762628405a44b744070a5f3d584017e65683047af15bddecf4f5e4231e",
+      "available_to_sandboxes": true
+    },
+    "variant": "cold",
+    "wall_seconds": 3.9299157790010213
+  },
+  {
+    "build_id": "cfcbbe25-f682-4a3c-964a-eb620afa2dec",
+    "image_id": "build-opt-canary-20260928-warm",
+    "status": "succeeded",
+    "error": "",
+    "timings": {
+      "environment": {
+        "docker_pull_skipped": 1,
+        "groups_reused": 1,
+        "preflight_ms": 54.292,
+        "total_ms": 343.284
+      },
+      "phases": {
+        "cleanup_ms": 0,
+        "docker_build_and_push_ms": 765,
+        "immutable_environment_ms": 343
+      },
+      "total_ms": 1121
+    },
+    "image": {
+      "id": "build-opt-canary-20260928-warm",
+      "tag": "10.42.0.2:5000/ucloud-managed/build-opt-canary-20260928-warm-c1ae46deb882:latest",
+      "source": "build:/tmp/ucloud-image-context-zp9icmnx",
+      "state": "available",
+      "created_at": "2026-09-28T12:32:38.354899+00:00",
+      "updated_at": "2026-09-28T12:32:38.354899+00:00",
+      "labels": {},
+      "pushed": true,
+      "manifest_digest": "sha256:bf2b6f4b6142cbc631c263cea06fbc44972a301db3b22243f1b9613a6dcb8b87",
+      "available_to_sandboxes": true
+    },
+    "variant": "warm",
+    "wall_seconds": 1.1994974900007946
+  }
+]

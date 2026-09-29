@@ -70,6 +70,17 @@ its additional traffic/overhead is part of the reported conservative measurement
 The event log records every event. The JSON report is checkpointed once per
 second and fully written at completion; it records the harness SHA256.
 
+Inventory load defaults to the full existing API response. Use
+`--inventory-view status` to exercise the SDK's public `list_sandbox_statuses()`
+method (`GET /v1/sandboxes?view=status`) with the same transport, poller count
+and one-second post-response cadence. This requires SDK 0.4.33 or newer. Both
+the placement observer and isolated load clients use the selected view, and
+the report records it. The compact view keeps state and worker placement but
+omits image specifications and snapshot descriptors. It requires gateway
+support and never silently falls back. Compare full-view before/after runs
+first to isolate server-side improvements; report compact-view results as a
+separate client workload change.
+
 For release qualification, supply `--gateway-token-file /private/path/gateway-token`.
 Report version 3 adds a separate `fleet_health` gate using the existing cached
 `/v1/nodes` probe; it does not poll workers directly. Every worker currently

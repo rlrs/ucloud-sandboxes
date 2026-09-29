@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from tests.test_images import _uploaded_context
-from ucloud_sandboxes.environment_builder import FreshEnvironmentBuilder, allowlisted_build_view
+from ucloud_sandboxes.environment_builder import FreshEnvironmentBuilder, allowlisted_build_view, publication_metrics
 from ucloud_sandboxes.image_rootfs import DockerOverlay2RootfsStore
 from ucloud_sandboxes.images import DockerImageRuntime, ImageBuildSpec, ImageManager, ImageStore
 from ucloud_sandboxes.sandbox import CommandResult
@@ -116,6 +116,8 @@ class EnvironmentBuilderTests(unittest.TestCase):
             def publish(spec):
                 self.assertEqual(spec.id, "fixture")
                 self.assertTrue(any("push" in command for command in calls))
+                with publication_metrics() as metrics:
+                    metrics.update(docker_pull_skipped=1, groups_reused=3)
                 return "sha256:" + "a" * 64
             manager = ImageManager(ImageStore(Path(temporary) / "images.sqlite"),
                 DockerImageRuntime(executor=Executor()), environment_publisher=publish)
@@ -126,6 +128,7 @@ class EnvironmentBuilderTests(unittest.TestCase):
             self.assertEqual(done.status, "succeeded", done.error)
             self.assertEqual(manager.get_image("fixture").manifest_digest, "sha256:" + "a" * 64)
             self.assertIn("immutable_environment_ms", done.timings["phases"])
+            self.assertEqual(done.timings["environment"], {"docker_pull_skipped": 1, "groups_reused": 3})
 
 
 if __name__ == "__main__":

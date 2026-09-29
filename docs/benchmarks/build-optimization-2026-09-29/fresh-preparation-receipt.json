@@ -1,0 +1,45 @@
+{
+  "archive_root": "/work/ucloud-sandboxes/build-optimization-load-20260929/frozen-archive",
+  "builds_executed": 0,
+  "context_bytes": 50422672,
+  "context_files": 88576,
+  "created_at": "2026-09-29T09:43:06.325081+00:00",
+  "fixture_count": 48,
+  "frozen_root": "/work/ucloud-sandboxes/build-load-20260929",
+  "generator": {
+    "bytes": 22412,
+    "mode": 420,
+    "path": "/work/ucloud-sandboxes/build-load-20260929/build_load_fixtures.py",
+    "sha256": "41462b527c7384d843c324eb40546850b236f396ab0a9ef65f143c439eaaa0ae"
+  },
+  "manifest_sha256": "e5e6e9255c5bcff2bdb6b54bbcbe899862af0553ce7eb62a908defedf9a2ebf5",
+  "network_requests": 0,
+  "only_revision_source_changed": true,
+  "original_inputs_unchanged": true,
+  "output_root": "/work/ucloud-sandboxes/build-optimization-load-20260929/fresh",
+  "recipes": [
+    "python-agent",
+    "typescript-tools",
+    "typescript-multistage"
+  ],
+  "schema_version": 1,
+  "source_checksums_sha256": "0b9de9deeb0606be9e8cbdf03ceead94a7e87ea729ce9baae3996eb4635b05bb",
+  "variants": [
+    "app-change-29",
+    "app-change-30",
+    "app-change-31",
+    "app-change-32",
+    "app-change-33",
+    "app-change-34",
+    "app-change-35",
+    "app-change-36",
+    "app-change-37",
+    "app-change-38",
+    "app-change-39",
+    "app-change-40",
+    "app-change-41",
+    "app-change-42",
+    "app-change-43",
+    "app-change-44"
+  ]
+}

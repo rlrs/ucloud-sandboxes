@@ -1,0 +1,930 @@
+{
+  "captured_at": "2026-09-29T08:38:11Z",
+  "health": {
+    "gateway_https": true,
+    "relay_https": true,
+    "metrics_ok": true,
+    "relay_storage_budget_bytes": 68719476736,
+    "database_pools": {
+      "database_pool": {
+        "connections_num": 3,
+        "connections_ms": 8,
+        "requests_num": 8105,
+        "usage_ms": 512,
+        "requests_queued": 1,
+        "requests_wait_ms": 3,
+        "pool_min": 1,
+        "pool_max": 16,
+        "pool_size": 2,
+        "pool_available": 2,
+        "requests_waiting": 0
+      },
+      "lifecycle_database_pool": {
+        "connections_num": 3,
+        "connections_ms": 7,
+        "requests_num": 32332,
+        "usage_ms": 1547,
+        "requests_queued": 1,
+        "requests_wait_ms": 3,
+        "pool_min": 1,
+        "pool_max": 4,
+        "pool_size": 2,
+        "pool_available": 2,
+        "requests_waiting": 0
+      }
+    }
+  },
+  "fleet": [],
+  "sandbox_count": 0,
+  "active_builds": 0,
+  "prepared": {
+    "prepared_builders": [],
+    "demand": {
+      "pending_resources": {
+        "vcpu": 0.0,
+        "memory_mb": 0,
+        "disk_mb": 0
+      },
+      "suppressed_pending_resources": {
+        "vcpu": 0.0,
+        "memory_mb": 0,
+        "disk_mb": 0
+      },
+      "pending_count": 0,
+      "suppressed_pending_count": 0,
+      "prepared_resources": {
+        "vcpu": 0.0,
+        "memory_mb": 0,
+        "disk_mb": 0
+      },
+      "desired_resources": {
+        "vcpu": 0.0,
+        "memory_mb": 0,
+        "disk_mb": 0
+      },
+      "oldest_pending_seconds": 0,
+      "pending_image_builds": 0,
+      "prepared_builder_count": 0,
+      "desired_builders": 0,
+      "pending": [],
+      "prepared": [],
+      "prepared_builders": [],
+      "image_warmups": []
+    }
+  },
+  "known_test_node_ids": [
+    "167927353",
+    "167927354",
+    "167927367",
+    "167927368",
+    "167929368",
+    "167931118",
+    "167933203",
+    "167933204",
+    "167933217",
+    "167933218",
+    "167933559"
+  ],
+  "test_nodes_remaining_at_provider": [],
+  "all_test_nodes_retired": true,
+  "provider_instances": [],
+  "gateway_sampler_active": false,
+  "history_source": "gateway build-history.sqlite, read-only exact-UUID lookup",
+  "successful_history_count": 138,
+  "history_count": 138,
+  "history": [
+    {
+      "build_id": "6132eae5-3140-4579-b438-3c38b186adb9",
+      "image_id": "bl20260929-dependency-000",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "e391fc7a-ec59-4cbe-b961-f17a604f4a6c",
+      "image_id": "bl20260929-dependency-001",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "a4de9ecb-9b79-437c-97f3-6e5357354d00",
+      "image_id": "bl20260929-dependency-002",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "18a235ab-5982-4932-815a-49f96e5388cf",
+      "image_id": "bl20260929-dependency-003",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "12545f32-2d5f-4540-a31f-d666bc98389c",
+      "image_id": "bl20260929-dependency-004",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "973d9385-f7aa-4fdd-b321-02f46681a197",
+      "image_id": "bl20260929-dependency-005",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "2ab3b4a8-a556-4071-804f-6e721102e2bd",
+      "image_id": "bl20260929-warm-000",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "d74b66ba-8ea1-44cf-a073-47b5fb66b084",
+      "image_id": "bl20260929-warm-001",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "f42a384d-c4cd-49e9-aa84-f5d8508e4496",
+      "image_id": "bl20260929-warm-002",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "0b4095e1-c585-4283-8a6e-61e12406e942",
+      "image_id": "bl20260929-warm-003",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "722c1926-d543-47eb-aa1f-a2db344fd07c",
+      "image_id": "bl20260929-warm-004",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "91851381-890c-4a73-8280-a7ba239fb851",
+      "image_id": "bl20260929-warm-005",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "4f1ad3d2-511a-4d6b-80a1-3222106feb8e",
+      "image_id": "bl20260929-warm-006",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "d34e2d0b-8c44-4b3b-8818-903d0475b3d6",
+      "image_id": "bl20260929-warm-007",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "165f5a9a-2fab-4c99-8c08-b7661ef4de29",
+      "image_id": "bl20260929-warm-008",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "6146e0ee-3ca5-4dae-a0b3-ad61c3f41ae3",
+      "image_id": "bl20260929-warm-009",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "62409dc7-480c-4fa7-bbf1-ae0616ebde0a",
+      "image_id": "bl20260929-warm-010",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "9c75819f-b15d-41d2-beeb-46656ed7dc99",
+      "image_id": "bl20260929-warm-011",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "f2054055-bfb7-45a5-84b5-a45ed1185a47",
+      "image_id": "bl20260929-warm-012",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "6b1a2026-d1f0-4865-a6e9-a997bd5b30cb",
+      "image_id": "bl20260929-warm-013",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "405f51c5-9116-492c-9acb-0fe120017f84",
+      "image_id": "bl20260929-warm-014",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "948d52a8-9222-4152-aa82-a795f9418b2e",
+      "image_id": "bl20260929-warm-015",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "a84c88ac-7531-49c6-8af2-745fe4034003",
+      "image_id": "bl20260929-warm-016",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "e00e06c8-524b-4d73-89af-ab61df83230a",
+      "image_id": "bl20260929-warm-017",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "816424c9-7bc0-42c5-aef3-f6b9bfcae92e",
+      "image_id": "bl20260929-warm-018",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "839ed975-29c8-4dfc-984e-8244be270a16",
+      "image_id": "bl20260929-warm-019",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "a9bf6305-4ceb-496e-b0aa-5ad841b9a9ef",
+      "image_id": "bl20260929-warm-020",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "edee420c-07c3-46c8-928b-45d73f63a5ed",
+      "image_id": "bl20260929-warm-021",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "9a164d77-de1b-40ac-8f26-1467b68ed347",
+      "image_id": "bl20260929-warm-022",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "0ee1a349-f397-4bce-8908-bc7df9e19348",
+      "image_id": "bl20260929-warm-023",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "d1828b9d-fd3f-42bc-808c-a00f65b5fb0a",
+      "image_id": "bl20260929-app-000",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "1be018d3-954a-4050-b96e-3d95a1f1427d",
+      "image_id": "bl20260929-app-001",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "2fc5ff2b-a806-4b58-8167-0c4c0ecbed1f",
+      "image_id": "bl20260929-app-002",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "5b0c6961-096d-428d-91b7-a7654bbfcf7e",
+      "image_id": "bl20260929-app-003",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "0cbf5ea6-3c6e-4444-aa45-51cc7001ddda",
+      "image_id": "bl20260929-app-004",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "51025048-9daa-4c7d-9bbb-35b8c7fde6d3",
+      "image_id": "bl20260929-app-005",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "fad3c2d6-17ed-4004-9ac0-a9a3a4001c91",
+      "image_id": "bl20260929-app-006",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "86fb6ca9-31d8-4744-9fa7-bce4d9009178",
+      "image_id": "bl20260929-app-007",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "5dd9acbf-50ff-4c98-acff-9c7fa5783708",
+      "image_id": "bl20260929-app-008",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "16ffd052-231b-413c-85e4-84d4f921b176",
+      "image_id": "bl20260929-app-009",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "5b4e6193-fce3-4dbd-ae38-82da31810ba3",
+      "image_id": "bl20260929-app-010",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "9a44d39d-aafd-4230-b254-698db82f8df9",
+      "image_id": "bl20260929-app-011",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "c594231f-673a-4f00-b837-8415a4b14732",
+      "image_id": "bl20260929-app-012",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "fbb1978f-6226-4079-9006-4ac18bb4f777",
+      "image_id": "bl20260929-app-013",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "960bb2c6-2c22-4285-b281-6a90d9717923",
+      "image_id": "bl20260929-app-014",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "61c0318a-a05f-400e-a4fb-0c6049dca982",
+      "image_id": "bl20260929-app-015",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "53bbc7f9-5f01-44be-9813-30202a44dc02",
+      "image_id": "bl20260929-app-016",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "87834035-9893-4064-8d6e-efa518114287",
+      "image_id": "bl20260929-app-017",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "7892d139-6735-4a30-94f7-aff238a221d2",
+      "image_id": "bl20260929-app-018",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "34e10819-8eaf-464b-adef-4e2b0208875c",
+      "image_id": "bl20260929-app-019",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "fc9ac541-40e3-4396-9b0a-5459a6ab97df",
+      "image_id": "bl20260929-app-020",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "3528b0ba-923b-43c2-beb1-83d266e642a7",
+      "image_id": "bl20260929-app-021",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "3b4e9d3b-ad12-4f76-b0cd-aa80bfe943ae",
+      "image_id": "bl20260929-app-022",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "43bbefe7-f96e-4bbb-b28d-fb1b8d337823",
+      "image_id": "bl20260929-app-023",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "156e4106-0f0e-4fbe-933d-aa8066b9bb53",
+      "image_id": "bl20260929-overload-000",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "5ee478e0-5731-4c1b-9a08-b1efb69f3eb4",
+      "image_id": "bl20260929-overload-001",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "cb3fc017-f82a-41de-8f1f-bbf5703d3b82",
+      "image_id": "bl20260929-overload-002",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "1c2df099-d14e-419c-bc0b-01cfd527b175",
+      "image_id": "bl20260929-overload-003",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "c73e7c87-515b-4407-98bb-2f2b0aae02b0",
+      "image_id": "bl20260929-overload-004",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "c2cd867f-42d8-44de-9c70-9f5a0c17b873",
+      "image_id": "bl20260929-overload-005",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "5ae35459-f9f0-48f5-bd79-846ec98d6c9f",
+      "image_id": "bl20260929-overload-006",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "6a9d0045-d08c-4c0c-bf1e-3bfddaa6de5e",
+      "image_id": "bl20260929-overload-007",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "d25def21-7c39-4fe3-972d-6cb27bb3b71d",
+      "image_id": "bl20260929-overload-008",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "210bbba0-ad4e-488f-9a0f-4e7525d7ce3c",
+      "image_id": "bl20260929-overload-009",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "43036321-1cb8-4e43-9f9e-6383a3f05a75",
+      "image_id": "bl20260929-overload-010",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "751d71b0-371e-4f48-8f2d-35a28a35e3a1",
+      "image_id": "bl20260929-overload-011",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "06e2ec44-214f-4832-b90e-43d7a00333a6",
+      "image_id": "bl20260929-overload-012",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "89f1f8e8-6999-4844-b596-9205b24e824d",
+      "image_id": "bl20260929-overload-013",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "84f0574d-1258-4fa1-9b7d-c6d52c48fedb",
+      "image_id": "bl20260929-overload-014",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "845b0672-50af-412b-bec1-92fe89c3a75c",
+      "image_id": "bl20260929-overload-015",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "40a4b6fb-a24a-4a99-8c3a-629b7a7a8622",
+      "image_id": "bl20260929-overload-016",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "09037931-5b1f-494c-815b-95af6d89e6af",
+      "image_id": "bl20260929-overload-017",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "8395ce00-6a12-4552-a66f-419903a25093",
+      "image_id": "bl20260929-overload-018",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "8f5a95c6-85f0-4f67-8e26-6493a8d05402",
+      "image_id": "bl20260929-overload-019",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "e1b7e574-677f-4b70-9730-93df9efb414e",
+      "image_id": "bl20260929-overload-020",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "05e52f59-21cb-4499-8f0e-b66bb0cfca4d",
+      "image_id": "bl20260929-overload-021",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "8ec6de82-fac4-4bbf-bf3b-7719935f9bed",
+      "image_id": "bl20260929-overload-022",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "fcfd6db5-2f38-4647-b0b1-72f65e9614c3",
+      "image_id": "bl20260929-overload-023",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "6dc3835a-be7e-4cc2-aa64-d26c1b81500c",
+      "image_id": "bl20260929-overload-024",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "0569b1c2-276f-4f30-bc8e-0f781c3cb362",
+      "image_id": "bl20260929-overload-025",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "8c9548a8-18e4-4423-94d0-e60cdd16e154",
+      "image_id": "bl20260929-overload-026",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "28337329-4815-472d-9d50-ba5ee0a0922b",
+      "image_id": "bl20260929-overload-027",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "7ec884f6-7962-4ffe-9664-6544ce7499d5",
+      "image_id": "bl20260929-overload-028",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "e3b9111e-8b65-4055-8cba-228511ff7048",
+      "image_id": "bl20260929-overload-029",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "a99977db-9c97-4c66-81ed-c36bb3de8b9e",
+      "image_id": "bl20260929-overload-030",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "30c3bf0e-5027-4a24-8804-6048895bb60b",
+      "image_id": "bl20260929-overload-031",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "f8756628-3001-4e2b-82d7-cf21df8d90d7",
+      "image_id": "bl20260929-overload-032",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "5e75979a-6923-4954-a45a-548ffa24b5b0",
+      "image_id": "bl20260929-overload-033",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "7bda3993-37a9-4167-83c0-b07ab5356cfd",
+      "image_id": "bl20260929-overload-034",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "1efd424f-5120-42f0-8f37-d5334a78201b",
+      "image_id": "bl20260929-overload-035",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "c1182ed8-c0c6-4938-91b4-b6d80d976675",
+      "image_id": "bl20260929-overload-036",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "8d9756d0-9755-48de-988a-6cbf27fcfd16",
+      "image_id": "bl20260929-overload-037",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "10f4f4a4-8070-4e8a-81d4-ac025b655acd",
+      "image_id": "bl20260929-overload-038",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "45dbb2d6-3dbb-4fe9-945b-0cd1fe56c3cc",
+      "image_id": "bl20260929-overload-039",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "a4dd569d-37ea-4927-b1fc-801e0af51edf",
+      "image_id": "bl20260929-overload-040",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "d5d524ba-7bc1-420b-83b1-7938ddde5cc7",
+      "image_id": "bl20260929-overload-041",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "a6f18f83-0632-48a9-9a2a-670972901277",
+      "image_id": "bl20260929-overload-042",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "801d6cb7-e0b3-4233-a41b-181e30e183b7",
+      "image_id": "bl20260929-overload-043",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "4cd0f3d1-ebe9-446b-9d46-ce8beb4d3057",
+      "image_id": "bl20260929-overload-044",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "5f76cf91-0d54-4e08-a97c-e708e4a303bd",
+      "image_id": "bl20260929-overload-045",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "1503f47a-ea76-46e4-b430-6eb460af9ebf",
+      "image_id": "bl20260929-overload-046",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "5fbf1d05-e83b-4f17-8fa7-9e135f37583b",
+      "image_id": "bl20260929-overload-047",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "b455c589-a4cc-4820-8202-532414c64ac2",
+      "image_id": "bl20260929-replacement-000",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "b1899b2e-3f55-4543-8869-eaf0a99518b3",
+      "image_id": "bl20260929-replacement-001",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "c780bee0-af6a-4b0e-9395-43e5a3f56e30",
+      "image_id": "bl20260929-replacement-002",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "45a511a0-5bd7-4d7c-8e61-4d55aa4f4930",
+      "image_id": "bl20260929-replacement-003",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "d707099c-4ff7-4479-ab1b-6752eabefd07",
+      "image_id": "bl20260929-replacement-004",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "553ee43f-ca50-42ea-997f-5ac12562c212",
+      "image_id": "bl20260929-replacement-005",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "9d775cbe-ab63-4548-a18c-a464ab64096a",
+      "image_id": "bl20260929-replacement-006",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "e4cfeec8-a531-46f6-9d41-230ae2280fd1",
+      "image_id": "bl20260929-replacement-007",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "260ade34-6449-4713-a5b4-77dd7b3e1fad",
+      "image_id": "bl20260929-replacement-008",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "83eea96e-18ed-4bf7-bfef-271c20f3e6cb",
+      "image_id": "bl20260929-replacement-009",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "972781c4-1892-48c0-8a74-4c2e532b0b44",
+      "image_id": "bl20260929-replacement-010",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "00cad366-aa76-4ac5-9008-3908c21fec14",
+      "image_id": "bl20260929-replacement-011",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "dfc647f4-fcec-40df-89f2-9ed4ec96c19d",
+      "image_id": "bl20260929-replacement-012",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "a0249aea-071e-462a-a66f-e5c073bc5185",
+      "image_id": "bl20260929-replacement-013",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "b671a53c-5b5c-49ad-be2f-6c6933062e3f",
+      "image_id": "bl20260929-replacement-014",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "f669a5e3-02a5-4280-9b07-e8fea0825848",
+      "image_id": "bl20260929-replacement-015",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "c81becff-65b8-47bf-a272-560ada5c0175",
+      "image_id": "bl20260929-replacement-016",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "0f128920-69fa-48e2-a542-9339d8a92e47",
+      "image_id": "bl20260929-replacement-017",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "b0357a60-7988-4262-912e-1254e9443a73",
+      "image_id": "bl20260929-replacement-018",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "e517209a-d1be-4e45-9f17-709daa4e8488",
+      "image_id": "bl20260929-replacement-019",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "1ec42391-0dda-4172-909c-07b6de8d1842",
+      "image_id": "bl20260929-replacement-020",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "635665b5-42d2-4312-afbb-945442d5f6a3",
+      "image_id": "bl20260929-replacement-021",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "a2b9b812-c117-4778-a811-1314280d0808",
+      "image_id": "bl20260929-replacement-022",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "6bf8dbe5-41aa-4d93-9d73-861d16ab51d5",
+      "image_id": "bl20260929-replacement-023",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "8b3328d6-31d8-4145-812d-882a400c04df",
+      "image_id": "bl20260929-cold-000",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "03552f57-49fa-4273-a356-5075ad4e241e",
+      "image_id": "bl20260929-cold-001",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "d139d689-606b-4533-80fa-74b19faf5a8b",
+      "image_id": "bl20260929-cold-002",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "918b0f30-4922-43e0-b4ed-8b7b543786c6",
+      "image_id": "bl20260929-cold-003",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "4d757c3d-7a15-4cba-bdb8-e84dd258189f",
+      "image_id": "bl20260929-cold-004",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "265665e5-97fc-4b70-b24a-f72ecfd0877f",
+      "image_id": "bl20260929-cold-005",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "cdf1f199-0a22-4411-a8c0-0746debb00e9",
+      "image_id": "bl20260929-cold-006",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "defb571d-313e-42de-b3af-e052266516ce",
+      "image_id": "bl20260929-cold-007",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "96acc24d-ba5c-4298-98a8-a8181db1282a",
+      "image_id": "bl20260929-cold-008",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "28351827-3e9d-45b1-bdac-52685ff3bec0",
+      "image_id": "bl20260929-cold-009",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "d68f99db-31bc-436c-84a6-149262e0648f",
+      "image_id": "bl20260929-cold-010",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "cb279644-184c-498f-9b4f-e85e67cbb8e3",
+      "image_id": "bl20260929-cold-011",
+      "status": "succeeded",
+      "identity_matches": true
+    }
+  ],
+  "retained_artifacts": [
+    "138 managed test image aliases",
+    "frozen fixture contexts and dependency locks",
+    "build receipts and gateway-local raw progress logs"
+  ]
+}

@@ -1,0 +1,257 @@
+{
+  "steady8": {
+    "window": {
+      "start": "2026-09-28T13:30:05+00:00",
+      "end": "2026-09-28T13:31:20+00:00",
+      "description": "All512active; quiet interval after first mixed phase, before high-NAT phase"
+    },
+    "samples": 38,
+    "registry_sdb": {
+      "rkB": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "wkB": {
+        "mean": 0.8421052631578947,
+        "p95": 0.0,
+        "max": 32.0
+      },
+      "await": {
+        "mean": 0.0668421052631579,
+        "p95": 0.0,
+        "max": 2.54
+      },
+      "aqu-sz": {
+        "mean": 0.0005263157894736842,
+        "p95": 0.0,
+        "max": 0.02
+      },
+      "util-percent": {
+        "mean": 0.003947368421052632,
+        "p95": 0.0,
+        "max": 0.15
+      }
+    },
+    "units": "rkB/wkB are KiB/s; await milliseconds; aqu-sz average queue; util-percent block-device busy fraction, not saturated-capacity percentage",
+    "sampled_write_bytes": 65536.0
+  },
+  "mixed8_first": {
+    "window": {
+      "start": "2026-09-28T13:28:42.772143+00:00",
+      "end": "2026-09-28T13:29:56.477432+00:00"
+    },
+    "samples": 37,
+    "registry_sdb": {
+      "rkB": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "wkB": {
+        "mean": 71050.48648648648,
+        "p95": 99204.0,
+        "max": 99226.0
+      },
+      "await": {
+        "mean": 27.411351351351353,
+        "p95": 35.14,
+        "max": 44.0
+      },
+      "aqu-sz": {
+        "mean": 2.6864864864864866,
+        "p95": 3.84,
+        "max": 3.94
+      },
+      "util-percent": {
+        "mean": 20.405405405405407,
+        "p95": 28.65,
+        "max": 33.7
+      }
+    },
+    "units": "rkB/wkB are KiB/s; await milliseconds; aqu-sz average queue; util-percent block-device busy fraction, not saturated-capacity percentage",
+    "sampled_write_bytes": 5383921664.0
+  },
+  "mixed8_highnat": {
+    "window": {
+      "start": "2026-09-28T13:31:27.499119+00:00",
+      "end": "2026-09-28T13:32:27.536505+00:00"
+    },
+    "samples": 30,
+    "registry_sdb": {
+      "rkB": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "wkB": {
+        "mean": 75465.4,
+        "p95": 99158.0,
+        "max": 99160.0
+      },
+      "await": {
+        "mean": 26.586,
+        "p95": 32.44,
+        "max": 33.52
+      },
+      "aqu-sz": {
+        "mean": 2.7923333333333336,
+        "p95": 3.93,
+        "max": 3.94
+      },
+      "util-percent": {
+        "mean": 22.038333333333334,
+        "p95": 28.8,
+        "max": 29.9
+      }
+    },
+    "units": "rkB/wkB are KiB/s; await milliseconds; aqu-sz average queue; util-percent block-device busy fraction, not saturated-capacity percentage",
+    "sampled_write_bytes": 4636594176.0
+  },
+  "steady4": {
+    "window": {
+      "start": "2026-09-28T13:36:20+00:00",
+      "end": "2026-09-28T13:36:50+00:00",
+      "description": "All512active; before first mixed phase"
+    },
+    "samples": 16,
+    "registry_sdb": {
+      "rkB": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "wkB": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "await": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "aqu-sz": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "util-percent": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      }
+    },
+    "units": "rkB/wkB are KiB/s; await milliseconds; aqu-sz average queue; util-percent block-device busy fraction, not saturated-capacity percentage",
+    "sampled_write_bytes": 0.0
+  },
+  "mixed4_first": {
+    "window": {
+      "start": "2026-09-28T13:36:57.967764+00:00",
+      "end": "2026-09-28T13:38:48.009498+00:00"
+    },
+    "samples": 56,
+    "registry_sdb": {
+      "rkB": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "wkB": {
+        "mean": 76314.51214285714,
+        "p95": 99134.0,
+        "max": 99170.0
+      },
+      "await": {
+        "mean": 32.10732142857143,
+        "p95": 43.13,
+        "max": 45.53
+      },
+      "aqu-sz": {
+        "mean": 3.2469642857142857,
+        "p95": 4.83,
+        "max": 5.01
+      },
+      "util-percent": {
+        "mean": 27.645892857142858,
+        "p95": 42.15,
+        "max": 48.95
+      }
+    },
+    "units": "rkB/wkB are KiB/s; await milliseconds; aqu-sz average queue; util-percent block-device busy fraction, not saturated-capacity percentage",
+    "sampled_write_bytes": 8752358768.64
+  },
+  "mixed4_highnat": {
+    "window": {
+      "start": "2026-09-28T13:38:56.634806+00:00",
+      "end": "2026-09-28T13:39:57.280295+00:00"
+    },
+    "samples": 30,
+    "registry_sdb": {
+      "rkB": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "wkB": {
+        "mean": 76525.53333333334,
+        "p95": 99108.0,
+        "max": 99110.0
+      },
+      "await": {
+        "mean": 28.355666666666668,
+        "p95": 34.2,
+        "max": 37.38
+      },
+      "aqu-sz": {
+        "mean": 3.110333333333333,
+        "p95": 4.49,
+        "max": 4.66
+      },
+      "util-percent": {
+        "mean": 22.176666666666666,
+        "p95": 28.1,
+        "max": 33.7
+      }
+    },
+    "units": "rkB/wkB are KiB/s; await milliseconds; aqu-sz average queue; util-percent block-device busy fraction, not saturated-capacity percentage",
+    "sampled_write_bytes": 4701728768.0
+  },
+  "mixed4_timeout_context": {
+    "window": {
+      "start": "2026-09-28T13:39:20+00:00",
+      "end": "2026-09-28T13:39:45+00:00",
+      "description": "Five generator HTTPS timeouts observed13:39:37.44UTC"
+    },
+    "samples": 13,
+    "registry_sdb": {
+      "rkB": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "wkB": {
+        "mean": 76242.0,
+        "p95": 99110.0,
+        "max": 99110.0
+      },
+      "await": {
+        "mean": 28.173076923076923,
+        "p95": 30.65,
+        "max": 30.65
+      },
+      "aqu-sz": {
+        "mean": 3.0953846153846154,
+        "p95": 4.29,
+        "max": 4.29
+      },
+      "util-percent": {
+        "mean": 20.884615384615383,
+        "p95": 27.85,
+        "max": 27.85
+      }
+    },
+    "units": "rkB/wkB are KiB/s; await milliseconds; aqu-sz average queue; util-percent block-device busy fraction, not saturated-capacity percentage",
+    "sampled_write_bytes": 2029867008.0
+  }
+}

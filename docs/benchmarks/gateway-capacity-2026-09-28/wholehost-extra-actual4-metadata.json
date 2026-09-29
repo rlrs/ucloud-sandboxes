@@ -1,0 +1,21 @@
+{
+  "unit": "ucloud-gateway-extra-actual4-20260928.service",
+  "sampler_pid": 2312,
+  "started_at": "2026-09-28T14:29:34.487800+00:00",
+  "duration_limit_seconds": 1200.0,
+  "snapshot_interval_seconds": 5.0,
+  "sar_interval_seconds": 2,
+  "kernel": "7.0.0-34-generic",
+  "online_cpus_at_start": "0-3",
+  "block_device": "sdb",
+  "sar_pid": 2313,
+  "finished_at": "2026-09-28T14:38:08.306382+00:00",
+  "sar_exit_code": -15,
+  "elapsed_seconds": 513.8183718600001,
+  "online_cpus_at_finish": "0-3",
+  "primary_unit": "ucloud-gateway-host-actual4-20260928.service",
+  "primary_pid": 2310,
+  "primary_local_artifact": "build/gateway-qualification/host-actual4.jsonl",
+  "extra_local_directory": "build/gateway-qualification/wholehost-extra-actual4",
+  "verified_stop": "Both transient units inactive and MainPID0 after14:38:08UTC"
+}

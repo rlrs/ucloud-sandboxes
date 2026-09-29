@@ -12,7 +12,8 @@ def builder(job_id: str, active: int):
 
 class BuilderPackingTests(unittest.TestCase):
     def pick(self, *builders):
-        return control_plane._reserve_builder_candidate(list(builders), {}, reserve=False).job_id
+        selected = control_plane._reserve_builder_candidate(list(builders), {}, reserve=False)
+        return selected.job_id if selected else None
 
     def test_builds_pack_onto_the_oldest_builder_with_a_free_slot(self):
         slots = DEFAULT_MAX_ACTIVE_IMAGE_BUILDS
@@ -22,8 +23,9 @@ class BuilderPackingTests(unittest.TestCase):
         self.assertEqual(self.pick(builder("100", 0), builder("200", slots - 1)), "200")
         # A full builder yields to one with a free slot.
         self.assertEqual(self.pick(builder("100", slots), builder("200", 1)), "200")
-        # Only when every builder is full does the shortest queue win.
-        self.assertEqual(self.pick(builder("100", slots + 2), builder("200", slots + 1)), "200")
+        # Busy fleets leave new work pending instead of pinning it to a queue.
+        self.assertIsNone(self.pick(builder("100", slots + 2), builder("200", slots + 1)))
+        self.assertIsNone(self.pick(builder("100", slots), builder("200", slots)))
 
 
 if __name__ == "__main__":

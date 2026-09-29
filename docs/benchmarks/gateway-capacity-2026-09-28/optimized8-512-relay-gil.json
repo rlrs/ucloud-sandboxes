@@ -1,0 +1,307 @@
+{
+  "run_id": "relay-load-e2388974345d",
+  "local_guard_before": {
+    "started_agents": 512,
+    "all_agents_ready": true,
+    "terminal_events": [],
+    "log_age_seconds": 0.034303903579711914,
+    "active": true
+  },
+  "local_guard_after": {
+    "started_agents": 512,
+    "all_agents_ready": true,
+    "terminal_events": [],
+    "log_age_seconds": 0.09464383125305176,
+    "active": true
+  },
+  "local_guard_samples": [
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.04196429252624512,
+      "active": true,
+      "checked_at": "2026-09-28T13:26:59.115104+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.1639862060546875,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:00.120454+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.11330342292785645,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:01.125359+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.18615078926086426,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:02.130366+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.0431516170501709,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:03.135298+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.007990837097167969,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:04.140323+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.020961284637451172,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:05.145366+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.2859652042388916,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:06.150665+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.015182256698608398,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:07.155996+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.12851262092590332,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:08.161182+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.009655475616455078,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:09.166656+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.04305911064147949,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:10.172051+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.0843808650970459,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:11.177464+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.03775739669799805,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:12.182769+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.034976959228515625,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:13.188403+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.05713772773742676,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:14.194663+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.09881854057312012,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:15.200135+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.06028318405151367,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:16.206141+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.11423230171203613,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:17.212146+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.11216998100280762,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:18.217790+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.025742053985595703,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:19.223547+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.011446714401245117,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:20.229422+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.04928421974182129,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:21.235528+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.17535614967346191,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:22.241591+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.041359901428222656,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:23.247940+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.011658906936645508,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:24.254478+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.04212546348571777,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:25.260544+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.012160778045654297,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:26.267143+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.09429812431335449,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:27.273350+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.0358891487121582,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:28.279248+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": -0.0012722015380859375,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:29.285984+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.1614079475402832,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:30.292661+00:00"
+    },
+    {
+      "started_agents": 512,
+      "all_agents_ready": true,
+      "terminal_events": [],
+      "log_age_seconds": 0.020026445388793945,
+      "active": true,
+      "checked_at": "2026-09-28T13:27:31.299157+00:00"
+    }
+  ],
+  "local_abort": null,
+  "ssh_exit_code": 0,
+  "started_at": "2026-09-28T13:26:59.760490+00:00",
+  "finished_at": "2026-09-28T13:27:31.306163+00:00",
+  "pid": 46832,
+  "exit_code": 0,
+  "stop_reason": null,
+  "duration_seconds": 30,
+  "sample_rate_hz": 99,
+  "gil_only": true,
+  "elapsed_seconds": 31.54558654599532,
+  "cpu_before": {
+    "ticks": 1455,
+    "start_ticks": 6254516
+  },
+  "cpu_after": {
+    "ticks": 2801,
+    "start_ticks": 6254516
+  },
+  "cpu_seconds": 13.46,
+  "same_process": true,
+  "remote_profile": "/work/ucloud-sandboxes/gateway-qualification-20260928/optimized8-512-relay-gil.txt",
+  "profiler_output": "py-spy> Sampling process 99 times a second for 30 seconds. Press Control-C to exit.\n\npy-spy> Wrote raw flamegraph data to '/work/ucloud-sandboxes/gateway-qualification-20260928/optimized8-512-relay-gil.txt'. Samples: 1019 Errors: 0\npy-spy> You can use the flamegraph.pl script from https://github.com/brendangregg/flamegraph to generate a SVG\n",
+  "valid_loaded_window": true
+}

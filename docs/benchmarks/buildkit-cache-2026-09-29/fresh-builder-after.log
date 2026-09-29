@@ -1,0 +1,20 @@
+moby/buildkit:v0.33.0@sha256:6c2fa84a6b61ccd72899dde4239f8d5717f05f9a8ca6f3cad185fb1a95a94de3
+network=host
+root
+/root
+ca46c1e0f19982ff9ef00df1b096674023b2d2a6603074abbcad7a8700c9de8d
+
+masked
+masked
+masked
+masked
+masked
+ID                           RECLAIMABLE   SIZE      LAST ACCESSED
+9nnptn5jfag3yyu9m1sl10qfl    true          0B        33 seconds ago
+l8b9djk7x3ldfwohdkiwkx4aq    true          0B        33 seconds ago
+tsww0jxj2mvd7hgwno38j4kc4    true          0B        33 seconds ago
+xmawkbxgfgg7fxgec2hqxo4be*   true          0B        33 seconds ago
+u9mw6ubcbnfq4pns7uqphugow*   true          4.096kB   33 seconds ago
+g7rzqp9rjn25jk2tlvezqr2rk*   true          33.55MB   33 seconds ago
+Reclaimable:	33.56MB
+Total:		33.56MB

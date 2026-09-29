@@ -553,6 +553,8 @@ def build_parser() -> argparse.ArgumentParser:
     builder_agent.add_argument("--docker-binary", default="docker")
     builder_agent.add_argument("--buildx-direct-push", action="store_true")
     builder_agent.add_argument("--buildx-cache-ref")
+    builder_agent.add_argument("--buildx-builder", default="")
+    builder_agent.add_argument("--buildx-cache-registry-url")
     add_environment_registry_args(builder_agent)
     builder_agent.add_argument("--environment-signing-key", type=Path)
     builder_agent.add_argument("--environment-allow-path", action="append", default=[])
@@ -1321,6 +1323,8 @@ def cmd_serve_builder_agent(args: argparse.Namespace) -> int:
             dry_run=False,
             buildx_direct_push=args.buildx_direct_push,
             buildx_cache_ref=args.buildx_cache_ref,
+            buildx_builder=args.buildx_builder,
+            buildx_cache_registry_url=args.buildx_cache_registry_url,
         ),
         max_active_image_builds=args.max_active_image_builds,
         max_concurrent_image_pulls=args.max_concurrent_image_pulls,
@@ -1882,6 +1886,17 @@ def run_registry_prune(
     usage_snapshot = usage_store.snapshot()
     usage_records = usage_snapshot.records
     reference_repositories = _reference_retained_repositories(config)
+    cache_policy = None
+    excluded_repositories = list(reference_repositories.values())
+    if config.builder.buildx_cache_ref:
+        from .build_cache import RegistryBuildCache
+        cache_policy = RegistryBuildCache(
+            config.builder.buildx_cache_ref, registry_url=config.registry_url,
+            max_bytes=config.builder.buildx_cache_max_bytes,
+            max_entries=config.builder.buildx_cache_max_entries,
+            max_age_seconds=config.builder.buildx_cache_max_age_seconds,
+        )
+        excluded_repositories.append(cache_policy.repository)
     plan = registry_prune_plan(
         client,
         keep_per_repository=config.registry_keep_per_repository,
@@ -1890,7 +1905,7 @@ def run_registry_prune(
         usage_records=usage_records,
         active_leases=usage_snapshot.leases,
         usage_generation=usage_snapshot.generation,
-        exclude_repositories=reference_repositories.values(),
+        exclude_repositories=excluded_repositories,
     )
     plan["execute"] = bool(execute)
     plan["usage_file"] = str(config.registry_usage_file())
@@ -1905,7 +1920,7 @@ def run_registry_prune(
             records = list_registry_tags(
                 client,
                 repository_prefix=repository_prefix,
-                exclude_repositories=reference_repositories.values(),
+                exclude_repositories=excluded_repositories,
             )
             records = apply_registry_usage(records, usage_records)
             candidates = select_prune_candidates(
@@ -1989,6 +2004,16 @@ def run_registry_prune(
         execute=execute,
     )
     plan["reference_retention"] = reference
+    cache_deleted = 0
+    if cache_policy is not None and (
+        not repository_prefix or cache_policy.repository.startswith(repository_prefix)
+    ):
+        try:
+            plan["build_cache"] = cache_policy.prune(execute=execute)
+            cache_deleted = plan["build_cache"].get("deleted_manifests", 0)
+        except (OSError, ValueError, RuntimeError) as exc:
+            # A disposable cache must not prevent image/reference maintenance.
+            plan["build_cache"] = {"error": type(exc).__name__, "deleted_manifests": 0}
     if execute:
         deleted_manifests = len(
             {(item.repository, item.digest) for item in (*deleted, *evicted)}
@@ -1996,6 +2021,7 @@ def run_registry_prune(
         deleted_manifests += sum(
             item["deleted_manifests"] for item in reference["decisions"]
         )
+        deleted_manifests += cache_deleted
         plan["deleted_manifest_count"] = deleted_manifests
         try:
             state = record_registry_prune(
@@ -2816,7 +2842,7 @@ def cmd_autoscaler(args: argparse.Namespace) -> int:
                         )
                     )
                 )
-            routing_state = routing_store.load()
+            routing_state = routing_store.load(include_exec_sessions=False)
             pending_snapshot = list(routing_state.pending.values())
             capacity_pending_snapshot = [
                 item for item in pending_snapshot if item.is_capacity_demand
@@ -7055,6 +7081,9 @@ def vm_init_options_for_job(
         ),
         host_aliases=(host_alias,) if host_alias else (),
         buildx_cache_ref=(config.builder.buildx_cache_ref if role == "builder" else ""),
+        buildx_cache_registry_url=(
+            config.registry_worker_url if role == "builder" and config.builder.buildx_cache_ref else ""
+        ),
         direct_runsc_commit=(
             config.sandbox.direct_runsc_commit if role == "sandbox" else ""
         ),

@@ -12,6 +12,7 @@ import subprocess
 import sys
 import time
 from typing import Literal
+from urllib.parse import urlsplit
 
 from .deployment import DEFAULT_INIT_VERSION, package_version
 from .direct_network import DirectNetworkTcpEgress
@@ -33,6 +34,12 @@ DEFAULT_SWAP_GB = 0
 DEFAULT_DOCKER_STORAGE_DIR = "/var/lib/ucloud-sandboxes"
 DEFAULT_DOCKER_MTU = 0
 DEFAULT_DOCKER_MAX_CONCURRENT_DOWNLOADS = 3
+SHARED_BUILDX_BUILDER = "ucloud-shared-cache"
+# Official multi-platform manifest, resolved and hash-checked on 2026-09-29.
+PINNED_BUILDKIT_IMAGE = (
+    "moby/buildkit:v0.33.0@sha256:"
+    "6c2fa84a6b61ccd72899dde4239f8d5717f05f9a8ca6f3cad185fb1a95a94de3"
+)
 DEFAULT_MAX_CONCURRENT_IMAGE_PULLS = 8
 DEFAULT_REMOTE_PACKAGE_DIR = "/var/cache/ucloud-sandboxes/init-packages"
 DEFAULT_REMOTE_PACKAGE_FILENAME = "node-package.tar.gz"
@@ -187,6 +194,7 @@ class VmInitOptions:
     docker_insecure_registries: tuple[str, ...] = ()
     host_aliases: tuple[str, ...] = ()
     buildx_cache_ref: str = ""
+    buildx_cache_registry_url: str = ""
     direct_runsc_commit: str = ""
     direct_network: str = "none"
     direct_network_allow_tcp: tuple[str, ...] = ()
@@ -255,6 +263,123 @@ class VmInitPackageStageResult:
     reused: bool = False
 
 
+def _buildkit_config(options: VmInitOptions) -> str:
+    # GC cannot remove active build references: these are cache targets, not a
+    # hard quota. Leave room for Docker's OCI images and EROFS conversion views.
+    disk_bytes = (
+        options.docker_quota_image_gb * 1024 ** 3
+        if options.docker_quota_image_gb else options.total_resources.disk_mb * 1024 ** 2
+    )
+    cache_bytes = min(20 * 1024 ** 3, disk_bytes // 4)
+    reserved_bytes = min(1024 ** 3, cache_bytes // 4)
+    free_bytes = min(10 * 1024 ** 3, disk_bytes // 4)
+    config = (
+        '[worker.oci]\n'
+        '  gc = true\n'
+        '  max-parallelism = 4\n'
+        f'  reservedSpace = {reserved_bytes}\n'
+        f'  maxUsedSpace = {cache_bytes}\n'
+        f'  minFreeSpace = {free_bytes}\n'
+        '\n[system]\n'
+        '  maxRegistryConcurrency = 4\n'
+    )
+    cache_url = urlsplit(options.buildx_cache_registry_url)
+    registries = set(options.docker_insecure_registries)
+    if cache_url.scheme == "http":
+        registries.add(cache_url.netloc)
+    for registry in sorted(registries):
+        # BuildKit uses exact registry authorities, unlike Docker's optional
+        # CIDR matching. Refuse to silently drop an existing network policy.
+        if "/" in registry:
+            raise ValueError("BuildKit cache requires explicit insecure registry hosts, not CIDRs or URLs")
+        # Only the explicitly configured plain-HTTP cache endpoint bypasses
+        # TLS. Other explicitly insecure registries retain their TLS transport.
+        transport = "http" if cache_url.scheme == "http" and registry == cache_url.netloc else "insecure"
+        config += f'\n[registry.{json.dumps(registry)}]\n  {transport} = true\n'
+    return config
+
+
+def _buildkit_setup_script(options: VmInitOptions, service_user: str) -> str:
+    if options.role != "builder" or not options.buildx_cache_ref:
+        return ""
+    config = _buildkit_config(options)
+    aliases = "\n".join(f"{address}\t{host}\t# ucloud-sandboxes host-alias {host}" for host, address in
+                        (alias.split("=", 1) for alias in options.host_aliases))
+    alias_setup = ""
+    if aliases:
+        # Docker host networking copies the host's /etc/hosts on each start.
+        # Verify the aliases installed above; do not rely on container-local
+        # edits that Docker would discard when restarting this builder.
+        alias_setup = f'''  ucloud_buildx_docker exec -i buildx_buildkit_{SHARED_BUILDX_BUILDER}0 sh -eu -c '
+    while IFS= read -r entry; do
+      grep -Fqx -- "$entry" /etc/hosts
+    done
+  ' <<'BUILDKIT_HOSTS'
+{aliases}
+BUILDKIT_HOSTS
+'''
+    # Keep this outside the static-runtime receipt branch: snapshot reuse must
+    # still create/check the per-user builder used by this node's agent.
+    return f'''# BEGIN shared BuildKit setup
+UCLOUD_BUILDX_USER="{service_user}"
+UCLOUD_BUILDX_HOME="$(getent passwd "$UCLOUD_BUILDX_USER" | cut -d: -f6)"
+if [ -z "$UCLOUD_BUILDX_HOME" ]; then
+  echo "Could not determine BuildKit service home" >&2
+  exit 1
+fi
+UCLOUD_BUILDX_GROUP="$(id -gn "$UCLOUD_BUILDX_USER")"
+$SUDO install -d -m 0700 -o "$UCLOUD_BUILDX_USER" -g "$UCLOUD_BUILDX_GROUP" "$UCLOUD_BUILDX_HOME/.docker"
+UCLOUD_BUILDKIT_CONFIG_DIR=/etc/ucloud-sandboxes/buildkit
+$SUDO install -d -m 0755 "$UCLOUD_BUILDKIT_CONFIG_DIR"
+ucloud_buildx_docker() {{
+  $SUDO runuser -u "$UCLOUD_BUILDX_USER" -- env \\
+    HOME="$UCLOUD_BUILDX_HOME" DOCKER_CONFIG="$UCLOUD_BUILDX_HOME/.docker" docker "$@"
+}}
+(
+  set -e
+  desired_config="$(mktemp)"
+  desired_receipt="$(mktemp)"
+  trap 'rm -f "$desired_config" "$desired_receipt"' EXIT
+  cat > "$desired_config" <<'BUILDKIT_CONFIG'
+{config.rstrip()}
+BUILDKIT_CONFIG
+  printf '%s\\n' {shlex.quote(PINNED_BUILDKIT_IMAGE)} network=host \\
+    "$UCLOUD_BUILDX_USER" "$UCLOUD_BUILDX_HOME" "$(sha256sum "$desired_config" | cut -d' ' -f1)" \\
+    {shlex.quote(aliases)} > "$desired_receipt"
+  config_file="$UCLOUD_BUILDKIT_CONFIG_DIR/buildkitd.toml"
+  receipt_file="$UCLOUD_BUILDKIT_CONFIG_DIR/receipt"
+  # inspect has no --format option, including in Buildx 0.37.1. Establish
+  # absence with the supported ls formatter; an inspect/runtime failure must
+  # abort instead of attempting to recreate an existing (possibly busy) node.
+  builders="$(ucloud_buildx_docker buildx ls --format '{{{{.Name}}}}')"
+  if grep -Fqx -- {SHARED_BUILDX_BUILDER} <<< "$builders"; then
+    inspection="$(ucloud_buildx_docker buildx inspect {SHARED_BUILDX_BUILDER})"
+    driver="$(printf '%s\\n' "$inspection" | awk '$1 == "Driver:" {{ print $2; exit }}')"
+    if [ "$driver" != docker-container ] \\
+      || ! cmp -s "$desired_config" "$config_file" \\
+      || ! cmp -s "$desired_receipt" "$receipt_file"; then
+      echo "Shared BuildKit configuration changed; replace this builder node instead of disrupting active builds" >&2
+      exit 1
+    fi
+  else
+    $SUDO install -m 0644 "$desired_config" "$config_file"
+    ucloud_buildx_docker buildx create --name {SHARED_BUILDX_BUILDER} \\
+      --driver docker-container --driver-opt {shlex.quote('image=' + PINNED_BUILDKIT_IMAGE)} \\
+      --driver-opt network=host --buildkitd-config "$config_file"
+    # Record successful creation before bootstrap so a transient image-pull
+    # failure can retry initialization without recreating or losing the cache.
+    $SUDO install -m 0644 "$desired_receipt" "$receipt_file"
+  fi
+  ucloud_buildx_docker buildx inspect {SHARED_BUILDX_BUILDER} --bootstrap
+  test "$(ucloud_buildx_docker inspect buildx_buildkit_{SHARED_BUILDX_BUILDER}0 --format '{{{{.Config.Image}}}}')" = {shlex.quote(PINNED_BUILDKIT_IMAGE)}
+  test "$(ucloud_buildx_docker inspect buildx_buildkit_{SHARED_BUILDX_BUILDER}0 --format '{{{{.HostConfig.NetworkMode}}}}')" = host
+{alias_setup.rstrip()}
+)
+log_init_phase "buildkit-cache"
+# END shared BuildKit setup
+'''
+
+
 def render_vm_init_script(options: VmInitOptions) -> str:
     validate_vm_init_options(options)
     work_dir = _clean_posix_path(options.work_dir)
@@ -315,6 +440,9 @@ def render_vm_init_script(options: VmInitOptions) -> str:
         builder_flags += " --buildx-direct-push"
     if options.role == "builder" and options.buildx_cache_ref:
         builder_flags += f" --buildx-cache-ref {shlex.quote(options.buildx_cache_ref)}"
+        builder_flags += f" --buildx-builder {SHARED_BUILDX_BUILDER}"
+        if options.buildx_cache_registry_url:
+            builder_flags += f" --buildx-cache-registry-url {shlex.quote(options.buildx_cache_registry_url)}"
     deployment_flag = " --deployment-id ${UCLOUD_DEPLOYMENT_ID}"
     heartbeat_auth_flag = " --bearer-token-file ${UCLOUD_HEARTBEAT_BEARER_TOKEN_FILE}"
     node_control_auth_flag = (
@@ -469,6 +597,11 @@ def render_vm_init_script(options: VmInitOptions) -> str:
   echo 'immutable adapter rollback requires a fresh worker' >&2; exit 1
 fi
 '''
+    buildkit_setup = _buildkit_setup_script(options, node_service_user)
+    buildkit_service_environment = (
+        'Environment="HOME=$UCLOUD_BUILDX_HOME" "DOCKER_CONFIG=$UCLOUD_BUILDX_HOME/.docker"'
+        if buildkit_setup else ""
+    )
     memory_filesystem_prestart = (
         "ExecStartPre=/usr/bin/env PYTHONPATH=$UCLOUD_AGENT_RUNTIME_DIR/site-packages /usr/bin/python3"
         " -m ucloud_sandboxes.memory_filesystem --mount-root $UCLOUD_STORAGE_NATIVE_MOUNT_ROOT"
@@ -676,6 +809,16 @@ wait_for_base_image_initialization() {{
 }}
 
 wait_for_base_image_initialization
+# OS packages are updated only through explicit maintenance.
+$SUDO install -d -m 0755 /etc/apt/apt.conf.d
+$SUDO tee /etc/apt/apt.conf.d/99zz-ucloud-no-unattended-upgrades >/dev/null <<'EOF'
+APT::Periodic::Enable "0";
+APT::Periodic::Update-Package-Lists "0";
+APT::Periodic::Unattended-Upgrade "0";
+EOF
+$SUDO systemctl disable --now apt-daily.timer apt-daily-upgrade.timer
+$SUDO systemctl mask apt-daily.timer apt-daily-upgrade.timer apt-daily.service apt-daily-upgrade.service unattended-upgrades.service
+
 log_init_phase "base-image"
 
 UCLOUD_OS_ID="$(. /etc/os-release && printf '%s' "$ID")"
@@ -1578,6 +1721,7 @@ fi
 $SUDO usermod -aG docker "$UCLOUD_SERVICE_USER"
 log_init_phase "docker-daemon"
 
+{buildkit_setup}
 
 echo "Activating bundled ucloud-sandboxes runtime"
 UCLOUD_AGENT_RUNTIME_DIR="$UCLOUD_CACHED_AGENT_RUNTIME_DIR"
@@ -1763,6 +1907,7 @@ User={node_service_user}
 Group={node_service_group}
 {node_service_supplementary_groups}
 EnvironmentFile={env_file}
+{buildkit_service_environment}
 WorkingDirectory={work_dir}
 {node_service_exec_start_pre}
 ExecStart={direct_agent_command}
@@ -2048,6 +2193,16 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
     _reject_newline("buildx cache ref", options.buildx_cache_ref)
     if options.buildx_cache_ref and options.role != "builder":
         raise ValueError("buildx_cache_ref requires the builder role")
+    _reject_newline("buildx cache registry URL", options.buildx_cache_registry_url)
+    if options.buildx_cache_registry_url:
+        cache_url = urlsplit(options.buildx_cache_registry_url)
+        if (not options.buildx_cache_ref or cache_url.scheme not in {"http", "https"}
+                or not cache_url.hostname or cache_url.username is not None
+                or cache_url.password is not None or cache_url.path not in {"", "/"}
+                or cache_url.query or cache_url.fragment or any(c.isspace() for c in cache_url.netloc)):
+            raise ValueError("buildx cache registry URL requires a cache ref and an HTTP(S) registry authority")
+        if options.buildx_cache_ref.split("/", 1)[0] != cache_url.netloc:
+            raise ValueError("buildx cache registry URL must match the cache ref registry")
     for key in options.init_authorized_keys:
         if not key.strip():
             raise ValueError("init authorized keys cannot contain empty keys.")

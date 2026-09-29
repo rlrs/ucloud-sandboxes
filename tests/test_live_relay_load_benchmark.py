@@ -1,4 +1,5 @@
 import json
+import ast
 import hashlib
 import io
 import asyncio
@@ -19,6 +20,59 @@ from datetime import datetime, timedelta, timezone
 from scripts.live_relay_load_benchmark import AGENT, uploaded_tool_probe, with_lease_renewal, parse_args, ContinuationObserver, response_window, retry_control, safe_error, summary, meets_useful_action_slo
 from scripts.live_relay_load_benchmark import resource_sample, resource_summary, FleetHealthQualification
 from scripts.live_relay_load_benchmark import finish_primary
+from scripts.live_relay_load_benchmark import MeasuredRelayClient, guest_retry_summary, response_retry_summary
+
+
+class RetryEvidenceTests(unittest.IsolatedAsyncioTestCase):
+    def test_terminal_guest_transport_error_excludes_authenticated_url(self):
+        from urllib.error import HTTPError
+        namespace = {'json': json, 'sys': sys, 'time': time}
+        tree = ast.parse(AGENT)
+        helpers = ast.Module(body=[node for node in tree.body if isinstance(node, ast.FunctionDef)
+                                   and node.name in {'transport_failure', 'exhausted'}], type_ignores=[])
+        exec(compile(helpers, '<guest-diagnostic-helpers>', 'exec'), namespace)
+        counts, codes = {}, {}
+        error = HTTPError('http://relay/_relay/private-secret/model', 429, 'private-secret', {},
+                          io.BytesIO(b'relay durable storage budget is exhausted'))
+        namespace['transport_failure'](error, counts, codes)
+        output = io.StringIO()
+        with redirect_stderr(output):
+            terminal = namespace['exhausted']('model', 0, counts, codes, time.monotonic())
+        self.assertNotIn('private-secret', output.getvalue() + str(terminal))
+        self.assertIn('http_429', str(terminal))
+        self.assertIn('relay_durable_storage_budget_exhausted', output.getvalue())
+
+    async def test_sdk_response_retries_keep_policy_and_record_status_only(self):
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, patch
+        from ucloud_sandboxes_sdk import AsyncRelayWorkerClient
+        from ucloud_sandboxes_sdk.relay import RelayApiError
+        request = SimpleNamespace(request_id='request')
+        client = MeasuredRelayClient('http://relay')
+        client.model_request(request, 0)
+        with patch.object(AsyncRelayWorkerClient, 'respond_to', new=AsyncMock(side_effect=[
+            RelayApiError('secret authenticated URL', status_code=429), {'ok': True},
+        ])):
+            result = await client.commit_response_bytes_to(request, b'{}', attempts=2, retry_delay_seconds=0)
+        self.assertEqual(result, {'ok': True})
+        summary = response_retry_summary(client.response_attempts)
+        self.assertEqual(summary['model']['retries'], 1)
+        self.assertEqual(summary['model']['status_counts'], {'http_429': 1, 'success': 1})
+        self.assertNotIn('secret', json.dumps(client.response_attempts))
+        await client.close()
+
+    def test_initial_admission_retries_are_not_hidden_by_warmup_exclusion(self):
+        cycles = [{'cycle': 0, 'guest_transport_retries': 4, 'guest_receipt_transport_retries': 2,
+                   'guest_model_failed_attempts_by_kind': {'http_429': 4},
+                   'guest_model_error_codes': {'relay_durable_storage_budget_exhausted': 4},
+                   'guest_receipt_failed_attempts_by_kind': {'http_503': 2},
+                   'guest_request_to_claim_seconds': 20, 'guest_model_request_seconds': 40},
+                  {'cycle': 1, 'guest_transport_retries': 0, 'guest_request_to_claim_seconds': .1}]
+        result = guest_retry_summary(cycles, 1)
+        self.assertEqual(result['initial_cycle']['model_retries'], 4)
+        self.assertEqual(result['measured_cycles']['model_retries'], 0)
+        self.assertEqual(result['all_cycles']['receipt_retries'], 2)
+        self.assertEqual(result['all_cycles']['model_error_codes']['relay_durable_storage_budget_exhausted'], 4)
 
 
 class PrimaryCompletionTests(unittest.IsolatedAsyncioTestCase):
@@ -439,17 +493,31 @@ class RelayLoadBenchmarkTests(unittest.TestCase):
     def test_guest_exercises_memory_files_relay_and_tool_with_stable_identity(self):
         self._exercise_guest()
 
+    def test_guest_http429_budget_and_receipt_retries_are_visible(self):
+        self._exercise_guest(reject_model=2, reject_observer=1)
+
     def test_sqlite_wal_connections_content_and_recoverable_files_survive_cycles(self):
         self._exercise_guest(sqlite_transactions=4)
 
     def test_sqlite_content_change_fails_integrity_even_when_rows_survive(self):
         self._exercise_guest(sqlite_transactions=4, corrupt_sqlite=True)
 
-    def _exercise_guest(self, sqlite_transactions=0, corrupt_sqlite=False):
+    def _exercise_guest(self, sqlite_transactions=0, corrupt_sqlite=False, reject_model=0, reject_observer=0):
         requests = []
+        rejected = {'/relay': reject_model, '/observe': reject_observer}
+        retry_ids = {'/relay': [], '/observe': []}
         class Echo(BaseHTTPRequestHandler):
             def do_POST(self):
                 body = self.rfile.read(int(self.headers['Content-Length']))
+                if rejected[self.path]:
+                    rejected[self.path] -= 1
+                    retry_ids[self.path].append(self.headers['X-UCloud-Relay-Request-Id'])
+                    error = b'relay durable storage budget is exhausted'
+                    self.send_response(429)
+                    self.send_header('Content-Length', str(len(error)))
+                    self.end_headers()
+                    self.wfile.write(error)
+                    return
                 requests.append((self.path, json.loads(body), self.headers['X-UCloud-Relay-Request-Id']))
                 if corrupt_sqlite and self.path == '/relay' and json.loads(body)['cycle'] == 1:
                     with closing(sqlite3.connect(root / 'repository.sqlite')) as corruptor:
@@ -502,7 +570,15 @@ class RelayLoadBenchmarkTests(unittest.TestCase):
                     self.assertEqual(results[0]['pid'], results[1]['pid'])
                     self.assertNotEqual(results[0]['digest'], results[1]['digest'])
                     self.assertEqual([r['tool'] for r in results], ['42', '42'])
-                    self.assertEqual([r['transport_retries'] for r in results], [0, 0])
+                    self.assertEqual([r['transport_retries'] for r in results], [reject_model, 0])
+                    self.assertEqual([r['receipt_transport_retries'] for r in results], [reject_observer, 0])
+                    if reject_model:
+                        self.assertEqual(results[0]['model_failed_attempts_by_kind'], {'http_429': reject_model})
+                        self.assertEqual(results[0]['model_error_codes'], {'relay_durable_storage_budget_exhausted': reject_model})
+                        self.assertTrue(all(value == requests[0][2] for value in retry_ids['/relay']))
+                    if reject_observer:
+                        self.assertEqual(results[0]['receipt_failed_attempts_by_kind'], {'http_429': reject_observer})
+                        self.assertTrue(all(value == requests[1][2] for value in retry_ids['/observe']))
                     for result in results:
                         self.assertGreaterEqual(result['verification_seconds'], 0)
                         self.assertGreater(result['tool_seconds'], 0)

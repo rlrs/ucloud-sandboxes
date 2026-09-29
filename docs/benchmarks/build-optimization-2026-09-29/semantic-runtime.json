@@ -1,0 +1,499 @@
+{
+  "started_at": "2026-09-29T09:50:40.518119+00:00",
+  "source_receipt_sha256": "08339efd5f4e3b6f6af9e332945ad5ff71f7ed5285a2300fadd9d1d0043d5119",
+  "source_run_id": "6c9929b8899b4100",
+  "source_receipt_complete": false,
+  "owner": "5f1b12d45c1f44b9",
+  "selected_cases": [
+    "links",
+    "whiteout-opaque",
+    "missing-parent"
+  ],
+  "cases": [
+    {
+      "case": "links",
+      "sandbox_id": "qs-5f1b12d45c1f44b9-0",
+      "image_id": "qs-5f1b12d45c1f44b9-0",
+      "source_manifest": "sha256:302c4082530a37a79e21835d1c2c8145ff33e94105f495ac3719382fe4a27161",
+      "source_tag": "qual-6c9929b8899b4100-links",
+      "started_at": "2026-09-29T09:50:40.518170+00:00",
+      "build": {
+        "build_id": "ba1e70cf-7cb3-491d-8ba6-b57c2be84cb2",
+        "status": "succeeded",
+        "timings": {
+          "end_to_end_ms": 866,
+          "environment": {
+            "docker_pull_skipped": 1,
+            "groups_reused": 6,
+            "preflight_ms": 242.285,
+            "total_ms": 454.956
+          },
+          "phases": {
+            "cleanup_ms": 0,
+            "docker_build_and_push_ms": 387,
+            "immutable_environment_ms": 455
+          },
+          "preparation_ms": 5,
+          "queue_wait_ms": 2,
+          "total_ms": 859
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T09:50:41.426460+00:00",
+          "id": "qs-5f1b12d45c1f44b9-0",
+          "labels": {},
+          "manifest_digest": "sha256:8c5c47fb061c78051d8479941a44fa5f91c8b32c371b1c66b54e07649d0c06f2",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-44uew6bx",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/qs-5f1b12d45c1f44b9-0-a9ab0978d7a5:latest",
+          "updated_at": "2026-09-29T09:50:41.426460+00:00"
+        }
+      },
+      "exit_code": 0,
+      "verified": true,
+      "filesystem": {
+        "verified": true,
+        "case": "links",
+        "observed": {
+          "": {
+            "kind": "directory",
+            "mode": 488,
+            "uid": 23123,
+            "gid": 23124,
+            "mtime_ns": 0,
+            "inode": 47,
+            "device": 20,
+            "nlink": 1
+          },
+          "delete": {
+            "kind": "directory",
+            "mode": 488,
+            "uid": 23123,
+            "gid": 23124,
+            "mtime_ns": 0,
+            "inode": 48,
+            "device": 20,
+            "nlink": 1
+          },
+          "hard-target": {
+            "kind": "file",
+            "mode": 416,
+            "uid": 23123,
+            "gid": 23124,
+            "mtime_ns": 0,
+            "inode": 806,
+            "device": 28,
+            "nlink": 1,
+            "content_sha256": "sha256:8e2fa47ad445aa61fb85ef33e3cc4bbf7c14961e9aa3086b5091c77419f01f99"
+          },
+          "implicit": {
+            "kind": "directory",
+            "mode": 488,
+            "uid": 23123,
+            "gid": 23124,
+            "mtime_ns": 0,
+            "inode": 49,
+            "device": 20,
+            "nlink": 1
+          },
+          "links": {
+            "kind": "directory",
+            "mode": 488,
+            "uid": 23123,
+            "gid": 23124,
+            "mtime_ns": 0,
+            "inode": 50,
+            "device": 20,
+            "nlink": 1
+          },
+          "opaque": {
+            "kind": "directory",
+            "mode": 488,
+            "uid": 23123,
+            "gid": 23124,
+            "mtime_ns": 0,
+            "inode": 51,
+            "device": 20,
+            "nlink": 1
+          },
+          "delete/gone": {
+            "kind": "file",
+            "mode": 416,
+            "uid": 23123,
+            "gid": 23124,
+            "mtime_ns": 0,
+            "inode": 810,
+            "device": 28,
+            "nlink": 1,
+            "content_sha256": "sha256:142ada6f57d7d0bb56cfee3dee494f02ef8b5968b6b3f20c94fa43f8b1ed89bf"
+          },
+          "links/absolute": {
+            "kind": "symlink",
+            "mode": 511,
+            "uid": 23123,
+            "gid": 23124,
+            "mtime_ns": 0,
+            "inode": 811,
+            "device": 28,
+            "nlink": 1,
+            "link": "/missing/qualification-target"
+          },
+          "links/dangling": {
+            "kind": "symlink",
+            "mode": 511,
+            "uid": 23123,
+            "gid": 23124,
+            "mtime_ns": 0,
+            "inode": 812,
+            "device": 28,
+            "nlink": 1,
+            "link": "../missing"
+          },
+          "links/executable": {
+            "kind": "file",
+            "mode": 489,
+            "uid": 23123,
+            "gid": 23124,
+            "mtime_ns": 0,
+            "inode": 813,
+            "device": 28,
+            "nlink": 2,
+            "content_sha256": "sha256:c1ad609d0a4f95252245d1e7b07d34e46a7579f0d493281e886a983e647d2ef3"
+          },
+          "links/hard": {
+            "kind": "file",
+            "mode": 489,
+            "uid": 23123,
+            "gid": 23124,
+            "mtime_ns": 0,
+            "inode": 813,
+            "device": 28,
+            "nlink": 2,
+            "content_sha256": "sha256:c1ad609d0a4f95252245d1e7b07d34e46a7579f0d493281e886a983e647d2ef3"
+          },
+          "links/relative": {
+            "kind": "symlink",
+            "mode": 511,
+            "uid": 23123,
+            "gid": 23124,
+            "mtime_ns": 0,
+            "inode": 814,
+            "device": 28,
+            "nlink": 1,
+            "link": "executable"
+          },
+          "opaque/old": {
+            "kind": "file",
+            "mode": 416,
+            "uid": 23123,
+            "gid": 23124,
+            "mtime_ns": 0,
+            "inode": 815,
+            "device": 28,
+            "nlink": 1,
+            "content_sha256": "sha256:7efe6099a2b3db8a1ace2f2262b5ae76bd60351244af1844b1d0e3e804f0bbb7"
+          }
+        },
+        "execution_identity": {
+          "uid": 23123,
+          "gid": 23124
+        },
+        "verified_absent": [],
+        "verified_hardlinks": [
+          [
+            "links/hard",
+            "links/executable"
+          ]
+        ]
+      },
+      "cleanup": {
+        "deleted": true,
+        "absence_observed_twice": true
+      },
+      "finished_at": "2026-09-29T09:52:16.651005+00:00"
+    },
+    {
+      "case": "whiteout-opaque",
+      "sandbox_id": "qs-5f1b12d45c1f44b9-1",
+      "image_id": "qs-5f1b12d45c1f44b9-1",
+      "source_manifest": "sha256:e62787a62e41ed5e547b6dc30d7a7f9671e061918100efd197235cc3f348c0d6",
+      "source_tag": "qual-6c9929b8899b4100-whiteout-opaque",
+      "started_at": "2026-09-29T09:52:16.651246+00:00",
+      "build": {
+        "build_id": "2994157c-c693-4449-a9a9-b069f52c949c",
+        "status": "succeeded",
+        "timings": {
+          "end_to_end_ms": 1481,
+          "environment": {
+            "docker_pull_skipped": 1,
+            "groups_reused": 6,
+            "preflight_ms": 299.331,
+            "total_ms": 473.274
+          },
+          "phases": {
+            "cleanup_ms": 0,
+            "docker_build_and_push_ms": 987,
+            "immutable_environment_ms": 473
+          },
+          "preparation_ms": 5,
+          "queue_wait_ms": 2,
+          "total_ms": 1474
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T09:52:18.174479+00:00",
+          "id": "qs-5f1b12d45c1f44b9-1",
+          "labels": {},
+          "manifest_digest": "sha256:721ec447d42de0d665bd1d10916f984f99230ce71322bb125c556dff8027f8e7",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-wy1xd7f3",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/qs-5f1b12d45c1f44b9-1-c10722a504b5:latest",
+          "updated_at": "2026-09-29T09:52:18.174479+00:00"
+        }
+      },
+      "exit_code": 0,
+      "verified": true,
+      "filesystem": {
+        "verified": true,
+        "case": "whiteout-opaque",
+        "observed": {
+          "": {
+            "kind": "directory",
+            "mode": 488,
+            "uid": 23123,
+            "gid": 23124,
+            "mtime_ns": 0,
+            "inode": 47,
+            "device": 20,
+            "nlink": 1
+          },
+          "delete": {
+            "kind": "directory",
+            "mode": 488,
+            "uid": 23123,
+            "gid": 23124,
+            "mtime_ns": 0,
+            "inode": 48,
+            "device": 20,
+            "nlink": 1
+          },
+          "hard-target": {
+            "kind": "file",
+            "mode": 416,
+            "uid": 23123,
+            "gid": 23124,
+            "mtime_ns": 0,
+            "inode": 806,
+            "device": 28,
+            "nlink": 1,
+            "content_sha256": "sha256:8e2fa47ad445aa61fb85ef33e3cc4bbf7c14961e9aa3086b5091c77419f01f99"
+          },
+          "implicit": {
+            "kind": "directory",
+            "mode": 488,
+            "uid": 23123,
+            "gid": 23124,
+            "mtime_ns": 0,
+            "inode": 49,
+            "device": 20,
+            "nlink": 1
+          },
+          "opaque": {
+            "kind": "directory",
+            "mode": 488,
+            "uid": 23123,
+            "gid": 23124,
+            "mtime_ns": 0,
+            "inode": 50,
+            "device": 20,
+            "nlink": 1
+          },
+          "opaque/new": {
+            "kind": "file",
+            "mode": 416,
+            "uid": 23123,
+            "gid": 23124,
+            "mtime_ns": 0,
+            "inode": 809,
+            "device": 28,
+            "nlink": 1,
+            "content_sha256": "sha256:e377bea174b1e686d399e8bfb723e4db8a425bac8647b7ffe19ae29bd0037eae"
+          }
+        },
+        "execution_identity": {
+          "uid": 23123,
+          "gid": 23124
+        },
+        "verified_absent": [
+          "delete/.wh.gone",
+          "delete/gone",
+          "opaque/.wh..wh..opq",
+          "opaque/old"
+        ],
+        "verified_hardlinks": []
+      },
+      "cleanup": {
+        "deleted": true,
+        "absence_observed_twice": true
+      },
+      "finished_at": "2026-09-29T09:52:19.949778+00:00"
+    },
+    {
+      "case": "missing-parent",
+      "sandbox_id": "qs-5f1b12d45c1f44b9-2",
+      "image_id": "qs-5f1b12d45c1f44b9-2",
+      "source_manifest": "sha256:2fb5815e46454763dedd2342bd3498405d699846c7c2233ae8d2f4875ce1e0b5",
+      "source_tag": "qual-6c9929b8899b4100-missing-parent",
+      "started_at": "2026-09-29T09:52:19.950095+00:00",
+      "build": {
+        "build_id": "c31693f0-30fc-46c0-9c75-218c19a931a0",
+        "status": "succeeded",
+        "timings": {
+          "end_to_end_ms": 940,
+          "environment": {
+            "docker_pull_skipped": 1,
+            "groups_reused": 6,
+            "preflight_ms": 273.688,
+            "total_ms": 492.615
+          },
+          "phases": {
+            "cleanup_ms": 0,
+            "docker_build_and_push_ms": 428,
+            "immutable_environment_ms": 492
+          },
+          "preparation_ms": 5,
+          "queue_wait_ms": 2,
+          "total_ms": 933
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T09:52:20.925398+00:00",
+          "id": "qs-5f1b12d45c1f44b9-2",
+          "labels": {},
+          "manifest_digest": "sha256:472ae87d60345acd85da31a401763e406003615a88b36c09e3b8226a276db6e3",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-n3_c6dde",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/qs-5f1b12d45c1f44b9-2-b5a7df4c59ef:latest",
+          "updated_at": "2026-09-29T09:52:20.925398+00:00"
+        }
+      },
+      "exit_code": 0,
+      "verified": true,
+      "filesystem": {
+        "verified": true,
+        "case": "missing-parent",
+        "observed": {
+          "": {
+            "kind": "directory",
+            "mode": 488,
+            "uid": 23123,
+            "gid": 23124,
+            "mtime_ns": 0,
+            "inode": 47,
+            "device": 20,
+            "nlink": 1
+          },
+          "delete": {
+            "kind": "directory",
+            "mode": 488,
+            "uid": 23123,
+            "gid": 23124,
+            "mtime_ns": 0,
+            "inode": 48,
+            "device": 20,
+            "nlink": 1
+          },
+          "hard-target": {
+            "kind": "file",
+            "mode": 416,
+            "uid": 23123,
+            "gid": 23124,
+            "mtime_ns": 0,
+            "inode": 806,
+            "device": 28,
+            "nlink": 1,
+            "content_sha256": "sha256:8e2fa47ad445aa61fb85ef33e3cc4bbf7c14961e9aa3086b5091c77419f01f99"
+          },
+          "implicit": {
+            "kind": "directory",
+            "mode": 493,
+            "uid": 0,
+            "gid": 0,
+            "mtime_ns": 0,
+            "inode": 49,
+            "device": 20,
+            "nlink": 1
+          },
+          "opaque": {
+            "kind": "directory",
+            "mode": 488,
+            "uid": 23123,
+            "gid": 23124,
+            "mtime_ns": 0,
+            "inode": 50,
+            "device": 20,
+            "nlink": 1
+          },
+          "delete/gone": {
+            "kind": "file",
+            "mode": 416,
+            "uid": 23123,
+            "gid": 23124,
+            "mtime_ns": 0,
+            "inode": 809,
+            "device": 28,
+            "nlink": 1,
+            "content_sha256": "sha256:142ada6f57d7d0bb56cfee3dee494f02ef8b5968b6b3f20c94fa43f8b1ed89bf"
+          },
+          "implicit/child": {
+            "kind": "file",
+            "mode": 416,
+            "uid": 23123,
+            "gid": 23124,
+            "mtime_ns": 0,
+            "inode": 810,
+            "device": 28,
+            "nlink": 1,
+            "content_sha256": "sha256:e5f975c3f97ca5c5c393d5714d40c709ea534f4cd1ffc217f5c5a836a9edd15f"
+          },
+          "opaque/old": {
+            "kind": "file",
+            "mode": 416,
+            "uid": 23123,
+            "gid": 23124,
+            "mtime_ns": 0,
+            "inode": 811,
+            "device": 28,
+            "nlink": 1,
+            "content_sha256": "sha256:7efe6099a2b3db8a1ace2f2262b5ae76bd60351244af1844b1d0e3e804f0bbb7"
+          }
+        },
+        "execution_identity": {
+          "uid": 23123,
+          "gid": 23124
+        },
+        "verified_absent": [],
+        "verified_hardlinks": []
+      },
+      "cleanup": {
+        "deleted": true,
+        "absence_observed_twice": true
+      },
+      "finished_at": "2026-09-29T09:52:22.371900+00:00"
+    }
+  ],
+  "complete": true,
+  "limits": {
+    "concurrency": 1,
+    "cpus": 1,
+    "memory_mb": 512,
+    "disk_mb": 1024,
+    "sandbox_ttl_seconds": 600,
+    "suite_seconds_excluding_cleanup": 1200,
+    "security_user": "23123:23124"
+  },
+  "finished_at": "2026-09-29T09:52:22.372301+00:00"
+}

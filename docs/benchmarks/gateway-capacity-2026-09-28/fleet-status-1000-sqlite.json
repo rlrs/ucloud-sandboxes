@@ -1,0 +1,122 @@
+{
+  "python": "3.10.13",
+  "platform": "Linux-5.15.0-190-generic-x86_64-with-glibc2.35",
+  "reads_per_sample": 10,
+  "repeats": 3,
+  "scope": "synthetic complete read/render CPU; excludes IPC, HTTP, TLS and client parse; not production capacity",
+  "routes": 1000,
+  "nodes": 2,
+  "backend": "sqlite",
+  "response_bytes": {
+    "full": 1318054,
+    "status": 336071,
+    "status_16_ids": 5447
+  },
+  "equivalent_visible_status": true,
+  "measurements": {
+    "unchanged": {
+      "median_cpu_ms_per_read": {
+        "full": 14.89605920000001,
+        "status": 9.39321870000005,
+        "status_16_ids": 3.9102091999999815
+      },
+      "status_cpu_reduction_percent": 36.94158586587758,
+      "samples": {
+        "full": [
+          {
+            "cpu_ms_per_read": 14.89605920000001,
+            "wall_ms_per_read": 14.89758649840951
+          },
+          {
+            "cpu_ms_per_read": 16.195488800000014,
+            "wall_ms_per_read": 16.198526276275516
+          },
+          {
+            "cpu_ms_per_read": 14.39534770000004,
+            "wall_ms_per_read": 14.396791392937303
+          }
+        ],
+        "status": [
+          {
+            "cpu_ms_per_read": 9.39321870000005,
+            "wall_ms_per_read": 9.394358331337571
+          },
+          {
+            "cpu_ms_per_read": 9.312762799999996,
+            "wall_ms_per_read": 9.313901839777827
+          },
+          {
+            "cpu_ms_per_read": 9.410047099999952,
+            "wall_ms_per_read": 9.38806589692831
+          }
+        ],
+        "status_16_ids": [
+          {
+            "cpu_ms_per_read": 3.9102091999999815,
+            "wall_ms_per_read": 3.911035507917404
+          },
+          {
+            "cpu_ms_per_read": 3.9181280000000207,
+            "wall_ms_per_read": 3.91889251768589
+          },
+          {
+            "cpu_ms_per_read": 3.8784343000000105,
+            "wall_ms_per_read": 3.8791437167674303
+          }
+        ]
+      }
+    },
+    "fresh_heartbeat_each_read": {
+      "median_cpu_ms_per_read": {
+        "full": 70.02866739999973,
+        "status": 60.31583209999995,
+        "status_16_ids": 23.44160999999989
+      },
+      "status_cpu_reduction_percent": 13.869798841838044,
+      "samples": {
+        "full": [
+          {
+            "cpu_ms_per_read": 68.8332803000001,
+            "wall_ms_per_read": 68.8369753304869
+          },
+          {
+            "cpu_ms_per_read": 70.02866739999973,
+            "wall_ms_per_read": 70.03406691364944
+          },
+          {
+            "cpu_ms_per_read": 71.76985699999996,
+            "wall_ms_per_read": 71.77804089151323
+          }
+        ],
+        "status": [
+          {
+            "cpu_ms_per_read": 60.31583209999995,
+            "wall_ms_per_read": 60.32039173878729
+          },
+          {
+            "cpu_ms_per_read": 61.278704300000086,
+            "wall_ms_per_read": 61.28321117721498
+          },
+          {
+            "cpu_ms_per_read": 60.27699710000061,
+            "wall_ms_per_read": 60.2817521430552
+          }
+        ],
+        "status_16_ids": [
+          {
+            "cpu_ms_per_read": 23.244963500000093,
+            "wall_ms_per_read": 23.247268330305815
+          },
+          {
+            "cpu_ms_per_read": 25.198267399999974,
+            "wall_ms_per_read": 25.199509551748633
+          },
+          {
+            "cpu_ms_per_read": 23.44160999999989,
+            "wall_ms_per_read": 23.444273229688406
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,135 @@
+{
+  "populate": {
+    "seconds": 1.167509328108281,
+    "metrics": {
+      "preflight_misses": 1,
+      "preflight_ms": 4.773,
+      "docker_pull_ms": 63.974,
+      "layer_lock_wait_ms": 0.006,
+      "component_lookup_ms": 1.147,
+      "mkfs_ms": 489.977,
+      "sign_ms": 59.535,
+      "publish_component_ms": 281.032,
+      "groups_built": 1,
+      "erofs_bytes_built": 67112960,
+      "total_ms": 1167.478
+    },
+    "manifest": "sha256:fabec967942ddfdc1bed8b827e199aebbaf3f6860f38b20d0c7626536cf0d599",
+    "docker_commands": [
+      [
+        "docker",
+        "pull",
+        "127.0.0.1:32771/ucloud-build-cache-fixture:base"
+      ],
+      [
+        "docker",
+        "image",
+        "inspect",
+        "127.0.0.1:32771/ucloud-build-cache-fixture:base"
+      ],
+      [
+        "docker",
+        "info",
+        "--format={{json .DockerRootDir}}"
+      ],
+      [
+        "docker",
+        "image",
+        "tag",
+        "sha256:d9a956fcab18464009d59640a57f9057f0be87df1d4ef1b05093dee74d6d6390",
+        "ucloud-sandbox-rootfs-cache:d9a956fcab18464009d59640a57f9057f0be87df1d4ef1b05093dee74d6d6390"
+      ],
+      [
+        "docker",
+        "image",
+        "inspect",
+        "127.0.0.1:32771/ucloud-build-cache-fixture:base"
+      ],
+      [
+        "docker",
+        "image",
+        "ls",
+        "--no-trunc",
+        "--filter",
+        "reference=ucloud-sandbox-rootfs-cache:d9a956fcab18464009d59640a57f9057f0be87df1d4ef1b05093dee74d6d6390",
+        "--format={{.Repository}} {{.Tag}} {{.ID}}"
+      ],
+      [
+        "docker",
+        "image",
+        "rm",
+        "ucloud-sandbox-rootfs-cache:d9a956fcab18464009d59640a57f9057f0be87df1d4ef1b05093dee74d6d6390"
+      ]
+    ]
+  },
+  "baseline_cold_docker": {
+    "seconds": 0.33703858917579055,
+    "metrics": {
+      "preflight_ms": 0.016,
+      "docker_pull_ms": 114.095,
+      "layer_lock_wait_ms": 0.004,
+      "component_lookup_ms": 16.044,
+      "groups_reused": 1,
+      "total_ms": 337.012
+    },
+    "manifest": "sha256:fabec967942ddfdc1bed8b827e199aebbaf3f6860f38b20d0c7626536cf0d599",
+    "docker_commands": [
+      [
+        "docker",
+        "pull",
+        "127.0.0.1:32771/ucloud-build-cache-fixture:base"
+      ],
+      [
+        "docker",
+        "image",
+        "inspect",
+        "127.0.0.1:32771/ucloud-build-cache-fixture:base"
+      ],
+      [
+        "docker",
+        "info",
+        "--format={{json .DockerRootDir}}"
+      ],
+      [
+        "docker",
+        "image",
+        "tag",
+        "sha256:d9a956fcab18464009d59640a57f9057f0be87df1d4ef1b05093dee74d6d6390",
+        "ucloud-sandbox-rootfs-cache:d9a956fcab18464009d59640a57f9057f0be87df1d4ef1b05093dee74d6d6390"
+      ],
+      [
+        "docker",
+        "image",
+        "inspect",
+        "127.0.0.1:32771/ucloud-build-cache-fixture:base"
+      ],
+      [
+        "docker",
+        "image",
+        "ls",
+        "--no-trunc",
+        "--filter",
+        "reference=ucloud-sandbox-rootfs-cache:d9a956fcab18464009d59640a57f9057f0be87df1d4ef1b05093dee74d6d6390",
+        "--format={{.Repository}} {{.Tag}} {{.ID}}"
+      ],
+      [
+        "docker",
+        "image",
+        "rm",
+        "ucloud-sandbox-rootfs-cache:d9a956fcab18464009d59640a57f9057f0be87df1d4ef1b05093dee74d6d6390"
+      ]
+    ]
+  },
+  "optimized_cold_docker": {
+    "seconds": 0.06399240624159575,
+    "metrics": {
+      "groups_reused": 1,
+      "docker_pull_skipped": 1,
+      "preflight_ms": 33.593,
+      "total_ms": 63.969
+    },
+    "manifest": "sha256:fabec967942ddfdc1bed8b827e199aebbaf3f6860f38b20d0c7626536cf0d599",
+    "docker_commands": []
+  },
+  "scope": "64 MiB incompressible single-layer image; real Docker overlay2, local HTTP registry, mkfs.erofs 1.4; cached components with image absent locally; not production throughput"
+}

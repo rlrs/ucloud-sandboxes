@@ -63,6 +63,17 @@ requiring placement use the [durable placement queue](placement-authority.md), w
 worker RPCs outside routing transactions. An explicit
 `?refresh=true` request fans out to nodes and reconciles their inventories.
 
+Fleet monitors can opt into `GET /v1/sandboxes?view=status`. It reads current
+route state and heartbeat freshness while omitting full user specifications
+and attached snapshot descriptors. Records retain `id`, `spec.id`, `generation`,
+`state`, `cached_state`, `node`, `created_at` and `updated_at`. The envelope sets
+`view` to `status` and `refresh_supported` to `false`. The default full response
+is unchanged. Add repeated exact IDs, such as
+`?view=status&id=agent-a&id=agent-b`, to read only those routes (at most 256 IDs).
+Missing IDs are omitted. Status requests cannot use `refresh=true`; use the
+ordinary full endpoint for explicit reconciliation. Existing authentication,
+generation, heartbeat expiry and detached-snapshot validation still apply.
+
 A post-start worker suspension or final provider state is node loss. The
 gateway removes that node from placement and reports affected non-portable work
 as `node_lost`. It never routes traffic to a rebooted copy of the earlier guest

@@ -5550,6 +5550,7 @@ class ControlPlaneTests(unittest.TestCase):
                     build_heartbeat(
                         job_id="job-builder",
                         node_id="builder-1",
+                        node_epoch=builder.RequestHandlerClass.node_epoch,
                         node_url=builder_url,
                         capabilities=("image-cache", "image-build", "snapshot"),
                         total_resources=ResourceQuantity(

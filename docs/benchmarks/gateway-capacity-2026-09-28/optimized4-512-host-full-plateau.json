@@ -1,0 +1,2817 @@
+{
+  "metadata": {
+    "type": "metadata",
+    "version": 1,
+    "clock_ticks": 100,
+    "page_bytes": 4096,
+    "cpu_count": 8,
+    "interval_seconds": 1.0,
+    "note": "Counters only; cgroup views may overlap; exited short processes are not individually attributed."
+  },
+  "sample_count": 349,
+  "interval_count": 348,
+  "started_at": "2026-09-28T13:36:10.535307+00:00",
+  "finished_at": "2026-09-28T13:41:58.600744+00:00",
+  "collection_seconds": {
+    "count": 349,
+    "mean": 0.03934043955299613,
+    "p95": 0.07095079099963186,
+    "max": 0.11589801000081934
+  },
+  "summary": {
+    "host/user_cores": {
+      "count": 348,
+      "mean": 1.4509053405008507,
+      "p95": 1.9798317519136412,
+      "max": 2.589574455233993,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 505.01
+    },
+    "host/nice_cores": {
+      "count": 348,
+      "mean": 0.01939290518678985,
+      "p95": 0.028862231107980515,
+      "max": 0.4999564622927954,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 6.75
+    },
+    "host/system_cores": {
+      "count": 348,
+      "mean": 0.3553929439416155,
+      "p95": 0.5199594795601945,
+      "max": 0.6699433964784289,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 123.7
+    },
+    "host/idle_cores": {
+      "count": 348,
+      "mean": 1.8343102586011628,
+      "p95": 2.5997776903976275,
+      "max": 3.119730979354461,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 638.46
+    },
+    "host/iowait_cores": {
+      "count": 348,
+      "mean": 0.11753537054689969,
+      "p95": 0.34997093911269556,
+      "max": 0.6299462454259663,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 40.910000000000004
+    },
+    "host/irq_cores": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 0.0
+    },
+    "host/softirq_cores": {
+      "count": 348,
+      "mean": 0.14603575861400417,
+      "p95": 0.26997440021722247,
+      "max": 0.5699562108316085,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 50.83
+    },
+    "host/steal_cores": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 0.0
+    },
+    "host/busy_cores": {
+      "count": 348,
+      "mean": 1.9717269482432602,
+      "p95": 2.7697896123211883,
+      "max": 3.379444655865211,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 686.29
+    },
+    "host/cpu_some_pressure_fraction": {
+      "count": 348,
+      "mean": 0.20656167649726315,
+      "p95": 0.37244570976885283,
+      "max": 0.5547678350025784,
+      "covered_seconds": 348.0654360440021
+    },
+    "host/cpu_full_pressure_fraction": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021
+    },
+    "host/memory_some_pressure_fraction": {
+      "count": 348,
+      "mean": 0.00022832201008879648,
+      "p95": 0.0012638894943500143,
+      "max": 0.011209079095696923,
+      "covered_seconds": 348.0654360440021
+    },
+    "host/memory_full_pressure_fraction": {
+      "count": 348,
+      "mean": 0.00019981874899870135,
+      "p95": 0.0012328922045360504,
+      "max": 0.0087342824175658,
+      "covered_seconds": 348.0654360440021
+    },
+    "host/io_some_pressure_fraction": {
+      "count": 348,
+      "mean": 0.06569202118968633,
+      "p95": 0.18949759100407906,
+      "max": 0.4459138163229835,
+      "covered_seconds": 348.0654360440021
+    },
+    "host/io_full_pressure_fraction": {
+      "count": 348,
+      "mean": 0.03262275947033284,
+      "p95": 0.09719719801596423,
+      "max": 0.19275455186826818,
+      "covered_seconds": 348.0654360440021
+    },
+    "network/lo/rx_bytes_per_second": {
+      "count": 348,
+      "mean": 19277981.2016489,
+      "p95": 24599153.84410344,
+      "max": 26201487.89031117,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 6709998933.0
+    },
+    "network/lo/rx_packets_per_second": {
+      "count": 348,
+      "mean": 3688.2691214352817,
+      "p95": 4875.573713964138,
+      "max": 5769.495261493567,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 1283759.0
+    },
+    "network/lo/rx_errors_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "network/lo/rx_drops_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "network/lo/tx_bytes_per_second": {
+      "count": 348,
+      "mean": 19277981.2016489,
+      "p95": 24599153.84410344,
+      "max": 26201487.89031117,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 6709998933.0
+    },
+    "network/lo/tx_packets_per_second": {
+      "count": 348,
+      "mean": 3688.2691214352817,
+      "p95": 4875.573713964138,
+      "max": 5769.495261493567,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 1283759.0
+    },
+    "network/lo/tx_errors_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "network/lo/tx_drops_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "network/eth0/rx_bytes_per_second": {
+      "count": 348,
+      "mean": 65138796.867304444,
+      "p95": 194346070.1386128,
+      "max": 637345692.1184734,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 22672563735.0
+    },
+    "network/eth0/rx_packets_per_second": {
+      "count": 348,
+      "mean": 5353.398548209881,
+      "p95": 11005.299292607457,
+      "max": 35611.62031489972,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 1863333.0
+    },
+    "network/eth0/rx_errors_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "network/eth0/rx_drops_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "network/eth0/tx_bytes_per_second": {
+      "count": 348,
+      "mean": 17047889.990001354,
+      "p95": 21504194.953996867,
+      "max": 22614966.575031716,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 5933781263.0
+    },
+    "network/eth0/tx_packets_per_second": {
+      "count": 348,
+      "mean": 3904.949642366023,
+      "p95": 6652.497290756446,
+      "max": 20113.68871600119,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 1359178.0
+    },
+    "network/eth0/tx_errors_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "network/eth0/tx_drops_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "network/enp7s0/rx_bytes_per_second": {
+      "count": 348,
+      "mean": 39857809.98158683,
+      "p95": 91716022.03800504,
+      "max": 121989475.054539,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 13873126011.0
+    },
+    "network/enp7s0/rx_packets_per_second": {
+      "count": 348,
+      "mean": 4485.481286922811,
+      "p95": 10341.01943350561,
+      "max": 22818.377917471822,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 1561241.0
+    },
+    "network/enp7s0/rx_errors_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "network/enp7s0/rx_drops_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "network/enp7s0/tx_bytes_per_second": {
+      "count": 348,
+      "mean": 104345003.38151531,
+      "p95": 274240273.259386,
+      "max": 722047439.2036848,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 36318889101.0
+    },
+    "network/enp7s0/tx_packets_per_second": {
+      "count": 348,
+      "mean": 5066.9753941814615,
+      "p95": 12144.226777095908,
+      "max": 36202.56423196011,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 1763639.0
+    },
+    "network/enp7s0/tx_errors_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "network/enp7s0/tx_drops_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "network/docker0/rx_bytes_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "network/docker0/rx_packets_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "network/docker0/rx_errors_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "network/docker0/rx_drops_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "network/docker0/tx_bytes_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "network/docker0/tx_packets_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "network/docker0/tx_errors_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "network/docker0/tx_drops_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "network/softnet/processed_per_second": {
+      "count": 348,
+      "mean": 12341.529939953436,
+      "p95": 21608.11723118197,
+      "max": 58046.49115598929,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 4295660.0
+    },
+    "network/softnet/dropped_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "network/softnet/time_squeeze_per_second": {
+      "count": 348,
+      "mean": 0.03160325289699087,
+      "p95": 0.0,
+      "max": 1.9995603846455925,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 11.0
+    },
+    "network/tcp/InSegs_per_second": {
+      "count": 348,
+      "mean": 8454.838358692901,
+      "p95": 11784.061246358979,
+      "max": 13697.762160564029,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 2942837.0
+    },
+    "network/tcp/OutSegs_per_second": {
+      "count": 348,
+      "mean": 47134.38135789498,
+      "p95": 80140.80920559968,
+      "max": 200106.13767347994,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 16405849.0
+    },
+    "network/tcp/RetransSegs_per_second": {
+      "count": 348,
+      "mean": 109.28692154078506,
+      "p95": 418.96705159367406,
+      "max": 1204.8956403745758,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 38039.0
+    },
+    "network/tcp_ext/ListenOverflows_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "network/tcp_ext/ListenDrops_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "network/conntrack/count": {
+      "count": 348,
+      "mean": 22328.269352465068,
+      "p95": 26993,
+      "max": 27742,
+      "covered_seconds": 348.0654360440021
+    },
+    "network/conntrack/max": {
+      "count": 348,
+      "mean": 262144.0,
+      "p95": 262144,
+      "max": 262144,
+      "covered_seconds": 348.0654360440021
+    },
+    "network/conntrack/utilization_fraction": {
+      "count": 348,
+      "mean": 0.08517558804498698,
+      "p95": 0.10297012329101562,
+      "max": 0.10582733154296875,
+      "covered_seconds": 348.0654360440021
+    },
+    "host/online_cpu_count": {
+      "count": 348,
+      "mean": 4.0,
+      "p95": 4,
+      "max": 4,
+      "covered_seconds": 348.0654360440021
+    },
+    "cgroup/container:ucloud-sandbox-registry/cores": {
+      "count": 348,
+      "mean": 0.1091437588051617,
+      "p95": 0.2539405618473237,
+      "max": 0.28549713805352706,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 37.98917
+    },
+    "cgroup/container:ucloud-sandbox-registry/user_cores": {
+      "count": 348,
+      "mean": 0.03633319683716387,
+      "p95": 0.08560464647497801,
+      "max": 0.09805146138486302,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 12.64633
+    },
+    "cgroup/container:ucloud-sandbox-registry/system_cores": {
+      "count": 348,
+      "mean": 0.07281056196799782,
+      "p95": 0.17099445010738146,
+      "max": 0.19945310367133523,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 25.34284
+    },
+    "cgroup/container:ucloud-sandbox-registry/throttled_seconds_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "cgroup/containerd.service/cores": {
+      "count": 348,
+      "mean": 0.0014018685840966835,
+      "p95": 0.0033306714292819194,
+      "max": 0.011332342134884854,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 0.487942
+    },
+    "cgroup/containerd.service/user_cores": {
+      "count": 348,
+      "mean": 0.0006940591480317508,
+      "p95": 0.0017491157319703525,
+      "max": 0.011332342134884854,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 0.241578
+    },
+    "cgroup/containerd.service/system_cores": {
+      "count": 348,
+      "mean": 0.0007078094360649325,
+      "p95": 0.0017668338663829545,
+      "max": 0.005604083206799551,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 0.246364
+    },
+    "cgroup/containerd.service/throttled_seconds_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "cgroup/nginx.service/cores": {
+      "count": 348,
+      "mean": 0.10656854188564348,
+      "p95": 0.1457544385908547,
+      "max": 0.18150677428167505,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 37.092826
+    },
+    "cgroup/nginx.service/user_cores": {
+      "count": 348,
+      "mean": 0.042800523859302955,
+      "p95": 0.05904824815099547,
+      "max": 0.06780350012293361,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 14.897383
+    },
+    "cgroup/nginx.service/system_cores": {
+      "count": 348,
+      "mean": 0.06376801515331752,
+      "p95": 0.08935030979743717,
+      "max": 0.11887371840900894,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 22.195442
+    },
+    "cgroup/nginx.service/throttled_seconds_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "cgroup/docker.service/cores": {
+      "count": 348,
+      "mean": 0.001201176436108829,
+      "p95": 0.0026248008379767445,
+      "max": 0.01070247510472444,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 0.418088
+    },
+    "cgroup/docker.service/user_cores": {
+      "count": 348,
+      "mean": 0.0006209033636211983,
+      "p95": 0.002153816210551637,
+      "max": 0.007951198631202095,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 0.216115
+    },
+    "cgroup/docker.service/system_cores": {
+      "count": 348,
+      "mean": 0.0005802730724876306,
+      "p95": 0.0019037044346574125,
+      "max": 0.008325297972473455,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 0.20197299999999999
+    },
+    "cgroup/docker.service/throttled_seconds_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "cgroup/ucloud-sandbox-registry.service/cores": {
+      "count": 348,
+      "mean": 0.0003807416257879928,
+      "p95": 0.0009699272001778819,
+      "max": 0.004345627679664139,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 0.132523
+    },
+    "cgroup/ucloud-sandbox-registry.service/user_cores": {
+      "count": 348,
+      "mean": 0.00013143505577559438,
+      "p95": 0.0006309521252431718,
+      "max": 0.0036346885907913356,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 0.045748
+    },
+    "cgroup/ucloud-sandbox-registry.service/system_cores": {
+      "count": 348,
+      "mean": 0.00024930944303538905,
+      "p95": 0.0008528427971892533,
+      "max": 0.0019018562411412141,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 0.086776
+    },
+    "cgroup/ucloud-sandbox-registry.service/throttled_seconds_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "cgroup/ucloud-gateway-qualification-complete-sampler.service/cores": {
+      "count": 348,
+      "mean": 0.034780356640955266,
+      "p95": 0.044269802204508546,
+      "max": 0.07781552013203658,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 12.10584
+    },
+    "cgroup/ucloud-gateway-qualification-complete-sampler.service/user_cores": {
+      "count": 348,
+      "mean": 0.01607112175106303,
+      "p95": 0.023407073200012098,
+      "max": 0.03451350353026316,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 5.593802
+    },
+    "cgroup/ucloud-gateway-qualification-complete-sampler.service/system_cores": {
+      "count": 348,
+      "mean": 0.01870923201686925,
+      "p95": 0.02709906295018345,
+      "max": 0.04631060303474371,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 6.512037
+    },
+    "cgroup/ucloud-gateway-qualification-complete-sampler.service/throttled_seconds_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "cgroup/ucloud-sandbox-placement.service/cores": {
+      "count": 348,
+      "mean": 0.012146954457912643,
+      "p95": 0.014582355023695768,
+      "max": 0.019653808443102924,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 4.2279349999999996
+    },
+    "cgroup/ucloud-sandbox-placement.service/user_cores": {
+      "count": 348,
+      "mean": 0.010223741375889255,
+      "p95": 0.012749952502161594,
+      "max": 0.01471685311570566,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 3.558531
+    },
+    "cgroup/ucloud-sandbox-placement.service/system_cores": {
+      "count": 348,
+      "mean": 0.0019232130820233887,
+      "p95": 0.004433279367222072,
+      "max": 0.007597335354736243,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 0.669404
+    },
+    "cgroup/ucloud-sandbox-placement.service/throttled_seconds_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "cgroup/ucloud-sandbox-gateway.service/cores": {
+      "count": 348,
+      "mean": 0.6860226735349083,
+      "p95": 0.9371538198681602,
+      "max": 1.364428942293428,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 238.780781
+    },
+    "cgroup/ucloud-sandbox-gateway.service/user_cores": {
+      "count": 348,
+      "mean": 0.5754035455984806,
+      "p95": 0.7859433893937747,
+      "max": 1.1950846800570964,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 200.278086
+    },
+    "cgroup/ucloud-sandbox-gateway.service/system_cores": {
+      "count": 348,
+      "mean": 0.11061912506340481,
+      "p95": 0.17060264164317213,
+      "max": 0.35919465164173675,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 38.502694
+    },
+    "cgroup/ucloud-sandbox-gateway.service/throttled_seconds_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "cgroup/ucloud-sandbox-autoscaler.service/cores": {
+      "count": 348,
+      "mean": 0.033593008064500364,
+      "p95": 0.17220839924085565,
+      "max": 0.4366761093174313,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 11.692565
+    },
+    "cgroup/ucloud-sandbox-autoscaler.service/user_cores": {
+      "count": 348,
+      "mean": 0.029895349903931688,
+      "p95": 0.1587763513999233,
+      "max": 0.2826867027612619,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 10.405538
+    },
+    "cgroup/ucloud-sandbox-autoscaler.service/system_cores": {
+      "count": 348,
+      "mean": 0.003697655287545688,
+      "p95": 0.016773633519145313,
+      "max": 0.15398840667040736,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 1.287026
+    },
+    "cgroup/ucloud-sandbox-autoscaler.service/throttled_seconds_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "cgroup/ucloud-gateway-extra-metrics-20260928-1328.service/cores": {
+      "count": 348,
+      "mean": 0.0025824856676845242,
+      "p95": 0.0069644515354855075,
+      "max": 0.010263196381497157,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 0.898874
+    },
+    "cgroup/ucloud-gateway-extra-metrics-20260928-1328.service/user_cores": {
+      "count": 348,
+      "mean": 0.0007671890752353877,
+      "p95": 0.0028107809558532825,
+      "max": 0.00470159381518867,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 0.267032
+    },
+    "cgroup/ucloud-gateway-extra-metrics-20260928-1328.service/system_cores": {
+      "count": 348,
+      "mean": 0.0018152994654721275,
+      "p95": 0.005098562946068286,
+      "max": 0.007183437529683903,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 0.631843
+    },
+    "cgroup/ucloud-gateway-extra-metrics-20260928-1328.service/throttled_seconds_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "cgroup/ucloud-sandbox-relay.service/cores": {
+      "count": 348,
+      "mean": 0.4367727020754255,
+      "p95": 0.6008840931002365,
+      "max": 0.7152944460118298,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 152.025481
+    },
+    "cgroup/ucloud-sandbox-relay.service/user_cores": {
+      "count": 348,
+      "mean": 0.3625470182682751,
+      "p95": 0.49672198875848544,
+      "max": 0.5976922373370431,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 126.190086
+    },
+    "cgroup/ucloud-sandbox-relay.service/system_cores": {
+      "count": 348,
+      "mean": 0.0742256838071503,
+      "p95": 0.11760220867478663,
+      "max": 0.26238074244783466,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 25.835395
+    },
+    "cgroup/ucloud-sandbox-relay.service/throttled_seconds_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "cgroup/postgresql@18-main.service/cores": {
+      "count": 348,
+      "mean": 0.5028840984310549,
+      "p95": 0.6998484714759791,
+      "max": 1.4396064294777908,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 175.036573
+    },
+    "cgroup/postgresql@18-main.service/user_cores": {
+      "count": 348,
+      "mean": 0.401306089416881,
+      "p95": 0.5482089768909285,
+      "max": 1.2797616967624574,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 139.680779
+    },
+    "cgroup/postgresql@18-main.service/system_cores": {
+      "count": 348,
+      "mean": 0.10157800614115085,
+      "p95": 0.1503888510516067,
+      "max": 0.2072483313050298,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 35.355793
+    },
+    "disk/sda/read_bytes_per_second": {
+      "count": 348,
+      "mean": 1094.4149017768125,
+      "p95": 0.0,
+      "max": 344034.8984310636,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 380928.0
+    },
+    "disk/sda/write_bytes_per_second": {
+      "count": 348,
+      "mean": 5086969.910382491,
+      "p95": 12376993.51579119,
+      "max": 126477889.88232818,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 1770598400.0
+    },
+    "disk/sda/reads_per_second": {
+      "count": 348,
+      "mean": 0.0603334828033462,
+      "p95": 0.0,
+      "max": 12.998900435976523,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 21.0
+    },
+    "disk/sda/writes_per_second": {
+      "count": 348,
+      "mean": 559.7280850815959,
+      "p95": 796.9353008043432,
+      "max": 959.9237993289931,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 194822.0
+    },
+    "disk/sda/read_ms_per_second": {
+      "count": 348,
+      "mean": 0.014365114953177667,
+      "p95": 0.0,
+      "max": 2.9997462544561206,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 5.0
+    },
+    "disk/sda/write_ms_per_second": {
+      "count": 348,
+      "mean": 79.41322848415678,
+      "p95": 165.96351192558419,
+      "max": 3187.730668616763,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 27641.0
+    },
+    "disk/sda/busy_ms_per_second": {
+      "count": 348,
+      "mean": 46.405067344745135,
+      "p95": 68.99396413224544,
+      "max": 79.99399589095933,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 16152.0
+    },
+    "disk/sda/weighted_io_ms_per_second": {
+      "count": 348,
+      "mean": 99.47842105075534,
+      "p95": 191.84598201696238,
+      "max": 3213.7284720621947,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 34625.0
+    },
+    "disk/sda1/read_bytes_per_second": {
+      "count": 348,
+      "mean": 1094.4149017768125,
+      "p95": 0.0,
+      "max": 344034.8984310636,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 380928.0
+    },
+    "disk/sda1/write_bytes_per_second": {
+      "count": 348,
+      "mean": 5086969.910382491,
+      "p95": 12376993.51579119,
+      "max": 126477889.88232818,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 1770598400.0
+    },
+    "disk/sda1/reads_per_second": {
+      "count": 348,
+      "mean": 0.0603334828033462,
+      "p95": 0.0,
+      "max": 12.998900435976523,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 21.0
+    },
+    "disk/sda1/writes_per_second": {
+      "count": 348,
+      "mean": 559.7280850815959,
+      "p95": 796.9353008043432,
+      "max": 959.9237993289931,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 194822.0
+    },
+    "disk/sda1/read_ms_per_second": {
+      "count": 348,
+      "mean": 0.014365114953177667,
+      "p95": 0.0,
+      "max": 2.9997462544561206,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 5.0
+    },
+    "disk/sda1/write_ms_per_second": {
+      "count": 348,
+      "mean": 79.41610150714742,
+      "p95": 165.9771910822829,
+      "max": 3188.730584133895,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 27642.0
+    },
+    "disk/sda1/busy_ms_per_second": {
+      "count": 348,
+      "mean": 47.0974658854883,
+      "p95": 68.9946232493335,
+      "max": 107.9918944527951,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 16393.0
+    },
+    "disk/sda1/weighted_io_ms_per_second": {
+      "count": 348,
+      "mean": 79.4304666221006,
+      "p95": 165.96351192558419,
+      "max": 3188.730584133895,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 27647.0
+    },
+    "disk/sda14/read_bytes_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "disk/sda14/write_bytes_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "disk/sda14/reads_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "disk/sda14/writes_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "disk/sda14/read_ms_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "disk/sda14/write_ms_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "disk/sda14/busy_ms_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "disk/sda14/weighted_io_ms_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "disk/sda15/read_bytes_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "disk/sda15/write_bytes_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "disk/sda15/reads_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "disk/sda15/writes_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "disk/sda15/read_ms_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "disk/sda15/write_ms_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "disk/sda15/busy_ms_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "disk/sda15/weighted_io_ms_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "disk/sdb/read_bytes_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "disk/sdb/write_bytes_per_second": {
+      "count": 348,
+      "mean": 38922018.69273612,
+      "p95": 120835793.3411989,
+      "max": 135035221.3781766,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 13547409408.0
+    },
+    "disk/sdb/reads_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "disk/sdb/writes_per_second": {
+      "count": 348,
+      "mean": 50.826649727333226,
+      "p95": 138.98845867618482,
+      "max": 168.98825227488427,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 17691.0
+    },
+    "disk/sdb/read_ms_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "disk/sdb/write_ms_per_second": {
+      "count": 348,
+      "mean": 1565.9181968619725,
+      "p95": 4622.473870047123,
+      "max": 6935.43896458537,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 545042.0
+    },
+    "disk/sdb/busy_ms_per_second": {
+      "count": 348,
+      "mean": 127.97019004888793,
+      "p95": 368.9727011868349,
+      "max": 848.9311134840519,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 44542.0
+    },
+    "disk/sdb/weighted_io_ms_per_second": {
+      "count": 348,
+      "mean": 1590.6405596963912,
+      "p95": 4648.593322475494,
+      "max": 7132.423029755974,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 553647.0
+    },
+    "disk/sr0/read_bytes_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "disk/sr0/write_bytes_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "disk/sr0/reads_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "disk/sr0/writes_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "disk/sr0/read_ms_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "disk/sr0/write_ms_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "disk/sr0/busy_ms_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    },
+    "disk/sr0/weighted_io_ms_per_second": {
+      "count": 348,
+      "mean": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "covered_seconds": 348.0654360440021,
+      "counter_delta": 0.0
+    }
+  },
+  "hottest_processes": [
+    {
+      "identity": "46832:6254516",
+      "name": "ucloud-sandboxe",
+      "cgroup": "/system.slice/ucloud-sandbox-relay.service",
+      "count": 348,
+      "mean": 0.43678568526632017,
+      "p95": 0.5999548911941918,
+      "max": 0.7099408917380753,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 152.03
+    },
+    {
+      "identity": "36907:5843288",
+      "name": "registry",
+      "cgroup": "/system.slice/docker-fbd6d51efeb16c03bd4ba671aab7f465fd92dd3cd67218e23817aaa74a1681ca.scope",
+      "count": 348,
+      "mean": 0.10914614341424392,
+      "p95": 0.24997875655475268,
+      "max": 0.289976469859099,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 37.99
+    },
+    {
+      "identity": "46894:6254634",
+      "name": "python",
+      "cgroup": "/system.slice/ucloud-sandbox-gateway.service",
+      "count": 348,
+      "mean": 0.08558735489103254,
+      "p95": 0.12998846807282535,
+      "max": 0.22997382438045386,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 29.79
+    },
+    {
+      "identity": "46893:6254634",
+      "name": "python",
+      "cgroup": "/system.slice/ucloud-sandbox-gateway.service",
+      "count": 348,
+      "mean": 0.0850414805228118,
+      "p95": 0.12998862807524503,
+      "max": 0.21998258573924356,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 29.6
+    },
+    {
+      "identity": "46833:6254517",
+      "name": "ucloud-sandboxe",
+      "cgroup": "/system.slice/ucloud-sandbox-gateway.service",
+      "count": 348,
+      "mean": 0.08446687592468469,
+      "p95": 0.12998814911038561,
+      "max": 0.15998791019405253,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 29.400000000000002
+    },
+    {
+      "identity": "46891:6254634",
+      "name": "python",
+      "cgroup": "/system.slice/ucloud-sandbox-gateway.service",
+      "count": 348,
+      "mean": 0.08423703408543384,
+      "p95": 0.12983246626241707,
+      "max": 0.19998102100182352,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 29.32
+    },
+    {
+      "identity": "46892:6254634",
+      "name": "python",
+      "cgroup": "/system.slice/ucloud-sandbox-gateway.service",
+      "count": 348,
+      "mean": 0.08383481086674487,
+      "p95": 0.12986702707356357,
+      "max": 0.16998543615805423,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 29.18
+    },
+    {
+      "identity": "46890:6254634",
+      "name": "python",
+      "cgroup": "/system.slice/ucloud-sandbox-gateway.service",
+      "count": 348,
+      "mean": 0.08323147603871141,
+      "p95": 0.12983246626241707,
+      "max": 0.3299721206535545,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 28.97
+    },
+    {
+      "identity": "42745:6115852",
+      "name": "python",
+      "cgroup": "/system.slice/ucloud-gateway-qualification-complete-sampler.service",
+      "count": 348,
+      "mean": 0.033643099220342094,
+      "p95": 0.03999857569062923,
+      "max": 0.04999652434168174,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 11.709999999999999
+    },
+    {
+      "identity": "48125:6288074",
+      "name": "postgres",
+      "cgroup": "/system.slice/system-postgresql.slice/postgresql@18-main.service",
+      "count": 348,
+      "mean": 0.03326960623155948,
+      "p95": 0.049991025560869776,
+      "max": 0.04999649524591549,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 11.58
+    },
+    {
+      "identity": "48437:6290368",
+      "name": "postgres",
+      "cgroup": "/system.slice/system-postgresql.slice/postgresql@18-main.service",
+      "count": 348,
+      "mean": 0.032982303932495925,
+      "p95": 0.04999525525045588,
+      "max": 0.05999457840965339,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 11.48
+    },
+    {
+      "identity": "46835:6254518",
+      "name": "ucloud-sandboxe",
+      "cgroup": "/system.slice/ucloud-sandbox-autoscaler.service",
+      "count": 348,
+      "mean": 0.03186182496614807,
+      "p95": 0.16998645836920037,
+      "max": 0.2699698961964688,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 11.09
+    },
+    {
+      "identity": "46866:6254559",
+      "name": "postgres",
+      "cgroup": "/system.slice/system-postgresql.slice/postgresql@18-main.service",
+      "count": 348,
+      "mean": 0.031631983126897224,
+      "p95": 0.04997244749109604,
+      "max": 0.0499964226559657,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 11.01
+    },
+    {
+      "identity": "48126:6288076",
+      "name": "postgres",
+      "cgroup": "/system.slice/system-postgresql.slice/postgresql@18-main.service",
+      "count": 348,
+      "mean": 0.03140214128764638,
+      "p95": 0.047505850226440965,
+      "max": 0.04999649524591549,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 10.93
+    },
+    {
+      "identity": "47572:6278848",
+      "name": "python",
+      "cgroup": "/system.slice/ucloud-sandbox-gateway.service",
+      "count": 348,
+      "mean": 0.030597694850268434,
+      "p95": 0.059995302308050405,
+      "max": 0.0999920564313016,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 10.65
+    },
+    {
+      "identity": "47566:6278847",
+      "name": "python",
+      "cgroup": "/system.slice/ucloud-sandbox-gateway.service",
+      "count": 348,
+      "mean": 0.030568964620362078,
+      "p95": 0.05999478927275321,
+      "max": 0.08996135925715724,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 10.64
+    },
+    {
+      "identity": "47569:6278847",
+      "name": "python",
+      "cgroup": "/system.slice/ucloud-sandbox-gateway.service",
+      "count": 348,
+      "mean": 0.0304253134708303,
+      "p95": 0.05999515635125213,
+      "max": 0.07998063932666746,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 10.59
+    },
+    {
+      "identity": "47543:6278787",
+      "name": "python",
+      "cgroup": "/system.slice/ucloud-sandbox-gateway.service",
+      "count": 348,
+      "mean": 0.029936899562422258,
+      "p95": 0.05999474541991197,
+      "max": 0.1199709589900012,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 10.42
+    },
+    {
+      "identity": "47570:6278848",
+      "name": "python",
+      "cgroup": "/system.slice/ucloud-sandbox-gateway.service",
+      "count": 348,
+      "mean": 0.02967832749326506,
+      "p95": 0.05999488051675869,
+      "max": 0.11994847900954299,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 10.33
+    },
+    {
+      "identity": "47565:6278847",
+      "name": "python",
+      "cgroup": "/system.slice/ucloud-sandbox-gateway.service",
+      "count": 348,
+      "mean": 0.028414197377385427,
+      "p95": 0.05999470390754261,
+      "max": 0.0899927201287029,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 9.89
+    },
+    {
+      "identity": "47368:6273676",
+      "name": "nginx",
+      "cgroup": "/system.slice/nginx.service",
+      "count": 348,
+      "mean": 0.021518942199860145,
+      "p95": 0.03999663152375444,
+      "max": 0.05995294802721142,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 7.49
+    },
+    {
+      "identity": "47373:6273676",
+      "name": "nginx",
+      "cgroup": "/system.slice/nginx.service",
+      "count": 348,
+      "mean": 0.01787020300175302,
+      "p95": 0.0396665146467448,
+      "max": 0.05999475141934386,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 6.22
+    },
+    {
+      "identity": "47369:6273676",
+      "name": "nginx",
+      "cgroup": "/system.slice/nginx.service",
+      "count": 348,
+      "mean": 0.015227021850368326,
+      "p95": 0.029997541791425393,
+      "max": 0.049995030493959855,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 5.3
+    },
+    {
+      "identity": "47374:6273676",
+      "name": "nginx",
+      "cgroup": "/system.slice/nginx.service",
+      "count": 348,
+      "mean": 0.01442257541299038,
+      "p95": 0.029997866521693613,
+      "max": 0.049990942990710004,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 5.0200000000000005
+    },
+    {
+      "identity": "47902:6286572",
+      "name": "postgres",
+      "cgroup": "/system.slice/system-postgresql.slice/postgresql@18-main.service",
+      "count": 348,
+      "mean": 0.012296538399920084,
+      "p95": 0.019999101360370062,
+      "max": 0.059995014714181935,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 4.28
+    },
+    {
+      "identity": "46869:6254567",
+      "name": "ucloud-sandboxe",
+      "cgroup": "/system.slice/ucloud-sandbox-placement.service",
+      "count": 348,
+      "mean": 0.012152887250388308,
+      "p95": 0.019998477355936815,
+      "max": 0.029997573646201404,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 4.23
+    },
+    {
+      "identity": "48104:6287900",
+      "name": "postgres",
+      "cgroup": "/system.slice/system-postgresql.slice/postgresql@18-main.service",
+      "count": 348,
+      "mean": 0.011894315181231107,
+      "p95": 0.01999867940718272,
+      "max": 0.049991904011025365,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 4.14
+    },
+    {
+      "identity": "46865:6254558",
+      "name": "postgres",
+      "cgroup": "/system.slice/system-postgresql.slice/postgresql@18-main.service",
+      "count": 348,
+      "mean": 0.01163574311207391,
+      "p95": 0.0199988657042714,
+      "max": 0.041640623189605354,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 4.05
+    },
+    {
+      "identity": "48452:6291769",
+      "name": "postgres",
+      "cgroup": "/system.slice/system-postgresql.slice/postgresql@18-main.service",
+      "count": 348,
+      "mean": 0.01152082219244849,
+      "p95": 0.019998522809010596,
+      "max": 0.04999338757482453,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 4.01
+    },
+    {
+      "identity": "48446:6290809",
+      "name": "postgres",
+      "cgroup": "/system.slice/system-postgresql.slice/postgresql@18-main.service",
+      "count": 348,
+      "mean": 0.011434631502729423,
+      "p95": 0.019998487534475327,
+      "max": 0.052762161186625446,
+      "covered_seconds": 348.0654360440021,
+      "cpu_seconds": 3.98
+    }
+  ],
+  "harness_phase_timestamps": [],
+  "phases": {
+    "four-online-cpu": {
+      "host/user_cores": {
+        "count": 348,
+        "mean": 1.4509053405008507,
+        "p95": 1.9798317519136412,
+        "max": 2.589574455233993,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 505.01
+      },
+      "host/nice_cores": {
+        "count": 348,
+        "mean": 0.01939290518678985,
+        "p95": 0.028862231107980515,
+        "max": 0.4999564622927954,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 6.75
+      },
+      "host/system_cores": {
+        "count": 348,
+        "mean": 0.3553929439416155,
+        "p95": 0.5199594795601945,
+        "max": 0.6699433964784289,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 123.7
+      },
+      "host/idle_cores": {
+        "count": 348,
+        "mean": 1.8343102586011628,
+        "p95": 2.5997776903976275,
+        "max": 3.119730979354461,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 638.46
+      },
+      "host/iowait_cores": {
+        "count": 348,
+        "mean": 0.11753537054689969,
+        "p95": 0.34997093911269556,
+        "max": 0.6299462454259663,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 40.910000000000004
+      },
+      "host/irq_cores": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 0.0
+      },
+      "host/softirq_cores": {
+        "count": 348,
+        "mean": 0.14603575861400417,
+        "p95": 0.26997440021722247,
+        "max": 0.5699562108316085,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 50.83
+      },
+      "host/steal_cores": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 0.0
+      },
+      "host/busy_cores": {
+        "count": 348,
+        "mean": 1.9717269482432602,
+        "p95": 2.7697896123211883,
+        "max": 3.379444655865211,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 686.29
+      },
+      "host/cpu_some_pressure_fraction": {
+        "count": 348,
+        "mean": 0.20656167649726315,
+        "p95": 0.37244570976885283,
+        "max": 0.5547678350025784,
+        "covered_seconds": 348.0654360440021
+      },
+      "host/cpu_full_pressure_fraction": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021
+      },
+      "host/memory_some_pressure_fraction": {
+        "count": 348,
+        "mean": 0.00022832201008879648,
+        "p95": 0.0012638894943500143,
+        "max": 0.011209079095696923,
+        "covered_seconds": 348.0654360440021
+      },
+      "host/memory_full_pressure_fraction": {
+        "count": 348,
+        "mean": 0.00019981874899870135,
+        "p95": 0.0012328922045360504,
+        "max": 0.0087342824175658,
+        "covered_seconds": 348.0654360440021
+      },
+      "host/io_some_pressure_fraction": {
+        "count": 348,
+        "mean": 0.06569202118968633,
+        "p95": 0.18949759100407906,
+        "max": 0.4459138163229835,
+        "covered_seconds": 348.0654360440021
+      },
+      "host/io_full_pressure_fraction": {
+        "count": 348,
+        "mean": 0.03262275947033284,
+        "p95": 0.09719719801596423,
+        "max": 0.19275455186826818,
+        "covered_seconds": 348.0654360440021
+      },
+      "network/lo/rx_bytes_per_second": {
+        "count": 348,
+        "mean": 19277981.2016489,
+        "p95": 24599153.84410344,
+        "max": 26201487.89031117,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 6709998933.0
+      },
+      "network/lo/rx_packets_per_second": {
+        "count": 348,
+        "mean": 3688.2691214352817,
+        "p95": 4875.573713964138,
+        "max": 5769.495261493567,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 1283759.0
+      },
+      "network/lo/rx_errors_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "network/lo/rx_drops_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "network/lo/tx_bytes_per_second": {
+        "count": 348,
+        "mean": 19277981.2016489,
+        "p95": 24599153.84410344,
+        "max": 26201487.89031117,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 6709998933.0
+      },
+      "network/lo/tx_packets_per_second": {
+        "count": 348,
+        "mean": 3688.2691214352817,
+        "p95": 4875.573713964138,
+        "max": 5769.495261493567,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 1283759.0
+      },
+      "network/lo/tx_errors_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "network/lo/tx_drops_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "network/eth0/rx_bytes_per_second": {
+        "count": 348,
+        "mean": 65138796.867304444,
+        "p95": 194346070.1386128,
+        "max": 637345692.1184734,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 22672563735.0
+      },
+      "network/eth0/rx_packets_per_second": {
+        "count": 348,
+        "mean": 5353.398548209881,
+        "p95": 11005.299292607457,
+        "max": 35611.62031489972,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 1863333.0
+      },
+      "network/eth0/rx_errors_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "network/eth0/rx_drops_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "network/eth0/tx_bytes_per_second": {
+        "count": 348,
+        "mean": 17047889.990001354,
+        "p95": 21504194.953996867,
+        "max": 22614966.575031716,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 5933781263.0
+      },
+      "network/eth0/tx_packets_per_second": {
+        "count": 348,
+        "mean": 3904.949642366023,
+        "p95": 6652.497290756446,
+        "max": 20113.68871600119,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 1359178.0
+      },
+      "network/eth0/tx_errors_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "network/eth0/tx_drops_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "network/enp7s0/rx_bytes_per_second": {
+        "count": 348,
+        "mean": 39857809.98158683,
+        "p95": 91716022.03800504,
+        "max": 121989475.054539,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 13873126011.0
+      },
+      "network/enp7s0/rx_packets_per_second": {
+        "count": 348,
+        "mean": 4485.481286922811,
+        "p95": 10341.01943350561,
+        "max": 22818.377917471822,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 1561241.0
+      },
+      "network/enp7s0/rx_errors_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "network/enp7s0/rx_drops_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "network/enp7s0/tx_bytes_per_second": {
+        "count": 348,
+        "mean": 104345003.38151531,
+        "p95": 274240273.259386,
+        "max": 722047439.2036848,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 36318889101.0
+      },
+      "network/enp7s0/tx_packets_per_second": {
+        "count": 348,
+        "mean": 5066.9753941814615,
+        "p95": 12144.226777095908,
+        "max": 36202.56423196011,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 1763639.0
+      },
+      "network/enp7s0/tx_errors_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "network/enp7s0/tx_drops_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "network/docker0/rx_bytes_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "network/docker0/rx_packets_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "network/docker0/rx_errors_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "network/docker0/rx_drops_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "network/docker0/tx_bytes_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "network/docker0/tx_packets_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "network/docker0/tx_errors_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "network/docker0/tx_drops_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "network/softnet/processed_per_second": {
+        "count": 348,
+        "mean": 12341.529939953436,
+        "p95": 21608.11723118197,
+        "max": 58046.49115598929,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 4295660.0
+      },
+      "network/softnet/dropped_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "network/softnet/time_squeeze_per_second": {
+        "count": 348,
+        "mean": 0.03160325289699087,
+        "p95": 0.0,
+        "max": 1.9995603846455925,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 11.0
+      },
+      "network/tcp/InSegs_per_second": {
+        "count": 348,
+        "mean": 8454.838358692901,
+        "p95": 11784.061246358979,
+        "max": 13697.762160564029,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 2942837.0
+      },
+      "network/tcp/OutSegs_per_second": {
+        "count": 348,
+        "mean": 47134.38135789498,
+        "p95": 80140.80920559968,
+        "max": 200106.13767347994,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 16405849.0
+      },
+      "network/tcp/RetransSegs_per_second": {
+        "count": 348,
+        "mean": 109.28692154078506,
+        "p95": 418.96705159367406,
+        "max": 1204.8956403745758,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 38039.0
+      },
+      "network/tcp_ext/ListenOverflows_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "network/tcp_ext/ListenDrops_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "network/conntrack/count": {
+        "count": 348,
+        "mean": 22328.269352465068,
+        "p95": 26993,
+        "max": 27742,
+        "covered_seconds": 348.0654360440021
+      },
+      "network/conntrack/max": {
+        "count": 348,
+        "mean": 262144.0,
+        "p95": 262144,
+        "max": 262144,
+        "covered_seconds": 348.0654360440021
+      },
+      "network/conntrack/utilization_fraction": {
+        "count": 348,
+        "mean": 0.08517558804498698,
+        "p95": 0.10297012329101562,
+        "max": 0.10582733154296875,
+        "covered_seconds": 348.0654360440021
+      },
+      "host/online_cpu_count": {
+        "count": 348,
+        "mean": 4.0,
+        "p95": 4,
+        "max": 4,
+        "covered_seconds": 348.0654360440021
+      },
+      "cgroup/container:ucloud-sandbox-registry/cores": {
+        "count": 348,
+        "mean": 0.1091437588051617,
+        "p95": 0.2539405618473237,
+        "max": 0.28549713805352706,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 37.98917
+      },
+      "cgroup/container:ucloud-sandbox-registry/user_cores": {
+        "count": 348,
+        "mean": 0.03633319683716387,
+        "p95": 0.08560464647497801,
+        "max": 0.09805146138486302,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 12.64633
+      },
+      "cgroup/container:ucloud-sandbox-registry/system_cores": {
+        "count": 348,
+        "mean": 0.07281056196799782,
+        "p95": 0.17099445010738146,
+        "max": 0.19945310367133523,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 25.34284
+      },
+      "cgroup/container:ucloud-sandbox-registry/throttled_seconds_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "cgroup/containerd.service/cores": {
+        "count": 348,
+        "mean": 0.0014018685840966835,
+        "p95": 0.0033306714292819194,
+        "max": 0.011332342134884854,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 0.487942
+      },
+      "cgroup/containerd.service/user_cores": {
+        "count": 348,
+        "mean": 0.0006940591480317508,
+        "p95": 0.0017491157319703525,
+        "max": 0.011332342134884854,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 0.241578
+      },
+      "cgroup/containerd.service/system_cores": {
+        "count": 348,
+        "mean": 0.0007078094360649325,
+        "p95": 0.0017668338663829545,
+        "max": 0.005604083206799551,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 0.246364
+      },
+      "cgroup/containerd.service/throttled_seconds_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "cgroup/nginx.service/cores": {
+        "count": 348,
+        "mean": 0.10656854188564348,
+        "p95": 0.1457544385908547,
+        "max": 0.18150677428167505,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 37.092826
+      },
+      "cgroup/nginx.service/user_cores": {
+        "count": 348,
+        "mean": 0.042800523859302955,
+        "p95": 0.05904824815099547,
+        "max": 0.06780350012293361,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 14.897383
+      },
+      "cgroup/nginx.service/system_cores": {
+        "count": 348,
+        "mean": 0.06376801515331752,
+        "p95": 0.08935030979743717,
+        "max": 0.11887371840900894,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 22.195442
+      },
+      "cgroup/nginx.service/throttled_seconds_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "cgroup/docker.service/cores": {
+        "count": 348,
+        "mean": 0.001201176436108829,
+        "p95": 0.0026248008379767445,
+        "max": 0.01070247510472444,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 0.418088
+      },
+      "cgroup/docker.service/user_cores": {
+        "count": 348,
+        "mean": 0.0006209033636211983,
+        "p95": 0.002153816210551637,
+        "max": 0.007951198631202095,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 0.216115
+      },
+      "cgroup/docker.service/system_cores": {
+        "count": 348,
+        "mean": 0.0005802730724876306,
+        "p95": 0.0019037044346574125,
+        "max": 0.008325297972473455,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 0.20197299999999999
+      },
+      "cgroup/docker.service/throttled_seconds_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "cgroup/ucloud-sandbox-registry.service/cores": {
+        "count": 348,
+        "mean": 0.0003807416257879928,
+        "p95": 0.0009699272001778819,
+        "max": 0.004345627679664139,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 0.132523
+      },
+      "cgroup/ucloud-sandbox-registry.service/user_cores": {
+        "count": 348,
+        "mean": 0.00013143505577559438,
+        "p95": 0.0006309521252431718,
+        "max": 0.0036346885907913356,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 0.045748
+      },
+      "cgroup/ucloud-sandbox-registry.service/system_cores": {
+        "count": 348,
+        "mean": 0.00024930944303538905,
+        "p95": 0.0008528427971892533,
+        "max": 0.0019018562411412141,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 0.086776
+      },
+      "cgroup/ucloud-sandbox-registry.service/throttled_seconds_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "cgroup/ucloud-gateway-qualification-complete-sampler.service/cores": {
+        "count": 348,
+        "mean": 0.034780356640955266,
+        "p95": 0.044269802204508546,
+        "max": 0.07781552013203658,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 12.10584
+      },
+      "cgroup/ucloud-gateway-qualification-complete-sampler.service/user_cores": {
+        "count": 348,
+        "mean": 0.01607112175106303,
+        "p95": 0.023407073200012098,
+        "max": 0.03451350353026316,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 5.593802
+      },
+      "cgroup/ucloud-gateway-qualification-complete-sampler.service/system_cores": {
+        "count": 348,
+        "mean": 0.01870923201686925,
+        "p95": 0.02709906295018345,
+        "max": 0.04631060303474371,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 6.512037
+      },
+      "cgroup/ucloud-gateway-qualification-complete-sampler.service/throttled_seconds_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "cgroup/ucloud-sandbox-placement.service/cores": {
+        "count": 348,
+        "mean": 0.012146954457912643,
+        "p95": 0.014582355023695768,
+        "max": 0.019653808443102924,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 4.2279349999999996
+      },
+      "cgroup/ucloud-sandbox-placement.service/user_cores": {
+        "count": 348,
+        "mean": 0.010223741375889255,
+        "p95": 0.012749952502161594,
+        "max": 0.01471685311570566,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 3.558531
+      },
+      "cgroup/ucloud-sandbox-placement.service/system_cores": {
+        "count": 348,
+        "mean": 0.0019232130820233887,
+        "p95": 0.004433279367222072,
+        "max": 0.007597335354736243,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 0.669404
+      },
+      "cgroup/ucloud-sandbox-placement.service/throttled_seconds_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "cgroup/ucloud-sandbox-gateway.service/cores": {
+        "count": 348,
+        "mean": 0.6860226735349083,
+        "p95": 0.9371538198681602,
+        "max": 1.364428942293428,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 238.780781
+      },
+      "cgroup/ucloud-sandbox-gateway.service/user_cores": {
+        "count": 348,
+        "mean": 0.5754035455984806,
+        "p95": 0.7859433893937747,
+        "max": 1.1950846800570964,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 200.278086
+      },
+      "cgroup/ucloud-sandbox-gateway.service/system_cores": {
+        "count": 348,
+        "mean": 0.11061912506340481,
+        "p95": 0.17060264164317213,
+        "max": 0.35919465164173675,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 38.502694
+      },
+      "cgroup/ucloud-sandbox-gateway.service/throttled_seconds_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "cgroup/ucloud-sandbox-autoscaler.service/cores": {
+        "count": 348,
+        "mean": 0.033593008064500364,
+        "p95": 0.17220839924085565,
+        "max": 0.4366761093174313,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 11.692565
+      },
+      "cgroup/ucloud-sandbox-autoscaler.service/user_cores": {
+        "count": 348,
+        "mean": 0.029895349903931688,
+        "p95": 0.1587763513999233,
+        "max": 0.2826867027612619,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 10.405538
+      },
+      "cgroup/ucloud-sandbox-autoscaler.service/system_cores": {
+        "count": 348,
+        "mean": 0.003697655287545688,
+        "p95": 0.016773633519145313,
+        "max": 0.15398840667040736,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 1.287026
+      },
+      "cgroup/ucloud-sandbox-autoscaler.service/throttled_seconds_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "cgroup/ucloud-gateway-extra-metrics-20260928-1328.service/cores": {
+        "count": 348,
+        "mean": 0.0025824856676845242,
+        "p95": 0.0069644515354855075,
+        "max": 0.010263196381497157,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 0.898874
+      },
+      "cgroup/ucloud-gateway-extra-metrics-20260928-1328.service/user_cores": {
+        "count": 348,
+        "mean": 0.0007671890752353877,
+        "p95": 0.0028107809558532825,
+        "max": 0.00470159381518867,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 0.267032
+      },
+      "cgroup/ucloud-gateway-extra-metrics-20260928-1328.service/system_cores": {
+        "count": 348,
+        "mean": 0.0018152994654721275,
+        "p95": 0.005098562946068286,
+        "max": 0.007183437529683903,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 0.631843
+      },
+      "cgroup/ucloud-gateway-extra-metrics-20260928-1328.service/throttled_seconds_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "cgroup/ucloud-sandbox-relay.service/cores": {
+        "count": 348,
+        "mean": 0.4367727020754255,
+        "p95": 0.6008840931002365,
+        "max": 0.7152944460118298,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 152.025481
+      },
+      "cgroup/ucloud-sandbox-relay.service/user_cores": {
+        "count": 348,
+        "mean": 0.3625470182682751,
+        "p95": 0.49672198875848544,
+        "max": 0.5976922373370431,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 126.190086
+      },
+      "cgroup/ucloud-sandbox-relay.service/system_cores": {
+        "count": 348,
+        "mean": 0.0742256838071503,
+        "p95": 0.11760220867478663,
+        "max": 0.26238074244783466,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 25.835395
+      },
+      "cgroup/ucloud-sandbox-relay.service/throttled_seconds_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "cgroup/postgresql@18-main.service/cores": {
+        "count": 348,
+        "mean": 0.5028840984310549,
+        "p95": 0.6998484714759791,
+        "max": 1.4396064294777908,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 175.036573
+      },
+      "cgroup/postgresql@18-main.service/user_cores": {
+        "count": 348,
+        "mean": 0.401306089416881,
+        "p95": 0.5482089768909285,
+        "max": 1.2797616967624574,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 139.680779
+      },
+      "cgroup/postgresql@18-main.service/system_cores": {
+        "count": 348,
+        "mean": 0.10157800614115085,
+        "p95": 0.1503888510516067,
+        "max": 0.2072483313050298,
+        "covered_seconds": 348.0654360440021,
+        "cpu_seconds": 35.355793
+      },
+      "disk/sda/read_bytes_per_second": {
+        "count": 348,
+        "mean": 1094.4149017768125,
+        "p95": 0.0,
+        "max": 344034.8984310636,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 380928.0
+      },
+      "disk/sda/write_bytes_per_second": {
+        "count": 348,
+        "mean": 5086969.910382491,
+        "p95": 12376993.51579119,
+        "max": 126477889.88232818,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 1770598400.0
+      },
+      "disk/sda/reads_per_second": {
+        "count": 348,
+        "mean": 0.0603334828033462,
+        "p95": 0.0,
+        "max": 12.998900435976523,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 21.0
+      },
+      "disk/sda/writes_per_second": {
+        "count": 348,
+        "mean": 559.7280850815959,
+        "p95": 796.9353008043432,
+        "max": 959.9237993289931,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 194822.0
+      },
+      "disk/sda/read_ms_per_second": {
+        "count": 348,
+        "mean": 0.014365114953177667,
+        "p95": 0.0,
+        "max": 2.9997462544561206,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 5.0
+      },
+      "disk/sda/write_ms_per_second": {
+        "count": 348,
+        "mean": 79.41322848415678,
+        "p95": 165.96351192558419,
+        "max": 3187.730668616763,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 27641.0
+      },
+      "disk/sda/busy_ms_per_second": {
+        "count": 348,
+        "mean": 46.405067344745135,
+        "p95": 68.99396413224544,
+        "max": 79.99399589095933,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 16152.0
+      },
+      "disk/sda/weighted_io_ms_per_second": {
+        "count": 348,
+        "mean": 99.47842105075534,
+        "p95": 191.84598201696238,
+        "max": 3213.7284720621947,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 34625.0
+      },
+      "disk/sda1/read_bytes_per_second": {
+        "count": 348,
+        "mean": 1094.4149017768125,
+        "p95": 0.0,
+        "max": 344034.8984310636,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 380928.0
+      },
+      "disk/sda1/write_bytes_per_second": {
+        "count": 348,
+        "mean": 5086969.910382491,
+        "p95": 12376993.51579119,
+        "max": 126477889.88232818,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 1770598400.0
+      },
+      "disk/sda1/reads_per_second": {
+        "count": 348,
+        "mean": 0.0603334828033462,
+        "p95": 0.0,
+        "max": 12.998900435976523,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 21.0
+      },
+      "disk/sda1/writes_per_second": {
+        "count": 348,
+        "mean": 559.7280850815959,
+        "p95": 796.9353008043432,
+        "max": 959.9237993289931,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 194822.0
+      },
+      "disk/sda1/read_ms_per_second": {
+        "count": 348,
+        "mean": 0.014365114953177667,
+        "p95": 0.0,
+        "max": 2.9997462544561206,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 5.0
+      },
+      "disk/sda1/write_ms_per_second": {
+        "count": 348,
+        "mean": 79.41610150714742,
+        "p95": 165.9771910822829,
+        "max": 3188.730584133895,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 27642.0
+      },
+      "disk/sda1/busy_ms_per_second": {
+        "count": 348,
+        "mean": 47.0974658854883,
+        "p95": 68.9946232493335,
+        "max": 107.9918944527951,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 16393.0
+      },
+      "disk/sda1/weighted_io_ms_per_second": {
+        "count": 348,
+        "mean": 79.4304666221006,
+        "p95": 165.96351192558419,
+        "max": 3188.730584133895,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 27647.0
+      },
+      "disk/sda14/read_bytes_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "disk/sda14/write_bytes_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "disk/sda14/reads_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "disk/sda14/writes_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "disk/sda14/read_ms_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "disk/sda14/write_ms_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "disk/sda14/busy_ms_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "disk/sda14/weighted_io_ms_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "disk/sda15/read_bytes_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "disk/sda15/write_bytes_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "disk/sda15/reads_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "disk/sda15/writes_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "disk/sda15/read_ms_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "disk/sda15/write_ms_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "disk/sda15/busy_ms_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "disk/sda15/weighted_io_ms_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "disk/sdb/read_bytes_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "disk/sdb/write_bytes_per_second": {
+        "count": 348,
+        "mean": 38922018.69273612,
+        "p95": 120835793.3411989,
+        "max": 135035221.3781766,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 13547409408.0
+      },
+      "disk/sdb/reads_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "disk/sdb/writes_per_second": {
+        "count": 348,
+        "mean": 50.826649727333226,
+        "p95": 138.98845867618482,
+        "max": 168.98825227488427,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 17691.0
+      },
+      "disk/sdb/read_ms_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "disk/sdb/write_ms_per_second": {
+        "count": 348,
+        "mean": 1565.9181968619725,
+        "p95": 4622.473870047123,
+        "max": 6935.43896458537,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 545042.0
+      },
+      "disk/sdb/busy_ms_per_second": {
+        "count": 348,
+        "mean": 127.97019004888793,
+        "p95": 368.9727011868349,
+        "max": 848.9311134840519,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 44542.0
+      },
+      "disk/sdb/weighted_io_ms_per_second": {
+        "count": 348,
+        "mean": 1590.6405596963912,
+        "p95": 4648.593322475494,
+        "max": 7132.423029755974,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 553647.0
+      },
+      "disk/sr0/read_bytes_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "disk/sr0/write_bytes_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "disk/sr0/reads_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "disk/sr0/writes_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "disk/sr0/read_ms_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "disk/sr0/write_ms_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "disk/sr0/busy_ms_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      },
+      "disk/sr0/weighted_io_ms_per_second": {
+        "count": 348,
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0,
+        "covered_seconds": 348.0654360440021,
+        "counter_delta": 0.0
+      }
+    }
+  },
+  "harness_phases": {},
+  "limitations": [
+    "Cgroup rows may overlap and must not be summed without checking their paths.",
+    "Short-lived processes between samples are covered by host/cgroup CPU but absent from per-process attribution.",
+    "Disk rows may include both whole devices and partitions; do not sum these.",
+    "Interface counters can count the same forwarded packet on several interfaces; do not sum as unique traffic.",
+    "Phase joins use each interval's final timestamp and require synchronized driver/gateway clocks.",
+    "p95 is the nearest-rank sample percentile; mean is weighted by elapsed sample time."
+  ],
+  "selected_window": {
+    "start": "2026-09-28T13:36:10.250689+00:00",
+    "end": "2026-09-28T13:41:59.417932+00:00"
+  }
+}

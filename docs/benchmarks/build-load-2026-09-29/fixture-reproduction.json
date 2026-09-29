@@ -1,0 +1,38 @@
+[
+  {
+    "recipe": "python-agent",
+    "variant": "app-change-1",
+    "context_sha256": "74d00665a83100449a8541b2132668c4abc337311728fd5725ed6c0b43f79d1e",
+    "matches_measured_input": true
+  },
+  {
+    "recipe": "python-agent",
+    "variant": "dependency-change",
+    "context_sha256": "df0479c8e128d480dd3dd4b6e30a8255a8931e1be3b09c13c6d85a1e8d60140c",
+    "matches_measured_input": true
+  },
+  {
+    "recipe": "typescript-multistage",
+    "variant": "app-change-1",
+    "context_sha256": "b3134f70b0b90df1468d00443552ae1a6921240f4c99a0abb7fe196ebbdca4f8",
+    "matches_measured_input": true
+  },
+  {
+    "recipe": "typescript-multistage",
+    "variant": "dependency-change",
+    "context_sha256": "1c5985e770a9cb26ccc14e34868da82beca43e7db8a37dfab02ebf23f2693c1e",
+    "matches_measured_input": true
+  },
+  {
+    "recipe": "typescript-tools",
+    "variant": "app-change-1",
+    "context_sha256": "d79e8887d7b754eab6040d56940c1e0fd0aff4c7ed562b9cea0ff7285dd5ab82",
+    "matches_measured_input": true
+  },
+  {
+    "recipe": "typescript-tools",
+    "variant": "dependency-change",
+    "context_sha256": "a82959b8fffcc8be551028f93c2d33a2f455e9029baf21c534a467f1d352d01b",
+    "matches_measured_input": true
+  }
+]

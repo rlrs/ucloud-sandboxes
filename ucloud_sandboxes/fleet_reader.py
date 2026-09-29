@@ -5,6 +5,20 @@ import json
 from pathlib import Path
 from threading import Lock
 
+MAX_STATUS_IDS = 256
+
+
+def status_ids(values):
+    """Bound and canonicalize exact IDs; every SQL value remains a parameter."""
+    if (not isinstance(values, (list, tuple)) or len(values) > MAX_STATUS_IDS
+            or any(not isinstance(value, str) or not value or len(value) > 512
+                   or "\0" in value for value in values)):
+        raise ValueError(f"status filtering requires at most {MAX_STATUS_IDS} nonempty IDs")
+    result = tuple(sorted(set(values)))
+    if len(json.dumps(result).encode('utf-8')) + len(b'status:') > 256 * 1024:
+        raise ValueError("encoded status filter exceeds 256 KiB")
+    return result
+
 
 class FleetResponseRenderer:
     """Reuse encoding work, never database observations.
@@ -15,8 +29,9 @@ class FleetResponseRenderer:
     encodings only; it never limits the response or fleet size.
     """
 
-    def __init__(self, max_cached_bytes=8 * 1024 * 1024):
+    def __init__(self, max_cached_bytes=8 * 1024 * 1024, *, status_only=False):
         self.max_cached_bytes = max_cached_bytes
+        self.status_only = status_only
         self._nodes = {}
         self._routes = {}
         self._epoch = 0
@@ -46,17 +61,32 @@ class FleetResponseRenderer:
             if cached is not None and cached[0] == row and cached[1] == epoch:
                 body = cached[2]
             else:
-                route = _sandbox_route_from_row(row)
+                projected = row
+                if self.status_only:
+                    # Validate the same lifecycle/generation/portability fields
+                    # without loading or decoding omitted user specifications.
+                    projected = dict(row, resources_json='{"vcpu":0,"memory_mb":0,"disk_mb":0}',
+                                     spec_json=json.dumps({"id": row["sandbox_id"]}))
+                route = _sandbox_route_from_row(projected)
                 record = _route_only_sandbox_record(
                     route, node[0] if node is not None else None,
                     heartbeat_ttl_seconds=ttl,
                 )
+                if self.status_only:
+                    record = {key: record[key] for key in (
+                        "id", "spec", "state", "cached_state", "node",
+                        "created_at", "updated_at",
+                    )}
+                    record["generation"] = route.generation
                 body = json.dumps(record, separators=(",", ":")).encode("utf-8")
             encoded.append(body)
             if size + len(body) <= self.max_cached_bytes:
                 retained[row["sandbox_id"]] = (row, epoch, body)
                 size += len(body)
         self._nodes, self._routes = nodes, retained
+        if self.status_only:
+            return (b'{"sandboxes":[' + b','.join(encoded)
+                    + b'],"cached":true,"refresh_supported":false,"view":"status"}')
         return b'{"sandboxes":[' + b','.join(encoded) + b'],"cached":true,"refresh_supported":true}'
 
 
@@ -78,11 +108,22 @@ def _serve(connection, control_path, routing_path, ttl, identities):
         control = ControlStateStore(Path(control_path))
         routing = open_routing_store(Path(routing_path))
         renderer = FleetResponseRenderer()
-        while connection.recv_bytes() == b'read':
+        status_renderer = FleetResponseRenderer(status_only=True)
+        while True:
+            command = connection.recv_bytes(256 * 1024)
+            if command == b'close':
+                break
             try:
                 if _identities(paths) != identities:
                     raise ValueError('fleet state files changed')
-                payload = _sandbox_list_bytes(control, routing, ttl, renderer=renderer)
+                if command == b'read':
+                    payload = _sandbox_list_bytes(control, routing, ttl, renderer=renderer)
+                elif command.startswith(b'status:'):
+                    ids = status_ids(json.loads(command[7:]))
+                    payload = _sandbox_list_bytes(control, routing, ttl,
+                        renderer=status_renderer, status_only=True, sandbox_ids=ids)
+                else:
+                    raise ValueError('unknown fleet read command')
                 if _identities(paths) != identities:
                     raise ValueError('fleet state files changed')
             except Exception:
@@ -99,7 +140,7 @@ def _serve(connection, control_path, routing_path, ttl, identities):
 class FleetSnapshotReader:
     """One fresh read per call; concurrent HTTP calls coalesce above this layer.
 
-    An anonymous pipe carries only fixed commands and JSON bytes. The child has
+    An anonymous pipe carries read commands, bounded ID filters and JSON bytes. The child has
     no network listener, request token, lifecycle authority, or response cache.
     A failed read is retried in a fresh process, never served from stale data.
     """
@@ -139,6 +180,13 @@ class FleetSnapshotReader:
             process.close()
 
     def read(self):
+        return self._read(b'read')
+
+    def read_status(self, sandbox_ids=()):
+        command = b'status:' + json.dumps(status_ids(sandbox_ids)).encode('utf-8')
+        return self._read(command)
+
+    def _read(self, command):
         with self._guard:
             if self._closed:
                 raise RuntimeError('fleet snapshot reader is closed')
@@ -146,7 +194,7 @@ class FleetSnapshotReader:
                 try:
                     if self._process is None:
                         self._start()
-                    self._connection.send_bytes(b'read')
+                    self._connection.send_bytes(command)
                     if not self._connection.poll(30):
                         raise TimeoutError('fleet snapshot read timed out')
                     result = self._connection.recv_bytes()

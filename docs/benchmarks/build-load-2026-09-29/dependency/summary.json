@@ -1,0 +1,3429 @@
+{
+  "submitted_cases": 6,
+  "succeeded": 6,
+  "failed_or_incomplete": 0,
+  "batch_wall_seconds": 128.66903080900374,
+  "successful_builds_per_minute": 2.797876052508578,
+  "measurements": {
+    "client_wall_seconds": {
+      "count": 6,
+      "min": 40.218090897993534,
+      "p50": 62.442532407003455,
+      "p95": 128.66602332775074,
+      "max": 128.66633770200133
+    },
+    "submission_seconds": {
+      "count": 6,
+      "min": 1.4461844309989829,
+      "p50": 4.804204634001508,
+      "p95": 4.940250449250016,
+      "max": 4.9446753800002625
+    },
+    "polling_seconds": {
+      "count": 6,
+      "min": 35.29077303899976,
+      "p50": 57.60099118549988,
+      "p95": 127.21127725800397,
+      "max": 127.21846302700578
+    },
+    "preparation_ms": {
+      "count": 6,
+      "min": 463,
+      "p50": 3592.0,
+      "p95": 3729.0,
+      "max": 3737
+    },
+    "queue_wait_ms": {
+      "count": 6,
+      "min": 4,
+      "p50": 6.0,
+      "p95": 12.0,
+      "max": 14
+    },
+    "total_ms": {
+      "count": 6,
+      "min": 35244,
+      "p50": 56814.0,
+      "p95": 126528.25,
+      "max": 126533
+    },
+    "end_to_end_ms": {
+      "count": 6,
+      "min": 38987,
+      "p50": 60442.0,
+      "p95": 127020.25,
+      "max": 127027
+    },
+    "docker_build_and_push_ms": {
+      "count": 6,
+      "min": 33671,
+      "p50": 37026.5,
+      "p95": 80021.0,
+      "max": 80025
+    },
+    "immutable_environment_ms": {
+      "count": 6,
+      "min": 1505,
+      "p50": 19725.0,
+      "p95": 46414.75,
+      "max": 46418
+    },
+    "cleanup_ms": {
+      "count": 6,
+      "min": 23,
+      "p50": 25.0,
+      "p95": 32.0,
+      "max": 32
+    }
+  },
+  "builders": {
+    "167927353": 2,
+    "167927354": 4
+  },
+  "http_statuses": {
+    "200": 446,
+    "202": 6,
+    "404": 3,
+    "201": 3
+  },
+  "environment_totals": {
+    "groups_reused": 20,
+    "groups_built": 6,
+    "erofs_bytes_built": 809365504,
+    "docker_pull_skipped": 0
+  },
+  "records": [
+    {
+      "index": 0,
+      "recipe": "python-agent",
+      "variant": "dependency-change",
+      "image_id": "bl20260929-dependency-000",
+      "context_sha256": "df0479c8e128d480dd3dd4b6e30a8255a8931e1be3b09c13c6d85a1e8d60140c",
+      "started_at": "2026-09-29T08:09:00Z",
+      "start_offset_seconds": 0.0017063650011550635,
+      "submission_seconds": 1.4461844309989829,
+      "build_id": "6132eae5-3140-4579-b438-3c38b186adb9",
+      "polling_seconds": 127.21846302700578,
+      "build": {
+        "build_id": "6132eae5-3140-4579-b438-3c38b186adb9",
+        "image_id": "bl20260929-dependency-000",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:09:01.375239+00:00",
+        "started_at": "2026-09-29T08:09:01.375239+00:00",
+        "queued_at": "2026-09-29T08:09:01.838654+00:00",
+        "execution_started_at": "2026-09-29T08:09:01.843279+00:00",
+        "finished_at": "2026-09-29T08:11:08.325050+00:00",
+        "timings": {
+          "end_to_end_ms": 127000,
+          "environment": {
+            "component_lookup_ms": 272.099,
+            "docker_pull_ms": 39303.968,
+            "groups_reused": 6,
+            "layer_lock_wait_ms": 6224.228999999999,
+            "preflight_misses": 1,
+            "preflight_ms": 51.73,
+            "total_ms": 46418.001
+          },
+          "phases": {
+            "cleanup_ms": 32,
+            "docker_build_and_push_ms": 80025,
+            "immutable_environment_ms": 46418
+          },
+          "preparation_ms": 463,
+          "queue_wait_ms": 4,
+          "total_ms": 126533
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:11:08.325050+00:00",
+          "id": "bl20260929-dependency-000",
+          "labels": {},
+          "manifest_digest": "sha256:d5af079c05a7944dc783f3a4d87f14b1384d7ecd75325737ba2c09f99a2c16c5",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-mrivs2y5",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-dependency-000-dc4b6bd2a62b:latest",
+          "updated_at": "2026-09-29T08:11:08.325050+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.3",
+          "job_id": "167927353",
+          "node_url": "http://10.42.0.3:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.3"
+      },
+      "cached_steps_in_retained_tail": 1,
+      "cached_steps_observed": [
+        {
+          "id": "#14",
+          "description": "[2/8] WORKDIR /opt/fixture"
+        }
+      ],
+      "client_wall_seconds": 128.66508020499896,
+      "finish_offset_seconds": 128.66678677100572,
+      "finished_at": "2026-09-29T08:11:09Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 200,
+          "headers_seconds": 0.006656517994997557
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 0.5303423859950271
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.017399547003151383
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008320364999235608
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.011105598998256028
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009139646994299255
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00731886200082954
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007639295996341389
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0078652369993506
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00723255400225753
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008470521999697667
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007210932999441866
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008360300998901948
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0062843850028002635
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007866899999498855
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007913803994597401
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00870083000336308
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007010768000327516
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007610666005348321
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0066541250052978285
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007758229003229644
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006735989001754206
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008551514998544008
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008443434002401773
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00851161900209263
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005412070000602398
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00820998300332576
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00699984299717471
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0080048700037878
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006053175995475613
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.033388477997505106
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007721288995526265
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.011298085999442264
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005434901999251451
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008104688000457827
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005917948001297191
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008328375995915849
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007756847997370642
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00810198399994988
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008751239998673555
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009270876995287836
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009229759998561349
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008632846002001315
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00798791700071888
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007925520003482234
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008458336000330746
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007203141998616047
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006212455999047961
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008296592000988312
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007850236004742328
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008209282001189422
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008433139999397099
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007845628999348264
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007773750003252644
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0078089990056469105
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00785298000118928
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008373630000278354
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008587835000071209
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008814257002086379
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008046407005167566
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0065927109972108155
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008211404994654004
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006673552998108789
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006474818001152016
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008945068002503831
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00696335199609166
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007279568999365438
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008441511999990325
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009475539998675231
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009033578993694391
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008319824999489356
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008191237000573892
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00809561500500422
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008068948998698033
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008187120998627506
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008779538002272602
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.013581537998106796
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008091078998404555
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008775384005275555
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00885280899819918
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008490770997013897
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009013121998577844
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009795600999495946
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010162587997911032
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005943383999692742
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008870033998391591
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010317260996089317
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.011837841004307847
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010640287000569515
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009973847998480778
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00745339800050715
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008987066001282074
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007936565998534206
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.01037123599962797
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009290693997172639
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0104908709981828
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008193289999326225
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005524315994989593
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008938397993915714
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008620469001471065
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009359248004329856
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008498552000673953
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008842436000122689
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008744340004341211
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010014193998358678
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009547387999191415
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00870708900038153
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.01196376499865437
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008875031002389733
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0098958099988522
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.011873679999553133
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010541310002736282
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009906775994750205
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00946782899700338
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010200551005254965
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.011382363001757767
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008503278004354797
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008317170999362133
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009688683996500913
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006826102995546535
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005630272004054859
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.014208453998435289
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007115502005035523
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00766936600120971
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.012776156996551435
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009776164995855652
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00879023400193546
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009092248998058494
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.057744529003684875
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "recipe": "typescript-tools",
+      "variant": "dependency-change",
+      "image_id": "bl20260929-dependency-001",
+      "context_sha256": "a82959b8fffcc8be551028f93c2d33a2f455e9029baf21c534a467f1d352d01b",
+      "started_at": "2026-09-29T08:09:00Z",
+      "start_offset_seconds": 0.0022550630019395612,
+      "submission_seconds": 4.9446753800002625,
+      "build_id": "e391fc7a-ec59-4cbe-b961-f17a604f4a6c",
+      "polling_seconds": 57.501126005001424,
+      "build": {
+        "build_id": "e391fc7a-ec59-4cbe-b961-f17a604f4a6c",
+        "image_id": "bl20260929-dependency-001",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:09:01.624045+00:00",
+        "started_at": "2026-09-29T08:09:01.624045+00:00",
+        "queued_at": "2026-09-29T08:09:05.328971+00:00",
+        "execution_started_at": "2026-09-29T08:09:05.343297+00:00",
+        "finished_at": "2026-09-29T08:10:01.990672+00:00",
+        "timings": {
+          "end_to_end_ms": 60403,
+          "environment": {
+            "component_lookup_ms": 198.59900000000002,
+            "docker_pull_ms": 12602.582,
+            "erofs_bytes_built": 187019264,
+            "groups_built": 2,
+            "groups_reused": 3,
+            "layer_lock_wait_ms": 0.053,
+            "mkfs_ms": 1050.445,
+            "preflight_misses": 1,
+            "preflight_ms": 58.149,
+            "publish_component_ms": 1150.047,
+            "sign_ms": 250.69600000000003,
+            "squash_ms": 3126.545,
+            "total_ms": 19713.068
+          },
+          "phases": {
+            "cleanup_ms": 23,
+            "docker_build_and_push_ms": 36917,
+            "immutable_environment_ms": 19713
+          },
+          "preparation_ms": 3705,
+          "queue_wait_ms": 14,
+          "total_ms": 56684
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:10:01.990672+00:00",
+          "id": "bl20260929-dependency-001",
+          "labels": {},
+          "manifest_digest": "sha256:40bbabf591253dc8539289ab05fe14f9b6e1b6335543e512006746c915dea100",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-zb7e8unq",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-dependency-001-11385b7118f7:latest",
+          "updated_at": "2026-09-29T08:10:01.990672+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.4",
+          "job_id": "167927354",
+          "node_url": "http://10.42.0.4:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.4"
+      },
+      "cached_steps_in_retained_tail": 1,
+      "cached_steps_observed": [
+        {
+          "id": "#14",
+          "description": "[2/8] WORKDIR /opt/fixture"
+        }
+      ],
+      "client_wall_seconds": 62.44598629000393,
+      "finish_offset_seconds": 62.448241483005404,
+      "finished_at": "2026-09-29T08:10:02Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 200,
+          "headers_seconds": 0.0053232989957905374
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 3.8412381050002296
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.011104579003585968
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009929056002874859
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0064186099989456125
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009732385005918331
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005993553000735119
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.01070795999839902
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.015538970001216512
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004133435999392532
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004375611002615187
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005269733999739401
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005227886002103332
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010973108001053333
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006194281006173696
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0041231520008295774
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004116773001442198
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004587110997817945
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005500813997059595
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003950862999772653
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004160012002103031
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004332390999479685
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004884412002866156
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004553275000944268
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0046287989971460775
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007908116000180598
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004301897999539506
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00542637100443244
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006171679000544827
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005976599997666199
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005527249995793682
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005032356995798182
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004005911003332585
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007801618994562887
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006299494998529553
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0072389729975839145
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007718776003457606
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007736999999906402
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007090256993251387
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00468287400144618
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0063951480042305775
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008975408993137535
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006561736998264678
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007425048999721184
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005876882001757622
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00580427200475242
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007576039002742618
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004886364993581083
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004545584997686092
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006081455998355523
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007944466000481043
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007885573999374174
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00867840900173178
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006751970999175683
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00457994199678069
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006720815996231977
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.012835196997912135
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008273521001683548
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006916997997905128
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.10947082000348018
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "recipe": "typescript-multistage",
+      "variant": "dependency-change",
+      "image_id": "bl20260929-dependency-002",
+      "context_sha256": "1c5985e770a9cb26ccc14e34868da82beca43e7db8a37dfab02ebf23f2693c1e",
+      "started_at": "2026-09-29T08:09:00Z",
+      "start_offset_seconds": 0.0024111980019370094,
+      "submission_seconds": 4.8704003040038515,
+      "build_id": "a4de9ecb-9b79-437c-97f3-6e5357354d00",
+      "polling_seconds": 36.42109791799885,
+      "build": {
+        "build_id": "a4de9ecb-9b79-437c-97f3-6e5357354d00",
+        "image_id": "bl20260929-dependency-002",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:09:01.609046+00:00",
+        "started_at": "2026-09-29T08:09:01.609046+00:00",
+        "queued_at": "2026-09-29T08:09:05.261964+00:00",
+        "execution_started_at": "2026-09-29T08:09:05.268472+00:00",
+        "finished_at": "2026-09-29T08:09:40.603041+00:00",
+        "timings": {
+          "end_to_end_ms": 39032,
+          "environment": {
+            "component_lookup_ms": 126.755,
+            "docker_pull_ms": 259.182,
+            "groups_reused": 2,
+            "layer_lock_wait_ms": 281.66999999999996,
+            "preflight_misses": 1,
+            "preflight_ms": 19.333,
+            "total_ms": 1569.837
+          },
+          "phases": {
+            "cleanup_ms": 25,
+            "docker_build_and_push_ms": 33739,
+            "immutable_environment_ms": 1569
+          },
+          "preparation_ms": 3653,
+          "queue_wait_ms": 6,
+          "total_ms": 35373
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:09:40.603041+00:00",
+          "id": "bl20260929-dependency-002",
+          "labels": {},
+          "manifest_digest": "sha256:f72d3f1f2b191b8c38f1ecd30b24ed8a1255acc478fe90787bfa5bb2ef17756f",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-pv_vat47",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-dependency-002-63ab94d0bff9:latest",
+          "updated_at": "2026-09-29T08:09:40.603041+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.4",
+          "job_id": "167927354",
+          "node_url": "http://10.42.0.4:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.4"
+      },
+      "cached_steps_in_retained_tail": 8,
+      "cached_steps_observed": [
+        {
+          "id": "#16",
+          "description": "[2/8] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#23",
+          "description": "[stage-1 2/6] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#24",
+          "description": "[compile 7/8] COPY src ./src"
+        },
+        {
+          "id": "#25",
+          "description": "[compile 4/8] RUN npm ci --no-audit --no-fund --cache /tmp/npm-cache  && npm ls --all --json > /opt/fixture/npm-resolved.json  && rm -rf /tmp/npm-cache"
+        },
+        {
+          "id": "#26",
+          "description": "[compile 5/8] COPY tsconfig.json build.cjs webpack.config.cjs eslint.config.cjs jest.config.cjs ./"
+        },
+        {
+          "id": "#27",
+          "description": "[compile 6/8] COPY tests ./tests"
+        },
+        {
+          "id": "#28",
+          "description": "[compile 8/8] RUN npm run lint && npm run build && npm test  && node dist/bundle.cjs > /opt/fixture/build-smoke.json"
+        },
+        {
+          "id": "#29",
+          "description": "[compile 3/8] COPY package.json package-lock.json ./"
+        }
+      ],
+      "client_wall_seconds": 41.29172566500347,
+      "finish_offset_seconds": 41.29413705399929,
+      "finished_at": "2026-09-29T08:09:41Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 404,
+          "headers_seconds": 0.007617846000357531
+        },
+        {
+          "method": "PUT",
+          "category": "context",
+          "status": 201,
+          "headers_seconds": 0.008130954003718216
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 3.7834309300014866
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.013042782993579749
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.011316860996885225
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.013051945999905001
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.012235790003614966
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.012274633001652546
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.011467679993074853
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007765779999317601
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00410959299915703
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006351226998958737
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006576007996045519
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005279158001940232
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006789681996451691
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0043120030022691935
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005172951001441106
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005017866998969112
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005897811999602709
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004266288997314405
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005299135002132971
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004687221000494901
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00495007200515829
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006535131004056893
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005190164003579412
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005160301996511407
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0049285729983239435
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008633017001557164
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0045270990012795664
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008197765993827488
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006580373003089335
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007418610999593511
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004143820995523129
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00600125399796525
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0058439569984329864
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006558893997862469
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006053625998902135
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004901184998743702
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005915194997214712
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.164803910003684
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "recipe": "python-agent",
+      "variant": "dependency-change",
+      "image_id": "bl20260929-dependency-003",
+      "context_sha256": "df0479c8e128d480dd3dd4b6e30a8255a8931e1be3b09c13c6d85a1e8d60140c",
+      "started_at": "2026-09-29T08:09:00Z",
+      "start_offset_seconds": 0.0019081440041190945,
+      "submission_seconds": 1.4762889859994175,
+      "build_id": "18a235ab-5982-4932-815a-49f96e5388cf",
+      "polling_seconds": 127.18971995099855,
+      "build": {
+        "build_id": "18a235ab-5982-4932-815a-49f96e5388cf",
+        "image_id": "bl20260929-dependency-003",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:09:01.360105+00:00",
+        "started_at": "2026-09-29T08:09:01.360105+00:00",
+        "queued_at": "2026-09-29T08:09:01.869433+00:00",
+        "execution_started_at": "2026-09-29T08:09:01.874099+00:00",
+        "finished_at": "2026-09-29T08:11:08.327041+00:00",
+        "timings": {
+          "end_to_end_ms": 127027,
+          "environment": {
+            "component_lookup_ms": 153.369,
+            "docker_pull_ms": 39292.442,
+            "erofs_bytes_built": 618647552,
+            "groups_built": 3,
+            "groups_reused": 3,
+            "layer_lock_wait_ms": 0.05,
+            "mkfs_ms": 1577.9799999999998,
+            "preflight_misses": 1,
+            "preflight_ms": 50.685,
+            "publish_component_ms": 3092.659,
+            "sign_ms": 817.127,
+            "squash_ms": 566.793,
+            "total_ms": 46404.892
+          },
+          "phases": {
+            "cleanup_ms": 32,
+            "docker_build_and_push_ms": 80009,
+            "immutable_environment_ms": 46405
+          },
+          "preparation_ms": 509,
+          "queue_wait_ms": 4,
+          "total_ms": 126514
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:11:08.327041+00:00",
+          "id": "bl20260929-dependency-003",
+          "labels": {},
+          "manifest_digest": "sha256:79e885f45f686e714185697743fbd7e7bf1afb069264c0f9906cde9a6b2e742c",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-jinzdnw1",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-dependency-003-77424abadf3c:latest",
+          "updated_at": "2026-09-29T08:11:08.327041+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.3",
+          "job_id": "167927353",
+          "node_url": "http://10.42.0.3:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.3"
+      },
+      "cached_steps_in_retained_tail": 1,
+      "cached_steps_observed": [
+        {
+          "id": "#14",
+          "description": "[2/8] WORKDIR /opt/fixture"
+        }
+      ],
+      "client_wall_seconds": 128.66633770200133,
+      "finish_offset_seconds": 128.66824596600054,
+      "finished_at": "2026-09-29T08:11:09Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 404,
+          "headers_seconds": 0.003172339995217044
+        },
+        {
+          "method": "PUT",
+          "category": "context",
+          "status": 201,
+          "headers_seconds": 0.006899441999848932
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 0.5794262589988648
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.01604002200474497
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008347363000211772
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008582988004491199
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008679730999574531
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006276134001382161
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0058703039976535365
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006104225998569746
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006622180997510441
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007605227998283226
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007877074000134598
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007040558004518971
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008515364002960268
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007718204004049767
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0068233490019338205
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008498370996676385
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006049180999980308
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.01053031600167742
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008126166998408735
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004976399999577552
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005804091000754852
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005779649000032805
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0069012860039947554
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00675002699426841
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0036459520051721483
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008932630997151136
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005294518996379338
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005796360004751477
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004794468994077761
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.03385046599578345
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0069860939984209836
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00870505599596072
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004754613000841346
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010424339001474436
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004403609003929887
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010147508000954986
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007998139997653197
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007832732000679243
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009009925997816026
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008094873999652918
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008227655998780392
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.01152059299784014
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008305495000968222
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005205165994993877
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00969627500307979
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008530224004061893
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0052455810000537895
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.011559926002519205
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006419420999009162
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00801671599765541
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00836236299801385
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008064943001954816
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0102039249977679
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008412621995375957
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0070352420007111505
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0061949419978191145
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008797643000434618
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009052385998074897
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006783313998312224
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008330739998200443
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009272328999941237
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007648958002391737
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005071049003163353
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008702681996510364
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007861311998567544
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005214857999817468
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009833602998696733
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00943613400158938
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009022785998240579
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008775554000749253
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00816332799877273
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008219155002734624
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006965905995457433
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007556641998235136
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009965534998627845
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.01340271099616075
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006901787004608195
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010387688998889644
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008051554999838118
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008431799004029017
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009720928006572649
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.012321467998845037
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010345941002015024
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007813435004209168
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009066373997484334
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00790016400424065
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009062418997928035
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.011182385998836253
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010275364002154674
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007080994997522794
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.01031598899862729
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00779681300627999
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010676047000742983
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00936270400416106
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010353131001465954
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00823400600347668
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004284233997168485
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009854683004959952
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008584949006035458
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00973947400052566
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006000381996273063
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.011648437997791916
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008320464999997057
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010344378999434412
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010809942003106698
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007918028997664806
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.012412653995852452
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00889414799894439
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010564964002696797
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010924970003543422
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.012271548999706283
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0082063269946957
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010701090999646112
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.011241366999456659
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008580834997701459
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.01024365099874558
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009426722004718613
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008799005998298526
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007530114999099169
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004766789999848697
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.012411261996021494
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007357485999818891
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009154496998235118
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.013097138995362911
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010202022996963933
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008137732002069242
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009251169998606201
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.05566625999927055
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "recipe": "typescript-tools",
+      "variant": "dependency-change",
+      "image_id": "bl20260929-dependency-004",
+      "context_sha256": "a82959b8fffcc8be551028f93c2d33a2f455e9029baf21c534a467f1d352d01b",
+      "started_at": "2026-09-29T08:09:00Z",
+      "start_offset_seconds": 0.0020687560026999563,
+      "submission_seconds": 4.738008963999164,
+      "build_id": "12545f32-2d5f-4540-a31f-d666bc98389c",
+      "polling_seconds": 57.700856365998334,
+      "build": {
+        "build_id": "12545f32-2d5f-4540-a31f-d666bc98389c",
+        "image_id": "bl20260929-dependency-004",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:09:01.597399+00:00",
+        "started_at": "2026-09-29T08:09:01.597399+00:00",
+        "queued_at": "2026-09-29T08:09:05.129113+00:00",
+        "execution_started_at": "2026-09-29T08:09:05.135859+00:00",
+        "finished_at": "2026-09-29T08:10:02.044466+00:00",
+        "timings": {
+          "end_to_end_ms": 60481,
+          "environment": {
+            "component_lookup_ms": 301.443,
+            "docker_pull_ms": 12585.324,
+            "groups_reused": 5,
+            "layer_lock_wait_ms": 6143.813999999999,
+            "preflight_misses": 1,
+            "preflight_ms": 53.87,
+            "total_ms": 19737.228
+          },
+          "phases": {
+            "cleanup_ms": 23,
+            "docker_build_and_push_ms": 37136,
+            "immutable_environment_ms": 19737
+          },
+          "preparation_ms": 3531,
+          "queue_wait_ms": 6,
+          "total_ms": 56944
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:10:02.044466+00:00",
+          "id": "bl20260929-dependency-004",
+          "labels": {},
+          "manifest_digest": "sha256:8c741e2e3b117706d31b65c85fe2e3cd2884414e3b82492dc89ae824bec7017d",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-4fcyv201",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-dependency-004-5f8013a0f916:latest",
+          "updated_at": "2026-09-29T08:10:02.044466+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.4",
+          "job_id": "167927354",
+          "node_url": "http://10.42.0.4:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.4"
+      },
+      "cached_steps_in_retained_tail": 1,
+      "cached_steps_observed": [
+        {
+          "id": "#14",
+          "description": "[2/8] WORKDIR /opt/fixture"
+        }
+      ],
+      "client_wall_seconds": 62.43907852400298,
+      "finish_offset_seconds": 62.441147551006,
+      "finished_at": "2026-09-29T08:10:02Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 404,
+          "headers_seconds": 0.007153995000408031
+        },
+        {
+          "method": "PUT",
+          "category": "context",
+          "status": 201,
+          "headers_seconds": 0.004194039000140037
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 3.6340705190013978
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.01848752899968531
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.011949704996368382
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.011091370004578494
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006488838000223041
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004904239998722915
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.011096116999397054
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.013293529002112336
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004708519998530392
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006668906004051678
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.011752013000659645
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005940069000644144
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008249819002230652
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005928893995587714
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005650060003972612
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004770034996909089
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007526630004576873
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005077738002000842
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00518828300118912
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0064403300057165325
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006719876000715885
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005202100997848902
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005266040003334638
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006719816003169399
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005030193999118637
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006409457004338037
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00598446000367403
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006256476997805294
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.008565543001168407
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007479384999896865
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005991671001538634
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00806509199901484
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006166823004605249
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005115369996929076
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0051684350037248805
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005556119001994375
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007881618999817874
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006141177000245079
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007382021001831163
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006990339999902062
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005532536000828259
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0072013009994407184
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005111566002597101
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006637733000388835
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005911019004997797
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004621359003067482
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00492350500280736
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009164600996882655
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007892335001088213
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006226985999091994
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006236127999727614
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007398281995847356
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007324630998482462
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005244619998848066
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006700789999740664
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00728023900592234
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0048665680005797185
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007559675999800675
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.2850660850017448
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "recipe": "typescript-multistage",
+      "variant": "dependency-change",
+      "image_id": "bl20260929-dependency-005",
+      "context_sha256": "1c5985e770a9cb26ccc14e34868da82beca43e7db8a37dfab02ebf23f2693c1e",
+      "started_at": "2026-09-29T08:09:00Z",
+      "start_offset_seconds": 0.0014303250063676387,
+      "submission_seconds": 4.926975656999275,
+      "build_id": "973d9385-f7aa-4fdd-b321-02f46681a197",
+      "polling_seconds": 35.29077303899976,
+      "build": {
+        "build_id": "973d9385-f7aa-4fdd-b321-02f46681a197",
+        "image_id": "bl20260929-dependency-005",
+        "status": "succeeded",
+        "created_at": "2026-09-29T08:09:01.580576+00:00",
+        "started_at": "2026-09-29T08:09:01.580576+00:00",
+        "queued_at": "2026-09-29T08:09:05.317464+00:00",
+        "execution_started_at": "2026-09-29T08:09:05.324441+00:00",
+        "finished_at": "2026-09-29T08:09:40.527892+00:00",
+        "timings": {
+          "end_to_end_ms": 38987,
+          "environment": {
+            "component_lookup_ms": 42.691,
+            "docker_pull_ms": 264.164,
+            "erofs_bytes_built": 3698688,
+            "groups_built": 1,
+            "groups_reused": 1,
+            "layer_lock_wait_ms": 0.022,
+            "mkfs_ms": 52.355,
+            "preflight_misses": 1,
+            "preflight_ms": 17.579,
+            "publish_component_ms": 216.964,
+            "sign_ms": 11.992,
+            "squash_ms": 22.388,
+            "total_ms": 1505.356
+          },
+          "phases": {
+            "cleanup_ms": 25,
+            "docker_build_and_push_ms": 33671,
+            "immutable_environment_ms": 1505
+          },
+          "preparation_ms": 3737,
+          "queue_wait_ms": 6,
+          "total_ms": 35244
+        },
+        "image": {
+          "available_to_sandboxes": true,
+          "created_at": "2026-09-29T08:09:40.527892+00:00",
+          "id": "bl20260929-dependency-005",
+          "labels": {},
+          "manifest_digest": "sha256:f6c92488e71e619a6a1c9b49ad6af6bb42982e7ebfc0446c3aab49aadd0bd783",
+          "pushed": true,
+          "source": "build:/tmp/ucloud-image-context-9g87_d2c",
+          "state": "available",
+          "tag": "10.42.0.2:5000/ucloud-managed/bl20260929-dependency-005-41aca874c449:latest",
+          "updated_at": "2026-09-29T08:09:40.527892+00:00"
+        },
+        "node": {
+          "node_id": "10.42.0.4",
+          "job_id": "167927354",
+          "node_url": "http://10.42.0.4:8090",
+          "active_sandboxes": 0
+        },
+        "location": "10.42.0.4"
+      },
+      "cached_steps_in_retained_tail": 2,
+      "cached_steps_observed": [
+        {
+          "id": "#23",
+          "description": "[stage-1 2/6] WORKDIR /opt/fixture"
+        },
+        {
+          "id": "#9",
+          "description": "[2/8] WORKDIR /opt/fixture"
+        }
+      ],
+      "client_wall_seconds": 40.218090897993534,
+      "finish_offset_seconds": 40.21952166300616,
+      "finished_at": "2026-09-29T08:09:40Z",
+      "http": [
+        {
+          "method": "GET",
+          "category": "context",
+          "status": 200,
+          "headers_seconds": 0.006478253002569545
+        },
+        {
+          "method": "POST",
+          "category": "submit",
+          "status": 202,
+          "headers_seconds": 3.8305737729970133
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.011257209000177681
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.007181312998000067
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009826984998653643
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010073674995510373
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005977970999083482
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.010606821997498628
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006565202995261643
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.011040268997021485
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00546014700375963
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00622838699928252
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004676263997680508
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005261562000669073
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006844698000350036
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.009501344997261185
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.003915784996934235
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004414823997649364
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005938437003351282
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004344617002061568
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005410899000708014
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0062906129969633184
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005178127998078708
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004370151997136418
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005593822002992965
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004982858001312707
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006101992999901995
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00603662299545249
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.006737810996128246
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004162304998317268
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.005531525006517768
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004867648996878415
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004379615995276254
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004521321003267076
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.004588313000567723
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.00475529300456401
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.0059149559965590015
+        },
+        {
+          "method": "GET",
+          "category": "poll",
+          "status": 200,
+          "headers_seconds": 0.06465249299799325
+        }
+      ]
+    }
+  ],
+  "phase": "dependency",
+  "finished_at": "2026-09-29T08:11:09Z",
+  "fleet_after": [
+    {
+      "job_id": "167927353",
+      "node_url": "http://10.42.0.3:8090",
+      "active_image_builds": 2,
+      "active_sandboxes": 0,
+      "physical_disk_free_mb": 205440,
+      "updated_at": "2026-09-29 08:10:50.205233+00:00",
+      "capabilities": [
+        "image-cache",
+        "image-build",
+        "request-body-keepalive-v1"
+      ]
+    },
+    {
+      "job_id": "167927354",
+      "node_url": "http://10.42.0.4:8090",
+      "active_image_builds": 0,
+      "active_sandboxes": 0,
+      "physical_disk_free_mb": 209768,
+      "updated_at": "2026-09-29 08:11:08.440702+00:00",
+      "capabilities": [
+        "image-cache",
+        "image-build",
+        "request-body-keepalive-v1"
+      ]
+    },
+    {
+      "job_id": "167927367",
+      "node_url": "http://10.42.0.5:8090",
+      "active_image_builds": 0,
+      "active_sandboxes": 0,
+      "physical_disk_free_mb": 209509,
+      "updated_at": "2026-09-29 08:10:50.684931+00:00",
+      "capabilities": [
+        "image-cache",
+        "image-build",
+        "request-body-keepalive-v1"
+      ]
+    },
+    {
+      "job_id": "167927368",
+      "node_url": "http://10.42.0.6:8090",
+      "active_image_builds": 0,
+      "active_sandboxes": 0,
+      "physical_disk_free_mb": 212159,
+      "updated_at": "2026-09-29 08:10:46.163967+00:00",
+      "capabilities": [
+        "image-cache",
+        "image-build",
+        "request-body-keepalive-v1"
+      ]
+    },
+    {
+      "job_id": "167931118",
+      "node_url": "http://10.42.0.7:8090",
+      "active_image_builds": 0,
+      "active_sandboxes": 0,
+      "physical_disk_free_mb": 605019,
+      "updated_at": "2026-09-29 08:10:53.440625+00:00",
+      "capabilities": [
+        "request-body-keepalive-v1",
+        "environment-contract-v1",
+        "sandbox",
+        "image-cache",
+        "disk-quota",
+        "hibernate-local-v2",
+        "relay-wake-fence-v1",
+        "resource-phase-advice-v1",
+        "direct-runsc-v1",
+        "network-policy-relay-v1:default",
+        "managed-primary-v1",
+        "static-file-management-v1",
+        "storage-native-v1",
+        "sandbox-detach-published-v1",
+        "sandbox-migrate-storage-native-v1",
+        "sandbox-checkpoint-v3",
+        "runtime-compatibility-sha256:8e689189ddd3e7ac4d6bb82a83b4ff3cf5bfb448c9b961fbd2cfe20de1354ab2",
+        "runtime-cpu-features-sha256:7caa1f7c2807e6e4a5dfea7e392b246753e6be75257a9e00591756f4e39e52e4",
+        "immutable-environment-host-erofs-v1"
+      ]
+    }
+  ],
+  "concurrency": 6,
+  "recipes": [
+    "python-agent",
+    "typescript-tools",
+    "typescript-multistage"
+  ],
+  "variants": [
+    "dependency-change"
+  ],
+  "gateway_loopback_client": true,
+  "durable_history_records": 6
+}

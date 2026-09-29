@@ -1,0 +1,82 @@
+{
+  "scope": "32 sandbox functional canaries, driver on gateway, all-agent plateau; pool acquisitions are not SQL statements and include observer/background work. Natural workloads and retained state differ; this is not whole-host capacity evidence.",
+  "runs": [
+    {
+      "run": "baseline32-full",
+      "run_id": "relay-load-aebe5ad017b7",
+      "full_active_window": {
+        "start": "2026-09-28T18:38:42.829739+00:00",
+        "end": "2026-09-28T18:40:14.259330+00:00"
+      },
+      "counter_window": {
+        "start": "2026-09-28T18:38:43.888047+00:00",
+        "end": "2026-09-28T18:40:13.889998+00:00",
+        "seconds": 90.00195097923279
+      },
+      "model_completions": 97,
+      "pools": {
+        "database_pool": {
+          "acquisitions": 2199,
+          "wait_ms": 0
+        },
+        "lifecycle_database_pool": {
+          "acquisitions": 4363,
+          "wait_ms": 2
+        }
+      },
+      "pool_acquisitions_per_second": 72.90953061133227,
+      "pool_acquisitions_per_model_completion": 67.64948453608247,
+      "counter_deltas": {},
+      "harness_sha256": "684ec5e7039e3e8fc569a6d8c283662ebdc10996c56954712faf42846f193888",
+      "sdk_version": "0.4.32"
+    },
+    {
+      "run": "after32-full",
+      "run_id": "relay-load-ff591d64becb",
+      "full_active_window": {
+        "start": "2026-09-28T18:52:24.258429+00:00",
+        "end": "2026-09-28T18:53:55.603145+00:00"
+      },
+      "counter_window": {
+        "start": "2026-09-28T18:52:26.900608+00:00",
+        "end": "2026-09-28T18:53:51.903206+00:00",
+        "seconds": 85.00259804725647
+      },
+      "model_completions": 96,
+      "pools": {
+        "database_pool": {
+          "acquisitions": 2008,
+          "wait_ms": 0
+        },
+        "lifecycle_database_pool": {
+          "acquisitions": 1933,
+          "wait_ms": 0
+        }
+      },
+      "pool_acquisitions_per_second": 46.36328877629169,
+      "pool_acquisitions_per_model_completion": 41.052083333333336,
+      "counter_deltas": {
+        "lifecycle_reconciliations": 339,
+        "lifecycle_wake_claim_calls": 435,
+        "lifecycle_park_hints": 111,
+        "lifecycle_wake_hints": 96,
+        "lifecycle_wake_claim_rows": 96,
+        "lifecycle_wake_claim_empty": 339,
+        "lifecycle_park_claim_calls": 450,
+        "lifecycle_park_claim_rows": 111,
+        "lifecycle_park_claim_empty": 339,
+        "notification_batches": 493,
+        "notification_keys": 696,
+        "notification_self_ignored": 696,
+        "poll_readiness_queries": 170,
+        "poll_readiness_rows": 297,
+        "delivery_status_queries": 650,
+        "delivery_status_rows": 5630,
+        "delivery_body_queries": 190,
+        "delivery_body_rows": 192
+      },
+      "harness_sha256": "684ec5e7039e3e8fc569a6d8c283662ebdc10996c56954712faf42846f193888",
+      "sdk_version": "0.4.32"
+    }
+  ]
+}

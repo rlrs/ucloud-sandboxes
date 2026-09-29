@@ -1,0 +1,56 @@
+[
+  {
+    "image_id": "bl20260929-opt-fresh-000",
+    "sandbox_id": "bl-smoke-opt-fresh-0",
+    "recipe": "python-agent",
+    "variant": "app-change-29",
+    "started_at": "2026-09-29T09:47:48Z",
+    "create_seconds": 0.9996587599889608,
+    "exit_code": 0,
+    "output": {
+      "grouped_rows": 11,
+      "revision": 29,
+      "score": 716528,
+      "source_modules": 1500
+    },
+    "verified": true,
+    "deleted": true,
+    "finished_at": "2026-09-29T09:47:57Z"
+  },
+  {
+    "image_id": "bl20260929-opt-fresh-001",
+    "sandbox_id": "bl-smoke-opt-fresh-1",
+    "recipe": "typescript-tools",
+    "variant": "app-change-29",
+    "started_at": "2026-09-29T09:47:48Z",
+    "create_seconds": 0.988719303990365,
+    "exit_code": 0,
+    "output": {
+      "source_modules": 2000,
+      "revision": 29,
+      "score": 964539,
+      "grouped_rows": 11
+    },
+    "verified": true,
+    "deleted": true,
+    "finished_at": "2026-09-29T09:47:50Z"
+  },
+  {
+    "image_id": "bl20260929-opt-fresh-002",
+    "sandbox_id": "bl-smoke-opt-fresh-2",
+    "recipe": "typescript-multistage",
+    "variant": "app-change-29",
+    "started_at": "2026-09-29T09:47:48Z",
+    "create_seconds": 0.942102810004144,
+    "exit_code": 0,
+    "output": {
+      "source_modules": 2000,
+      "revision": 29,
+      "score": 964539,
+      "grouped_rows": 11
+    },
+    "verified": true,
+    "deleted": true,
+    "finished_at": "2026-09-29T09:47:50Z"
+  }
+]

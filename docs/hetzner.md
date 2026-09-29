@@ -102,22 +102,34 @@ transactional backups. Put the much larger immutable registry blob tree on a
 Hetzner Volume; network-storage latency should not sit under SQLite commits or
 worker sandbox COW.
 
-## Production deployment (2026-09-27, 0.7.0)
+## Production deployment (2026-09-28, 0.7.0)
 
 The Hetzner production deployment is scripted in `scripts/hetzner_prod/`. It
 writes generated state to the git-ignored `build/hetzner-prod/`, and its
 secrets come from `.env`.
 
 **Gateway:**
-- CCX33 (8 dedicated vCPUs, 32 GB RAM) `sandboxes-gateway` at `10.42.0.2`, on Primary IP `77.42.92.27`
+- CCX23 (4 dedicated vCPUs, 16 GB RAM) `sandboxes-gateway` at `10.42.0.2`, on Primary IP `77.42.92.27`
   (`auto_delete` off). The SDK URL is `https://77.42.92.27`, with a
   Let's Encrypt IP certificate.
 - Runs PostgreSQL 18, a registry on a 1,000 GB Hetzner Volume, the relay,
   NAT and 6 gateway HTTP processes. Placement and autoscaling run separately.
+- The gateway retains its 160 GB local disk and existing registry Volume.
+  The four-core, 16 GB shape was qualified after an actual resize and reboot
+  with 512 agent sandboxes, inventory polling and concurrent registry/NAT
+  traffic. See the [qualification report](benchmarks/gateway-capacity-2026-09-28/README.md)
+  for latency gates, traffic rates and workload limits.
 - The model relay is published at `https://77.42.92.27/relay` for inference
   workers outside Hetzner (`configure_hetzner_sdk_ingress.sh` proxies
   `/relay/` to loopback port 8092). Sandboxes reach the same URL through
   the gateway NAT. Relay-only sandboxes keep the private `10.42.0.2:8092`.
+
+**OS update policy:** unattended APT upgrades are disabled on managed hosts.
+Gateway preparation/installation, worker and builder initialization, and snapshot
+preparation write `99zz-ucloud-no-unattended-upgrades` and mask the APT daily
+timers/services plus `unattended-upgrades.service`. Package updates require an
+explicit maintenance operation. This prevents unattended library updates from
+restarting PostgreSQL, the registry, and control-plane services during a run.
 
 **Client settings** (SDK and `verifiers-ucloud`):
 

@@ -1,0 +1,1108 @@
+[
+  {
+    "at": {
+      "date": "2026-09-28",
+      "time": "13:39:20",
+      "tz": "UTC",
+      "interval": 2
+    },
+    "busy_cores": 2.3651,
+    "hottest_cpu_busy_percent": 62.25,
+    "public_rx_MiBps": 128.3681640625,
+    "private_rx_MiBps": 81.4891796875,
+    "private_tx_MiBps": 203.832958984375,
+    "local_tcp": {
+      "atmptf": 0.0,
+      "estres": 0.0,
+      "retrseg": 317.0,
+      "isegerr": 0.0,
+      "orsts": 0.0
+    },
+    "softnet": {
+      "cpu": "all",
+      "total": 17673.5,
+      "dropd": 0.0,
+      "squeezd": 0.0,
+      "rx_rps": 0.0,
+      "flw_lim": 0.0,
+      "blg_len": 0
+    },
+    "interface_errors": {
+      "lo": {
+        "iface": "lo",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "eth0": {
+        "iface": "eth0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "enp7s0": {
+        "iface": "enp7s0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "docker0": {
+        "iface": "docker0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      }
+    }
+  },
+  {
+    "at": {
+      "date": "2026-09-28",
+      "time": "13:39:22",
+      "tz": "UTC",
+      "interval": 2
+    },
+    "busy_cores": 2.4589999999999996,
+    "hottest_cpu_busy_percent": 65.66,
+    "public_rx_MiBps": 77.674072265625,
+    "private_rx_MiBps": 76.372958984375,
+    "private_tx_MiBps": 151.9006640625,
+    "local_tcp": {
+      "atmptf": 0.0,
+      "estres": 0.5,
+      "retrseg": 66.5,
+      "isegerr": 0.0,
+      "orsts": 0.5
+    },
+    "softnet": {
+      "cpu": "all",
+      "total": 15216.0,
+      "dropd": 0.0,
+      "squeezd": 0.0,
+      "rx_rps": 0.0,
+      "flw_lim": 0.0,
+      "blg_len": 0
+    },
+    "interface_errors": {
+      "lo": {
+        "iface": "lo",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "eth0": {
+        "iface": "eth0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "enp7s0": {
+        "iface": "enp7s0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "docker0": {
+        "iface": "docker0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      }
+    }
+  },
+  {
+    "at": {
+      "date": "2026-09-28",
+      "time": "13:39:24",
+      "tz": "UTC",
+      "interval": 2
+    },
+    "busy_cores": 2.5449,
+    "hottest_cpu_busy_percent": 68.57,
+    "public_rx_MiBps": 198.933427734375,
+    "private_rx_MiBps": 70.856572265625,
+    "private_tx_MiBps": 274.0282421875,
+    "local_tcp": {
+      "atmptf": 0.0,
+      "estres": 0.0,
+      "retrseg": 160.5,
+      "isegerr": 0.0,
+      "orsts": 0.0
+    },
+    "softnet": {
+      "cpu": "all",
+      "total": 22384.5,
+      "dropd": 0.0,
+      "squeezd": 0.0,
+      "rx_rps": 0.0,
+      "flw_lim": 0.0,
+      "blg_len": 0
+    },
+    "interface_errors": {
+      "lo": {
+        "iface": "lo",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "eth0": {
+        "iface": "eth0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "enp7s0": {
+        "iface": "enp7s0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "docker0": {
+        "iface": "docker0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      }
+    }
+  },
+  {
+    "at": {
+      "date": "2026-09-28",
+      "time": "13:39:26",
+      "tz": "UTC",
+      "interval": 2
+    },
+    "busy_cores": 2.1726,
+    "hottest_cpu_busy_percent": 57.510000000000005,
+    "public_rx_MiBps": 101.824775390625,
+    "private_rx_MiBps": 82.452138671875,
+    "private_tx_MiBps": 177.15546875,
+    "local_tcp": {
+      "atmptf": 0.0,
+      "estres": 0.0,
+      "retrseg": 117.0,
+      "isegerr": 0.0,
+      "orsts": 0.0
+    },
+    "softnet": {
+      "cpu": "all",
+      "total": 16457.0,
+      "dropd": 0.0,
+      "squeezd": 0.0,
+      "rx_rps": 0.0,
+      "flw_lim": 0.0,
+      "blg_len": 0
+    },
+    "interface_errors": {
+      "lo": {
+        "iface": "lo",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "eth0": {
+        "iface": "eth0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "enp7s0": {
+        "iface": "enp7s0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "docker0": {
+        "iface": "docker0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      }
+    }
+  },
+  {
+    "at": {
+      "date": "2026-09-28",
+      "time": "13:39:28",
+      "tz": "UTC",
+      "interval": 2
+    },
+    "busy_cores": 2.136,
+    "hottest_cpu_busy_percent": 58.97,
+    "public_rx_MiBps": 134.205673828125,
+    "private_rx_MiBps": 76.346123046875,
+    "private_tx_MiBps": 211.12619140625,
+    "local_tcp": {
+      "atmptf": 0.0,
+      "estres": 0.5,
+      "retrseg": 294.5,
+      "isegerr": 0.0,
+      "orsts": 0.5
+    },
+    "softnet": {
+      "cpu": "all",
+      "total": 16223.0,
+      "dropd": 0.0,
+      "squeezd": 0.5,
+      "rx_rps": 0.0,
+      "flw_lim": 0.0,
+      "blg_len": 0
+    },
+    "interface_errors": {
+      "lo": {
+        "iface": "lo",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "eth0": {
+        "iface": "eth0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "enp7s0": {
+        "iface": "enp7s0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "docker0": {
+        "iface": "docker0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      }
+    }
+  },
+  {
+    "at": {
+      "date": "2026-09-28",
+      "time": "13:39:30",
+      "tz": "UTC",
+      "interval": 2
+    },
+    "busy_cores": 1.7773,
+    "hottest_cpu_busy_percent": 46.93,
+    "public_rx_MiBps": 67.243125,
+    "private_rx_MiBps": 72.4576171875,
+    "private_tx_MiBps": 140.67353515625,
+    "local_tcp": {
+      "atmptf": 0.0,
+      "estres": 0.0,
+      "retrseg": 239.0,
+      "isegerr": 0.0,
+      "orsts": 0.0
+    },
+    "softnet": {
+      "cpu": "all",
+      "total": 11771.0,
+      "dropd": 0.0,
+      "squeezd": 0.0,
+      "rx_rps": 0.0,
+      "flw_lim": 0.0,
+      "blg_len": 0
+    },
+    "interface_errors": {
+      "lo": {
+        "iface": "lo",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "eth0": {
+        "iface": "eth0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "enp7s0": {
+        "iface": "enp7s0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "docker0": {
+        "iface": "docker0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      }
+    }
+  },
+  {
+    "at": {
+      "date": "2026-09-28",
+      "time": "13:39:32",
+      "tz": "UTC",
+      "interval": 2
+    },
+    "busy_cores": 1.8519999999999999,
+    "hottest_cpu_busy_percent": 47.18,
+    "public_rx_MiBps": 2.303095703125,
+    "private_rx_MiBps": 79.783740234375,
+    "private_tx_MiBps": 77.7050390625,
+    "local_tcp": {
+      "atmptf": 2.0,
+      "estres": 0.0,
+      "retrseg": 180.5,
+      "isegerr": 0.0,
+      "orsts": 1.0
+    },
+    "softnet": {
+      "cpu": "all",
+      "total": 8650.5,
+      "dropd": 0.0,
+      "squeezd": 0.0,
+      "rx_rps": 0.0,
+      "flw_lim": 0.0,
+      "blg_len": 0
+    },
+    "interface_errors": {
+      "lo": {
+        "iface": "lo",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "eth0": {
+        "iface": "eth0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "enp7s0": {
+        "iface": "enp7s0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "docker0": {
+        "iface": "docker0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      }
+    }
+  },
+  {
+    "at": {
+      "date": "2026-09-28",
+      "time": "13:39:34",
+      "tz": "UTC",
+      "interval": 2
+    },
+    "busy_cores": 2.1020999999999996,
+    "hottest_cpu_busy_percent": 55.379999999999995,
+    "public_rx_MiBps": 2.37796875,
+    "private_rx_MiBps": 76.1572265625,
+    "private_tx_MiBps": 77.41755859375,
+    "local_tcp": {
+      "atmptf": 1.5,
+      "estres": 0.5,
+      "retrseg": 341.5,
+      "isegerr": 0.0,
+      "orsts": 1.0
+    },
+    "softnet": {
+      "cpu": "all",
+      "total": 9043.0,
+      "dropd": 0.0,
+      "squeezd": 0.0,
+      "rx_rps": 0.0,
+      "flw_lim": 0.0,
+      "blg_len": 0
+    },
+    "interface_errors": {
+      "lo": {
+        "iface": "lo",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "eth0": {
+        "iface": "eth0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "enp7s0": {
+        "iface": "enp7s0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "docker0": {
+        "iface": "docker0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      }
+    }
+  },
+  {
+    "at": {
+      "date": "2026-09-28",
+      "time": "13:39:36",
+      "tz": "UTC",
+      "interval": 2
+    },
+    "busy_cores": 2.1531000000000002,
+    "hottest_cpu_busy_percent": 56.059999999999995,
+    "public_rx_MiBps": 66.83744140625,
+    "private_rx_MiBps": 76.410888671875,
+    "private_tx_MiBps": 141.67873046875,
+    "local_tcp": {
+      "atmptf": 3.0,
+      "estres": 0.0,
+      "retrseg": 160.5,
+      "isegerr": 0.0,
+      "orsts": 0.5
+    },
+    "softnet": {
+      "cpu": "all",
+      "total": 15570.0,
+      "dropd": 0.0,
+      "squeezd": 0.0,
+      "rx_rps": 0.0,
+      "flw_lim": 0.0,
+      "blg_len": 0
+    },
+    "interface_errors": {
+      "lo": {
+        "iface": "lo",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "eth0": {
+        "iface": "eth0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "enp7s0": {
+        "iface": "enp7s0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "docker0": {
+        "iface": "docker0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      }
+    }
+  },
+  {
+    "at": {
+      "date": "2026-09-28",
+      "time": "13:39:38",
+      "tz": "UTC",
+      "interval": 2
+    },
+    "busy_cores": 1.9843000000000002,
+    "hottest_cpu_busy_percent": 53.57,
+    "public_rx_MiBps": 34.28021484375,
+    "private_rx_MiBps": 76.165087890625,
+    "private_tx_MiBps": 109.718291015625,
+    "local_tcp": {
+      "atmptf": 0.5,
+      "estres": 0.5,
+      "retrseg": 60.5,
+      "isegerr": 0.0,
+      "orsts": 0.5
+    },
+    "softnet": {
+      "cpu": "all",
+      "total": 10914.0,
+      "dropd": 0.0,
+      "squeezd": 0.5,
+      "rx_rps": 0.0,
+      "flw_lim": 0.0,
+      "blg_len": 0
+    },
+    "interface_errors": {
+      "lo": {
+        "iface": "lo",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "eth0": {
+        "iface": "eth0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "enp7s0": {
+        "iface": "enp7s0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "docker0": {
+        "iface": "docker0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      }
+    }
+  },
+  {
+    "at": {
+      "date": "2026-09-28",
+      "time": "13:39:40",
+      "tz": "UTC",
+      "interval": 2
+    },
+    "busy_cores": 1.8829,
+    "hottest_cpu_busy_percent": 48.73,
+    "public_rx_MiBps": 2.3787109375,
+    "private_rx_MiBps": 75.930068359375,
+    "private_tx_MiBps": 76.98708984375,
+    "local_tcp": {
+      "atmptf": 0.0,
+      "estres": 0.0,
+      "retrseg": 135.0,
+      "isegerr": 0.0,
+      "orsts": 0.0
+    },
+    "softnet": {
+      "cpu": "all",
+      "total": 9271.0,
+      "dropd": 0.0,
+      "squeezd": 0.0,
+      "rx_rps": 0.0,
+      "flw_lim": 0.0,
+      "blg_len": 0
+    },
+    "interface_errors": {
+      "lo": {
+        "iface": "lo",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "eth0": {
+        "iface": "eth0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "enp7s0": {
+        "iface": "enp7s0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "docker0": {
+        "iface": "docker0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      }
+    }
+  },
+  {
+    "at": {
+      "date": "2026-09-28",
+      "time": "13:39:42",
+      "tz": "UTC",
+      "interval": 2
+    },
+    "busy_cores": 2.2579000000000002,
+    "hottest_cpu_busy_percent": 62.37000000000001,
+    "public_rx_MiBps": 318.2796484375,
+    "private_rx_MiBps": 76.413525390625,
+    "private_tx_MiBps": 393.357939453125,
+    "local_tcp": {
+      "atmptf": 0.0,
+      "estres": 0.5,
+      "retrseg": 148.0,
+      "isegerr": 0.0,
+      "orsts": 1.0
+    },
+    "softnet": {
+      "cpu": "all",
+      "total": 34552.5,
+      "dropd": 0.0,
+      "squeezd": 0.5,
+      "rx_rps": 0.0,
+      "flw_lim": 0.0,
+      "blg_len": 0
+    },
+    "interface_errors": {
+      "lo": {
+        "iface": "lo",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "eth0": {
+        "iface": "eth0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "enp7s0": {
+        "iface": "enp7s0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "docker0": {
+        "iface": "docker0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      }
+    }
+  },
+  {
+    "at": {
+      "date": "2026-09-28",
+      "time": "13:39:44",
+      "tz": "UTC",
+      "interval": 2
+    },
+    "busy_cores": 2.6378999999999997,
+    "hottest_cpu_busy_percent": 78.53999999999999,
+    "public_rx_MiBps": 542.845068359375,
+    "private_rx_MiBps": 77.571630859375,
+    "private_tx_MiBps": 618.777578125,
+    "local_tcp": {
+      "atmptf": 0.0,
+      "estres": 0.5,
+      "retrseg": 227.0,
+      "isegerr": 0.0,
+      "orsts": 0.5
+    },
+    "softnet": {
+      "cpu": "all",
+      "total": 53953.5,
+      "dropd": 0.0,
+      "squeezd": 0.0,
+      "rx_rps": 0.0,
+      "flw_lim": 0.0,
+      "blg_len": 0
+    },
+    "interface_errors": {
+      "lo": {
+        "iface": "lo",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "eth0": {
+        "iface": "eth0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "enp7s0": {
+        "iface": "enp7s0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "docker0": {
+        "iface": "docker0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      }
+    }
+  },
+  {
+    "at": {
+      "date": "2026-09-28",
+      "time": "13:39:46",
+      "tz": "UTC",
+      "interval": 2
+    },
+    "busy_cores": 2.6303,
+    "hottest_cpu_busy_percent": 68.7,
+    "public_rx_MiBps": 121.28388671875,
+    "private_rx_MiBps": 76.62841796875,
+    "private_tx_MiBps": 194.77849609375,
+    "local_tcp": {
+      "atmptf": 0.5,
+      "estres": 0.0,
+      "retrseg": 58.5,
+      "isegerr": 0.0,
+      "orsts": 0.0
+    },
+    "softnet": {
+      "cpu": "all",
+      "total": 17267.5,
+      "dropd": 0.0,
+      "squeezd": 0.0,
+      "rx_rps": 0.0,
+      "flw_lim": 0.0,
+      "blg_len": 0
+    },
+    "interface_errors": {
+      "lo": {
+        "iface": "lo",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "eth0": {
+        "iface": "eth0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "enp7s0": {
+        "iface": "enp7s0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      },
+      "docker0": {
+        "iface": "docker0",
+        "rxerr": 0.0,
+        "txerr": 0.0,
+        "coll": 0.0,
+        "rxdrop": 0.0,
+        "txdrop": 0.0,
+        "txcarr": 0.0,
+        "rxfram": 0.0,
+        "rxfifo": 0.0,
+        "txfifo": 0.0
+      }
+    }
+  }
+]

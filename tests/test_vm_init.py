@@ -102,6 +102,173 @@ def write_bundle(root: Path, role: str) -> dict:
 
 
 class VmInitTests(unittest.TestCase):
+    def test_shared_buildkit_is_opt_in_and_uses_agent_user(self):
+        for role in ("sandbox", "builder"):
+            script = render_vm_init_script(self._options(role=role))
+            self.assertNotIn("# BEGIN shared BuildKit setup", script)
+            self.assertNotIn("--buildx-builder", script)
+        options = self._options(
+            role="builder", buildx_cache_ref="registry.internal:5000/build-cache",
+            buildx_cache_registry_url="http://registry.internal:5000",
+        )
+        for immutable, expected_user in ((False, "$UCLOUD_SERVICE_USER"), (True, "root")):
+            with self.subTest(immutable=immutable), patch(
+                "ucloud_sandboxes.environment_bootstrap.settings",
+                return_value=(" --environment-test" if immutable else "", "", ""),
+            ):
+                script = render_vm_init_script(options)
+            self.assertIn(f'UCLOUD_BUILDX_USER="{expected_user}"', script)
+            self.assertIn('HOME="$UCLOUD_BUILDX_HOME" DOCKER_CONFIG="$UCLOUD_BUILDX_HOME/.docker" docker "$@"', script)
+            service = script.split("<<NODE_SERVICE\n", 1)[1].split("\nNODE_SERVICE", 1)[0]
+            self.assertIn('Environment="HOME=$UCLOUD_BUILDX_HOME" "DOCKER_CONFIG=$UCLOUD_BUILDX_HOME/.docker"', service)
+            self.assertIn("--buildx-builder ucloud-shared-cache", service)
+            self.assertIn("--buildx-cache-registry-url http://registry.internal:5000", service)
+            self.assertIn('config["storage-driver"] = "overlay2"', script)
+            self.assertIn('config["features"] = {"containerd-snapshotter": False}', script)
+            # Reused snapshots still run setup after Docker readiness, outside
+            # the static-runtime installation conditional.
+            self.assertIn('log_init_phase "docker-daemon"\n\n# BEGIN shared BuildKit setup', script)
+            result = subprocess.run(["bash", "-n"], input=script, text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_buildkit_cache_targets_and_registry_transport(self):
+        options = self._options(
+            role="builder", buildx_cache_ref="registry.internal:5000/build-cache",
+            buildx_cache_registry_url="http://registry.internal:5000",
+            docker_insecure_registries=("private-tls.internal:5001", "registry.internal:5000"),
+        )
+        config = vm_init._buildkit_config(options)
+        self.assertIn("max-parallelism = 4", config)
+        self.assertIn(f"maxUsedSpace = {20 * 1024 ** 3}", config)
+        self.assertIn(f"minFreeSpace = {10 * 1024 ** 3}", config)
+        self.assertIn(f"reservedSpace = {1024 ** 3}", config)
+        self.assertIn('[registry."registry.internal:5000"]\n  http = true', config)
+        self.assertIn('[registry."private-tls.internal:5001"]\n  insecure = true', config)
+        self.assertNotIn("docker.io", config)
+        smaller = vm_init._buildkit_config(self._options(role="builder", docker_quota_image_gb=8))
+        self.assertIn(f"maxUsedSpace = {2 * 1024 ** 3}", smaller)
+        self.assertIn(f"minFreeSpace = {2 * 1024 ** 3}", smaller)
+        for url in ("http://another:5000", "http://user:secret@registry.internal:5000", "http://registry.internal:5000/path"):
+            with self.subTest(url=url), self.assertRaisesRegex(ValueError, "buildx cache registry URL"):
+                render_vm_init_script(self._options(
+                    role="builder", buildx_cache_ref="registry.internal:5000/cache",
+                    buildx_cache_registry_url=url,
+                ))
+        with self.assertRaisesRegex(ValueError, "explicit insecure registry hosts"):
+            render_vm_init_script(self._options(
+                role="builder", buildx_cache_ref="registry.internal:5000/cache",
+                docker_insecure_registries=("10.0.0.0/8",),
+            ))
+
+    def test_buildkit_setup_reuses_state_and_recovers_failed_bootstrap(self):
+        options = self._options(
+            role="builder", buildx_cache_ref="registry.internal:5000/cache",
+            buildx_cache_registry_url="http://registry.internal:5000",
+            host_aliases=("registry.internal=10.42.0.1",),
+        )
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            bin_dir, home = root / "bin", root / "home"
+            bin_dir.mkdir()
+            home.mkdir()
+            stubs = {
+                "getent": f"#!/bin/sh\nprintf '%s\\n' 'fixture:x:1:1::{home}:/bin/sh'\n",
+                "runuser": '#!/bin/bash\nexport MOCK_USER="$2"\nshift 3\nexec "$@"\n',
+                "install": '#!/bin/bash\nargs=(); while (($#)); do case "$1" in -o|-g) shift 2;; *) args+=("$1"); shift;; esac; done\nexec /usr/bin/install "${args[@]}"\n',
+                "docker": f'''#!{sys.executable}
+import json, os, pathlib, sys
+root = pathlib.Path(os.environ["MOCK_ROOT"])
+args = sys.argv[1:]
+with (root / "calls").open("a") as log:
+    log.write(json.dumps({{"args": args, "home": os.environ["HOME"], "config": os.environ["DOCKER_CONFIG"], "user": os.environ["MOCK_USER"]}}) + "\\n")
+path = root / "state"
+state = json.loads(path.read_text()) if path.exists() else None
+if args[:2] == ["buildx", "create"]:
+    assert state is None
+    image = next(value.removeprefix("image=") for value in args if value.startswith("image="))
+    path.write_text(json.dumps({{"image": image, "network": "host", "driver": "docker-container", "status": "stopped", "cache": "retained"}}))
+elif args[:2] == ["buildx", "ls"]:
+    if (root / "fail-list").exists():
+        print("ERROR: cannot read builder store", file=sys.stderr)
+        sys.exit(1)
+    assert args[2:] == ["--format", "{{{{.Name}}}}"]
+    print("default\\ndefault")
+    if state is not None:
+        print("ucloud-shared-cache\\nucloud-shared-cache0")
+elif args[:2] == ["buildx", "inspect"]:
+    # Match the real Buildx CLI, which has never supported inspect --format.
+    if "--format" in args:
+        print("unknown flag: --format", file=sys.stderr)
+        sys.exit(125)
+    if state is None:
+        sys.exit(1)
+    if "--bootstrap" in args:
+        if (root / "fail-bootstrap").exists():
+            sys.exit(2)
+        state["status"] = "running"
+        path.write_text(json.dumps(state))
+    elif (root / "fail-inspect").exists():
+        print("ERROR: unexpected inspection failure", file=sys.stderr)
+        sys.exit(1)
+    print("Name:          ucloud-shared-cache\\nDriver:        " + state["driver"] + "\\nNodes:\\nName:          ucloud-shared-cache0\\nStatus:        " + state["status"])
+elif args[0] == "inspect":
+    print(state["image"] if args[-1] == "{{{{.Config.Image}}}}" else state["network"])
+elif args[0] == "exec":
+    assert sys.stdin.read() == "10.42.0.1\\tregistry.internal\\t# ucloud-sandboxes host-alias registry.internal\\n"
+else:
+    raise AssertionError(args)
+''',
+            }
+            for name, body in stubs.items():
+                path = bin_dir / name
+                path.write_text(body)
+                path.chmod(0o755)
+            setup = vm_init._buildkit_setup_script(options, "root").replace(
+                "/etc/ucloud-sandboxes/buildkit", str(root / "config")
+            )
+            harness = 'set -euo pipefail\nSUDO=""\nlog_init_phase() { :; }\n' + setup
+            def run():
+                return subprocess.run(
+                    ["bash", "-c", harness], text=True, capture_output=True,
+                    env={**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "MOCK_ROOT": str(root)},
+                )
+            (root / "fail-bootstrap").touch()
+            self.assertNotEqual(run().returncode, 0)
+            self.assertTrue((root / "config/receipt").is_file())
+            (root / "fail-bootstrap").unlink()
+            for _ in range(2):
+                result = run()
+                self.assertEqual(result.returncode, 0, result.stderr)
+            # Stopping a registered builder must bootstrap the same instance.
+            stopped = json.loads((root / "state").read_text())
+            stopped["status"] = "stopped"
+            (root / "state").write_text(json.dumps(stopped))
+            result = run()
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads((root / "state").read_text()), {**stopped, "status": "running"})
+            # An unreadable store or failed inspection is not proof of absence.
+            for failure in ("fail-list", "fail-inspect"):
+                with self.subTest(failure=failure):
+                    (root / failure).touch()
+                    before = (root / "state").read_bytes()
+                    self.assertNotEqual(run().returncode, 0)
+                    self.assertEqual((root / "state").read_bytes(), before)
+                    (root / failure).unlink()
+            calls = [json.loads(line) for line in (root / "calls").read_text().splitlines()]
+            self.assertEqual(sum(call["args"][:2] == ["buildx", "create"] for call in calls), 1)
+            self.assertFalse(any(call["args"][:2] == ["buildx", "inspect"]
+                                 and "--format" in call["args"] for call in calls))
+            self.assertTrue(all(call["user"] == "root" and call["home"] == str(home)
+                                and call["config"] == str(home / ".docker") for call in calls))
+            # A changed policy refuses to remove/recreate a potentially busy
+            # builder, and leaves its cache and registration intact.
+            state_before = (root / "state").read_bytes()
+            (root / "config/buildkitd.toml").write_text("wrong policy\n")
+            result = run()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("replace this builder node", result.stderr)
+            self.assertEqual((root / "state").read_bytes(), state_before)
+
     def test_storage_format_upgrade_guard_requires_a_fresh_or_current_worker(self) -> None:
         script = render_vm_init_script(self._options())
         guard = script.split("<<'STORAGE_UPGRADE_GUARD'\n", 1)[1].split(

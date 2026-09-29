@@ -1,0 +1,17 @@
+{
+  "unit": "ucloud-gateway-extra-metrics-20260928-acceptance.service",
+  "sampler_pid": 52955,
+  "started_at": "2026-09-28T13:46:52.120825+00:00",
+  "duration_limit_seconds": 1200.0,
+  "snapshot_interval_seconds": 5.0,
+  "sar_interval_seconds": 2,
+  "kernel": "7.0.0-30-generic",
+  "online_cpus_at_start": "0-3",
+  "block_device": "sdb",
+  "sar_pid": 52958,
+  "finished_at": "2026-09-28T13:52:34.735826+00:00",
+  "sar_exit_code": -15,
+  "elapsed_seconds": 342.61473740800284,
+  "online_cpus_at_finish": "0-3",
+  "local_artifact_directory": "build/gateway-qualification/wholehost-extra-acceptance"
+}

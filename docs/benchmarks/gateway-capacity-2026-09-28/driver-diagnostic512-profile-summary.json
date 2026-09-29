@@ -1,0 +1,360 @@
+{
+  "source": "docs/benchmarks/gateway-capacity-2026-09-28/driver-diagnostic512-cpu.txt",
+  "samples": 10030,
+  "scope": "Whole diagnostic run GIL-held sampled Python stacks; provisioning, active cycles and cleanup mixed. Profiler perturbs timings; percentages are sampled-driver attribution, not gateway CPU or capacity. C-extension or GC work is charged to visible calling frames.",
+  "exclusive_categories": {
+    "inventory_poll_and_decode": {
+      "samples": 8036,
+      "percent": 80.11964107676968
+    },
+    "asyncio_transport_or_runtime": {
+      "samples": 990,
+      "percent": 9.870388833499502
+    },
+    "scenario_operations": {
+      "samples": 731,
+      "percent": 7.288135593220339
+    },
+    "report_checkpoint": {
+      "samples": 236,
+      "percent": 2.3529411764705883
+    },
+    "resource_probe": {
+      "samples": 29,
+      "percent": 0.28913260219341974
+    },
+    "other_harness_or_observer": {
+      "samples": 8,
+      "percent": 0.07976071784646062
+    }
+  },
+  "top_leaf_frames": [
+    {
+      "frame": "raw_decode (json/decoder.py:353)",
+      "samples": 6721,
+      "percent": 67.00897308075773
+    },
+    {
+      "frame": "inventory_probe (live_relay_load_benchmark.py:870)",
+      "samples": 782,
+      "percent": 7.796610169491526
+    },
+    {
+      "frame": "encode_report (live_relay_load_benchmark.py:194)",
+      "samples": 219,
+      "percent": 2.1834496510468595
+    },
+    {
+      "frame": "data_received (aiohttp/client_proto.py:326)",
+      "samples": 104,
+      "percent": 1.036889332003988
+    },
+    {
+      "frame": "read (ssl.py:917)",
+      "samples": 71,
+      "percent": 0.707876370887338
+    },
+    {
+      "frame": "iterencode (json/encoder.py:257)",
+      "samples": 63,
+      "percent": 0.6281156530408774
+    },
+    {
+      "frame": "_run (asyncio/events.py:80)",
+      "samples": 59,
+      "percent": 0.5882352941176471
+    },
+    {
+      "frame": "inventory_probe (live_relay_load_benchmark.py:878)",
+      "samples": 50,
+      "percent": 0.4985044865403789
+    },
+    {
+      "frame": "inventory_probe (live_relay_load_benchmark.py:881)",
+      "samples": 45,
+      "percent": 0.448654037886341
+    },
+    {
+      "frame": "_read_nowait (aiohttp/streams.py:579)",
+      "samples": 45,
+      "percent": 0.448654037886341
+    },
+    {
+      "frame": "inventory_probe (live_relay_load_benchmark.py:880)",
+      "samples": 38,
+      "percent": 0.37886340977068794
+    },
+    {
+      "frame": "read_async_response (ucloud_sandboxes_sdk/_http.py:252)",
+      "samples": 38,
+      "percent": 0.37886340977068794
+    },
+    {
+      "frame": "request (aiohttp/client.py:529)",
+      "samples": 33,
+      "percent": 0.32901296111665
+    },
+    {
+      "frame": "resume_reading (aiohttp/client_proto.py:194)",
+      "samples": 30,
+      "percent": 0.29910269192422734
+    },
+    {
+      "frame": "inventory_probe (live_relay_load_benchmark.py:882)",
+      "samples": 28,
+      "percent": 0.2791625124626122
+    },
+    {
+      "frame": "_call_connection_lost (asyncio/selector_events.py:747)",
+      "samples": 28,
+      "percent": 0.2791625124626122
+    },
+    {
+      "frame": "set_response_params (aiohttp/client_proto.py:248)",
+      "samples": 24,
+      "percent": 0.23928215353938184
+    },
+    {
+      "frame": "family (socket.py:518)",
+      "samples": 21,
+      "percent": 0.2093718843469591
+    },
+    {
+      "frame": "connect (aiohttp/connector.py:628)",
+      "samples": 20,
+      "percent": 0.19940179461615154
+    },
+    {
+      "frame": "_request_json (ucloud_sandboxes_sdk/client.py:2569)",
+      "samples": 19,
+      "percent": 0.18943170488534397
+    },
+    {
+      "frame": "feed_ssldata (asyncio/sslproto.py:199)",
+      "samples": 17,
+      "percent": 0.1694915254237288
+    },
+    {
+      "frame": "_read_ready__data_received (asyncio/selector_events.py:862)",
+      "samples": 17,
+      "percent": 0.1694915254237288
+    },
+    {
+      "frame": "__aenter__ (aiohttp/client.py:1693)",
+      "samples": 16,
+      "percent": 0.15952143569292124
+    },
+    {
+      "frame": "inventory_probe (live_relay_load_benchmark.py:883)",
+      "samples": 16,
+      "percent": 0.15952143569292124
+    },
+    {
+      "frame": "_add_writer (asyncio/selector_events.py:291)",
+      "samples": 16,
+      "percent": 0.15952143569292124
+    }
+  ],
+  "top_inclusive_frames": [
+    {
+      "frame": "_run_code (runpy.py:86)",
+      "samples": 10027,
+      "percent": 99.97008973080757
+    },
+    {
+      "frame": "<module> (run_gateway_driver_diagnostic.py:21)",
+      "samples": 10027,
+      "percent": 99.97008973080757
+    },
+    {
+      "frame": "run_path (runpy.py:289)",
+      "samples": 10027,
+      "percent": 99.97008973080757
+    },
+    {
+      "frame": "_run_module_code (runpy.py:96)",
+      "samples": 10027,
+      "percent": 99.97008973080757
+    },
+    {
+      "frame": "<module> (live_relay_load_benchmark.py:1208)",
+      "samples": 10023,
+      "percent": 99.93020937188435
+    },
+    {
+      "frame": "run_until_complete (asyncio/base_events.py:636)",
+      "samples": 10020,
+      "percent": 99.90029910269193
+    },
+    {
+      "frame": "main (live_relay_load_benchmark.py:1201)",
+      "samples": 10020,
+      "percent": 99.90029910269193
+    },
+    {
+      "frame": "run (asyncio/runners.py:44)",
+      "samples": 10020,
+      "percent": 99.90029910269193
+    },
+    {
+      "frame": "run_forever (asyncio/base_events.py:603)",
+      "samples": 10018,
+      "percent": 99.8803589232303
+    },
+    {
+      "frame": "_run_once (asyncio/base_events.py:1909)",
+      "samples": 9919,
+      "percent": 98.89332003988036
+    },
+    {
+      "frame": "_run (asyncio/events.py:80)",
+      "samples": 9915,
+      "percent": 98.85343968095714
+    },
+    {
+      "frame": "inventory_probe (live_relay_load_benchmark.py:869)",
+      "samples": 7031,
+      "percent": 70.09970089730807
+    },
+    {
+      "frame": "list_sandboxes (ucloud_sandboxes_sdk/client.py:2056)",
+      "samples": 7013,
+      "percent": 69.92023928215355
+    },
+    {
+      "frame": "loads (json/__init__.py:346)",
+      "samples": 6738,
+      "percent": 67.17846460618145
+    },
+    {
+      "frame": "decode (json/decoder.py:337)",
+      "samples": 6732,
+      "percent": 67.11864406779661
+    },
+    {
+      "frame": "raw_decode (json/decoder.py:353)",
+      "samples": 6721,
+      "percent": 67.00897308075773
+    },
+    {
+      "frame": "_request_json (ucloud_sandboxes_sdk/client.py:2567)",
+      "samples": 6692,
+      "percent": 66.71984047856431
+    },
+    {
+      "frame": "_decode_node_json (ucloud_sandboxes_sdk/client.py:3206)",
+      "samples": 6688,
+      "percent": 66.67996011964108
+    },
+    {
+      "frame": "_request_json (ucloud_sandboxes_sdk/client.py:2557)",
+      "samples": 802,
+      "percent": 7.9960119641076774
+    },
+    {
+      "frame": "inventory_probe (live_relay_load_benchmark.py:870)",
+      "samples": 782,
+      "percent": 7.796610169491526
+    },
+    {
+      "frame": "__aenter__ (aiohttp/client.py:1693)",
+      "samples": 585,
+      "percent": 5.8325024925224325
+    },
+    {
+      "frame": "_send (ucloud_sandboxes_sdk/client.py:2609)",
+      "samples": 470,
+      "percent": 4.685942173479561
+    },
+    {
+      "frame": "_read_ready (asyncio/selector_events.py:819)",
+      "samples": 432,
+      "percent": 4.307078763708874
+    },
+    {
+      "frame": "_read_ready__data_received (asyncio/selector_events.py:876)",
+      "samples": 406,
+      "percent": 4.047856430707877
+    },
+    {
+      "frame": "_request (aiohttp/client.py:860)",
+      "samples": 362,
+      "percent": 3.6091724825523435
+    },
+    {
+      "frame": "_send (ucloud_sandboxes_sdk/client.py:2624)",
+      "samples": 307,
+      "percent": 3.060817547357926
+    },
+    {
+      "frame": "read_async_response (ucloud_sandboxes_sdk/_http.py:245)",
+      "samples": 258,
+      "percent": 2.5722831505483548
+    },
+    {
+      "frame": "event (live_relay_load_benchmark.py:786)",
+      "samples": 236,
+      "percent": 2.3529411764705883
+    },
+    {
+      "frame": "persist (live_relay_load_benchmark.py:777)",
+      "samples": 236,
+      "percent": 2.3529411764705883
+    },
+    {
+      "frame": "data_received (asyncio/sslproto.py:552)",
+      "samples": 223,
+      "percent": 2.22333000997009
+    },
+    {
+      "frame": "persist_report (live_relay_load_benchmark.py:211)",
+      "samples": 219,
+      "percent": 2.1834496510468595
+    },
+    {
+      "frame": "encode_report (live_relay_load_benchmark.py:194)",
+      "samples": 219,
+      "percent": 2.1834496510468595
+    },
+    {
+      "frame": "read (aiohttp/streams.py:450)",
+      "samples": 217,
+      "percent": 2.1635094715852445
+    },
+    {
+      "frame": "upload_file (ucloud_sandboxes_sdk/client.py:1693)",
+      "samples": 213,
+      "percent": 2.1236291126620137
+    },
+    {
+      "frame": "upload_file (ucloud_sandboxes_sdk/client.py:2143)",
+      "samples": 213,
+      "percent": 2.1236291126620137
+    },
+    {
+      "frame": "_request_json (ucloud_sandboxes_sdk/relay.py:1151)",
+      "samples": 209,
+      "percent": 2.0837487537387838
+    },
+    {
+      "frame": "_finish_file_upload (ucloud_sandboxes_sdk/client.py:2155)",
+      "samples": 204,
+      "percent": 2.0338983050847457
+    },
+    {
+      "frame": "scenario (live_relay_load_benchmark.py:1087)",
+      "samples": 191,
+      "percent": 1.9042871385842473
+    },
+    {
+      "frame": "data_received (aiohttp/client_proto.py:326)",
+      "samples": 183,
+      "percent": 1.8245264207377865
+    },
+    {
+      "frame": "data_received (asyncio/sslproto.py:534)",
+      "samples": 164,
+      "percent": 1.6350947158524427
+    }
+  ]
+}

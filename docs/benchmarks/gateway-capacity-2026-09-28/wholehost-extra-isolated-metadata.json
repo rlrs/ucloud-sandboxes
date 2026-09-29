@@ -1,0 +1,17 @@
+{
+  "unit": "ucloud-gateway-extra-metrics-20260928-isolated-four.service",
+  "sampler_pid": 57301,
+  "started_at": "2026-09-28T14:11:43.941096+00:00",
+  "duration_limit_seconds": 1200.0,
+  "snapshot_interval_seconds": 5.0,
+  "sar_interval_seconds": 2,
+  "kernel": "7.0.0-30-generic",
+  "online_cpus_at_start": "0-4",
+  "block_device": "sdb",
+  "sar_pid": 57304,
+  "finished_at": "2026-09-28T14:20:30.969227+00:00",
+  "sar_exit_code": -15,
+  "elapsed_seconds": 527.0279727160087,
+  "online_cpus_at_finish": "0-7",
+  "local_artifact_directory": "build/gateway-qualification/wholehost-extra-isolated"
+}

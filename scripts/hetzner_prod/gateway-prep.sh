@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 # PostgreSQL, service user, venv and database schemas before install_hetzner_gateway.sh.
 set -euo pipefail
+# OS packages are updated only through explicit maintenance.
+install -d -m 0755 /etc/apt/apt.conf.d
+cat > /etc/apt/apt.conf.d/99zz-ucloud-no-unattended-upgrades <<'EOF'
+APT::Periodic::Enable "0";
+APT::Periodic::Update-Package-Lists "0";
+APT::Periodic::Unattended-Upgrade "0";
+EOF
+systemctl disable --now apt-daily.timer apt-daily-upgrade.timer
+systemctl mask apt-daily.timer apt-daily-upgrade.timer apt-daily.service apt-daily-upgrade.service unattended-upgrades.service
+
 export DEBIAN_FRONTEND=noninteractive
 apt-get -o DPkg::Lock::Timeout=600 update -q >/dev/null
 apt-get -o DPkg::Lock::Timeout=600 install -y -q postgresql python3-venv >/dev/null

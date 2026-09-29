@@ -1,0 +1,15 @@
+{
+  "started_at": "2026-09-28T13:06:18.929907+00:00",
+  "finished_at": "2026-09-28T13:06:39.726043+00:00",
+  "pid": 23715,
+  "duration_seconds": 20,
+  "sample_rate_hz": 99,
+  "gil_only": true,
+  "exit_code": 0,
+  "note": "Initial successful profile followed by accidental repeated invocation during retrieval; conservatively exclude through 13:07:01UTC.",
+  "exclude_until": "2026-09-28T13:07:01+00:00",
+  "retrieved_at": "2026-09-28T13:07:36.222794+00:00",
+  "valid_loaded_window": false,
+  "benchmark_finished_at": "2026-09-28T13:06:17.335994+00:00",
+  "invalid_reason": "The failed baseline had finished cleanup before either profile invocation. These are idle samples, not evidence of a loaded relay hot path."
+}

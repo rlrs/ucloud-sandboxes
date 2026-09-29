@@ -711,11 +711,19 @@ class RoutingStore:
             self._ensure_db()
         self._write_batches = _route_write_batch(path)
 
-    def load(self) -> RoutingState:
+    def load(self, *, include_exec_sessions: bool = True) -> RoutingState:
+        """Prune expired signals and read one coherent routing snapshot.
+
+        Autoscaling uses capacity and sandbox ownership, not individual exec
+        sessions. Omitting that projection avoids work proportional to retained
+        exec history without changing its lifetime or the snapshot transaction.
+        """
         with self._lock:
             with self._transaction() as conn:
                 self._prune_expired_unlocked(conn, utc_now())
-                return self._load_unlocked(conn)
+                return self._load_unlocked(
+                    conn, include_exec_sessions=include_exec_sessions
+                )
 
     def load_metrics(self) -> tuple[RoutingState, int]:
         """Load dashboard state without materializing every exec session."""
@@ -999,6 +1007,32 @@ class RoutingStore:
             _sandbox_route_from_row(row)
             for row in self._sandbox_route_rows_readonly(background=background)
         ]
+
+    def sandbox_status_rows_readonly(self, sandbox_ids=()) -> list[Any]:
+        """Read lifecycle identity without transferring full user specifications.
+
+        The SQL and connection contract also apply to the PostgreSQL backend.
+        Attached routes need no snapshot descriptor to report their status;
+        detached routes retain the complete portability proof for validation.
+        """
+        where = (" WHERE sandbox_id IN (" + ",".join("?" for _ in sandbox_ids) + ")"
+                 if sandbox_ids else "")
+        with self._connect() as conn:
+            rows = conn.execute(
+                """SELECT sandbox_id, node_id, job_id, node_url, state, generation,
+                          create_operation_id, spec_hash, delete_operation_id,
+                          node_epoch, activity_epoch, worker_state, storage_schema,
+                          snapshot_manifest_digest, snapshot_repository, snapshot_tag,
+                          CASE WHEN worker_state = 'attached' THEN '{}'
+                               ELSE storage_snapshot_json END AS storage_snapshot_json,
+                          created_at, updated_at
+                   FROM sandboxes""" + where + " ORDER BY sandbox_id",
+                tuple(sandbox_ids),
+            ).fetchall()
+        # Both drivers return owned, comparable named rows. The renderer only
+        # needs a dict when a changed row must be decoded; copying every column
+        # of every unchanged PostgreSQL row here costs more than the projection.
+        return rows
 
     def placement_routes_readonly(self) -> list[SandboxRoute]:
         """Fresh fleet routes for create ranking, reusing decodes of unchanged rows.

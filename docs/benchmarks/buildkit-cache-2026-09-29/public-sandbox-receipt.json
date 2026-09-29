@@ -1,0 +1,8 @@
+{
+  "phase": "sandbox",
+  "started_at": "2026-09-29T07:32:54Z",
+  "exit_code": 0,
+  "stdout": "b9eeeb7be9a5a710617e704d93e5265fd19d7dfde375d68f8d3e9b2bd188ab9d  /payload\n32\nb9eeeb7be9a5a710617e704d93e5265fd19d7dfde375d68f8d3e9b2bd188ab9d  /payload\n",
+  "payload_verified": true,
+  "sandbox_deleted": true
+}

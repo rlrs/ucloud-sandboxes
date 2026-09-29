@@ -71,7 +71,11 @@ raw.update({
         "schema": "ucloud_shared_prod",
         "dsn_file": "/etc/ucloud-sandboxes/postgres.dsn",
         "max_connections": 16,
-        "storage_budget_bytes": 8 * 1024**3,
+        # Each pending request reserves its possible 32 MiB response. 8 GiB
+        # capped production near 250 concurrent model calls, before CPU or RAM
+        # filled. Allow 512+ agents plus observation/completion overlap and
+        # retained results; this is a logical ceiling, not preallocated memory.
+        "storage_budget_bytes": 64 * 1024**3,
     },
     # UCloud production knobs (autoscaler/relay behaviour), node cap raised to 6.
     "autoscaler_max_init_per_cycle": 4,
@@ -81,8 +85,8 @@ raw.update({
     "heartbeat_interval_seconds": 20,
     "relay_request_timeout_seconds": 7200,
     "registry_keep_per_repository": 2,
-    # Six HTTP processes on the eight dedicated gateway vCPUs. Placement,
-    # relay, PostgreSQL and registry share the remaining CPU headroom.
+    # Six HTTP processes qualified on four dedicated gateway vCPUs together
+    # with placement, relay, PostgreSQL, registry and NAT traffic.
     "gateway_processes": 6,
 })
 # CCX63: 48 dedicated vCPU, 188,669 MiB visible, 915.5 GiB disk.
@@ -139,6 +143,15 @@ builder = raw["builder"]
 # one CCX33. They still stop after 5 idle minutes.
 builder.update({"product_id": "ccx33", "disk_gb": 223, "docker_quota_image_gb": 160, "max_nodes": 4,
                 "scale_down_idle_seconds": 300})
+# Shared final-layer BuildKit cache survives ephemeral builders. Runtime exports
+# are immutable; hourly retention caps referenced bytes/entries, with the
+# existing fenced registry GC reclaiming unreferenced blobs later.
+builder.update({
+    "buildx_cache_ref": f"{raw['gateway_private_host']}:{raw['registry_port']}/ucloud-build-cache:shared",
+    "buildx_cache_max_bytes": 32 * 1024**3,
+    "buildx_cache_max_entries": 64,
+    "buildx_cache_max_age_seconds": 7 * 86400,
+})
 policy = raw["policy"]
 policy.update({
     "min_nodes": 0,

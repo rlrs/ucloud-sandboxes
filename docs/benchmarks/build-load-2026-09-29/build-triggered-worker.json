@@ -1,0 +1,28 @@
+{
+  "worker_id": "167929368",
+  "private_ip": "10.42.0.7",
+  "classification": "Existing build-activity sandbox warm-up policy; qualification-induced sandbox worker, not observed customer sandbox demand",
+  "source": "ucloud_sandboxes/cli.py:6147 build_activity_sandbox_warm_resources; applied at4201-4219",
+  "evidence": {
+    "create_submitted_at": "2026-09-29T07:56:59.176495+00:00",
+    "raw_pending_and_prepared_sandbox_resources": "0 vCPU / 0 MiB / 0 MiB throughout80 observed worker cycles",
+    "synthetic_prepared_resources": "1 vCPU / 512 MiB / 1024 MiB",
+    "desired_after_headroom": "1 vCPU / 640 MiB / 1024 MiB",
+    "init_succeeded_at": "2026-09-29T07:58:14.365697+00:00",
+    "maximum_observed_worker_active_sandboxes": 0,
+    "worker_samples": 80,
+    "cold_warm_demand_cleared_at": "2026-09-29T08:00:03.567554+00:00",
+    "next_phase_warm_demand_returned_at": "2026-09-29T08:01:57.968900+00:00",
+    "next_phase_pending_builds": 3,
+    "warm_demand_cleared_again_at": "2026-09-29T08:03:16.165656+00:00",
+    "idle_stop_reason_at": "2026-09-29T08:03:16.165656+00:00",
+    "idle_stop_reason": "idle node exceeds min_nodes=0 with no pending resource demand",
+    "stop_executed_at": "2026-09-29T08:03:37+00:00",
+    "stop_execution_receipt": "Executed stop requests: 167929368",
+    "cleanup_note": "Autoscaler waited for drain proof from08:03:16, then submitted provider stop08:03:37. No manual cleanup performed; provider404 not independently checked.",
+    "live_policy": {"min_nodes":0,"max_nodes":3,"scale_down_idle_seconds":300,"pressure_scale_down_cooldown_seconds":300},
+    "collected_at": "2026-09-29T08:03:41.026944+00:00"
+  },
+  "qualification_caveat": "Cold gateway host metrics include this worker's provisioning/initialization from07:56:59 through07:58:14 plus later idle heartbeats. Warm phase inherits an existing worker. Do not attribute the complete difference solely to image cache.",
+  "mutation_performed": false
+}

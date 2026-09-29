@@ -26,6 +26,7 @@ from .mount_status import linux_mount_root
 from .environment_manifest import DOCKER_OVERLAY2_ABI, HOST_EROFS_ABI, EnvironmentManifest
 from .build_deadline import (
     remaining_build_execution_seconds, ImageBuildTimeoutError, without_build_execution_deadline,
+    build_execution_deadline,
 )
 
 
@@ -41,7 +42,7 @@ def _mount_present(path: Path, runner: CommandRunner, binary: str) -> bool:
         mounted = linux_mount_root(path)
         if mounted is not None:
             return mounted
-    result = runner.run((binary, "--quiet", str(path)), timeout=60)
+    result = runner.run((binary, "--quiet", str(path)), timeout=remaining_build_execution_seconds(60))
     if result.returncode == 0:
         return True
     if result.returncode in {1, 32}:
@@ -481,12 +482,10 @@ class DockerOverlay2RootfsStore:
         self._pin_image(image_id)
         rootfs = target / "rootfs"
         identity = self._rootfs_identity(image_id)
-        mounted = False
         try:
             target.mkdir(mode=0o700)
             rootfs.mkdir(mode=0o755)
             self._mount_overlay2(rootfs, layers)
-            mounted = True
             marker = {
                 "image_id": image_id,
                 "rootfs_identity_sha256": identity,
@@ -499,25 +498,20 @@ class DockerOverlay2RootfsStore:
             )
             _fsync_directory(target)
             _fsync_directory(self.images)
-        except Exception as exc:
-            if mounted:
-                result = self.runner.run(
-                    (self.umount_binary, str(rootfs)),
-                    timeout=60,
-                )
-                if result.returncode != 0:
-                    raise DirectWardenError(
-                        "overlay2 image publication failed and its mount "
-                        f"could not be released: {result.stderr or result.stdout}"
-                    ) from exc
-            shutil.rmtree(target, ignore_errors=True)
+        except Exception:
+            # A timed-out mount may have succeeded before its process stopped,
+            # including a bind whose read-only remount did not finish. Inspect
+            # before deleting anything; failed cleanup preserves target/pin so
+            # ordinary GC can retry under the same digest lease.
             try:
-                with without_build_execution_deadline():
+                with without_build_execution_deadline(), build_execution_deadline(10):
+                    if target.exists():
+                        self._discard_overlay2_target(target)
                     self._unpin_image(image_id)
             except Exception as cleanup_exc:
                 raise DirectWardenError(
-                    "overlay2 image publication failed and its private pin "
-                    "could not be released"
+                    "overlay2 image publication failed and its private mount "
+                    "or pin could not be released"
                 ) from cleanup_exc
             raise
         return MaterializedRootfs(
@@ -705,7 +699,7 @@ class DockerOverlay2RootfsStore:
                 self.docker_binary, "image", "inspect",
                 "--format={{.Id}} {{.Metadata.LastTagTime}}", *ids,
             ),
-            timeout=60,
+            timeout=remaining_build_execution_seconds(60),
         )
         times: dict[str, float] = {}
         for line in result.stdout.splitlines():
@@ -720,7 +714,7 @@ class DockerOverlay2RootfsStore:
     def image_content_id(self, image_ref: str) -> str | None:
         result = self.runner.run(
             (self.docker_binary, "image", "inspect", "--format={{.Id}}", image_ref),
-            timeout=60,
+            timeout=remaining_build_execution_seconds(60),
         )
         image_id = result.stdout.strip()
         return image_id if result.returncode == 0 and image_id.startswith("sha256:") else None
@@ -1011,16 +1005,19 @@ class DockerOverlay2RootfsStore:
         return rootfs
 
     def _discard_overlay2_target(self, target: Path) -> None:
-        rootfs = target / "rootfs"
+        self._unmount_overlay2_if_present(target / "rootfs")
+        shutil.rmtree(target)
+
+    def _unmount_overlay2_if_present(self, rootfs: Path) -> None:
         if rootfs.exists():
             mounted = self.runner.run(
                 (self.mountpoint_binary, "--quiet", str(rootfs)),
-                timeout=60,
+                timeout=remaining_build_execution_seconds(60),
             )
             if mounted.returncode == 0:
                 result = self.runner.run(
                     (self.umount_binary, str(rootfs)),
-                    timeout=60,
+                    timeout=remaining_build_execution_seconds(60),
                 )
                 if result.returncode != 0:
                     raise DirectWardenError(
@@ -1032,7 +1029,6 @@ class DockerOverlay2RootfsStore:
                     f"could not inspect incomplete image mount: "
                     f"{mounted.stderr or mounted.stdout}"
                 )
-        shutil.rmtree(target)
 
     def _ensure_overlay2_mount(
         self,
@@ -1041,7 +1037,18 @@ class DockerOverlay2RootfsStore:
     ) -> None:
         if self._overlay2_mount_present(rootfs):
             return
-        self._mount_overlay2(rootfs, layers)
+        try:
+            self._mount_overlay2(rootfs, layers)
+        except Exception:
+            try:
+                with without_build_execution_deadline(), build_execution_deadline(10):
+                    self._unmount_overlay2_if_present(rootfs)
+            except Exception:
+                # A successful bind followed by failed read-only remount and
+                # failed unmount must never be trusted via the old marker.
+                (rootfs.parent / self.COMPLETE).unlink(missing_ok=True)
+                raise
+            raise
 
     def _overlay2_mount_present(self, rootfs: Path) -> bool:
         return _mount_present(rootfs, self.runner, self.mountpoint_binary)
@@ -1055,7 +1062,7 @@ class DockerOverlay2RootfsStore:
                     str(layers[0]),
                     str(rootfs),
                 ),
-                timeout=60,
+                timeout=remaining_build_execution_seconds(60),
             )
             if result.returncode == 0:
                 readonly = self.runner.run(
@@ -1065,20 +1072,9 @@ class DockerOverlay2RootfsStore:
                         "remount,bind,ro",
                         str(rootfs),
                     ),
-                    timeout=60,
+                    timeout=remaining_build_execution_seconds(60),
                 )
-                if readonly.returncode != 0:
-                    cleanup = self.runner.run(
-                        (self.umount_binary, str(rootfs)),
-                        timeout=60,
-                    )
-                    if cleanup.returncode != 0:
-                        raise DirectWardenError(
-                            "single-layer image remount failed and its "
-                            "bind mount could not be released: "
-                            f"{cleanup.stderr or cleanup.stdout}"
-                        )
-                    result = readonly
+                result = readonly
         else:
             result = self.runner.run(
                 (
@@ -1090,7 +1086,7 @@ class DockerOverlay2RootfsStore:
                     "ro,lowerdir=" + ":".join(str(item) for item in layers),
                     str(rootfs),
                 ),
-                timeout=60,
+                timeout=remaining_build_execution_seconds(60),
             )
         if result.returncode != 0:
             raise DirectWardenError(

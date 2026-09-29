@@ -450,7 +450,7 @@ class FreshEnvironmentBuilder:
         try:
             with without_build_execution_deadline(), build_execution_deadline(10):
                 self.image_store.collect_image(image_id, is_referenced=lambda _: False)
-        except ImageBuildTimeoutError:
+        except (ImageBuildTimeoutError, subprocess.TimeoutExpired):
             _LOG.warning("temporary builder image cleanup deferred after its deadline")
 
     def _mkfs(self, image, view, *, exclude_runtime_mounts):

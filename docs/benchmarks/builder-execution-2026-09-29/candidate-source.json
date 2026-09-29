@@ -1,0 +1,16 @@
+{
+  "wheel_sha256": "b1580ae4ffc8e81a81cb5cc56f4e539bb084a07c2a16bbb95f57c6707448917d",
+  "packaged_files_match": 163,
+  "source_hashes": {
+    "environment_builder.py": "da4348d19158102f936df051d0dae3b770f55c6149627dc461cb5b17024ff734",
+    "environment_prepare.py": "a04d9ca83163c8e39835c4a0f86314e8cfd6aa2cf57940d1026d63b1374adde4",
+    "environment_config.py": "7ed816e9caee955f47b523a113586b7ca9a251ee0b957c6b38c1188c52c1e2ab",
+    "build_history.py": "b40f2fe2a772e1c4078f68a93bf87933c25750fee11b7ab76d5b50b77ed8dd86"
+  },
+  "baseline_commit": "6484bcba193acd1bc7631cb1d881d4f78578c23c",
+  "baseline_wheel_sha256": "7b00954ae39cae9c552c238769dea193df0f5388b4ef8de6155670aeba5a947a",
+  "qualification_script_sha256": "ed33782ad4b8168cc72e6559c0c9cf5c654156520ad1547aa567ea9d9df7ed02",
+  "final_audit_script_sha256": "8a677511dfbf491b95d4d7836e3a2a9d1c516ef8fbe32b12e540487257a9c0c1",
+  "telemetry_script_sha256": "ed9a6b6fecdd01984f5b54a05ae0ba696c03f81d6b2ef481cc8f009ec00b9c5e",
+  "candidate_commit": "03710941bfa0d29033108fd1fdafc74d3b0298fa"
+}

@@ -9,8 +9,10 @@ with equivalent filesystem outputs and all privileged semantic probes exercised.
 **All 48 production builds passed.** Environment-publication p95 improved from
 12.288 to 9.789 seconds in the historical comparison, but batch completion was
 139.054 seconds versus 135.561 seconds previously. This run therefore does not
-show an end-to-end build latency improvement. Application smokes and the final
-cleanup audit remain pending below.
+show an end-to-end build latency improvement. All three application smoke
+sandboxes passed and were deleted. The builder reservation was released, and
+[the combined final audit](../builder-execution-2026-09-29/final-state.json)
+passed at 12:24:13 UTC, verifying both releases' cleanup and exact build history.
 
 ## Change and baseline
 
@@ -134,9 +136,9 @@ latency experiment.
 | Environment-publication median / p95 | 4.196 / 12.288 s | 3.021 / 9.789 s |
 | Retained cache preparation/mount timing | Unavailable | 48/48 records for each |
 | Physical registry writes, client window | 0.651 GiB | 0.628 GiB |
-| Three application smoke sandboxes passed/deleted | 3/3 | PENDING |
+| Three application smoke sandboxes passed/deleted | 3/3 | 3/3 |
 | Durable history lookups reported by load harness | 48/48 | 48/48 |
-| Provider, reservations, sampler, and final health audit | Passed | PENDING |
+| Provider, reservations, sampler, and final health audit | Passed | Passed in combined R1/R2 audit |
 
 The fleet reached 16 admitted/executing builds, at most four per builder.
 Node queue p95 was 15 ms; submission p95 was 98.797 seconds and included admission
@@ -147,6 +149,23 @@ codes. The telemetry cannot attribute the longer client wait to a particular
 resource; raising concurrency is not justified by the gateway's low mean CPU.
 All 48 builds used selective materialization and skipped a full Docker pull,
 reusing 160 groups and building 48 new groups from 96,993,279 selected OCI bytes.
+
+[The application smoke receipt](smoke-prep-repeat.json) covers one measured image
+from each recipe. All three executed successfully and were deleted by 11:51:13
+UTC. [Registry request aggregation](candidate-registry.json) records 852
+successful cross-repository mounts, no declined mount responses, and 68,382,405
+managed-image committed blob bytes, close to the preceding run's 68,380,565 bytes.
+These are completed HTTP events joined to immutable blob sizes, not physical
+write savings or upload-body measurements. The separate physical-write counters
+remain the relevant storage evidence.
+
+[Cache pruning](cache-prune.json) removed 48 cache manifests from 112 inventoried
+tags, retaining 64 entries and 960,211,467 referenced bytes under the existing
+policy. Manifest deletion does not establish physical byte reclamation; normal
+registry garbage collection remains responsible for unreferenced blobs. The
+candidate builder reservation has since been [released](pool-release.json),
+and the subsequent qualification used fresh builders. Final provider retirement
+was verified separately; the pruning receipt does not claim fleet cleanup.
 
 ### Retained preparation costs
 
@@ -195,10 +214,22 @@ the intended public endpoint is `/healthz`. Raw failed-probe counts are preserve
 in generated reports. They establish neither a TLS failure/service outage nor
 successful health during the burst. The 1,811 SDK HTTP 200 responses, 48 accepted
 builds and 48 terminal successes are independent functional evidence. The
-deployment controller correctly checks `/healthz`; final health and application
-smoke receipts remain separate gates. Future samplers must use `/healthz`.
+deployment controller correctly checks `/healthz`; final health and the passed
+application smoke receipts remain separate gates. Future samplers must use `/healthz`.
 
-### Reproduce and finish qualification
+### Execution-model follow-up
+
+[The completed Linux thread/process diagnostic](PROCESS-COMPARISON.md) compares
+the same deployed candidate source on the same root-capable builder. Four fresh
+processes took 2.001 seconds including startup and preparation, versus 7.439
+seconds for four threads' preparation alone; all 16 outputs and privileged
+semantic probes passed. This is isolated filesystem evidence, not a full-build
+speedup. It motivates a separately qualified child process only for selective
+cache misses, leaving all-cache-hit publication in the parent. The
+[next release's record](../builder-execution-2026-09-29/README.md) records its
+deployment, representative load and passed combined final cleanup gates.
+
+### Reproduce and final cleanup
 
 ```sh
 python3 scripts/build_load_report.py --root docs/benchmarks/builder-preparation-2026-09-29
@@ -210,10 +241,17 @@ python3 docs/benchmarks/build-optimization-2026-09-29/analyze-qualification.py \
 python3 docs/benchmarks/builder-preparation-2026-09-29/analyze-preparation.py
 ```
 
-Update the remaining gates from smoke and `final-state.json` receipts. The
-[prepared final audit](final-audit.py) requires
-all 48 durable identities, three successful/deleted smoke sandboxes, no remaining
-workload or reservations, stopped samplers, healthy services, and retirement of
-all known temporary nodes, including profiling VM `167955324`. Deployment health
-and microbenchmark success do not substitute for that audit. This build test
-does not qualify 500 or 1,000 concurrently running agent sandboxes.
+[The completed combined audit](../builder-execution-2026-09-29/final-state.json)
+verified all 96 exact successful build identities across R1/R2 and all six
+successful/deleted smoke sandboxes. All 11 known temporary nodes, including
+profiling VM `167955324`, were absent from provider inventory. Fleet, sandbox,
+active-build and reservation counts were zero; both samplers were stopped and
+gateway/relay HTTPS, metrics and idle checks passed.
+
+The original [R1 audit script](final-audit.py) is retained for provenance and was
+superseded by the [combined R2 audit](../builder-execution-2026-09-29/final-audit.py),
+which performs a direct read-only heartbeat count and binds each smoke recipe
+to its distinct measured image. Use the combined audit for repeat verification,
+with a new output path. Final idle health does not repair the invalid in-burst R1
+health probe. This build test does not qualify 500 or 1,000 concurrently running
+agent sandboxes.

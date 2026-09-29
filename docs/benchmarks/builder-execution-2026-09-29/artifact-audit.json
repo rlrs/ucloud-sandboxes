@@ -1,0 +1,652 @@
+{
+  "captured_at": "2026-09-29T12:27:47.987122+00:00",
+  "scope": "Both retained builder-preparation and builder-execution release directories, including final-state.json. Hash-unchanged files inherit prior completed local artifact reviews; this final pass reviews only new/changed content. The audit receipt itself and gitignored __pycache__ files are excluded.",
+  "method": [
+    "Credential/private-key/Bearer/JWT/common-token/signed-URL/credentialed-URL patterns.",
+    "Sensitive JSON-key and raw workload payload/log-field review.",
+    "Manual review of deployment/audit scripts and owned synthetic fixture schemas; scripts read existing credentials for authenticated operations but do not embed or export their values."
+  ],
+  "limitations": [
+    "Bounded artifact review, not a repository-wide security audit or proof that every possible secret encoding is absent.",
+    "Authorized production IDs, addresses, paths, numeric metrics, public signatures and synthetic benchmark metadata are intentionally retained.",
+    "Qualification command fields are the owned frozen test commands, not customer process logs."
+  ],
+  "file_count": 90,
+  "incremental_files_reviewed": 30,
+  "unchanged_files_previously_reviewed": 60,
+  "json_documents": 1600,
+  "findings": [],
+  "raw_customer_payload_or_log_fields": [],
+  "files": [
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/MICROBENCHMARK.md",
+      "sha256": "eb10e7996e7e37899d53f77b753722016626c3435b688190fc5a5004e1dcca55",
+      "bytes": 6866,
+      "json_documents": 0,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/PROCESS-COMPARISON.md",
+      "sha256": "813b899a07438de6099d0a63549266f4cbdbfc57599f0d11e1050a0b7ec741f7",
+      "bytes": 8128,
+      "json_documents": 0,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/README.md",
+      "bytes": 15467,
+      "sha256": "118fc9b47ff9f38933545f84e8af1e82013a2657c3c72988f52abac4bd0ef40e",
+      "json_documents": 0,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/analyze-preparation.py",
+      "sha256": "b16a1bf9ca9297c94da091e1289cb2c0ae85f9c4e383e73e1c0f7902dfab8ee3",
+      "bytes": 7837,
+      "json_documents": 0,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/build-load-report.json",
+      "sha256": "726549fd88db580f922aa46e4eb4319ca19bbc574b9f0d683c0ac265a3e263f8",
+      "bytes": 313425,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/build-load-report.md",
+      "sha256": "e0a7008b2ba0697a8e47b80cfd5a9bb012b26ee54744d083ce03da0e4a011230",
+      "bytes": 6346,
+      "json_documents": 0,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/builder-167957685-initial.json",
+      "sha256": "7bb4551aeedb13748054d82085dc87b910a5a39b6fd1c172adea37b11900c02f",
+      "bytes": 430,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/builder-167957686-initial.json",
+      "sha256": "7bb4551aeedb13748054d82085dc87b910a5a39b6fd1c172adea37b11900c02f",
+      "bytes": 430,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/builder-167957690-initial.json",
+      "sha256": "7bb4551aeedb13748054d82085dc87b910a5a39b6fd1c172adea37b11900c02f",
+      "bytes": 430,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/builder-167957691-initial.json",
+      "sha256": "7bb4551aeedb13748054d82085dc87b910a5a39b6fd1c172adea37b11900c02f",
+      "bytes": 430,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/cache-prune.json",
+      "sha256": "a21cbf9840e51da31da82cfa18103b9a62b7ba6d368ee238adfa44f7f5d85411",
+      "bytes": 12901,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/candidate-registry.json",
+      "sha256": "a556c0a23602b8ef081fe5a1bec7af9126b10932b676cdba680fe0a9bea099e5",
+      "bytes": 11762,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/candidate-source.json",
+      "sha256": "00f1ad511748f01cc9405589bdd2052d38f7d1cd054ba2ade7697910af1a4045",
+      "bytes": 1202,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/deployment-controller.py",
+      "sha256": "15e9ce3ea78e601fe51fa06d2cf7b12fdd0fa6ea9e5d36f46d48c237144d561b",
+      "bytes": 19027,
+      "json_documents": 0,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/deployment-receipt.json",
+      "sha256": "90393391122605d06206450a66b71776fc1f552c6804bfcd61b2236b4dfb6e33",
+      "bytes": 1255,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/execution-model-linux.json",
+      "sha256": "b67d4b3b3632280379d2c9c7003f0f8abbe22f103e64c7c54f9157c98aa6bf23",
+      "bytes": 43194,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/final-audit.py",
+      "sha256": "10de6155967616cda4d6b1002f133c6006e1a43ae9c454f8afffd12558b4381e",
+      "bytes": 9566,
+      "json_documents": 0,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/host-findings.json",
+      "sha256": "287f2d2177f4c45cdf86ec23c9551de66e211fcf58e8c41a5860f1783baa2b54",
+      "bytes": 49562,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/host-findings.md",
+      "sha256": "d9ffbcfea4a98bbaff69736036776c5410c5696b934a76c83b9f2e7b616cda6e",
+      "bytes": 5186,
+      "json_documents": 0,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/image-inventory.json",
+      "sha256": "2d705d42dfc3c739252fb038e56f8e62b97e3699a1350e3f90de28142a639ab9",
+      "bytes": 144074,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/linux-four-thread.json",
+      "sha256": "74fadab80e68f5c2cf853c75fa6aed54f5b68944f50e0b1a359dcda9f4e54456",
+      "bytes": 35562,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/local-four-consume-2000.json",
+      "sha256": "bf2e857ad44f14a6c9ead43fe9289d8fa2faacf349a5806d73dd220fc63cbde6",
+      "bytes": 35674,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/local-initial-2000.json",
+      "sha256": "4f44bfcedccdea6aa9144e6ceceed89a7de54bea28de87321bc5ac741d25e98f",
+      "bytes": 51100,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/local-thread-process-2000.json",
+      "sha256": "4e772dc50bc750653545c50a561670f52c3d8182ed01a286598b74ff05ffcb0d",
+      "bytes": 43544,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/phase-costs.json",
+      "sha256": "3ba662cb0f0a2f3d9976959b5c8a8280da140e4d0ce70f190034974e2b8d00a1",
+      "bytes": 36361,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/phase-costs.md",
+      "sha256": "4a8e68d4841065aa88726d7ba359dce5bce8e1b5e2efebae9bebe6d24473f823",
+      "bytes": 5529,
+      "json_documents": 0,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/pool-hold.json",
+      "sha256": "d964a8da46aedfffdc6e4a7904bdbdf48575660a03e8d95afbfa53beb4ccc6d6",
+      "bytes": 2089,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/pool-prepare.json",
+      "sha256": "a94c9c1ab8ad0931061a1fa3df4a7d794c5e46a5f1ad670861116a3d5b622436",
+      "bytes": 998,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/pool-release.json",
+      "sha256": "a7d173d8c9c6effc59bc7299f3824d2751e2910865f06c36ec4dc1d3eeeafba0",
+      "bytes": 2460,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/pre-deployment-check.json",
+      "sha256": "e928a87b983a0ca55736848881cc20717ecd9092b97cdf1c43aa659a12315664",
+      "bytes": 873,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/prep-repeat/before.json",
+      "sha256": "56affec27f5dc20ae6cffe6319174c5945f3aef1d81dd1f5d4171036d4f44032",
+      "bytes": 1472,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/prep-repeat/summary.json",
+      "sha256": "faee4fe81ffb62d0b702ce21eecc01c05a1527377e11bf0ad4a72f3437e2b681",
+      "bytes": 597137,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/prep-repeat.qualification.json",
+      "sha256": "89e97003c498ade41ba74c19232f2d7b72b75442687e0953372bf2dbb332ff8e",
+      "bytes": 13074,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/profile-pool-prepare.json",
+      "sha256": "9ec9b86dd06914f1bfad67140c2962c86926ef8921e527efb5ba2bff792e9134",
+      "bytes": 1012,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/profile-pool-ready.json",
+      "sha256": "f39803dd9c223fa634a4a469118a6221446759f552d63d5fb33795cd058087cf",
+      "bytes": 1278,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/profile-pool-release.json",
+      "sha256": "ed6663b4c67d12212a811c7f502475e91cb23a1821e0cb84adc36a3352222c24",
+      "bytes": 830,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/qualification-comparison.json",
+      "sha256": "56ed88f1889012e39fe7e3e8834656def01e9ca6ff5d59c77699e5945ed397dd",
+      "bytes": 103281,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/qualification-comparison.md",
+      "sha256": "06dad891dd9dec8aca4c0a4e4ca11c75c7a3bf13573ccbe8433b72514853671e",
+      "bytes": 3925,
+      "json_documents": 0,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/readonly-diff-canary.json",
+      "sha256": "a9dda7ffe118c6f84641e1a0fd04855ff366c65defb319dc1fda25957b9c7253",
+      "bytes": 91,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/readonly-diff-canary.py",
+      "sha256": "de8b08cfc05a5e8d7ef969d8ffb3129f5c00ad064d974e39720331ae98db9ad5",
+      "bytes": 6265,
+      "json_documents": 0,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/repeat-plan.json",
+      "sha256": "19aafc2b4e6b9fd31238d4cb73fa9a6780f4cdabf0e687fa834f31b4bc6e54ce",
+      "bytes": 12470,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/smoke-prep-repeat.json",
+      "sha256": "f7c6db3c9c76986fe10f9e0edb57a499c2b817a8e1828118391298bf46f8f9e2",
+      "bytes": 1427,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/staging-receipt.json",
+      "sha256": "0a0441119b89e0b1b1179282631d295e4f6499fe83bfbe3f5b6053b07b9e39d0",
+      "bytes": 1849,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/telemetry/builder-167957685.jsonl.gz",
+      "sha256": "9e817a822d89b96468446838bb35c88f056c268d19bd1351351a4bc1bf067e95",
+      "bytes": 94332,
+      "json_documents": 151,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/telemetry/builder-167957686.jsonl.gz",
+      "sha256": "8ffb86c634b46202c3c298c6249cbdd4bc72bb94265256b4ee68a39cfc1edc13",
+      "bytes": 107357,
+      "json_documents": 154,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/telemetry/builder-167957690.jsonl.gz",
+      "sha256": "5adc1c18e69652eca6b37d7554e43d22d96de13451b270e67e39822d65fa888c",
+      "bytes": 109597,
+      "json_documents": 154,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/telemetry/builder-167957691.jsonl.gz",
+      "sha256": "3ae678fd2c1f89da3903e4f21a285ba33a17f01aacf2a11717ed7a752660b776",
+      "bytes": 113874,
+      "json_documents": 155,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/telemetry/gateway.jsonl.gz",
+      "sha256": "f79543694d0e09df502ca38e983f95538af8c4a1bdd1d5390684ca12915659b3",
+      "bytes": 230714,
+      "json_documents": 258,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/test-verification.md",
+      "sha256": "ccc75385506da71b4f463a2b8fe1f865ddab9655a2f46ba12e84cc111d7e3c68",
+      "bytes": 3296,
+      "json_documents": 0,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-preparation-2026-09-29/tools-erofs-equivalence.json",
+      "sha256": "03f0a644a133017b612ce31faef82808dc9f5ded63a3377b131d06e69b161ffc",
+      "bytes": 1844084,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/README.md",
+      "bytes": 15822,
+      "sha256": "5292c4e93146544f29d33506149e811cd3d21438715978245db2b449fdba2ca9",
+      "json_documents": 0,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/analyze-execution.py",
+      "bytes": 9013,
+      "sha256": "be40640bcf0d601cd8bc156266e0025f2d17df48fe8639922d223286010e961f",
+      "json_documents": 0,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/build-load-report.json",
+      "bytes": 315612,
+      "sha256": "1eac7107cdbe6cd1598ebdcad9784619a686f588cc761d13ce9e466b714db832",
+      "json_documents": 1,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/build-load-report.md",
+      "bytes": 6342,
+      "sha256": "6ddb9f8a5a545ac5911461202ce93302353f80b8ecfa22073d4a42ad81093f39",
+      "json_documents": 0,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/builder-167960902-initial.json",
+      "bytes": 440,
+      "sha256": "6d3b8920d436d0c47bb9f10b9bd04d32aa4d9b7a85189324d5fbe15fad8e997c",
+      "json_documents": 1,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/builder-167960903-initial.json",
+      "bytes": 440,
+      "sha256": "6d3b8920d436d0c47bb9f10b9bd04d32aa4d9b7a85189324d5fbe15fad8e997c",
+      "json_documents": 1,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/builder-167960906-initial.json",
+      "bytes": 440,
+      "sha256": "6d3b8920d436d0c47bb9f10b9bd04d32aa4d9b7a85189324d5fbe15fad8e997c",
+      "json_documents": 1,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/builder-167960907-initial.json",
+      "bytes": 440,
+      "sha256": "6d3b8920d436d0c47bb9f10b9bd04d32aa4d9b7a85189324d5fbe15fad8e997c",
+      "json_documents": 1,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/cache-prune.json",
+      "bytes": 12901,
+      "sha256": "5755ddc76a4d2ac07e2571e6c9cc3ef5233bbe97100cd93f431ceef054412f11",
+      "json_documents": 1,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/candidate-registry.json",
+      "bytes": 11720,
+      "sha256": "31ddd61e117b8b61a309e32601d191faa8104e55366a5a767e741ea2ecba4cf8",
+      "json_documents": 1,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/candidate-source.json",
+      "bytes": 1053,
+      "sha256": "de6ba130df6fd464b2ef5bc1db17a696661df73bf7a36cff8c400f5db3af144b",
+      "json_documents": 1,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/deployment-controller.py",
+      "sha256": "eba55118f9843ce6f926a4a44881826b18c846fcb5c53343ff704fd3e8691037",
+      "bytes": 19025,
+      "json_documents": 0,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/deployment-receipt.json",
+      "bytes": 1251,
+      "sha256": "4bfc192e46f119c50008c2baa9170881528a85f644d2d0ec6a92ab9522b24ee6",
+      "json_documents": 1,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/exec-repeat/before.json",
+      "bytes": 1472,
+      "sha256": "8cc6589b7050f863cf5e2af25773ac94ce6da9334c60f4bfeddcc7cefa40ef17",
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/exec-repeat/summary.json",
+      "bytes": 515688,
+      "sha256": "3e7b3dbe7b4c6098a34e6b2431f80b417a07c97d0633f43075ed6e556734da4f",
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/exec-repeat.qualification.json",
+      "bytes": 13072,
+      "sha256": "637be98f01db1fc1707726dff74b403841cfd278f58855e7bad290240f532b0a",
+      "json_documents": 1,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/final-audit.py",
+      "bytes": 21479,
+      "sha256": "8a677511dfbf491b95d4d7836e3a2a9d1c516ef8fbe32b12e540487257a9c0c1",
+      "json_documents": 0,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/final-state.json",
+      "bytes": 22154,
+      "sha256": "7ce9bfbda8bfe1a2bc7da8dda3b40daa742e67af39b378dd93563d0a0c1aaaeb",
+      "json_documents": 1,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/host-findings.json",
+      "bytes": 50251,
+      "sha256": "2ed1d0c2f15d90e4a5da1d1858d9d79235f6ef881a2f8125ee30e4ad57bd72ba",
+      "json_documents": 1,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/host-findings.md",
+      "bytes": 5176,
+      "sha256": "99ae3cdfa64c917297ab8bfc381a03244f81c2659da62a9a04f0fd4cbb05f6ac",
+      "json_documents": 0,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/image-inventory.json",
+      "bytes": 144074,
+      "sha256": "63fe24c7dae59313cc62cbfaab0442f1071e23181139b9cfb17a82fc865dae30",
+      "json_documents": 1,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/phase-costs.json",
+      "bytes": 40364,
+      "sha256": "d687118bfdc931def6ba818a3db88185c4b19911965d7c670a6062e8e48f7647",
+      "json_documents": 1,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/phase-costs.md",
+      "bytes": 6915,
+      "sha256": "b4a79cfb3872df7bc9e61583e5d1a707b656d4a475261e17c1b7a4bc363718b5",
+      "json_documents": 0,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/pool-hold.json",
+      "bytes": 2085,
+      "sha256": "567512e6fac64b05b3a442be7115dc33f5f940379248161532a1d6352b158d94",
+      "json_documents": 1,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/pool-prepare.json",
+      "bytes": 1013,
+      "sha256": "8b203a91a97918bb4062ec680ceebbbe212e789cb33e7c0ff48f20167a158f86",
+      "json_documents": 1,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/pool-ready.json",
+      "bytes": 1689,
+      "sha256": "fee2351141ba1f15d2d902b0493be7267075e92436bab59dbeebb103979c8421",
+      "json_documents": 1,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/pool-release.json",
+      "bytes": 3290,
+      "sha256": "14288506ffa4a23ec38057d033a936c08303c45179501b301a25d2ad4decb096",
+      "json_documents": 1,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/pre-deployment-check.json",
+      "sha256": "79b3c72a5c8d186b853351491a8c6adc55aafc897c8877d98f8cca592bb1004c",
+      "bytes": 782,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/qualification-comparison.json",
+      "bytes": 103349,
+      "sha256": "e756d2dd15d936a2906964708831737dc133b16626865a78bc5035ccbb70a394",
+      "json_documents": 1,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/qualification-comparison.md",
+      "bytes": 3932,
+      "sha256": "ec19858a1ac8fe91831abd1306c31971a4c7ca0d9b9278c0d8180ecae5604f17",
+      "json_documents": 0,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/repeat-plan.json",
+      "bytes": 12468,
+      "sha256": "53c4e863f50fb927b7a0cea053cd4c865923039436de987caea8baac3fbb25f0",
+      "json_documents": 1,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/smoke-exec-repeat.json",
+      "bytes": 1427,
+      "sha256": "3dca1fd072976cb5c8c4bc1a77376c63556a16d285f04f10d5412f0c3e572891",
+      "json_documents": 1,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/staging-receipt.json",
+      "sha256": "311c9a7906af5aeffe6c54d7b1983607395df609a702706be0b12242ff1f0638",
+      "bytes": 1855,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/telemetry/builder-167960902.jsonl.gz",
+      "bytes": 86002,
+      "sha256": "725d0518fdb85298e810f5f41c741c9a81ee3ec8719339d973057f0f1fa69abc",
+      "json_documents": 122,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/telemetry/builder-167960903.jsonl.gz",
+      "bytes": 81993,
+      "sha256": "dbddbe1beb0a5670ecce17fa2efeb9e0045d268182b677adbcfd8f5e408ba2f1",
+      "json_documents": 122,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/telemetry/builder-167960906.jsonl.gz",
+      "bytes": 87400,
+      "sha256": "f08076d592d5048b6d6d3bed817ba3274c98560f8a834d4e3ff72c81bee07ec3",
+      "json_documents": 122,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/telemetry/builder-167960907.jsonl.gz",
+      "bytes": 82938,
+      "sha256": "9cd63ff067400b2692479199138d01f38aa541b06700b99c28eedb3bb8c1c2d7",
+      "json_documents": 121,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/telemetry/gateway.jsonl.gz",
+      "bytes": 166508,
+      "sha256": "b68fafdbd804ec72739503f077c0fc4d9632e073540475a091e9dc045cc263ac",
+      "json_documents": 182,
+      "review": "unchanged from earlier completed artifact audit"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/test-verification.md",
+      "bytes": 3683,
+      "sha256": "6f4b5fef532add9d9103762f6e4b7ad95fdacd9912aed1d2aba29f50cf77cc9b",
+      "json_documents": 0,
+      "review": "new or changed artifact reviewed in final incremental pass"
+    },
+    {
+      "path": "docs/benchmarks/builder-execution-2026-09-29/tools-erofs-equivalence.json",
+      "sha256": "84dda85df557fb355c419db13c0e0a5901851f0bafbb398a50e594e09cd7ae2e",
+      "bytes": 1844148,
+      "json_documents": 1,
+      "review": "unchanged from earlier completed artifact audit"
+    }
+  ]
+}

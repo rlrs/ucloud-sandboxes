@@ -1,0 +1,731 @@
+{
+  "captured_at": "2026-09-29T12:24:13Z",
+  "source_identity": {
+    "wheel_sha256": "b1580ae4ffc8e81a81cb5cc56f4e539bb084a07c2a16bbb95f57c6707448917d",
+    "controller_sha256": "eba55118f9843ce6f926a4a44881826b18c846fcb5c53343ff704fd3e8691037",
+    "bundle_sha256": {
+      "builder": "e6e215acd78838fbaa1d9e5c373504498efb9312380377a4506fd5960b501dd3",
+      "sandbox": "cddb70d722366d45c2cf9ed3212e49d76dc23b909cce5264c5c66e4d20a0b25a"
+    },
+    "configured_node_package_root": "/work/ucloud-sandboxes/builder-execution-20260929-r1",
+    "packaged_files_compared": 163,
+    "mismatched_files": [],
+    "all_packaged_files_match": true
+  },
+  "health": {
+    "gateway_https": true,
+    "relay_https": true,
+    "metrics_ok": true,
+    "relay_storage_budget_bytes": 68719476736,
+    "database_pools": {
+      "database_pool": {
+        "connections_num": 1,
+        "connections_ms": 3,
+        "requests_num": 1762,
+        "usage_ms": 130,
+        "pool_min": 1,
+        "pool_max": 16,
+        "pool_size": 1,
+        "pool_available": 1,
+        "requests_waiting": 0
+      },
+      "lifecycle_database_pool": {
+        "connections_num": 1,
+        "connections_ms": 3,
+        "requests_num": 7021,
+        "usage_ms": 319,
+        "pool_min": 1,
+        "pool_max": 4,
+        "pool_size": 1,
+        "pool_available": 1,
+        "requests_waiting": 0
+      }
+    }
+  },
+  "idle_guard": {
+    "sandboxes": 0,
+    "relay_inflight": 0,
+    "relay_delivery_pending": 0,
+    "lifecycle_claimed": 0,
+    "lifecycle_due": 0,
+    "lifecycle_deferred": 0
+  },
+  "phases": [
+    {
+      "phase": "prep-repeat",
+      "records": 48,
+      "phase_succeeded": true,
+      "application_smoke_gate_passed": true,
+      "smoke_sandbox_ids": [
+        "bl-smoke-prep-repeat-0",
+        "bl-smoke-prep-repeat-1",
+        "bl-smoke-prep-repeat-2"
+      ],
+      "successful_deleted_smokes": 3,
+      "known_node_ids": [
+        "167957685",
+        "167957686",
+        "167957690",
+        "167957691",
+        "167958242"
+      ],
+      "input_sha256": {
+        "/work/ucloud-sandboxes/builder-preparation-load-20260929/prep-repeat/summary.json": "faee4fe81ffb62d0b702ce21eecc01c05a1527377e11bf0ad4a72f3437e2b681",
+        "/work/ucloud-sandboxes/builder-preparation-load-20260929/smoke-prep-repeat.json": "f7c6db3c9c76986fe10f9e0edb57a499c2b817a8e1828118391298bf46f8f9e2",
+        "/work/ucloud-sandboxes/builder-preparation-load-20260929/prep-repeat/before.json": "56affec27f5dc20ae6cffe6319174c5945f3aef1d81dd1f5d4171036d4f44032"
+      }
+    },
+    {
+      "phase": "exec-repeat",
+      "records": 48,
+      "phase_succeeded": true,
+      "application_smoke_gate_passed": true,
+      "smoke_sandbox_ids": [
+        "bl-smoke-exec-repeat-0",
+        "bl-smoke-exec-repeat-1",
+        "bl-smoke-exec-repeat-2"
+      ],
+      "successful_deleted_smokes": 3,
+      "known_node_ids": [
+        "167960902",
+        "167960903",
+        "167960906",
+        "167960907",
+        "167961272"
+      ],
+      "input_sha256": {
+        "/work/ucloud-sandboxes/builder-execution-load-20260929/exec-repeat/summary.json": "3e7b3dbe7b4c6098a34e6b2431f80b417a07c97d0633f43075ed6e556734da4f",
+        "/work/ucloud-sandboxes/builder-execution-load-20260929/smoke-exec-repeat.json": "3dca1fd072976cb5c8c4bc1a77376c63556a16d285f04f10d5412f0c3e572891",
+        "/work/ucloud-sandboxes/builder-execution-load-20260929/exec-repeat/before.json": "8cc6589b7050f863cf5e2af25773ac94ce6da9334c60f4bfeddcc7cefa40ef17"
+      }
+    }
+  ],
+  "measured_build_count": 96,
+  "sandbox_count": 0,
+  "active_builds": 0,
+  "fleet_count": 0,
+  "pending_reservations_absent": true,
+  "known_test_node_ids": [
+    "167955324",
+    "167957685",
+    "167957686",
+    "167957690",
+    "167957691",
+    "167958242",
+    "167960902",
+    "167960903",
+    "167960906",
+    "167960907",
+    "167961272"
+  ],
+  "test_nodes_remaining_at_provider": [],
+  "all_test_nodes_retired": true,
+  "provider_instances": [],
+  "samplers": [
+    {
+      "unit": "ucloud-build-load-monitor",
+      "load_state": "not-found",
+      "active_state": "inactive",
+      "inactive": true
+    },
+    {
+      "unit": "ucloud-execution-load-monitor",
+      "load_state": "not-found",
+      "active_state": "inactive",
+      "inactive": true
+    }
+  ],
+  "gateway_sampler_active": false,
+  "history_source": "gateway build-history.sqlite, read-only exact-UUID lookups for both phases",
+  "successful_history_count": 96,
+  "history_count": 96,
+  "history": [
+    {
+      "build_id": "fa7de8cd-3dd8-4e5f-939e-76a596b5b4e5",
+      "image_id": "bl20260929-prep-repeat-000",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "9f0505f2-bbf6-47e4-b6f3-7956066b0574",
+      "image_id": "bl20260929-prep-repeat-001",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "9c3c5757-22a5-4d36-8b06-398813866ec7",
+      "image_id": "bl20260929-prep-repeat-002",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "71b9e660-3d3c-4cda-98b1-40f071d02073",
+      "image_id": "bl20260929-prep-repeat-003",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "39dc7b38-490d-4ed3-8e66-9feb026b59fe",
+      "image_id": "bl20260929-prep-repeat-004",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "e18358fc-30f0-4d31-8ff3-897270aaec9d",
+      "image_id": "bl20260929-prep-repeat-005",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "44c50b77-f1fc-471e-93a7-decc5e834a03",
+      "image_id": "bl20260929-prep-repeat-006",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "5e4cb1d3-7f42-4621-a967-aa7e58e5259b",
+      "image_id": "bl20260929-prep-repeat-007",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "a2d835be-f883-457b-941f-e00b8f9eed2e",
+      "image_id": "bl20260929-prep-repeat-008",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "00956cb2-77aa-45e0-849e-946017af0759",
+      "image_id": "bl20260929-prep-repeat-009",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "5fec89e9-9d86-4c41-9a3e-85f1e5567934",
+      "image_id": "bl20260929-prep-repeat-010",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "8438f144-3c0a-4a6a-8781-0b6162c443e8",
+      "image_id": "bl20260929-prep-repeat-011",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "2a699050-25ff-44ef-af80-9ab7226a4166",
+      "image_id": "bl20260929-prep-repeat-012",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "4aa05407-dd99-4b83-878b-9a41f7f0e84c",
+      "image_id": "bl20260929-prep-repeat-013",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "8570dd2c-4df6-4d91-9305-f571ab315f44",
+      "image_id": "bl20260929-prep-repeat-014",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "c4822398-c6ae-4e20-86a7-7feb198c3640",
+      "image_id": "bl20260929-prep-repeat-015",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "a0f82e19-7550-4fb3-ae2c-d640c440a1e4",
+      "image_id": "bl20260929-prep-repeat-016",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "fd9d39fb-b8e3-400d-8ab7-b8c25a1a83a2",
+      "image_id": "bl20260929-prep-repeat-017",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "3d8ac592-b1ec-47e5-80a4-b3e1bd6728b7",
+      "image_id": "bl20260929-prep-repeat-018",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "b94ad422-90e4-4a67-a8aa-5decb72ff259",
+      "image_id": "bl20260929-prep-repeat-019",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "92d7d764-b5ed-4efe-bf47-94f5258f2d53",
+      "image_id": "bl20260929-prep-repeat-020",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "011613df-2754-48f3-a8b6-cfabdcdfa73e",
+      "image_id": "bl20260929-prep-repeat-021",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "9c10bc77-cfe1-4e1a-918f-d31696e882f1",
+      "image_id": "bl20260929-prep-repeat-022",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "882ed66f-9d38-4736-afde-e3bc4c657ded",
+      "image_id": "bl20260929-prep-repeat-023",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "9ab5905c-52fb-417a-a518-d478802deb91",
+      "image_id": "bl20260929-prep-repeat-024",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "c75345bb-d7f5-487e-80a3-c62262cfd8fd",
+      "image_id": "bl20260929-prep-repeat-025",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "74a5c0a2-32b1-4428-ac9c-a952929bc1df",
+      "image_id": "bl20260929-prep-repeat-026",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "c7a949a7-92ce-43b9-8474-519793f6f176",
+      "image_id": "bl20260929-prep-repeat-027",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "4f77829b-af7b-4f25-8ff2-b9183872c65a",
+      "image_id": "bl20260929-prep-repeat-028",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "073b1765-c5d2-480e-841d-d199b346cf73",
+      "image_id": "bl20260929-prep-repeat-029",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "58e0fe72-0538-4c0b-9573-14a5ea960622",
+      "image_id": "bl20260929-prep-repeat-030",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "7c496f14-fb9f-4982-80ec-8150d8c5338e",
+      "image_id": "bl20260929-prep-repeat-031",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "dd586ac7-7e71-4817-ae05-1050a1f4a0db",
+      "image_id": "bl20260929-prep-repeat-032",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "b78789de-ce0b-4881-b182-230f9a994034",
+      "image_id": "bl20260929-prep-repeat-033",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "5bfd995a-62b8-4832-9231-d54e29ce09e3",
+      "image_id": "bl20260929-prep-repeat-034",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "d8b89350-5e98-4814-a052-7b47edfb1087",
+      "image_id": "bl20260929-prep-repeat-035",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "af0db016-a0e7-4ede-b5a1-997f9b7f691b",
+      "image_id": "bl20260929-prep-repeat-036",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "5c56a5e0-d800-4c16-8d32-e3334d5d13d8",
+      "image_id": "bl20260929-prep-repeat-037",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "867c1e28-2feb-4411-a0b3-7b1865a37d53",
+      "image_id": "bl20260929-prep-repeat-038",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "24e08866-436b-4600-bec4-dc94edcee607",
+      "image_id": "bl20260929-prep-repeat-039",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "10bba8fb-fbeb-4ac9-b1a8-f74079c560da",
+      "image_id": "bl20260929-prep-repeat-040",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "289b19b5-61e0-4bce-b446-ca0de46d4e8a",
+      "image_id": "bl20260929-prep-repeat-041",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "5391130e-3118-4619-bbc2-6fe6e6712aa5",
+      "image_id": "bl20260929-prep-repeat-042",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "cbe643df-5919-498f-b5ca-4bd5abf437dd",
+      "image_id": "bl20260929-prep-repeat-043",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "4fc54d25-23d6-4063-a610-b3e1d5fb2846",
+      "image_id": "bl20260929-prep-repeat-044",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "64032dc2-ef2f-4246-8dda-0a5c81d2a75d",
+      "image_id": "bl20260929-prep-repeat-045",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "63f9409b-fee5-443c-bf4f-054c0e4cc80d",
+      "image_id": "bl20260929-prep-repeat-046",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "ca49619b-d4c1-41a4-b445-201f42d3e265",
+      "image_id": "bl20260929-prep-repeat-047",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "3c0231f1-6bd5-481e-bb3c-250f2c803129",
+      "image_id": "bl20260929-exec-repeat-000",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "6b6d09e9-8d4e-46fc-9bc1-20930e2d8c5d",
+      "image_id": "bl20260929-exec-repeat-001",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "7b3015b9-1814-4b07-85e5-ba2f73d968e8",
+      "image_id": "bl20260929-exec-repeat-002",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "a51e364d-c6ad-4f7f-b63f-9f332682bb33",
+      "image_id": "bl20260929-exec-repeat-003",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "5b0d6fc9-ff99-420d-bd28-2ce46bc24620",
+      "image_id": "bl20260929-exec-repeat-004",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "2f1c5d92-ebf4-4e94-8783-5aaa604c098a",
+      "image_id": "bl20260929-exec-repeat-005",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "9fc12178-ac5f-42c0-a4e3-c0936f793a2c",
+      "image_id": "bl20260929-exec-repeat-006",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "2cbd9a26-12bc-4176-99f7-1689f8c86418",
+      "image_id": "bl20260929-exec-repeat-007",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "4668378e-1f18-4367-b87a-15ebad96948b",
+      "image_id": "bl20260929-exec-repeat-008",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "b65cd8ef-bd71-4500-a7e1-18710b430d70",
+      "image_id": "bl20260929-exec-repeat-009",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "c883948a-11ef-48e2-8265-41ae703d73cc",
+      "image_id": "bl20260929-exec-repeat-010",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "896981ab-2c6b-408d-83dc-9bc342687450",
+      "image_id": "bl20260929-exec-repeat-011",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "c6c9c168-d6a4-49d7-9018-500962dadb5a",
+      "image_id": "bl20260929-exec-repeat-012",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "503d96bb-4194-4440-8be3-23c483750d8f",
+      "image_id": "bl20260929-exec-repeat-013",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "5a1bc9dd-b74f-433f-9209-f44279d47654",
+      "image_id": "bl20260929-exec-repeat-014",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "e764b472-5500-4a54-9ae9-3f82b50f552b",
+      "image_id": "bl20260929-exec-repeat-015",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "23a1fb51-1bb4-4d2b-b05c-b504e633bbbf",
+      "image_id": "bl20260929-exec-repeat-016",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "05691e40-1760-4fbf-b6eb-9d2cc2147065",
+      "image_id": "bl20260929-exec-repeat-017",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "bac4afa8-4b34-424b-a5b9-c6ac2469516f",
+      "image_id": "bl20260929-exec-repeat-018",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "1bdaabf4-b75f-4a90-a3a1-97abb09041c6",
+      "image_id": "bl20260929-exec-repeat-019",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "c68f22fa-5142-4735-9a67-2b5f074ff70d",
+      "image_id": "bl20260929-exec-repeat-020",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "e71409ae-5be9-4c51-9ae4-23e785651c12",
+      "image_id": "bl20260929-exec-repeat-021",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "611d5c7b-5f0d-4a46-a4cf-f64e0448d6f2",
+      "image_id": "bl20260929-exec-repeat-022",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "e97574e8-fdcc-4e71-b225-e7f2ca79b8e9",
+      "image_id": "bl20260929-exec-repeat-023",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "d0508245-ca55-4563-9a91-8dfe7cc0c24a",
+      "image_id": "bl20260929-exec-repeat-024",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "c74b4869-5508-4268-89d1-0cb9311b4d76",
+      "image_id": "bl20260929-exec-repeat-025",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "58fdddcc-9e87-49b0-9fb5-847e4955971e",
+      "image_id": "bl20260929-exec-repeat-026",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "66655bab-4bdd-42bc-979a-73748941383e",
+      "image_id": "bl20260929-exec-repeat-027",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "3504ecf0-1729-4efd-b8db-f7a73fdbc6ab",
+      "image_id": "bl20260929-exec-repeat-028",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "3cf53336-3af0-4cec-944f-694f790cae37",
+      "image_id": "bl20260929-exec-repeat-029",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "b6a0b681-64a1-4217-9697-e0e30906ead7",
+      "image_id": "bl20260929-exec-repeat-030",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "f576eac2-6a2c-45e4-bdeb-3ea9b812af6e",
+      "image_id": "bl20260929-exec-repeat-031",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "7a849335-71bf-4d16-a1eb-25a6429c050e",
+      "image_id": "bl20260929-exec-repeat-032",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "0e7a9041-1849-4191-bdea-11a44bb6cb01",
+      "image_id": "bl20260929-exec-repeat-033",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "1072a9fd-20e2-4bfe-ac0b-1fc91ae72cb4",
+      "image_id": "bl20260929-exec-repeat-034",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "d50b3201-9c88-4bc8-80de-f02e95d25cf4",
+      "image_id": "bl20260929-exec-repeat-035",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "e0e85e50-0d61-4682-b0c2-cadc06a1d9b6",
+      "image_id": "bl20260929-exec-repeat-036",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "7bf5bceb-9fb6-4757-a40f-735e81b8e2eb",
+      "image_id": "bl20260929-exec-repeat-037",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "06e5ed90-42e8-4aec-8d88-77f23e78d64f",
+      "image_id": "bl20260929-exec-repeat-038",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "72e833aa-44dc-4a33-85f2-cd8c87794e35",
+      "image_id": "bl20260929-exec-repeat-039",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "c60bfeb8-4669-440e-a3bd-c57062498373",
+      "image_id": "bl20260929-exec-repeat-040",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "9ca3bf16-6504-495f-809c-45e7fcca2ee0",
+      "image_id": "bl20260929-exec-repeat-041",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "b2b62d22-4136-4a22-bb87-6eff74fb07e3",
+      "image_id": "bl20260929-exec-repeat-042",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "0d43f50f-a354-4f28-9889-0f78c25707f9",
+      "image_id": "bl20260929-exec-repeat-043",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "88544117-1089-4402-8392-8ace0b2c4068",
+      "image_id": "bl20260929-exec-repeat-044",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "5adbcfa1-48ac-4b3f-b338-1ad7e7300b7d",
+      "image_id": "bl20260929-exec-repeat-045",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "bd87f6f6-fef0-40ab-b286-3b5cf22368be",
+      "image_id": "bl20260929-exec-repeat-046",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "fb5d2fce-e117-4dbc-862e-4dea9d3613cc",
+      "image_id": "bl20260929-exec-repeat-047",
+      "status": "succeeded",
+      "identity_matches": true
+    }
+  ],
+  "retained_artifacts": [
+    "96 measured managed test image aliases",
+    "local synthetic benchmark receipts",
+    "frozen fixture contexts and dependency locks",
+    "qualification receipts and local raw progress logs"
+  ],
+  "limitations": [
+    "The R1 /health sampler returned HTTP401 and is not successful in-burst health evidence.",
+    "This final idle audit does not establish health during either earlier burst or agent-sandbox capacity."
+  ],
+  "audit_complete": true
+}

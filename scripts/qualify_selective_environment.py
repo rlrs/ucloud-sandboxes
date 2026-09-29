@@ -26,7 +26,8 @@ from urllib.parse import urlsplit
 class ReadOnlyClient:
     """Fail closed if the candidate tries to write through the registry client."""
 
-    READS = frozenset({"manifest_document", "manifest_layers", "blob_bytes", "open_blob", "blob_exists"})
+    READS = frozenset({"manifest_document", "manifest_layers", "blob_bytes", "open_blob", "blob_exists",
+                       "base_url", "timeout_seconds"})
 
     def __init__(self, client):
         self._client = client
@@ -115,7 +116,8 @@ def compare(args):
     def builder_at(root):
         registry = capture_registry(client, args.environment_repository, trust)
         return FreshEnvironmentBuilder(DockerOverlay2RootfsStore(root / "images", docker_binary=args.docker),
-                                       registry, key, root / "scratch")
+                                       registry, key, root / "scratch",
+                                       preparation_subprocess=getattr(args, "preparation_subprocess", False))
 
     builder = builder_at(args.work_root / "probe")
     original, seen = builder._reuse_layer_component, []
@@ -178,6 +180,10 @@ def compare(args):
                 raise ValueError("Candidate did not take the required selective/fallback path")
             if arm == "B" and args.expect == "selective" and metrics.get("selective_materializations", 0) != 1:
                 raise ValueError("Missing positive evidence that selective materialization ran")
+            if (arm == "B" and args.expect == "selective"
+                    and getattr(args, "preparation_subprocess", False)
+                    and metrics.get("selective_subprocess_ms", 0) <= 0):
+                raise ValueError("Missing positive evidence that isolated preparation ran")
         output["equivalent"] = True
     finally:
         output["finished_at"] = datetime.now(timezone.utc).isoformat()
@@ -196,6 +202,8 @@ def main():
     parser.add_argument("--group", type=int, default=-1)
     parser.add_argument("--order", choices=("AB", "ABBA"), default="ABBA")
     parser.add_argument("--expect", choices=("selective", "fallback"), required=True)
+    parser.add_argument("--preparation-subprocess", action="store_true",
+                        help="Exercise the production isolated selective preparation path")
     parser.add_argument("--trusted-keys", type=Path, default=Path("/etc/ucloud-sandboxes/environment/producers.json"))
     parser.add_argument("--signing-key", type=Path, default=Path("/etc/ucloud-sandboxes/environment/producer.pem"))
     parser.add_argument("--docker", default="docker")

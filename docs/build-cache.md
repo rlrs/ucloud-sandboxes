@@ -104,6 +104,20 @@ general OCI filesystem semantics instead of guessing about unseen lower layers.
 Metrics distinguish successful `selective_materializations`, fallbacks,
 downloaded OCI bytes/layers and the existing Docker-pull phase.
 
+Production selective preparation runs in a fresh Python subprocess after a
+partial signed-component miss. This avoids concurrent extraction and squashing
+competing inside the node agent's interpreter. One child belongs to each admitted
+build and has a ten-minute timeout; timeout and cancellation kill and reap it
+before its private scratch directory is removed. Complete cache hits start no
+child. The parent retains component locks, signing, and registry publication.
+This is process isolation for performance, not a separate security boundary.
+
+The numeric `selective_subprocess_ms` includes startup, extraction, squashing
+and IPC. `selective_materialization_ms` and `squash_ms` are nested child phases;
+do not add them to subprocess or environment totals. Integrity, child startup,
+protocol and timeout failures fail the build; the existing unsupported-extraction
+fallback remains available.
+
 Each production builder admits four nonterminal builds, including context
 preparation, for its four execution slots. New work waits through the existing
 SDK admission retries when all slots are occupied; it can then choose whichever

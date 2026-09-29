@@ -2,16 +2,47 @@ import json
 from pathlib import Path
 import subprocess
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from scripts.environment_producer_key import provision
 from tests import test_vm_init as vm_fixtures
 from ucloud_sandboxes.config import DeploymentConfig
-from ucloud_sandboxes.environment_config import EnvironmentDeploymentConfig
+from ucloud_sandboxes.environment_config import EnvironmentDeploymentConfig, environment_publisher_from_args
 from ucloud_sandboxes.vm_init import render_vm_init_script
 
 
 class EnvironmentBootstrapTests(unittest.TestCase):
+    def test_configured_publisher_isolates_preparation_and_keeps_signing_key_in_parent(self):
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+        from ucloud_sandboxes.environment_builder import FreshEnvironmentBuilder
+
+        self.assertIsNone(environment_publisher_from_args(SimpleNamespace()))
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            key = provision(root / "key")
+            args = SimpleNamespace(environment_registry_url="http://registry:5000",
+                environment_registry_repository="environments",
+                environment_trusted_keys=Path(key["public_trust_file"]),
+                environment_signing_key=Path(key["private_key_file"]),
+                environment_allow_path=["*"], image_file=root / "images.json", docker_binary="docker")
+            with patch.object(FreshEnvironmentBuilder, "publish_image", autospec=True,
+                              return_value="published-in-parent") as publish:
+                publisher = environment_publisher_from_args(args)
+                self.assertEqual(publisher(SimpleNamespace(tag="registry:5000/owned/image:latest")),
+                                 "published-in-parent")
+            builder, image = publish.call_args.args
+            self.assertTrue(builder.preparation_subprocess)
+            self.assertEqual(image, "registry:5000/owned/image:latest")
+            self.assertEqual(publish.call_args.kwargs, {"allowlist": ("*",)})
+            self.assertEqual(builder.work_root, root / "environment-build/scratch")
+            # A real provisioned private key remains usable by the parent
+            # publisher, while the child receives only source preparation data.
+            public = Ed25519PublicKey.from_public_bytes(next(iter(builder.registry.trusted_keys.values())))
+            challenge = b"parent-retains-environment-signing-authority"
+            public.verify(builder.signing_key.sign(challenge), challenge)
+
     def test_node_advertises_actual_runtime_restore_identity_and_selected_adapter(self):
         from tests import test_direct_provisioner as fixtures
         from ucloud_sandboxes.capabilities import HOST_EROFS_CAPABILITY, RUNTIME_COMPATIBILITY_CAPABILITY_PREFIX

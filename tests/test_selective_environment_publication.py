@@ -186,6 +186,71 @@ class SelectiveEnvironmentPublicationTests(unittest.TestCase):
         self.assertEqual(metrics["selective_materializations"], 1)
         self.assertEqual(metrics["groups_built"], 1)
 
+    def test_isolated_prepared_view_preserves_original_group_binding_and_phase_metrics(self):
+        from ucloud_sandboxes.environment_prepare import PreparationResult
+        from ucloud_sandboxes.oci_layer_materialize import materialize_layers
+        first = self.tail()
+        second = layer([directory("app"), member("app/extra", b"additional file")])
+        self.add_image("isolated", [self.base, first, second])
+        self.builder.preparation_subprocess = True
+        scratch = []
+        def prepare(client, repository, layers, diff_ids, group_counts, root):
+            scratch.append(root)
+            self.assertEqual(group_counts, [2])
+            self.assertEqual(diff_ids, [first[1], second[1]])
+            directories = materialize_layers(client, repository, layers, diff_ids, root / "diffs")
+            view = root / "view-0"
+            environment_builder.squash_layer_diffs(directories, view, consume_private_diffs=True)
+            return PreparationResult((view,), {"selective_materialization_ms": 12.5,
+                "squash_ms": 3.25, "selective_subprocess_ms": 40.0})
+        with patch("ucloud_sandboxes.environment_prepare.prepare_in_subprocess", side_effect=prepare) as child, \
+             patch.object(self.store, "_checked", side_effect=AssertionError("must not pull")), \
+             publication_metrics() as metrics:
+            _, environment = self.publish("isolated")
+        child.assert_called_once()
+        self.assertEqual(self.registry.load(environment.components[-1]).source_layers, (first[1], second[1]))
+        self.assertEqual(self.mkfs_views[0]["app/run"]["content"], b"#!/bin/sh\necho selective\n".hex())
+        self.assertEqual(self.mkfs_views[0]["app/extra"]["content"], b"additional file".hex())
+        self.assertEqual(metrics["selective_materialization_ms"], 12.5)
+        self.assertEqual(metrics["squash_ms"], 3.25)
+        self.assertEqual(metrics["selective_subprocess_ms"], 40.0)
+        self.assertTrue(all(not path.exists() for path in scratch))
+
+    def test_complete_cache_hit_does_not_start_preparation_child(self):
+        self.builder.preparation_subprocess = True
+        with patch("ucloud_sandboxes.environment_prepare.prepare_in_subprocess",
+                   side_effect=AssertionError("cache hit must not spawn")), publication_metrics() as metrics:
+            _, environment = self.publish("base")
+        self.assertEqual(environment.components, (self.base_component,))
+        self.assertEqual(self.mkfs_views, [])
+        self.assertNotIn("selective_subprocess_ms", metrics)
+
+    def test_isolated_fallback_uses_docker_but_unexpected_failure_does_not_publish(self):
+        from ucloud_sandboxes.environment_prepare import PreparationError, PreparationResult
+        self.builder.preparation_subprocess = True
+        self.add_image("isolated-fallback", [self.base, self.tail()])
+        with patch("ucloud_sandboxes.environment_prepare.prepare_in_subprocess",
+                   return_value=PreparationResult((), {"selective_materialization_ms": 2.0,
+                       "squash_ms": 0.0, "selective_subprocess_ms": 30.0}, fallback=True)), \
+             patch.object(self.store, "_checked", wraps=self.store._checked) as pull:
+            self.publish("isolated-fallback")
+        pull.assert_called_once()
+        self.assertIn("docker-materialized", self.mkfs_views[0])
+        self.add_image("isolated-failed", [self.base, self.tail(b"distinct missing tail")])
+        scratch = []
+        def fail(*args):
+            scratch.append(args[-1])
+            (args[-1] / "partial").write_bytes(b"discarded")
+            raise PreparationError("child failed")
+        self.client.puts.clear()
+        with patch("ucloud_sandboxes.environment_prepare.prepare_in_subprocess", side_effect=fail), \
+             patch.object(self.store, "_checked", side_effect=AssertionError("must not pull")), \
+             patch.object(environment_builder, "sign_layer_component", side_effect=AssertionError("must not sign")), \
+             self.assertRaises(PreparationError):
+            self.publish("isolated-failed")
+        self.assertEqual(self.client.puts, [])
+        self.assertTrue(all(not path.exists() for path in scratch))
+
     def test_corrupt_source_bindings_never_pull_sign_or_publish(self):
         for corruption in ("config", "compressed_blob", "diff_id"):
             with self.subTest(corruption=corruption):

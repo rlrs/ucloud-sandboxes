@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Isolate selective OCI extraction and private filesystem squashing in a bounded
+  fresh Python process per admitted build. Preserve parent-side signing and
+  publication, complete-cache-hit behavior, integrity checks, and Docker fallback
+  for unsupported layers; retain process and subphase timings in build history.
+
 - Prepare selective EROFS layers with bounded kernel payload copies and reuse
   validated paths. Move files from private disposable diffs during squashing
   instead of copying their payloads and metadata again; borrowed Docker layers

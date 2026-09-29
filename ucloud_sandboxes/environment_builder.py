@@ -398,6 +398,9 @@ class FreshEnvironmentBuilder:
     # lz4 made SWE-bench images 38% smaller with a faster mkfs; workers read
     # fewer bytes per chunk and the kernel decompresses (docs/image-import.md).
     compression: str = "lz4"
+    # Production builders isolate CPU-heavy private preparation from the GIL
+    # shared by concurrent build threads. Test adapters retain the local path.
+    preparation_subprocess: bool = False
     _layer_format: dict | None = field(default=None, init=False, repr=False)
 
     def build(self, image_ref, *, allowlist, tag):
@@ -631,10 +634,22 @@ class FreshEnvironmentBuilder:
         selected = [item for index in missing for item in source[groups[index][3]:groups[index][4]]]
         self.work_root.mkdir(mode=0o700, parents=True, exist_ok=True)
         with TemporaryDirectory(dir=self.work_root) as temporary:
+            prepared = None
             try:
-                with _phase("selective_materialization"):
-                    directories = materialize_layers(self.registry.client, repository,
-                        [item[2] for item in selected], [item[0] for item in selected], Path(temporary))
+                if self.preparation_subprocess:
+                    from .environment_prepare import prepare_in_subprocess
+                    result = prepare_in_subprocess(self.registry.client, repository,
+                        [item[2] for item in selected], [item[0] for item in selected],
+                        [groups[index][4] - groups[index][3] for index in missing], Path(temporary))
+                    for name, value in result.metrics.items():
+                        _measure(name, value)
+                    if result.fallback:
+                        raise UnsupportedLayer("isolated selective extraction requires Docker")
+                    prepared = dict(zip(missing, result.views))
+                else:
+                    with _phase("selective_materialization"):
+                        directories = materialize_layers(self.registry.client, repository,
+                            [item[2] for item in selected], [item[0] for item in selected], Path(temporary))
             except (UnsupportedLayer, OSError, EOFError, tarfile.TarError) as exc:
                 _measure("selective_fallbacks")
                 _LOG.info("selective layer materialization requires Docker: %s", type(exc).__name__)
@@ -651,7 +666,8 @@ class FreshEnvironmentBuilder:
                     reused += 1
                     continue
                 count = end - start
-                component, hit = self._publish_layer_group(directories[offset:offset + count], group,
+                views = [prepared[index]] if prepared is not None else directories[offset:offset + count]
+                component, hit = self._publish_layer_group(views, group,
                     lower_dirs=(), parent=parent, layer_format=layer_format, consume_private_diffs=True)
                 components[index] = component
                 reused += hit

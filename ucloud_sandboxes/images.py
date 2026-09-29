@@ -12,6 +12,7 @@ import tempfile
 import time
 from collections import deque
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
@@ -44,6 +45,19 @@ MAX_BUILD_CONTEXT_EXTRACTED_BYTES = 2 * 1024**3
 MAX_BUILD_CONTEXT_MEMBER_BYTES = 512 * 1024**2
 MAX_BUILD_CONTEXT_MEMBERS = 100_000
 MAX_BUILD_CONTEXT_DECOMPRESSED_ARCHIVE_BYTES = 2 * 1024**3
+_CACHE_PHASE_TIMINGS = ContextVar("image_build_cache_phase_timings", default=None)
+
+
+@contextmanager
+def _cache_phase(name):
+    """Retain trusted preparation timings even when build output is truncated."""
+    started = time.monotonic()
+    try:
+        yield
+    finally:
+        phases = _CACHE_PHASE_TIMINGS.get()
+        if phases is not None:
+            phases[name] = _elapsed_ms(started)
 
 _IMAGE_STATE_ERROR = "image state database is invalid or unavailable"
 _IMAGE_STATE_APPLICATION_ID = 0x55435349
@@ -325,16 +339,18 @@ class DockerImageRuntime:
             try:
                 # Affinity only affects which caches are offered. BuildKit still
                 # validates all build inputs; this is not an image-result cache.
-                dockerfile = Path(_dockerfile_path(spec.context_path, spec.dockerfile))
-                recipe = hashlib.sha256(dockerfile.read_bytes()).hexdigest()
-                plan = self.build_cache.prepare(recipe)
+                with _cache_phase("cache_prepare_ms"):
+                    dockerfile = Path(_dockerfile_path(spec.context_path, spec.dockerfile))
+                    recipe = hashlib.sha256(dockerfile.read_bytes()).hexdigest()
+                    plan = self.build_cache.prepare(recipe)
                 imports, export_ref = plan.imports, plan.export_ref
                 matching_ref = plan.matching_ref
             except (OSError, ValueError, RuntimeError) as exc:
                 if on_output is not None:
                     on_output("stderr", f"Shared build cache unavailable ({type(exc).__name__}); building without it.\n")
             if matching_ref:
-                mounts = self.build_cache.pre_mount(spec.tag, matching_ref)
+                with _cache_phase("cache_mount_ms"):
+                    mounts = self.build_cache.pre_mount(spec.tag, matching_ref)
                 if on_output is not None:
                     on_output("stderr", "Shared build cache mounts: " + json.dumps(mounts, sort_keys=True) + "\n")
         return self._run(
@@ -1180,6 +1196,7 @@ class ImageManager:
             self._update_build(build_id, execution_started_at=utc_now().isoformat(),
                                timings=timings())
             phase = time.monotonic()
+            cache_timing_token = _CACHE_PHASE_TIMINGS.set(phases)
             try:
                 build_result = self.runtime.build(
                     spec,
@@ -1187,6 +1204,7 @@ class ImageManager:
                     on_output=append_output,
                 )
             finally:
+                _CACHE_PHASE_TIMINGS.reset(cache_timing_token)
                 phase_name = (
                     "docker_build_and_push_ms" if direct_push else "docker_build_ms"
                 )

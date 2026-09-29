@@ -4,10 +4,11 @@ This accepts only layers whose filesystem view can be produced without looking
 through a lower layer. Everything else remains the Docker adapter's job. Never
 use tarfile.extract/extractall on these untrusted archives.
 """
+import errno
 import gzip
 import hashlib
 import os
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 import shutil
 import tarfile
 
@@ -29,16 +30,19 @@ BLOCK = 1024 * 1024
 def _path(value, *, root=False):
     if not isinstance(value, str) or len(value) > 4096 or "\0" in value:
         raise UnsupportedLayer("unsupported OCI member path")
-    path = PurePosixPath(value)
-    if path.is_absolute() or ".." in path.parts:
+    # Match PurePosixPath's removal of empty and '.' components without
+    # allocating path objects for every member. Absolute paths and every '..'
+    # component remain forbidden before any destination path is constructed.
+    parts = tuple(part for part in value.split('/') if part and part != '.')
+    if value.startswith('/') or ".." in parts:
         raise UnsupportedLayer("OCI member escapes its diff directory")
-    if not path.parts:
+    if not parts:
         if root:
             return ()
         raise UnsupportedLayer("OCI member has an empty path")
-    if any(part.startswith('.wh.') for part in path.parts):
+    if any(part.startswith('.wh.') for part in parts):
         raise UnsupportedLayer("OCI whiteouts require lower-layer context")
-    return path.parts
+    return parts
 
 
 def _members(archive):
@@ -83,27 +87,55 @@ def _metadata(path, member):
     os.utime(path, (member.mtime, member.mtime), follow_symlinks=False)
 
 
+def _copy_member(archive, member, target):
+    """Copy one validated regular payload, never its surrounding tar bytes."""
+    copied = 0
+    sendfile = getattr(os, 'sendfile', None)
+    if sendfile is not None:
+        while copied < member.size:
+            try:
+                count = sendfile(target.fileno(), archive.fileobj.fileno(),
+                                 member.offset_data + copied, min(BLOCK, member.size - copied))
+            except OSError as exc:
+                if exc.errno not in {errno.ENOSYS, errno.EXDEV, errno.EINVAL, errno.EOPNOTSUPP, errno.ENOTSOCK}:
+                    raise
+                break
+            if not count:
+                # Some filesystems do not support range copies even though the
+                # syscall exists. The bounded tar reader also detects truncation.
+                break
+            copied += count
+    if copied < member.size:
+        with archive.extractfile(member) as source:
+            source.seek(copied)
+            shutil.copyfileobj(source, target, BLOCK)
+
+
 def _extract(archive_path, destination):
     with tarfile.open(archive_path, mode='r:') as archive:
         entries = _members(archive)
+        # All names/ancestors were validated, including duplicate canonical
+        # paths and symlink parents. Reuse each resulting filename for creation
+        # and metadata instead of repeatedly reparsing it through pathlib.
+        paths = {parts: os.path.join(os.fspath(destination), *parts) for parts in entries}
         destination.mkdir(mode=0o700)
         for parts, member in sorted(entries.items(), key=lambda item: (len(item[0]), item[0])):
             if parts and member.isdir():
-                destination.joinpath(*parts).mkdir(mode=0o700)
+                os.mkdir(paths[parts], mode=0o700)
         for parts, member in entries.items():
-            path = destination.joinpath(*parts)
+            path = paths[parts]
             if member.isreg():
                 descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
-                with archive.extractfile(member) as source, os.fdopen(descriptor, 'wb') as target:
-                    shutil.copyfileobj(source, target, BLOCK)
+                with os.fdopen(descriptor, 'wb') as target:
+                    _copy_member(archive, member, target)
             elif member.issym():
-                path.symlink_to(member.linkname)
+                os.symlink(member.linkname, path)
         for parts, member in entries.items():
             if member.islnk():
-                os.link(destination.joinpath(*_path(member.linkname)), destination.joinpath(*parts),
+                os.link(paths[_path(member.linkname)], paths[parts],
                         follow_symlinks=False)
         for parts, member in sorted(entries.items(), key=lambda item: (-len(item[0]), item[0])):
-            _metadata(destination.joinpath(*parts), member)
+            _metadata(paths[parts], member)
         if () not in entries:
             os.chown(destination, 0, 0, follow_symlinks=False)
             os.chmod(destination, 0o755)

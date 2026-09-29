@@ -1,0 +1,393 @@
+{
+  "phase": "prep-repeat",
+  "candidate": "B2-selective-and-scheduling",
+  "verified_contexts": [
+    {
+      "recipe": "python-agent",
+      "variant": "app-change-5",
+      "context_sha256": "b0f478441cb60aeb84a6042bdca8835a477ab839ef7227d092904f0b8def7afb",
+      "context_files": 1510,
+      "context_bytes": 861438
+    },
+    {
+      "recipe": "python-agent",
+      "variant": "app-change-6",
+      "context_sha256": "b7e702dfb1daa056d6862e57e4a1b4611e6e843f49de0105c5716ffe5633caa0",
+      "context_files": 1510,
+      "context_bytes": 861438
+    },
+    {
+      "recipe": "python-agent",
+      "variant": "app-change-7",
+      "context_sha256": "220a8922b40005c3281769355025097e5d4dff3be525eb24ca1524c169cbad09",
+      "context_files": 1510,
+      "context_bytes": 861438
+    },
+    {
+      "recipe": "python-agent",
+      "variant": "app-change-8",
+      "context_sha256": "f554cff1ab9f9e324a6f3f9051a9e9f1f051d7f89889ed8c0119b35074169af0",
+      "context_files": 1510,
+      "context_bytes": 861438
+    },
+    {
+      "recipe": "python-agent",
+      "variant": "app-change-9",
+      "context_sha256": "350087d72f870166d9a2eb4651c347dcf7c30ccb931c818e7534db847f6c3110",
+      "context_files": 1510,
+      "context_bytes": 861438
+    },
+    {
+      "recipe": "python-agent",
+      "variant": "app-change-10",
+      "context_sha256": "5ac74b48fcffb01e3677dbd177086c75466efa8e1b79d1747195956d99516414",
+      "context_files": 1510,
+      "context_bytes": 861439
+    },
+    {
+      "recipe": "python-agent",
+      "variant": "app-change-11",
+      "context_sha256": "2b38077f6396ae93cdc59c917a342aee761a5a6e9f5696d915b724b0493a8fe4",
+      "context_files": 1510,
+      "context_bytes": 861439
+    },
+    {
+      "recipe": "python-agent",
+      "variant": "app-change-12",
+      "context_sha256": "06f98a244cc997a278585a3402a2dde9fb2876a1681734826c4feeed671fedda",
+      "context_files": 1510,
+      "context_bytes": 861439
+    },
+    {
+      "recipe": "python-agent",
+      "variant": "app-change-13",
+      "context_sha256": "b501744a58da9b46a912f44c003033b1fd9b47e35ec2732c6c015bb8740dd601",
+      "context_files": 1510,
+      "context_bytes": 861439
+    },
+    {
+      "recipe": "python-agent",
+      "variant": "app-change-14",
+      "context_sha256": "5c456fcaf6784a55ff41656c2bb9c16d1ec16151357b95945ec012fb291e2782",
+      "context_files": 1510,
+      "context_bytes": 861439
+    },
+    {
+      "recipe": "python-agent",
+      "variant": "app-change-15",
+      "context_sha256": "798cce6e4b1200de1cff61a3382a44fb61abc93c48a38d63e257bb351ea4e9ed",
+      "context_files": 1510,
+      "context_bytes": 861439
+    },
+    {
+      "recipe": "python-agent",
+      "variant": "app-change-16",
+      "context_sha256": "89b20c8550c7d6c3e0f40883e2e95f9b3ede1f8b72e1c0e70c584e007017a9c8",
+      "context_files": 1510,
+      "context_bytes": 861439
+    },
+    {
+      "recipe": "python-agent",
+      "variant": "app-change-17",
+      "context_sha256": "f98338d1777c0118ac3ae79962c0aae8d55af449c30b327cb02d6f4a4ba09596",
+      "context_files": 1510,
+      "context_bytes": 861439
+    },
+    {
+      "recipe": "python-agent",
+      "variant": "app-change-18",
+      "context_sha256": "0ab651dd9dbaec0431484e7ab57477fa53b0350ebc3dc15f5435780f4433117f",
+      "context_files": 1510,
+      "context_bytes": 861439
+    },
+    {
+      "recipe": "python-agent",
+      "variant": "app-change-19",
+      "context_sha256": "8f264218c553fd9eb33ddde01e334f74e4499762a0f2a1d0690a361cc6687293",
+      "context_files": 1510,
+      "context_bytes": 861439
+    },
+    {
+      "recipe": "python-agent",
+      "variant": "app-change-20",
+      "context_sha256": "b63d320f94281cbe05558114a46c88e918b34199d465c181a94ea9ee03f4e3eb",
+      "context_files": 1510,
+      "context_bytes": 861439
+    },
+    {
+      "recipe": "typescript-tools",
+      "variant": "app-change-5",
+      "context_sha256": "888202c5790256485f047832a06c8de754e1e78233fcd8ca96bb63fc0cf2d066",
+      "context_files": 2013,
+      "context_bytes": 1144789
+    },
+    {
+      "recipe": "typescript-tools",
+      "variant": "app-change-6",
+      "context_sha256": "c08eb45fa8d26d53d418d20a5f0fa76f30eff99a507e2fd410b79bf55f11e1c0",
+      "context_files": 2013,
+      "context_bytes": 1144789
+    },
+    {
+      "recipe": "typescript-tools",
+      "variant": "app-change-7",
+      "context_sha256": "9fd639ef9337887cc7e08558c16f37f68bc42f85c41bb97ec3c3b5e893003a67",
+      "context_files": 2013,
+      "context_bytes": 1144789
+    },
+    {
+      "recipe": "typescript-tools",
+      "variant": "app-change-8",
+      "context_sha256": "a7f9e7716df25c501dd4c161211184b56e64b64f69195abb4c3e1e31fc9f8862",
+      "context_files": 2013,
+      "context_bytes": 1144789
+    },
+    {
+      "recipe": "typescript-tools",
+      "variant": "app-change-9",
+      "context_sha256": "1b1b34d4c9a6622fa323b21a9f254861a72d5a638bfbfa2c4e916618c6853f26",
+      "context_files": 2013,
+      "context_bytes": 1144789
+    },
+    {
+      "recipe": "typescript-tools",
+      "variant": "app-change-10",
+      "context_sha256": "14b676c8f93ce6e4117195499575ab9084958a7913d8d4938c898cba82a693d0",
+      "context_files": 2013,
+      "context_bytes": 1144790
+    },
+    {
+      "recipe": "typescript-tools",
+      "variant": "app-change-11",
+      "context_sha256": "463c014b882f51ac436f4c7a20ff595cbdf7fca701cb4da71a6d32e9c0277f38",
+      "context_files": 2013,
+      "context_bytes": 1144790
+    },
+    {
+      "recipe": "typescript-tools",
+      "variant": "app-change-12",
+      "context_sha256": "35c1e8ed86c56afceb35b5c8cf1cb80bd20e24c3ac2d08818c3f5d938a9697f3",
+      "context_files": 2013,
+      "context_bytes": 1144790
+    },
+    {
+      "recipe": "typescript-tools",
+      "variant": "app-change-13",
+      "context_sha256": "feda02588beec436a339b46e0c68e93a9096876d2ca2e7dad4d629f33738441e",
+      "context_files": 2013,
+      "context_bytes": 1144790
+    },
+    {
+      "recipe": "typescript-tools",
+      "variant": "app-change-14",
+      "context_sha256": "c6cf5286ab6dab194e540c52449cedb8a27455b4555c341b29e7847c7691abf3",
+      "context_files": 2013,
+      "context_bytes": 1144790
+    },
+    {
+      "recipe": "typescript-tools",
+      "variant": "app-change-15",
+      "context_sha256": "3943e7d1a73f86835225feb4bd18df65375a92de23b2765ffc4044ef8cff3f8d",
+      "context_files": 2013,
+      "context_bytes": 1144790
+    },
+    {
+      "recipe": "typescript-tools",
+      "variant": "app-change-16",
+      "context_sha256": "ce5feb424e4034d2f9cb5f0919875d090747223265fb3159d994e49d5032d0e5",
+      "context_files": 2013,
+      "context_bytes": 1144790
+    },
+    {
+      "recipe": "typescript-tools",
+      "variant": "app-change-17",
+      "context_sha256": "407bd23ed3ff4f3c66c259fc3ae6f6f5d919f2ee5a755e9e3c9ff6a15e167289",
+      "context_files": 2013,
+      "context_bytes": 1144790
+    },
+    {
+      "recipe": "typescript-tools",
+      "variant": "app-change-18",
+      "context_sha256": "c2201186b6128a8235cdb25f52e415f8494d8ec72b2281907fa5b478f48b430a",
+      "context_files": 2013,
+      "context_bytes": 1144790
+    },
+    {
+      "recipe": "typescript-tools",
+      "variant": "app-change-19",
+      "context_sha256": "e10c4cb94f351a9714130c481c6e541b794c3bf98283c1c0c9af7bcb040a44a9",
+      "context_files": 2013,
+      "context_bytes": 1144790
+    },
+    {
+      "recipe": "typescript-tools",
+      "variant": "app-change-20",
+      "context_sha256": "f7698f9f9021730a6e8a3e585971b5d4edbe8567628089f24788e92dafa2fe26",
+      "context_files": 2013,
+      "context_bytes": 1144790
+    },
+    {
+      "recipe": "typescript-multistage",
+      "variant": "app-change-5",
+      "context_sha256": "134a0d4d35cfb2abbe3a5036befbb37d42fe7f8cefb34be91780232d31400ddf",
+      "context_files": 2013,
+      "context_bytes": 1145187
+    },
+    {
+      "recipe": "typescript-multistage",
+      "variant": "app-change-6",
+      "context_sha256": "f87c03a26673105c1ced3c637078a614256e399a8c93e880478dcb90d02c26e8",
+      "context_files": 2013,
+      "context_bytes": 1145187
+    },
+    {
+      "recipe": "typescript-multistage",
+      "variant": "app-change-7",
+      "context_sha256": "5c838e892dc7fa616026c8b6a6b0f7b69042020eb835189b74495943df98a523",
+      "context_files": 2013,
+      "context_bytes": 1145187
+    },
+    {
+      "recipe": "typescript-multistage",
+      "variant": "app-change-8",
+      "context_sha256": "7e2f5bd636a15d4a4613aa78abb3d4b5b7a15336bde5a82a26b2da33c74340bd",
+      "context_files": 2013,
+      "context_bytes": 1145187
+    },
+    {
+      "recipe": "typescript-multistage",
+      "variant": "app-change-9",
+      "context_sha256": "6b11aa2329fce274574483f67835b3a51d3038880865dde6dfe80119a39e216a",
+      "context_files": 2013,
+      "context_bytes": 1145187
+    },
+    {
+      "recipe": "typescript-multistage",
+      "variant": "app-change-10",
+      "context_sha256": "d1a3c98393a070e6be0910231e16b144f61cb5a4bf374ce15af3f8cc3f5bcca9",
+      "context_files": 2013,
+      "context_bytes": 1145188
+    },
+    {
+      "recipe": "typescript-multistage",
+      "variant": "app-change-11",
+      "context_sha256": "08694f2b2def1440ad590d8c5efb486d82cb7ed82f7ab1a3cd59ffc5937189b8",
+      "context_files": 2013,
+      "context_bytes": 1145188
+    },
+    {
+      "recipe": "typescript-multistage",
+      "variant": "app-change-12",
+      "context_sha256": "d8a4917b03778f9dd6b4c272c45d1c328e14633fee08f87c1480dd92b7fd9c3e",
+      "context_files": 2013,
+      "context_bytes": 1145188
+    },
+    {
+      "recipe": "typescript-multistage",
+      "variant": "app-change-13",
+      "context_sha256": "7b55e7cb1a334f9efc2d1363f4ce5551a3ca53081d2a8b7d7577b79196e3af6f",
+      "context_files": 2013,
+      "context_bytes": 1145188
+    },
+    {
+      "recipe": "typescript-multistage",
+      "variant": "app-change-14",
+      "context_sha256": "37765a91d9345372c423554ed3c3c7066d8f804c7a588705cca7f220b4f0da0a",
+      "context_files": 2013,
+      "context_bytes": 1145188
+    },
+    {
+      "recipe": "typescript-multistage",
+      "variant": "app-change-15",
+      "context_sha256": "1f7a585de306827ba0dc3b1c3bdff03e7e2e0e7726562da1209c40dc773ec2b3",
+      "context_files": 2013,
+      "context_bytes": 1145188
+    },
+    {
+      "recipe": "typescript-multistage",
+      "variant": "app-change-16",
+      "context_sha256": "c51fd44cefedc69d72d6f50d03b952d9db392333a76e404c2d328eab90370b13",
+      "context_files": 2013,
+      "context_bytes": 1145188
+    },
+    {
+      "recipe": "typescript-multistage",
+      "variant": "app-change-17",
+      "context_sha256": "5bd620357ceb7dff1c3c594fbcfdb74cecb837601466a07db9ebcb58ed710dc3",
+      "context_files": 2013,
+      "context_bytes": 1145188
+    },
+    {
+      "recipe": "typescript-multistage",
+      "variant": "app-change-18",
+      "context_sha256": "7d36b931c89ee793b3d447a794a1817c40b4c48c9aa986af0802efe2813bd3b8",
+      "context_files": 2013,
+      "context_bytes": 1145188
+    },
+    {
+      "recipe": "typescript-multistage",
+      "variant": "app-change-19",
+      "context_sha256": "8ec3e04e5921839fc916cfd74f2362952047a83e26a81337334c958cedcaa9ca",
+      "context_files": 2013,
+      "context_bytes": 1145188
+    },
+    {
+      "recipe": "typescript-multistage",
+      "variant": "app-change-20",
+      "context_sha256": "46f9216b46c6689acc8ab3ea72ced50d772944c8e07525a8347200e5b281ad83",
+      "context_files": 2013,
+      "context_bytes": 1145188
+    }
+  ],
+  "inventory_sha256": "45efcdbd714d7fbc6748b26f7fcdc29b4b18d1f4117baac0feb8af24e32505a7",
+  "harness_sha256": "d0b2754af69c69d9a303fd15117f60fad044ca0e559b3a1cfbe934f49682c6ec",
+  "declared_artifact_sha256": "7b00954ae39cae9c552c238769dea193df0f5388b4ef8de6155670aeba5a947a",
+  "command": [
+    "/work/ucloud-sandboxes/gateway-venv/bin/python",
+    "/work/ucloud-sandboxes/build-load-20260929/live_build_load_benchmark.py",
+    "--root",
+    "/work/ucloud-sandboxes/builder-preparation-load-20260929",
+    "build",
+    "--phase",
+    "prep-repeat",
+    "--count",
+    "48",
+    "--concurrency",
+    "48",
+    "--variants",
+    "app-change-5",
+    "app-change-6",
+    "app-change-7",
+    "app-change-8",
+    "app-change-9",
+    "app-change-10",
+    "app-change-11",
+    "app-change-12",
+    "app-change-13",
+    "app-change-14",
+    "app-change-15",
+    "app-change-16",
+    "app-change-17",
+    "app-change-18",
+    "app-change-19",
+    "app-change-20",
+    "--timeout",
+    "1200",
+    "--expected-builders",
+    "4"
+  ],
+  "count": 48,
+  "concurrency": 48,
+  "expected_builders": 4,
+  "ran": true,
+  "gateway_imported_source_sha256": {
+    "environment_builder": "174d8cb86d8289ed9ef79c6431fad60b2853f37577866647f471e7e0506accce",
+    "control_plane": "1d351909e06de24770405275aaf3bbe545885b0604311068e173ef35377f1177",
+    "node_agent": "b1cf1363b03ebbc6c0fe1b9748e247068b66847d2be23c6e96c8cc9607d51555",
+    "images": "0928983885171db22645076439b12f71938d0c3d981099e5c440d8d0c3ddf056",
+    "build_cache": "a72e678ab5ca8ab5ef582e591705d288c82360cfc7a63b09c9bd1f1a4063b461"
+  },
+  "started_at": "2026-09-29T11:46:20.397666+00:00",
+  "returncode": 0,
+  "finished_at": "2026-09-29T11:48:40.786118+00:00"
+}

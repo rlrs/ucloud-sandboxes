@@ -129,3 +129,8 @@ guaranteed completion-delivery stream.
 
 See [the production qualification](benchmarks/buildkit-cache-2026-09-29/README.md)
 for deployment receipts, measured cache reuse and scope limits.
+
+Cache preparation and mount durations are retained as numeric `cache_prepare_ms`
+and `cache_mount_ms` in build `timings.phases`, including terminal history. These
+are subphases of `docker_build_and_push_ms`; do not add them to it. They survive
+truncated build log tails and do not depend on parsing Docker output.

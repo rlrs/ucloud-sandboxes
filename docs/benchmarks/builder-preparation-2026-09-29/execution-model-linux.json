@@ -1,0 +1,1319 @@
+{
+  "schema": 1,
+  "fixture": {
+    "schema": 1,
+    "modules": 2000,
+    "uid": 0,
+    "gid": 0,
+    "stamp": 1700000000,
+    "layers": [
+      {
+        "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:d5f558635fd9e1c65f77d15befd33d5962ed7baef19985e00afca1ad1a50e97d",
+        "size": 136371
+      },
+      {
+        "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:a3909a55f0d28b40a8468741e41d088c34b2a772e1ec48021b0e0fcb6b116492",
+        "size": 14515
+      },
+      {
+        "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:9a99c69e445eee1cff0f78983bdf23b0cc8297bb7eb10dcb0c6d917da8d5cc37",
+        "size": 46092
+      },
+      {
+        "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:fd15eb455b502a8b6c2e0d91c8863d241f501b71df845014c0b19eac2e2c2d68",
+        "size": 10786
+      }
+    ],
+    "diff_ids": [
+      "sha256:38f19b4f943f8742004baec27a1c6dddd76a0c0b0ae184c8832a90dd52fdb14f",
+      "sha256:b3a5c2e7661dabbf48b343d79c7f24fbdff03fa31969e5bf81924c74885aec93",
+      "sha256:bb7d1ed811c75e27097ef5b6e24b11dec0000dbaaec7dfc4e6df014969220137",
+      "sha256:f3f2fdced7f9094a069c0d9566b1caef0dfea98905c9d6c0fc70d51ec1dc0d31"
+    ],
+    "uncompressed_bytes": 14673920,
+    "fixture_sha256": "sha256:9b7a2b88ff1ea2ad970cc9cc3836149b0add3457a5f3126dc9a23b4025153e54"
+  },
+  "exact_semantics_equal": true,
+  "mismatches": [],
+  "means": {
+    "threads": {
+      "startup_to_ready_wall_seconds": 0.1763320014999863,
+      "preparation_wall_seconds": 7.439315472500027,
+      "preparation_cpu_seconds": 14.6316683355,
+      "startup_plus_preparation_wall_seconds": 7.6156474740000135,
+      "cleanup_and_reap_wall_seconds": 1.1938891380000314
+    },
+    "processes": {
+      "startup_to_ready_wall_seconds": 0.23279931000001852,
+      "preparation_wall_seconds": 1.768183309499932,
+      "preparation_cpu_seconds": 5.969808241,
+      "startup_plus_preparation_wall_seconds": 2.0009826194999505,
+      "cleanup_and_reap_wall_seconds": 0.3968959430000609
+    }
+  },
+  "runs": [
+    {
+      "schema": 1,
+      "mode": "threads",
+      "concurrency": 4,
+      "sources": {
+        "environment_builder.py": "sha256:174d8cb86d8289ed9ef79c6431fad60b2853f37577866647f471e7e0506accce",
+        "oci_layer_materialize.py": "sha256:fd7c7a91b3724e0277fada18a1499809993869f9f11ab8c984a3f42b3a18d367"
+      },
+      "runtime": {
+        "python": "3.14.4",
+        "platform": "Linux-7.0.0-30-generic-x86_64-with-glibc2.43",
+        "uid": 0,
+        "gid": 0
+      },
+      "startup_to_ready_wall_seconds": 0.17533829600006356,
+      "phases": {
+        "materialize": {
+          "wall_seconds": 3.882067955000025,
+          "cpu_seconds": 8.423501041
+        },
+        "squash": {
+          "wall_seconds": 3.3796860149999475,
+          "cpu_seconds": 6.016502085
+        }
+      },
+      "preparation_wall_seconds": 7.2617539699999725,
+      "preparation_cpu_seconds": 14.440003126,
+      "startup_plus_preparation_wall_seconds": 7.437092266000036,
+      "cleanup_and_reap_wall_seconds": 1.1792969880000328,
+      "whole_trial_including_validation_seconds": 16.16781895400004,
+      "workers_reaped_and_trees_removed": true,
+      "individual_phase_observations": {
+        "materialize": [
+          {
+            "kind": "materialize",
+            "wall_seconds": 3.881849054999975,
+            "cpu_seconds": 2.1440909269999997
+          },
+          {
+            "kind": "materialize",
+            "wall_seconds": 3.876715112999932,
+            "cpu_seconds": 2.140765656
+          },
+          {
+            "kind": "materialize",
+            "wall_seconds": 3.7967716709999877,
+            "cpu_seconds": 2.070596149
+          },
+          {
+            "kind": "materialize",
+            "wall_seconds": 3.867512855999962,
+            "cpu_seconds": 2.068048309
+          }
+        ],
+        "squash": [
+          {
+            "kind": "squash",
+            "wall_seconds": 3.366576794000025,
+            "cpu_seconds": 1.556423542
+          },
+          {
+            "kind": "squash",
+            "wall_seconds": 3.3794467070000564,
+            "cpu_seconds": 1.5029206449999997
+          },
+          {
+            "kind": "squash",
+            "wall_seconds": 3.3606805750000603,
+            "cpu_seconds": 1.505852273
+          },
+          {
+            "kind": "squash",
+            "wall_seconds": 3.362940684000023,
+            "cpu_seconds": 1.4513056250000003
+          }
+        ]
+      },
+      "materialized_trees": [
+        [
+          {
+            "entries": 10005,
+            "tree_digest": "sha256:1a4ed6148fea2b2c0897fc1d6701ef4b8d8221b6486f572d86697f0ec59edfc8",
+            "hardlink_groups": [
+              [
+                "app/node_modules/package-00000/index-alias.js",
+                "app/node_modules/package-00000/index.js"
+              ]
+            ]
+          },
+          {
+            "entries": 1003,
+            "tree_digest": "sha256:bbfae10232d18ebec225f5991ed84c04ddba0adb24d186902819c351bd527a8c",
+            "hardlink_groups": []
+          },
+          {
+            "entries": 2008,
+            "tree_digest": "sha256:490fcc19fb2c7aeea9d9b8d81b9d579376d4137914ef02eaa13a322d2b8a84bc",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          {
+            "entries": 404,
+            "tree_digest": "sha256:d936224cec01cc627c17c8f68fa3f4dc97a8123ebae9ab8452ddb927763209be",
+            "hardlink_groups": []
+          }
+        ],
+        [
+          {
+            "entries": 10005,
+            "tree_digest": "sha256:1a4ed6148fea2b2c0897fc1d6701ef4b8d8221b6486f572d86697f0ec59edfc8",
+            "hardlink_groups": [
+              [
+                "app/node_modules/package-00000/index-alias.js",
+                "app/node_modules/package-00000/index.js"
+              ]
+            ]
+          },
+          {
+            "entries": 1003,
+            "tree_digest": "sha256:bbfae10232d18ebec225f5991ed84c04ddba0adb24d186902819c351bd527a8c",
+            "hardlink_groups": []
+          },
+          {
+            "entries": 2008,
+            "tree_digest": "sha256:490fcc19fb2c7aeea9d9b8d81b9d579376d4137914ef02eaa13a322d2b8a84bc",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          {
+            "entries": 404,
+            "tree_digest": "sha256:d936224cec01cc627c17c8f68fa3f4dc97a8123ebae9ab8452ddb927763209be",
+            "hardlink_groups": []
+          }
+        ],
+        [
+          {
+            "entries": 10005,
+            "tree_digest": "sha256:1a4ed6148fea2b2c0897fc1d6701ef4b8d8221b6486f572d86697f0ec59edfc8",
+            "hardlink_groups": [
+              [
+                "app/node_modules/package-00000/index-alias.js",
+                "app/node_modules/package-00000/index.js"
+              ]
+            ]
+          },
+          {
+            "entries": 1003,
+            "tree_digest": "sha256:bbfae10232d18ebec225f5991ed84c04ddba0adb24d186902819c351bd527a8c",
+            "hardlink_groups": []
+          },
+          {
+            "entries": 2008,
+            "tree_digest": "sha256:490fcc19fb2c7aeea9d9b8d81b9d579376d4137914ef02eaa13a322d2b8a84bc",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          {
+            "entries": 404,
+            "tree_digest": "sha256:d936224cec01cc627c17c8f68fa3f4dc97a8123ebae9ab8452ddb927763209be",
+            "hardlink_groups": []
+          }
+        ],
+        [
+          {
+            "entries": 10005,
+            "tree_digest": "sha256:1a4ed6148fea2b2c0897fc1d6701ef4b8d8221b6486f572d86697f0ec59edfc8",
+            "hardlink_groups": [
+              [
+                "app/node_modules/package-00000/index-alias.js",
+                "app/node_modules/package-00000/index.js"
+              ]
+            ]
+          },
+          {
+            "entries": 1003,
+            "tree_digest": "sha256:bbfae10232d18ebec225f5991ed84c04ddba0adb24d186902819c351bd527a8c",
+            "hardlink_groups": []
+          },
+          {
+            "entries": 2008,
+            "tree_digest": "sha256:490fcc19fb2c7aeea9d9b8d81b9d579376d4137914ef02eaa13a322d2b8a84bc",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          {
+            "entries": 404,
+            "tree_digest": "sha256:d936224cec01cc627c17c8f68fa3f4dc97a8123ebae9ab8452ddb927763209be",
+            "hardlink_groups": []
+          }
+        ]
+      ],
+      "outputs": [
+        {
+          "kind": "validate_output",
+          "tree": {
+            "entries": 12012,
+            "tree_digest": "sha256:f4ab5fa4b1bef89d712003db60ac4f5dcbd9f7b66ea778d626688ca5d45146de",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          "overlay_tree": {
+            "entries": 9,
+            "tree_digest": "sha256:c12e0a07c7ba21f652c810154bde9e07e76fad438c76fded2867982b6cb45a2d",
+            "hardlink_groups": []
+          },
+          "capabilities_exercised": [
+            "user_xattr",
+            "whiteout",
+            "lower_whiteout",
+            "trusted_opaque"
+          ],
+          "capability_skips": {}
+        },
+        {
+          "kind": "validate_output",
+          "tree": {
+            "entries": 12012,
+            "tree_digest": "sha256:f4ab5fa4b1bef89d712003db60ac4f5dcbd9f7b66ea778d626688ca5d45146de",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          "overlay_tree": {
+            "entries": 9,
+            "tree_digest": "sha256:c12e0a07c7ba21f652c810154bde9e07e76fad438c76fded2867982b6cb45a2d",
+            "hardlink_groups": []
+          },
+          "capabilities_exercised": [
+            "user_xattr",
+            "whiteout",
+            "lower_whiteout",
+            "trusted_opaque"
+          ],
+          "capability_skips": {}
+        },
+        {
+          "kind": "validate_output",
+          "tree": {
+            "entries": 12012,
+            "tree_digest": "sha256:f4ab5fa4b1bef89d712003db60ac4f5dcbd9f7b66ea778d626688ca5d45146de",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          "overlay_tree": {
+            "entries": 9,
+            "tree_digest": "sha256:c12e0a07c7ba21f652c810154bde9e07e76fad438c76fded2867982b6cb45a2d",
+            "hardlink_groups": []
+          },
+          "capabilities_exercised": [
+            "user_xattr",
+            "whiteout",
+            "lower_whiteout",
+            "trusted_opaque"
+          ],
+          "capability_skips": {}
+        },
+        {
+          "kind": "validate_output",
+          "tree": {
+            "entries": 12012,
+            "tree_digest": "sha256:f4ab5fa4b1bef89d712003db60ac4f5dcbd9f7b66ea778d626688ca5d45146de",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          "overlay_tree": {
+            "entries": 9,
+            "tree_digest": "sha256:c12e0a07c7ba21f652c810154bde9e07e76fad438c76fded2867982b6cb45a2d",
+            "hardlink_groups": []
+          },
+          "capabilities_exercised": [
+            "user_xattr",
+            "whiteout",
+            "lower_whiteout",
+            "trusted_opaque"
+          ],
+          "capability_skips": {}
+        }
+      ],
+      "cpu_accounting": "sum of worker thread CPU",
+      "repeat": 0
+    },
+    {
+      "schema": 1,
+      "mode": "processes",
+      "concurrency": 4,
+      "sources": {
+        "environment_builder.py": "sha256:174d8cb86d8289ed9ef79c6431fad60b2853f37577866647f471e7e0506accce",
+        "oci_layer_materialize.py": "sha256:fd7c7a91b3724e0277fada18a1499809993869f9f11ab8c984a3f42b3a18d367"
+      },
+      "runtime": {
+        "python": "3.14.4",
+        "platform": "Linux-7.0.0-30-generic-x86_64-with-glibc2.43",
+        "uid": 0,
+        "gid": 0
+      },
+      "startup_to_ready_wall_seconds": 0.22877141499998288,
+      "phases": {
+        "materialize": {
+          "wall_seconds": 0.939548054999932,
+          "cpu_seconds": 3.3160533450000003
+        },
+        "squash": {
+          "wall_seconds": 0.853273865999995,
+          "cpu_seconds": 2.6660503769999995
+        }
+      },
+      "preparation_wall_seconds": 1.792821920999927,
+      "preparation_cpu_seconds": 5.982103722,
+      "startup_plus_preparation_wall_seconds": 2.02159333599991,
+      "cleanup_and_reap_wall_seconds": 0.39490887500005556,
+      "whole_trial_including_validation_seconds": 3.276246828000012,
+      "workers_reaped_and_trees_removed": true,
+      "individual_phase_observations": {
+        "materialize": [
+          {
+            "kind": "materialize",
+            "wall_seconds": 0.9327022900000657,
+            "cpu_seconds": 0.824901364
+          },
+          {
+            "kind": "materialize",
+            "wall_seconds": 0.9334680630000776,
+            "cpu_seconds": 0.8310505570000001
+          },
+          {
+            "kind": "materialize",
+            "wall_seconds": 0.9333896340000365,
+            "cpu_seconds": 0.8254997339999999
+          },
+          {
+            "kind": "materialize",
+            "wall_seconds": 0.9393954050000275,
+            "cpu_seconds": 0.8346016900000001
+          }
+        ],
+        "squash": [
+          {
+            "kind": "squash",
+            "wall_seconds": 0.8413923350000232,
+            "cpu_seconds": 0.6627180579999998
+          },
+          {
+            "kind": "squash",
+            "wall_seconds": 0.8530898440000101,
+            "cpu_seconds": 0.6922015719999999
+          },
+          {
+            "kind": "squash",
+            "wall_seconds": 0.8264952560000438,
+            "cpu_seconds": 0.6417691469999998
+          },
+          {
+            "kind": "squash",
+            "wall_seconds": 0.8434671490000483,
+            "cpu_seconds": 0.6693616
+          }
+        ]
+      },
+      "materialized_trees": [
+        [
+          {
+            "entries": 10005,
+            "tree_digest": "sha256:1a4ed6148fea2b2c0897fc1d6701ef4b8d8221b6486f572d86697f0ec59edfc8",
+            "hardlink_groups": [
+              [
+                "app/node_modules/package-00000/index-alias.js",
+                "app/node_modules/package-00000/index.js"
+              ]
+            ]
+          },
+          {
+            "entries": 1003,
+            "tree_digest": "sha256:bbfae10232d18ebec225f5991ed84c04ddba0adb24d186902819c351bd527a8c",
+            "hardlink_groups": []
+          },
+          {
+            "entries": 2008,
+            "tree_digest": "sha256:490fcc19fb2c7aeea9d9b8d81b9d579376d4137914ef02eaa13a322d2b8a84bc",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          {
+            "entries": 404,
+            "tree_digest": "sha256:d936224cec01cc627c17c8f68fa3f4dc97a8123ebae9ab8452ddb927763209be",
+            "hardlink_groups": []
+          }
+        ],
+        [
+          {
+            "entries": 10005,
+            "tree_digest": "sha256:1a4ed6148fea2b2c0897fc1d6701ef4b8d8221b6486f572d86697f0ec59edfc8",
+            "hardlink_groups": [
+              [
+                "app/node_modules/package-00000/index-alias.js",
+                "app/node_modules/package-00000/index.js"
+              ]
+            ]
+          },
+          {
+            "entries": 1003,
+            "tree_digest": "sha256:bbfae10232d18ebec225f5991ed84c04ddba0adb24d186902819c351bd527a8c",
+            "hardlink_groups": []
+          },
+          {
+            "entries": 2008,
+            "tree_digest": "sha256:490fcc19fb2c7aeea9d9b8d81b9d579376d4137914ef02eaa13a322d2b8a84bc",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          {
+            "entries": 404,
+            "tree_digest": "sha256:d936224cec01cc627c17c8f68fa3f4dc97a8123ebae9ab8452ddb927763209be",
+            "hardlink_groups": []
+          }
+        ],
+        [
+          {
+            "entries": 10005,
+            "tree_digest": "sha256:1a4ed6148fea2b2c0897fc1d6701ef4b8d8221b6486f572d86697f0ec59edfc8",
+            "hardlink_groups": [
+              [
+                "app/node_modules/package-00000/index-alias.js",
+                "app/node_modules/package-00000/index.js"
+              ]
+            ]
+          },
+          {
+            "entries": 1003,
+            "tree_digest": "sha256:bbfae10232d18ebec225f5991ed84c04ddba0adb24d186902819c351bd527a8c",
+            "hardlink_groups": []
+          },
+          {
+            "entries": 2008,
+            "tree_digest": "sha256:490fcc19fb2c7aeea9d9b8d81b9d579376d4137914ef02eaa13a322d2b8a84bc",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          {
+            "entries": 404,
+            "tree_digest": "sha256:d936224cec01cc627c17c8f68fa3f4dc97a8123ebae9ab8452ddb927763209be",
+            "hardlink_groups": []
+          }
+        ],
+        [
+          {
+            "entries": 10005,
+            "tree_digest": "sha256:1a4ed6148fea2b2c0897fc1d6701ef4b8d8221b6486f572d86697f0ec59edfc8",
+            "hardlink_groups": [
+              [
+                "app/node_modules/package-00000/index-alias.js",
+                "app/node_modules/package-00000/index.js"
+              ]
+            ]
+          },
+          {
+            "entries": 1003,
+            "tree_digest": "sha256:bbfae10232d18ebec225f5991ed84c04ddba0adb24d186902819c351bd527a8c",
+            "hardlink_groups": []
+          },
+          {
+            "entries": 2008,
+            "tree_digest": "sha256:490fcc19fb2c7aeea9d9b8d81b9d579376d4137914ef02eaa13a322d2b8a84bc",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          {
+            "entries": 404,
+            "tree_digest": "sha256:d936224cec01cc627c17c8f68fa3f4dc97a8123ebae9ab8452ddb927763209be",
+            "hardlink_groups": []
+          }
+        ]
+      ],
+      "outputs": [
+        {
+          "kind": "validate_output",
+          "tree": {
+            "entries": 12012,
+            "tree_digest": "sha256:f4ab5fa4b1bef89d712003db60ac4f5dcbd9f7b66ea778d626688ca5d45146de",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          "overlay_tree": {
+            "entries": 9,
+            "tree_digest": "sha256:c12e0a07c7ba21f652c810154bde9e07e76fad438c76fded2867982b6cb45a2d",
+            "hardlink_groups": []
+          },
+          "capabilities_exercised": [
+            "user_xattr",
+            "whiteout",
+            "lower_whiteout",
+            "trusted_opaque"
+          ],
+          "capability_skips": {}
+        },
+        {
+          "kind": "validate_output",
+          "tree": {
+            "entries": 12012,
+            "tree_digest": "sha256:f4ab5fa4b1bef89d712003db60ac4f5dcbd9f7b66ea778d626688ca5d45146de",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          "overlay_tree": {
+            "entries": 9,
+            "tree_digest": "sha256:c12e0a07c7ba21f652c810154bde9e07e76fad438c76fded2867982b6cb45a2d",
+            "hardlink_groups": []
+          },
+          "capabilities_exercised": [
+            "user_xattr",
+            "whiteout",
+            "lower_whiteout",
+            "trusted_opaque"
+          ],
+          "capability_skips": {}
+        },
+        {
+          "kind": "validate_output",
+          "tree": {
+            "entries": 12012,
+            "tree_digest": "sha256:f4ab5fa4b1bef89d712003db60ac4f5dcbd9f7b66ea778d626688ca5d45146de",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          "overlay_tree": {
+            "entries": 9,
+            "tree_digest": "sha256:c12e0a07c7ba21f652c810154bde9e07e76fad438c76fded2867982b6cb45a2d",
+            "hardlink_groups": []
+          },
+          "capabilities_exercised": [
+            "user_xattr",
+            "whiteout",
+            "lower_whiteout",
+            "trusted_opaque"
+          ],
+          "capability_skips": {}
+        },
+        {
+          "kind": "validate_output",
+          "tree": {
+            "entries": 12012,
+            "tree_digest": "sha256:f4ab5fa4b1bef89d712003db60ac4f5dcbd9f7b66ea778d626688ca5d45146de",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          "overlay_tree": {
+            "entries": 9,
+            "tree_digest": "sha256:c12e0a07c7ba21f652c810154bde9e07e76fad438c76fded2867982b6cb45a2d",
+            "hardlink_groups": []
+          },
+          "capabilities_exercised": [
+            "user_xattr",
+            "whiteout",
+            "lower_whiteout",
+            "trusted_opaque"
+          ],
+          "capability_skips": {}
+        }
+      ],
+      "cpu_accounting": "sum of worker process CPU",
+      "repeat": 0
+    },
+    {
+      "schema": 1,
+      "mode": "processes",
+      "concurrency": 4,
+      "sources": {
+        "environment_builder.py": "sha256:174d8cb86d8289ed9ef79c6431fad60b2853f37577866647f471e7e0506accce",
+        "oci_layer_materialize.py": "sha256:fd7c7a91b3724e0277fada18a1499809993869f9f11ab8c984a3f42b3a18d367"
+      },
+      "runtime": {
+        "python": "3.14.4",
+        "platform": "Linux-7.0.0-30-generic-x86_64-with-glibc2.43",
+        "uid": 0,
+        "gid": 0
+      },
+      "startup_to_ready_wall_seconds": 0.23682720500005416,
+      "phases": {
+        "materialize": {
+          "wall_seconds": 0.9389626199999839,
+          "cpu_seconds": 3.321331657
+        },
+        "squash": {
+          "wall_seconds": 0.8045820779999531,
+          "cpu_seconds": 2.636181103
+        }
+      },
+      "preparation_wall_seconds": 1.743544697999937,
+      "preparation_cpu_seconds": 5.95751276,
+      "startup_plus_preparation_wall_seconds": 1.980371902999991,
+      "cleanup_and_reap_wall_seconds": 0.3988830110000663,
+      "whole_trial_including_validation_seconds": 3.2846194930000365,
+      "workers_reaped_and_trees_removed": true,
+      "individual_phase_observations": {
+        "materialize": [
+          {
+            "kind": "materialize",
+            "wall_seconds": 0.9386715789999016,
+            "cpu_seconds": 0.8415127530000001
+          },
+          {
+            "kind": "materialize",
+            "wall_seconds": 0.9068611889999829,
+            "cpu_seconds": 0.815562414
+          },
+          {
+            "kind": "materialize",
+            "wall_seconds": 0.9313871909999989,
+            "cpu_seconds": 0.827834364
+          },
+          {
+            "kind": "materialize",
+            "wall_seconds": 0.9383223580000504,
+            "cpu_seconds": 0.836422126
+          }
+        ],
+        "squash": [
+          {
+            "kind": "squash",
+            "wall_seconds": 0.8033267209999622,
+            "cpu_seconds": 0.669501377
+          },
+          {
+            "kind": "squash",
+            "wall_seconds": 0.8044006979999949,
+            "cpu_seconds": 0.6631732860000001
+          },
+          {
+            "kind": "squash",
+            "wall_seconds": 0.7936209609999878,
+            "cpu_seconds": 0.6534924929999999
+          },
+          {
+            "kind": "squash",
+            "wall_seconds": 0.7954788460000373,
+            "cpu_seconds": 0.6500139469999999
+          }
+        ]
+      },
+      "materialized_trees": [
+        [
+          {
+            "entries": 10005,
+            "tree_digest": "sha256:1a4ed6148fea2b2c0897fc1d6701ef4b8d8221b6486f572d86697f0ec59edfc8",
+            "hardlink_groups": [
+              [
+                "app/node_modules/package-00000/index-alias.js",
+                "app/node_modules/package-00000/index.js"
+              ]
+            ]
+          },
+          {
+            "entries": 1003,
+            "tree_digest": "sha256:bbfae10232d18ebec225f5991ed84c04ddba0adb24d186902819c351bd527a8c",
+            "hardlink_groups": []
+          },
+          {
+            "entries": 2008,
+            "tree_digest": "sha256:490fcc19fb2c7aeea9d9b8d81b9d579376d4137914ef02eaa13a322d2b8a84bc",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          {
+            "entries": 404,
+            "tree_digest": "sha256:d936224cec01cc627c17c8f68fa3f4dc97a8123ebae9ab8452ddb927763209be",
+            "hardlink_groups": []
+          }
+        ],
+        [
+          {
+            "entries": 10005,
+            "tree_digest": "sha256:1a4ed6148fea2b2c0897fc1d6701ef4b8d8221b6486f572d86697f0ec59edfc8",
+            "hardlink_groups": [
+              [
+                "app/node_modules/package-00000/index-alias.js",
+                "app/node_modules/package-00000/index.js"
+              ]
+            ]
+          },
+          {
+            "entries": 1003,
+            "tree_digest": "sha256:bbfae10232d18ebec225f5991ed84c04ddba0adb24d186902819c351bd527a8c",
+            "hardlink_groups": []
+          },
+          {
+            "entries": 2008,
+            "tree_digest": "sha256:490fcc19fb2c7aeea9d9b8d81b9d579376d4137914ef02eaa13a322d2b8a84bc",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          {
+            "entries": 404,
+            "tree_digest": "sha256:d936224cec01cc627c17c8f68fa3f4dc97a8123ebae9ab8452ddb927763209be",
+            "hardlink_groups": []
+          }
+        ],
+        [
+          {
+            "entries": 10005,
+            "tree_digest": "sha256:1a4ed6148fea2b2c0897fc1d6701ef4b8d8221b6486f572d86697f0ec59edfc8",
+            "hardlink_groups": [
+              [
+                "app/node_modules/package-00000/index-alias.js",
+                "app/node_modules/package-00000/index.js"
+              ]
+            ]
+          },
+          {
+            "entries": 1003,
+            "tree_digest": "sha256:bbfae10232d18ebec225f5991ed84c04ddba0adb24d186902819c351bd527a8c",
+            "hardlink_groups": []
+          },
+          {
+            "entries": 2008,
+            "tree_digest": "sha256:490fcc19fb2c7aeea9d9b8d81b9d579376d4137914ef02eaa13a322d2b8a84bc",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          {
+            "entries": 404,
+            "tree_digest": "sha256:d936224cec01cc627c17c8f68fa3f4dc97a8123ebae9ab8452ddb927763209be",
+            "hardlink_groups": []
+          }
+        ],
+        [
+          {
+            "entries": 10005,
+            "tree_digest": "sha256:1a4ed6148fea2b2c0897fc1d6701ef4b8d8221b6486f572d86697f0ec59edfc8",
+            "hardlink_groups": [
+              [
+                "app/node_modules/package-00000/index-alias.js",
+                "app/node_modules/package-00000/index.js"
+              ]
+            ]
+          },
+          {
+            "entries": 1003,
+            "tree_digest": "sha256:bbfae10232d18ebec225f5991ed84c04ddba0adb24d186902819c351bd527a8c",
+            "hardlink_groups": []
+          },
+          {
+            "entries": 2008,
+            "tree_digest": "sha256:490fcc19fb2c7aeea9d9b8d81b9d579376d4137914ef02eaa13a322d2b8a84bc",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          {
+            "entries": 404,
+            "tree_digest": "sha256:d936224cec01cc627c17c8f68fa3f4dc97a8123ebae9ab8452ddb927763209be",
+            "hardlink_groups": []
+          }
+        ]
+      ],
+      "outputs": [
+        {
+          "kind": "validate_output",
+          "tree": {
+            "entries": 12012,
+            "tree_digest": "sha256:f4ab5fa4b1bef89d712003db60ac4f5dcbd9f7b66ea778d626688ca5d45146de",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          "overlay_tree": {
+            "entries": 9,
+            "tree_digest": "sha256:c12e0a07c7ba21f652c810154bde9e07e76fad438c76fded2867982b6cb45a2d",
+            "hardlink_groups": []
+          },
+          "capabilities_exercised": [
+            "user_xattr",
+            "whiteout",
+            "lower_whiteout",
+            "trusted_opaque"
+          ],
+          "capability_skips": {}
+        },
+        {
+          "kind": "validate_output",
+          "tree": {
+            "entries": 12012,
+            "tree_digest": "sha256:f4ab5fa4b1bef89d712003db60ac4f5dcbd9f7b66ea778d626688ca5d45146de",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          "overlay_tree": {
+            "entries": 9,
+            "tree_digest": "sha256:c12e0a07c7ba21f652c810154bde9e07e76fad438c76fded2867982b6cb45a2d",
+            "hardlink_groups": []
+          },
+          "capabilities_exercised": [
+            "user_xattr",
+            "whiteout",
+            "lower_whiteout",
+            "trusted_opaque"
+          ],
+          "capability_skips": {}
+        },
+        {
+          "kind": "validate_output",
+          "tree": {
+            "entries": 12012,
+            "tree_digest": "sha256:f4ab5fa4b1bef89d712003db60ac4f5dcbd9f7b66ea778d626688ca5d45146de",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          "overlay_tree": {
+            "entries": 9,
+            "tree_digest": "sha256:c12e0a07c7ba21f652c810154bde9e07e76fad438c76fded2867982b6cb45a2d",
+            "hardlink_groups": []
+          },
+          "capabilities_exercised": [
+            "user_xattr",
+            "whiteout",
+            "lower_whiteout",
+            "trusted_opaque"
+          ],
+          "capability_skips": {}
+        },
+        {
+          "kind": "validate_output",
+          "tree": {
+            "entries": 12012,
+            "tree_digest": "sha256:f4ab5fa4b1bef89d712003db60ac4f5dcbd9f7b66ea778d626688ca5d45146de",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          "overlay_tree": {
+            "entries": 9,
+            "tree_digest": "sha256:c12e0a07c7ba21f652c810154bde9e07e76fad438c76fded2867982b6cb45a2d",
+            "hardlink_groups": []
+          },
+          "capabilities_exercised": [
+            "user_xattr",
+            "whiteout",
+            "lower_whiteout",
+            "trusted_opaque"
+          ],
+          "capability_skips": {}
+        }
+      ],
+      "cpu_accounting": "sum of worker process CPU",
+      "repeat": 1
+    },
+    {
+      "schema": 1,
+      "mode": "threads",
+      "concurrency": 4,
+      "sources": {
+        "environment_builder.py": "sha256:174d8cb86d8289ed9ef79c6431fad60b2853f37577866647f471e7e0506accce",
+        "oci_layer_materialize.py": "sha256:fd7c7a91b3724e0277fada18a1499809993869f9f11ab8c984a3f42b3a18d367"
+      },
+      "runtime": {
+        "python": "3.14.4",
+        "platform": "Linux-7.0.0-30-generic-x86_64-with-glibc2.43",
+        "uid": 0,
+        "gid": 0
+      },
+      "startup_to_ready_wall_seconds": 0.17732570699990902,
+      "phases": {
+        "materialize": {
+          "wall_seconds": 4.141103375000057,
+          "cpu_seconds": 8.726118060000001
+        },
+        "squash": {
+          "wall_seconds": 3.475773600000025,
+          "cpu_seconds": 6.0972154849999995
+        }
+      },
+      "preparation_wall_seconds": 7.616876975000082,
+      "preparation_cpu_seconds": 14.823333545,
+      "startup_plus_preparation_wall_seconds": 7.794202681999991,
+      "cleanup_and_reap_wall_seconds": 1.20848128800003,
+      "whole_trial_including_validation_seconds": 16.799313340999902,
+      "workers_reaped_and_trees_removed": true,
+      "individual_phase_observations": {
+        "materialize": [
+          {
+            "kind": "materialize",
+            "wall_seconds": 4.131069324000009,
+            "cpu_seconds": 2.196593741
+          },
+          {
+            "kind": "materialize",
+            "wall_seconds": 4.136583007000013,
+            "cpu_seconds": 2.21516902
+          },
+          {
+            "kind": "materialize",
+            "wall_seconds": 4.0369967679999945,
+            "cpu_seconds": 2.130227522
+          },
+          {
+            "kind": "materialize",
+            "wall_seconds": 4.140422488000013,
+            "cpu_seconds": 2.184127777
+          }
+        ],
+        "squash": [
+          {
+            "kind": "squash",
+            "wall_seconds": 3.2732150489999867,
+            "cpu_seconds": 1.5356555099999998
+          },
+          {
+            "kind": "squash",
+            "wall_seconds": 3.4753900130000375,
+            "cpu_seconds": 1.5085198919999998
+          },
+          {
+            "kind": "squash",
+            "wall_seconds": 3.4603891410000642,
+            "cpu_seconds": 1.5107018329999997
+          },
+          {
+            "kind": "squash",
+            "wall_seconds": 3.457335370999999,
+            "cpu_seconds": 1.5423382499999998
+          }
+        ]
+      },
+      "materialized_trees": [
+        [
+          {
+            "entries": 10005,
+            "tree_digest": "sha256:1a4ed6148fea2b2c0897fc1d6701ef4b8d8221b6486f572d86697f0ec59edfc8",
+            "hardlink_groups": [
+              [
+                "app/node_modules/package-00000/index-alias.js",
+                "app/node_modules/package-00000/index.js"
+              ]
+            ]
+          },
+          {
+            "entries": 1003,
+            "tree_digest": "sha256:bbfae10232d18ebec225f5991ed84c04ddba0adb24d186902819c351bd527a8c",
+            "hardlink_groups": []
+          },
+          {
+            "entries": 2008,
+            "tree_digest": "sha256:490fcc19fb2c7aeea9d9b8d81b9d579376d4137914ef02eaa13a322d2b8a84bc",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          {
+            "entries": 404,
+            "tree_digest": "sha256:d936224cec01cc627c17c8f68fa3f4dc97a8123ebae9ab8452ddb927763209be",
+            "hardlink_groups": []
+          }
+        ],
+        [
+          {
+            "entries": 10005,
+            "tree_digest": "sha256:1a4ed6148fea2b2c0897fc1d6701ef4b8d8221b6486f572d86697f0ec59edfc8",
+            "hardlink_groups": [
+              [
+                "app/node_modules/package-00000/index-alias.js",
+                "app/node_modules/package-00000/index.js"
+              ]
+            ]
+          },
+          {
+            "entries": 1003,
+            "tree_digest": "sha256:bbfae10232d18ebec225f5991ed84c04ddba0adb24d186902819c351bd527a8c",
+            "hardlink_groups": []
+          },
+          {
+            "entries": 2008,
+            "tree_digest": "sha256:490fcc19fb2c7aeea9d9b8d81b9d579376d4137914ef02eaa13a322d2b8a84bc",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          {
+            "entries": 404,
+            "tree_digest": "sha256:d936224cec01cc627c17c8f68fa3f4dc97a8123ebae9ab8452ddb927763209be",
+            "hardlink_groups": []
+          }
+        ],
+        [
+          {
+            "entries": 10005,
+            "tree_digest": "sha256:1a4ed6148fea2b2c0897fc1d6701ef4b8d8221b6486f572d86697f0ec59edfc8",
+            "hardlink_groups": [
+              [
+                "app/node_modules/package-00000/index-alias.js",
+                "app/node_modules/package-00000/index.js"
+              ]
+            ]
+          },
+          {
+            "entries": 1003,
+            "tree_digest": "sha256:bbfae10232d18ebec225f5991ed84c04ddba0adb24d186902819c351bd527a8c",
+            "hardlink_groups": []
+          },
+          {
+            "entries": 2008,
+            "tree_digest": "sha256:490fcc19fb2c7aeea9d9b8d81b9d579376d4137914ef02eaa13a322d2b8a84bc",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          {
+            "entries": 404,
+            "tree_digest": "sha256:d936224cec01cc627c17c8f68fa3f4dc97a8123ebae9ab8452ddb927763209be",
+            "hardlink_groups": []
+          }
+        ],
+        [
+          {
+            "entries": 10005,
+            "tree_digest": "sha256:1a4ed6148fea2b2c0897fc1d6701ef4b8d8221b6486f572d86697f0ec59edfc8",
+            "hardlink_groups": [
+              [
+                "app/node_modules/package-00000/index-alias.js",
+                "app/node_modules/package-00000/index.js"
+              ]
+            ]
+          },
+          {
+            "entries": 1003,
+            "tree_digest": "sha256:bbfae10232d18ebec225f5991ed84c04ddba0adb24d186902819c351bd527a8c",
+            "hardlink_groups": []
+          },
+          {
+            "entries": 2008,
+            "tree_digest": "sha256:490fcc19fb2c7aeea9d9b8d81b9d579376d4137914ef02eaa13a322d2b8a84bc",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          {
+            "entries": 404,
+            "tree_digest": "sha256:d936224cec01cc627c17c8f68fa3f4dc97a8123ebae9ab8452ddb927763209be",
+            "hardlink_groups": []
+          }
+        ]
+      ],
+      "outputs": [
+        {
+          "kind": "validate_output",
+          "tree": {
+            "entries": 12012,
+            "tree_digest": "sha256:f4ab5fa4b1bef89d712003db60ac4f5dcbd9f7b66ea778d626688ca5d45146de",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          "overlay_tree": {
+            "entries": 9,
+            "tree_digest": "sha256:c12e0a07c7ba21f652c810154bde9e07e76fad438c76fded2867982b6cb45a2d",
+            "hardlink_groups": []
+          },
+          "capabilities_exercised": [
+            "user_xattr",
+            "whiteout",
+            "lower_whiteout",
+            "trusted_opaque"
+          ],
+          "capability_skips": {}
+        },
+        {
+          "kind": "validate_output",
+          "tree": {
+            "entries": 12012,
+            "tree_digest": "sha256:f4ab5fa4b1bef89d712003db60ac4f5dcbd9f7b66ea778d626688ca5d45146de",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          "overlay_tree": {
+            "entries": 9,
+            "tree_digest": "sha256:c12e0a07c7ba21f652c810154bde9e07e76fad438c76fded2867982b6cb45a2d",
+            "hardlink_groups": []
+          },
+          "capabilities_exercised": [
+            "user_xattr",
+            "whiteout",
+            "lower_whiteout",
+            "trusted_opaque"
+          ],
+          "capability_skips": {}
+        },
+        {
+          "kind": "validate_output",
+          "tree": {
+            "entries": 12012,
+            "tree_digest": "sha256:f4ab5fa4b1bef89d712003db60ac4f5dcbd9f7b66ea778d626688ca5d45146de",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          "overlay_tree": {
+            "entries": 9,
+            "tree_digest": "sha256:c12e0a07c7ba21f652c810154bde9e07e76fad438c76fded2867982b6cb45a2d",
+            "hardlink_groups": []
+          },
+          "capabilities_exercised": [
+            "user_xattr",
+            "whiteout",
+            "lower_whiteout",
+            "trusted_opaque"
+          ],
+          "capability_skips": {}
+        },
+        {
+          "kind": "validate_output",
+          "tree": {
+            "entries": 12012,
+            "tree_digest": "sha256:f4ab5fa4b1bef89d712003db60ac4f5dcbd9f7b66ea778d626688ca5d45146de",
+            "hardlink_groups": [
+              [
+                "app/dist/run-alias.js",
+                "app/dist/run.js"
+              ]
+            ]
+          },
+          "overlay_tree": {
+            "entries": 9,
+            "tree_digest": "sha256:c12e0a07c7ba21f652c810154bde9e07e76fad438c76fded2867982b6cb45a2d",
+            "hardlink_groups": []
+          },
+          "capabilities_exercised": [
+            "user_xattr",
+            "whiteout",
+            "lower_whiteout",
+            "trusted_opaque"
+          ],
+          "capability_skips": {}
+        }
+      ],
+      "cpu_accounting": "sum of worker thread CPU",
+      "repeat": 1
+    }
+  ],
+  "helper_sha256": "sha256:e55dbc76764785f75b19d7bcab5c4d35ce21ba7283220c8451e8ac507d190432",
+  "limitations": [
+    "Synthetic candidate-only comparison; no network, registry, Docker, mkfs, signing, or production calls.",
+    "All arms consume fresh private diffs. Four threads share an interpreter; four processes use spawn and separate interpreters.",
+    "Startup includes spawning/imports/readiness and is separate from phase wall time. The subprocess supervisor's own interpreter startup is excluded symmetrically.",
+    "For a cold process-offload estimate compare processes startup_plus_preparation with threads preparation, since the production node is already imported.",
+    "Validation is outside timed stages. Stage barriers isolate each operation but do not reproduce arbitrary production overlap.",
+    "Shared warmed fixture bytes; fresh private output trees. No cache drops. CPU excludes supervisor IPC and startup; it sums each worker's timed CPU.",
+    "Comparison follows helper metadata rules, including normalized generated-whiteout mtime and explicit capability skips.",
+    "Fresh-process costs are measured, not amortized persistent-pool costs. Filesystem contention, Python/runtime versions and hardware can change results."
+  ]
+}

@@ -1,14 +1,57 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from threading import Barrier
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock
 
-from ucloud_sandboxes.images import DockerImageRuntime, ImageBuildSpec
+from tests.test_images import _uploaded_context
+from ucloud_sandboxes.images import (
+    BUILD_LOG_TAIL_CHARS, DockerImageRuntime, ImageBuildSpec, ImageManager, ImageStore,
+)
 from ucloud_sandboxes.sandbox import CommandResult
 
 
 class BuildCacheRuntimeTests(unittest.TestCase):
+    def test_concurrent_builds_retain_cache_timings_after_log_truncation_and_failure(self):
+        with TemporaryDirectory() as raw:
+            Path(raw, "Dockerfile").write_text("FROM scratch\n")
+            barrier = Barrier(2)
+
+            class Runtime(DockerImageRuntime):
+                def _run(self, argv, *, on_output=None):
+                    barrier.wait(timeout=5)
+                    on_output("stdout", "x" * (BUILD_LOG_TAIL_CHARS + 100))
+                    if "registry/ucloud-managed/fail:latest" in argv:
+                        raise RuntimeError("deliberate build failure")
+                    return CommandResult(argv=argv, exit_code=0)
+
+            runtime = Runtime(buildx_direct_push=True)
+            runtime.build_cache = Mock()
+            runtime.build_cache.prepare.return_value = SimpleNamespace(
+                imports=(), export_ref="registry/ucloud-build-cache:unique",
+                matching_ref="registry/ucloud-build-cache:one")
+            runtime.build_cache.pre_mount.return_value = {"mounted": 1}
+            manager = ImageManager(ImageStore(Path(raw) / "images.sqlite"), runtime,
+                                   max_active_builds=2)
+            identity, materialize = _uploaded_context(("Dockerfile", b"FROM scratch\n"))
+            records = [manager.start_build(ImageBuildSpec(id=name,
+                tag=f"registry/ucloud-managed/{name}:latest", context_path="."), push=True,
+                context_identity=identity, materialize_context=materialize)[0]
+                for name in ("ok", "fail")]
+            completed = [manager.wait_for_build(record.build_id, timeout_seconds=10) for record in records]
+            self.assertEqual([record.status for record in completed], ["succeeded", "failed"])
+            for record in completed:
+                self.assertNotIn("Shared build cache mounts:", record.log_tail)
+                phases = record.timings["phases"]
+                for key in ("cache_prepare_ms", "cache_mount_ms"):
+                    self.assertIsInstance(phases[key], int)
+                    self.assertGreaterEqual(phases[key], 0)
+                    self.assertLessEqual(phases[key], phases["docker_build_and_push_ms"])
+            # Terminal records are read back through the persisted build store.
+            self.assertEqual(manager.build_store.get(records[1].build_id).timings,
+                             completed[1].timings)
+
     def test_replacement_builder_imports_shared_cache_and_exports_own_ref(self):
         with TemporaryDirectory() as raw:
             Path(raw, "Dockerfile").write_text("FROM scratch\n")

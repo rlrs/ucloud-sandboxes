@@ -1,0 +1,1647 @@
+{
+  "schema": 1,
+  "fixture": {
+    "schema": 1,
+    "modules": 2000,
+    "uid": 1000,
+    "gid": 1000,
+    "stamp": 1700000000,
+    "layers": [
+      {
+        "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:be23fa137e26b5159caac967a0ddf40232f5dedc9a8e66f33a5a78219be5fdd6",
+        "size": 136316
+      },
+      {
+        "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:312f24e626bd755438a7b635a9dc7db2670860256062f03bb42c6b221aaf4341",
+        "size": 14533
+      },
+      {
+        "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:d22c80810eec6718d8952da459eaa561055d5fca20e5a6ca027cbc085ba9d347",
+        "size": 46069
+      },
+      {
+        "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:046c93118b3fc52aa463bb647a71ed89cd5b3a2429871217b71c0ca11776a882",
+        "size": 10794
+      }
+    ],
+    "diff_ids": [
+      "sha256:d10b407f3e3a86ec541334d8b51cd79529a4f953bd929a8b941bb052b3393c06",
+      "sha256:b1f3fe7f0a1620be84be766a8a901b0b4ec140f9aae9bbe9af68654d27b70202",
+      "sha256:9fd0ce14ea79b45916e6d55c1fc671f4d56890df24ab656e87d900e4e4758353",
+      "sha256:a8011e7c34196e43245053f5c9430b47d2bedd296f0a83289d4bddb1cacd05c1"
+    ],
+    "uncompressed_bytes": 14673920,
+    "fixture_sha256": "sha256:6bc692d3908abb0d08e38b37133847791a94488f2d04552bb2eb97549a61c3ee"
+  },
+  "exact_semantics_equal": true,
+  "sources_stable_within_arms": true,
+  "mismatches": [],
+  "runs": [
+    {
+      "capabilities_exercised": [
+        "user_xattr",
+        "whiteout",
+        "lower_whiteout"
+      ],
+      "capability_skips": {
+        "trusted_opaque": "EPERM"
+      },
+      "fixture_sha256": "sha256:6bc692d3908abb0d08e38b37133847791a94488f2d04552bb2eb97549a61c3ee",
+      "gid": 1000,
+      "materialized_trees": [
+        {
+          "entries": 10005,
+          "hardlink_groups": [
+            [
+              "app/node_modules/package-00000/index-alias.js",
+              "app/node_modules/package-00000/index.js"
+            ]
+          ],
+          "tree_digest": "sha256:8fac4325378da5eeb3c53722a8ee777f6ac874247ce3c25e214d61622e5ff071"
+        },
+        {
+          "entries": 1003,
+          "hardlink_groups": [],
+          "tree_digest": "sha256:82ac23742362a22cc19cd4e7b3bb08347a94d785d7f81e70fb652cf15a99680b"
+        },
+        {
+          "entries": 2008,
+          "hardlink_groups": [
+            [
+              "app/dist/run-alias.js",
+              "app/dist/run.js"
+            ]
+          ],
+          "tree_digest": "sha256:342991c1caed16c14a0c9332606a8293d2fcc080b560c0f4cc2d68e916630dae"
+        },
+        {
+          "entries": 404,
+          "hardlink_groups": [],
+          "tree_digest": "sha256:79481b64aaba606d9633127adcec24c84eab9b9f42c80ac8babe03db404d7741"
+        }
+      ],
+      "overlay_tree": {
+        "entries": 9,
+        "hardlink_groups": [],
+        "tree_digest": "sha256:e1848991f2d290891c95b5828a3e488c817bdc535132610b582944c464affec2"
+      },
+      "phases": {
+        "materialize": {
+          "process_cpu_seconds": 1.27429902,
+          "wall_seconds": 1.2766560409218073
+        },
+        "overlay_semantics_squash": {
+          "process_cpu_seconds": 0.0008948629999996349,
+          "wall_seconds": 0.0008962303400039673
+        },
+        "squash": {
+          "process_cpu_seconds": 0.8891433770000001,
+          "wall_seconds": 0.8917779731564224
+        }
+      },
+      "platform": "Linux-5.15.0-190-generic-x86_64-with-glibc2.35",
+      "profiled": false,
+      "python": "3.10.13",
+      "schema": 1,
+      "semantic_checks_passed": true,
+      "sources": {
+        "environment_builder.py": "sha256:7e030120c87bf2ad78bded44d8514819961c40d9c4a6fb319faea421f462945c",
+        "oci_layer_materialize.py": "sha256:5ffddc068669f9ecb5f75c1a1db8a0cf21c6a87c69b62b0698a6743fc578f308"
+      },
+      "squashed_tree": {
+        "entries": 12012,
+        "hardlink_groups": [
+          [
+            "app/dist/run-alias.js",
+            "app/dist/run.js"
+          ]
+        ],
+        "tree_digest": "sha256:beeccd1532f5ca4ef362d5c5aa1e08c30aa3ed86f060650883fcf4b49c8237be"
+      },
+      "uid": 1000,
+      "arm": "baseline",
+      "repeat": 0
+    },
+    {
+      "capabilities_exercised": [
+        "user_xattr",
+        "whiteout",
+        "lower_whiteout"
+      ],
+      "capability_skips": {
+        "trusted_opaque": "EPERM"
+      },
+      "fixture_sha256": "sha256:6bc692d3908abb0d08e38b37133847791a94488f2d04552bb2eb97549a61c3ee",
+      "gid": 1000,
+      "materialized_trees": [
+        {
+          "entries": 10005,
+          "hardlink_groups": [
+            [
+              "app/node_modules/package-00000/index-alias.js",
+              "app/node_modules/package-00000/index.js"
+            ]
+          ],
+          "tree_digest": "sha256:8fac4325378da5eeb3c53722a8ee777f6ac874247ce3c25e214d61622e5ff071"
+        },
+        {
+          "entries": 1003,
+          "hardlink_groups": [],
+          "tree_digest": "sha256:82ac23742362a22cc19cd4e7b3bb08347a94d785d7f81e70fb652cf15a99680b"
+        },
+        {
+          "entries": 2008,
+          "hardlink_groups": [
+            [
+              "app/dist/run-alias.js",
+              "app/dist/run.js"
+            ]
+          ],
+          "tree_digest": "sha256:342991c1caed16c14a0c9332606a8293d2fcc080b560c0f4cc2d68e916630dae"
+        },
+        {
+          "entries": 404,
+          "hardlink_groups": [],
+          "tree_digest": "sha256:79481b64aaba606d9633127adcec24c84eab9b9f42c80ac8babe03db404d7741"
+        }
+      ],
+      "overlay_tree": {
+        "entries": 9,
+        "hardlink_groups": [],
+        "tree_digest": "sha256:e1848991f2d290891c95b5828a3e488c817bdc535132610b582944c464affec2"
+      },
+      "phases": {
+        "materialize": {
+          "process_cpu_seconds": 1.068661735,
+          "wall_seconds": 1.073567837011069
+        },
+        "overlay_semantics_squash": {
+          "process_cpu_seconds": 0.0008994399999999736,
+          "wall_seconds": 0.0009009172208607197
+        },
+        "squash": {
+          "process_cpu_seconds": 0.885909584,
+          "wall_seconds": 0.9188967277295887
+        }
+      },
+      "platform": "Linux-5.15.0-190-generic-x86_64-with-glibc2.35",
+      "profiled": false,
+      "python": "3.10.13",
+      "schema": 1,
+      "semantic_checks_passed": true,
+      "sources": {
+        "environment_builder.py": "sha256:174d8cb86d8289ed9ef79c6431fad60b2853f37577866647f471e7e0506accce",
+        "oci_layer_materialize.py": "sha256:fd7c7a91b3724e0277fada18a1499809993869f9f11ab8c984a3f42b3a18d367"
+      },
+      "squashed_tree": {
+        "entries": 12012,
+        "hardlink_groups": [
+          [
+            "app/dist/run-alias.js",
+            "app/dist/run.js"
+          ]
+        ],
+        "tree_digest": "sha256:beeccd1532f5ca4ef362d5c5aa1e08c30aa3ed86f060650883fcf4b49c8237be"
+      },
+      "uid": 1000,
+      "arm": "candidate",
+      "repeat": 0
+    },
+    {
+      "capabilities_exercised": [
+        "user_xattr",
+        "whiteout",
+        "lower_whiteout"
+      ],
+      "capability_skips": {
+        "trusted_opaque": "EPERM"
+      },
+      "fixture_sha256": "sha256:6bc692d3908abb0d08e38b37133847791a94488f2d04552bb2eb97549a61c3ee",
+      "gid": 1000,
+      "materialized_trees": [
+        {
+          "entries": 10005,
+          "hardlink_groups": [
+            [
+              "app/node_modules/package-00000/index-alias.js",
+              "app/node_modules/package-00000/index.js"
+            ]
+          ],
+          "tree_digest": "sha256:8fac4325378da5eeb3c53722a8ee777f6ac874247ce3c25e214d61622e5ff071"
+        },
+        {
+          "entries": 1003,
+          "hardlink_groups": [],
+          "tree_digest": "sha256:82ac23742362a22cc19cd4e7b3bb08347a94d785d7f81e70fb652cf15a99680b"
+        },
+        {
+          "entries": 2008,
+          "hardlink_groups": [
+            [
+              "app/dist/run-alias.js",
+              "app/dist/run.js"
+            ]
+          ],
+          "tree_digest": "sha256:342991c1caed16c14a0c9332606a8293d2fcc080b560c0f4cc2d68e916630dae"
+        },
+        {
+          "entries": 404,
+          "hardlink_groups": [],
+          "tree_digest": "sha256:79481b64aaba606d9633127adcec24c84eab9b9f42c80ac8babe03db404d7741"
+        }
+      ],
+      "overlay_tree": {
+        "entries": 9,
+        "hardlink_groups": [],
+        "tree_digest": "sha256:e1848991f2d290891c95b5828a3e488c817bdc535132610b582944c464affec2"
+      },
+      "phases": {
+        "materialize": {
+          "process_cpu_seconds": 1.088810324,
+          "wall_seconds": 1.1195452408865094
+        },
+        "overlay_semantics_squash": {
+          "process_cpu_seconds": 0.0009518490000002267,
+          "wall_seconds": 0.000990564003586769
+        },
+        "squash": {
+          "process_cpu_seconds": 0.918381396,
+          "wall_seconds": 0.9363546767272055
+        }
+      },
+      "platform": "Linux-5.15.0-190-generic-x86_64-with-glibc2.35",
+      "profiled": false,
+      "python": "3.10.13",
+      "schema": 1,
+      "semantic_checks_passed": true,
+      "sources": {
+        "environment_builder.py": "sha256:174d8cb86d8289ed9ef79c6431fad60b2853f37577866647f471e7e0506accce",
+        "oci_layer_materialize.py": "sha256:fd7c7a91b3724e0277fada18a1499809993869f9f11ab8c984a3f42b3a18d367"
+      },
+      "squashed_tree": {
+        "entries": 12012,
+        "hardlink_groups": [
+          [
+            "app/dist/run-alias.js",
+            "app/dist/run.js"
+          ]
+        ],
+        "tree_digest": "sha256:beeccd1532f5ca4ef362d5c5aa1e08c30aa3ed86f060650883fcf4b49c8237be"
+      },
+      "uid": 1000,
+      "arm": "candidate",
+      "repeat": 1
+    },
+    {
+      "capabilities_exercised": [
+        "user_xattr",
+        "whiteout",
+        "lower_whiteout"
+      ],
+      "capability_skips": {
+        "trusted_opaque": "EPERM"
+      },
+      "fixture_sha256": "sha256:6bc692d3908abb0d08e38b37133847791a94488f2d04552bb2eb97549a61c3ee",
+      "gid": 1000,
+      "materialized_trees": [
+        {
+          "entries": 10005,
+          "hardlink_groups": [
+            [
+              "app/node_modules/package-00000/index-alias.js",
+              "app/node_modules/package-00000/index.js"
+            ]
+          ],
+          "tree_digest": "sha256:8fac4325378da5eeb3c53722a8ee777f6ac874247ce3c25e214d61622e5ff071"
+        },
+        {
+          "entries": 1003,
+          "hardlink_groups": [],
+          "tree_digest": "sha256:82ac23742362a22cc19cd4e7b3bb08347a94d785d7f81e70fb652cf15a99680b"
+        },
+        {
+          "entries": 2008,
+          "hardlink_groups": [
+            [
+              "app/dist/run-alias.js",
+              "app/dist/run.js"
+            ]
+          ],
+          "tree_digest": "sha256:342991c1caed16c14a0c9332606a8293d2fcc080b560c0f4cc2d68e916630dae"
+        },
+        {
+          "entries": 404,
+          "hardlink_groups": [],
+          "tree_digest": "sha256:79481b64aaba606d9633127adcec24c84eab9b9f42c80ac8babe03db404d7741"
+        }
+      ],
+      "overlay_tree": {
+        "entries": 9,
+        "hardlink_groups": [],
+        "tree_digest": "sha256:e1848991f2d290891c95b5828a3e488c817bdc535132610b582944c464affec2"
+      },
+      "phases": {
+        "materialize": {
+          "process_cpu_seconds": 1.351981922,
+          "wall_seconds": 1.3668474252335727
+        },
+        "overlay_semantics_squash": {
+          "process_cpu_seconds": 0.000916445000000099,
+          "wall_seconds": 0.000917922705411911
+        },
+        "squash": {
+          "process_cpu_seconds": 0.8643843659999999,
+          "wall_seconds": 0.8956455779261887
+        }
+      },
+      "platform": "Linux-5.15.0-190-generic-x86_64-with-glibc2.35",
+      "profiled": false,
+      "python": "3.10.13",
+      "schema": 1,
+      "semantic_checks_passed": true,
+      "sources": {
+        "environment_builder.py": "sha256:7e030120c87bf2ad78bded44d8514819961c40d9c4a6fb319faea421f462945c",
+        "oci_layer_materialize.py": "sha256:5ffddc068669f9ecb5f75c1a1db8a0cf21c6a87c69b62b0698a6743fc578f308"
+      },
+      "squashed_tree": {
+        "entries": 12012,
+        "hardlink_groups": [
+          [
+            "app/dist/run-alias.js",
+            "app/dist/run.js"
+          ]
+        ],
+        "tree_digest": "sha256:beeccd1532f5ca4ef362d5c5aa1e08c30aa3ed86f060650883fcf4b49c8237be"
+      },
+      "uid": 1000,
+      "arm": "baseline",
+      "repeat": 1
+    },
+    {
+      "capabilities_exercised": [
+        "user_xattr",
+        "whiteout",
+        "lower_whiteout"
+      ],
+      "capability_skips": {
+        "trusted_opaque": "EPERM"
+      },
+      "fixture_sha256": "sha256:6bc692d3908abb0d08e38b37133847791a94488f2d04552bb2eb97549a61c3ee",
+      "gid": 1000,
+      "materialized_trees": [
+        {
+          "entries": 10005,
+          "hardlink_groups": [
+            [
+              "app/node_modules/package-00000/index-alias.js",
+              "app/node_modules/package-00000/index.js"
+            ]
+          ],
+          "tree_digest": "sha256:8fac4325378da5eeb3c53722a8ee777f6ac874247ce3c25e214d61622e5ff071"
+        },
+        {
+          "entries": 1003,
+          "hardlink_groups": [],
+          "tree_digest": "sha256:82ac23742362a22cc19cd4e7b3bb08347a94d785d7f81e70fb652cf15a99680b"
+        },
+        {
+          "entries": 2008,
+          "hardlink_groups": [
+            [
+              "app/dist/run-alias.js",
+              "app/dist/run.js"
+            ]
+          ],
+          "tree_digest": "sha256:342991c1caed16c14a0c9332606a8293d2fcc080b560c0f4cc2d68e916630dae"
+        },
+        {
+          "entries": 404,
+          "hardlink_groups": [],
+          "tree_digest": "sha256:79481b64aaba606d9633127adcec24c84eab9b9f42c80ac8babe03db404d7741"
+        }
+      ],
+      "overlay_tree": {
+        "entries": 9,
+        "hardlink_groups": [],
+        "tree_digest": "sha256:e1848991f2d290891c95b5828a3e488c817bdc535132610b582944c464affec2"
+      },
+      "phases": {
+        "materialize": {
+          "process_cpu_seconds": 1.890577423,
+          "wall_seconds": 1.9195558889769018
+        },
+        "overlay_semantics_squash": {
+          "process_cpu_seconds": 0.0012051780000001955,
+          "wall_seconds": 0.0012066205963492393
+        },
+        "squash": {
+          "process_cpu_seconds": 1.1068658610000002,
+          "wall_seconds": 1.124548606108874
+        }
+      },
+      "platform": "Linux-5.15.0-190-generic-x86_64-with-glibc2.35",
+      "profile": [
+        {
+          "calls": 1,
+          "cumulative_seconds": 1.919542587,
+          "file": "benchmark_environment_preparation.py",
+          "function": "<lambda>",
+          "line": 233,
+          "primitive_calls": 1,
+          "self_seconds": 1.1677e-05
+        },
+        {
+          "calls": 1,
+          "cumulative_seconds": 1.919515085,
+          "file": "oci_layer_materialize.py",
+          "function": "materialize_layers",
+          "line": 112,
+          "primitive_calls": 1,
+          "self_seconds": 0.00609131
+        },
+        {
+          "calls": 4,
+          "cumulative_seconds": 1.8500081890000002,
+          "file": "oci_layer_materialize.py",
+          "function": "_extract",
+          "line": 86,
+          "primitive_calls": 4,
+          "self_seconds": 0.05192982
+        },
+        {
+          "calls": 2,
+          "cumulative_seconds": 1.125692801,
+          "file": "environment_builder.py",
+          "function": "squash_layer_diffs",
+          "line": 344,
+          "primitive_calls": 2,
+          "self_seconds": 0.002768688
+        },
+        {
+          "calls": 1,
+          "cumulative_seconds": 1.124530799,
+          "file": "benchmark_environment_preparation.py",
+          "function": "<lambda>",
+          "line": 236,
+          "primitive_calls": 1,
+          "self_seconds": 5.057e-06
+        },
+        {
+          "calls": 2518,
+          "cumulative_seconds": 1.1226062570000002,
+          "file": "environment_builder.py",
+          "function": "_merge_layer_diff",
+          "line": 305,
+          "primitive_calls": 6,
+          "self_seconds": 0.046144738000000005
+        },
+        {
+          "calls": 4,
+          "cumulative_seconds": 0.8366932090000001,
+          "file": "oci_layer_materialize.py",
+          "function": "_members",
+          "line": 44,
+          "primitive_calls": 4,
+          "self_seconds": 0.053524653000000005
+        },
+        {
+          "calls": 10915,
+          "cumulative_seconds": 0.652791793,
+          "file": "environment_builder.py",
+          "function": "_copy_entry",
+          "line": 78,
+          "primitive_calls": 10915,
+          "self_seconds": 0.056985969000000004
+        },
+        {
+          "calls": 13424,
+          "cumulative_seconds": 0.611650307,
+          "file": "tarfile.py",
+          "function": "__iter__",
+          "line": 2722,
+          "primitive_calls": 13424,
+          "self_seconds": 0.007272736
+        },
+        {
+          "calls": 13428,
+          "cumulative_seconds": 0.6035999280000001,
+          "file": "tarfile.py",
+          "function": "next",
+          "line": 2581,
+          "primitive_calls": 13428,
+          "self_seconds": 0.020977341
+        },
+        {
+          "calls": 13424,
+          "cumulative_seconds": 0.5626628060000001,
+          "file": "tarfile.py",
+          "function": "fromtarfile",
+          "line": 1287,
+          "primitive_calls": 13424,
+          "self_seconds": 0.014623556000000001
+        },
+        {
+          "calls": 13424,
+          "cumulative_seconds": 0.48794931500000005,
+          "file": "tarfile.py",
+          "function": "frombuf",
+          "line": 1224,
+          "primitive_calls": 13424,
+          "self_seconds": 0.068424096
+        },
+        {
+          "calls": 56229,
+          "cumulative_seconds": 0.319687716,
+          "file": "pathlib.py",
+          "function": "_parse_args",
+          "line": 569,
+          "primitive_calls": 56229,
+          "self_seconds": 0.100766808
+        },
+        {
+          "calls": 42805,
+          "cumulative_seconds": 0.316840161,
+          "file": "pathlib.py",
+          "function": "_make_child",
+          "line": 615,
+          "primitive_calls": 42805,
+          "self_seconds": 0.041531519
+        },
+        {
+          "calls": 29353,
+          "cumulative_seconds": 0.25130822,
+          "file": "pathlib.py",
+          "function": "joinpath",
+          "line": 845,
+          "primitive_calls": 29353,
+          "self_seconds": 0.007257558000000001
+        },
+        {
+          "calls": 13420,
+          "cumulative_seconds": 0.23416724300000002,
+          "file": "tarfile.py",
+          "function": "calc_chksums",
+          "line": 226,
+          "primitive_calls": 13420,
+          "self_seconds": 0.03217694
+        },
+        {
+          "calls": 13420,
+          "cumulative_seconds": 0.22068810800000002,
+          "file": "oci_layer_materialize.py",
+          "function": "_metadata",
+          "line": 77,
+          "primitive_calls": 13420,
+          "self_seconds": 0.014354533000000001
+        },
+        {
+          "calls": 13433,
+          "cumulative_seconds": 0.20163403200000002,
+          "file": "environment_builder.py",
+          "function": "_copy_metadata",
+          "line": 64,
+          "primitive_calls": 13433,
+          "self_seconds": 0.027095021
+        },
+        {
+          "calls": 38297,
+          "cumulative_seconds": 0.20041881900000003,
+          "file": "pathlib.py",
+          "function": "lstat",
+          "line": 1217,
+          "primitive_calls": 38297,
+          "self_seconds": 0.013299196000000001
+        },
+        {
+          "calls": 32736,
+          "cumulative_seconds": 0.193060804,
+          "file": "~",
+          "function": "<built-in method io.open>",
+          "line": 0,
+          "primitive_calls": 32736,
+          "self_seconds": 0.18930749300000002
+        },
+        {
+          "calls": 38306,
+          "cumulative_seconds": 0.187171896,
+          "file": "pathlib.py",
+          "function": "stat",
+          "line": 1092,
+          "primitive_calls": 38306,
+          "self_seconds": 0.009869069000000001
+        },
+        {
+          "calls": 56229,
+          "cumulative_seconds": 0.185478794,
+          "file": "pathlib.py",
+          "function": "parse_parts",
+          "line": 56,
+          "primitive_calls": 56229,
+          "self_seconds": 0.134986764
+        },
+        {
+          "calls": 43630,
+          "cumulative_seconds": 0.177623638,
+          "file": "~",
+          "function": "<method '__exit__' of '_io._IOBase' objects>",
+          "line": 0,
+          "primitive_calls": 43630,
+          "self_seconds": 0.175466156
+        },
+        {
+          "calls": 38306,
+          "cumulative_seconds": 0.17730282700000002,
+          "file": "~",
+          "function": "<built-in method posix.stat>",
+          "line": 0,
+          "primitive_calls": 38306,
+          "self_seconds": 0.125217106
+        },
+        {
+          "calls": 21809,
+          "cumulative_seconds": 0.173350898,
+          "file": "~",
+          "function": "<built-in method posix.open>",
+          "line": 0,
+          "primitive_calls": 21809,
+          "self_seconds": 0.15021252100000002
+        },
+        {
+          "calls": 78933,
+          "cumulative_seconds": 0.16773167600000002,
+          "file": "~",
+          "function": "<method 'read' of '_io.BufferedReader' objects>",
+          "line": 0,
+          "primitive_calls": 67971,
+          "self_seconds": 0.067537514
+        },
+        {
+          "calls": 13424,
+          "cumulative_seconds": 0.15223234400000002,
+          "file": "oci_layer_materialize.py",
+          "function": "_path",
+          "line": 29,
+          "primitive_calls": 13424,
+          "self_seconds": 0.026284744000000002
+        },
+        {
+          "calls": 10919,
+          "cumulative_seconds": 0.147969455,
+          "file": "pathlib.py",
+          "function": "open",
+          "line": 1111,
+          "primitive_calls": 10919,
+          "self_seconds": 0.003829453
+        },
+        {
+          "calls": 26845,
+          "cumulative_seconds": 0.13925462,
+          "file": "~",
+          "function": "<built-in method posix.chmod>",
+          "line": 0,
+          "primitive_calls": 26845,
+          "self_seconds": 0.130322832
+        },
+        {
+          "calls": 21809,
+          "cumulative_seconds": 0.134625999,
+          "file": "shutil.py",
+          "function": "copyfileobj",
+          "line": 187,
+          "primitive_calls": 21809,
+          "self_seconds": 0.015361958
+        },
+        {
+          "calls": 176552,
+          "cumulative_seconds": 0.133557017,
+          "file": "pathlib.py",
+          "function": "__fspath__",
+          "line": 631,
+          "primitive_calls": 176552,
+          "self_seconds": 0.042221847
+        },
+        {
+          "calls": 4522,
+          "cumulative_seconds": 0.13227492400000002,
+          "file": "pathlib.py",
+          "function": "mkdir",
+          "line": 1170,
+          "primitive_calls": 4522,
+          "self_seconds": 0.001463679
+        },
+        {
+          "calls": 4522,
+          "cumulative_seconds": 0.13081124500000002,
+          "file": "~",
+          "function": "<built-in method posix.mkdir>",
+          "line": 0,
+          "primitive_calls": 4522,
+          "self_seconds": 0.12601778900000002
+        },
+        {
+          "calls": 107360,
+          "cumulative_seconds": 0.12591685800000002,
+          "file": "tarfile.py",
+          "function": "nti",
+          "line": 176,
+          "primitive_calls": 107360,
+          "self_seconds": 0.056646747000000004
+        },
+        {
+          "calls": 26853,
+          "cumulative_seconds": 0.11517466700000001,
+          "file": "~",
+          "function": "<built-in method posix.chown>",
+          "line": 0,
+          "primitive_calls": 26853,
+          "self_seconds": 0.08991847500000001
+        },
+        {
+          "calls": 26840,
+          "cumulative_seconds": 0.107635011,
+          "file": "~",
+          "function": "<built-in method _struct.unpack_from>",
+          "line": 0,
+          "primitive_calls": 26840,
+          "self_seconds": 0.107635011
+        },
+        {
+          "calls": 174460,
+          "cumulative_seconds": 0.102359664,
+          "file": "tarfile.py",
+          "function": "nts",
+          "line": 168,
+          "primitive_calls": 174460,
+          "self_seconds": 0.070040981
+        },
+        {
+          "calls": 13429,
+          "cumulative_seconds": 0.09821215600000001,
+          "file": "environment_builder.py",
+          "function": "_lstat",
+          "line": 247,
+          "primitive_calls": 13429,
+          "self_seconds": 0.006221203000000001
+        },
+        {
+          "calls": 26841,
+          "cumulative_seconds": 0.09435734500000001,
+          "file": "~",
+          "function": "<built-in method builtins.sum>",
+          "line": 0,
+          "primitive_calls": 26841,
+          "self_seconds": 0.09435676500000001
+        },
+        {
+          "calls": 176552,
+          "cumulative_seconds": 0.09133517000000001,
+          "file": "pathlib.py",
+          "function": "__str__",
+          "line": 621,
+          "primitive_calls": 176552,
+          "self_seconds": 0.058301313
+        },
+        {
+          "calls": 26853,
+          "cumulative_seconds": 0.088414878,
+          "file": "~",
+          "function": "<built-in method posix.utime>",
+          "line": 0,
+          "primitive_calls": 26853,
+          "self_seconds": 0.07953143700000001
+        },
+        {
+          "calls": 13424,
+          "cumulative_seconds": 0.08787790100000001,
+          "file": "pathlib.py",
+          "function": "__new__",
+          "line": 554,
+          "primitive_calls": 13424,
+          "self_seconds": 0.0043872880000000005
+        },
+        {
+          "calls": 13424,
+          "cumulative_seconds": 0.083490613,
+          "file": "pathlib.py",
+          "function": "_from_parts",
+          "line": 589,
+          "primitive_calls": 13424,
+          "self_seconds": 0.008191539000000001
+        },
+        {
+          "calls": 13452,
+          "cumulative_seconds": 0.076911699,
+          "file": "pathlib.py",
+          "function": "__truediv__",
+          "line": 853,
+          "primitive_calls": 13452,
+          "self_seconds": 0.0041222
+        },
+        {
+          "calls": 21809,
+          "cumulative_seconds": 0.069493546,
+          "file": "os.py",
+          "function": "fdopen",
+          "line": 1024,
+          "primitive_calls": 21809,
+          "self_seconds": 0.019100310000000002
+        },
+        {
+          "calls": 2526,
+          "cumulative_seconds": 0.06506405400000001,
+          "file": "~",
+          "function": "<built-in method builtins.sorted>",
+          "line": 0,
+          "primitive_calls": 2526,
+          "self_seconds": 0.010285619000000001
+        },
+        {
+          "calls": 32706,
+          "cumulative_seconds": 0.064268003,
+          "file": "tarfile.py",
+          "function": "readinto",
+          "line": 699,
+          "primitive_calls": 32706,
+          "self_seconds": 0.019429999
+        },
+        {
+          "calls": 13420,
+          "cumulative_seconds": 0.049645758000000005,
+          "file": "tarfile.py",
+          "function": "_proc_member",
+          "line": 1308,
+          "primitive_calls": 13420,
+          "self_seconds": 0.007087653
+        },
+        {
+          "calls": 10902,
+          "cumulative_seconds": 0.043786417,
+          "file": "tarfile.py",
+          "function": "extractfile",
+          "line": 2354,
+          "primitive_calls": 10902,
+          "self_seconds": 0.009981435
+        },
+        {
+          "calls": 19,
+          "cumulative_seconds": 0.043730632000000005,
+          "file": "gzip.py",
+          "function": "read",
+          "line": 296,
+          "primitive_calls": 19,
+          "self_seconds": 1.7559000000000002e-05
+        },
+        {
+          "calls": 48,
+          "cumulative_seconds": 0.043542684000000005,
+          "file": "_compression.py",
+          "function": "readinto",
+          "line": 66,
+          "primitive_calls": 48,
+          "self_seconds": 0.003207941
+        },
+        {
+          "calls": 13420,
+          "cumulative_seconds": 0.042558105000000006,
+          "file": "tarfile.py",
+          "function": "_proc_builtin",
+          "line": 1321,
+          "primitive_calls": 13420,
+          "self_seconds": 0.016453529
+        },
+        {
+          "calls": 15947,
+          "cumulative_seconds": 0.0421262,
+          "file": "pathlib.py",
+          "function": "iterdir",
+          "line": 1013,
+          "primitive_calls": 15947,
+          "self_seconds": 0.005082358
+        },
+        {
+          "calls": 48,
+          "cumulative_seconds": 0.040303324,
+          "file": "gzip.py",
+          "function": "read",
+          "line": 463,
+          "primitive_calls": 48,
+          "self_seconds": 0.000126345
+        },
+        {
+          "calls": 32706,
+          "cumulative_seconds": 0.038854489,
+          "file": "tarfile.py",
+          "function": "read",
+          "line": 668,
+          "primitive_calls": 32706,
+          "self_seconds": 0.021069656000000003
+        },
+        {
+          "calls": 14457,
+          "cumulative_seconds": 0.034436907,
+          "file": "~",
+          "function": "<built-in method posix.listxattr>",
+          "line": 0,
+          "primitive_calls": 14457,
+          "self_seconds": 0.029734284000000003
+        },
+        {
+          "calls": 53719,
+          "cumulative_seconds": 0.033033857,
+          "file": "pathlib.py",
+          "function": "_format_parsed_parts",
+          "line": 608,
+          "primitive_calls": 53719,
+          "self_seconds": 0.024321094
+        },
+        {
+          "calls": 40,
+          "cumulative_seconds": 0.029928097,
+          "file": "~",
+          "function": "<method 'decompress' of 'zlib.Decompress' objects>",
+          "line": 0,
+          "primitive_calls": 40,
+          "self_seconds": 0.029928097
+        },
+        {
+          "calls": 10902,
+          "cumulative_seconds": 0.029321136,
+          "file": "tarfile.py",
+          "function": "__init__",
+          "line": 710,
+          "primitive_calls": 10902,
+          "self_seconds": 0.013187775
+        },
+        {
+          "calls": 26841,
+          "cumulative_seconds": 0.026542749,
+          "file": "~",
+          "function": "<built-in method builtins.any>",
+          "line": 0,
+          "primitive_calls": 26841,
+          "self_seconds": 0.009183473000000001
+        }
+      ],
+      "profiled": true,
+      "python": "3.10.13",
+      "schema": 1,
+      "semantic_checks_passed": true,
+      "sources": {
+        "environment_builder.py": "sha256:7e030120c87bf2ad78bded44d8514819961c40d9c4a6fb319faea421f462945c",
+        "oci_layer_materialize.py": "sha256:5ffddc068669f9ecb5f75c1a1db8a0cf21c6a87c69b62b0698a6743fc578f308"
+      },
+      "squashed_tree": {
+        "entries": 12012,
+        "hardlink_groups": [
+          [
+            "app/dist/run-alias.js",
+            "app/dist/run.js"
+          ]
+        ],
+        "tree_digest": "sha256:beeccd1532f5ca4ef362d5c5aa1e08c30aa3ed86f060650883fcf4b49c8237be"
+      },
+      "uid": 1000,
+      "arm": "baseline",
+      "repeat": 0
+    },
+    {
+      "capabilities_exercised": [
+        "user_xattr",
+        "whiteout",
+        "lower_whiteout"
+      ],
+      "capability_skips": {
+        "trusted_opaque": "EPERM"
+      },
+      "fixture_sha256": "sha256:6bc692d3908abb0d08e38b37133847791a94488f2d04552bb2eb97549a61c3ee",
+      "gid": 1000,
+      "materialized_trees": [
+        {
+          "entries": 10005,
+          "hardlink_groups": [
+            [
+              "app/node_modules/package-00000/index-alias.js",
+              "app/node_modules/package-00000/index.js"
+            ]
+          ],
+          "tree_digest": "sha256:8fac4325378da5eeb3c53722a8ee777f6ac874247ce3c25e214d61622e5ff071"
+        },
+        {
+          "entries": 1003,
+          "hardlink_groups": [],
+          "tree_digest": "sha256:82ac23742362a22cc19cd4e7b3bb08347a94d785d7f81e70fb652cf15a99680b"
+        },
+        {
+          "entries": 2008,
+          "hardlink_groups": [
+            [
+              "app/dist/run-alias.js",
+              "app/dist/run.js"
+            ]
+          ],
+          "tree_digest": "sha256:342991c1caed16c14a0c9332606a8293d2fcc080b560c0f4cc2d68e916630dae"
+        },
+        {
+          "entries": 404,
+          "hardlink_groups": [],
+          "tree_digest": "sha256:79481b64aaba606d9633127adcec24c84eab9b9f42c80ac8babe03db404d7741"
+        }
+      ],
+      "overlay_tree": {
+        "entries": 9,
+        "hardlink_groups": [],
+        "tree_digest": "sha256:e1848991f2d290891c95b5828a3e488c817bdc535132610b582944c464affec2"
+      },
+      "phases": {
+        "materialize": {
+          "process_cpu_seconds": 1.41384799,
+          "wall_seconds": 1.4189016427844763
+        },
+        "overlay_semantics_squash": {
+          "process_cpu_seconds": 0.0012533719999998638,
+          "wall_seconds": 0.0012547741644084454
+        },
+        "squash": {
+          "process_cpu_seconds": 1.153284496,
+          "wall_seconds": 1.1776491939090192
+        }
+      },
+      "platform": "Linux-5.15.0-190-generic-x86_64-with-glibc2.35",
+      "profile": [
+        {
+          "calls": 1,
+          "cumulative_seconds": 1.418887481,
+          "file": "benchmark_environment_preparation.py",
+          "function": "<lambda>",
+          "line": 233,
+          "primitive_calls": 1,
+          "self_seconds": 9.086e-06
+        },
+        {
+          "calls": 1,
+          "cumulative_seconds": 1.418862631,
+          "file": "oci_layer_materialize.py",
+          "function": "materialize_layers",
+          "line": 144,
+          "primitive_calls": 1,
+          "self_seconds": 0.003262268
+        },
+        {
+          "calls": 4,
+          "cumulative_seconds": 1.350977912,
+          "file": "oci_layer_materialize.py",
+          "function": "_extract",
+          "line": 114,
+          "primitive_calls": 4,
+          "self_seconds": 0.031325344000000005
+        },
+        {
+          "calls": 2,
+          "cumulative_seconds": 1.178848992,
+          "file": "environment_builder.py",
+          "function": "squash_layer_diffs",
+          "line": 363,
+          "primitive_calls": 2,
+          "self_seconds": 0.0023167170000000003
+        },
+        {
+          "calls": 1,
+          "cumulative_seconds": 1.177638588,
+          "file": "benchmark_environment_preparation.py",
+          "function": "<lambda>",
+          "line": 236,
+          "primitive_calls": 1,
+          "self_seconds": 5.2090000000000004e-06
+        },
+        {
+          "calls": 2518,
+          "cumulative_seconds": 1.1762113840000001,
+          "file": "environment_builder.py",
+          "function": "_merge_layer_diff",
+          "line": 307,
+          "primitive_calls": 6,
+          "self_seconds": 0.047360454
+        },
+        {
+          "calls": 4,
+          "cumulative_seconds": 0.769576193,
+          "file": "oci_layer_materialize.py",
+          "function": "_members",
+          "line": 48,
+          "primitive_calls": 4,
+          "self_seconds": 0.05207372800000001
+        },
+        {
+          "calls": 10915,
+          "cumulative_seconds": 0.688703461,
+          "file": "environment_builder.py",
+          "function": "_copy_entry",
+          "line": 79,
+          "primitive_calls": 10915,
+          "self_seconds": 0.058444176
+        },
+        {
+          "calls": 13424,
+          "cumulative_seconds": 0.6329576450000001,
+          "file": "tarfile.py",
+          "function": "__iter__",
+          "line": 2722,
+          "primitive_calls": 13424,
+          "self_seconds": 0.007334945000000001
+        },
+        {
+          "calls": 13428,
+          "cumulative_seconds": 0.624876552,
+          "file": "tarfile.py",
+          "function": "next",
+          "line": 2581,
+          "primitive_calls": 13428,
+          "self_seconds": 0.020750515
+        },
+        {
+          "calls": 13424,
+          "cumulative_seconds": 0.5838486810000001,
+          "file": "tarfile.py",
+          "function": "fromtarfile",
+          "line": 1287,
+          "primitive_calls": 13424,
+          "self_seconds": 0.015442208
+        },
+        {
+          "calls": 13424,
+          "cumulative_seconds": 0.50696966,
+          "file": "tarfile.py",
+          "function": "frombuf",
+          "line": 1224,
+          "primitive_calls": 13424,
+          "self_seconds": 0.069779484
+        },
+        {
+          "calls": 13420,
+          "cumulative_seconds": 0.248674676,
+          "file": "tarfile.py",
+          "function": "calc_chksums",
+          "line": 226,
+          "primitive_calls": 13420,
+          "self_seconds": 0.033076787
+        },
+        {
+          "calls": 38297,
+          "cumulative_seconds": 0.209255816,
+          "file": "pathlib.py",
+          "function": "lstat",
+          "line": 1217,
+          "primitive_calls": 38297,
+          "self_seconds": 0.013710631000000001
+        },
+        {
+          "calls": 13433,
+          "cumulative_seconds": 0.20891996000000002,
+          "file": "environment_builder.py",
+          "function": "_copy_metadata",
+          "line": 65,
+          "primitive_calls": 13433,
+          "self_seconds": 0.027967836000000003
+        },
+        {
+          "calls": 32736,
+          "cumulative_seconds": 0.203152946,
+          "file": "~",
+          "function": "<built-in method io.open>",
+          "line": 0,
+          "primitive_calls": 32736,
+          "self_seconds": 0.19929904
+        },
+        {
+          "calls": 38306,
+          "cumulative_seconds": 0.195596182,
+          "file": "pathlib.py",
+          "function": "stat",
+          "line": 1092,
+          "primitive_calls": 38306,
+          "self_seconds": 0.009782751000000001
+        },
+        {
+          "calls": 38306,
+          "cumulative_seconds": 0.185813431,
+          "file": "~",
+          "function": "<built-in method posix.stat>",
+          "line": 0,
+          "primitive_calls": 38306,
+          "self_seconds": 0.12965418
+        },
+        {
+          "calls": 13420,
+          "cumulative_seconds": 0.183556097,
+          "file": "oci_layer_materialize.py",
+          "function": "_metadata",
+          "line": 81,
+          "primitive_calls": 13420,
+          "self_seconds": 0.012652774
+        },
+        {
+          "calls": 10919,
+          "cumulative_seconds": 0.15895772200000002,
+          "file": "pathlib.py",
+          "function": "open",
+          "line": 1111,
+          "primitive_calls": 10919,
+          "self_seconds": 0.0040205810000000005
+        },
+        {
+          "calls": 21809,
+          "cumulative_seconds": 0.150606551,
+          "file": "~",
+          "function": "<built-in method posix.open>",
+          "line": 0,
+          "primitive_calls": 21809,
+          "self_seconds": 0.146746563
+        },
+        {
+          "calls": 26845,
+          "cumulative_seconds": 0.136319667,
+          "file": "~",
+          "function": "<built-in method posix.chmod>",
+          "line": 0,
+          "primitive_calls": 26845,
+          "self_seconds": 0.13172340800000001
+        },
+        {
+          "calls": 107360,
+          "cumulative_seconds": 0.129316608,
+          "file": "tarfile.py",
+          "function": "nti",
+          "line": 176,
+          "primitive_calls": 107360,
+          "self_seconds": 0.059422153000000005
+        },
+        {
+          "calls": 32728,
+          "cumulative_seconds": 0.116726621,
+          "file": "~",
+          "function": "<method '__exit__' of '_io._IOBase' objects>",
+          "line": 0,
+          "primitive_calls": 32728,
+          "self_seconds": 0.11639547900000001
+        },
+        {
+          "calls": 26840,
+          "cumulative_seconds": 0.110965303,
+          "file": "~",
+          "function": "<built-in method _struct.unpack_from>",
+          "line": 0,
+          "primitive_calls": 26840,
+          "self_seconds": 0.110965303
+        },
+        {
+          "calls": 26841,
+          "cumulative_seconds": 0.104634689,
+          "file": "~",
+          "function": "<built-in method builtins.sum>",
+          "line": 0,
+          "primitive_calls": 26841,
+          "self_seconds": 0.10463409900000001
+        },
+        {
+          "calls": 174460,
+          "cumulative_seconds": 0.103398186,
+          "file": "tarfile.py",
+          "function": "nts",
+          "line": 168,
+          "primitive_calls": 174460,
+          "self_seconds": 0.07061123300000001
+        },
+        {
+          "calls": 13429,
+          "cumulative_seconds": 0.103098961,
+          "file": "environment_builder.py",
+          "function": "_lstat",
+          "line": 248,
+          "primitive_calls": 13429,
+          "self_seconds": 0.006623658
+        },
+        {
+          "calls": 46227,
+          "cumulative_seconds": 0.10232389300000001,
+          "file": "~",
+          "function": "<method 'read' of '_io.BufferedReader' objects>",
+          "line": 0,
+          "primitive_calls": 46167,
+          "self_seconds": 0.058115637000000005
+        },
+        {
+          "calls": 4522,
+          "cumulative_seconds": 0.09874558900000001,
+          "file": "~",
+          "function": "<built-in method posix.mkdir>",
+          "line": 0,
+          "primitive_calls": 4522,
+          "self_seconds": 0.09806030900000001
+        },
+        {
+          "calls": 26853,
+          "cumulative_seconds": 0.0931786,
+          "file": "~",
+          "function": "<built-in method posix.chown>",
+          "line": 0,
+          "primitive_calls": 26853,
+          "self_seconds": 0.088274355
+        },
+        {
+          "calls": 136297,
+          "cumulative_seconds": 0.089513726,
+          "file": "pathlib.py",
+          "function": "__fspath__",
+          "line": 631,
+          "primitive_calls": 136297,
+          "self_seconds": 0.033791579
+        },
+        {
+          "calls": 26853,
+          "cumulative_seconds": 0.08316870200000001,
+          "file": "~",
+          "function": "<built-in method posix.utime>",
+          "line": 0,
+          "primitive_calls": 26853,
+          "self_seconds": 0.078748704
+        },
+        {
+          "calls": 10902,
+          "cumulative_seconds": 0.07967632100000001,
+          "file": "oci_layer_materialize.py",
+          "function": "_copy_member",
+          "line": 90,
+          "primitive_calls": 10902,
+          "self_seconds": 0.01262908
+        },
+        {
+          "calls": 13452,
+          "cumulative_seconds": 0.07779319,
+          "file": "pathlib.py",
+          "function": "__truediv__",
+          "line": 853,
+          "primitive_calls": 13452,
+          "self_seconds": 0.004412798
+        },
+        {
+          "calls": 13452,
+          "cumulative_seconds": 0.073380392,
+          "file": "pathlib.py",
+          "function": "_make_child",
+          "line": 615,
+          "primitive_calls": 13452,
+          "self_seconds": 0.014043972
+        },
+        {
+          "calls": 2526,
+          "cumulative_seconds": 0.06893618700000001,
+          "file": "~",
+          "function": "<built-in method builtins.sorted>",
+          "line": 0,
+          "primitive_calls": 2526,
+          "self_seconds": 0.011393654000000001
+        },
+        {
+          "calls": 21809,
+          "cumulative_seconds": 0.06798649000000001,
+          "file": "os.py",
+          "function": "fdopen",
+          "line": 1024,
+          "primitive_calls": 21809,
+          "self_seconds": 0.018404871
+        },
+        {
+          "calls": 13424,
+          "cumulative_seconds": 0.064751262,
+          "file": "oci_layer_materialize.py",
+          "function": "_path",
+          "line": 30,
+          "primitive_calls": 13424,
+          "self_seconds": 0.028265678000000002
+        },
+        {
+          "calls": 10902,
+          "cumulative_seconds": 0.06271222500000001,
+          "file": "~",
+          "function": "<built-in method posix.sendfile>",
+          "line": 0,
+          "primitive_calls": 10902,
+          "self_seconds": 0.06271222500000001
+        },
+        {
+          "calls": 10907,
+          "cumulative_seconds": 0.06045595,
+          "file": "shutil.py",
+          "function": "copyfileobj",
+          "line": 187,
+          "primitive_calls": 10907,
+          "self_seconds": 0.008624525000000001
+        },
+        {
+          "calls": 136297,
+          "cumulative_seconds": 0.05572214700000001,
+          "file": "pathlib.py",
+          "function": "__str__",
+          "line": 621,
+          "primitive_calls": 136297,
+          "self_seconds": 0.03671791
+        },
+        {
+          "calls": 13420,
+          "cumulative_seconds": 0.050805569,
+          "file": "tarfile.py",
+          "function": "_proc_member",
+          "line": 1308,
+          "primitive_calls": 13420,
+          "self_seconds": 0.007313574000000001
+        },
+        {
+          "calls": 4,
+          "cumulative_seconds": 0.050435253000000006,
+          "file": "oci_layer_materialize.py",
+          "function": "<dictcomp>",
+          "line": 120,
+          "primitive_calls": 4,
+          "self_seconds": 0.007387152
+        },
+        {
+          "calls": 13452,
+          "cumulative_seconds": 0.048461354000000005,
+          "file": "pathlib.py",
+          "function": "_parse_args",
+          "line": 569,
+          "primitive_calls": 13452,
+          "self_seconds": 0.016005348000000003
+        },
+        {
+          "calls": 19,
+          "cumulative_seconds": 0.044545731000000005,
+          "file": "gzip.py",
+          "function": "read",
+          "line": 296,
+          "primitive_calls": 19,
+          "self_seconds": 1.9973e-05
+        },
+        {
+          "calls": 48,
+          "cumulative_seconds": 0.044337509000000004,
+          "file": "_compression.py",
+          "function": "readinto",
+          "line": 66,
+          "primitive_calls": 48,
+          "self_seconds": 0.002733184
+        },
+        {
+          "calls": 15947,
+          "cumulative_seconds": 0.044173672000000004,
+          "file": "pathlib.py",
+          "function": "iterdir",
+          "line": 1013,
+          "primitive_calls": 15947,
+          "self_seconds": 0.005385034
+        },
+        {
+          "calls": 13420,
+          "cumulative_seconds": 0.043491995000000006,
+          "file": "tarfile.py",
+          "function": "_proc_builtin",
+          "line": 1321,
+          "primitive_calls": 13420,
+          "self_seconds": 0.017097239
+        },
+        {
+          "calls": 2013,
+          "cumulative_seconds": 0.043051285,
+          "file": "pathlib.py",
+          "function": "mkdir",
+          "line": 1170,
+          "primitive_calls": 2013,
+          "self_seconds": 0.0007847500000000001
+        },
+        {
+          "calls": 48,
+          "cumulative_seconds": 0.041572976000000005,
+          "file": "gzip.py",
+          "function": "read",
+          "line": 463,
+          "primitive_calls": 48,
+          "self_seconds": 0.00013278900000000002
+        },
+        {
+          "calls": 13420,
+          "cumulative_seconds": 0.036576422000000004,
+          "file": "posixpath.py",
+          "function": "join",
+          "line": 71,
+          "primitive_calls": 13420,
+          "self_seconds": 0.024663914000000002
+        },
+        {
+          "calls": 14457,
+          "cumulative_seconds": 0.035614347000000005,
+          "file": "~",
+          "function": "<built-in method posix.listxattr>",
+          "line": 0,
+          "primitive_calls": 14457,
+          "self_seconds": 0.030710659
+        },
+        {
+          "calls": 40,
+          "cumulative_seconds": 0.030829248000000004,
+          "file": "~",
+          "function": "<method 'decompress' of 'zlib.Decompress' objects>",
+          "line": 0,
+          "primitive_calls": 40,
+          "self_seconds": 0.030829248000000004
+        },
+        {
+          "calls": 13452,
+          "cumulative_seconds": 0.027528169,
+          "file": "pathlib.py",
+          "function": "parse_parts",
+          "line": 56,
+          "primitive_calls": 13452,
+          "self_seconds": 0.019418743000000002
+        },
+        {
+          "calls": 2518,
+          "cumulative_seconds": 0.026646738000000003,
+          "file": "~",
+          "function": "<built-in method posix.listdir>",
+          "line": 0,
+          "primitive_calls": 2518,
+          "self_seconds": 0.025773035000000003
+        },
+        {
+          "calls": 26841,
+          "cumulative_seconds": 0.026242676000000003,
+          "file": "~",
+          "function": "<built-in method builtins.any>",
+          "line": 0,
+          "primitive_calls": 26841,
+          "self_seconds": 0.009021839
+        },
+        {
+          "calls": 40268,
+          "cumulative_seconds": 0.025781799,
+          "file": "~",
+          "function": "<method 'tell' of '_io.BufferedReader' objects>",
+          "line": 0,
+          "primitive_calls": 40268,
+          "self_seconds": 0.025781799
+        },
+        {
+          "calls": 21814,
+          "cumulative_seconds": 0.024437114000000003,
+          "file": "~",
+          "function": "<built-in method posix.fstat>",
+          "line": 0,
+          "primitive_calls": 21814,
+          "self_seconds": 0.024437114000000003
+        },
+        {
+          "calls": 174460,
+          "cumulative_seconds": 0.020021814000000002,
+          "file": "~",
+          "function": "<method 'find' of 'bytes' objects>",
+          "line": 0,
+          "primitive_calls": 174460,
+          "self_seconds": 0.020021814000000002
+        }
+      ],
+      "profiled": true,
+      "python": "3.10.13",
+      "schema": 1,
+      "semantic_checks_passed": true,
+      "sources": {
+        "environment_builder.py": "sha256:174d8cb86d8289ed9ef79c6431fad60b2853f37577866647f471e7e0506accce",
+        "oci_layer_materialize.py": "sha256:fd7c7a91b3724e0277fada18a1499809993869f9f11ab8c984a3f42b3a18d367"
+      },
+      "squashed_tree": {
+        "entries": 12012,
+        "hardlink_groups": [
+          [
+            "app/dist/run-alias.js",
+            "app/dist/run.js"
+          ]
+        ],
+        "tree_digest": "sha256:beeccd1532f5ca4ef362d5c5aa1e08c30aa3ed86f060650883fcf4b49c8237be"
+      },
+      "uid": 1000,
+      "arm": "candidate",
+      "repeat": 0
+    }
+  ],
+  "limitations": [
+    "Synthetic filesystem preparation only; no network, Docker, registry, mkfs, or signatures.",
+    "Each arm uses a fresh interpreter and fresh destination, with shared warmed fixture bytes. No cache dropping.",
+    "Profiling runs are separate and excluded from timing comparisons.",
+    "OCI whiteouts and extended metadata remain unsupported by selective extraction; real overlay cases are tested separately.",
+    "Unavailable privileged whiteout/opaque operations are explicitly skipped. Nonroot results do not qualify root-only semantics.",
+    "Content, mode/type, uid/gid, nanosecond mtime, xattrs and hardlink equivalence are compared; read-dependent atime, ctime and numeric inode IDs are excluded. Generated whiteout mtime is normalized because the existing squasher creates it with the current time."
+  ]
+}

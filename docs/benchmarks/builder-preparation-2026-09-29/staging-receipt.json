@@ -1,0 +1,34 @@
+{
+  "bundles": {
+    "builder": {
+      "agent_sha256": "920fa995d3ca9f47916d6da1294c5551ef042e4232f6b6a861a4fe6f1cdcff46",
+      "bytes": 164092444,
+      "dependency_files_unchanged": true,
+      "dependency_inventory_sha256": "1748b29187671396f6b487499361bd45d57411dc90fb6d5786e5d9a7e4601426",
+      "native_files_unchanged": true,
+      "native_inventory_sha256": "0b663966260d10b62c3e2c3f2bdf7a3ad383f441236935111b12e6af746d3184",
+      "sha256": "4d5a217780c2e716f0b70791d6447051be992ed8bebe024f8dd494ec7e01de49",
+      "source_sha256": "ea9de4df81dcdbe638a18cb53a97a089632d386e365429a3339403bfcbf39bc7"
+    },
+    "sandbox": {
+      "agent_sha256": "920fa995d3ca9f47916d6da1294c5551ef042e4232f6b6a861a4fe6f1cdcff46",
+      "bytes": 313570285,
+      "dependency_files_unchanged": true,
+      "dependency_inventory_sha256": "1748b29187671396f6b487499361bd45d57411dc90fb6d5786e5d9a7e4601426",
+      "native_files_unchanged": true,
+      "native_inventory_sha256": "845154275c87ba454e70b06990481c156df307ab40a0f2e9959efd14147a2d4e",
+      "sha256": "a648b71261e17d32cb0325fe496a962300c2ef8c5175ed38756c2763975ce19b",
+      "source_sha256": "82168ef5c0e84b974dc61f6d1e2fd62e2e5fe88751142f8b1d1ec8411d71137d"
+    }
+  },
+  "config_sha256": "7de1d6836c9d0398e8a6efb59f475b626b237f9f151ee83e83343d81a585924a",
+  "controller_sha256": "15e9ce3ea78e601fe51fa06d2cf7b12fdd0fa6ea9e5d36f46d48c237144d561b",
+  "dependency_changes": false,
+  "finished_at": "2026-09-29T11:34:02Z",
+  "native_changes": false,
+  "repacker_sha256": "9fddb39307442fabea50f78c80b296a5c32b2e00952e7624af7c02709bd0da5b",
+  "root": "/work/ucloud-sandboxes/builder-preparation-20260929-r1",
+  "source_root": "/work/ucloud-sandboxes/registry-io-20260929-r1",
+  "started_at": "2026-09-29T11:33:44Z",
+  "wheel_sha256": "7b00954ae39cae9c552c238769dea193df0f5388b4ef8de6155670aeba5a947a"
+}

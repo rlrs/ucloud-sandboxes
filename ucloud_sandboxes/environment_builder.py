@@ -6,6 +6,7 @@ workspace, memory directory, or checkpoint is accepted as a publication source.
 from dataclasses import dataclass, field
 from contextlib import contextmanager
 from contextvars import ContextVar
+import errno
 import fcntl
 import json
 import logging
@@ -291,9 +292,10 @@ class _LowerView:
         return True
 
 
-def _replace_directory_metadata(source, destination):
+def _replace_directory_metadata(source, destination, info=None):
     """A merged directory shows the upper layer's inode; its opacity stays."""
-    info = source.lstat()
+    if info is None:
+        info = source.lstat()
     if hasattr(os, "listxattr"):
         wanted = set(os.listxattr(source, follow_symlinks=False)) - {OPAQUE_XATTR}
         for name in os.listxattr(destination, follow_symlinks=False):
@@ -302,7 +304,7 @@ def _replace_directory_metadata(source, destination):
     _copy_metadata(source, destination, info, skip_xattrs=(OPAQUE_XATTR,))
 
 
-def _merge_layer_diff(source, target, parts, hardlinks, lower, lower_visible):
+def _merge_layer_diff(source, target, parts, hardlinks, lower, lower_visible, *, consume_private_diffs=False):
     for child in sorted(source.iterdir(), key=lambda path: path.name):
         if not parts and child.name in WHOLE_IMAGE_EXCLUDED:
             continue  # mkfs excludes them; they may hold device nodes.
@@ -321,13 +323,29 @@ def _merge_layer_diff(source, target, parts, hardlinks, lower, lower_visible):
         if not stat.S_ISDIR(info.st_mode):
             if existing is not None:
                 _remove(destination, existing)
-            _copy_entry(child, destination, hardlinks)
+            if consume_private_diffs and (stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode)):
+                # Only freshly extracted, private scratch diffs opt in. Moving
+                # their inode preserves bytes, ownership, xattrs and hardlinks
+                # without copying or applying metadata a second time. Docker
+                # layers and other borrowed immutable inputs always copy.
+                try:
+                    child.rename(destination)
+                except OSError as exc:
+                    if exc.errno != errno.EXDEV:
+                        raise
+                    _copy_entry(child, destination, hardlinks)
+                else:
+                    if stat.S_ISREG(info.st_mode):
+                        hardlinks.setdefault((info.st_dev, info.st_ino), destination)
+            else:
+                _copy_entry(child, destination, hardlinks)
             continue
         opaque = _is_opaque(child)
         if existing is not None and stat.S_ISDIR(existing.st_mode) and not opaque:
             _merge_layer_diff(child, destination, path, hardlinks, lower,
-                              lower_visible and not _is_opaque(destination))
-            _replace_directory_metadata(child, destination)
+                              lower_visible and not _is_opaque(destination),
+                              consume_private_diffs=consume_private_diffs)
+            _replace_directory_metadata(child, destination, info if consume_private_diffs else None)
             continue
         # A directory over an earlier file or whiteout of this group hides
         # every lower layer, as it does in the separate layers: make it opaque.
@@ -335,13 +353,14 @@ def _merge_layer_diff(source, target, parts, hardlinks, lower, lower_visible):
         if existing is not None:
             _remove(destination, existing)
         destination.mkdir(mode=0o700)
-        _merge_layer_diff(child, destination, path, hardlinks, lower, lower_visible and not hides)
+        _merge_layer_diff(child, destination, path, hardlinks, lower, lower_visible and not hides,
+                          consume_private_diffs=consume_private_diffs)
         _copy_metadata(child, destination, info)
         if hides:
             _set_opaque(destination)
 
 
-def squash_layer_diffs(diff_dirs, destination: Path, *, lower_dirs=()):
+def squash_layer_diffs(diff_dirs, destination: Path, *, lower_dirs=(), consume_private_diffs=False):
     """Squash Docker overlay2 diffs (bottom to top) into one overlay layer.
 
     Stacked above ``lower_dirs`` (bottom to top) the result shows the same tree
@@ -349,6 +368,11 @@ def squash_layer_diffs(diff_dirs, destination: Path, *, lower_dirs=()):
     layer has that path; an opaque directory replaces the earlier one; a
     directory over an earlier file or whiteout becomes opaque; a file replaces
     whatever was there, breaking earlier hard links.
+
+    consume_private_diffs may move regular files and symlinks out of privately
+    owned disposable extractions. Never enable it for Docker or borrowed layer
+    directories. Directory metadata and the overlay merge rules remain the
+    same; cross-filesystem moves fall back to copying.
     """
     if destination.exists() or not diff_dirs:
         raise ValueError("layer squash requires layers and a new destination")
@@ -357,9 +381,11 @@ def squash_layer_diffs(diff_dirs, destination: Path, *, lower_dirs=()):
     for layer in diff_dirs:
         if layer.is_symlink() or not layer.is_dir():
             raise ValueError("layer squash requires real diff directories")
+        info = layer.lstat() if consume_private_diffs else None
         # Hard links never span layers: each diff is its own tar extraction.
-        _merge_layer_diff(layer, destination, (), {}, lower, bool(lower.layers))
-        _replace_directory_metadata(layer, destination)
+        _merge_layer_diff(layer, destination, (), {}, lower, bool(lower.layers),
+                          consume_private_diffs=consume_private_diffs)
+        _replace_directory_metadata(layer, destination, info)
 
 
 @dataclass
@@ -484,7 +510,8 @@ class FreshEnvironmentBuilder:
         finally:
             os.close(fd)
 
-    def _publish_layer_group(self, directories, diff_ids, *, lower_dirs, parent, layer_format):
+    def _publish_layer_group(self, directories, diff_ids, *, lower_dirs, parent, layer_format,
+                             consume_private_diffs=False):
         tag = LAYER_TAG_PREFIX + layer_group_key(layer_format, parent, diff_ids)
         with self._group_lock(tag):
             # Recheck after waiting: the preceding publisher may have filled it.
@@ -503,7 +530,8 @@ class FreshEnvironmentBuilder:
                 else:
                     view = root / "view"
                     with _phase("squash"):
-                        squash_layer_diffs(directories, view, lower_dirs=lower_dirs)
+                        squash_layer_diffs(directories, view, lower_dirs=lower_dirs,
+                                           consume_private_diffs=consume_private_diffs)
                 with _phase("mkfs"):
                     self._mkfs(image, view, exclude_runtime_mounts=True)
                 with _phase("sign"):
@@ -624,7 +652,7 @@ class FreshEnvironmentBuilder:
                     continue
                 count = end - start
                 component, hit = self._publish_layer_group(directories[offset:offset + count], group,
-                    lower_dirs=(), parent=parent, layer_format=layer_format)
+                    lower_dirs=(), parent=parent, layer_format=layer_format, consume_private_diffs=True)
                 components[index] = component
                 reused += hit
                 offset += count

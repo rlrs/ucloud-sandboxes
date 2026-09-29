@@ -1,11 +1,13 @@
 """Integrity and filesystem semantics for the bounded OCI layer fast path."""
 from contextlib import ExitStack
+import errno
 import gzip
 import hashlib
 import io
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import stat
+import sys
 import tarfile
 from tempfile import TemporaryDirectory
 import unittest
@@ -374,6 +376,97 @@ class MaterializeLayersTests(unittest.TestCase):
         for target in ("../outside", "/outside", "directory/../../outside"):
             with self.subTest(target=target):
                 self.reject([member("alias", kind=tarfile.LNKTYPE, linkname=target)])
+
+    def test_fast_path_normalization_matches_posix_paths_and_existing_rejections(self):
+        names = ("", ".", "./", "/", "//", "///a", "a//./b/", "a/../b",
+                 "../", "a/..", ".wh.deleted", "a/.wh..wh..opq", "é/☃",
+                 "a\\..\\b", "a b/file", "a/././b", "x" * 4097, "a\0b")
+        for name in names:
+            for root in (True, False):
+                with self.subTest(name=name[:50], root=root):
+                    path = PurePosixPath(name)
+                    rejected = (len(name) > 4096 or "\0" in name or path.is_absolute()
+                                or ".." in path.parts or (not path.parts and not root)
+                                or any(part.startswith(".wh.") for part in path.parts))
+                    if rejected:
+                        with self.assertRaises(materialize.UnsupportedLayer):
+                            materialize._path(name, root=root)
+                    else:
+                        self.assertEqual(materialize._path(name, root=root), path.parts)
+
+    @unittest.skipUnless(sys.platform.startswith("linux") and hasattr(os, "sendfile"),
+                         "regular-file sendfile fast path requires Linux")
+    def test_kernel_copy_is_bounded_to_each_regular_payload_and_preserves_metadata(self):
+        large = bytes(range(256)) * (materialize.BLOCK // 128 + 1)
+        value = layer([
+            directory("app", mode=0o750), member("app/empty", b""),
+            member("app/large", large, mode=0o4510), member("app/last", b"last-payload"),
+            member("app/hard", kind=tarfile.LNKTYPE, mode=0o4510, linkname="app/large"),
+        ])
+        native = os.sendfile
+        with patch.object(materialize.os, "sendfile", wraps=native) as copies, \
+                patch.object(tarfile.TarFile, "extractfile", side_effect=AssertionError("unexpected Python copy")):
+            (output,), _ = self.extract([value])
+        self.assertEqual((output / "app/large").read_bytes(), large)
+        self.assertEqual((output / "app/empty").read_bytes(), b"")
+        self.assertEqual((output / "app/last").read_bytes(), b"last-payload")
+        self.assertEqual((output / "app/large").stat().st_ino, (output / "app/hard").stat().st_ino)
+        self.assertEqual(stat.S_IMODE((output / "app/large").stat().st_mode), 0o4510)
+        self.assertEqual((output / "app/large").stat().st_mtime, 123456789)
+        self.assertEqual(sum(call.args[3] for call in copies.call_args_list), len(large) + len(b"last-payload"))
+        self.assertTrue(all(0 < call.args[3] <= materialize.BLOCK for call in copies.call_args_list))
+
+    def test_kernel_copy_unavailable_or_declined_uses_portable_tar_reader(self):
+        value = layer([member("first", b"first-payload"), member("second", b"second-payload")])
+        for error in (None, errno.ENOSYS, errno.EXDEV, errno.EINVAL, errno.EOPNOTSUPP, errno.ENOTSOCK, 0):
+            with self.subTest(error=error):
+                if error is None:
+                    replacement = None
+                elif error == 0:
+                    def replacement(*args):
+                        return 0
+                else:
+                    def replacement(*args, _error=error):
+                        raise OSError(_error, "unsupported native copy")
+                with patch.object(materialize.os, "sendfile", replacement, create=True):
+                    (output,), _ = self.extract([value])
+                self.assertEqual((output / "first").read_bytes(), b"first-payload")
+                self.assertEqual((output / "second").read_bytes(), b"second-payload")
+
+    @unittest.skipUnless(sys.platform.startswith("linux") and hasattr(os, "sendfile"),
+                         "regular-file sendfile fast path requires Linux")
+    def test_short_kernel_copies_and_partial_copy_fallback_do_not_repeat_or_omit_bytes(self):
+        value = layer([member("first", b"0123456789abcdef"), member("second", b"next")])
+        native = os.sendfile
+        for fallback in (False, True):
+            calls = [0]
+            def copy(output, source, offset, count):
+                calls[0] += 1
+                if fallback and calls[0] == 2:
+                    raise OSError(errno.EINVAL, "declined after a partial copy")
+                return native(output, source, offset, min(count, 3))
+            with self.subTest(fallback=fallback), patch.object(materialize.os, "sendfile", side_effect=copy):
+                (output,), _ = self.extract([value])
+            self.assertEqual((output / "first").read_bytes(), b"0123456789abcdef")
+            self.assertEqual((output / "second").read_bytes(), b"next")
+
+    def test_real_kernel_copy_errors_are_not_silently_retried_as_portable_copy(self):
+        value = layer([member("file", b"body")])
+        for code in (errno.ENOSPC, errno.EIO):
+            with self.subTest(code=code), patch.object(materialize.os, "sendfile", side_effect=OSError(code, "failed"), create=True):
+                with self.assertRaises(OSError) as raised:
+                    self.extract([value])
+                self.assertEqual(raised.exception.errno, code)
+
+    def test_truncated_regular_payload_is_rejected_when_native_copy_cannot_complete(self):
+        # Both identities can authenticate a malformed/truncated tar; extraction
+        # must still reject it instead of silently accepting a short output file.
+        header, _ = member("truncated", b"1234567890")
+        raw = header.tobuf(format=tarfile.USTAR_FORMAT) + b"123"
+        value = {"mediaType": OCI_TAR, "digest": sha256(raw), "size": len(raw)}, sha256(raw), raw
+        with patch.object(materialize.os, "sendfile", return_value=0, create=True):
+            with self.assertRaises(tarfile.ReadError):
+                self.extract([value])
 
 
 if __name__ == "__main__":

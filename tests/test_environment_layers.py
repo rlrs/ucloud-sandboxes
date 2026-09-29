@@ -2,6 +2,7 @@
 from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+import errno
 import hashlib
 import os
 from pathlib import Path
@@ -292,6 +293,102 @@ class LinuxSquashTests(unittest.TestCase):
             lower, first, second = tree.scenario(root)
             squash_layer_diffs([first, second], root / "view", lower_dirs=[lower])
             tree.check(self, root / "view")
+
+
+class PrivateDiffSquashTests(unittest.TestCase):
+    def fixture(self, root):
+        first, second = root / "first", root / "second"
+        for layer in (first, second):
+            (layer / "app/subdir").mkdir(parents=True)
+        (first / "app/original").write_bytes(b"original inode")
+        os.link(first / "app/original", first / "app/old-link")
+        (first / "app/subdir/lower").write_bytes(b"retained")
+        (second / "app/original").write_bytes(b"replacement")
+        (second / "app/executable").write_bytes(b"#!/bin/sh\n")
+        (second / "app/executable").chmod(0o751)
+        os.link(second / "app/executable", second / "app/new-link")
+        (second / "app/relative").symlink_to("executable")
+        (second / "app/dangling").symlink_to("missing")
+        (second / "app/absolute").symlink_to("/missing/fixture")
+        if hasattr(os, "setxattr"):
+            os.setxattr(first / "app", "user.removed-in-upper", b"old")
+            os.setxattr(second / "app", "user.directory", b"upper")
+            os.setxattr(second / "app/executable", "user.payload", b"preserved")
+        for number, layer in enumerate((first, second)):
+            for path in [layer, *layer.rglob("*")]:
+                os.utime(path, ns=(2_000_000_000_000_000_000, 1_700_000_000_000_000_000 + number),
+                         follow_symlinks=False)
+        return first, second
+
+    def snapshot(self, root):
+        result, identities = {}, {}
+        for path in [root, *sorted(root.rglob("*"))]:
+            name = str(path.relative_to(root))
+            info = path.lstat()
+            value = {"mode": info.st_mode, "uid": info.st_uid, "gid": info.st_gid,
+                     "mtime_ns": info.st_mtime_ns}
+            if stat.S_ISREG(info.st_mode):
+                value["bytes"] = path.read_bytes()
+                identities.setdefault((info.st_dev, info.st_ino), []).append(name)
+            elif stat.S_ISLNK(info.st_mode):
+                value["link"] = os.readlink(path)
+            if hasattr(os, "listxattr"):
+                value["xattrs"] = {key: os.getxattr(path, key, follow_symlinks=False)
+                                   for key in os.listxattr(path, follow_symlinks=False)}
+            result[name] = value
+        return result, sorted(sorted(paths) for paths in identities.values() if len(paths) > 1)
+
+    def test_private_moves_match_copy_metadata_links_replacements_and_preserve_default_sources(self):
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            copy_layers = self.fixture(root / "copy-source")
+            move_layers = self.fixture(root / "move-source")
+            original = [self.snapshot(layer) for layer in copy_layers]
+            squash_layer_diffs(copy_layers, root / "copied")
+            self.assertEqual([self.snapshot(layer) for layer in copy_layers], original)
+            with patch.object(environment_builder, "_copy_entry", side_effect=AssertionError("private files must move")):
+                squash_layer_diffs(move_layers, root / "moved", consume_private_diffs=True)
+            self.assertEqual(self.snapshot(root / "moved"), self.snapshot(root / "copied"))
+            self.assertEqual((root / "moved/app/original").read_bytes(), b"replacement")
+            self.assertEqual((root / "moved/app/old-link").read_bytes(), b"original inode")
+            self.assertFalse(any(path.is_file() or path.is_symlink()
+                                 for layer in move_layers for path in layer.rglob("*")))
+
+    @unittest.skipUnless(sys.platform == "linux" and hasattr(os, "setxattr"), "user xattrs need Linux")
+    def test_private_moves_keep_overlay_whiteouts_opacity_and_lower_layer_visibility(self):
+        # Exercise the complete overlay algorithm without privileged devices:
+        # FIFO stands in for a whiteout, and a user xattr for trusted opacity.
+        tree = _Tree(os.mkfifo, environment_builder._set_opaque,
+                     lambda info: stat.S_ISFIFO(info.st_mode), environment_builder._is_opaque)
+        with TemporaryDirectory() as raw, \
+             patch.object(environment_builder, "OPAQUE_XATTR", "user.test-overlay-opaque"), \
+             patch.object(environment_builder, "_is_whiteout", tree.is_whiteout), \
+             patch.object(environment_builder, "_make_whiteout", os.mkfifo):
+            root = Path(raw)
+            lower, first, second = tree.scenario(root)
+            squash_layer_diffs([first, second], root / "view", lower_dirs=[lower], consume_private_diffs=True)
+            tree.check(self, root / "view")
+            self.assertEqual((lower / "etc/gone").read_text(), "base")
+
+    def test_cross_filesystem_move_falls_back_to_copy_and_preserves_hardlinks(self):
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            layers = self.fixture(root / "source")
+            with patch.object(Path, "rename", side_effect=OSError(errno.EXDEV, "different filesystem")):
+                squash_layer_diffs(layers, root / "view", consume_private_diffs=True)
+            self.assertTrue((layers[1] / "app/executable").is_file())
+            self.assertEqual((root / "view/app/executable").stat().st_ino,
+                             (root / "view/app/new-link").stat().st_ino)
+            self.assertNotEqual((root / "view/app/executable").stat().st_ino,
+                                (layers[1] / "app/executable").stat().st_ino)
+
+    def test_other_move_failures_abort_instead_of_silently_copying(self):
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            layers = self.fixture(root / "source")
+            with patch.object(Path, "rename", side_effect=PermissionError("move denied")), \
+                 self.assertRaises(PermissionError):
+                squash_layer_diffs(layers, root / "view", consume_private_diffs=True)
 
 
 class LayerRegistry(MemoryRegistry):

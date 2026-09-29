@@ -170,6 +170,22 @@ class SelectiveEnvironmentPublicationTests(unittest.TestCase):
                 self.assertEqual(metrics["groups_built"], 1)
                 self.assertEqual(metrics["groups_reused"], 1)
 
+    def test_multiple_private_tail_diffs_move_into_group_without_recopied_payload(self):
+        first = self.tail()
+        second = layer([directory("app"), member("app/extra", b"additional file", mode=0o640)])
+        image_id = self.add_image("two-private-tails", [self.base, first, second])
+        with patch.object(environment_builder, "_copy_entry", side_effect=AssertionError("private payload copied")), \
+             patch.object(self.store, "_checked", side_effect=AssertionError("must not pull")), \
+             publication_metrics() as metrics:
+            _, environment = self.publish("two-private-tails")
+        self.assertEqual(environment.source_image, image_id)
+        self.assertEqual(self.registry.load(environment.components[-1]).source_layers, (first[1], second[1]))
+        self.assertEqual(self.mkfs_views, [{"app": {"mode": 0o755, "content": None},
+            "app/extra": {"mode": 0o640, "content": b"additional file".hex()},
+            "app/run": {"mode": 0o751, "content": b"#!/bin/sh\necho selective\n".hex()}}])
+        self.assertEqual(metrics["selective_materializations"], 1)
+        self.assertEqual(metrics["groups_built"], 1)
+
     def test_corrupt_source_bindings_never_pull_sign_or_publish(self):
         for corruption in ("config", "compressed_blob", "diff_id"):
             with self.subTest(corruption=corruption):

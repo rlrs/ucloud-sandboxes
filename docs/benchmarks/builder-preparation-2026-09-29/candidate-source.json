@@ -1,0 +1,18 @@
+{
+  "wheel_sha256": "7b00954ae39cae9c552c238769dea193df0f5388b4ef8de6155670aeba5a947a",
+  "packaged_files": 162,
+  "matches_source": true,
+  "modules": {
+    "ucloud_sandboxes/environment_builder.py": "174d8cb86d8289ed9ef79c6431fad60b2853f37577866647f471e7e0506accce",
+    "ucloud_sandboxes/oci_layer_materialize.py": "fd7c7a91b3724e0277fada18a1499809993869f9f11ab8c984a3f42b3a18d367",
+    "ucloud_sandboxes/images.py": "0928983885171db22645076439b12f71938d0c3d981099e5c440d8d0c3ddf056",
+    "ucloud_sandboxes/build_history.py": "b66df177bb66ab57e9615c0e1604b6d6be4687b4d731d53d4e7f25044947616a"
+  },
+  "qualification_inputs": {
+    "scripts/build_load_telemetry.py": "ed9a6b6fecdd01984f5b54a05ae0ba696c03f81d6b2ef481cc8f009ec00b9c5e",
+    "scripts/benchmark_environment_preparation.py": "e55dbc76764785f75b19d7bcab5c4d35ce21ba7283220c8451e8ac507d190432",
+    "scripts/qualify_build_optimization.py": "e9c60880598396d18aa377cc02b5659d9f4d3610cf2ae65411b829361beb288b",
+    "scripts/live_build_load_benchmark.py": "d0b2754af69c69d9a303fd15117f60fad044ca0e559b3a1cfbe934f49682c6ec",
+    "scripts/qualify_selective_environment.py": "0f5d1263ea15c501084458943a4fcf0603dd68681b72a81318f4da2c735cd87e"
+  }
+}

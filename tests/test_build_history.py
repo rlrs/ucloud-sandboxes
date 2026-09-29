@@ -43,7 +43,8 @@ class BuildHistoryTests(unittest.TestCase):
                     location="https://private/?token=secret", queued_at="not-a-timestamp")
         raw["timings"] = {
             "total_ms": 123, "queue_wait_ms": 45, "preparation_ms": 6, "end_to_end_ms": 174,
-            "secret": 123, "phases": {"docker_build_ms": 100, "cleanup_ms": float("nan"),
+            "secret": 123, "phases": {"docker_build_ms": 100, "cache_prepare_ms": 2,
+                                      "cache_mount_ms": 4, "cleanup_ms": float("nan"),
                                       "private command": 42},
             "environment": {"groups_reused": 3, "groups_built": True,
                             "erofs_bytes_built": 10**1000, "mkfs_ms": -1,
@@ -56,7 +57,8 @@ class BuildHistoryTests(unittest.TestCase):
         self.assertNotIn("queued_at", saved)
         self.assertEqual(saved["timings"], {
             "total_ms": 123, "queue_wait_ms": 45, "preparation_ms": 6, "end_to_end_ms": 174,
-            "phases": {"docker_build_ms": 100}, "environment": {"groups_reused": 3},
+            "phases": {"docker_build_ms": 100, "cache_prepare_ms": 2, "cache_mount_ms": 4},
+            "environment": {"groups_reused": 3},
         })
         self.assertEqual(self.path.stat().st_mode & 0o777, 0o600)
 

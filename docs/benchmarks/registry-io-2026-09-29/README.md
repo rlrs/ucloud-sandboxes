@@ -117,4 +117,5 @@ The [prepared protocol](QUALIFICATION.md) and frozen
 [qualification receipt](io-repeat.qualification.json) preserve execution inputs.
 Raw customer logs and credentials are not included. The telemetry, infrastructure
 IDs, benchmark results, and deployment receipts are production-derived data;
-public publication requires the separately requested approval.
+publication of commits `da5c8ee` and `48f30bd` was explicitly approved by the
+user and completed on 2026-09-29 before the builder-preparation qualification.

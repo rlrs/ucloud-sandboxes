@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Prepare selective EROFS layers with bounded kernel payload copies and reuse
+  validated paths. Move files from private disposable diffs during squashing
+  instead of copying their payloads and metadata again; borrowed Docker layers
+  retain the existing copy path. Persist cache preparation and mount timings.
 - Link known shared-cache blobs into managed-image repositories before pushing
   to avoid repeated large OCI uploads from fresh builders. Bound optional mount
   preparation and preserve normal upload fallback; remove redundant EROFS

@@ -1,0 +1,1241 @@
+{
+  "schema": 1,
+  "unit": "milliseconds",
+  "baseline": {
+    "source": "docs/benchmarks/registry-io-2026-09-29/io-repeat/summary.json",
+    "sha256": "519f0484a73e1bcd7c17e805ebfebd11ff2eb94c8cfc21a4e78d11f5a892d926",
+    "phase": "io-repeat",
+    "batch_wall_seconds": 135.56140324300213,
+    "all": {
+      "records": 48,
+      "phases": {
+        "cache_prepare_ms": {
+          "records_reporting": 0,
+          "records_expected": 48,
+          "total_ms": null,
+          "count": 0,
+          "min": null,
+          "mean": null,
+          "p50": null,
+          "p95": null,
+          "max": null
+        },
+        "cache_mount_ms": {
+          "records_reporting": 0,
+          "records_expected": 48,
+          "total_ms": null,
+          "count": 0,
+          "min": null,
+          "mean": null,
+          "p50": null,
+          "p95": null,
+          "max": null
+        },
+        "docker_build_and_push_ms": {
+          "records_reporting": 48,
+          "records_expected": 48,
+          "total_ms": 1510150,
+          "count": 48,
+          "min": 2316,
+          "mean": 31461.458333333332,
+          "p50": 31155.5,
+          "p95": 57641.29999999998,
+          "max": 63722
+        },
+        "immutable_environment_ms": {
+          "records_reporting": 48,
+          "records_expected": 48,
+          "total_ms": 191298,
+          "count": 48,
+          "min": 393,
+          "mean": 3985.375,
+          "p50": 4195.5,
+          "p95": 12288.449999999997,
+          "max": 13515
+        }
+      },
+      "environment": {
+        "selective_materialization_ms": {
+          "records_reporting": 48,
+          "records_expected": 48,
+          "total_ms": 65811.82599999999,
+          "count": 48,
+          "min": 63.917,
+          "mean": 1371.0797083333334,
+          "p50": 1334.9805000000001,
+          "p95": 4800.361199999998,
+          "max": 5545.097
+        },
+        "squash_ms": {
+          "records_reporting": 48,
+          "records_expected": 48,
+          "total_ms": 71150.56599999999,
+          "count": 48,
+          "min": 8.17,
+          "mean": 1482.303458333333,
+          "p50": 1506.1495,
+          "p95": 5718.804249999998,
+          "max": 6326.62
+        },
+        "mkfs_ms": {
+          "records_reporting": 48,
+          "records_expected": 48,
+          "total_ms": 8960.717999999999,
+          "count": 48,
+          "min": 27.597,
+          "mean": 186.68162500000005,
+          "p50": 114.945,
+          "p95": 433.96674999999993,
+          "max": 459.276
+        },
+        "sign_ms": {
+          "records_reporting": 48,
+          "records_expected": 48,
+          "total_ms": 614.0439999999999,
+          "count": 48,
+          "min": 4.892,
+          "mean": 12.792583333333335,
+          "p50": 9.747499999999999,
+          "p95": 25.731049999999996,
+          "max": 45.978
+        },
+        "publish_component_ms": {
+          "records_reporting": 48,
+          "records_expected": 48,
+          "total_ms": 10186.575,
+          "count": 48,
+          "min": 74.307,
+          "mean": 212.2203125,
+          "p50": 176.1465,
+          "p95": 483.7791999999999,
+          "max": 559.021
+        },
+        "component_lookup_ms": {
+          "records_reporting": 48,
+          "records_expected": 48,
+          "total_ms": 73.802,
+          "count": 48,
+          "min": 1.053,
+          "mean": 1.5375416666666666,
+          "p50": 1.3585,
+          "p95": 2.23215,
+          "max": 3.662
+        },
+        "layer_lock_wait_ms": {
+          "records_reporting": 48,
+          "records_expected": 48,
+          "total_ms": 1.6929999999999996,
+          "count": 48,
+          "min": 0.005,
+          "mean": 0.035270833333333335,
+          "p50": 0.01,
+          "p95": 0.0843,
+          "max": 0.755
+        },
+        "preflight_ms": {
+          "records_reporting": 48,
+          "records_expected": 48,
+          "total_ms": 180348.509,
+          "count": 48,
+          "min": 258.803,
+          "mean": 3757.2606041666663,
+          "p50": 3846.1885,
+          "p95": 12092.380999999996,
+          "max": 13272.391
+        }
+      },
+      "extraction_plus_squash_ms": {
+        "records_reporting": 48,
+        "records_expected": 48,
+        "total_ms": 136962.39199999996,
+        "count": 48,
+        "min": 72.832,
+        "mean": 2853.3831666666665,
+        "p50": 2840.7945,
+        "p95": 10554.974499999997,
+        "max": 11805.935
+      }
+    },
+    "by_recipe": {
+      "python-agent": {
+        "records": 16,
+        "phases": {
+          "cache_prepare_ms": {
+            "records_reporting": 0,
+            "records_expected": 16,
+            "total_ms": null,
+            "count": 0,
+            "min": null,
+            "mean": null,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "cache_mount_ms": {
+            "records_reporting": 0,
+            "records_expected": 16,
+            "total_ms": null,
+            "count": 0,
+            "min": null,
+            "mean": null,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "docker_build_and_push_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 381620,
+            "count": 16,
+            "min": 6110,
+            "mean": 23851.25,
+            "p50": 26921.5,
+            "p95": 29773.75,
+            "max": 29971
+          },
+          "immutable_environment_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 62079,
+            "count": 16,
+            "min": 1541,
+            "mean": 3879.9375,
+            "p50": 4218.5,
+            "p95": 4369.0,
+            "max": 4393
+          }
+        },
+        "environment": {
+          "selective_materialization_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 20003.637000000002,
+            "count": 16,
+            "min": 403.801,
+            "mean": 1250.2273125,
+            "p50": 1365.8605,
+            "p95": 1496.9985,
+            "max": 1499.751
+          },
+          "squash_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 22840.974000000002,
+            "count": 16,
+            "min": 382.569,
+            "mean": 1427.5608750000001,
+            "p50": 1648.324,
+            "p95": 1762.232,
+            "max": 1824.62
+          },
+          "mkfs_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 1920.213,
+            "count": 16,
+            "min": 93.451,
+            "mean": 120.01331250000001,
+            "p50": 114.945,
+            "p95": 142.00400000000002,
+            "max": 168.278
+          },
+          "sign_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 139.091,
+            "count": 16,
+            "min": 6.909,
+            "mean": 8.6931875,
+            "p50": 7.9825,
+            "p95": 11.1625,
+            "max": 13.234
+          },
+          "publish_component_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 2992.4449999999997,
+            "count": 16,
+            "min": 98.464,
+            "mean": 187.02781250000004,
+            "p50": 170.5045,
+            "p95": 314.234,
+            "max": 350.264
+          },
+          "component_lookup_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 30.348,
+            "count": 16,
+            "min": 1.2,
+            "mean": 1.89675,
+            "p50": 1.7389999999999999,
+            "p95": 3.0395,
+            "max": 3.662
+          },
+          "layer_lock_wait_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 1.2999999999999998,
+            "count": 16,
+            "min": 0.007,
+            "mean": 0.08125,
+            "p50": 0.017,
+            "p95": 0.33125,
+            "max": 0.755
+          },
+          "preflight_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 57089.61200000001,
+            "count": 16,
+            "min": 1373.247,
+            "mean": 3568.10075,
+            "p50": 3896.5910000000003,
+            "p95": 4108.4259999999995,
+            "max": 4132.168
+          }
+        },
+        "extraction_plus_squash_ms": {
+          "records_reporting": 16,
+          "records_expected": 16,
+          "total_ms": 42844.61099999999,
+          "count": 16,
+          "min": 786.37,
+          "mean": 2677.7881875,
+          "p50": 2988.9395000000004,
+          "p95": 3171.81925,
+          "max": 3237.517
+        }
+      },
+      "typescript-multistage": {
+        "records": 16,
+        "phases": {
+          "cache_prepare_ms": {
+            "records_reporting": 0,
+            "records_expected": 16,
+            "total_ms": null,
+            "count": 0,
+            "min": null,
+            "mean": null,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "cache_mount_ms": {
+            "records_reporting": 0,
+            "records_expected": 16,
+            "total_ms": null,
+            "count": 0,
+            "min": null,
+            "mean": null,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "docker_build_and_push_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 591006,
+            "count": 16,
+            "min": 2391,
+            "mean": 36937.875,
+            "p50": 33390.0,
+            "p95": 63551.0,
+            "max": 63722
+          },
+          "immutable_environment_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 8865,
+            "count": 16,
+            "min": 393,
+            "mean": 554.0625,
+            "p50": 475.0,
+            "p95": 974.5,
+            "max": 991
+          }
+        },
+        "environment": {
+          "selective_materialization_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 1537.3089999999997,
+            "count": 16,
+            "min": 63.917,
+            "mean": 96.08181250000001,
+            "p50": 75.9145,
+            "p95": 180.73325,
+            "max": 293.324
+          },
+          "squash_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 292.57000000000005,
+            "count": 16,
+            "min": 8.17,
+            "mean": 18.285625,
+            "p50": 14.4505,
+            "p95": 36.18875,
+            "max": 41.852
+          },
+          "mkfs_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 645.9780000000001,
+            "count": 16,
+            "min": 27.597,
+            "mean": 40.373625000000004,
+            "p50": 39.072500000000005,
+            "p95": 54.240249999999996,
+            "max": 61.525
+          },
+          "sign_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 111.53000000000002,
+            "count": 16,
+            "min": 4.892,
+            "mean": 6.970625000000001,
+            "p50": 6.162,
+            "p95": 11.26225,
+            "max": 11.848
+          },
+          "publish_component_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 2368.966,
+            "count": 16,
+            "min": 74.307,
+            "mean": 148.060375,
+            "p50": 102.351,
+            "p95": 430.07675,
+            "max": 431.813
+          },
+          "component_lookup_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 22.150999999999996,
+            "count": 16,
+            "min": 1.053,
+            "mean": 1.3844375,
+            "p50": 1.302,
+            "p95": 1.791,
+            "max": 1.968
+          },
+          "layer_lock_wait_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 0.21500000000000002,
+            "count": 16,
+            "min": 0.006,
+            "mean": 0.013437500000000002,
+            "p50": 0.008,
+            "p95": 0.03475,
+            "max": 0.085
+          },
+          "preflight_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 6077.449000000001,
+            "count": 16,
+            "min": 258.803,
+            "mean": 379.84056250000003,
+            "p50": 321.2685,
+            "p95": 715.16175,
+            "max": 732.738
+          }
+        },
+        "extraction_plus_squash_ms": {
+          "records_reporting": 16,
+          "records_expected": 16,
+          "total_ms": 1829.8789999999997,
+          "count": 16,
+          "min": 72.832,
+          "mean": 114.36743750000002,
+          "p50": 90.14500000000001,
+          "p95": 218.988,
+          "max": 320.78700000000003
+        }
+      },
+      "typescript-tools": {
+        "records": 16,
+        "phases": {
+          "cache_prepare_ms": {
+            "records_reporting": 0,
+            "records_expected": 16,
+            "total_ms": null,
+            "count": 0,
+            "min": null,
+            "mean": null,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "cache_mount_ms": {
+            "records_reporting": 0,
+            "records_expected": 16,
+            "total_ms": null,
+            "count": 0,
+            "min": null,
+            "mean": null,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "docker_build_and_push_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 537524,
+            "count": 16,
+            "min": 2316,
+            "mean": 33595.25,
+            "p50": 33477.5,
+            "p95": 52467.5,
+            "max": 61604
+          },
+          "immutable_environment_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 120354,
+            "count": 16,
+            "min": 3694,
+            "mean": 7522.125,
+            "p50": 5732.5,
+            "p95": 13502.25,
+            "max": 13515
+          }
+        },
+        "environment": {
+          "selective_materialization_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 44270.88,
+            "count": 16,
+            "min": 1093.088,
+            "mean": 2766.9300000000003,
+            "p50": 2434.6904999999997,
+            "p95": 5495.760499999999,
+            "max": 5545.097
+          },
+          "squash_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 48017.022,
+            "count": 16,
+            "min": 1157.42,
+            "mean": 3001.0638750000003,
+            "p50": 1773.542,
+            "p95": 6320.1745,
+            "max": 6326.62
+          },
+          "mkfs_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 6394.526999999999,
+            "count": 16,
+            "min": 345.554,
+            "mean": 399.6579375,
+            "p50": 392.59299999999996,
+            "p95": 449.3775,
+            "max": 459.276
+          },
+          "sign_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 363.42300000000006,
+            "count": 16,
+            "min": 19.301,
+            "mean": 22.7139375,
+            "p50": 19.97,
+            "p95": 31.35075,
+            "max": 45.978
+          },
+          "publish_component_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 4825.164000000001,
+            "count": 16,
+            "min": 178.716,
+            "mean": 301.57275,
+            "p50": 250.0,
+            "p95": 524.46325,
+            "max": 559.021
+          },
+          "component_lookup_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 21.303,
+            "count": 16,
+            "min": 1.13,
+            "mean": 1.3314375,
+            "p50": 1.3085,
+            "p95": 1.57875,
+            "max": 1.635
+          },
+          "layer_lock_wait_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 0.178,
+            "count": 16,
+            "min": 0.005,
+            "mean": 0.011125,
+            "p50": 0.0095,
+            "p95": 0.02,
+            "max": 0.02
+          },
+          "preflight_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 117181.44799999997,
+            "count": 16,
+            "min": 3507.327,
+            "mean": 7323.840499999999,
+            "p50": 5541.4015,
+            "p95": 13267.1395,
+            "max": 13272.391
+          }
+        },
+        "extraction_plus_squash_ms": {
+          "records_reporting": 16,
+          "records_expected": 16,
+          "total_ms": 92287.902,
+          "count": 16,
+          "min": 2250.508,
+          "mean": 5767.993875,
+          "p50": 4208.2325,
+          "p95": 11797.6415,
+          "max": 11805.935
+        }
+      }
+    }
+  },
+  "candidate": {
+    "source": "docs/benchmarks/builder-preparation-2026-09-29/prep-repeat/summary.json",
+    "sha256": "faee4fe81ffb62d0b702ce21eecc01c05a1527377e11bf0ad4a72f3437e2b681",
+    "phase": "prep-repeat",
+    "batch_wall_seconds": 139.05414943600772,
+    "all": {
+      "records": 48,
+      "phases": {
+        "cache_prepare_ms": {
+          "records_reporting": 48,
+          "records_expected": 48,
+          "total_ms": 147,
+          "count": 48,
+          "min": 1,
+          "mean": 3.0625,
+          "p50": 3.0,
+          "p95": 7.0,
+          "max": 8
+        },
+        "cache_mount_ms": {
+          "records_reporting": 48,
+          "records_expected": 48,
+          "total_ms": 17731,
+          "count": 48,
+          "min": 125,
+          "mean": 369.3958333333333,
+          "p50": 290.5,
+          "p95": 677.0999999999999,
+          "max": 1095
+        },
+        "docker_build_and_push_ms": {
+          "records_reporting": 48,
+          "records_expected": 48,
+          "total_ms": 1550027,
+          "count": 48,
+          "min": 2594,
+          "mean": 32292.229166666668,
+          "p50": 34214.5,
+          "p95": 50801.4,
+          "max": 51068
+        },
+        "immutable_environment_ms": {
+          "records_reporting": 48,
+          "records_expected": 48,
+          "total_ms": 147967,
+          "count": 48,
+          "min": 445,
+          "mean": 3082.6458333333335,
+          "p50": 3020.5,
+          "p95": 9788.9,
+          "max": 9980
+        }
+      },
+      "environment": {
+        "selective_materialization_ms": {
+          "records_reporting": 48,
+          "records_expected": 48,
+          "total_ms": 54732.74,
+          "count": 48,
+          "min": 56.98,
+          "mean": 1140.2654166666669,
+          "p50": 1061.1545,
+          "p95": 4928.87455,
+          "max": 5024.658
+        },
+        "squash_ms": {
+          "records_reporting": 48,
+          "records_expected": 48,
+          "total_ms": 34081.958000000006,
+          "count": 48,
+          "min": 3.736,
+          "mean": 710.0407916666667,
+          "p50": 548.0015,
+          "p95": 2961.3448999999996,
+          "max": 3135.432
+        },
+        "mkfs_ms": {
+          "records_reporting": 48,
+          "records_expected": 48,
+          "total_ms": 9642.468,
+          "count": 48,
+          "min": 29.872,
+          "mean": 200.88474999999994,
+          "p50": 129.338,
+          "p95": 498.6627,
+          "max": 528.007
+        },
+        "sign_ms": {
+          "records_reporting": 48,
+          "records_expected": 48,
+          "total_ms": 684.3360000000002,
+          "count": 48,
+          "min": 4.951,
+          "mean": 14.257,
+          "p50": 10.1745,
+          "p95": 34.58979999999999,
+          "max": 45.435
+        },
+        "publish_component_ms": {
+          "records_reporting": 48,
+          "records_expected": 48,
+          "total_ms": 13089.135999999999,
+          "count": 48,
+          "min": 99.425,
+          "mean": 272.6903333333333,
+          "p50": 238.075,
+          "p95": 574.0481999999997,
+          "max": 647.691
+        },
+        "component_lookup_ms": {
+          "records_reporting": 48,
+          "records_expected": 48,
+          "total_ms": 80.181,
+          "count": 48,
+          "min": 0.922,
+          "mean": 1.6704374999999996,
+          "p50": 1.483,
+          "p95": 2.97835,
+          "max": 3.801
+        },
+        "layer_lock_wait_ms": {
+          "records_reporting": 48,
+          "records_expected": 48,
+          "total_ms": 1.8419999999999994,
+          "count": 48,
+          "min": 0.004,
+          "mean": 0.03837500000000001,
+          "p50": 0.0095,
+          "p95": 0.12049999999999994,
+          "max": 0.394
+        },
+        "preflight_ms": {
+          "records_reporting": 48,
+          "records_expected": 48,
+          "total_ms": 132474.76799999998,
+          "count": 48,
+          "min": 295.294,
+          "mean": 2759.891,
+          "p50": 2701.1105,
+          "p95": 9481.277949999998,
+          "max": 9733.109
+        }
+      },
+      "extraction_plus_squash_ms": {
+        "records_reporting": 48,
+        "records_expected": 48,
+        "total_ms": 88814.698,
+        "count": 48,
+        "min": 63.233,
+        "mean": 1850.3062083333334,
+        "p50": 1664.747,
+        "p95": 7895.3928,
+        "max": 8160.09
+      }
+    },
+    "by_recipe": {
+      "python-agent": {
+        "records": 16,
+        "phases": {
+          "cache_prepare_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 66,
+            "count": 16,
+            "min": 1,
+            "mean": 4.125,
+            "p50": 3.0,
+            "p95": 8.0,
+            "max": 8
+          },
+          "cache_mount_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 6835,
+            "count": 16,
+            "min": 151,
+            "mean": 427.1875,
+            "p50": 414.0,
+            "p95": 624.5,
+            "max": 629
+          },
+          "docker_build_and_push_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 414562,
+            "count": 16,
+            "min": 5995,
+            "mean": 25910.125,
+            "p50": 29352.5,
+            "p95": 36773.5,
+            "max": 36928
+          },
+          "immutable_environment_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 47976,
+            "count": 16,
+            "min": 1147,
+            "mean": 2998.5,
+            "p50": 3048.5,
+            "p95": 4495.0,
+            "max": 4552
+          }
+        },
+        "environment": {
+          "selective_materialization_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 15440.882000000001,
+            "count": 16,
+            "min": 248.6,
+            "mean": 965.055125,
+            "p50": 1142.5075000000002,
+            "p95": 1328.657,
+            "max": 1369.22
+          },
+          "squash_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 8459.564,
+            "count": 16,
+            "min": 158.49,
+            "mean": 528.7227499999999,
+            "p50": 564.3745,
+            "p95": 844.17575,
+            "max": 851.939
+          },
+          "mkfs_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 1997.2449999999994,
+            "count": 16,
+            "min": 90.862,
+            "mean": 124.8278125,
+            "p50": 129.338,
+            "p95": 147.2335,
+            "max": 147.688
+          },
+          "sign_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 142.36299999999997,
+            "count": 16,
+            "min": 6.777,
+            "mean": 8.8976875,
+            "p50": 8.6145,
+            "p95": 11.018,
+            "max": 12.557
+          },
+          "publish_component_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 5011.718,
+            "count": 16,
+            "min": 159.297,
+            "mean": 313.232375,
+            "p50": 234.7805,
+            "p95": 647.094,
+            "max": 647.691
+          },
+          "component_lookup_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 30.004000000000005,
+            "count": 16,
+            "min": 1.094,
+            "mean": 1.8752500000000003,
+            "p50": 1.596,
+            "p95": 3.1747500000000004,
+            "max": 3.801
+          },
+          "layer_lock_wait_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 1.347,
+            "count": 16,
+            "min": 0.008,
+            "mean": 0.0841875,
+            "p50": 0.051500000000000004,
+            "p95": 0.37,
+            "max": 0.394
+          },
+          "preflight_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 40055.054000000004,
+            "count": 16,
+            "min": 973.875,
+            "mean": 2503.4408750000002,
+            "p50": 2730.633,
+            "p95": 3507.558,
+            "max": 3565.404
+          }
+        },
+        "extraction_plus_squash_ms": {
+          "records_reporting": 16,
+          "records_expected": 16,
+          "total_ms": 23900.445999999996,
+          "count": 16,
+          "min": 407.09000000000003,
+          "mean": 1493.7778750000002,
+          "p50": 1715.9535,
+          "p95": 2167.725,
+          "max": 2210.808
+        }
+      },
+      "typescript-multistage": {
+        "records": 16,
+        "phases": {
+          "cache_prepare_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 40,
+            "count": 16,
+            "min": 2,
+            "mean": 2.5,
+            "p50": 2.0,
+            "p95": 4.0,
+            "max": 4
+          },
+          "cache_mount_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 5657,
+            "count": 16,
+            "min": 229,
+            "mean": 353.5625,
+            "p50": 306.0,
+            "p95": 586.75,
+            "max": 703
+          },
+          "docker_build_and_push_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 525171,
+            "count": 16,
+            "min": 2594,
+            "mean": 32823.1875,
+            "p50": 35482.0,
+            "p95": 49191.0,
+            "max": 50814
+          },
+          "immutable_environment_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 10844,
+            "count": 16,
+            "min": 445,
+            "mean": 677.75,
+            "p50": 705.0,
+            "p95": 880.75,
+            "max": 892
+          }
+        },
+        "environment": {
+          "selective_materialization_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 1507.856,
+            "count": 16,
+            "min": 56.98,
+            "mean": 94.241,
+            "p50": 78.7245,
+            "p95": 150.63875,
+            "max": 185.222
+          },
+          "squash_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 157.899,
+            "count": 16,
+            "min": 3.736,
+            "mean": 9.8686875,
+            "p50": 7.1075,
+            "p95": 21.950499999999998,
+            "max": 26.014
+          },
+          "mkfs_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 723.519,
+            "count": 16,
+            "min": 29.872,
+            "mean": 45.2199375,
+            "p50": 43.8985,
+            "p95": 63.173,
+            "max": 65.498
+          },
+          "sign_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 135.91899999999998,
+            "count": 16,
+            "min": 4.951,
+            "mean": 8.494937499999999,
+            "p50": 7.736000000000001,
+            "p95": 13.5425,
+            "max": 13.76
+          },
+          "publish_component_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 3040.3069999999993,
+            "count": 16,
+            "min": 99.425,
+            "mean": 190.01918750000002,
+            "p50": 205.309,
+            "p95": 283.0755,
+            "max": 296.121
+          },
+          "component_lookup_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 26.338000000000005,
+            "count": 16,
+            "min": 0.922,
+            "mean": 1.6461249999999998,
+            "p50": 1.375,
+            "p95": 3.1665,
+            "max": 3.711
+          },
+          "layer_lock_wait_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 0.173,
+            "count": 16,
+            "min": 0.004,
+            "mean": 0.0108125,
+            "p50": 0.007,
+            "p95": 0.026,
+            "max": 0.059
+          },
+          "preflight_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 7121.507000000001,
+            "count": 16,
+            "min": 295.294,
+            "mean": 445.09418750000003,
+            "p50": 457.90250000000003,
+            "p95": 606.3115,
+            "max": 614.299
+          }
+        },
+        "extraction_plus_squash_ms": {
+          "records_reporting": 16,
+          "records_expected": 16,
+          "total_ms": 1665.7549999999997,
+          "count": 16,
+          "min": 63.233,
+          "mean": 104.1096875,
+          "p50": 84.822,
+          "p95": 169.4995,
+          "max": 189.697
+        }
+      },
+      "typescript-tools": {
+        "records": 16,
+        "phases": {
+          "cache_prepare_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 41,
+            "count": 16,
+            "min": 2,
+            "mean": 2.5625,
+            "p50": 2.5,
+            "p95": 3.25,
+            "max": 4
+          },
+          "cache_mount_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 5239,
+            "count": 16,
+            "min": 125,
+            "mean": 327.4375,
+            "p50": 231.0,
+            "p95": 1083.75,
+            "max": 1095
+          },
+          "docker_build_and_push_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 610294,
+            "count": 16,
+            "min": 3188,
+            "mean": 38143.375,
+            "p50": 35974.0,
+            "p95": 50900.0,
+            "max": 51068
+          },
+          "immutable_environment_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 89147,
+            "count": 16,
+            "min": 2687,
+            "mean": 5571.6875,
+            "p50": 4813.0,
+            "p95": 9974.75,
+            "max": 9980
+          }
+        },
+        "environment": {
+          "selective_materialization_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 37784.002,
+            "count": 16,
+            "min": 898.252,
+            "mean": 2361.500125,
+            "p50": 1898.6774999999998,
+            "p95": 5013.64875,
+            "max": 5024.658
+          },
+          "squash_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 25464.495000000003,
+            "count": 16,
+            "min": 524.15,
+            "mean": 1591.5309375000002,
+            "p50": 1252.94,
+            "p95": 3133.8525,
+            "max": 3135.432
+          },
+          "mkfs_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 6921.704,
+            "count": 16,
+            "min": 335.702,
+            "mean": 432.6064999999999,
+            "p50": 426.8725,
+            "p95": 526.3517499999999,
+            "max": 528.007
+          },
+          "sign_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 406.054,
+            "count": 16,
+            "min": 18.706,
+            "mean": 25.378375000000002,
+            "p50": 20.898,
+            "p95": 41.244,
+            "max": 45.435
+          },
+          "publish_component_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 5037.111,
+            "count": 16,
+            "min": 230.822,
+            "mean": 314.8194375,
+            "p50": 307.98350000000005,
+            "p95": 429.7555,
+            "max": 434.488
+          },
+          "component_lookup_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 23.839000000000002,
+            "count": 16,
+            "min": 1.053,
+            "mean": 1.4899375000000004,
+            "p50": 1.432,
+            "p95": 1.91625,
+            "max": 1.986
+          },
+          "layer_lock_wait_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 0.32200000000000006,
+            "count": 16,
+            "min": 0.005,
+            "mean": 0.020125,
+            "p50": 0.010499999999999999,
+            "p95": 0.059000000000000004,
+            "max": 0.062
+          },
+          "preflight_ms": {
+            "records_reporting": 16,
+            "records_expected": 16,
+            "total_ms": 85298.20700000001,
+            "count": 16,
+            "min": 2517.555,
+            "mean": 5331.1379375,
+            "p50": 4581.311,
+            "p95": 9713.833999999999,
+            "max": 9733.109
+          }
+        },
+        "extraction_plus_squash_ms": {
+          "records_reporting": 16,
+          "records_expected": 16,
+          "total_ms": 63248.497,
+          "count": 16,
+          "min": 1462.5929999999998,
+          "mean": 3953.0310625,
+          "p50": 3305.8329999999996,
+          "p95": 8141.532,
+          "max": 8160.09
+        }
+      }
+    }
+  },
+  "candidate_health": {
+    "source": "docs/benchmarks/builder-preparation-2026-09-29/telemetry/gateway.jsonl.gz",
+    "sha256": "f79543694d0e09df502ca38e983f95538af8c4a1bdd1d5390684ca12915659b3",
+    "window": {
+      "started_at": "2026-09-29T11:46:21+00:00",
+      "finished_at": "2026-09-29T11:48:40+00:00"
+    },
+    "health_url": "https://77.42.92.27/health",
+    "response_status_counts": {
+      "401": 23
+    },
+    "interpretation": "HTTP401 from /health is an invalid successful-health gate; retain raw failures and use independent correctly configured checks."
+  },
+  "limitations": [
+    "Historical runs use identical context hashes but different placement/cache history; deltas are descriptive, not isolated causal speedups.",
+    "Durations are milliseconds with linearly interpolated percentiles. Missing values remain missing; they are not zero.",
+    "Cache preparation/mount are nested inside build-and-push. Preflight contains selective extraction, squash and other work. Do not sum parent and child timings or independently calculated percentiles.",
+    "Selective materialization includes registry download, authentication, decompression, validation and extraction; it is not an extraction-only timer.",
+    "Per-build extraction-plus-squash sums disjoint stages before aggregation; summed wall time across concurrent builds is neither batch elapsed time nor CPU time.",
+    "Sampler health status reflects its configured endpoint. A protected endpoint's HTTP401 response cannot establish successful health during the burst."
+  ]
+}

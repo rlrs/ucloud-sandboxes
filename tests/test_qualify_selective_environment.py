@@ -7,11 +7,30 @@ import unittest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
-from scripts.qualify_selective_environment import ReadOnlyClient, capture_registry
+from scripts.qualify_selective_environment import (
+    ReadOnlyClient, capture_registry, require_exact_publications, selected_group_indices,
+)
 from ucloud_sandboxes.environment_artifact import content_digest, layer_chain_id, sign_layer_component
 
 
 class SelectiveQualificationTests(unittest.TestCase):
+    def test_multiple_missing_groups_preserve_a_cached_base(self):
+        self.assertEqual(selected_group_indices([5, 3, 4], 6), (3, 4, 5))
+        self.assertEqual(selected_group_indices([-1], 6), (5,))
+        self.assertEqual(selected_group_indices([-3, -2, -1], 6), (3, 4, 5))
+        for indices in ([], [0], [-6], [6], [-7], [3, 3], [3, -3], [True]):
+            with self.subTest(indices=indices), self.assertRaises(ValueError):
+                selected_group_indices(indices, 6)
+
+    def test_publication_proof_requires_each_selected_group_once(self):
+        expected = ("group-three", "group-four", "group-five")
+        require_exact_publications([{"tag": tag} for tag in reversed(expected)], expected)
+        for observed in (expected[:2], (*expected, "other"),
+                         ("group-three", "group-four", "group-four"),
+                         ("group-three", "group-four", None)):
+            with self.subTest(observed=observed), self.assertRaises(ValueError):
+                require_exact_publications([{"tag": tag} for tag in observed], expected)
+
     def test_client_blocks_every_unlisted_operation(self):
         client = ReadOnlyClient(SimpleNamespace(blob_bytes=lambda *_: b"payload", put_manifest=lambda: self.fail()))
         self.assertEqual(client.blob_bytes("repo", "digest"), b"payload")

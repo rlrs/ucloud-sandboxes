@@ -89,6 +89,25 @@ def signing_key(path):
     return key
 
 
+def selected_group_indices(indices, count):
+    """Resolve negative indices while retaining a real cached base group."""
+    if not indices or any(type(index) is not int for index in indices):
+        raise ValueError("Select one or more integer group indices")
+    resolved = [index if index >= 0 else count + index for index in indices]
+    if any(not 0 < index < count for index in resolved):
+        raise ValueError("Select non-base cached groups within the source image")
+    if len(set(resolved)) != len(resolved):
+        raise ValueError("Selected missing groups must be unique")
+    return tuple(sorted(resolved))
+
+
+def require_exact_publications(publications, selected_tags):
+    tags = [item.get("tag") for item in publications]
+    if (len(tags) != len(selected_tags) or any(not isinstance(tag, str) for tag in tags)
+            or set(tags) != set(selected_tags)):
+        raise ValueError("Expected exactly every selected missing group to be materialized")
+
+
 def compare(args):
     from ucloud_sandboxes import environment_builder
     from ucloud_sandboxes.environment_builder import FreshEnvironmentBuilder, MAX_LAYER_GROUPS, publication_metrics
@@ -135,12 +154,13 @@ def compare(args):
         warm = builder._reuse_image_layers(args.repository, args.manifest, max_groups=MAX_LAYER_GROUPS)
     if warm is None or len(seen) < 2:
         raise ValueError("Expected an already published image with at least two cached EROFS groups")
-    index = args.group if args.group >= 0 else len(seen) + args.group
-    if not 0 < index < len(seen):
-        raise ValueError("Select a non-base cached group to exercise reuse of its lower groups")
-    selected = seen[index]
-    output.update(group_index=index, group_count=len(seen), forced_missing_tag=selected,
+    indices = selected_group_indices(
+        args.groups if getattr(args, "groups", None) is not None else [args.group], len(seen))
+    selected = tuple(seen[index] for index in indices)
+    output.update(group_indices=list(indices), group_count=len(seen), forced_missing_tags=list(selected),
                   format=builder.layer_format(), source_image_id=warm["image_id"])
+    if len(indices) == 1:
+        output.update(group_index=indices[0], forced_missing_tag=selected[0])
     reference_components = [builder.registry.load(digest).to_dict() for digest in warm["components"]]
     output["reference_component_digests"] = [item["image_digest"] for item in reference_components]
     try:
@@ -149,7 +169,7 @@ def compare(args):
             original = builder._reuse_layer_component
 
             def lookup(tag, *values, **_kwargs):
-                return None if tag == selected else original(tag, *values, refresh=False)
+                return None if tag in selected else original(tag, *values, refresh=False)
 
             disable = patch.object(builder, "_materialize_registry_groups", return_value=None) if arm == "A" else nullcontext()
             started = time.monotonic()
@@ -172,8 +192,7 @@ def compare(args):
                 raise ValueError("Image identity or source layers changed during comparison")
             if result["image_config"] != warm["image_config"]:
                 raise ValueError("Runtime image configuration differs between paths")
-            if len(builder.registry.publications) != 1 or builder.registry.publications[0]["tag"] != selected:
-                raise ValueError("Expected exactly the selected missing group to be materialized")
+            require_exact_publications(builder.registry.publications, selected)
             if components != reference_components:
                 raise ValueError("EROFS bytes or signed metadata differ from the published Docker reference")
             if arm == "B" and ((args.expect == "selective") == docker_used):
@@ -199,7 +218,11 @@ def main():
     parser.add_argument("--repository", required=True)
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--work-root", type=Path, required=True, help="New owned directory; must not already exist")
-    parser.add_argument("--group", type=int, default=-1)
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument("--group", type=int, default=-1,
+                           help="One missing group; negative indices count from the end (default: -1)")
+    selection.add_argument("--groups", type=int, nargs="+",
+                           help="Force several missing groups together, e.g. --groups 3 4 5")
     parser.add_argument("--order", choices=("AB", "ABBA"), default="ABBA")
     parser.add_argument("--expect", choices=("selective", "fallback"), required=True)
     parser.add_argument("--preparation-subprocess", action="store_true",

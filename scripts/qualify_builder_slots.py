@@ -300,21 +300,38 @@ def load_sdk(path):
     return sdk
 
 
-def verify_builder_receipts(paths, expected_nodes, declared_slots):
+def verify_builder_receipts(paths, expected_nodes, declared_slots, expected_wheel_sha256=None):
     if declared_slots == 4:
         require(not paths, 'Baseline must not claim candidate upgrade receipts')
         return []
-    require(len(paths) == 4, 'Candidate requires four successful owned upgrade receipts')
+    require(len(paths) == 4, 'Six-slot policy requires four verified owned runtime receipts')
     result = []
     for path in paths:
         require(path.stat().st_size <= 1024**2, 'Oversized builder receipt')
         value = json.loads(path.read_text())
         after = value.get('after', {})
-        require(value.get('complete') is True and value.get('service_changed') is True
-                and after.get('finishing_capacity') == 2 and after.get('node_epoch'),
-                'Candidate builder upgrade was not verified')
+        if value.get('kind') == 'installed_runtime':
+            require(expected_wheel_sha256 is not None, 'Fresh runtime inspection requires an explicit wheel pin')
+            inspector = Path(__file__).with_name('inspect_owned_builder.py')
+            require(value.get('service_changed') is False
+                    and value.get('inspector_sha256') == sha(inspector)
+                    and type(value.get('installed_files_match_wheel')) is int
+                    and value['installed_files_match_wheel'] > 0
+                    and value.get('runtime_file_set_matches') is True
+                    and value.get('import_origins_match') is True
+                    and after.get('active_builds') == 0 and after.get('admission_open') is True
+                    and after.get('draining') is False, 'Installed runtime inspection was not verified')
+        else:
+            require(value.get('service_changed') is True, 'Candidate builder upgrade was not verified')
+        if expected_wheel_sha256 is not None:
+            require(re.fullmatch(r'[0-9a-f]{64}', expected_wheel_sha256)
+                    and value.get('wheel_sha256') == expected_wheel_sha256, 'Builder wheel identity differs')
+        require(value.get('complete') is True and after.get('finishing_capacity') == 2 and after.get('node_epoch'),
+                'Builder policy or incarnation was not verified')
         result.append(dict(job_id=str(after['job_id']), node_epoch=after['node_epoch'],
-                           finishing_capacity=2, receipt_sha256=sha(path)))
+                           finishing_capacity=2, receipt_sha256=sha(path),
+                           verification=value.get('kind', 'owned_upgrade'),
+                           wheel_sha256=value.get('wheel_sha256')))
     require({v['job_id'] for v in result} == set(expected_nodes), 'Candidate receipts name different builders')
     return result
 
@@ -504,7 +521,9 @@ def main(argv=None):
     run.add_argument('--deadline-seconds', type=float, required=True)
     run.add_argument('--drain-seconds', type=float, default=1900)
     run.add_argument('--builder-receipt', type=Path, action='append', default=[],
-                     help='Four copied, successful owned upgrade receipts are required for the6-total candidate')
+                     help='Four verified installed-runtime or owned-upgrade receipts for the6-total policy')
+    run.add_argument('--builder-wheel-sha256',
+                     help='Pin every builder receipt to this wheel; required for installed-runtime inspection')
     hold = sub.add_parser('hold')
     hold.add_argument('--sdk-wheel', type=Path, required=True)
     hold.add_argument('--deployment-config', type=Path, default=Path('/etc/ucloud-sandboxes/deployment.json'))
@@ -539,7 +558,8 @@ def main(argv=None):
             require(context_inventory(Path(case['context_path']))['context_sha256'] == case['context_sha256'],
                     'Prepared context changed')
         require(not args.output.exists(), 'Output must be new')
-        args.builder_receipts = verify_builder_receipts(args.builder_receipt, args.expected_node, args.declared_slots)
+        args.builder_receipts = verify_builder_receipts(args.builder_receipt, args.expected_node,
+                                                       args.declared_slots, args.builder_wheel_sha256)
         args.output.mkdir(mode=0o700, parents=True)
         sdk = load_sdk(args.sdk_wheel)
         args.image_prefix = args.run_id + '-' + uuid4().hex[:8]

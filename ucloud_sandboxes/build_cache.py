@@ -170,21 +170,25 @@ class RegistryBuildCache:
         matching = next((entry for entry in eligible if entry[2].recipe == recipe), None)
         exact = next((entry for entry in eligible if affinity and entry[2].recipe == recipe
                       and entry[2].affinity == affinity), None)
+        # Competing imports can contain the same graph keys with only partial
+        # results and prevent BuildKit from using the complete exact cache.
+        # Offer that cache alone; BuildKit still validates every build input.
+        selection_limit = 1 if exact is not None else self.import_limit
         selected = [exact] if exact else []
-        if matching is not None and matching != exact and len(selected) < self.import_limit:
+        if matching is not None and matching != exact and len(selected) < selection_limit:
             selected.append(matching)
         # Keep useful cross-recipe prefixes without letting a burst from one
         # unrelated recipe occupy every fallback slot. Then fill by recency.
         seen_recipes = {recipe}
         for entry in eligible:
-            if len(selected) >= self.import_limit:
+            if len(selected) >= selection_limit:
                 break
             if entry[2].recipe not in seen_recipes:
                 selected.append(entry)
                 seen_recipes.add(entry[2].recipe)
         selected_tags = {entry[1] for entry in selected}
         for entry in eligible:
-            if len(selected) >= self.import_limit:
+            if len(selected) >= selection_limit:
                 break
             if entry[1] not in selected_tags:
                 selected.append(entry)
@@ -194,7 +198,7 @@ class RegistryBuildCache:
         return BuildCachePlan(
             imports=tuple(
                 f"{self.repository_ref}:{entry[1]}"
-                for entry in selected[: self.import_limit]
+                for entry in selected[:selection_limit]
             ),
             export_ref=f"{self.repository_ref}:{identity}-{now:010d}-{uuid4().hex}",
             matching_ref=f"{self.repository_ref}:{preferred[1]}" if preferred else "",

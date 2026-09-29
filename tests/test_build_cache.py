@@ -125,7 +125,7 @@ class RegistryBuildCacheTests(unittest.TestCase):
         self.assertEqual(len({plan.export_ref for plan in plans}), 100)
         self.assertTrue(all(plan.imports == () for plan in plans))
 
-    def test_exact_affinity_outside_recent_eight_precedes_recipe_and_diverse_fallbacks(self):
+    def test_exact_affinity_outside_recent_eight_is_the_only_import(self):
         affinity = hashlib.sha256(b"verified archive, dockerfile, args A").hexdigest()
         exact = affinity_tag("exact", affinity=affinity, age=100, recipe="wanted")
         newest_recipe = tag("newest-recipe", age=50, recipe="wanted")
@@ -139,10 +139,7 @@ class RegistryBuildCacheTests(unittest.TestCase):
         self.assertEqual(len(self.registry.tags_by_name), 64)
         plan = self.cache().prepare("wanted", affinity_key=affinity)
         refs = [value.rsplit(":", 1)[-1] for value in plan.imports]
-        self.assertEqual(refs[:5], [exact, newest_recipe, tag("burst-0", recipe="busy"), diverse,
-                                   tag("legacy-old", age=300, recipe="legacy")])
-        self.assertEqual(len(refs), 8)
-        self.assertEqual(len(set(refs)), 8)
+        self.assertEqual(refs, [exact])
         self.assertEqual(plan.matching_ref, plan.imports[0])
         self.assertTrue(plan.affinity_match)
         exported = plan.export_ref.rsplit(":", 1)[-1]
@@ -150,6 +147,36 @@ class RegistryBuildCacheTests(unittest.TestCase):
         self.assertTrue(exported.startswith("bc2-" + hashlib.sha256(b"wanted").hexdigest()[:16] + "-" + affinity[:32] + "-"))
         one = self.cache(import_limit=1).prepare("wanted", affinity_key=affinity)
         self.assertEqual(one.imports, (plan.imports[0],))
+
+        # Changed build inputs and callers without a verified affinity retain
+        # the diverse fallback instead of being limited to one recent recipe.
+        for key in ("", hashlib.sha256(b"changed archive or build args").hexdigest()):
+            with self.subTest(affinity=key):
+                fallback = self.cache().prepare("wanted", affinity_key=key)
+                self.assertFalse(fallback.affinity_match)
+                refs = [value.rsplit(":", 1)[-1] for value in fallback.imports]
+                self.assertEqual(refs, [newest_recipe, tag("burst-0", recipe="busy"), diverse,
+                                       tag("legacy-old", age=300, recipe="legacy"),
+                                       *(tag(f"burst-{number}", age=number, recipe="busy")
+                                         for number in range(1, 5))])
+                self.assertEqual(fallback.matching_ref, fallback.imports[0])
+
+    def test_only_newest_exact_recipe_and_affinity_wins_among_competing_tags(self):
+        affinity = "a" * 64
+        newest_exact = affinity_tag("newest-exact", affinity=affinity, age=20)
+        names = (
+            affinity_tag("older-exact", affinity=affinity, age=30),
+            newest_exact,
+            affinity_tag("wrong-inputs", affinity="b" * 64, age=1),
+            affinity_tag("wrong-recipe", affinity=affinity, recipe="other-recipe"),
+            tag("legacy", age=2),
+        )
+        for name in names:
+            self.registry.add(name, manifest(name))
+        plan = self.cache().prepare("recipe", affinity_key=affinity)
+        self.assertEqual(plan.imports, (f"registry:5000/{REPOSITORY}:{newest_exact}",))
+        self.assertEqual(plan.matching_ref, plan.imports[0])
+        self.assertTrue(plan.affinity_match)
 
     def test_changed_affinity_or_recipe_cannot_claim_exact_match(self):
         old_affinity = hashlib.sha256(b"same archive and dockerfile; args A").hexdigest()

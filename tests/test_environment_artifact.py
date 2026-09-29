@@ -164,6 +164,61 @@ class EnvironmentArtifactTests(unittest.TestCase):
             cache.read(self.component, 0, 4)
 
 
+class EnvironmentDocumentLoadTests(unittest.TestCase):
+    setUp = EnvironmentArtifactTests.setUp
+
+    def test_supplied_document_skips_only_manifest_read_and_load_remains_compatible(self):
+        document, _ = self.client.manifest_document("environments", self.digest)
+        reader = EnvironmentArtifactRegistry(self.client, "environments", self.registry.trusted_keys)
+        self.client.reads.clear()
+        with patch.object(self.client, "manifest_document", wraps=self.client.manifest_document) as manifests:
+            self.assertEqual(reader.load_document(self.digest, document), self.component)
+            manifests.assert_not_called()
+            self.assertEqual(self.client.reads, [document["config"]["digest"]])
+            self.assertTrue(reader.whole_image(self.component))
+            self.assertEqual(reader.load(self.digest), self.component)
+            manifests.assert_called_once_with("environments", self.digest)
+
+    def test_supplied_document_rejects_invalid_metadata_and_wrong_manifest_binding(self):
+        from ucloud_sandboxes.environment_artifact import canonical_bytes
+        document, _ = self.client.manifest_document("environments", self.digest)
+        reader = EnvironmentArtifactRegistry(self.client, "environments", self.registry.trusted_keys)
+        for malformed in (None, [], "manifest"):
+            with self.subTest(malformed=malformed), self.assertRaisesRegex(ValueError, "OCI metadata"):
+                reader.load_document(self.digest, malformed)
+        changed = document | {"annotations": {"unexpected": "manifest"}}
+        with self.assertRaisesRegex(ValueError, "manifest content identity"):
+            reader.load_document(self.digest, changed)
+        for changes in ({"schemaVersion": 1}, {"config": {}}, {"config": []}):
+            changed = document | changes
+            with self.subTest(changes=changes), self.assertRaisesRegex(ValueError, "OCI metadata"):
+                reader.load_document(content_digest(canonical_bytes(changed)), changed)
+        self.assertFalse(reader.whole_image(self.component))
+
+    def test_supplied_document_authenticates_config_and_dependency_closure(self):
+        from ucloud_sandboxes.environment_artifact import canonical_bytes
+        document, _ = self.client.manifest_document("environments", self.digest)
+        reader = EnvironmentArtifactRegistry(self.client, "environments", self.registry.trusted_keys)
+        changed = document | {"layers": []}
+        with self.assertRaisesRegex(ValueError, "dependency closure"):
+            reader.load_document(content_digest(canonical_bytes(changed)), changed)
+        self.assertFalse(reader.whole_image(self.component))
+        untrusted = EnvironmentArtifactRegistry(self.client, "environments", {})
+        with self.assertRaisesRegex(ValueError, "not trusted"):
+            untrusted.load_document(self.digest, document)
+        config_digest = document["config"]["digest"]
+        original = self.client.blobs[config_digest]
+        self.client.blobs[config_digest] = b"x" * len(original)
+        with self.assertRaisesRegex(ValueError, "index content identity"):
+            reader.load_document(self.digest, document)
+        changed_config = json.loads(original) | {"source_image": "sha256:" + "2" * 64}
+        raw = canonical_bytes(changed_config)
+        self.client.blobs[content_digest(raw)] = raw
+        changed = document | {"config": document["config"] | {"digest": content_digest(raw), "size": len(raw)}}
+        with self.assertRaisesRegex(ValueError, "signature"):
+            reader.load_document(content_digest(canonical_bytes(changed)), changed)
+
+
 class EnvironmentReadRetryTests(EnvironmentArtifactTests):
     def test_cancel_after_temporary_write_prevents_cache_install(self):
         cache = self.cache()

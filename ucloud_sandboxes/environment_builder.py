@@ -647,7 +647,7 @@ class FreshEnvironmentBuilder:
             document, _headers = client.manifest_document(repository, tag)
             payload = canonical_bytes(document)
             digest = content_digest(payload)
-            component = self.registry.load(digest)
+            component = self.registry.load_document(digest, document)
         except (RegistryRequestError, ValueError) as exc:
             if isinstance(exc, RegistryRequestError) and exc.status_code not in {400, 404}:
                 raise

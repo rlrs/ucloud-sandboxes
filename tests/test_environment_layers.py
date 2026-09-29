@@ -437,6 +437,41 @@ class LayerPublicationTests(unittest.TestCase):
         self.assertEqual(metrics["groups_reused"], 2)
         self.assertIn("docker_pull_ms", metrics)
 
+    def test_reuse_avoids_duplicate_manifest_reads_but_keeps_refresh_and_root_validation(self):
+        self.registry_config()
+        _, components, environment = self.publish("base")
+        self.client.puts.clear()
+        with patch.object(self.client, "manifest_document", wraps=self.client.manifest_document) as reads:
+            annotated = self.builder.publish_image("registry.example/ucloud-managed/base:base", allowlist=("*",))
+        requested = [call.args for call in reads.call_args_list]
+        for component, digest in zip(components, environment.components):
+            tag = "layer-" + component.group_key
+            # Preflight and refresh each read the tag once. Their already-read
+            # document is authenticated without another immutable-manifest GET.
+            self.assertEqual(requested.count(("environments", tag)), 2)
+            # Final publication still reloads each immutable component and
+            # verifies exact source binding before signing the environment.
+            self.assertEqual(requested.count(("environments", digest)), 1)
+        self.assertEqual([tag for tag in self.client.puts if tag.startswith("layer-")],
+                         ["layer-" + component.group_key for component in components])
+        _, result = load_image_environment(self.registry, "ucloud-managed/base", annotated)
+        self.assertEqual(result, environment)
+
+    def test_reuse_checks_source_parent_and_format_from_supplied_document(self):
+        self.registry_config()
+        _, components, _ = self.publish("base")
+        component = components[0]
+        tag = "layer-" + component.group_key
+        self.client.puts.clear()
+        for layers, parent, layer_format in (
+                ([diff_id("foreign")], component.parent, component.format),
+                (component.source_layers, diff_id("foreign"), component.format),
+                (component.source_layers, component.parent, component.format | {"compression": ""})):
+            with self.subTest(layers=layers, parent=parent, layer_format=layer_format), \
+                 self.assertLogs("ucloud_sandboxes.environment_builder", level="WARNING"):
+                self.assertIsNone(self.builder._reuse_layer_component(tag, layers, parent, layer_format))
+        self.assertEqual(self.client.puts, [])
+
     def test_corrupt_oci_config_cannot_be_signed_from_a_cache_hit(self):
         image_id = self.registry_config()
         self.publish("base")

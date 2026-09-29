@@ -18,6 +18,7 @@ from urllib.parse import quote, urlparse
 from uuid import uuid4
 
 from .managed_registry import (
+    MANIFEST_ACCEPT,
     MAX_REGISTRY_JSON_RESPONSE_BYTES,
     RegistryClient,
     RegistryRequestError,
@@ -41,12 +42,23 @@ _OWNED_TAG = re.compile(r"^bc1-([0-9a-f]{16})-([0-9]{10})-([0-9a-f]{32})$")
 _TAG = re.compile(r"^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$")
 _REPOSITORY_PART = re.compile(r"^[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*$")
 _INVENTORY_TIMEOUT_SECONDS = 3.0
+_MOUNT_TIMEOUT_SECONDS = 3.0
+_MAX_MOUNT_LAYERS = 64
+_MAX_MOUNT_MANIFEST_BYTES = 256 * 1024
+_MOUNT_LAYER_TYPES = frozenset({
+    "application/vnd.oci.image.layer.v1.tar",
+    "application/vnd.oci.image.layer.v1.tar+gzip",
+    "application/vnd.oci.image.layer.v1.tar+zstd",
+    "application/vnd.docker.image.rootfs.diff.tar",
+    "application/vnd.docker.image.rootfs.diff.tar.gzip",
+})
 
 
 @dataclass(frozen=True)
 class BuildCachePlan:
     imports: tuple[str, ...]
     export_ref: str
+    matching_ref: str = ""
 
 
 @dataclass(frozen=True)
@@ -109,6 +121,7 @@ class RegistryBuildCache:
         if parsed.username or parsed.password or parsed.query or parsed.fragment:
             raise ValueError("BuildKit cache registry URL must not contain credentials or query")
         self.repository = repository
+        self.authority = authority
         self.repository_ref = f"{authority}/{repository}"
         self.max_bytes = max_bytes
         self.max_age_seconds = max_age_seconds
@@ -140,7 +153,120 @@ class RegistryBuildCache:
                 for entry in selected[: self.import_limit]
             ),
             export_ref=f"{self.repository_ref}:bc1-{recipe}-{now:010d}-{uuid4().hex}",
+            matching_ref=f"{self.repository_ref}:{matching[1]}" if matching else "",
         )
+
+    def pre_mount(self, target_ref: str, matching_ref: str) -> dict[str, Any]:
+        """Offer existing cache blobs to one managed destination before pushing.
+
+        A fresh BuildKit store may know a layer's public origin but not its
+        existing private-registry location. Creating repository links avoids
+        uploading those identical bytes again. These links never select build
+        results: BuildKit still validates its inputs and pushes its own result.
+        Every failure leaves ordinary image push and cache imports available.
+        """
+        started = time.monotonic()
+        deadline = started + _MOUNT_TIMEOUT_SECONDS
+        result: dict[str, Any] = {
+            "attempted": 0, "mounted": 0, "mounted_descriptor_bytes": 0,
+        }
+        try:
+            target = self._mount_target(target_ref)
+            prefix = self.repository_ref + ":"
+            if not target or not matching_ref.startswith(prefix):
+                result["skipped"] = True
+                return result
+            tag = matching_ref[len(prefix):]
+            if not _OWNED_TAG.fullmatch(tag):
+                result["skipped"] = True
+                return result
+            # A single bounded GET captures a complete manifest snapshot. Bind
+            # its raw bytes to the registry digest; reserializing JSON would
+            # change the digest. A concurrent prune can only make mounts miss.
+            response = self.client._request(
+                f"/v2/{quote(self.repository, safe='/')}/manifests/{quote(tag, safe='')}",
+                headers={"Accept": MANIFEST_ACCEPT},
+                timeout_seconds=self._mount_remaining(deadline),
+            )
+            try:
+                payload = _read_response_bytes(response, _MAX_MOUNT_MANIFEST_BYTES + 1, deadline=deadline)
+                returned_digest = normalize_manifest_digest(str(response.headers.get("Docker-Content-Digest", "")))
+            finally:
+                response.close()
+            if len(payload) > _MAX_MOUNT_MANIFEST_BYTES:
+                raise ValueError("BuildKit mount manifest exceeds the byte limit")
+            if returned_digest != "sha256:" + hashlib.sha256(payload).hexdigest():
+                raise ValueError("BuildKit mount manifest digest does not match its bytes")
+            layers = self._mount_layers(json.loads(payload))
+            # Reach the largest repeated uploads first if the budget expires.
+            for blob_digest, size in sorted(layers.items(), key=lambda item: (-item[1], item[0])):
+                remaining = self._mount_remaining(deadline)
+                result["attempted"] += 1
+                if self.client.mount_blob(target, self.repository, blob_digest, timeout_seconds=remaining):
+                    result["mounted"] += 1
+                    # Descriptor accounting, not measured avoided disk writes.
+                    result["mounted_descriptor_bytes"] += size
+        except (OSError, ValueError, RuntimeError) as exc:
+            result["error"] = type(exc).__name__
+        finally:
+            result["elapsed_ms"] = round(max(0.0, time.monotonic() - started) * 1000, 3)
+        return result
+
+    def _mount_target(self, target_ref: str) -> str:
+        if not isinstance(target_ref, str) or "://" in target_ref or "@" in target_ref:
+            return ""
+        authority, separator, path = target_ref.partition("/")
+        endpoint = urlparse(self.client.base_url)
+        if (not separator or authority != self.authority or endpoint.netloc != self.authority
+                or endpoint.path not in {"", "/"} or endpoint.username or endpoint.password
+                or endpoint.query or endpoint.fragment):
+            return ""
+        repository, colon, tag = path.rpartition(":")
+        if not colon:
+            repository = path
+        elif not _TAG.fullmatch(tag):
+            return ""
+        parts = repository.split("/")
+        if len(parts) < 2 or parts[0] != "ucloud-managed" or not all(
+            _REPOSITORY_PART.fullmatch(part) for part in parts
+        ):
+            return ""
+        return repository
+
+    @staticmethod
+    def _mount_remaining(deadline: float) -> float:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("BuildKit cache mounts exceeded the preparation deadline")
+        return remaining
+
+    @staticmethod
+    def _mount_layers(manifest: Any) -> dict[str, int]:
+        if (not isinstance(manifest, dict) or manifest.get("schemaVersion") != 2
+                or manifest.get("mediaType") != CACHE_MANIFEST_MEDIA_TYPE):
+            raise ValueError("BuildKit mount source must be a flat cache manifest")
+        config = manifest.get("config")
+        if not isinstance(config, dict) or config.get("mediaType") != CACHE_CONFIG_MEDIA_TYPE:
+            raise ValueError("BuildKit mount source has an invalid cache config")
+        layers = manifest.get("layers")
+        if not isinstance(layers, list) or len(layers) > _MAX_MOUNT_LAYERS:
+            raise ValueError("BuildKit mount source exceeds the layer limit")
+        blobs: dict[str, int] = {}
+        # Validate every descriptor before the first mount, including config.
+        for descriptor in [config, *layers]:
+            if not isinstance(descriptor, dict):
+                raise ValueError("BuildKit mount source has an invalid descriptor")
+            blob_digest = normalize_manifest_digest(str(descriptor.get("digest", "")))
+            size = descriptor.get("size")
+            if not blob_digest or type(size) is not int or size < 0:
+                raise ValueError("BuildKit mount source has an invalid digest or size")
+            if blob_digest in blobs and blobs[blob_digest] != size:
+                raise ValueError("BuildKit mount source has conflicting blob sizes")
+            blobs[blob_digest] = size
+        for descriptor in layers:
+            if descriptor.get("mediaType") not in _MOUNT_LAYER_TYPES:
+                raise ValueError("BuildKit mount source has an unsupported layer type")
+        return {normalize_manifest_digest(descriptor["digest"]): descriptor["size"] for descriptor in layers}
 
     def prune(self, *, execute: bool = False) -> dict[str, Any]:
         """Plan or remove cache manifests; reject incomplete or changed inventories.

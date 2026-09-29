@@ -65,6 +65,30 @@ Cache lookup errors fall back to an ordinary build, and cache-export failures
 do not fail the final image export. Image build/push and EROFS/signature errors
 retain their normal failure behavior.
 
+## Avoiding repeated registry uploads
+
+Before pushing a managed image, the builder can link blobs from one recent
+cache with the same Dockerfile into that image's new registry repository.
+Fresh BuildKit stores may otherwise upload large existing private-registry
+blobs again because they know only the original public source repository.
+Registry mounts transfer no blob payload; BuildKit still checks its inputs,
+produces the image, and uploads any missing or changed layers normally.
+
+This optional preparation accepts only the configured registry and managed
+image namespace. It verifies the cache manifest's raw digest and all
+descriptors before mounting, considers at most 64 layers from a 256 KiB
+manifest, and attempts larger layers first. Its three-second deadline is
+cooperative: a final socket operation and the short cleanup allowance for a
+declined mount can extend elapsed time. Missing cache entries, pruning races,
+unsupported responses, and transport failures preserve ordinary build/push
+behavior. Declined mounts' new upload sessions are cancelled individually.
+
+The emitted mount counters report descriptor bytes linked, not measured
+network traffic or physical disk savings. Registry request aggregates and
+host disk counters establish those separately. EROFS component reuse also
+avoids fetching the same manifest twice, while retaining signature checks,
+retention refreshes and final root validation.
+
 ## Partial EROFS misses and build admission
 
 A complete signed-component hit avoids Docker materialization. For a partial

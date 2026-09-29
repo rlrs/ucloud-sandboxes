@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "status": "prepared-not-run",
+  "release_root": "/work/ucloud-sandboxes/registry-io-20260929-r1",
+  "baseline_release_root": "/work/ucloud-sandboxes/build-optimization-20260929-r1",
+  "baseline_wheel_sha256": "f38db1aae25b0ddb14401fce61d80e299a2d8740b2586998e521b21ef0a26a2f",
+  "source_bundle_sha256": {
+    "builder": "e4f775e6ca8911f94f778c4a2f76f53e0708df2430a4f9423737e5038d7a3091",
+    "sandbox": "ec49a3aadbcff6491059ad2b267152eeb7561d8cdc62e471f485c205f36ea7b3"
+  },
+  "repacker_sha256": "9fddb39307442fabea50f78c80b296a5c32b2e00952e7624af7c02709bd0da5b",
+  "controller_sha256": "1851cb23d7f673c7ba3f47b9954d1c4cf6ff93f3d10cf2b65397433396b15f7f",
+  "configuration_change_allowlist": [
+    "node_package_root"
+  ],
+  "baseline_phase": "opt-repeat",
+  "baseline_summary": "../build-optimization-2026-09-29/opt-repeat/summary.json",
+  "baseline_registry_summary": "baseline-repeat-registry.json",
+  "baseline_batch_seconds": 122.0648833939922,
+  "baseline_client_p95_seconds": 118.65227218459695,
+  "baseline_registry_write_gib_reported": 5.518,
+  "fixture_inventory_sha256": "45efcdbd714d7fbc6748b26f7fcdc29b4b18d1f4117baac0feb8af24e32505a7",
+  "frozen_harness_sha256": "d0b2754af69c69d9a303fd15117f60fad044ca0e559b3a1cfbe934f49682c6ec",
+  "frozen_wrapper_sha256": "e9c60880598396d18aa377cc02b5659d9f4d3610cf2ae65411b829361beb288b",
+  "source_context_root": "/work/ucloud-sandboxes/build-load-20260929/contexts",
+  "request_count": 48,
+  "concurrency": 48,
+  "expected_builders": 4,
+  "builder_type": "ccx33",
+  "execution_slots_per_builder": 4,
+  "nonterminal_admission_per_builder": 4,
+  "variants": [
+    "app-change-5",
+    "app-change-6",
+    "app-change-7",
+    "app-change-8",
+    "app-change-9",
+    "app-change-10",
+    "app-change-11",
+    "app-change-12",
+    "app-change-13",
+    "app-change-14",
+    "app-change-15",
+    "app-change-16",
+    "app-change-17",
+    "app-change-18",
+    "app-change-19",
+    "app-change-20"
+  ]
+}

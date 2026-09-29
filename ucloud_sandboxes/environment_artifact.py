@@ -368,6 +368,21 @@ class EnvironmentArtifactRegistry:
     def load(self, digest: str) -> EnvironmentComponent:
         require_digest(digest)
         document, _headers = self.client.manifest_document(self.repository, digest)
+        return self.load_document(digest, document)
+
+    def load_document(self, digest: str, document: dict) -> EnvironmentComponent:
+        """Authenticate an already-fetched manifest without reading it twice.
+
+        This only reuses the caller's document. Config bytes are still fetched
+        and authenticated, and callers retain their normal liveness/GC checks.
+        """
+        require_digest(digest)
+        if not isinstance(document, dict):
+            raise ValueError("invalid environment OCI metadata")
+        # Publisher uses canonical JSON, so an attacker cannot substitute a
+        # differently signed component for the selected immutable root digest.
+        if content_digest(canonical_bytes(document)) != digest:
+            raise ValueError("environment manifest content identity mismatch")
         # The producer signature authenticates the config even if registry JSON
         # formatting differs; additionally bind every executable chunk to OCI GC.
         config = document.get("config", {})
@@ -390,10 +405,6 @@ class EnvironmentArtifactRegistry:
                 self._whole_images.add(component.image_digest)
         elif document.get("layers") != per_chunk:
             raise ValueError("environment OCI dependency closure differs from signed index")
-        # Publisher uses canonical JSON, so an attacker cannot substitute a
-        # differently signed component for the selected immutable root digest.
-        if content_digest(canonical_bytes(document)) != digest:
-            raise ValueError("environment manifest content identity mismatch")
         return component
 
 ENVIRONMENT_ANNOTATION = "org.ucloud.immutable-environment.v1"

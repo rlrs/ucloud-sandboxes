@@ -1,0 +1,45 @@
+{
+  "baseline_window": [
+    "2026-09-29T09:41:55Z",
+    "2026-09-29T09:43:58Z"
+  ],
+  "candidate_window": [
+    "2026-09-29T10:39:57Z",
+    "2026-09-29T10:42:14Z"
+  ],
+  "committed_blob_descriptor_bytes": {
+    "managed-image": {
+      "baseline": 5339586891,
+      "candidate": 68380565,
+      "reduction_percent": 98.71936600347759
+    },
+    "build-cache": {
+      "baseline": 68284122,
+      "candidate": 71406255,
+      "reduction_percent": -4.572267913176065
+    },
+    "environments": {
+      "baseline": 239005648,
+      "candidate": 239005648,
+      "reduction_percent": 0.0
+    }
+  },
+  "environment_manifest_gets": {
+    "baseline": 896,
+    "candidate": 576,
+    "avoided": 320
+  },
+  "mount_statuses": {
+    "baseline": {
+      "201": 366
+    },
+    "candidate": {
+      "201": 846
+    }
+  },
+  "limits": [
+    "Committed bytes use current immutable blob file sizes; they are not measured request body or physical disk bytes.",
+    "Only completed registry log events within the selected window are counted; uploads spanning boundaries may be incomplete.",
+    "Duration sums span concurrent requests and are not elapsed wall time. No raw logs or headers are exported."
+  ]
+}

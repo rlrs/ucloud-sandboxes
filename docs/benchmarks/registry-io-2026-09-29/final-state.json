@@ -1,0 +1,439 @@
+{
+  "captured_at": "2026-09-29T10:51:40Z",
+  "health": {
+    "gateway_https": true,
+    "relay_https": true,
+    "metrics_ok": true,
+    "relay_storage_budget_bytes": 68719476736,
+    "database_pools": {
+      "database_pool": {
+        "connections_num": 1,
+        "connections_ms": 2,
+        "requests_num": 2120,
+        "usage_ms": 137,
+        "pool_min": 1,
+        "pool_max": 16,
+        "pool_size": 1,
+        "pool_available": 1,
+        "requests_waiting": 0
+      },
+      "lifecycle_database_pool": {
+        "connections_num": 1,
+        "connections_ms": 2,
+        "requests_num": 8442,
+        "usage_ms": 346,
+        "pool_min": 1,
+        "pool_max": 4,
+        "pool_size": 1,
+        "pool_available": 1,
+        "requests_waiting": 0
+      }
+    }
+  },
+  "fleet": [],
+  "sandbox_count": 0,
+  "active_builds": 0,
+  "prepared": {
+    "prepared_builders": [],
+    "demand": {
+      "pending_resources": {
+        "vcpu": 0.0,
+        "memory_mb": 0,
+        "disk_mb": 0
+      },
+      "suppressed_pending_resources": {
+        "vcpu": 0.0,
+        "memory_mb": 0,
+        "disk_mb": 0
+      },
+      "pending_count": 0,
+      "suppressed_pending_count": 0,
+      "prepared_resources": {
+        "vcpu": 0.0,
+        "memory_mb": 0,
+        "disk_mb": 0
+      },
+      "desired_resources": {
+        "vcpu": 0.0,
+        "memory_mb": 0,
+        "disk_mb": 0
+      },
+      "oldest_pending_seconds": 0,
+      "pending_image_builds": 0,
+      "prepared_builder_count": 0,
+      "desired_builders": 0,
+      "pending": [],
+      "prepared": [],
+      "prepared_builders": [],
+      "image_warmups": []
+    }
+  },
+  "prepared_capacity": {
+    "prepared": [],
+    "demand": {
+      "pending_resources": {
+        "vcpu": 0.0,
+        "memory_mb": 0,
+        "disk_mb": 0
+      },
+      "suppressed_pending_resources": {
+        "vcpu": 0.0,
+        "memory_mb": 0,
+        "disk_mb": 0
+      },
+      "pending_count": 0,
+      "suppressed_pending_count": 0,
+      "prepared_resources": {
+        "vcpu": 0.0,
+        "memory_mb": 0,
+        "disk_mb": 0
+      },
+      "desired_resources": {
+        "vcpu": 0.0,
+        "memory_mb": 0,
+        "disk_mb": 0
+      },
+      "oldest_pending_seconds": 0,
+      "pending_image_builds": 0,
+      "prepared_builder_count": 0,
+      "desired_builders": 0,
+      "pending": [],
+      "prepared": [],
+      "prepared_builders": [],
+      "image_warmups": []
+    }
+  },
+  "pending_reservations_absent": true,
+  "known_test_node_ids": [
+    "167948343",
+    "167948344",
+    "167948358",
+    "167948359",
+    "167949801"
+  ],
+  "before_receipt_present": true,
+  "additional_known_node_ids": [
+    "167948343",
+    "167948344",
+    "167948358",
+    "167948359",
+    "167949801"
+  ],
+  "test_nodes_remaining_at_provider": [],
+  "all_test_nodes_retired": true,
+  "provider_instances": [],
+  "samplers": [
+    {
+      "unit": "ucloud-build-load-monitor",
+      "command_ok": true,
+      "load_state": "not-found",
+      "active_state": "inactive",
+      "inactive": true
+    }
+  ],
+  "gateway_sampler_active": false,
+  "measured_build_count": 48,
+  "measured_phase_succeeded": true,
+  "application_sandboxes_verified_and_deleted": 3,
+  "application_smoke_gate_passed": true,
+  "history_source": "gateway build-history.sqlite, read-only exact-UUID lookup",
+  "successful_history_count": 48,
+  "history_count": 48,
+  "history": [
+    {
+      "build_id": "aa1eb713-71d1-443f-8839-cc70d5505c88",
+      "image_id": "bl20260929-io-repeat-000",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "f08fc136-4918-431d-9cdd-21f338f41107",
+      "image_id": "bl20260929-io-repeat-001",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "f3558a88-a2fd-4e44-86ef-aa41c6e80722",
+      "image_id": "bl20260929-io-repeat-002",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "549132e0-fea0-41cf-b2cb-109c2f7aa6fc",
+      "image_id": "bl20260929-io-repeat-003",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "ef13da2e-a31e-4b64-a1c2-c77eaf2fdeac",
+      "image_id": "bl20260929-io-repeat-004",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "ddaa5ecd-81c7-4e08-9d6b-4769868a5c25",
+      "image_id": "bl20260929-io-repeat-005",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "ade9a742-9996-4f64-9a2f-1b718705a608",
+      "image_id": "bl20260929-io-repeat-006",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "2a033bc1-81d3-4cf8-bd4b-c05c6f2abdd2",
+      "image_id": "bl20260929-io-repeat-007",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "c16a823d-f97d-4574-a1b6-d68127347dd5",
+      "image_id": "bl20260929-io-repeat-008",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "cb09536a-8d6b-4d72-98ff-3e31693e193e",
+      "image_id": "bl20260929-io-repeat-009",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "a53c82bb-bdf0-4e2c-a738-5546fab280db",
+      "image_id": "bl20260929-io-repeat-010",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "ebba1c7b-d58d-4803-b8ff-b86af005597c",
+      "image_id": "bl20260929-io-repeat-011",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "d97a48ec-7ea7-4ef6-a815-1129edc9f7ec",
+      "image_id": "bl20260929-io-repeat-012",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "b690217b-326f-456e-9c07-3494abc5bfab",
+      "image_id": "bl20260929-io-repeat-013",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "4c946eae-5e44-4a29-b197-dd5250e85c5f",
+      "image_id": "bl20260929-io-repeat-014",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "f9b47272-e1e1-41a2-9381-bc1f09c44828",
+      "image_id": "bl20260929-io-repeat-015",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "c249265e-c3ef-4b24-b47f-b884bb4a20f8",
+      "image_id": "bl20260929-io-repeat-016",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "5922e20d-b165-40be-bda3-6044adb7f53c",
+      "image_id": "bl20260929-io-repeat-017",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "07f55cdd-e30d-42d2-8f44-c2b628521462",
+      "image_id": "bl20260929-io-repeat-018",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "45b23e28-553f-47cd-b458-8c4a533fcd9c",
+      "image_id": "bl20260929-io-repeat-019",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "15627f71-da65-4672-a19c-184c97de177e",
+      "image_id": "bl20260929-io-repeat-020",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "b85c0ea7-7d44-4aba-aec4-8f338837959a",
+      "image_id": "bl20260929-io-repeat-021",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "ba165737-5fdc-427d-874d-b3dcc2b865df",
+      "image_id": "bl20260929-io-repeat-022",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "b7b30fd0-c8d4-4d09-9296-119279ae8623",
+      "image_id": "bl20260929-io-repeat-023",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "bed797b6-4982-4e74-9b98-9076c7092a13",
+      "image_id": "bl20260929-io-repeat-024",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "ba1c9547-85ec-483f-b1bd-a5fdb0562b68",
+      "image_id": "bl20260929-io-repeat-025",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "7d1958bc-9f72-4e2e-b344-c79eb2aca364",
+      "image_id": "bl20260929-io-repeat-026",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "55fd7343-9da5-461d-bb90-dde405e8c40a",
+      "image_id": "bl20260929-io-repeat-027",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "6c92b19d-eac1-43c8-b6aa-f2d286d0bc4e",
+      "image_id": "bl20260929-io-repeat-028",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "b74cd034-293f-49b7-994e-951f06d08930",
+      "image_id": "bl20260929-io-repeat-029",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "08603e1e-d684-43d6-a566-fe4ff18afb5f",
+      "image_id": "bl20260929-io-repeat-030",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "6a27cb23-37f5-430e-b594-c92d926fe825",
+      "image_id": "bl20260929-io-repeat-031",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "06730779-d435-4fe0-8ab8-ffbdec61cd4e",
+      "image_id": "bl20260929-io-repeat-032",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "e36a227b-6290-417b-a65f-34dff34592d1",
+      "image_id": "bl20260929-io-repeat-033",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "a8dc1aff-4557-48e2-86eb-687471d2ced1",
+      "image_id": "bl20260929-io-repeat-034",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "be2d6621-25b3-41dd-9984-2ce8edb64b35",
+      "image_id": "bl20260929-io-repeat-035",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "a4b46a58-568f-438d-bdb4-d734c79fc377",
+      "image_id": "bl20260929-io-repeat-036",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "b687b42b-1f55-43af-83a6-dd8df229ff1c",
+      "image_id": "bl20260929-io-repeat-037",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "99234b22-3984-4ec3-b6f6-8bed9dcb4f5a",
+      "image_id": "bl20260929-io-repeat-038",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "278aa8ac-5573-4422-8fc0-1accd3904d81",
+      "image_id": "bl20260929-io-repeat-039",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "f0cdb83d-494b-4766-a2ff-18af7c7ec824",
+      "image_id": "bl20260929-io-repeat-040",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "2e846e35-289e-462a-aebd-d4df84518266",
+      "image_id": "bl20260929-io-repeat-041",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "183f7782-d610-4f74-96a0-ebe52d12be8c",
+      "image_id": "bl20260929-io-repeat-042",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "9707cbad-09c6-42ae-9106-181e62828c75",
+      "image_id": "bl20260929-io-repeat-043",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "bc548b40-b3bb-4357-b5db-81acd1f2515b",
+      "image_id": "bl20260929-io-repeat-044",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "431d88f9-aef5-452e-adb3-21b717504c60",
+      "image_id": "bl20260929-io-repeat-045",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "f79d490c-3d4a-4adb-9bd2-2d9b37b29f14",
+      "image_id": "bl20260929-io-repeat-046",
+      "status": "succeeded",
+      "identity_matches": true
+    },
+    {
+      "build_id": "21f10117-dbe8-4bcd-beb6-070b4cb2afb0",
+      "image_id": "bl20260929-io-repeat-047",
+      "status": "succeeded",
+      "identity_matches": true
+    }
+  ],
+  "retained_artifacts": [
+    "48 measured managed test image aliases",
+    "owned mount/fallback canary references",
+    "frozen fixture contexts and dependency locks",
+    "qualification receipts and local raw progress logs"
+  ],
+  "audit_complete": true
+}

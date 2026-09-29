@@ -542,6 +542,58 @@ class RegistryClient:
         finally:
             response.close()
 
+    def mount_blob(
+        self, repository: str, source_repository: str, digest: str, *,
+        timeout_seconds: float | None = None,
+    ) -> bool:
+        """Link an existing same-registry blob without transferring its payload.
+
+        A registry may decline mounting and create an upload instead. Cancel
+        only that returned target-repository session; the caller can then use
+        its ordinary upload path. This never publishes a manifest or an image.
+        """
+        part = r"[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*"
+        for value in (repository, source_repository):
+            if not isinstance(value, str) or len(value) > 255 or not re.fullmatch(part + r"(?:/" + part + r")*", value):
+                raise ValueError("registry blob mount requires plain repository names")
+        normalized = _validate_lease_digest(digest)
+        if timeout_seconds is not None and (not math.isfinite(timeout_seconds) or timeout_seconds <= 0):
+            raise ValueError("registry request timeout must be positive and finite")
+        budget = min(self.timeout_seconds, timeout_seconds) if timeout_seconds is not None else self.timeout_seconds
+        deadline = time.monotonic() + budget
+        prefix = f"/v2/{_quote_repository(repository)}/blobs/uploads/"
+        response = self._request(
+            prefix + "?" + urlencode({'mount': normalized, 'from': source_repository}),
+            method="POST", data=b"", timeout_seconds=budget,
+        )
+        try:
+            status = response.status
+            if status == 201:
+                stored = str(response.headers.get("Docker-Content-Digest") or "")
+                if stored and stored != normalized:
+                    raise ValueError("registry mounted blob under an unexpected digest")
+                return True
+            if status != 202:
+                raise ValueError("registry returned an unexpected blob mount status")
+            location = self._upload_location_path(response)
+            path = urlparse(location).path
+            session = path.removeprefix(prefix)
+            if not path.startswith(prefix) or not session or "/" in session:
+                raise ValueError("registry mount fallback Location names another upload")
+        finally:
+            response.close()
+        # Cleanup has a short independent allowance if the mount consumed the
+        # remaining optional budget, so a declined mount need not leak a session.
+        remaining = deadline - time.monotonic()
+        cleanup_timeout = min(1.0, self.timeout_seconds, remaining if remaining > 0 else 1.0)
+        try:
+            cancelled = self._request(location, method="DELETE", timeout_seconds=cleanup_timeout)
+            cancelled.close()
+        except RegistryRequestError as exc:
+            if exc.status_code != 404:
+                raise
+        return False
+
     def upload_blob_chunk(self, location: str, chunk: bytes) -> str:
         if not chunk:
             raise ValueError("registry upload chunk cannot be empty")

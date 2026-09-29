@@ -1,0 +1,19 @@
+{
+  "wheel_sha256": "59229802be015443b0dd61f2c0c1b8a1eb9cd4460fc35eaf003a601c72b7009b",
+  "packaged_source_resource_files": 162,
+  "missing_or_different": [],
+  "validation": {
+    "diff_check": "passed",
+    "ruff_changed_modules_tests_and_helpers": "passed",
+    "focused_suites": "See test-verification.md; not a full repository test run.",
+    "live_builds_succeeded": 48,
+    "live_application_smokes_passed": 3,
+    "final_audit_passed": true
+  },
+  "publication_audit": {
+    "credential_candidates_found": false,
+    "raw_customer_logs_included": false,
+    "production_telemetry_and_topology_present": true,
+    "public_push_approval": "pending"
+  }
+}

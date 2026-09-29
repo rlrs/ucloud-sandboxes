@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Link known shared-cache blobs into managed-image repositories before pushing
+  to avoid repeated large OCI uploads from fresh builders. Bound optional mount
+  preparation and preserve normal upload fallback; remove redundant EROFS
+  manifest reads while retaining authentication and retention checks.
 - Materialize bounded partial EROFS cache misses directly from authenticated OCI
   layers, preserving signed output and falling back to Docker for unsupported
   filesystem semantics. Admit four builds per builder so excess work can choose

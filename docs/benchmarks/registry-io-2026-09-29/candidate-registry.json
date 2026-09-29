@@ -1,0 +1,417 @@
+{
+  "start": "2026-09-29T10:39:57Z",
+  "end": "2026-09-29T10:42:14Z",
+  "registry_log_bytes_read": 7625546,
+  "groups": {
+    "build-cache|GET|tags|200|": {
+      "requests": 48,
+      "response_bytes": 250241,
+      "committed_blob_bytes": 0,
+      "duration_seconds": {
+        "sum": 0.044908482,
+        "p50": 0.0008416119999999999,
+        "p95": 0.001514839,
+        "max": 0.0026265230000000004
+      }
+    },
+    "build-cache|GET|manifest|200|": {
+      "requests": 432,
+      "response_bytes": 2721307,
+      "committed_blob_bytes": 0,
+      "duration_seconds": {
+        "sum": 0.491327484,
+        "p50": 0.000624872,
+        "p95": 0.0033729740000000004,
+        "max": 0.021634709000000002
+      }
+    },
+    "managed-image|POST|upload|201|mount": {
+      "requests": 846,
+      "response_bytes": 0,
+      "committed_blob_bytes": 0,
+      "duration_seconds": {
+        "sum": 9.679988026,
+        "p50": 0.010520395,
+        "p95": 0.018772921,
+        "max": 0.049485504
+      }
+    },
+    "build-cache|HEAD|manifest|200|": {
+      "requests": 384,
+      "response_bytes": 0,
+      "committed_blob_bytes": 0,
+      "duration_seconds": {
+        "sum": 0.449223626,
+        "p50": 0.000694267,
+        "p95": 0.003335762,
+        "max": 0.019551796
+      }
+    },
+    "build-cache|GET|blob|200|": {
+      "requests": 492,
+      "response_bytes": 3442395756,
+      "committed_blob_bytes": 0,
+      "duration_seconds": {
+        "sum": 12.733655820000001,
+        "p50": 0.001338086,
+        "p95": 0.097004605,
+        "max": 1.324522925
+      }
+    },
+    "managed-image|HEAD|blob|200|": {
+      "requests": 496,
+      "response_bytes": 0,
+      "committed_blob_bytes": 0,
+      "duration_seconds": {
+        "sum": 0.23777853799999998,
+        "p50": 0.000284363,
+        "p95": 0.001931456,
+        "max": 0.0035278870000000004
+      }
+    },
+    "managed-image|POST|upload|202|": {
+      "requests": 174,
+      "response_bytes": 0,
+      "committed_blob_bytes": 0,
+      "duration_seconds": {
+        "sum": 6.232868292,
+        "p50": 0.034043188,
+        "p95": 0.057936473999999995,
+        "max": 0.088024464
+      }
+    },
+    "build-cache|HEAD|blob|200|": {
+      "requests": 714,
+      "response_bytes": 0,
+      "committed_blob_bytes": 0,
+      "duration_seconds": {
+        "sum": 0.217003629,
+        "p50": 0.000250105,
+        "p95": 0.0005921269999999999,
+        "max": 0.003184435
+      }
+    },
+    "build-cache|POST|upload|202|": {
+      "requests": 172,
+      "response_bytes": 0,
+      "committed_blob_bytes": 0,
+      "duration_seconds": {
+        "sum": 6.293315759,
+        "p50": 0.035290680000000005,
+        "p95": 0.057698805,
+        "max": 0.2894313
+      }
+    },
+    "managed-image|PUT|upload|201|": {
+      "requests": 174,
+      "response_bytes": 0,
+      "committed_blob_bytes": 68380565,
+      "duration_seconds": {
+        "sum": 9.401215434000001,
+        "p50": 0.051448241000000006,
+        "p95": 0.089802749,
+        "max": 0.1185645
+      }
+    },
+    "build-cache|PUT|upload|201|": {
+      "requests": 172,
+      "response_bytes": 0,
+      "committed_blob_bytes": 71406255,
+      "duration_seconds": {
+        "sum": 10.905052564,
+        "p50": 0.049791024999999996,
+        "p95": 0.168181625,
+        "max": 0.21415789799999999
+      }
+    },
+    "managed-image|PUT|manifest|201|": {
+      "requests": 144,
+      "response_bytes": 0,
+      "committed_blob_bytes": 0,
+      "duration_seconds": {
+        "sum": 7.57394281,
+        "p50": 0.048744031,
+        "p95": 0.09257683500000001,
+        "max": 0.316237433
+      }
+    },
+    "build-cache|PUT|manifest|201|": {
+      "requests": 48,
+      "response_bytes": 0,
+      "committed_blob_bytes": 0,
+      "duration_seconds": {
+        "sum": 2.566371343,
+        "p50": 0.052691186,
+        "p95": 0.089059423,
+        "max": 0.116819142
+      }
+    },
+    "managed-image|GET|manifest|200|": {
+      "requests": 244,
+      "response_bytes": 625810,
+      "committed_blob_bytes": 0,
+      "duration_seconds": {
+        "sum": 0.09043321,
+        "p50": 0.000325339,
+        "p95": 0.000547686,
+        "max": 0.002711921
+      }
+    },
+    "managed-image|GET|blob|200|": {
+      "requests": 288,
+      "response_bytes": 97415849,
+      "committed_blob_bytes": 0,
+      "duration_seconds": {
+        "sum": 0.485503421,
+        "p50": 0.001298691,
+        "p95": 0.0046122540000000005,
+        "max": 0.010918795
+      }
+    },
+    "environments|GET|manifest|200|": {
+      "requests": 576,
+      "response_bytes": 232176,
+      "committed_blob_bytes": 0,
+      "duration_seconds": {
+        "sum": 0.176198877,
+        "p50": 0.000237288,
+        "p95": 0.00041998999999999997,
+        "max": 0.008537709
+      }
+    },
+    "environments|GET|blob|200|": {
+      "requests": 576,
+      "response_bytes": 37349776,
+      "committed_blob_bytes": 0,
+      "duration_seconds": {
+        "sum": 0.744991953,
+        "p50": 0.001105496,
+        "p95": 0.0035373410000000003,
+        "max": 0.005659728
+      }
+    },
+    "environments|PUT|manifest|201|": {
+      "requests": 256,
+      "response_bytes": 0,
+      "committed_blob_bytes": 0,
+      "duration_seconds": {
+        "sum": 10.584025783,
+        "p50": 0.036878389,
+        "p95": 0.07253957,
+        "max": 0.23138312300000002
+      }
+    },
+    "environments|HEAD|blob|200|": {
+      "requests": 32,
+      "response_bytes": 0,
+      "committed_blob_bytes": 0,
+      "duration_seconds": {
+        "sum": 0.008888278,
+        "p50": 0.00026032,
+        "p95": 0.00039600599999999996,
+        "max": 0.000545172
+      }
+    },
+    "environments|POST|upload|202|": {
+      "requests": 112,
+      "response_bytes": 0,
+      "committed_blob_bytes": 0,
+      "duration_seconds": {
+        "sum": 3.527952848,
+        "p50": 0.022237461,
+        "p95": 0.080651542,
+        "max": 0.27946297800000003
+      }
+    },
+    "environments|PATCH|upload|202|": {
+      "requests": 96,
+      "response_bytes": 0,
+      "committed_blob_bytes": 0,
+      "duration_seconds": {
+        "sum": 3.253524722,
+        "p50": 0.027492632,
+        "p95": 0.047851309,
+        "max": 0.278870869
+      }
+    },
+    "environments|PUT|upload|201|": {
+      "requests": 112,
+      "response_bytes": 0,
+      "committed_blob_bytes": 239005648,
+      "duration_seconds": {
+        "sum": 4.579075517000001,
+        "p50": 0.024369402000000002,
+        "p95": 0.112201382,
+        "max": 0.32718631900000006
+      }
+    },
+    "managed-image|HEAD|manifest|200|": {
+      "requests": 166,
+      "response_bytes": 0,
+      "committed_blob_bytes": 0,
+      "duration_seconds": {
+        "sum": 0.077948268,
+        "p50": 0.000331057,
+        "p95": 0.00141344,
+        "max": 0.004173377999999999
+      }
+    }
+  },
+  "mount_statuses": {
+    "201": 846
+  },
+  "committed_blob_bytes_by_kind": {
+    "managed-image": 68380565,
+    "build-cache": 71406255,
+    "environments": 239005648
+  },
+  "unique_committed_blob_bytes": 307443650,
+  "malformed_lines": 0,
+  "largest_repeated_commits": [
+    {
+      "kind": "environments",
+      "digest": "sha256:17092f638536f932bd5b1023f8fa537677812ece4349e986130b6d56ee3cd965",
+      "count": 1,
+      "bytes": 14925824,
+      "total_committed_bytes": 14925824
+    },
+    {
+      "kind": "environments",
+      "digest": "sha256:a29a712b105c8a03384ea84327240055ec3f3d6baa0efe66053754d388fb042a",
+      "count": 1,
+      "bytes": 14925824,
+      "total_committed_bytes": 14925824
+    },
+    {
+      "kind": "environments",
+      "digest": "sha256:6ccb47febe43e993798729d917530a141c1b25129c66bfb8d154325e10671447",
+      "count": 1,
+      "bytes": 14925824,
+      "total_committed_bytes": 14925824
+    },
+    {
+      "kind": "environments",
+      "digest": "sha256:e61925c9e238ff1d8ea14efe615688893264bc0f6e6d2ca2cf4718e61bde0b71",
+      "count": 1,
+      "bytes": 14921728,
+      "total_committed_bytes": 14921728
+    },
+    {
+      "kind": "environments",
+      "digest": "sha256:3ec3955afced08f77b63709c146b2588b19d91667d4d9a2348e14ddfc24582db",
+      "count": 1,
+      "bytes": 14921728,
+      "total_committed_bytes": 14921728
+    },
+    {
+      "kind": "environments",
+      "digest": "sha256:90f8fb3d549605ed9ff600e7bd0950feaa07f322cbfa4e13aa304db12453c537",
+      "count": 1,
+      "bytes": 14921728,
+      "total_committed_bytes": 14921728
+    },
+    {
+      "kind": "environments",
+      "digest": "sha256:6fd41e7f8c7d9f2c2da87ced3bc61295a120b0b8046991d213c4187f751142ef",
+      "count": 1,
+      "bytes": 14921728,
+      "total_committed_bytes": 14921728
+    },
+    {
+      "kind": "environments",
+      "digest": "sha256:896b0881b1e2cb2265a98129e78c4ff192b9dfe9c12c7c75d61726152c761144",
+      "count": 1,
+      "bytes": 14921728,
+      "total_committed_bytes": 14921728
+    },
+    {
+      "kind": "environments",
+      "digest": "sha256:bcb0079e04942ad8ce3a48f2faa236c9bf73be25b6d09115e3396829edf531ad",
+      "count": 1,
+      "bytes": 14921728,
+      "total_committed_bytes": 14921728
+    },
+    {
+      "kind": "environments",
+      "digest": "sha256:65481929e803896735019aa38ca46748c65a010f92a64535eaa356e69c69c3ea",
+      "count": 1,
+      "bytes": 14921728,
+      "total_committed_bytes": 14921728
+    },
+    {
+      "kind": "environments",
+      "digest": "sha256:8444b8695aca742c85bb8b24be4589875af0d54aaf2464d7de421206c6ed1201",
+      "count": 1,
+      "bytes": 14921728,
+      "total_committed_bytes": 14921728
+    },
+    {
+      "kind": "environments",
+      "digest": "sha256:635f1dec07a43bf88f1107bd0b2c13e4d512ba7234edcb6d5a7d2bd7fffe4605",
+      "count": 1,
+      "bytes": 14921728,
+      "total_committed_bytes": 14921728
+    },
+    {
+      "kind": "environments",
+      "digest": "sha256:5aa37613968517fd127e2e001deb2180b34dece5c435829c43f6c24f48423be1",
+      "count": 1,
+      "bytes": 14921728,
+      "total_committed_bytes": 14921728
+    },
+    {
+      "kind": "environments",
+      "digest": "sha256:251d163a440dbbfe2f11d6718878aaf110b36cd13c50717617bce1ce78583c4a",
+      "count": 1,
+      "bytes": 14921728,
+      "total_committed_bytes": 14921728
+    },
+    {
+      "kind": "environments",
+      "digest": "sha256:4752b0725a65c5569bcf402cedc6b0c1bb1c9e69d4feae4460949205391eda47",
+      "count": 1,
+      "bytes": 14921728,
+      "total_committed_bytes": 14921728
+    },
+    {
+      "kind": "environments",
+      "digest": "sha256:5ea47481d89aea6da214a134aff7241338ba167d5f4c2dac3ae63b2158adbe70",
+      "count": 1,
+      "bytes": 14917632,
+      "total_committed_bytes": 14917632
+    },
+    {
+      "kind": "build-cache",
+      "digest": "sha256:a25d1735472045e49c900b554318e937f69a60f379d279aedc2b55af51f9202b",
+      "count": 2,
+      "bytes": 3339266,
+      "total_committed_bytes": 6678532
+    },
+    {
+      "kind": "managed-image",
+      "digest": "sha256:c99ded1f6269ac2fcfd3c9a3ab2e8b83fe385b84b4d9bf27967ab1a1626620b0",
+      "count": 1,
+      "bytes": 3342308,
+      "total_committed_bytes": 3342308
+    },
+    {
+      "kind": "build-cache",
+      "digest": "sha256:c99ded1f6269ac2fcfd3c9a3ab2e8b83fe385b84b4d9bf27967ab1a1626620b0",
+      "count": 1,
+      "bytes": 3342308,
+      "total_committed_bytes": 3342308
+    },
+    {
+      "kind": "managed-image",
+      "digest": "sha256:da49b4abb5f6bfcf03170f3b6b230f48abd9f2b655bd15f6fce40a79bd5d6c5b",
+      "count": 1,
+      "bytes": 3342098,
+      "total_committed_bytes": 3342098
+    }
+  ],
+  "limits": [
+    "Committed bytes use current immutable blob file sizes; they are not measured request body or physical disk bytes.",
+    "Only completed registry log events within the selected window are counted; uploads spanning boundaries may be incomplete.",
+    "Duration sums span concurrent requests and are not elapsed wall time. No raw logs or headers are exported."
+  ]
+}

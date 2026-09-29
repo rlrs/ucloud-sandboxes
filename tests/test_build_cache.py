@@ -1,6 +1,8 @@
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 import hashlib
+from io import BytesIO
+import json
 import unittest
 from unittest.mock import patch
 
@@ -107,6 +109,8 @@ class RegistryBuildCacheTests(unittest.TestCase):
         self.assertEqual(plan.imports[1], f"registry:5000/{REPOSITORY}:{tag('0', recipe='recipe-0')}")
         self.assertTrue(all(":bc1-" in reference for reference in plan.imports))
         self.assertNotIn("expired", " ".join(plan.imports))
+        self.assertEqual(plan.matching_ref, plan.imports[0])
+        self.assertEqual(self.cache().prepare("unrelated-recipe").matching_ref, "")
 
     def test_concurrent_builds_export_to_unique_tags(self) -> None:
         cache = self.cache()
@@ -317,6 +321,153 @@ class RegistryBuildCacheTests(unittest.TestCase):
             with self.subTest(kwargs=kwargs):
                 with self.assertRaises(ValueError):
                     self.cache(**kwargs)
+
+
+class CacheMountRegistry(RegistryClient):
+    def __init__(self, document):
+        super().__init__("http://registry:5000")
+        self.document = document
+        self.requests = []
+        self.mounts = []
+        self.on_mount = lambda _digest: True
+        self.after_read = lambda: None
+        self.header_digest = None
+
+    def _request(self, path, **kwargs):
+        self.requests.append((path, kwargs))
+        payload = json.dumps(self.document, indent=2).encode()
+        response = BytesIO(payload)
+        response.headers = {"Docker-Content-Digest": self.header_digest or "sha256:" + hashlib.sha256(payload).hexdigest()}
+        self.response = response
+        self.after_read()
+        return response
+
+    def mount_blob(self, target, source, blob_digest, *, timeout_seconds=None):
+        self.mounts.append((target, source, blob_digest, timeout_seconds))
+        return self.on_mount(blob_digest)
+
+
+class RegistryBuildCacheMountTests(unittest.TestCase):
+    def setUp(self):
+        self.document = manifest("cache", (("small", 3), ("large", 300), ("small", 3)))
+        for layer in self.document["layers"]:
+            layer["mediaType"] = "application/vnd.oci.image.layer.v1.tar+gzip"
+        self.registry = CacheMountRegistry(self.document)
+        self.cache = RegistryBuildCache(REF, client=self.registry, clock=lambda: NOW)
+        self.source = f"registry:5000/{REPOSITORY}:{tag('source')}"
+        self.target = "registry:5000/ucloud-managed/my-image:latest"
+
+    def test_mounts_one_verified_snapshot_largest_first_without_duplicate_layers_or_config(self):
+        result = self.cache.pre_mount(self.target, self.source)
+        self.assertEqual([x[2] for x in self.registry.mounts], [digest("large"), digest("small")])
+        self.assertTrue(all(x[:2] == ("ucloud-managed/my-image", REPOSITORY) for x in self.registry.mounts))
+        self.assertTrue(all(0 < x[3] <= 3 for x in self.registry.mounts))
+        self.assertEqual(result["mounted"], 2)
+        self.assertEqual(result["mounted_descriptor_bytes"], 303)
+        self.assertEqual(len(self.registry.requests), 1)
+        self.assertTrue(self.registry.response.closed)
+        self.assertEqual(self.registry.timeout_seconds, 30)
+
+    def test_unmanaged_cross_registry_and_malformed_destinations_do_not_make_requests(self):
+        for target in (
+            "other:5000/ucloud-managed/image:latest", "registry:5000/ordinary/image:latest",
+            "registry:5000/ucloud-managed-evil/image:latest", "registry:5000/ucloud-managed:latest",
+            "registry:5000/ucloud-managed/../image:latest", "registry:5000/ucloud-managed/image@" + digest("image"),
+            "https://registry:5000/ucloud-managed/image:latest", "registry:5000/ucloud-managed/image:bad/tag",
+        ):
+            with self.subTest(target=target):
+                self.assertTrue(self.cache.pre_mount(target, self.source)["skipped"])
+        self.assertEqual(self.registry.requests, [])
+        self.registry.base_url = "http://other-registry:5000"
+        self.assertTrue(self.cache.pre_mount(self.target, self.source)["skipped"])
+        self.assertEqual(self.registry.requests, [])
+
+    def test_unselected_or_external_source_does_not_make_requests(self):
+        for source in ("", REF, self.source.replace("registry:5000", "other:5000"), self.source.replace(REPOSITORY, "other/ucloud-build-cache")):
+            with self.subTest(source=source):
+                self.assertTrue(self.cache.pre_mount(self.target, source)["skipped"])
+        self.assertEqual(self.registry.requests, [])
+
+    def test_malformed_final_descriptor_prevents_all_mounts(self):
+        for bad in (None, {}, {"digest": "sha256:bad", "size": 1},
+                    {"digest": digest("bad"), "size": True},
+                    {"digest": digest("bad"), "size": -1},
+                    {"digest": digest("bad"), "size": 1, "mediaType": "unknown"},
+                    {"digest": digest("large"), "size": 301, "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip"}):
+            with self.subTest(bad=bad):
+                self.registry.document = deepcopy(self.document)
+                self.registry.document["layers"].append(bad)
+                self.assertEqual(self.cache.pre_mount(self.target, self.source)["error"], "ValueError")
+                self.assertEqual(self.registry.mounts, [])
+
+    def test_wrong_manifest_digest_kind_config_and_layer_limit_prevent_mounts(self):
+        mutations = (
+            lambda d: d.update(schemaVersion=1),
+            lambda d: d.update(mediaType="application/vnd.oci.image.index.v1+json"),
+            lambda d: d["config"].update(mediaType="application/vnd.oci.image.config.v1+json"),
+            lambda d: d["config"].update(digest="invalid"),
+            lambda d: d.update(layers=d["layers"] * 22),
+            lambda d: d.update(extra="x" * (256 * 1024)),
+        )
+        for mutate in mutations:
+            with self.subTest(mutation=mutate):
+                self.registry.document = deepcopy(self.document)
+                mutate(self.registry.document)
+                self.assertEqual(self.cache.pre_mount(self.target, self.source)["error"], "ValueError")
+                self.assertEqual(self.registry.mounts, [])
+                self.assertTrue(self.registry.response.closed)
+        self.registry.document = self.document
+        self.registry.header_digest = digest("different-raw-bytes")
+        self.assertEqual(self.cache.pre_mount(self.target, self.source)["error"], "ValueError")
+        self.assertEqual(self.registry.mounts, [])
+
+    def test_tag_change_after_snapshot_does_not_change_mounted_descriptors(self):
+        # Simulate another writer replacing the tag immediately after the GET
+        # response was captured. Only content from the verified snapshot is used.
+        self.registry.after_read = lambda: setattr(self.registry, "document", manifest("new"))
+        result = self.cache.pre_mount(self.target, self.source)
+        self.assertEqual(result["mounted"], 2)
+        self.assertEqual([x[2] for x in self.registry.mounts], [digest("large"), digest("small")])
+
+    def test_pruned_source_mount_miss_is_optional(self):
+        self.registry.on_mount = lambda _: False
+        result = self.cache.pre_mount(self.target, self.source)
+        self.assertEqual(result["attempted"], 2)
+        self.assertEqual(result["mounted"], 0)
+        self.assertNotIn("error", result)
+
+    def test_partial_mount_failure_keeps_counts_and_stops_without_exposing_error_text(self):
+        def fail_second(_digest):
+            if len(self.registry.mounts) == 2:
+                raise OSError("private transport details")
+            return True
+        self.registry.on_mount = fail_second
+        result = self.cache.pre_mount(self.target, self.source)
+        self.assertEqual(result["mounted"], 1)
+        self.assertEqual(result["mounted_descriptor_bytes"], 300)
+        self.assertEqual(result["error"], "OSError")
+        self.assertNotIn("private", json.dumps(result))
+
+    def test_deadline_passes_remaining_budget_and_stops_before_next_layer(self):
+        now = [10.0]
+        def delay(_digest):
+            now[0] += 3.1
+            return True
+        self.registry.on_mount = delay
+        with patch("ucloud_sandboxes.build_cache.time.monotonic", side_effect=lambda: now[0]):
+            result = self.cache.pre_mount(self.target, self.source)
+        self.assertEqual(len(self.registry.mounts), 1)
+        self.assertEqual(self.registry.mounts[0][3], 3.0)
+        self.assertEqual(result["error"], "TimeoutError")
+        self.assertEqual(result["mounted"], 1)
+
+    def test_concurrent_targets_keep_repository_and_timeout_state_independent(self):
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            results = list(executor.map(
+                lambda n: self.cache.pre_mount(f"registry:5000/ucloud-managed/image-{n}:latest", self.source), range(12)))
+        self.assertTrue(all(result["mounted"] == 2 for result in results))
+        self.assertEqual({call[0] for call in self.registry.mounts}, {f"ucloud-managed/image-{n}" for n in range(12)})
+        self.assertEqual(self.registry.timeout_seconds, 30)
 
 
 if __name__ == "__main__":

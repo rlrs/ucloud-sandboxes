@@ -1,0 +1,20 @@
+{
+  "old_wheel_sha256": "f38db1aae25b0ddb14401fce61d80e299a2d8740b2586998e521b21ef0a26a2f",
+  "new_wheel_sha256": "59229802be015443b0dd61f2c0c1b8a1eb9cd4460fc35eaf003a601c72b7009b",
+  "changed_files": [
+    "ucloud_sandboxes/build_cache.py",
+    "ucloud_sandboxes/environment_artifact.py",
+    "ucloud_sandboxes/environment_builder.py",
+    "ucloud_sandboxes/images.py",
+    "ucloud_sandboxes/managed_registry.py",
+    "ucloud_sandboxes-0.7.0.dist-info/RECORD"
+  ],
+  "changed_runtime_sha256": {
+    "ucloud_sandboxes/build_cache.py": "a72e678ab5ca8ab5ef582e591705d288c82360cfc7a63b09c9bd1f1a4063b461",
+    "ucloud_sandboxes/environment_artifact.py": "3608ab38464f343eea204600af6b22606890c9cb8e7f985c6fa8f4224ab0f959",
+    "ucloud_sandboxes/environment_builder.py": "7e030120c87bf2ad78bded44d8514819961c40d9c4a6fb319faea421f462945c",
+    "ucloud_sandboxes/images.py": "8f6ed0fce9a8156ed62c66f91bd81e2caea93158ebed51fda3c9cc1cbd5668bc",
+    "ucloud_sandboxes/managed_registry.py": "57f09652cdec78060bb9c48a6082d69d17806a48621b4a0a383f2e011524d967"
+  },
+  "base_commit": "da5c8ee"
+}

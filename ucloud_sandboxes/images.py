@@ -320,6 +320,7 @@ class DockerImageRuntime:
     ) -> CommandResult:
         imports: tuple[str, ...] = ()
         export_ref = ""
+        matching_ref = ""
         if push and self.build_cache is not None and not self.dry_run:
             try:
                 # Affinity only affects which caches are offered. BuildKit still
@@ -328,9 +329,14 @@ class DockerImageRuntime:
                 recipe = hashlib.sha256(dockerfile.read_bytes()).hexdigest()
                 plan = self.build_cache.prepare(recipe)
                 imports, export_ref = plan.imports, plan.export_ref
+                matching_ref = plan.matching_ref
             except (OSError, ValueError, RuntimeError) as exc:
                 if on_output is not None:
                     on_output("stderr", f"Shared build cache unavailable ({type(exc).__name__}); building without it.\n")
+            if matching_ref:
+                mounts = self.build_cache.pre_mount(spec.tag, matching_ref)
+                if on_output is not None:
+                    on_output("stderr", "Shared build cache mounts: " + json.dumps(mounts, sort_keys=True) + "\n")
         return self._run(
             self.build_command(spec, push=push, cache_imports=imports, cache_export=export_ref),
             on_output=on_output,

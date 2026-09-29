@@ -1,0 +1,56 @@
+[
+  {
+    "image_id": "bl20260929-io-repeat-000",
+    "sandbox_id": "bl-smoke-io-repeat-0",
+    "recipe": "python-agent",
+    "variant": "app-change-5",
+    "started_at": "2026-09-29T10:46:36Z",
+    "create_seconds": 1.4307698010088643,
+    "exit_code": 0,
+    "output": {
+      "grouped_rows": 11,
+      "revision": 5,
+      "score": 680528,
+      "source_modules": 1500
+    },
+    "verified": true,
+    "deleted": true,
+    "finished_at": "2026-09-29T10:46:57Z"
+  },
+  {
+    "image_id": "bl20260929-io-repeat-001",
+    "sandbox_id": "bl-smoke-io-repeat-1",
+    "recipe": "typescript-tools",
+    "variant": "app-change-5",
+    "started_at": "2026-09-29T10:46:36Z",
+    "create_seconds": 1.4231286779977381,
+    "exit_code": 0,
+    "output": {
+      "source_modules": 2000,
+      "revision": 5,
+      "score": 916539,
+      "grouped_rows": 11
+    },
+    "verified": true,
+    "deleted": true,
+    "finished_at": "2026-09-29T10:46:39Z"
+  },
+  {
+    "image_id": "bl20260929-io-repeat-002",
+    "sandbox_id": "bl-smoke-io-repeat-2",
+    "recipe": "typescript-multistage",
+    "variant": "app-change-5",
+    "started_at": "2026-09-29T10:46:36Z",
+    "create_seconds": 1.4133473029942252,
+    "exit_code": 0,
+    "output": {
+      "source_modules": 2000,
+      "revision": 5,
+      "score": 916539,
+      "grouped_rows": 11
+    },
+    "verified": true,
+    "deleted": true,
+    "finished_at": "2026-09-29T10:46:39Z"
+  }
+]

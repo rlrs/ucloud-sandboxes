@@ -197,6 +197,7 @@ class VmInitOptions:
     buildx_cache_ref: str = ""
     buildx_cache_registry_url: str = ""
     build_execution_timeout_seconds: float = 1800.0
+    max_finishing_image_builds: int = 0
     direct_runsc_commit: str = ""
     direct_network: str = "none"
     direct_network_allow_tcp: tuple[str, ...] = ()
@@ -441,6 +442,7 @@ def render_vm_init_script(options: VmInitOptions) -> str:
     if options.role == "builder":
         builder_flags += " --buildx-direct-push"
         builder_flags += f" --build-execution-timeout-seconds {options.build_execution_timeout_seconds:g}"
+        builder_flags += f" --max-finishing-image-builds {options.max_finishing_image_builds}"
     if options.role == "builder" and options.buildx_cache_ref:
         builder_flags += f" --buildx-cache-ref {shlex.quote(options.buildx_cache_ref)}"
         builder_flags += f" --buildx-builder {SHARED_BUILDX_BUILDER}"
@@ -2133,6 +2135,9 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         raise ValueError("swap size cannot be negative.")
     if options.max_concurrent_image_pulls < 1:
         raise ValueError("max concurrent image pulls must be positive.")
+    if (type(options.max_finishing_image_builds) is not int
+            or not 0 <= options.max_finishing_image_builds <= 2):
+        raise ValueError("max finishing image builds must be an integer between 0 and 2.")
     if (type(options.build_execution_timeout_seconds) not in {int, float}
             or not math.isfinite(options.build_execution_timeout_seconds)
             or options.build_execution_timeout_seconds <= 0):

@@ -50,12 +50,32 @@ an uninterruptible kernel operation or arbitrary third-party Python callbacks.
 
 ## Capacity and cache
 
-The production pool admits four builds per builder, at most four builders.
-Extra requests receive retryable 503s rather than joining a hidden execution
-backlog; their wait consumes the client submission budget. Preparation also
-counts against admission. Faster builds do not make this 16-slot capacity
-unbounded. Prebuild images before starting an expensive training run when its
-burst cannot meet the caller's deadline.
+Builders admit at most four builds in context preparation or Docker build/push.
+`builder.max_finishing_builds` optionally adds one or two slots for immutable
+filesystem publication and cleanup; its backward-compatible default is zero.
+With two finishing slots, a builder can have at most six owned builds, while
+preparation/build/push remains bounded at four and publication/cleanup at two.
+The BuildKit worker's parallelism remains four.
+
+A build retains its preparation/build slot until a finishing slot is available.
+Only then can the gateway dispatch a replacement into that preparation/build
+slot. When publication slows, occupied finishing slots apply backpressure to
+new builds. Waiting for the phase transition consumes the execution deadline
+and is reported as `timings.phases.finishing_wait_ms`. Cleanup continues to own
+capacity and prevent node drain even after the result becomes terminal.
+
+The builder publishes its current total admission ceiling in the reserved
+heartbeat label `ucloud.image-build-admission-capacity`. The gateway reads the
+live value and accounts for its concurrent dispatches; the builder atomically
+enforces the phase and total limits. Missing labels retain the legacy four-slot
+behavior; malformed values close new admission. Replaying an existing accepted
+build does not require another slot. No cache-hit prediction or sampled CPU
+threshold changes these limits.
+
+Extra requests receive retryable 503s; their wait consumes the client submission
+budget. There is no additional unbounded build queue. Prebuild images before
+starting an expensive training run when its burst cannot meet the caller's
+deadline. Adding publication overlap does not increase CPU or registry bandwidth.
 
 Shared cache retention prefers distinct verified build contexts before repeated
 exports of the same context. Production permits 512 tags while retaining the

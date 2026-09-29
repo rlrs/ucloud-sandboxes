@@ -102,6 +102,13 @@ def write_bundle(root: Path, role: str) -> dict:
 
 
 class VmInitTests(unittest.TestCase):
+    def test_finishing_capacity_reaches_builder_service_and_is_bounded(self):
+        script = render_vm_init_script(self._options(role="builder", max_finishing_image_builds=2))
+        self.assertIn("--max-finishing-image-builds 2", script)
+        for value in (-1, True, 3, 1.5):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                render_vm_init_script(self._options(role="builder", max_finishing_image_builds=value))
+
     def test_builder_execution_budget_reaches_service_and_rejects_unbounded_values(self):
         script = render_vm_init_script(self._options(role="builder", build_execution_timeout_seconds=123))
         self.assertIn("--build-execution-timeout-seconds 123", script)

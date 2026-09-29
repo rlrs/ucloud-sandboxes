@@ -80,6 +80,7 @@ from .capabilities import (
     RESOURCE_PHASE_CAPABILITY,
     has_capability,
 )
+from .build_admission import BUILD_ADMISSION_CAPACITY_LABEL, build_admission_capacity
 from .build_context_store import (
     BuildContextBlobStore,
     BuildContextHttpHandler,
@@ -106,7 +107,6 @@ from .http_server import (
 from .http_contract import SandboxHttpRoute, match_sandbox_http_route
 from .image_inventory_cache import ImageInventoryCache, ImageInventorySnapshot
 from .images import (
-    DEFAULT_MAX_ACTIVE_IMAGE_BUILDS,
     DockerImageRuntime,
     ImageBuildSpec,
     ImageManager,
@@ -6711,11 +6711,21 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 or not current.admission_open
             ):
                 continue
+            # Keep gateway-owned metadata (for example quarantine labels),
+            # but take this scheduling hint from the same live sample as the
+            # admitted count. A legacy live response must clear a stale hint.
+            labels = dict(heartbeat.labels)
+            labels.pop(BUILD_ADMISSION_CAPACITY_LABEL, None)
+            if BUILD_ADMISSION_CAPACITY_LABEL in current.labels:
+                labels[BUILD_ADMISSION_CAPACITY_LABEL] = current.labels[
+                    BUILD_ADMISSION_CAPACITY_LABEL
+                ]
             refreshed.append(
                 replace(
                     heartbeat,
                     active_image_builds=current.active_image_builds,
                     physical_disk_free_mb=current.physical_disk_free_mb,
+                    labels=labels,
                 )
             )
         return _reserve_builder_candidate(refreshed, baseline, reserve=reserve)
@@ -8348,7 +8358,7 @@ def _reserve_builder_candidate(
             return heartbeat.active_image_builds + max(0, additions)
 
         eligible = [heartbeat for heartbeat in candidates
-                    if allow_full or load(heartbeat) < DEFAULT_MAX_ACTIVE_IMAGE_BUILDS]
+                    if allow_full or load(heartbeat) < build_admission_capacity(heartbeat.labels)]
         if not eligible:
             return None
 

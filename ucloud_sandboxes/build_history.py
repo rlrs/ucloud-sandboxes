@@ -23,7 +23,8 @@ _TIMESTAMPS = ("created_at", "updated_at", "started_at", "queued_at",
                "execution_started_at", "finished_at")
 _TOTALS = frozenset(("total_ms", "queue_wait_ms", "preparation_ms", "end_to_end_ms"))
 _PHASES = frozenset(("docker_build_and_push_ms", "docker_build_ms", "docker_push_ms",
-                     "immutable_environment_ms", "cleanup_ms", "cache_prepare_ms", "cache_mount_ms"))
+                     "immutable_environment_ms", "cleanup_ms", "cache_prepare_ms", "cache_mount_ms",
+                     "finishing_wait_ms"))
 _ENVIRONMENT = frozenset(("total_ms", "preflight_ms", "docker_pull_ms", "layer_lock_wait_ms",
     "component_lookup_ms", "squash_ms", "mkfs_ms", "sign_ms", "publish_component_ms",
     "groups_reused", "groups_built", "erofs_bytes_built", "preflight_misses", "docker_pull_skipped",

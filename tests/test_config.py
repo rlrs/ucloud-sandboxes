@@ -9,6 +9,19 @@ from ucloud_sandboxes.config import DeploymentConfig
 
 
 class ConfigTests(unittest.TestCase):
+    def test_build_finishing_capacity_is_additive_and_bounded(self):
+        raw = self._raw()
+        raw["builder"].pop("max_finishing_builds")
+        self.assertEqual(DeploymentConfig.from_dict(raw).builder.max_finishing_builds, 0)
+        for value in (-1, True, "2", 3, 1.5):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                DeploymentConfig.from_dict({**raw, "builder": {**raw["builder"],
+                    "max_finishing_builds": value}})
+        raw["builder"]["max_finishing_builds"] = 2
+        config = DeploymentConfig.from_dict(raw)
+        self.assertEqual(config.builder.max_finishing_builds, 2)
+        self.assertEqual(DeploymentConfig.from_dict(config.to_dict()), config)
+
     def test_build_execution_budget_is_additive_and_validated(self):
         raw = self._raw()
         raw["builder"].pop("build_execution_timeout_seconds")

@@ -7,8 +7,10 @@ from threading import Barrier
 from collections import Counter
 from ucloud_sandboxes import control_plane
 
+from ucloud_sandboxes.build_admission import BUILD_ADMISSION_CAPACITY_LABEL
 from ucloud_sandboxes.control_plane import ControlPlaneHandler, ProxiedResponse
 from ucloud_sandboxes.deployment import package_version
+from ucloud_sandboxes.images import DEFAULT_MAX_ACTIVE_IMAGE_BUILDS
 from ucloud_sandboxes.models import NodeHeartbeat, ResourceQuantity, utc_now
 from ucloud_sandboxes.registry import heartbeat_to_dict
 
@@ -113,6 +115,78 @@ class BuilderSelectionTests(unittest.TestCase):
         self.handler._ready_heartbeats.return_value = [stale, self.idle]
         self.assertEqual(self.handler._select_builder_node(image_id="burst"), self.idle)
 
+    def test_live_capacity_can_reopen_or_close_a_periodically_full_builder(self):
+        stale = replace(self.busy, labels={BUILD_ADMISSION_CAPACITY_LABEL: "4"})
+        self.handler._ready_heartbeats.return_value = [stale]
+        self.busy = replace(self.busy, labels={BUILD_ADMISSION_CAPACITY_LABEL: "6"})
+        self.assertEqual(self.handler._select_builder_node(image_id="new"), self.busy)
+        for capacity in ("4", "0", "bad"):
+            with self.subTest(capacity=capacity):
+                self.busy = replace(self.busy, labels={BUILD_ADMISSION_CAPACITY_LABEL: capacity})
+                self.assertIsNone(self.handler._select_builder_node(image_id="new"))
+
+    def test_legacy_live_sample_clears_stale_capacity_and_preserves_other_labels(self):
+        stale = replace(self.busy, labels={
+            BUILD_ADMISSION_CAPACITY_LABEL: "6", "controller-owned": "keep",
+        })
+        self.handler._ready_heartbeats.return_value = [stale]
+        # The live legacy node is full at four; the periodic six-slot hint
+        # must not survive refresh and dispatch another build to it.
+        self.assertIsNone(self.handler._select_builder_node(image_id="new"))
+        self.busy = replace(self.busy, active_image_builds=3)
+        selected = self.handler._select_builder_node(image_id="new")
+        self.assertEqual(selected.labels, {"controller-owned": "keep"})
+        self.assertEqual(stale.labels[BUILD_ADMISSION_CAPACITY_LABEL], "6")
+
+    def test_closed_capacity_still_replays_the_active_owner(self):
+        for capacity in ("0", "bad"):
+            with self.subTest(capacity=capacity):
+                owner = replace(self.busy, labels={BUILD_ADMISSION_CAPACITY_LABEL: capacity})
+                self.handler._ready_heartbeats.return_value = [owner]
+                self.handler._proxy_request.side_effect = None
+                self.handler._proxy_request.return_value = self.response(
+                    200, {"build": {"status": "running"}},
+                )
+                self.handler._proxy_request.reset_mock()
+                self.assertEqual(self.handler._select_builder_node(image_id="existing"), owner)
+                self.assertEqual(self.handler._proxy_request.call_count, 1)
+
+    def test_simultaneous_samples_honor_each_nodes_capacity_and_existing_load(self):
+        nodes = [
+            replace(self.idle, node_id="small", job_id="small", node_url="http://small",
+                    active_image_builds=1, labels={BUILD_ADMISSION_CAPACITY_LABEL: "2"}),
+            replace(self.idle, node_id="large", job_id="large", node_url="http://large",
+                    active_image_builds=4, labels={BUILD_ADMISSION_CAPACITY_LABEL: "6"}),
+        ]
+        sampled = Barrier(8)
+        self.handler._ready_heartbeats.return_value = nodes
+
+        def probe(url, path, **kwargs):
+            current = next(node for node in nodes if node.node_url == url)
+            if current == nodes[-1]:
+                sampled.wait(5)
+            return self.response(200, {"heartbeat": heartbeat_to_dict(current)})
+
+        self.handler._proxy_request.side_effect = probe
+        with (
+            patch.dict(control_plane._BUILDER_DISPATCH_COUNTS, {}, clear=True),
+            patch.dict(control_plane._BUILDER_DISPATCH_INFLIGHT, {}, clear=True),
+        ):
+            def dispatch(_):
+                selected = self.handler._select_builder_node(reserve=True)
+                if selected is None:
+                    return None
+                # Completion must not erase a reservation for a concurrent
+                # selector still holding the same old live sample.
+                with control_plane._BUILDER_DISPATCH_GUARD:
+                    control_plane._BUILDER_DISPATCH_INFLIGHT[selected.job_id] -= 1
+                return selected.job_id
+
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                selected = list(pool.map(dispatch, range(8)))
+            self.assertEqual(Counter(selected), {"small": 1, "large": 2, None: 5})
+            self.assertTrue(all(v == 0 for v in control_plane._BUILDER_DISPATCH_INFLIGHT.values()))
+
     def test_live_draining_or_restarted_builder_is_not_selected(self):
         for changed in (
             replace(self.idle, draining=True),
@@ -167,7 +241,7 @@ class BuilderSelectionTests(unittest.TestCase):
         )
         # Builds pack onto a builder until its slots are full; dispatches it
         # has not acknowledged yet count toward that.
-        full = control_plane.DEFAULT_MAX_ACTIVE_IMAGE_BUILDS
+        full = DEFAULT_MAX_ACTIVE_IMAGE_BUILDS
         with (
             patch.dict(control_plane._BUILDER_DISPATCH_COUNTS, {"2": full}, clear=True),
             patch.dict(control_plane._BUILDER_DISPATCH_INFLIGHT, {"2": full}, clear=True),

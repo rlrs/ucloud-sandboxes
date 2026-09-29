@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Pipeline image building and filesystem publication with separate bounded
+  admission phases. Allow up to two additional finishing builds while retaining
+  four preparation/build slots; publish live capacity to the gateway and retain
+  cleanup ownership until it finishes. See `docs/build-deadlines.md`.
+
 - Preserve retryable builder-status failures instead of returning false build-not-found
   responses. Bound build execution, publication and owned subprocess cancellation
   with one configurable server budget; retain independent client wait semantics.

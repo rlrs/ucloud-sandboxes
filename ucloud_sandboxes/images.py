@@ -299,11 +299,12 @@ class ImageBuildRecord:
     request_fingerprint: str = ""
     queued_at: str = ""
     execution_started_at: str = ""
+    admission_phase: str = ""
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "ImageBuildRecord | None":
         # Older persisted records predate the additive queue timestamps.
-        raw = {"queued_at": "", "execution_started_at": "", **raw}
+        raw = {"queued_at": "", "execution_started_at": "", "admission_phase": "", **raw}
         fields = set(cls.__dataclass_fields__)
         structured = set(
             "command exit_code image owner_pid push push_command push_exit_code timings".split()
@@ -314,6 +315,8 @@ class ImageBuildRecord:
             return None
         required = "build_id image_id status created_at updated_at".split()
         if not all(raw[name] for name in required):
+            return None
+        if raw["admission_phase"] not in {"", "preparing_solving", "finishing", "released"}:
             return None
         if any(
             type(raw[name]) is not list
@@ -345,6 +348,8 @@ class ImageBuildRecord:
     def to_dict(self) -> dict[str, Any]:
         raw = asdict(self)
         raw.update(command=list(self.command), push_command=list(self.push_command))
+        if not self.admission_phase:
+            raw.pop("admission_phase")
         return raw
 
     @property
@@ -671,9 +676,11 @@ class _ImageStateStore(Generic[_ImageStateRecordT]):
             raise ValueError(_IMAGE_STATE_ERROR) from exc
 
     @contextmanager
-    def _transaction(self, *, write: bool) -> Iterator[sqlite3.Connection]:
+    def _transaction(self, *, write: bool, timeout_seconds: float | None = None) -> Iterator[sqlite3.Connection]:
         conn = self._connect()
         try:
+            if timeout_seconds is not None:
+                conn.execute(f"PRAGMA busy_timeout = {max(1, int(timeout_seconds * 1000))}")
             conn.execute("BEGIN IMMEDIATE" if write else "BEGIN")
             yield conn
             conn.commit()
@@ -776,10 +783,21 @@ class ImageStore(_ImageStateStore[ImageRecord]):
             return removed
 
 
+def _build_owns_admission(record: ImageBuildRecord) -> bool:
+    return (not record.terminal
+            or record.admission_phase in {"preparing_solving", "finishing"})
+
+
 class ImageBuildStore(_ImageStateStore[ImageBuildRecord]):
     _table = "image_state_v1_builds"
     _id_field = "build_id"
     _decode = staticmethod(ImageBuildRecord.from_dict)
+    _PHASE_SQL = "json_extract(record_json, '$.admission_phase')"
+    _STATUS_SQL = "json_extract(record_json, '$.status')"
+    _PHASE_TYPE_SQL = "json_type(record_json, '$.admission_phase')"
+    _OWNED_SQL = (f"COALESCE({_STATUS_SQL}, '') NOT IN ('succeeded', 'failed') "
+                  f"OR COALESCE({_PHASE_SQL}, '') NOT IN ('', 'released') "
+                  f"OR COALESCE({_PHASE_TYPE_SQL}, 'text') != 'text'")
 
     def __init__(
         self,
@@ -789,12 +807,20 @@ class ImageBuildStore(_ImageStateStore[ImageBuildRecord]):
     ) -> None:
         super().__init__(path)
         self.max_terminal_builds = max(0, max_terminal_builds)
+        # A small index of live ownership avoids decoding retained log tails
+        # for every heartbeat and every bounded wait for a finishing permit.
+        # Existing table/version and legacy readers remain compatible.
+        with self._transaction(write=True) as conn:
+            conn.execute(f"CREATE INDEX IF NOT EXISTS image_build_owned_phases "
+                         f"ON {self._table} ({self._STATUS_SQL}, {self._PHASE_SQL}, {self._PHASE_TYPE_SQL}) "
+                         f"WHERE {self._OWNED_SQL}")
 
     def reserve_build(
         self,
         record: ImageBuildRecord,
         *,
         max_active_builds: int | None,
+        max_preparing_builds: int | None = None,
     ) -> tuple[ImageBuildRecord, bool]:
         with self._transaction(write=True) as conn:
             records = self._load(conn)
@@ -802,7 +828,7 @@ class ImageBuildStore(_ImageStateStore[ImageBuildRecord]):
                 (
                     existing
                     for existing in records.values()
-                    if not existing.terminal
+                    if _build_owns_admission(existing)
                     and (
                         existing.image_id == record.image_id
                         or existing.tag == record.tag
@@ -821,29 +847,88 @@ class ImageBuildStore(_ImageStateStore[ImageBuildRecord]):
                     "an active build already owns this image id or tag with "
                     "a different build specification"
                 )
-            active_count = sum(
-                1 for existing in records.values() if not existing.terminal
-            )
+            owned = [existing for existing in records.values() if _build_owns_admission(existing)]
+            active_count = len(owned)
             if max_active_builds is not None and active_count >= max_active_builds:
                 raise ImageBuildCapacityError(
                     f"image build capacity reached ({max_active_builds})"
                 )
+            if max_preparing_builds is not None and sum(
+                existing.admission_phase != "finishing" for existing in owned
+            ) >= max_preparing_builds:
+                raise ImageBuildCapacityError(
+                    f"image build preparation/execution capacity reached ({max_preparing_builds})"
+                )
             self._put(conn, record)
             self._compact(conn)
             return record, True
+
+    def admission_snapshot(self) -> dict[str, int]:
+        with self._transaction(write=False) as conn:
+            return self._admission_snapshot(conn)
+
+    def _admission_snapshot(self, conn: sqlite3.Connection) -> dict[str, int]:
+        active = finishing = 0
+        for status, phase, phase_type, count in conn.execute(
+            f"SELECT {self._STATUS_SQL}, {self._PHASE_SQL}, {self._PHASE_TYPE_SQL}, COUNT(*) "
+            f"FROM {self._table} WHERE {self._OWNED_SQL} "
+            f"GROUP BY {self._STATUS_SQL}, {self._PHASE_SQL}, {self._PHASE_TYPE_SQL}"
+        ):
+            if phase_type is None:
+                phase = ""  # Legacy records omit this additive field.
+            if (type(status) is not str or not status
+                    or phase_type not in {None, "text"}
+                    or phase not in {"", "preparing_solving", "finishing", "released"}):
+                raise ValueError("image state contains invalid admission metadata")
+            active += count
+            finishing += count if phase == "finishing" else 0
+        return {"active_builds": active, "finishing_builds": finishing,
+                "preparing_solving_builds": active - finishing}
+
+    def _get_exact(self, conn: sqlite3.Connection, build_id: str) -> ImageBuildRecord | None:
+        row = conn.execute(f"SELECT record_json FROM {self._table} WHERE record_id = ?", (build_id,)).fetchone()
+        if row is None:
+            return None
+        raw = json.loads(row[0])
+        record = self._decode(raw) if isinstance(raw, dict) else None
+        if record is None or record.build_id != build_id:
+            raise ValueError("image state contains an invalid record")
+        return record
+
+    def get_exact(self, build_id: str) -> ImageBuildRecord | None:
+        with self._transaction(write=False) as conn:
+            return self._get_exact(conn, build_id)
+
+    def try_enter_finishing(self, build_id: str, *, max_finishing_builds: int) -> bool:
+        with self._transaction(write=True, timeout_seconds=remaining_build_execution_seconds(60)) as conn:
+            remaining_build_execution_seconds()
+            record = self._get_exact(conn, build_id)
+            if record is None or record.admission_phase not in {"preparing_solving", "finishing"}:
+                raise RuntimeError("image build lost its admission ownership")
+            if record.admission_phase == "finishing":
+                return True
+            if self._admission_snapshot(conn)["finishing_builds"] >= max_finishing_builds:
+                return False
+            self._put(conn, replace(record, admission_phase="finishing"))
+            return True
 
     def reconcile_interrupted(self) -> tuple[ImageBuildRecord, ...]:
         with self._transaction(write=True) as conn:
             now = utc_now().isoformat()
             interrupted: list[ImageBuildRecord] = []
             for record in self._load(conn).values():
-                if record.terminal or _pid_is_running(record.owner_pid):
+                if _pid_is_running(record.owner_pid):
+                    continue
+                if record.terminal:
+                    if record.admission_phase in {"preparing_solving", "finishing"}:
+                        self._put(conn, replace(record, admission_phase="released"))
                     continue
                 error = "image build interrupted by node-agent restart"
                 if record.error:
                     error = f"{record.error}; {error}"
                 updated = replace(
                     record,
+                    admission_phase="released" if record.admission_phase else "",
                     status="failed",
                     error=error,
                     updated_at=now,
@@ -869,7 +954,8 @@ class ImageBuildStore(_ImageStateStore[ImageBuildRecord]):
 
     def _compact(self, conn: sqlite3.Connection) -> None:
         terminal = sorted(
-            (record for record in self._load(conn).values() if record.terminal),
+            (record for record in self._load(conn).values()
+             if record.terminal and not _build_owns_admission(record)),
             key=lambda record: (
                 record.finished_at or record.updated_at or record.created_at,
                 record.build_id,
@@ -890,6 +976,7 @@ class ImageManager:
         *,
         build_store: ImageBuildStore | None = None,
         max_active_builds: int = DEFAULT_MAX_ACTIVE_IMAGE_BUILDS,
+        max_finishing_builds: int = 0,
         queue_builds: bool = False,
         max_queued_builds: int | None = None,
         max_concurrent_pulls: int = 8,
@@ -902,6 +989,11 @@ class ImageManager:
         self.runtime = runtime
         self.build_store = build_store or ImageBuildStore(store.path)
         self.max_active_builds = max(1, max_active_builds)
+        if type(max_finishing_builds) is not int or max_finishing_builds < 0:
+            raise ValueError("max_finishing_builds must be a nonnegative integer")
+        if max_finishing_builds and max_queued_builds not in {None, 0}:
+            raise ValueError("phase-aware admission does not permit a local build queue")
+        self.max_finishing_builds = max_finishing_builds
         # Validate before admitting any work. This is a server policy, separate
         # from the wait_for_build timeout and from queued/admission time.
         with build_execution_deadline(build_execution_timeout_seconds):
@@ -912,6 +1004,7 @@ class ImageManager:
         # the autoscaler can add builders for it, instead of queuing it all
         # behind one builder's slots.
         self.max_queued_builds = (
+            0 if max_finishing_builds else
             self.max_active_builds if max_queued_builds is None else max(0, max_queued_builds)
         )
         self._queued_builds: deque[tuple[ImageBuildRecord, Thread, Callable[[], None] | None]] = deque()
@@ -921,6 +1014,7 @@ class ImageManager:
         self._build_conditions: dict[str, Condition] = {}
         self._active_threads: dict[str, Thread] = {}
         self._pending_terminal_builds: dict[str, ImageBuildRecord] = {}
+        self._pending_admission_releases: set[str] = set()
         self._active_image_operations = 0
         self._active_pulls = 0
         self._waiting_pulls = 0
@@ -942,9 +1036,25 @@ class ImageManager:
             return list(self.build_store.load().values())
 
     def active_build_count(self) -> int:
+        if self.max_finishing_builds:
+            return self.build_admission_snapshot()["active_builds"]
         builds = sum(1 for record in self.list_builds() if not record.terminal)
         with self._build_lock:
             return builds + self._active_image_operations
+
+    def build_admission_snapshot(self) -> dict[str, int]:
+        """Absolute dispatch ceiling; owned cleanup remains active until done."""
+        with self._build_lock:
+            self._retry_terminal_builds_locked()
+            snapshot = self.build_store.admission_snapshot()
+            snapshot["active_builds"] += self._active_image_operations
+            active = snapshot["active_builds"]
+            available = max(0, min(
+                self.max_active_builds - snapshot["preparing_solving_builds"],
+                self.max_active_builds + self.max_finishing_builds - active,
+            ))
+            return {**snapshot, "available_build_slots": available,
+                    "admission_capacity": active + available}
 
     @contextmanager
     def image_operation(self):
@@ -1042,15 +1152,19 @@ class ImageManager:
                 timings={"total_ms": None, "phases": {}},
                 owner_pid=os.getpid(),
                 request_fingerprint=request_fingerprint,
+                admission_phase="preparing_solving" if self.max_finishing_builds else "",
             )
             with self._build_lock:
                 self._retry_terminal_builds_locked()
                 record, build_started = self.build_store.reserve_build(
                     record,
                     max_active_builds=(
+                        self.max_active_builds + self.max_finishing_builds
+                        if self.max_finishing_builds else
                         self.max_active_builds + self.max_queued_builds
                         if self.queue_builds else self.max_active_builds
                     ),
+                    max_preparing_builds=self.max_active_builds if self.max_finishing_builds else None,
                 )
                 if not build_started:
                     if cleanup is not None:
@@ -1105,7 +1219,10 @@ class ImageManager:
                         f"{exc}; build context cleanup failed: {cleanup_error}"
                     )
             with self._build_lock:
-                self._fail_reserved_build_locked(record, failure)
+                try:
+                    self._fail_reserved_build_locked(record, failure)
+                finally:
+                    self._release_build_admission_locked(record.build_id)
             if failure is not exc:
                 raise failure from exc
             raise
@@ -1129,7 +1246,8 @@ class ImageManager:
         )
         try:
             with self._build_lock:
-                if self.queue_builds and len(self._active_threads) >= self.max_active_builds:
+                if (not self.max_finishing_builds and self.queue_builds
+                        and len(self._active_threads) >= self.max_active_builds):
                     self._queued_builds.append((record, thread, effective_cleanup))
                     return record, True
                 self._active_threads[build_id] = thread
@@ -1139,8 +1257,12 @@ class ImageManager:
                     self._fail_reserved_build_locked(record, exc)
                     raise
         except Exception:
-            if effective_cleanup is not None:
-                effective_cleanup()
+            try:
+                if effective_cleanup is not None:
+                    effective_cleanup()
+            finally:
+                with self._build_lock:
+                    self._release_build_admission_locked(build_id)
             raise
         return record, True
 
@@ -1159,6 +1281,42 @@ class ImageManager:
                     except Exception as cleanup_error:
                         exc = RuntimeError(f"{exc}; build context cleanup failed: {cleanup_error}")
                 self._fail_reserved_build_locked(record, exc)
+
+    def _enter_finishing(self, build_id: str) -> None:
+        if not self.max_finishing_builds:
+            return
+        # Keep the preparing/solve permit while waiting. This bounds accepted
+        # backlog and leaves additional demand at the gateway for another node.
+        while True:
+            remaining_build_execution_seconds()
+            with self._build_lock:
+                if self.build_store.try_enter_finishing(
+                    build_id, max_finishing_builds=self.max_finishing_builds,
+                ):
+                    return
+            time.sleep(remaining_build_execution_seconds(0.05))
+
+    def _release_build_admission_locked(self, build_id: str) -> None:
+        if not self.max_finishing_builds:
+            return
+        # Queue the intent before even reading SQLite: a transient read failure
+        # after cleanup must not leave live-PID ownership stranded indefinitely.
+        self._pending_admission_releases.add(build_id)
+        record = self._pending_terminal_builds.get(build_id) or self.build_store.get_exact(build_id)
+        if record is None:
+            self._pending_admission_releases.discard(build_id)
+            return
+        if not record.terminal:
+            now = utc_now().isoformat()
+            record = replace(record, status="failed", updated_at=now, finished_at=now,
+                             error="image build ended without a terminal result")
+        record = replace(record, admission_phase="released")
+        # If SQLite is temporarily unavailable, later polls/heartbeats retry
+        # this terminal release. Until committed, other processes fail closed.
+        self._pending_terminal_builds[build_id] = record
+        self.build_store.upsert(record)
+        self._pending_terminal_builds.pop(build_id, None)
+        self._pending_admission_releases.discard(build_id)
 
     def _fail_reserved_build_locked(
         self,
@@ -1338,6 +1496,13 @@ class ImageManager:
                 finally:
                     phases["docker_push_ms"] = _elapsed_ms(phase)
                     update_timings()
+            if self.max_finishing_builds:
+                phase = time.monotonic()
+                try:
+                    self._enter_finishing(build_id)
+                finally:
+                    phases["finishing_wait_ms"] = _elapsed_ms(phase)
+                    update_timings()
             manifest_digest = ""
             if push and not self.runtime.dry_run and self.environment_publisher is not None:
                 phase = time.monotonic()
@@ -1401,13 +1566,16 @@ class ImageManager:
                         update_timings()
             finally:
                 with self._build_lock:
-                    self._active_threads.pop(build_id, None)
-                    self._pending_build_logs.pop(build_id, None)
-                    self._build_log_last_flush.pop(build_id, None)
-                    condition = self._build_conditions.pop(build_id, None)
-                    if condition is not None:
-                        condition.notify_all()
-                    self._start_queued_builds_locked()
+                    try:
+                        self._release_build_admission_locked(build_id)
+                    finally:
+                        self._active_threads.pop(build_id, None)
+                        self._pending_build_logs.pop(build_id, None)
+                        self._build_log_last_flush.pop(build_id, None)
+                        condition = self._build_conditions.pop(build_id, None)
+                        if condition is not None:
+                            condition.notify_all()
+                        self._start_queued_builds_locked()
 
     def _append_build_log(self, build_id: str, stream: str, chunk: str) -> None:
         if not chunk:
@@ -1430,8 +1598,12 @@ class ImageManager:
         # Keep their terminal result until a later request/heartbeat commits it;
         # process liveness alone cannot recover these abandoned capacity slots.
         for build_id, record in tuple(self._pending_terminal_builds.items()):
+            if build_id in self._pending_admission_releases:
+                record = replace(record, admission_phase="released")
             self.build_store.upsert(record)
             self._pending_terminal_builds.pop(build_id, None)
+        for build_id in tuple(self._pending_admission_releases):
+            self._release_build_admission_locked(build_id)
 
     def _update_build(self, build_id: str, **changes: Any) -> ImageBuildRecord | None:
         with self._build_lock:

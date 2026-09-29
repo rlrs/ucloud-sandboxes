@@ -13,6 +13,7 @@ from unittest.mock import Mock
 from urllib import error, request
 
 from ucloud_sandboxes.images import DockerImageRuntime
+from ucloud_sandboxes.build_admission import BUILD_ADMISSION_CAPACITY_LABEL
 from ucloud_sandboxes.memory_backing import MemoryBackingBusyError
 from ucloud_sandboxes.models import ResourceQuantity
 from ucloud_sandboxes.node_agent import (
@@ -114,9 +115,20 @@ class BuilderNodeAgentTests(unittest.TestCase):
         self.assertEqual(heartbeat["inventory"], [])
         self.assertEqual(heartbeat["deployment_id"], "deployment-a")
         self.assertEqual(heartbeat["node_epoch"], "builder-boot-1")
+        self.assertEqual(heartbeat["labels"][BUILD_ADMISSION_CAPACITY_LABEL], "4")
         with self.assertRaises(error.HTTPError) as rejected:
             self._json("/v1/sandboxes")
         self.assertEqual(rejected.exception.code, 404)
+
+    def test_live_heartbeat_reports_build_count_and_capacity_from_one_snapshot(self):
+        manager = self.server.RequestHandlerClass.image_manager
+        manager.build_admission_snapshot = Mock(return_value={
+            "active_builds": 5, "admission_capacity": 6,
+        })
+        _, payload = self._json("/v1/heartbeat")
+        self.assertEqual(payload["heartbeat"]["active_image_builds"], 5)
+        self.assertEqual(payload["heartbeat"]["labels"][BUILD_ADMISSION_CAPACITY_LABEL], "6")
+        manager.build_admission_snapshot.assert_called_once_with()
 
     def test_host_boot_epoch_is_stable_and_canonical(self) -> None:
         root = Path(self.temporary.name)

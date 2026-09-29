@@ -63,6 +63,7 @@ from .images import (
     materialize_uploaded_build_context,
     uploaded_build_context_reference,
 )
+from .build_admission import BUILD_ADMISSION_CAPACITY_LABEL
 from .direct_registry import ManagedPrimaryOwnedError
 from .memory_backing import MemoryBackingBusyError
 from .managed_process import ManagedProcessError, ManagedProcessReadUnavailable, ManagedProcessStart
@@ -203,9 +204,15 @@ class NodeAgentHandler(BuildContextHttpHandler):
         if not self._check_node_control_authorized():
             return
         if parsed.path == "/v1/heartbeat":
+            admission = {}
+
+            def active_build_count():
+                admission.update(self.image_manager.build_admission_snapshot())
+                return admission["active_builds"]
+
             node_snapshot = self.manager.heartbeat_snapshot(
                 active_build_count=(
-                    self.image_manager.active_build_count
+                    active_build_count
                     if self.image_builds_enabled
                     else lambda: 0
                 )
@@ -235,6 +242,8 @@ class NodeAgentHandler(BuildContextHttpHandler):
                             init_version=self.init_version,
                             active_sandboxes=activity.active_sandboxes,
                             active_image_builds=node_snapshot.active_image_builds,
+                            labels=({BUILD_ADMISSION_CAPACITY_LABEL: str(admission["admission_capacity"])}
+                                    if self.image_builds_enabled else {}),
                             active_sandbox_creates=activity.active_sandbox_creates,
                             draining=node_snapshot.drain.draining,
                             capabilities=self.capabilities,
@@ -1777,6 +1786,7 @@ def build_builder_node_agent_server(
     max_json_body_bytes: int = DEFAULT_MAX_JSON_BODY_BYTES,
     max_file_body_bytes: int = DEFAULT_MAX_FILE_BODY_BYTES,
     max_active_image_builds: int = DEFAULT_MAX_ACTIVE_IMAGE_BUILDS,
+    max_finishing_image_builds: int = 0,
     build_execution_timeout_seconds: float = 1800.0,
     max_concurrent_image_pulls: int = 8,
     physical_disk_path: Path | None = None,
@@ -1797,6 +1807,8 @@ def build_builder_node_agent_server(
         or max_concurrent_image_pulls < 1
     ):
         raise ValueError("node-agent request and build limits must be positive")
+    if type(max_finishing_image_builds) is not int or not 0 <= max_finishing_image_builds <= 2:
+        raise ValueError("max finishing image builds must be between 0 and 2")
     resources = total_resources or ResourceQuantity()
     if not resources.is_valid:
         raise ValueError("total_resources cannot contain negative or non-finite values")
@@ -1807,6 +1819,7 @@ def build_builder_node_agent_server(
         ImageStore(image_file),
         image_runtime,
         max_active_builds=max_active_image_builds,
+        max_finishing_builds=max_finishing_image_builds,
         build_execution_timeout_seconds=build_execution_timeout_seconds,
         queue_builds=True,
         # Atomically admit only execution capacity, including preparations.

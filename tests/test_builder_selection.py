@@ -74,6 +74,18 @@ class BuilderSelectionTests(unittest.TestCase):
                     self.handler._select_builder_node(image_id="existing")
                 )
 
+    def test_terminal_build_keeps_its_owner_until_cleanup_releases_admission(self):
+        for status in ("succeeded", "failed"):
+            for phase in ("preparing_solving", "finishing"):
+                with self.subTest(status=status, phase=phase):
+                    self.handler._proxy_request.reset_mock()
+                    self.handler._proxy_request.side_effect = None
+                    self.handler._proxy_request.return_value = self.response(
+                        200, {"build": {"status": status, "admission_phase": phase}})
+                    self.assertEqual(
+                        self.handler._select_builder_node(image_id="existing"), self.busy)
+                    self.assertEqual(self.handler._proxy_request.call_count, 1)
+
     def test_completed_build_does_not_pin_new_build_to_busy_node(self):
         self.handler._proxy_request.side_effect = [
             self.response(200, {"build": {"status": "succeeded"}}),

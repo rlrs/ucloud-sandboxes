@@ -6677,9 +6677,11 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     "failed",
                 }:
                     return None
-                if build["status"] == "running":
+                if (build["status"] == "running"
+                        or build.get("admission_phase") in {"preparing_solving", "finishing"}):
                     # Joining/conflicting with an existing build is allowed
-                    # even at capacity; only new work needs another slot.
+                    # even at capacity, including terminal cleanup ownership;
+                    # only new work needs another slot.
                     return _reserve_builder_candidate(
                         [heartbeat], baseline, reserve=reserve, allow_full=True,
                     )

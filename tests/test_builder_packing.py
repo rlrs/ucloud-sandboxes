@@ -3,6 +3,7 @@ import unittest
 
 from ucloud_sandboxes import control_plane
 from ucloud_sandboxes.images import DEFAULT_MAX_ACTIVE_IMAGE_BUILDS
+from ucloud_sandboxes.build_admission import BUILD_ADMISSION_CAPACITY_LABEL
 from tests.test_control_plane import build_heartbeat
 
 
@@ -26,6 +27,24 @@ class BuilderPackingTests(unittest.TestCase):
         # Busy fleets leave new work pending instead of pinning it to a queue.
         self.assertIsNone(self.pick(builder("100", slots + 2), builder("200", slots + 1)))
         self.assertIsNone(self.pick(builder("100", slots), builder("200", slots)))
+
+    def test_pipeline_uses_idle_peers_before_building_a_publication_queue(self):
+        def pipeline(job, active):
+            return replace(builder(job, active), labels={BUILD_ADMISSION_CAPACITY_LABEL: "6"})
+        self.assertEqual(self.pick(pipeline("100", 0), pipeline("200", 1)), "200")
+        self.assertEqual(self.pick(pipeline("100", 0), pipeline("200", 2)), "100")
+        self.assertEqual(self.pick(pipeline("100", 5), pipeline("200", 3)), "200")
+        self.assertIsNone(self.pick(pipeline("100", 6), pipeline("200", 6)))
+
+    def test_pipeline_spreading_counts_dispatches_after_live_sample(self):
+        from unittest.mock import patch
+        nodes = [replace(builder(str(n), 0), labels={BUILD_ADMISSION_CAPACITY_LABEL: "6"})
+                 for n in range(3)]
+        with patch.dict(control_plane._BUILDER_DISPATCH_COUNTS, {}, clear=True), \
+             patch.dict(control_plane._BUILDER_DISPATCH_INFLIGHT, {}, clear=True):
+            chosen = [control_plane._reserve_builder_candidate(nodes, {}, reserve=True).job_id for _ in range(9)]
+            self.assertEqual(chosen[:6], ["0", "0", "1", "1", "2", "2"])
+            self.assertEqual(chosen[6:], ["0", "1", "2"])
 
 
 if __name__ == "__main__":

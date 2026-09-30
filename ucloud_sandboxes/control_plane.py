@@ -8365,12 +8365,19 @@ def _reserve_builder_candidate(
             return None
 
         def rank(heartbeat: NodeHeartbeat):
-            # Pack: fill the busiest builder that still has a free slot, and
-            # among idle ones the oldest, so surplus builders stay idle and
-            # scale down. A full fleet leaves demand at the gateway where a
-            # retry can select whichever peer next becomes available.
+            # Pipeline admission includes solves waiting for publication; it
+            # is a hard safety ceiling, not a throughput target. Consolidate
+            # a trickle up to two builds, then use idle peers before queuing
+            # more output behind the two publication workers. Once every
+            # peer has work, prefer the least loaded. Legacy builders retain
+            # their original packing behavior. Dispatch reservations count
+            # here as well, so a simultaneous burst cannot defeat spreading.
+            active = load(heartbeat)
+            pipelined = BUILD_ADMISSION_CAPACITY_LABEL in heartbeat.labels
+            saturated = pipelined and active >= 2
             return (
-                -load(heartbeat),
+                int(saturated),
+                active if saturated else -active,
                 consolidation_rank(heartbeat),
                 -heartbeat.physical_disk_free_mb,
                 heartbeat.node_id,

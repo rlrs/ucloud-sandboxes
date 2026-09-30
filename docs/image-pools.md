@@ -26,7 +26,7 @@ uv run python scripts/plan_image_pool.py plan \
   --limit 100 --per-family 2
 ```
 
-The `source` preparation (default) preserves the upstream image. `swesmith-v1` additionally fetches all repository branch refs and installs ripgrep, matching the pinned integration's common preparation recipe. These fetched refs and resolved packages are frozen in the published artifact; refreshing them requires an intentionally versioned preparation recipe. This does not stage hidden test files or precompute test results. The smoke validates the signed closure and sandbox mount/exec; SWE-smith also checks its repository refs and ripgrep. Exact task branch membership and task-specific dependency readiness still require the actual selection or stronger family-specific qualification.
+The `source` preparation (default) preserves the upstream image. Newly resolved sources with inherited ONBUILD triggers are deferred for direct import, because a FROM-only build would execute those triggers. `swesmith-v1` additionally fetches all repository branch refs and installs ripgrep, matching the pinned integration's common preparation recipe. These fetched refs and resolved packages are frozen in the published artifact; refreshing them requires an intentionally versioned preparation recipe. This does not stage hidden test files or precompute test results. The smoke validates the signed closure and sandbox mount/exec; SWE-smith also checks its repository refs and ripgrep. Exact task branch membership and task-specific dependency readiness still require the actual selection or stronger family-specific qualification.
 
 Run the preparer on the gateway, as its service account:
 

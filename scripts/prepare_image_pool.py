@@ -343,6 +343,8 @@ def main():
                 save(receipt_path, receipt)
             resolved = receipt["resolved"]
             preparation = item.get("preparation", "source")
+            if preparation == "source" and resolved.get("onbuild"):
+                raise RuntimeError("deferred: inherited ONBUILD triggers require a direct source import")
             key = image_identity(resolved["reference"], preparation)
             image_id = "precomputed-" + key[:32]
             # Serialize aliases for the same immutable image, across local runs.

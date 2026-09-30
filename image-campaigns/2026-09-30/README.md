@@ -2,7 +2,7 @@
 
 `inputs.json.gz` is a 1.3 MB recipe bundle stored in Git, independent of the registry volume. It contains 35,984 source references and the exact dependency contexts for 8,602 shared foundations: 11 OpenSWE, one explicit TMax scientific foundation, 2,786 TMax inline prefixes and 5,804 Terminal prefixes. It excludes task solutions, registry blobs, credentials, production addresses, build IDs and success receipts.
 
-The initial snapshot contains 191 resolved source digests; the remaining references have not all been resolved or built. The preparer records additional immutable resolutions on the gateway root disk, outside `/mnt/ucloud-registry`, before building. Preserve those work directories when replacing only the volume. Refresh this bundle from those directories to preserve later pins off-host as well. A Git snapshot is only as current as its recorded inputs.
+The initial snapshot contains 191 resolved source digests. `inputs-refreshed.json.gz` preserves the same source definitions and 8,602 foundation contexts, with 451 resolved source digests (SHA-256 `7ac209b302a7a2edd48741ff6bb98ca325f85ac3d3261ba6de6e358b9a52f2e7`). Existing pins and context bytes were compared against the initial snapshot and are unchanged. The remaining references have not all been resolved or built. The preparer records additional immutable resolutions on the gateway root disk, outside `/mnt/ucloud-registry`, before building. Preserve those work directories when replacing only the volume. Refresh this bundle from those directories to preserve later pins off-host as well. A Git snapshot is only as current as its recorded inputs.
 
 Foundation context identities and bundle checksums are verified before submission. Source dataset revisions are included in the source inventory and foundation records. Input definitions come from research-environments `c7ea0d7fe3379f0e6ffb0a68c82c80c184601f92` and verifiers-ucloud `7856cc18faceae31aa533605ea812d81b92a85ea`; actual training selection was unavailable. BIRD and NeMo remain deferred.
 
@@ -16,7 +16,7 @@ On the gateway, use a checked-out repository containing the preparation scripts 
 
 ```sh
 python scripts/image_campaign.py materialize \
-  --bundle image-campaigns/2026-09-30/inputs.json.gz \
+  --bundle image-campaigns/2026-09-30/inputs-refreshed.json.gz \
   --output /data/image-recovery-1 --generation recovery-1
 
 python scripts/image_campaign.py commands \

@@ -6,6 +6,8 @@ The initial snapshot contains 191 resolved source digests. `inputs-refreshed.jso
 
 `inputs-bases-complete.json.gz` advances the snapshot to 693 source digest pins, including all 94 inventoried generic task bases. It preserves every earlier pin, source definition and foundation context (SHA-256 `1a1c6268971b9cadc1e391638c59fe034c821b13c30a0d6f8b8a76a65362c2f3`). The separate `task-bases` recovery stage prepares all of those generic bases before the expensive task-image tail. This is not a claim that every task-specific SWE base or dependency installation is prepared.
 
+`inputs-shared-proof.json.gz` preserves that snapshot and adds the immutable source pin for the newly qualified Click PR1002 task base: 694 source pins, with unchanged foundation contexts (SHA-256 `289739d8029ef1220988379452894526102afd0d201a1fd849635f746bf225ea`). Shared-image experiments are not an automatic recovery transformation; the canonical original source remains the fallback.
+
 Foundation context identities and bundle checksums are verified before submission. Source dataset revisions are included in the source inventory and foundation records. Input definitions come from research-environments `c7ea0d7fe3379f0e6ffb0a68c82c80c184601f92` and verifiers-ucloud `7856cc18faceae31aa533605ea812d81b92a85ea`; actual training selection was unavailable. BIRD and NeMo remain deferred.
 
 ## Recovery after losing a registry volume
@@ -32,6 +34,8 @@ The second command prints explicit preparation commands. Run the small `bases` g
 Each loss event needs a new generation and empty output directory. Resume that same generation after ordinary interruption. New image identities and accepted-build journal names prevent old successful builds and publication records from masquerading as restored content. Old aliases remain insert-only: on an existing gateway, rewrite the actual recipe index from the new catalogs and use explicit restored image IDs/references. Existing client requests using stale upstream aliases are **not** automatically repaired by this workflow. Do not reuse an old catalog or old rewritten recipe database after volume loss.
 
 Rebuild the actual recipe index with `plan_image_foundations.py rewrite-index` and `plan_image_pool.py rewrite-index`, then audit it with `plan_image_pool.py audit-index` and qualify the selected artifacts before resuming training. Preserve the original task contexts separately; this bundle contains dependency prefixes and upstream image inputs, not every task's complete context or the unavailable training index.
+
+Before treating the cache as complete, run `plan_image_pool.py report --require-all-task-bases` with the full inventory and all source catalogs. It fails unless every inventoried task base is prepared, including task-specific upstream images; 100% generic-base coverage alone cannot pass. This is a catalog coverage gate, not a substitute for verifying the live artifact closure or measuring remaining recipe steps.
 
 The index audit now counts remaining RUN/COPY/ADD work separately from base readiness. `--max-unqualified-live-builds` defaults to zero: a warm base does not qualify a remaining package installation, download, compiler invocation or arbitrary script as a small live step. Increase that allowance only for separately measured recipes. Terminal preparation also reuses the longest exact validated Dockerfile prefix from its existing catalog, or another plan/catalog passed with `--prepared-prefix-root`; canonical task inputs remain unchanged.
 

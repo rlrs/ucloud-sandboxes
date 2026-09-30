@@ -108,7 +108,14 @@ def coverage_report(inventory, catalogs):
                 base_sources.add(item["source"])
                 if not faithful:
                     missing_bases.append(item["source"])
+    required_sources = {item["source"] for item in inventory["images"]}
+    missing_sources = (required_sources - ready.keys()) | set(missing_bases)
     return {"families": dict(families), "ready_source_references": len(ready),
+            "task_base_references": len(required_sources),
+            "task_base_references_ready": len(required_sources) - len(missing_sources),
+            "missing_task_base_references_count": len(missing_sources),
+            "missing_task_base_references_sample": sorted(missing_sources)[:50],
+            "all_task_bases_prepared": bool(required_sources) and not missing_sources,
             "generic_base_references": len(base_sources),
             "generic_base_references_ready": len(base_sources) - len(missing_bases),
             "missing_generic_bases": sorted(missing_bases),
@@ -315,6 +322,8 @@ def main():
     report = commands.add_parser("report")
     report.add_argument("--inventory", type=Path, required=True)
     report.add_argument("--catalog", type=Path, action="append", required=True)
+    report.add_argument("--require-all-task-bases", action="store_true",
+                        help="fail unless every inventoried base, including task-specific upstream images, is prepared")
     audit = commands.add_parser("audit-index")
     audit.add_argument("--source", type=Path, required=True)
     audit.add_argument("--catalog", type=Path, action="append", required=True)
@@ -332,8 +341,11 @@ def main():
         (args.output / "plan.json").write_text(json.dumps({**inventory, "images": images}, indent=2) + "\n")
         print(json.dumps({"images": len(images), "task_rows": sum(x["task_rows"] for x in images)}))
     elif args.command == "report":
-        print(json.dumps(coverage_report(json.loads(args.inventory.read_text()),
-                                         [json.loads(p.read_text()) for p in args.catalog]), indent=2))
+        result = coverage_report(json.loads(args.inventory.read_text()),
+                                 [json.loads(p.read_text()) for p in args.catalog])
+        print(json.dumps(result, indent=2))
+        if args.require_all_task_bases and not result["all_task_bases_prepared"]:
+            raise SystemExit(1)
     elif args.command == "audit-index":
         if min(args.max_live_builds, args.max_cold_builds, args.max_unqualified_live_builds) < 0:
             parser.error("build allowances cannot be negative")

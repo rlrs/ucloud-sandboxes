@@ -1582,5 +1582,255 @@
     "exact_content_and_metadata_bytes": 1133885082,
     "elapsed_seconds": 22.003587891027564,
     "scope": "Two retained flat ScaleSWE images; logical tar file bytes, not measured physical storage savings or corpus-wide extrapolation."
+  },
+  "completed_prefix_tail": {
+    "observed_at_utc": "2026-09-30T20:26:09Z",
+    "results": {
+      "ready": 315,
+      "deferred": 330
+    },
+    "successful_build_receipts": 315,
+    "erofs_bytes_built": 12249309184,
+    "groups_reused": 413,
+    "prefix_components_reused": 228,
+    "docker_pulls_skipped": 314,
+    "end_to_end_ms_p50": 6061,
+    "end_to_end_ms_p95": 29258,
+    "registry_used_bytes": 2406611005440,
+    "registry_available_bytes": 612536532992,
+    "observed_registry_growth_bytes": 19096715264,
+    "failure_reasons": {
+      "deferred: batch storage budget": 330
+    }
+  },
+  "strict_all_task_base_coverage": {
+    "families": {
+      "MultiSWE": {
+        "upstream_image_rows": 2232,
+        "upstream_image_rows_ready": 50
+      },
+      "R2E-Gym": {
+        "upstream_image_rows": 4522,
+        "upstream_image_rows_ready": 50
+      },
+      "SWE-Lego": {
+        "upstream_image_rows": 4323,
+        "upstream_image_rows_ready": 52
+      },
+      "SWE-rebench v2": {
+        "upstream_image_rows": 6272,
+        "upstream_image_rows_ready": 53
+      },
+      "ScaleSWE": {
+        "upstream_image_rows": 17202,
+        "upstream_image_rows_ready": 140
+      },
+      "SWE-smith": {
+        "upstream_image_rows": 88130,
+        "upstream_image_rows_ready": 59879
+      },
+      "OpenThoughts TBLite": {
+        "base_only_rows": 100,
+        "base_only_rows_ready": 100
+      },
+      "Terminal-Lego": {
+        "base_only_rows": 13825,
+        "base_only_rows_ready": 13825
+      },
+      "Senior SWE-Bench": {
+        "base_only_rows": 50,
+        "base_only_rows_ready": 50
+      },
+      "Terminal-Bench 2": {
+        "upstream_image_rows": 89,
+        "upstream_image_rows_ready": 50
+      },
+      "SWE-bench Multilingual": {
+        "upstream_image_rows": 300,
+        "upstream_image_rows_ready": 50
+      },
+      "SWE-bench Verified": {
+        "upstream_image_rows": 500,
+        "upstream_image_rows_ready": 50
+      }
+    },
+    "ready_source_references": 692,
+    "task_base_references": 35984,
+    "task_base_references_ready": 692,
+    "missing_task_base_references_count": 35292,
+    "missing_task_base_references_sample": [
+      "alexgshaw/mteb-leaderboard:20251031",
+      "alexgshaw/mteb-retrieve:20251031",
+      "alexgshaw/multi-source-data-merger:20251031",
+      "alexgshaw/nginx-request-logging:20251031",
+      "alexgshaw/openssl-selfsigned-cert:20251031",
+      "alexgshaw/overfull-hbox:20251031",
+      "alexgshaw/password-recovery:20251031",
+      "alexgshaw/path-tracing-reverse:20251031",
+      "alexgshaw/path-tracing:20251031",
+      "alexgshaw/polyglot-c-py:20251031",
+      "alexgshaw/polyglot-rust-c:20251031",
+      "alexgshaw/portfolio-optimization:20251031",
+      "alexgshaw/protein-assembly:20251031",
+      "alexgshaw/prove-plus-comm:20251031",
+      "alexgshaw/pypi-server:20251031",
+      "alexgshaw/pytorch-model-cli:20251031",
+      "alexgshaw/pytorch-model-recovery:20251031",
+      "alexgshaw/qemu-alpine-ssh:20251031",
+      "alexgshaw/qemu-startup:20251031",
+      "alexgshaw/query-optimize:20251031",
+      "alexgshaw/raman-fitting:20251031",
+      "alexgshaw/regex-chess:20251031",
+      "alexgshaw/regex-log:20251031",
+      "alexgshaw/reshard-c4-data:20251031",
+      "alexgshaw/rstan-to-pystan:20251031",
+      "alexgshaw/sam-cell-seg:20251031",
+      "alexgshaw/sanitize-git-repo:20251031",
+      "alexgshaw/schemelike-metacircular-eval:20251031",
+      "alexgshaw/sparql-university:20251031",
+      "alexgshaw/sqlite-db-truncate:20251031",
+      "alexgshaw/sqlite-with-gcov:20251031",
+      "alexgshaw/torch-pipeline-parallelism:20251031",
+      "alexgshaw/torch-tensor-parallelism:20251031",
+      "alexgshaw/train-fasttext:20251031",
+      "alexgshaw/tune-mjcf:20251031",
+      "alexgshaw/video-processing:20251031",
+      "alexgshaw/vulnerable-secret:20251031",
+      "alexgshaw/winning-avg-corewars:20251031",
+      "alexgshaw/write-compressor:20251031",
+      "aweaiteam/scaleswe:adamchainz_django-cors-headers_pr380",
+      "aweaiteam/scaleswe:adamchainz_django-cors-headers_pr388",
+      "aweaiteam/scaleswe:adamchainz_django-cors-headers_pr396",
+      "aweaiteam/scaleswe:adamchainz_django-cors-headers_pr397",
+      "aweaiteam/scaleswe:adamchainz_django-cors-headers_pr405",
+      "aweaiteam/scaleswe:adamchainz_django-cors-headers_pr418",
+      "aweaiteam/scaleswe:adamchainz_django-cors-headers_pr451",
+      "aweaiteam/scaleswe:adamchainz_ec2-metadata_pr339",
+      "aweaiteam/scaleswe:adamchainz_ec2-metadata_pr40",
+      "aweaiteam/scaleswe:adamchainz_flake8-comprehensions_pr195",
+      "aweaiteam/scaleswe:adamchainz_flake8-comprehensions_pr202"
+    ],
+    "all_task_bases_prepared": false,
+    "generic_base_references": 94,
+    "generic_base_references_ready": 94,
+    "missing_generic_bases": [],
+    "unique_erofs_bytes": 514824216576,
+    "summed_erofs_bytes": 802753581056,
+    "scope": "Upstream image/base coverage; not proof of task-specific setup or an unavailable training selection"
+  },
+  "strict_all_task_base_coverage_after_new_task": {
+    "families": {
+      "MultiSWE": {
+        "upstream_image_rows": 2232,
+        "upstream_image_rows_ready": 50
+      },
+      "R2E-Gym": {
+        "upstream_image_rows": 4522,
+        "upstream_image_rows_ready": 50
+      },
+      "SWE-Lego": {
+        "upstream_image_rows": 4323,
+        "upstream_image_rows_ready": 52
+      },
+      "SWE-rebench v2": {
+        "upstream_image_rows": 6272,
+        "upstream_image_rows_ready": 53
+      },
+      "ScaleSWE": {
+        "upstream_image_rows": 17202,
+        "upstream_image_rows_ready": 141
+      },
+      "SWE-smith": {
+        "upstream_image_rows": 88130,
+        "upstream_image_rows_ready": 59879
+      },
+      "OpenThoughts TBLite": {
+        "base_only_rows": 100,
+        "base_only_rows_ready": 100
+      },
+      "Terminal-Lego": {
+        "base_only_rows": 13825,
+        "base_only_rows_ready": 13825
+      },
+      "Senior SWE-Bench": {
+        "base_only_rows": 50,
+        "base_only_rows_ready": 50
+      },
+      "Terminal-Bench 2": {
+        "upstream_image_rows": 89,
+        "upstream_image_rows_ready": 50
+      },
+      "SWE-bench Multilingual": {
+        "upstream_image_rows": 300,
+        "upstream_image_rows_ready": 50
+      },
+      "SWE-bench Verified": {
+        "upstream_image_rows": 500,
+        "upstream_image_rows_ready": 50
+      }
+    },
+    "ready_source_references": 693,
+    "task_base_references": 35984,
+    "task_base_references_ready": 693,
+    "missing_task_base_references_count": 35291,
+    "missing_task_base_references_sample": [
+      "alexgshaw/mteb-leaderboard:20251031",
+      "alexgshaw/mteb-retrieve:20251031",
+      "alexgshaw/multi-source-data-merger:20251031",
+      "alexgshaw/nginx-request-logging:20251031",
+      "alexgshaw/openssl-selfsigned-cert:20251031",
+      "alexgshaw/overfull-hbox:20251031",
+      "alexgshaw/password-recovery:20251031",
+      "alexgshaw/path-tracing-reverse:20251031",
+      "alexgshaw/path-tracing:20251031",
+      "alexgshaw/polyglot-c-py:20251031",
+      "alexgshaw/polyglot-rust-c:20251031",
+      "alexgshaw/portfolio-optimization:20251031",
+      "alexgshaw/protein-assembly:20251031",
+      "alexgshaw/prove-plus-comm:20251031",
+      "alexgshaw/pypi-server:20251031",
+      "alexgshaw/pytorch-model-cli:20251031",
+      "alexgshaw/pytorch-model-recovery:20251031",
+      "alexgshaw/qemu-alpine-ssh:20251031",
+      "alexgshaw/qemu-startup:20251031",
+      "alexgshaw/query-optimize:20251031",
+      "alexgshaw/raman-fitting:20251031",
+      "alexgshaw/regex-chess:20251031",
+      "alexgshaw/regex-log:20251031",
+      "alexgshaw/reshard-c4-data:20251031",
+      "alexgshaw/rstan-to-pystan:20251031",
+      "alexgshaw/sam-cell-seg:20251031",
+      "alexgshaw/sanitize-git-repo:20251031",
+      "alexgshaw/schemelike-metacircular-eval:20251031",
+      "alexgshaw/sparql-university:20251031",
+      "alexgshaw/sqlite-db-truncate:20251031",
+      "alexgshaw/sqlite-with-gcov:20251031",
+      "alexgshaw/torch-pipeline-parallelism:20251031",
+      "alexgshaw/torch-tensor-parallelism:20251031",
+      "alexgshaw/train-fasttext:20251031",
+      "alexgshaw/tune-mjcf:20251031",
+      "alexgshaw/video-processing:20251031",
+      "alexgshaw/vulnerable-secret:20251031",
+      "alexgshaw/winning-avg-corewars:20251031",
+      "alexgshaw/write-compressor:20251031",
+      "aweaiteam/scaleswe:adamchainz_django-cors-headers_pr380",
+      "aweaiteam/scaleswe:adamchainz_django-cors-headers_pr388",
+      "aweaiteam/scaleswe:adamchainz_django-cors-headers_pr396",
+      "aweaiteam/scaleswe:adamchainz_django-cors-headers_pr397",
+      "aweaiteam/scaleswe:adamchainz_django-cors-headers_pr405",
+      "aweaiteam/scaleswe:adamchainz_django-cors-headers_pr418",
+      "aweaiteam/scaleswe:adamchainz_django-cors-headers_pr451",
+      "aweaiteam/scaleswe:adamchainz_ec2-metadata_pr339",
+      "aweaiteam/scaleswe:adamchainz_ec2-metadata_pr40",
+      "aweaiteam/scaleswe:adamchainz_flake8-comprehensions_pr195",
+      "aweaiteam/scaleswe:adamchainz_flake8-comprehensions_pr202"
+    ],
+    "all_task_bases_prepared": false,
+    "generic_base_references": 94,
+    "generic_base_references_ready": 94,
+    "missing_generic_bases": [],
+    "unique_erofs_bytes": 514824216576,
+    "summed_erofs_bytes": 803525926912,
+    "scope": "Upstream image/base coverage; not proof of task-specific setup or an unavailable training selection"
   }
 }

@@ -1,0 +1,292 @@
+{
+  "scope": "Isolated flat-image sharing prototype; no existing source alias or image was replaced.",
+  "sources": [
+    {
+      "source": "aweaiteam/scaleswe:adamchainz_apig-wsgi_pr80",
+      "reference": "10.42.0.2:5000/ucloud-managed/precomputed-356170717dabe0384858a0d18587-823bbecf5235:latest@sha256:db4a81f9173c9d0a5da6e8194505ac2012e1d30acc34581c64f12fc6c96bf9e0",
+      "layers": [
+        {
+          "digest": "sha256:1fa6965d9efeb3574e3be1366a45a20b6cf9e315bdaeedc7c6e692e2aa961825",
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "size": 441039438
+        }
+      ]
+    },
+    {
+      "source": "aweaiteam/scaleswe:adamchainz_apig-wsgi_pr93",
+      "reference": "10.42.0.2:5000/ucloud-managed/precomputed-88ac4e3f2a111e3d43ed2b303ada-513bf5447ec7:latest@sha256:f17a5a77a9b3a66d5dfe2df55605e535b8c8b457c613988b2bcdeaa44221bb87",
+      "layers": [
+        {
+          "digest": "sha256:68910ff5e0aa73067111b2727a92167e09fd7bddc0d534624ffea7c5d44647b5",
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "size": 437356919
+        }
+      ]
+    }
+  ],
+  "delta": {
+    "sources": [
+      "aweaiteam/scaleswe:adamchainz_apig-wsgi_pr80",
+      "aweaiteam/scaleswe:adamchainz_apig-wsgi_pr93"
+    ],
+    "changed_entries": 1362,
+    "whiteouts": 211,
+    "restored_directories": 180,
+    "changed_regular_file_bytes": 16702971,
+    "delta_compressed_bytes": 6263530,
+    "delta_digest": "sha256:6c9a5484f15600c0f31e880649cd0634ceff3821ddeae96760868422a972a37b",
+    "delta_tar_bytes": 17920000,
+    "delta_diff_id": "sha256:9984424e4ec5722ea3010aaa04bb7f506f1160cc5591fc6e8ad8b30bfe2edb94",
+    "elapsed_seconds": 45.3428707139974,
+    "scope": "Unpublished delta archive; source compressed blobs and selected target contents verified. Runtime filesystem equivalence is not yet qualified."
+  },
+  "build_timings": {
+    "end_to_end_ms": 46283,
+    "environment": {
+      "component_lookup_ms": 70.81299999999999,
+      "docker_pull_ms": 41818.177,
+      "erofs_bytes_built": 11575296,
+      "groups_built": 1,
+      "groups_reused": 1,
+      "layer_lock_wait_ms": 0.027,
+      "mkfs_ms": 106.442,
+      "oci_decompress_ms": 55.142996001222855,
+      "oci_download_bytes_actual": 6263530.0,
+      "oci_extract_ms": 0.15531999997620005,
+      "oci_transfer_ms": 10.167505999334026,
+      "preflight_misses": 1,
+      "preflight_ms": 388.171,
+      "publish_component_ms": 198.045,
+      "selective_fallback_whiteout": 1,
+      "selective_fallbacks": 1,
+      "selective_materialization_ms": 79.222,
+      "selective_subprocess_ms": 364.888,
+      "sign_ms": 34.377,
+      "squash_ms": 0.0,
+      "total_ms": 43072.886
+    },
+    "phases": {
+      "cache_prepare_ms": 10,
+      "cleanup_ms": 0,
+      "docker_build_and_push_ms": 851,
+      "finishing_wait_ms": 2,
+      "immutable_environment_ms": 45189
+    },
+    "preparation_ms": 40,
+    "queue_wait_ms": 15,
+    "total_ms": 46228
+  },
+  "publication": {
+    "reference": "10.42.0.2:5000/ucloud-proof/flat-rebase-v2-20260930-pr93:proof-v1@sha256:95c89936e03cdfe68fb81640ee02ead355bd14cbf74ecd222de39bca385ba0d3",
+    "original": "10.42.0.2:5000/ucloud-managed/precomputed-88ac4e3f2a111e3d43ed2b303ada-513bf5447ec7:latest@sha256:f17a5a77a9b3a66d5dfe2df55605e535b8c8b457c613988b2bcdeaa44221bb87",
+    "prepared": "10.42.0.2:5000/ucloud-managed/flat-rebase-proof-v2-20260930-pr93-0eb1e148fe72:latest@sha256:6c90e223a914b81f658a0417dc45d8485c3c74f4ccec1d08d7db2e709711fff0"
+  },
+  "filesystem_qualification": {
+    "equivalent": true,
+    "original_entries": 40512,
+    "prepared_entries": 40512,
+    "excluded": [
+      "/dev",
+      "/etc/hostname",
+      "/etc/hosts",
+      "/etc/resolv.conf",
+      "/proc",
+      "/run",
+      "/sys",
+      "/tmp/ucloud-filesystem-proof.json.gz"
+    ],
+    "differences": [],
+    "runtime_timestamp_changes": [
+      {
+        "path": "/",
+        "original": 1790799706765262485,
+        "prepared": 1790799706779776867
+      },
+      {
+        "path": "/.ucloud-init",
+        "original": 1790799706665653498,
+        "prepared": 1790799706668377733
+      },
+      {
+        "path": "/etc",
+        "original": 1790799706663747458,
+        "prepared": 1790799706667297183
+      },
+      {
+        "path": "/tmp",
+        "original": 1790799706764055724,
+        "prepared": 1790799706778975240
+      }
+    ],
+    "original_scan_seconds": 40.803272676,
+    "prepared_scan_seconds": 41.845871579
+  },
+  "cross_project_logical_overlap": {
+    "anchor": "aweaiteam/scaleswe:adamchainz_apig-wsgi_pr80",
+    "scope": "Read-only logical file overlap; no physical savings or runtime qualification for these targets.",
+    "results": [
+      {
+        "source": "aweaiteam/scaleswe:fonttools_fonttools_pr1359",
+        "source_digest": "sha256:9a5100e1fb093c7f3187cb8040062c65deb0ef3806e041dea6789ee120472817",
+        "layer_digest": "sha256:c187d2e3b0d4bd05ee723270e58b32b6c8fefb1b1316cb6ac231601b6a52484f",
+        "compressed_read_bytes": 694616209,
+        "entries": 52982,
+        "regular_file_bytes": 1636029449,
+        "changed_regular_file_bytes": 503398946,
+        "unchanged_fraction": 0.6923044714704276,
+        "changed_entries": 13884,
+        "whiteouts": 128,
+        "seconds": 16.405892645998392,
+        "source_reference": "10.42.0.2:5000/ucloud-managed/precomputed-ec25bd2b1281b2631a26f739e648-d076e77248e9:latest@sha256:9a5100e1fb093c7f3187cb8040062c65deb0ef3806e041dea6789ee120472817"
+      },
+      {
+        "source": "aweaiteam/scaleswe:canonical_operator_pr1000",
+        "source_digest": "sha256:2e49c11dc4c1c4fa8b8e6be649307b8898e555bdcc74fe14faa1614efdfedb79",
+        "layer_digest": "sha256:4b0fdb6f94e4bc4f68ad5bc7ca0b1aa3895c3ff6984257043c440ca5fd0a1cef",
+        "compressed_read_bytes": 509735077,
+        "entries": 50368,
+        "regular_file_bytes": 1313830457,
+        "changed_regular_file_bytes": 181199954,
+        "unchanged_fraction": 0.862082696412936,
+        "changed_entries": 11288,
+        "whiteouts": 112,
+        "seconds": 13.578264613985084,
+        "source_reference": "10.42.0.2:5000/ucloud-managed/precomputed-97dcec8b1d3216fbd377494a2cf1-b4a3cca9fe93:latest@sha256:2e49c11dc4c1c4fa8b8e6be649307b8898e555bdcc74fe14faa1614efdfedb79"
+      },
+      {
+        "source": "aweaiteam/scaleswe:pallets_click_pr1000",
+        "source_digest": "sha256:f1fe0eeb045f1fa8c01792d7c5deb38818b8e718dd7fb152e1c678d2d1ea4271",
+        "layer_digest": "sha256:ab887d026287c9b3325ba5cc502e01c9f388338f7fb3fbdf2d52c5c7394c3ab7",
+        "compressed_read_bytes": 489757446,
+        "entries": 45882,
+        "regular_file_bytes": 1252547718,
+        "changed_regular_file_bytes": 120788414,
+        "unchanged_fraction": 0.9035658184800589,
+        "changed_entries": 6814,
+        "whiteouts": 118,
+        "seconds": 13.101074602018343,
+        "source_reference": "10.42.0.2:5000/ucloud-managed/precomputed-8db8333494e660c29741879134ff-c8b11283f326:latest@sha256:f1fe0eeb045f1fa8c01792d7c5deb38818b8e718dd7fb152e1c678d2d1ea4271"
+      },
+      {
+        "source": "aweaiteam/scaleswe:python-poetry_poetry-core_pr100",
+        "source_digest": "sha256:5ed20bc58b64bf403d44f26db4c5c61ea6ca7abf1742865e4917cb6992326b3a",
+        "layer_digest": "sha256:370f25cf1972c865bffcc5ffc665ed2b4474167fc3596bce9574239f2f418f6d",
+        "compressed_read_bytes": 532498541,
+        "entries": 49150,
+        "regular_file_bytes": 1329518115,
+        "changed_regular_file_bytes": 196887612,
+        "unchanged_fraction": 0.8519105457995207,
+        "changed_entries": 10058,
+        "whiteouts": 205,
+        "seconds": 13.809183120989474,
+        "source_reference": "10.42.0.2:5000/ucloud-managed/precomputed-b9462d3ccd5dcc78696cea24d707-ec07a84e2e63:latest@sha256:5ed20bc58b64bf403d44f26db4c5c61ea6ca7abf1742865e4917cb6992326b3a"
+      }
+    ]
+  },
+  "new_task_proof": {
+    "source": "aweaiteam/scaleswe:pallets_click_pr1002",
+    "anchor": "aweaiteam/scaleswe:pallets_click_pr1000",
+    "delta": {
+      "sources": [
+        "aweaiteam/scaleswe:pallets_click_pr1000",
+        "aweaiteam/scaleswe:pallets_click_pr1002"
+      ],
+      "changed_entries": 13,
+      "whiteouts": 0,
+      "restored_directories": 7,
+      "changed_regular_file_bytes": 18,
+      "delta_compressed_bytes": 360,
+      "delta_digest": "sha256:85eb6027d94dceea69b5c529e61df9c98d581ead4fa0f3503b3ac7f2c9a2511c",
+      "delta_tar_bytes": 10240,
+      "delta_diff_id": "sha256:5b97f746e8956bb79df742aa1a83a0256e872ec5244d613b267dc4fcdeb5f27c",
+      "elapsed_seconds": 38.50818313698983,
+      "scope": "Unpublished delta archive; source compressed blobs and selected target contents verified. Runtime filesystem equivalence is not yet qualified."
+    },
+    "build_timings": {
+      "end_to_end_ms": 972,
+      "environment": {
+        "component_lookup_ms": 1.6059999999999999,
+        "docker_pull_skipped": 1,
+        "erofs_bytes_built": 4096,
+        "groups_built": 1,
+        "groups_reused": 1,
+        "layer_lock_wait_ms": 0.006,
+        "mkfs_ms": 8.575,
+        "oci_decompress_ms": 0.16963499996336395,
+        "oci_download_bytes": 360,
+        "oci_download_bytes_actual": 360.0,
+        "oci_extract_ms": 0.9706480000062356,
+        "oci_layers_materialized": 1,
+        "oci_transfer_ms": 8.579977000024996,
+        "preflight_misses": 1,
+        "preflight_ms": 506.011,
+        "publish_component_ms": 150.383,
+        "selective_materialization_ms": 10.129,
+        "selective_materializations": 1,
+        "selective_subprocess_ms": 264.266,
+        "sign_ms": 0.217,
+        "squash_ms": 0.0,
+        "total_ms": 671.68
+      },
+      "phases": {
+        "cache_prepare_ms": 7,
+        "cleanup_ms": 0,
+        "docker_build_and_push_ms": 271,
+        "finishing_wait_ms": 1,
+        "immutable_environment_ms": 687
+      },
+      "preparation_ms": 2,
+      "queue_wait_ms": 1,
+      "total_ms": 969
+    },
+    "filesystem_qualification": {
+      "equivalent": true,
+      "original_entries": 45872,
+      "prepared_entries": 45872,
+      "excluded": [
+        "/dev",
+        "/etc/hostname",
+        "/etc/hosts",
+        "/etc/resolv.conf",
+        "/proc",
+        "/run",
+        "/sys",
+        "/tmp/ucloud-filesystem-proof.json.gz"
+      ],
+      "differences": [],
+      "runtime_timestamp_changes": [
+        {
+          "path": "/",
+          "original": 1790800354304493539,
+          "prepared": 1790800354343995394
+        },
+        {
+          "path": "/.ucloud-init",
+          "original": 1790800354205335606,
+          "prepared": 1790800354248335858
+        },
+        {
+          "path": "/etc",
+          "original": 1790800354204335600,
+          "prepared": 1790800354247335852
+        },
+        {
+          "path": "/tmp",
+          "original": 1790800354303558682,
+          "prepared": 1790800354342501734
+        }
+      ],
+      "original_scan_seconds": 61.397048678,
+      "prepared_scan_seconds": 61.407595388000004
+    },
+    "publication": {
+      "reference": "10.42.0.2:5000/ucloud-proof/flat-rebase-click-20260930-pr1002:proof-v1@sha256:69a6fc4f3e45ff9287403f9e1efb226d2d3750729aef61259c303dc8680bdaf6",
+      "original": "10.42.0.2:5000/ucloud-managed/precomputed-c16d662f90b890ef43f8b7de918c-c980e54e0c2e:latest@sha256:4dbe816fa9b579786c4942136e6a0c5229df13a11c2975a3f7ade9cc5a095496",
+      "prepared": "10.42.0.2:5000/ucloud-managed/flat-rebase-click-proof-20260930-pr93-688570f8afa9:latest@sha256:6c7ed4eccf43f8cfe07362f255bbb4f934de99dc988222cb6c44842a95ea9704"
+    },
+    "original_erofs_already_shared": true,
+    "shared_original_erofs_bytes": 772345856,
+    "distinct_original_oci_bytes": 489757407,
+    "scope": "No original references removed. Potential retained OCI savings; original EROFS already deduplicated."
+  }
+}

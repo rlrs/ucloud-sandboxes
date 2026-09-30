@@ -221,6 +221,14 @@ class ImagePoolTests(unittest.TestCase):
         self.assertEqual(report["families"]["terminal"]["base_only_rows_ready"], 100)
         self.assertEqual(report["families"]["terminal"].get("upstream_image_rows_ready", 0), 0)
         self.assertEqual(report["unique_erofs_bytes"], 100)
+        self.assertEqual(report["generic_base_references_ready"], 1)
+        self.assertEqual(report["task_base_references"], 2)
+        self.assertEqual(report["task_base_references_ready"], 1)
+        self.assertEqual(report["missing_task_base_references_sample"], ["task"])
+        self.assertFalse(report["all_task_bases_prepared"])
+        catalogs[0]["images"]["task"] = {"status": "ready", "reference": "task@digest", "components": []}
+        self.assertTrue(planner.coverage_report(inventory, catalogs)["all_task_bases_prepared"])
+        self.assertFalse(planner.coverage_report({"images": []}, catalogs)["all_task_bases_prepared"])
 
     def test_selection_balances_families_before_fanout(self):
         images = [{"source": "popular", "families": ["swe"], "task_rows": 1000},

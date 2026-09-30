@@ -1542,6 +1542,45 @@
     "wheel_sha256": "2ccf7e0f4da530dc2567dec99378e13aaed35fefe3912aba4fd458a4e8c9c4b6",
     "bundle_sha256": "5be01496fb3142f7e57b3b74b470cd3e4d53b50ee75d1a259bd718ef2db5e44d",
     "test_count": 126,
-    "privileged_skips": 2
+    "privileged_skips": 2,
+    "larger_prefix_batch": {
+      "observed_at_utc": "2026-09-30T19:58:00Z",
+      "results": {
+        "ready": 161
+      },
+      "successful_build_receipts": 162,
+      "erofs_bytes_built": 1724665856,
+      "groups_reused": 238,
+      "prefix_components_reused": 118,
+      "docker_pulls_skipped": 162,
+      "end_to_end_ms_p50": 5231,
+      "end_to_end_ms_p95": 14593,
+      "registry_used_bytes": 2390297006080,
+      "registry_available_bytes": 628850532352,
+      "observed_registry_growth_bytes": 2782715904,
+      "failure_reasons": {}
+    }
+  },
+  "flat_source_overlap_20260930": {
+    "sources": [
+      "aweaiteam/scaleswe:adamchainz_apig-wsgi_pr80",
+      "aweaiteam/scaleswe:adamchainz_apig-wsgi_pr93"
+    ],
+    "totals": {
+      "aweaiteam/scaleswe:adamchainz_apig-wsgi_pr80": {
+        "entries": 41325,
+        "regular_file_bytes": 1159046415
+      },
+      "aweaiteam/scaleswe:adamchainz_apig-wsgi_pr93": {
+        "entries": 40522,
+        "regular_file_bytes": 1150588053
+      }
+    },
+    "same_path_content_entries": 39741,
+    "same_path_content_bytes": 1140020270,
+    "exact_content_and_metadata_entries": 39160,
+    "exact_content_and_metadata_bytes": 1133885082,
+    "elapsed_seconds": 22.003587891027564,
+    "scope": "Two retained flat ScaleSWE images; logical tar file bytes, not measured physical storage savings or corpus-wide extrapolation."
   }
 }

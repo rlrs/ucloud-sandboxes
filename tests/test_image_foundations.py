@@ -81,6 +81,12 @@ class ImageFoundationTests(unittest.TestCase):
                 self.assertEqual(db.execute("SELECT prepared_image FROM images WHERE family='other'").fetchone()[0], "old")
 
     def test_preparer_isolates_failed_build_and_resumes_accepted_work(self):
+        self.check_preparer_resume("")
+
+    def test_recovery_generation_ignores_old_foundation_and_resumes_new_build(self):
+        self.check_preparer_resume("recovery-1")
+
+    def check_preparer_resume(self, generation):
         preparer = self.load_script("prepare_image_foundations")
         pool = self.load_script("prepare_image_pool")
         from ucloud_sandboxes.images import ImageRecord
@@ -95,7 +101,8 @@ class ImageFoundationTests(unittest.TestCase):
                 (context / "Dockerfile").write_text(foundation.dockerfile)
                 (context / "base_install.sh").write_bytes(foundation.installer)
                 items.append({"key": foundation.key, "image_id": foundation.image_id, "tasks": 1})
-            (root / "plan.json").write_text(json.dumps({"schema": 1, "foundations": items}))
+            (root / "plan.json").write_text(json.dumps({"schema": 1, "foundations": items,
+                                                       "rebuild_generation": generation}))
             (root / "token").write_text("test")
             (root / "config.json").write_text("{}")
             config = SimpleNamespace(control_state_file=lambda: root / "control",
@@ -105,7 +112,8 @@ class ImageFoundationTests(unittest.TestCase):
             client.list_images.return_value = []
             client.submit_image_build.side_effect = [{"build_id": "bad"}, {"build_id": "good"}]
             now = utc_now()
-            image = ImageRecord(id=foundations[1].image_id, tag="registry/good:latest", source="build",
+            image_id = preparer.build_image_id(items[1], generation)
+            image = ImageRecord(id=image_id, tag="registry/good:latest", source="build",
                 state="available", created_at=now, updated_at=now, pushed=True,
                 manifest_digest="sha256:" + "b" * 64).to_dict()
             client.wait_for_image_build.side_effect = lambda identity, **kwargs: (
@@ -114,7 +122,15 @@ class ImageFoundationTests(unittest.TestCase):
             client.exec.return_value = SimpleNamespace(exit_code=0, stdout='{"cpu_only":true}', stderr="")
             sdk = SimpleNamespace(SandboxClient=Mock(return_value=client), Image=Mock(), SandboxSpec=Mock())
             store = Mock()
-            store.get.return_value = None
+            # A lost-volume record still exists under the old image identity.
+            # Recovery must never consult its missing registry publication.
+            store.get.side_effect = lambda identity: (
+                ImageRecord.from_dict({**image, "id": foundations[1].image_id})
+                if generation and identity == foundations[1].image_id else None)
+            # Keep patched modules loaded across patch.dict(sys.modules) cleanup.
+            for module in ("config", "environment_config", "managed_registry", "environment_dependencies",
+                           "images", "control_plane", "environment_artifact", "registry_disk", "host_locks"):
+                importlib.import_module("ucloud_sandboxes." + module)
             with ExitStack() as stack:
                 stack.enter_context(patch.dict(sys.modules, {"ucloud_sandboxes_sdk": sdk, "prepare_image_pool": pool}))
                 stack.enter_context(patch.object(sys, "path", list(sys.path)))
@@ -140,6 +156,7 @@ class ImageFoundationTests(unittest.TestCase):
                     self.assertEqual(exit_status.exception.code, 1)
                     catalog = json.loads((root / "catalog.json").read_text())
                     self.assertEqual(set(catalog["foundations"]), {foundations[1].key})
+                    self.assertEqual(catalog["foundations"][foundations[1].key]["image_id"], image_id)
                     self.assertEqual(catalog["failures"][foundations[0].key]["status"], "failed")
                 self.assertEqual(client.submit_image_build.call_count, 2)
                 self.assertEqual(client.create_sandbox.call_count, 1)

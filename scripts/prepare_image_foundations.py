@@ -44,6 +44,13 @@ def validate_context(root, item):
     return context
 
 
+def build_image_id(item, generation):
+    if not generation:
+        return item["image_id"]
+    digest = hashlib.sha256(json.dumps([item["key"], generation]).encode()).hexdigest()
+    return "foundation-" + item.get("family", "tmax") + "-" + digest[:32]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", required=True, type=Path)
@@ -60,7 +67,7 @@ def main():
         parser.error("limits must be positive")
     if not 1 <= args.workers <= 32:
         parser.error("workers must be 1..32")
-    from prepare_image_pool import admission, GIB
+    from prepare_image_pool import admission, GIB, rebuild_generation
     sys.path.insert(0, str(args.sdk_wheel))
     import ucloud_sandboxes_sdk as sdk
     from ucloud_sandboxes.config import DeploymentConfig
@@ -86,6 +93,7 @@ def main():
     plan = json.loads((args.root / "plan.json").read_text())
     if plan.get("schema") != 1:
         raise ValueError("unsupported foundation plan")
+    generation = rebuild_generation(plan)
     identities = [item["image_id"] for item in plan["foundations"]]
     if len(set(identities)) != len(identities):
         raise ValueError("duplicate foundation identity in plan")
@@ -93,6 +101,9 @@ def main():
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         catalog_path = args.root / "catalog.json"
         catalog = json.loads(catalog_path.read_text()) if catalog_path.exists() else {"schema": 1, "foundations": {}}
+        if catalog_path.exists() and catalog.get("rebuild_generation", "") != generation:
+            raise ValueError("use a fresh output directory for a different rebuild generation")
+        catalog["rebuild_generation"] = generation
         outcomes = args.root / "results"
         outcomes.mkdir(exist_ok=True)
         for path in outcomes.glob("*.json"):
@@ -128,7 +139,7 @@ def main():
             nonlocal reserved
             client = sdk.SandboxClient(args.gateway, api_token=token, timeout_seconds=120)
             context = validate_context(args.root, item)
-            image_id = item["image_id"]
+            image_id = build_image_id(item, generation)
             receipt_path = args.root / (image_id + ".receipt.json")
             receipt = json.loads(receipt_path.read_text()) if receipt_path.exists() else {"key": item["key"]}
             if receipt["key"] != item["key"]:
@@ -225,7 +236,7 @@ def main():
                 except sdk.SandboxApiError as exc:
                     if exc.status_code != 404:
                         raise
-            ready = {**item, "reference": reference, "environment_root": environment_root,
+            ready = {**item, "image_id": image_id, "reference": reference, "environment_root": environment_root,
                      "components": [{"digest": c.image_digest, "bytes": c.image_size} for c in components],
                      "retention_owner": owner, "validated": True, "validation": validation,
                      "smoke_seconds": time.monotonic() - started}

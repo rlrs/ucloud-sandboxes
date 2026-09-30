@@ -82,3 +82,7 @@ Report three separate states: prepared task image, shared foundation/base ready 
 Measure storage from the union of component digests, and also account for OCI/cache blobs and conversion scratch space. Flattened upstream images can contain gigabytes of unique data even when repository names match. Importing every such image into a bounded registry is not a substitute for measuring the selected working set or designing file-level sharing.
 
 Persistent preparation owners require explicit retirement when a pool is no longer used. Never delete shared blobs directly. A ready catalog is not a promise that unrelated, unprepared images will avoid a cold import.
+
+## Rebuilding after volume loss
+
+The [portable campaign and recovery procedure](../image-campaigns/2026-09-30/README.md) stores source inventory, known digest pins and dependency contexts in Git, independently of the registry. Materialize a fresh recovery generation to avoid reusing stale successful build records. Rebuild and qualify new artifacts, then rewrite the actual task index; this does not automatically repair old aliases or guarantee identical unpinned package versions.

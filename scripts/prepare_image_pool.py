@@ -189,9 +189,18 @@ def image_recipe(reference, preparation="source"):
     return dockerfile
 
 
-def image_identity(reference, preparation="source"):
-    return hashlib.sha256(json.dumps({"schema": 1, "platform": "linux/amd64",
-                                     "dockerfile": image_recipe(reference, preparation)}, sort_keys=True).encode()).hexdigest()
+def rebuild_generation(plan):
+    generation = plan.get("rebuild_generation", "")
+    if not isinstance(generation, str) or (generation and not re.fullmatch(r"[a-z0-9-]{1,32}", generation)):
+        raise ValueError("invalid rebuild generation")
+    return generation
+
+
+def image_identity(reference, preparation="source", generation=""):
+    inputs = {"schema": 1, "platform": "linux/amd64", "dockerfile": image_recipe(reference, preparation)}
+    if generation:
+        inputs["rebuild_generation"] = generation
+    return hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()
 
 
 def receipt_image(receipt, image_id):
@@ -290,10 +299,14 @@ def main():
     plan = json.loads((args.root / "plan.json").read_text())
     if plan.get("schema") != 1:
         raise ValueError("unsupported pool plan")
+    generation = rebuild_generation(plan)
     lock = (args.root / "prepare.lock").open("a")
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     catalog_path = args.root / "catalog.json"
     catalog = recover_catalog(args.root)
+    if catalog_path.exists() and catalog.get("rebuild_generation", "") != generation:
+        raise ValueError("use a fresh output directory for a different rebuild generation")
+    catalog["rebuild_generation"] = generation
     disk = registry_disk_usage(config)
     if disk is None:
         raise ValueError("pool preparation requires measurable registry storage")
@@ -339,13 +352,15 @@ def main():
                                        free_floor=args.free_floor_gib * GIB, estimate=GIB)
                     if reason:
                         raise RuntimeError("deferred: " + reason)
-                receipt["resolved"] = resolve(source)
+                # A recovery plan keeps known upstream digests, while resolving
+                # unvisited mutable tags is explicitly a new upstream snapshot.
+                receipt["resolved"] = resolve(item.get("pinned_source", source))
                 save(receipt_path, receipt)
             resolved = receipt["resolved"]
             preparation = item.get("preparation", "source")
             if preparation == "source" and resolved.get("onbuild"):
                 raise RuntimeError("deferred: inherited ONBUILD triggers require a direct source import")
-            key = image_identity(resolved["reference"], preparation)
+            key = image_identity(resolved["reference"], preparation, generation)
             image_id = "precomputed-" + key[:32]
             # Serialize aliases for the same immutable image, across local runs.
             with (claim_root / (key + ".lock")).open("a") as image_lock:

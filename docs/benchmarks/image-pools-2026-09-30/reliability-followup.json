@@ -1,0 +1,144 @@
+{
+  "observed_at_utc": "2026-09-30T14:45:16.672171+00:00",
+  "comparison_scope": "Different live precomputation cohorts, not a controlled benchmark; successful builds only for timing percentiles.",
+  "cohorts": {
+    "before_placement": {
+      "statuses": {
+        "succeeded": 195,
+        "failed": 1
+      },
+      "failures": {
+        "failed to solve": 1
+      },
+      "timings": {
+        "cache_prepare_ms": {
+          "n": 195,
+          "p50": 7,
+          "p95": 13,
+          "max": 19
+        },
+        "cleanup_ms": {
+          "n": 195,
+          "p50": 0,
+          "p95": 0,
+          "max": 1
+        },
+        "docker_build_and_push_ms": {
+          "n": 195,
+          "p50": 10601,
+          "p95": 74309,
+          "max": 102261
+        },
+        "finishing_wait_ms": {
+          "n": 195,
+          "p50": 13410,
+          "p95": 105048,
+          "max": 246934
+        },
+        "immutable_environment_ms": {
+          "n": 195,
+          "p50": 21112,
+          "p95": 86296,
+          "max": 204507
+        },
+        "end_to_end_ms": {
+          "n": 195,
+          "p50": 77096,
+          "p95": 166893,
+          "max": 342896
+        },
+        "cache_mount_ms": {
+          "n": 61,
+          "p50": 65,
+          "p95": 2817,
+          "max": 3002
+        }
+      }
+    },
+    "after_placement": {
+      "statuses": {
+        "succeeded": 113,
+        "running": 19
+      },
+      "failures": {},
+      "timings": {
+        "cache_mount_ms": {
+          "n": 37,
+          "p50": 161,
+          "p95": 3002,
+          "max": 3002
+        },
+        "cache_prepare_ms": {
+          "n": 113,
+          "p50": 9,
+          "p95": 18,
+          "max": 273
+        },
+        "cleanup_ms": {
+          "n": 113,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "docker_build_and_push_ms": {
+          "n": 113,
+          "p50": 21192,
+          "p95": 92213,
+          "max": 167682
+        },
+        "finishing_wait_ms": {
+          "n": 113,
+          "p50": 2,
+          "p95": 18151,
+          "max": 36508
+        },
+        "immutable_environment_ms": {
+          "n": 113,
+          "p50": 24670,
+          "p95": 88292,
+          "max": 199814
+        },
+        "end_to_end_ms": {
+          "n": 113,
+          "p50": 61489,
+          "p95": 141734,
+          "max": 224523
+        }
+      }
+    }
+  },
+  "large_blob_link_probe": {
+    "layer_bytes": 16929914030,
+    "destination_repositories": 2,
+    "elapsed_ms": 24.385,
+    "target_existed_before": false,
+    "target_exists_after": true,
+    "uploaded_layer_bytes": 0,
+    "scope": "Repository-link probe, not an end-to-end canary build."
+  },
+  "large_source_resume": {
+    "reused_blob_bytes": 17870924827,
+    "downloaded_bytes": 192,
+    "scope": "Staging succeeded; large build still running at last observation."
+  },
+  "recovery_bundle": {
+    "sources": 35984,
+    "pinned_sources": 451,
+    "foundation_contexts": 8602,
+    "unique_foundation_bases": 18,
+    "sha256": "7ac209b302a7a2edd48741ff6bb98ca325f85ac3d3261ba6de6e358b9a52f2e7"
+  },
+  "latest_coverage_snapshot": {
+    "observed_at_utc": "2026-09-30T14:47:28.349698+00:00",
+    "ready_source_images": 544,
+    "ready_tmax_inline_foundations": 612,
+    "tmax_inline_recipe_uses": 7195,
+    "tmax_total_ready_recipe_uses_including_explicit_foundation": 12329,
+    "tmax_total_recipes": 14600,
+    "ready_terminal_foundations": 743,
+    "terminal_ready_recipe_uses": 7278,
+    "terminal_total_recipes": 13825,
+    "registry_used_bytes": 1461085716480,
+    "registry_ceiling_provider_gb": 3000
+  }
+}

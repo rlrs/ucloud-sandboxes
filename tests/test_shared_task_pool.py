@@ -119,6 +119,24 @@ class SharedTaskPoolTests(unittest.TestCase):
 
 
 class SharedTaskScratchTests(unittest.TestCase):
+    def test_layered_exports_are_bound_to_manifest_config_layers_and_source_identity(self):
+        from prepare_shared_task_image import source_identity, validate_filesystem_export
+        reference = 'registry/image@sha256:' + 'a' * 64
+        layers = [{'digest': 'sha256:' + c * 64, 'size': 10} for c in 'bc']
+        manifest = {'config': {'digest': 'sha256:' + 'd' * 64}, 'layers': layers}
+        config = {'rootfs': {'diff_ids': ['sha256:' + c * 64 for c in 'ef']}}
+        row = {'reference': reference, 'source_config': manifest['config']['digest'],
+               'source_layers': layers, 'diff_ids': config['rootfs']['diff_ids']}
+        validate_filesystem_export(row, reference, manifest, config)
+        for key, value in [('reference', 'different'), ('source_layers', layers[:1]),
+                           ('source_config', 'sha256:' + '0' * 64), ('diff_ids', list(reversed(row['diff_ids'])))]:
+            with self.subTest(key=key), self.assertRaisesRegex(ValueError, 'authenticated OCI input'):
+                validate_filesystem_export({**row, key: value}, reference, manifest, config)
+        exports = {'anchor': {'export_sha256': 'a' * 64}, 'target': {'export_sha256': 'b' * 64}}
+        first = source_identity('ubuntu:22.04', reference, exports=exports)
+        exports['target']['export_sha256'] = 'c' * 64
+        self.assertNotEqual(first, source_identity('ubuntu:22.04', reference, exports=exports))
+
     def test_recovery_pin_is_part_of_identity_and_cannot_change_repository(self):
         from prepare_shared_task_image import source_identity
         pin = 'docker.io/library/ubuntu@sha256:' + 'a' * 64

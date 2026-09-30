@@ -16,6 +16,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import stat
 import sys
 from tempfile import TemporaryDirectory
 import time
@@ -33,7 +34,7 @@ def encode(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':')).encode()
 
 
-def source_identity(source, anchor, pinned_source=None):
+def source_identity(source, anchor, pinned_source=None, exports=None):
     identity = {'source': source, 'anchor': anchor, 'version': 1}
     if pinned_source:
         host, repository, selector = registry_parts(pinned_source)
@@ -42,7 +43,40 @@ def source_identity(source, anchor, pinned_source=None):
         if registry_parts(source)[:2] != (host, repository):
             raise ValueError('pinned source belongs to another repository')
         identity['pinned_source'] = pinned_source
+    if exports:
+        identity['filesystem_exports'] = {name: row['export_sha256'] for name, row in exports.items()}
     return identity
+
+
+def read_filesystem_exports(root):
+    """Accept only root-owned, immutable-input-bound offline unpacker receipts."""
+    if root is None:
+        return None
+    result = {}
+    for name in ('anchor', 'target'):
+        directory = root / name
+        receipt, archive = directory / 'export.json', directory / 'filesystem.tar.gz'
+        for path in (root, directory, receipt, archive):
+            info = path.lstat()
+            if info.st_uid != 0 or info.st_mode & 0o022 or stat.S_ISLNK(info.st_mode):
+                raise ValueError('filesystem exports require protected root-owned inputs')
+        if not receipt.is_file() or not archive.is_file() or receipt.stat().st_size > 256 * 1024:
+            raise ValueError('invalid filesystem export inputs')
+        row = json.loads(receipt.read_text())
+        from ucloud_sandboxes.environment_artifact import require_digest
+        require_digest('sha256:' + row['export_sha256'])
+        require_digest('sha256:' + row['unpacker_sha256'])
+        if (row.get('schema') != 1 or set(row.get('excluded_runtime_trees', [])) != {'dev', 'proc', 'sys', 'run'}
+                or row['export_bytes'] != archive.stat().st_size):
+            raise ValueError('filesystem export contract mismatch')
+        result[name] = row
+    return result
+
+
+def validate_filesystem_export(row, reference, manifest, config):
+    if (row['reference'] != reference or row['source_config'] != manifest['config']['digest']
+            or row['source_layers'] != manifest['layers'] or row['diff_ids'] != config['rootfs']['diff_ids']):
+        raise ValueError('filesystem export does not match authenticated OCI input')
 
 
 def save(path, value):
@@ -78,7 +112,7 @@ def deserialize(rows):
     return entries
 
 
-def cached_anchor(client, repository, layer, cache, scratch):
+def cached_anchor(client, repository, layer, cache, scratch, *, source_path=None):
     cache.mkdir(parents=True, exist_ok=True)
     key = layer['digest'].split(':')[1]
     with (cache / (key + '.lock')).open('a') as lock:
@@ -91,9 +125,10 @@ def cached_anchor(client, repository, layer, cache, scratch):
                     or hashlib.sha256(encode(payload)).hexdigest() != document['checksum']):
                 raise ValueError('cached anchor identity mismatch')
             return deserialize(payload['entries'])
-        blob = scratch / 'anchor.tar.gz'
-        with client.open_blob(repository, layer['digest']) as stream:
-            copy_verified(stream, blob, layer)
+        blob = source_path or scratch / 'anchor.tar.gz'
+        if source_path is None:
+            with client.open_blob(repository, layer['digest']) as stream:
+                copy_verified(stream, blob, layer)
         with verified_tar(blob, layer['digest']) as stream:
             index = index_flat_tar(stream)
         rows = []
@@ -135,6 +170,7 @@ def main():
     parser.add_argument('--anchor', required=True, help='prepared private image pinned by manifest digest')
     parser.add_argument('--root', type=Path, required=True)
     parser.add_argument('--anchor-cache', type=Path, required=True)
+    parser.add_argument('--filesystem-exports', type=Path, help='protected offline exports for multi-layer source qualification')
     parser.add_argument('--gateway', required=True)
     parser.add_argument('--sdk-wheel', type=Path, required=True)
     parser.add_argument('--config', type=Path, default=Path('/etc/ucloud-sandboxes/deployment.json'))
@@ -142,6 +178,7 @@ def main():
     parser.add_argument('--max-layer-gib', type=int, default=2)
     parser.add_argument('--max-delta-mib', type=int, default=256)
     args = parser.parse_args()
+    args.export_inputs = read_filesystem_exports(args.filesystem_exports)
     if min(args.free_floor_gib, args.max_layer_gib, args.max_delta_mib) < 1:
         parser.error('storage limits must be positive')
     if '@sha256:' not in args.anchor:
@@ -150,7 +187,7 @@ def main():
     with (args.root / 'prepare.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         identity_path, resolved_path = args.root / 'identity.json', args.root / 'resolved.json'
-        identity = source_identity(args.source, args.anchor, args.pinned_source)
+        identity = source_identity(args.source, args.anchor, args.pinned_source, args.export_inputs)
         if identity_path.exists() and resolved_path.exists() and json.loads(identity_path.read_text()) == identity:
             resolved = json.loads(resolved_path.read_text())
             old_key = hashlib.sha256(encode({**identity, 'source': resolved['reference']})).hexdigest()
@@ -190,12 +227,14 @@ def prepare(args):
     if any(component.format.get('layout') != 1 for component in anchor_components):
         raise ValueError('unknown anchor filesystem format')
     anchor_manifest, _ = registry.client.manifest_document(anchor_repo, anchor_digest)
-    if len(anchor_manifest['layers']) != 1:
+    if len(anchor_manifest['layers']) != 1 and not args.export_inputs:
         raise ValueError('anchor must be a single flat OCI layer')
+    if not anchor_manifest['layers']:
+        raise ValueError('anchor has no filesystem layers')
     anchor_layer = anchor_manifest['layers'][0]
     require_digest(anchor_layer['digest'])
-    maximum = args.max_layer_gib * 1024**3
-    if anchor_layer['size'] > maximum:
+    maximum = (5 if args.export_inputs else args.max_layer_gib) * 1024**3
+    if sum(layer['size'] for layer in anchor_manifest['layers']) > maximum:
         raise ValueError('anchor exceeds compressed input bound')
     # Leave enough space for inputs, decompressed metadata and concurrent ordinary builds.
     disk = registry_disk_usage(c)
@@ -207,7 +246,7 @@ def prepare(args):
     if 'sha256:' + hashlib.sha256(anchor_data).hexdigest() != anchor_manifest['config']['digest']:
         raise ValueError('anchor config identity mismatch')
     anchor_config = json.loads(anchor_data)
-    identity = source_identity(args.source, args.anchor, args.pinned_source)
+    identity = source_identity(args.source, args.anchor, args.pinned_source, args.export_inputs)
     identity_path = args.root / 'identity.json'
     if identity_path.exists() and json.loads(identity_path.read_text()) != identity:
         raise ValueError('work directory belongs to another source')
@@ -229,14 +268,20 @@ def prepare(args):
     if len(config_bytes) != descriptor['size'] or 'sha256:' + hashlib.sha256(config_bytes).hexdigest() != descriptor['digest']:
         raise ValueError('resolved source config identity mismatch')
     target_config = json.loads(config_bytes)
-    if (len(target_manifest['layers']) != 1 or (target_config.get('config') or {}).get('OnBuild')
-            or len(target_config['rootfs']['diff_ids']) != 1 or len(anchor_config['rootfs']['diff_ids']) != 1
+    if ((not args.export_inputs and (len(target_manifest['layers']) != 1
+                                    or len(target_config['rootfs']['diff_ids']) != 1
+                                    or len(anchor_config['rootfs']['diff_ids']) != 1))
+            or not target_manifest['layers'] or (target_config.get('config') or {}).get('OnBuild')
             or target_config.get('architecture') != 'amd64' or target_config.get('os') != 'linux'):
         raise ValueError('source requires unsupported image preparation')
     target_layer = target_manifest['layers'][0]
     require_digest(target_layer['digest'])
-    if target_layer['size'] > maximum:
+    target_compressed_bytes = sum(layer['size'] for layer in target_manifest['layers'])
+    if target_compressed_bytes > maximum:
         raise ValueError('source exceeds compressed input bound')
+    if args.export_inputs:
+        validate_filesystem_export(args.export_inputs['anchor'], args.anchor, anchor_manifest, anchor_config)
+        validate_filesystem_export(args.export_inputs['target'], resolved['reference'], target_manifest, target_config)
     key = hashlib.sha256(encode({**identity, 'source': resolved['reference']})).hexdigest()
     image_id, repository, tag = 'shared-task-' + key[:32], 'ucloud-shared-sources', 'flat-v1-' + key
     remove_abandoned_inputs(args.root, key)
@@ -244,15 +289,24 @@ def prepare(args):
     with TemporaryDirectory(prefix='inputs-', dir=args.root) as temporary:
         scratch = Path(temporary)
         (scratch / '.owner.json').write_text(json.dumps({'source_key': key}))
-        anchor_index = cached_anchor(registry.client, anchor_repo, anchor_layer, args.anchor_cache, scratch)
-        host, source_repo, _ = registry_parts(resolved['reference'])
-        endpoint = 'registry-1.docker.io' if host == 'docker.io' else host
-        url = f'https://{endpoint}/v2/{source_repo}/blobs/{target_layer["digest"]}'
-        opener = request.build_opener(PublicBlobRedirect()).open
-        blob = scratch / 'target.tar.gz'
-        with opener(request.Request(url, headers=public_registry_headers(host, source_repo)), timeout=120) as stream:
-            copy_verified(stream, blob, target_layer)
-        with verified_tar(blob, target_layer['digest']) as stream:
+        if args.export_inputs:
+            anchor_export = args.export_inputs['anchor']
+            anchor_index = cached_anchor(registry.client, anchor_repo, {
+                'digest': 'sha256:' + anchor_export['export_sha256'], 'size': anchor_export['export_bytes']},
+                args.anchor_cache, scratch, source_path=args.filesystem_exports / 'anchor/filesystem.tar.gz')
+            blob = args.filesystem_exports / 'target/filesystem.tar.gz'
+            input_digest = 'sha256:' + args.export_inputs['target']['export_sha256']
+        else:
+            anchor_index = cached_anchor(registry.client, anchor_repo, anchor_layer, args.anchor_cache, scratch)
+            host, source_repo, _ = registry_parts(resolved['reference'])
+            endpoint = 'registry-1.docker.io' if host == 'docker.io' else host
+            url = f'https://{endpoint}/v2/{source_repo}/blobs/{target_layer["digest"]}'
+            opener = request.build_opener(PublicBlobRedirect()).open
+            blob = scratch / 'target.tar.gz'
+            with opener(request.Request(url, headers=public_registry_headers(host, source_repo)), timeout=120) as stream:
+                copy_verified(stream, blob, target_layer)
+            input_digest = target_layer['digest']
+        with verified_tar(blob, input_digest) as stream:
             target_index = index_flat_tar(stream)
         plan = plan_flat_delta(anchor_index, target_index)
         if plan.regular_file_bytes > args.max_delta_mib * 1024**2:
@@ -261,7 +315,7 @@ def prepare(args):
         with delta.open('wb') as raw:
             with gzip.GzipFile(fileobj=raw, mode='wb', filename='', mtime=0) as compressed:
                 writer = CheckedWriter(compressed)
-                with verified_tar(blob, target_layer['digest']) as stream:
+                with verified_tar(blob, input_digest) as stream:
                     write_flat_delta(stream, writer, target_index, plan)
         delta_hash = hashlib.sha256()
         with delta.open('rb') as stream:
@@ -296,8 +350,9 @@ def prepare(args):
             raise ValueError('immutable shared-source tag conflict')
         if not _persist_registry_image_protection(usage, reference, 'shared-source:' + key, touch=True, persistent=True):
             raise RuntimeError('shared source retention failed')
-        if not registry.client.mount_blob(repository, anchor_repo, anchor_layer['digest']):
-            raise RuntimeError('anchor blob mount failed')
+        for layer in anchor_manifest['layers']:
+            if not registry.client.mount_blob(repository, anchor_repo, layer['digest']):
+                raise RuntimeError('anchor blob mount failed')
         registry.client.upload_blob_file(repository, delta, delta_digest, delta_size)
         registry.client.upload_blob_file(repository, config_path, config_digest, len(config_data))
         if registry.client.put_manifest(repository, tag, data) != digest:
@@ -396,12 +451,13 @@ def prepare(args):
         aliases.add(original_host + '/' + original_repo + separator + selector)
         if original_host == 'docker.io':
             aliases.add(original_repo + separator + selector)
-        result = {'source': args.source, 'retention_owner': 'shared-task:' + key, 'status': 'ready', 'preparation': 'source', 'method': 'verified-flat-delta-v1',
+        result = {'source': args.source, 'retention_owner': 'shared-task:' + key, 'status': 'ready', 'preparation': 'source',
+                  'method': 'verified-oci-delta-v1' if args.export_inputs else 'verified-flat-delta-v1',
                   'source_reference': resolved['reference'], 'anchor': args.anchor, 'reference': prepared, 'image_id': image_id,
                   'environment_root': environment_root, 'key': key,
                   'components': [{'digest': component.image_digest, 'bytes': component.image_size} for component in components],
                   'delta_compressed_bytes': delta_size, 'changed_regular_file_bytes': plan.regular_file_bytes,
-                  'original_compressed_bytes_not_retained': target_layer['size'], 'qualification': qualification,
+                  'original_compressed_bytes_not_retained': target_compressed_bytes, 'qualification': qualification,
                   'import_aliases': {alias: register_import_alias(store, record, alias) for alias in sorted(aliases)},
                   'seconds': time.monotonic() - started, 'artifact_reused': artifact_reused, 'timings': build.get('timings', {})}
         if args.family:

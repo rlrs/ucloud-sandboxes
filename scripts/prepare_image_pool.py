@@ -83,8 +83,9 @@ class SourceResolver:
                         error.close()
                         attempt += 1
                         save(path, {"next_request_at": self.clock() + delay, "failures": failures + 1,
-                                    "limits": limits})
-                        print(json.dumps({"registry": host, "status": "backoff", "seconds": delay}), flush=True)
+                                    "limits": limits, "status_code": error.code})
+                        print(json.dumps({"registry": host, "status": "backoff", "seconds": delay,
+                                          "status_code": error.code}), flush=True)
                     else:
                         # Avoid a burst of token/manifest requests after each
                         # completion; builds proceed independently of this lock.

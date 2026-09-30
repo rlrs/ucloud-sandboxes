@@ -70,3 +70,29 @@ Use original planner directories for snapshotting. Copy the new bundle off the g
 `shared-anchors.json` preserves the 118 public, pinned source anchors used by the expanded compact preparation queue. Restore these original sources with a fresh recovery generation, then regenerate private shared-task plans from the new catalogs. [Compact task-image preparation](../../docs/shared-task-images.md) describes qualification, storage limits, resume and recovery. The original full-source preparer remains a fallback; blindly restoring every source in full can exhaust the storage budget.
 
 `image_campaign.py refresh --bundle OLD --catalog READY_CATALOG --output NEW` adds public source pins without changing earlier pins or foundation contexts. It excludes runtime receipts and private prepared references, and fails on source-pin conflicts. Preserve each refreshed bundle off-host.
+
+## October 1 metadata and layered-input snapshot
+
+`inputs-layered-20261001.json.gz` preserves **944 public source pins**, all 35,984 source references, and the unchanged 8,602 foundation contexts. SHA-256: `f08a38a5f411716cc417fc82f988d506a4638b4fad982ea05017027207ba5ed7`. Pins are not prepared coverage. This refresh retains the original conservative 3 TB recovery policy; the running registry was explicitly expanded to 3,500 provider GB based on measured additional storage, while keeping the 500 GiB reserve. A fresh recovery should set its physical capacity and campaign limits explicitly; the commands do not resize volumes.
+
+`source-receipts-20261001.json.gz` separately preserves **662 authenticated public OCI manifest/config receipts**, only 651,335 bytes compressed. SHA-256: `dcd5c2ba8752ec81b193c5f26930724c56fc659fd8dd664eede237a824af6f03`. Older receipts without original manifest/config bytes could not be included (473 receipt files across overlapping campaigns); their known digest pins remain in the input bundle. No blobs, private prepared references, credentials, or ready/build state are included. Full public config content is retained because its digest is part of source identity.
+
+To restore saved metadata into a preparation plan while its coordinator is stopped:
+
+```sh
+python scripts/cache_source_receipts.py hydrate \
+  --bundle image-campaigns/2026-09-30/source-receipts-20261001.json.gz \
+  --root /data/fresh-source-pool --layout normal
+```
+
+The destination must already have a schema-1 `plan.json`. Use `--layout shared` for `prepare_shared_task_pool.py` work directories. Run hydration as the preparation service account. The tool verifies manifests/configs by digest, derives accounting and ONBUILD behavior from authenticated metadata, honors explicit plan pins, refuses conflicting existing receipts and requires an explicit pin when a mutable source has multiple saved digests. It never restores successful build state. Blob downloads still require upstream availability, but these sources need no additional manifest lookup.
+
+Create future metadata snapshots from the original preparation roots:
+
+```sh
+python scripts/cache_source_receipts.py pack \
+  --root /data/source-pool --root /data/shared-task-pool \
+  --output /data/source-receipts-next.json.gz
+```
+
+Copy every new snapshot off-host. The layered path also requires rebuilding its public anchor with a fresh generation, recreating protected filesystem exports, and requalifying the delta; see [the preparation workflow](../../docs/shared-task-images.md). No private anchor or successful build receipt in the disposable work directories is a recovery input.

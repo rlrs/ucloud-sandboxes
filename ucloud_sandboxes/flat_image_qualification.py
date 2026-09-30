@@ -53,7 +53,15 @@ def expected_filesystem(index):
     # Complete filesystem exports can omit the default root header.
     expected.setdefault('/', {'mode': stat.S_IFDIR | 0o755, 'uid': 0, 'gid': 0,
                               'mtime_ns': 0, 'xattrs': {}})
+    # The default workspace is created by DirectOciConfigBuilder only when
+    # absent. Existing source workspace contents and metadata remain checked.
+    expected.setdefault('/workspace', {'mode': stat.S_IFDIR | 0o1777, 'uid': 0, 'gid': 0,
+                                      'mtime_ns': 0, 'xattrs': {}})
     return expected
+
+
+def startup_mtimes(index):
+    return RUNTIME_MTIMES | ({'/workspace'} if 'workspace' not in index else set())
 
 
 def compare_snapshot(index, snapshot, *, layer_formats):
@@ -68,9 +76,10 @@ def compare_snapshot(index, snapshot, *, layer_formats):
     expected = expected_filesystem(index)
     actual = {path: row for path, row in snapshot['entries'].items() if not excluded(path)}
     count, sample = 0, []
+    volatile_mtimes = startup_mtimes(index)
     for path in sorted(expected.keys() | actual.keys()):
         left, right = expected.get(path), actual.get(path)
-        if left and right and path in RUNTIME_MTIMES:
+        if left and right and path in volatile_mtimes:
             left = {k: v for k, v in left.items() if k != 'mtime_ns'}
             right = {k: v for k, v in right.items() if k != 'mtime_ns'}
         if left != right:
@@ -79,8 +88,9 @@ def compare_snapshot(index, snapshot, *, layer_formats):
                 sample.append({'path': path, 'expected': left, 'actual': right})
     return {'equivalent': count == 0, 'expected_entries': len(expected), 'actual_entries': len(actual),
             'difference_count': count, 'difference_sample': sample,
-            'runtime_contract_version': 2,
-            'timestamp_contract': 'layout-1 mkfs -T 0; startup modifies root and etc',
+            'runtime_contract_version': 3,
+            'created_runtime_workspace': 'workspace' not in index,
+            'timestamp_contract': 'layout-1 mkfs -T 0; startup modifies root, etc and a newly created workspace',
             'excluded_runtime_trees': sorted(RUNTIME_TREES),
             'excluded_runtime_files': sorted(RUNTIME_FILES), 'scanner_output': SCAN_OUTPUT}
 
@@ -94,7 +104,7 @@ def qualification_key(index, components, runtime_config, worker_bundle_digest):
     range hashes, producer identity and runtime configuration remain in the key.
     """
     expected = expected_filesystem(index)
-    for path in RUNTIME_MTIMES:
+    for path in startup_mtimes(index):
         if path in expected:
             expected[path] = {k: v for k, v in expected[path].items() if k != 'mtime_ns'}
     physical = []
@@ -103,7 +113,7 @@ def qualification_key(index, components, runtime_config, worker_bundle_digest):
         profile.pop('source_layers', None)
         profile.pop('parent', None)
         physical.append(profile)
-    payload = {'schema': 1, 'runtime_contract': 2, 'filesystem': expected, 'components': physical,
+    payload = {'schema': 1, 'runtime_contract': 3, 'filesystem': expected, 'components': physical,
                'runtime_config': runtime_config, 'worker_bundle_digest': worker_bundle_digest,
                'scanner_digest': hashlib.sha256(SCANNER.encode()).hexdigest()}
     return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(',', ':')).encode()).hexdigest()

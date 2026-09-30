@@ -1,0 +1,648 @@
+{
+  "observed_at_utc": "2026-09-30T22:45:34Z",
+  "layered_canaries": [
+    {
+      "source": "swebench/sweb.eval.x86_64.django_1776_django-11477:latest",
+      "families": [
+        "SWE-bench Verified"
+      ],
+      "status": "ready",
+      "source_reference": "docker.io/swebench/sweb.eval.x86_64.django_1776_django-11477@sha256:18fa05d1fc555eb673f798a17cfc1a32b86b6cd9f9a56c64b7840cd5e35e7c10",
+      "source_compressed_bytes": 1152300076,
+      "staging": {
+        "downloaded_bytes": 90097582,
+        "reused_blob_bytes": 1062202494,
+        "mounted_blob_bytes": 0
+      },
+      "accepted_build_ms": 5595,
+      "environment": {
+        "erofs_bytes_built": 107417600,
+        "groups_reused": 6,
+        "prefix_components_reused": null,
+        "docker_pull_skipped": 1
+      }
+    },
+    {
+      "source": "swebench/sweb.eval.x86_64.django_1776_django-11490:latest",
+      "families": [
+        "SWE-bench Verified"
+      ],
+      "status": "ready",
+      "source_reference": "docker.io/swebench/sweb.eval.x86_64.django_1776_django-11490@sha256:d4fb2ca01ba943c7bac346b65e0e51b7a28a9170a29eaeb9091adcf6a2eab4b2",
+      "source_compressed_bytes": 1152324434,
+      "staging": {
+        "downloaded_bytes": 90121940,
+        "reused_blob_bytes": 1062202494,
+        "mounted_blob_bytes": 0
+      },
+      "accepted_build_ms": 5541,
+      "environment": {
+        "erofs_bytes_built": 107421696,
+        "groups_reused": 6,
+        "prefix_components_reused": null,
+        "docker_pull_skipped": 1
+      }
+    },
+    {
+      "source": "swebench/sweb.eval.x86_64.caddyserver_1776_caddy-6051:latest",
+      "families": [
+        "SWE-bench Multilingual"
+      ],
+      "status": "ready",
+      "source_reference": "docker.io/swebench/sweb.eval.x86_64.caddyserver_1776_caddy-6051@sha256:2362eb45346e69c2f129dac4641676e046e8b7e71754a24bd35a54096ec60067",
+      "source_compressed_bytes": 305223908,
+      "staging": {
+        "downloaded_bytes": 89552030,
+        "reused_blob_bytes": 215671878,
+        "mounted_blob_bytes": 0
+      },
+      "accepted_build_ms": 6859,
+      "environment": {
+        "erofs_bytes_built": 140603392,
+        "groups_reused": 4,
+        "prefix_components_reused": null,
+        "docker_pull_skipped": 1
+      }
+    },
+    {
+      "source": "swebench/sweb.eval.x86_64.caddyserver_1776_caddy-6370:latest",
+      "families": [
+        "SWE-bench Multilingual"
+      ],
+      "status": "ready",
+      "source_reference": "docker.io/swebench/sweb.eval.x86_64.caddyserver_1776_caddy-6370@sha256:8ea70b00bb8d9ce3ed540f3eedd8f21b73b7ae72f884a9cafee44008255419fa",
+      "source_compressed_bytes": 313983688,
+      "staging": {
+        "downloaded_bytes": 98311810,
+        "reused_blob_bytes": 215671878,
+        "mounted_blob_bytes": 0
+      },
+      "accepted_build_ms": 6891,
+      "environment": {
+        "erofs_bytes_built": 154632192,
+        "groups_reused": 4,
+        "prefix_components_reused": null,
+        "docker_pull_skipped": 1
+      }
+    },
+    {
+      "source": "alexgshaw/openssl-selfsigned-cert:20251031",
+      "families": [
+        "Terminal-Bench 2"
+      ],
+      "status": "ready",
+      "source_reference": "docker.io/alexgshaw/openssl-selfsigned-cert@sha256:4c948a4e630af2435ae0a19108fc0814a946ac2fa29a512469e0fc77b38c8c12",
+      "source_compressed_bytes": 44165464,
+      "staging": {
+        "downloaded_bytes": 971,
+        "reused_blob_bytes": 44164493,
+        "mounted_blob_bytes": 0
+      },
+      "accepted_build_ms": 1678,
+      "environment": {
+        "erofs_bytes_built": 8192,
+        "groups_reused": 1,
+        "prefix_components_reused": 1,
+        "docker_pull_skipped": 1
+      }
+    },
+    {
+      "source": "alexgshaw/nginx-request-logging:20251031",
+      "families": [
+        "Terminal-Bench 2"
+      ],
+      "status": "ready",
+      "source_reference": "docker.io/alexgshaw/nginx-request-logging@sha256:693e64431a0dbf45952e8b91a298d54fd60247e501c6623fb8fa3ebc07fc3d3d",
+      "source_compressed_bytes": 67277698,
+      "staging": {
+        "downloaded_bytes": 23113205,
+        "reused_blob_bytes": 44164493,
+        "mounted_blob_bytes": 0
+      },
+      "accepted_build_ms": 10130,
+      "environment": {
+        "erofs_bytes_built": 32530432,
+        "groups_reused": 1,
+        "prefix_components_reused": 2,
+        "docker_pull_skipped": null
+      }
+    },
+    {
+      "source": "mswebench/anuraghazra_m_github-readme-stats:pr-490",
+      "families": [
+        "MultiSWE"
+      ],
+      "status": "ready",
+      "source_reference": "docker.io/mswebench/anuraghazra_m_github-readme-stats@sha256:bc77df6038d77c610132f2933cd166155598814db8d64bfaf81dde94f37b10e2",
+      "source_compressed_bytes": 410378556,
+      "staging": {
+        "downloaded_bytes": 50244561,
+        "reused_blob_bytes": 360133995,
+        "mounted_blob_bytes": 0
+      },
+      "accepted_build_ms": 61816,
+      "environment": {
+        "erofs_bytes_built": 92839936,
+        "groups_reused": 2,
+        "prefix_components_reused": null,
+        "docker_pull_skipped": null
+      }
+    },
+    {
+      "source": "mswebench/anuraghazra_m_github-readme-stats:pr-559",
+      "families": [
+        "MultiSWE"
+      ],
+      "status": "ready",
+      "source_reference": "docker.io/mswebench/anuraghazra_m_github-readme-stats@sha256:c6883a2611bad307fc779ec58f471a9fb3772b836d8f95b412627b04aebf862e",
+      "source_compressed_bytes": 410384362,
+      "staging": {
+        "downloaded_bytes": 50250367,
+        "reused_blob_bytes": 360133995,
+        "mounted_blob_bytes": 0
+      },
+      "accepted_build_ms": 46344,
+      "environment": {
+        "erofs_bytes_built": 92852224,
+        "groups_reused": 2,
+        "prefix_components_reused": null,
+        "docker_pull_skipped": null
+      }
+    },
+    {
+      "source": "namanjain12/aiohttp_final:2f7c45ebc0e2adee709815fc26264c7940b732fd",
+      "families": [
+        "R2E-Gym"
+      ],
+      "status": "ready",
+      "source_reference": "docker.io/namanjain12/aiohttp_final@sha256:521d546136e282fa4cbdcfec74ec33a539a9926b0f3cdd07e068a87adf3711c7",
+      "source_compressed_bytes": 507422757,
+      "staging": {
+        "downloaded_bytes": 345905217,
+        "reused_blob_bytes": 161517540,
+        "mounted_blob_bytes": 0
+      },
+      "accepted_build_ms": 60353,
+      "environment": {
+        "erofs_bytes_built": 709271552,
+        "groups_reused": 2,
+        "prefix_components_reused": null,
+        "docker_pull_skipped": null
+      }
+    },
+    {
+      "source": "namanjain12/aiohttp_final:3b8fb5a2dcebc4703220f19010811b5ea9707707",
+      "families": [
+        "R2E-Gym"
+      ],
+      "status": "ready",
+      "source_reference": "docker.io/namanjain12/aiohttp_final@sha256:f92301903c76e6ffc277cc527a37ddd4e534ebd0e4bb3683406509fe921d13eb",
+      "source_compressed_bytes": 448589328,
+      "staging": {
+        "downloaded_bytes": 418149331,
+        "reused_blob_bytes": 30439997,
+        "mounted_blob_bytes": 0
+      },
+      "accepted_build_ms": 45159,
+      "environment": {
+        "erofs_bytes_built": 710385664,
+        "groups_reused": null,
+        "prefix_components_reused": null,
+        "docker_pull_skipped": null
+      }
+    },
+    {
+      "source": "jierun/sweb.eval.x86_64.beeware_1776_briefcase-1056:latest",
+      "families": [
+        "SWE-Lego"
+      ],
+      "status": "ready",
+      "source_reference": "docker.io/jierun/sweb.eval.x86_64.beeware_1776_briefcase-1056@sha256:6b4b162f103533eb70f45971a33ea2923f4c5ca5a429e3c941c6403eabd28795",
+      "source_compressed_bytes": 1009760783,
+      "staging": {
+        "downloaded_bytes": 349917373,
+        "reused_blob_bytes": 659843410,
+        "mounted_blob_bytes": 0
+      },
+      "accepted_build_ms": 15560,
+      "environment": {
+        "erofs_bytes_built": 540061696,
+        "groups_reused": 3,
+        "prefix_components_reused": null,
+        "docker_pull_skipped": 1
+      }
+    },
+    {
+      "source": "jierun/sweb.eval.x86_64.pre-commit_1776_pre-commit-1299:latest",
+      "families": [
+        "SWE-Lego"
+      ],
+      "status": "ready",
+      "source_reference": "docker.io/jierun/sweb.eval.x86_64.pre-commit_1776_pre-commit-1299@sha256:d4b88e5adfcac72cdbd0b5d537371978c4ae55a24af8421995747a7e93cef12c",
+      "source_compressed_bytes": 1032978842,
+      "staging": {
+        "downloaded_bytes": 373132240,
+        "reused_blob_bytes": 659846602,
+        "mounted_blob_bytes": 0
+      },
+      "accepted_build_ms": 13597,
+      "environment": {
+        "erofs_bytes_built": 549724160,
+        "groups_reused": 3,
+        "prefix_components_reused": null,
+        "docker_pull_skipped": 1
+      }
+    },
+    {
+      "source": "docker.io/swerebenchv2/gcanti-tcomb:166-6d925cb",
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "status": "ready",
+      "source_reference": "docker.io/swerebenchv2/gcanti-tcomb@sha256:71b2c216fab8dd92fa9b42e113a94ac34b5a1557e3cd26ff033db38660922494",
+      "source_compressed_bytes": 1110646667,
+      "staging": {
+        "downloaded_bytes": 531607269,
+        "reused_blob_bytes": 579039398,
+        "mounted_blob_bytes": 0
+      },
+      "accepted_build_ms": 116009,
+      "environment": {
+        "erofs_bytes_built": 853139456,
+        "groups_reused": 5,
+        "prefix_components_reused": null,
+        "docker_pull_skipped": null
+      }
+    },
+    {
+      "source": "docker.io/swerebenchv2/briannesbitt-carbon:2745-5ef3b72",
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "status": "ready",
+      "source_reference": "docker.io/swerebenchv2/briannesbitt-carbon@sha256:f664a97832990425b9b17f8e132438f941f00c605c63f224ef2db8a03a1f4682",
+      "source_compressed_bytes": 803960349,
+      "staging": {
+        "downloaded_bytes": 558916393,
+        "reused_blob_bytes": 245043956,
+        "mounted_blob_bytes": 0
+      },
+      "accepted_build_ms": 84848,
+      "environment": {
+        "erofs_bytes_built": 898535424,
+        "groups_reused": 4,
+        "prefix_components_reused": null,
+        "docker_pull_skipped": null
+      }
+    }
+  ],
+  "layered_proof": {
+    "source": "namanjain12/aiohttp_final:2f7c45ebc0e2adee709815fc26264c7940b732fd",
+    "source_reference": "docker.io/namanjain12/aiohttp_final@sha256:521d546136e282fa4cbdcfec74ec33a539a9926b0f3cdd07e068a87adf3711c7",
+    "method": "verified-oci-delta-v1",
+    "delta_compressed_bytes": 168212173,
+    "original_compressed_bytes_not_retained": 507422757,
+    "qualification": {
+      "actual_entries": 45568,
+      "certificate_key": "a92f7bb397c116be14700a48229b9dc735e291b5e583c7a801177bb1e3af6c1a",
+      "created_runtime_workspace": true,
+      "difference_count": 0,
+      "difference_sample": [],
+      "equivalent": true,
+      "excluded_runtime_files": [
+        "/.ucloud-init",
+        "/etc/hostname",
+        "/etc/hosts",
+        "/etc/resolv.conf"
+      ],
+      "excluded_runtime_trees": [
+        "/dev",
+        "/proc",
+        "/run",
+        "/sys",
+        "/tmp"
+      ],
+      "expected_entries": 45568,
+      "mode": "full_source_scan",
+      "runtime_contract_version": 3,
+      "scanner_output": "/tmp/ucloud-filesystem-proof.json.gz",
+      "timestamp_contract": "layout-1 mkfs -T 0; startup modifies root, etc and a newly created workspace"
+    },
+    "seconds": 117.93805229000282,
+    "artifact_reused": true
+  },
+  "proof_build_timings": {
+    "end_to_end_ms": 79206,
+    "environment": {
+      "component_lookup_ms": 457.032,
+      "docker_pull_ms": 68699.436,
+      "erofs_bytes_built": 262930432,
+      "groups_built": 1,
+      "groups_reused": 8,
+      "layer_lock_wait_ms": 0.11699999999999998,
+      "mkfs_ms": 1036.74,
+      "oci_decompress_ms": 1129.6163970018824,
+      "oci_download_bytes_actual": 168212173.0,
+      "oci_extract_ms": 0.17163000029540854,
+      "oci_transfer_ms": 58.52281600027709,
+      "preflight_misses": 1,
+      "preflight_ms": 2038.774,
+      "publish_component_ms": 1293.746,
+      "selective_fallback_whiteout": 1,
+      "selective_fallbacks": 1,
+      "selective_materialization_ms": 1575.592,
+      "selective_subprocess_ms": 1920.007,
+      "sign_ms": 324.804,
+      "squash_ms": 0.0,
+      "total_ms": 74505.462
+    },
+    "phases": {
+      "cache_prepare_ms": 18,
+      "cleanup_ms": 0,
+      "docker_build_and_push_ms": 1083,
+      "finishing_wait_ms": 3,
+      "immutable_environment_ms": 78006
+    },
+    "preparation_ms": 20,
+    "queue_wait_ms": 10,
+    "total_ms": 79176
+  },
+  "notes": [
+    "The existing-target proof did not reclaim its previously imported original blobs.",
+    "Fresh source preparations retained only deltas plus shared existing anchors. Reported added bytes exclude anchor cost.",
+    "Storage estimate for 90 evaluation candidates is extrapolation from a selected 14-image sample, not a complete-corpus forecast."
+  ],
+  "fresh_layered": [
+    {
+      "source": "namanjain12/aiohttp_final:396e33526ceb241f491d36cdaa72a31c6e0fae92",
+      "source_reference": "docker.io/namanjain12/aiohttp_final@sha256:2315c1e27ec651edea7be4b72f5c26ac20cc17bc6dc2bfad9f61603d3aff503d",
+      "delta_compressed_bytes": 37749723,
+      "original_compressed_bytes_not_retained": 448610149,
+      "changed_regular_file_bytes": 171901893,
+      "qualification": {
+        "actual_entries": 29072,
+        "certificate_key": "a5047ee45e3fb464f04f9743c61d9e0f6ffe564535f8ef9e8ca9261f2982a42f",
+        "created_runtime_workspace": true,
+        "difference_count": 0,
+        "difference_sample": [],
+        "equivalent": true,
+        "excluded_runtime_files": [
+          "/.ucloud-init",
+          "/etc/hostname",
+          "/etc/hosts",
+          "/etc/resolv.conf"
+        ],
+        "excluded_runtime_trees": [
+          "/dev",
+          "/proc",
+          "/run",
+          "/sys",
+          "/tmp"
+        ],
+        "expected_entries": 29072,
+        "mode": "full_source_scan",
+        "runtime_contract_version": 3,
+        "scanner_output": "/tmp/ucloud-filesystem-proof.json.gz",
+        "timestamp_contract": "layout-1 mkfs -T 0; startup modifies root, etc and a newly created workspace"
+      },
+      "seconds": 114.81446779001271,
+      "timings": {
+        "end_to_end_ms": 28749,
+        "environment": {
+          "component_lookup_ms": 306.233,
+          "docker_pull_ms": 24208.024,
+          "erofs_bytes_built": 68403200,
+          "groups_built": 1,
+          "groups_reused": 7,
+          "layer_lock_wait_ms": 0.09299999999999999,
+          "mkfs_ms": 262.528,
+          "oci_decompress_ms": 433.20669899995323,
+          "oci_download_bytes_actual": 37749723.0,
+          "oci_extract_ms": 0.25125599998432335,
+          "oci_transfer_ms": 26.709731000210013,
+          "prefix_component_probes": 2,
+          "prefix_components_reused": 2,
+          "preflight_misses": 1,
+          "preflight_ms": 1190.085,
+          "publish_component_ms": 406.461,
+          "selective_fallback_whiteout": 1,
+          "selective_fallbacks": 1,
+          "selective_materialization_ms": 631.101,
+          "selective_subprocess_ms": 1116.644,
+          "sign_ms": 91.371,
+          "squash_ms": 0.0,
+          "total_ms": 26882.132
+        },
+        "phases": {
+          "cache_prepare_ms": 7,
+          "cleanup_ms": 0,
+          "docker_build_and_push_ms": 574,
+          "finishing_wait_ms": 1,
+          "immutable_environment_ms": 28146
+        },
+        "preparation_ms": 5,
+        "queue_wait_ms": 2,
+        "total_ms": 28742
+      },
+      "import_aliases": {
+        "docker.io/namanjain12/aiohttp_final:396e33526ceb241f491d36cdaa72a31c6e0fae92": "registered",
+        "docker.io/namanjain12/aiohttp_final@sha256:2315c1e27ec651edea7be4b72f5c26ac20cc17bc6dc2bfad9f61603d3aff503d": "registered",
+        "namanjain12/aiohttp_final:396e33526ceb241f491d36cdaa72a31c6e0fae92": "registered"
+      }
+    },
+    {
+      "source": "namanjain12/aiohttp_final:3c31b3837404fa2fed3cdd42e89f9d6f25c6931e",
+      "source_reference": "docker.io/namanjain12/aiohttp_final@sha256:7b8b1a3b27c103c406695652f56ad96a86fc2443685028fb0f837070c6663e62",
+      "delta_compressed_bytes": 42054342,
+      "original_compressed_bytes_not_retained": 448607182,
+      "changed_regular_file_bytes": 187422352,
+      "qualification": {
+        "actual_entries": 29072,
+        "certificate_key": "2163fdd91d3b380d58374f6a455f74880668c03c30d76298da6c7201c9c0ecfc",
+        "created_runtime_workspace": true,
+        "difference_count": 0,
+        "difference_sample": [],
+        "equivalent": true,
+        "excluded_runtime_files": [
+          "/.ucloud-init",
+          "/etc/hostname",
+          "/etc/hosts",
+          "/etc/resolv.conf"
+        ],
+        "excluded_runtime_trees": [
+          "/dev",
+          "/proc",
+          "/run",
+          "/sys",
+          "/tmp"
+        ],
+        "expected_entries": 29072,
+        "mode": "full_source_scan",
+        "runtime_contract_version": 3,
+        "scanner_output": "/tmp/ucloud-filesystem-proof.json.gz",
+        "timestamp_contract": "layout-1 mkfs -T 0; startup modifies root, etc and a newly created workspace"
+      },
+      "seconds": 108.47439378299168,
+      "timings": {
+        "end_to_end_ms": 30975,
+        "environment": {
+          "component_lookup_ms": 266.074,
+          "docker_pull_ms": 26451.688,
+          "erofs_bytes_built": 77873152,
+          "groups_built": 1,
+          "groups_reused": 7,
+          "layer_lock_wait_ms": 0.103,
+          "mkfs_ms": 299.071,
+          "oci_decompress_ms": 493.2131549997507,
+          "oci_download_bytes_actual": 42054342.0,
+          "oci_extract_ms": 0.2646739999931924,
+          "oci_transfer_ms": 28.124255000079756,
+          "prefix_component_probes": 2,
+          "prefix_components_reused": 2,
+          "preflight_misses": 1,
+          "preflight_ms": 1222.912,
+          "publish_component_ms": 449.804,
+          "selective_fallback_whiteout": 1,
+          "selective_fallbacks": 1,
+          "selective_materialization_ms": 724.885,
+          "selective_subprocess_ms": 1166.415,
+          "sign_ms": 104.174,
+          "squash_ms": 0.0,
+          "total_ms": 29229.986
+        },
+        "phases": {
+          "cache_prepare_ms": 10,
+          "cleanup_ms": 0,
+          "docker_build_and_push_ms": 544,
+          "finishing_wait_ms": 1,
+          "immutable_environment_ms": 30396
+        },
+        "preparation_ms": 6,
+        "queue_wait_ms": 4,
+        "total_ms": 30965
+      },
+      "import_aliases": {
+        "docker.io/namanjain12/aiohttp_final:3c31b3837404fa2fed3cdd42e89f9d6f25c6931e": "registered",
+        "docker.io/namanjain12/aiohttp_final@sha256:7b8b1a3b27c103c406695652f56ad96a86fc2443685028fb0f837070c6663e62": "registered",
+        "namanjain12/aiohttp_final:3c31b3837404fa2fed3cdd42e89f9d6f25c6931e": "registered"
+      }
+    }
+  ],
+  "storage_expansion": {
+    "provider_gb_before": 3000,
+    "provider_gb_after": 3500,
+    "user_authorized_maximum_gb": 4000,
+    "free_floor_gib": 500,
+    "remaining_margin_before_bytes": 65136742400,
+    "pinned_evaluation_candidates": 90,
+    "additional_union_oci_bytes": 42134177433,
+    "sample_new_oci_bytes": 3069320289,
+    "sample_new_erofs_bytes": 4989423616,
+    "warning": "EROFS extrapolation is a sampled estimate, not an exact bound."
+  },
+  "public_alias_qualification": {
+    "schema": 1,
+    "images": 2,
+    "workers": 2,
+    "passed": 2,
+    "elapsed_seconds": 2.059233649983071,
+    "create_p50_seconds": 1.4670405020006,
+    "create_p95_seconds": 1.4670405020006,
+    "create_max_seconds": 1.4670405020006,
+    "results": [
+      {
+        "source": "namanjain12/aiohttp_final:396e33526ceb241f491d36cdaa72a31c6e0fae92",
+        "families": [
+          "R2E-Gym"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.3351451799971983,
+        "exec_seconds": 0.3551037150027696,
+        "new_import_build": false
+      },
+      {
+        "source": "namanjain12/aiohttp_final:3c31b3837404fa2fed3cdd42e89f9d6f25c6931e",
+        "families": [
+          "R2E-Gym"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.4670405020006,
+        "exec_seconds": 0.198880398995243,
+        "new_import_build": false
+      }
+    ]
+  },
+  "bounded_scratch_canary": {
+    "source": "namanjain12/aiohttp_final:306b4d0c4cbbf5e6257179f281254153517a5fc4",
+    "source_reference": "docker.io/namanjain12/aiohttp_final@sha256:af45f5c7aea18de51ed1fa0136eb653aeb7964c8baef359a433022c75a3796ff",
+    "delta_compressed_bytes": 171385659,
+    "original_compressed_bytes_not_retained": 510583480,
+    "qualification": {
+      "actual_entries": 47219,
+      "certificate_key": "564f4ad3b523881e75e69c38ed8dde6e95a8cf09627f98411a590c9a97839942",
+      "created_runtime_workspace": true,
+      "difference_count": 0,
+      "difference_sample": [],
+      "equivalent": true,
+      "excluded_runtime_files": [
+        "/.ucloud-init",
+        "/etc/hostname",
+        "/etc/hosts",
+        "/etc/resolv.conf"
+      ],
+      "excluded_runtime_trees": [
+        "/dev",
+        "/proc",
+        "/run",
+        "/sys",
+        "/tmp"
+      ],
+      "expected_entries": 47219,
+      "mode": "full_source_scan",
+      "runtime_contract_version": 3,
+      "scanner_output": "/tmp/ucloud-filesystem-proof.json.gz",
+      "timestamp_contract": "layout-1 mkfs -T 0; startup modifies root, etc and a newly created workspace"
+    },
+    "seconds": 180.8653775319981,
+    "timings": {
+      "end_to_end_ms": 54496,
+      "environment": {
+        "component_lookup_ms": 280.537,
+        "docker_pull_ms": 40139.327,
+        "erofs_bytes_built": 266747904,
+        "groups_built": 1,
+        "groups_reused": 7,
+        "layer_lock_wait_ms": 0.092,
+        "mkfs_ms": 1209.835,
+        "oci_decompress_ms": 1344.983425998862,
+        "oci_download_bytes_actual": 171385659.0,
+        "oci_extract_ms": 0.23596300002282078,
+        "oci_transfer_ms": 77.1522500018591,
+        "preflight_misses": 1,
+        "preflight_ms": 2396.533,
+        "publish_component_ms": 1287.403,
+        "selective_fallback_whiteout": 1,
+        "selective_fallbacks": 1,
+        "selective_materialization_ms": 1895.529,
+        "selective_subprocess_ms": 2270.415,
+        "sign_ms": 381.04,
+        "squash_ms": 0.0,
+        "total_ms": 46226.569
+      },
+      "phases": {
+        "cache_prepare_ms": 8,
+        "cleanup_ms": 0,
+        "docker_build_and_push_ms": 829,
+        "finishing_wait_ms": 5459,
+        "immutable_environment_ms": 48158
+      },
+      "preparation_ms": 7,
+      "queue_wait_ms": 5,
+      "total_ms": 54484
+    },
+    "unpacked_limit_bytes": 17179869184,
+    "scratch_removed_after_success": true
+  }
+}

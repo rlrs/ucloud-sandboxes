@@ -191,6 +191,32 @@ class SourceFilesystemQualificationTests(unittest.TestCase):
         self.assertNotIn('/tmp/installer.tar.gz', expected)
         self.assertEqual(expected['/app/required']['sha256'], hashlib.sha256(b'runtime retains this').hexdigest())
 
+    def test_only_an_absent_workspace_gets_the_exact_runtime_created_directory(self):
+        from copy import deepcopy
+        import stat
+        from ucloud_sandboxes.flat_image_qualification import (
+            RUNTIME_FILES, RUNTIME_TREES, SCAN_OUTPUT, compare_snapshot, expected_filesystem,
+        )
+        index = index_flat_tar(io.BytesIO(archive(ROOT)))
+        expected = expected_filesystem(index)
+        self.assertEqual(expected['/workspace']['mode'], stat.S_IFDIR | 0o1777)
+        snapshot = {'entries': deepcopy(expected), 'errors': [],
+                    'excluded': sorted(RUNTIME_TREES | (RUNTIME_FILES - {'/.ucloud-init'}) | {SCAN_OUTPUT})}
+        snapshot['entries']['/workspace']['mtime_ns'] = 123
+        formats = [{'layout': 1, 'excludes': ['dev', 'proc', 'sys', 'run']}]
+        self.assertTrue(compare_snapshot(index, snapshot, layer_formats=formats)['equivalent'])
+        snapshot['entries']['/workspace']['uid'] = 1000
+        self.assertFalse(compare_snapshot(index, snapshot, layer_formats=formats)['equivalent'])
+        present = index_flat_tar(io.BytesIO(archive(ROOT + [
+            ('workspace', tarfile.DIRTYPE, '', 0o750), ('workspace/input', tarfile.REGTYPE, 'required', 0o640)])))
+        snapshot['entries'] = expected_filesystem(present)
+        self.assertEqual(snapshot['entries']['/workspace']['mode'], stat.S_IFDIR | 0o750)
+        snapshot['entries']['/workspace']['mtime_ns'] = 123
+        self.assertFalse(compare_snapshot(present, snapshot, layer_formats=formats)['equivalent'])
+        snapshot['entries'] = expected_filesystem(present)
+        snapshot['entries'].pop('/workspace/input')
+        self.assertFalse(compare_snapshot(present, snapshot, layer_formats=formats)['equivalent'])
+
     def test_scanner_output_cannot_hide_a_source_file(self):
         from ucloud_sandboxes.flat_image_qualification import expected_filesystem
         data = archive([('.', tarfile.DIRTYPE, '', 0o755), ('tmp', tarfile.DIRTYPE, '', 0o1777),

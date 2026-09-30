@@ -73,7 +73,8 @@ def environment_publisher_from_args(args):
         raise ValueError("environment signing requires an Ed25519 key")
     root = args.image_file.absolute().parent / "environment-build"
     builder = FreshEnvironmentBuilder(DockerOverlay2RootfsStore(root / "images", docker_binary=args.docker_binary),
-                                      registry, key, root / "scratch", preparation_subprocess=True)
+                                      registry, key, root / "scratch", preparation_subprocess=True,
+                                      release_published_tag=True)
     return lambda spec: builder.publish_image(spec.tag, allowlist=allowlist)
 
 

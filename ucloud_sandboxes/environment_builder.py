@@ -409,6 +409,7 @@ class FreshEnvironmentBuilder:
     # Production builders isolate CPU-heavy private preparation from the GIL
     # shared by concurrent build threads. Test adapters retain the local path.
     preparation_subprocess: bool = False
+    release_published_tag: bool = False
     _layer_format: dict | None = field(default=None, init=False, repr=False)
 
     def build(self, image_ref, *, allowlist, tag):
@@ -800,6 +801,18 @@ class FreshEnvironmentBuilder:
                 with _phase("total"):
                     return self._publish_image(image_ref, allowlist=allowlist, toolkits=toolkits)
             finally:
+                if self.release_published_tag:
+                    # The registry owns the durable artifact. Docker was only
+                    # a temporary extraction cache; rootfs collection releases
+                    # its pin but does not remove the pulled publication tag.
+                    # Remove just this tag, without force: other tags, reader
+                    # pins and containers continue to protect shared layers.
+                    try:
+                        with without_build_execution_deadline(), build_execution_deadline(30):
+                            self.image_store._checked(self.image_store.docker_binary,
+                                "image", "rm", image_ref, timeout=30)
+                    except (DirectWardenError, OSError, subprocess.SubprocessError, ImageBuildTimeoutError):
+                        _LOG.warning("temporary publication tag cleanup deferred: %s", image_ref)
                 _LOG.info("environment publication metrics %s", json.dumps(metrics, sort_keys=True))
 
     def _publish_image(self, image_ref, *, allowlist, toolkits=()):

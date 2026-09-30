@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory
 import unittest
 from contextlib import contextmanager
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from tests.test_images import _uploaded_context
 from ucloud_sandboxes.environment_builder import FreshEnvironmentBuilder, allowlisted_build_view, publication_metrics
@@ -14,6 +14,35 @@ from ucloud_sandboxes.sandbox import CommandResult
 
 
 class EnvironmentBuilderTests(unittest.TestCase):
+    def test_publication_releases_only_its_local_tag_after_success_or_failure(self):
+        for failure in (False, True):
+            with self.subTest(failure=failure):
+                store = Mock(docker_binary="docker")
+                builder = FreshEnvironmentBuilder(store, None, None, Path("/unused"),
+                                                  release_published_tag=True)
+                events = []
+                def publish(*args, **kwargs):
+                    events.append("publication_finished")
+                    if failure:
+                        raise ValueError("publication failed")
+                    return "digest"
+                store._checked.side_effect = lambda *args, **kwargs: events.append("removed")
+                with patch.object(builder, "_publish_image", side_effect=publish):
+                    if failure:
+                        with self.assertRaisesRegex(ValueError, "publication failed"):
+                            builder.publish_image("registry/owned:latest", allowlist=("*",))
+                    else:
+                        self.assertEqual(builder.publish_image("registry/owned:latest", allowlist=("*",)), "digest")
+                self.assertEqual(events, ["publication_finished", "removed"])
+                store._checked.assert_called_once_with("docker", "image", "rm", "registry/owned:latest", timeout=30)
+
+    def test_cleanup_failure_does_not_lose_published_artifact(self):
+        store = Mock(docker_binary="docker")
+        store._checked.side_effect = OSError("busy")
+        builder = FreshEnvironmentBuilder(store, None, None, Path("/unused"), release_published_tag=True)
+        with patch.object(builder, "_publish_image", return_value="digest"):
+            self.assertEqual(builder.publish_image("registry/owned:latest", allowlist=("*",)), "digest")
+
     def test_failed_publication_releases_temporary_builder_mount_after_reader_lease(self):
         with TemporaryDirectory() as temporary:
             root = Path(temporary)

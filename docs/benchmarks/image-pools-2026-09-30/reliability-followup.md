@@ -27,7 +27,9 @@ Earlier remaining failures included a Debian package 404 and the old full builde
 
 A large source demonstrated that BuildKit uploaded an already-staged 16,929,914,030-byte layer again during cache export, taking about 130 seconds. The new preparer code pre-links existing base blobs into the managed output and cache repositories before submission. A live probe linked that exact layer into a fresh output repository and the cache in 24.385 ms, with no layer upload and verified destination availability. This probe establishes repository reuse, not an end-to-end speedup for the whole build.
 
-The implementation and focused tests are complete. The helper files are staged on the gateway, but full source/foundation canaries and activation in the running coordinators remain unverified because the forwarded SSH agent stopped responding. The running coordinators retain the previously deployed improvements. Do not claim the final prelink rollout is complete without its canary receipts and queue restart verification.
+SSH recovered and both full canaries passed on September 30 at 21:12 CEST (19:12 UTC), including sandbox checks. The source canary reused 334,019,346 bytes without upstream downloads, linked 22 layer descriptors across the output/cache repositories in 243.744 ms, and completed its accepted build in 1.183 s. It reused all four EROFS groups and skipped the Docker pull. The foundation canary linked eight descriptors in 113.563 ms and completed its accepted build in 29.663 s, then passed its sandbox check. Both ran on a newly provisioned builder. These accepted-build timings exclude provisioning and subsequent sandbox validation; the complete canary processes each took about three minutes.
+
+The deployed preparer scripts now contain the verified optimization. The three bulk queues had already exhausted their configured storage-growth allowances and remain stopped. Future invocations use the new scripts; there is no running old coordinator awaiting activation. Canary evidence is included in the measured-results JSON.
 
 ## Coverage and recovery
 
@@ -36,3 +38,11 @@ At 14:47:28 UTC, 544 source images were ready. Ready TMax prefixes covered 12,32
 The refreshed portable bundle preserves 451 source digest pins and the unchanged 8,602 foundation contexts. All contexts materialized and validated offline. Recovery now stages the 18 deduplicated bases before foundation commands, with local-base reuse and source staging enabled. Unpinned package repositories still prevent a byte-identical rebuild guarantee.
 
 The combined focused suites ran 107 tests, with two privileged filesystem fixtures skipped. Live sandbox checks complement these tests. The actual training index still needs rewriting, auditing and qualification against the final ready catalogs.
+
+## Reconnected status, September 30, 21:07 CEST
+
+The completed bulk run reached 671 ready source images, 1,239 TMax inline foundations and 1,957 Terminal foundations. With the previously prepared explicit TMax foundation, ready prefixes cover 12,956/14,600 TMax recipes (88.7%) and 8,683/13,825 Terminal recipes (62.8%). These are prefix-coverage figures, not completed task-image percentages. Counts exclude the new proof artifacts.
+
+Registry use was 2,379,658,756,096 bytes, with 639,488,782,336 bytes available on the unchanged 3,000 provider-GB volume. The 500 GiB reserve accounts for 536,870,912,000 of those available bytes. All bulk coordinators reached their persisted batch-growth budgets; their exit code is 1 because deferred entries are reported as incomplete work. This was not a gateway crash or a full registry. The public service, gateway and autoscaler were healthy, and registry maintenance timers were enabled.
+
+The TMax catalog has 1,533 storage-deferred recipes and 14 failed recipes; Terminal has 3,839 storage-deferred recipes and eight failures. Failures include old server execution deadlines and upstream package/download errors. One large MONAI source finished its upstream staging but failed filesystem publication with `invalid authenticated environment range index`; it is not ready. The current component format permits at most 65,536 chunks of 256 KiB (16 GiB per EROFS component). The receipt alone does not prove which range-index invariant failed, so a size-limit diagnosis remains unconfirmed.

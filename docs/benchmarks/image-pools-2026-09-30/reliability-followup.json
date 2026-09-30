@@ -140,5 +140,191 @@
     "terminal_total_recipes": 13825,
     "registry_used_bytes": 1461085716480,
     "registry_ceiling_provider_gb": 3000
+  },
+  "reconnected_20260930": {
+    "coverage_observed_at_utc": "2026-09-30T19:07:33Z",
+    "source_ready": 671,
+    "tmax_inline_ready": 1239,
+    "tmax_recipe_uses_ready_including_explicit": 12956,
+    "tmax_recipe_uses_total": 14600,
+    "terminal_ready": 1957,
+    "terminal_recipe_uses_ready": 8683,
+    "terminal_recipe_uses_total": 13825,
+    "registry_used_bytes": 2379658756096,
+    "registry_available_bytes": 639488782336,
+    "registry_free_floor_bytes": 536870912000,
+    "bulk_queues": "stopped at persisted growth limits",
+    "prelink_status": "deployed scripts; both full canaries passed; bulk queues remain stopped at storage limits",
+    "source_canary": {
+      "3fc9bb883650f91f0eebe75bc2023b9b9cdfc1cc60ed62fa851c00be8033a73b.json": {
+        "build_id": null,
+        "status": "succeeded",
+        "error": "",
+        "source_mounts": {
+          "attempted": 22,
+          "mounted": 22,
+          "mounted_descriptor_bytes": 668028728,
+          "elapsed_ms": 243.744
+        },
+        "timings": {
+          "end_to_end_ms": 1183,
+          "environment": {
+            "docker_pull_skipped": 1,
+            "groups_reused": 4,
+            "preflight_ms": 274.688,
+            "total_ms": 480.088
+          },
+          "phases": {
+            "cache_prepare_ms": 29,
+            "cleanup_ms": 0,
+            "docker_build_and_push_ms": 653,
+            "finishing_wait_ms": 2,
+            "immutable_environment_ms": 504
+          },
+          "preparation_ms": 4,
+          "queue_wait_ms": 2,
+          "total_ms": 1177
+        }
+      },
+      "results": [
+        {
+          "image_id": "precomputed-283712159523e32989a69a44e1c2f2fa",
+          "status": "ready",
+          "validated": null
+        }
+      ]
+    },
+    "foundation_canary": {
+      "foundation-terminal-prefix-435df5b98f758b43e3d06b198ded1f6e.receipt.json": {
+        "build_id": "137d5fd7-e100-4a1d-96a7-945e6f7ed831",
+        "status": "succeeded",
+        "error": "",
+        "source_mounts": {
+          "attempted": 8,
+          "mounted": 8,
+          "mounted_descriptor_bytes": 88730528,
+          "elapsed_ms": 113.563
+        },
+        "timings": {
+          "end_to_end_ms": 29663,
+          "environment": {
+            "component_lookup_ms": 1.309,
+            "docker_pull_ms": 6737.149,
+            "erofs_bytes_built": 157233152,
+            "groups_built": 1,
+            "layer_lock_wait_ms": 0.013,
+            "mkfs_ms": 448.634,
+            "preflight_misses": 1,
+            "preflight_ms": 5.536,
+            "publish_component_ms": 940.842,
+            "sign_ms": 221.129,
+            "squash_ms": 1337.417,
+            "total_ms": 10448.378
+          },
+          "phases": {
+            "cache_prepare_ms": 79,
+            "cleanup_ms": 0,
+            "docker_build_and_push_ms": 18798,
+            "finishing_wait_ms": 2,
+            "immutable_environment_ms": 10836
+          },
+          "preparation_ms": 5,
+          "queue_wait_ms": 5,
+          "total_ms": 29653
+        }
+      },
+      "results": [
+        {
+          "image_id": "foundation-terminal-prefix-435df5b98f758b43e3d06b198ded1f6e",
+          "status": null,
+          "validated": true
+        }
+      ]
+    },
+    "remaining_failures": {
+      "image-pool-wide-20260930": {
+        "initial_used_bytes": 510225489920,
+        "failure_reasons": [
+          [
+            "deferred: batch storage budget",
+            35314
+          ],
+          [
+            "build failed: invalid authenticated environment range index",
+            1
+          ]
+        ]
+      },
+      "tmax-inline-foundations-wide-20260930": {
+        "initial_used_bytes": 510225489920,
+        "failure_reasons": [
+          [
+            "deferred: batch storage budget",
+            1533
+          ],
+          [
+            "foundation build failed: image build exceeded its server execution deadline",
+            5
+          ],
+          [
+            "c2d74d7248584b9 --cache-to type=registry,ref=10.42.0.2:5000/ucloud-build-cache:bc2-e165b599ca75f0c8-db004052b59015460699b0e64585b603-1790778765-d41fad82111f4213",
+            1
+          ],
+          [
+            "d74d7248584b9 --cache-to type=registry,ref=10.42.0.2:5000/ucloud-build-cache:bc2-e165b599ca75f0c8-b49a72a0072b1edb5bcb2507052a897b-1790778766-18adaeba28524184ba",
+            1
+          ],
+          [
+            "d0cc21bf7975f --cache-to type=registry,ref=10.42.0.2:5000/ucloud-build-cache:bc2-e165b599ca75f0c8-00f8a99f7c9fd61b59806fb69e2e0364-1790778777-e00597d862484cd3b5",
+            1
+          ],
+          [
+            "a3ba7c92b17a2 --cache-to type=registry,ref=10.42.0.2:5000/ucloud-build-cache:bc2-e165b599ca75f0c8-2ab25302a5921b508d7242fc645e82db-1790778788-d6c39183ac034b56a2",
+            1
+          ],
+          [
+            "40885484e9301 --cache-to type=registry,ref=10.42.0.2:5000/ucloud-build-cache:bc2-e165b599ca75f0c8-8876f53a158f2d964b647792d956d8ba-1790778812-1e458054c49f4d4c94",
+            1
+          ],
+          [
+            "678e8642cf333 --cache-to type=registry,ref=10.42.0.2:5000/ucloud-build-cache:bc2-e165b599ca75f0c8-7486140e61037e3c289611fab45cdbc7-1790778823-71cf6fadc1574c9c95",
+            1
+          ]
+        ]
+      },
+      "terminal-foundations-full-20260930": {
+        "initial_used_bytes": 509969494016,
+        "failure_reasons": [
+          [
+            "deferred: batch storage budget",
+            3839
+          ],
+          [
+            "foundation build failed: image build exceeded its server execution deadline",
+            4
+          ],
+          [
+            "\n2.245 Err:2 http://deb.debian.org/debian-security bullseye-security/main amd64 libcurl4 amd64 7.74.0-1.3+deb11u16\n2.245   404  Not Found [IP: 151.101.130.132 8",
+            1
+          ],
+          [
+            "n-security/pool/updates/main/g/git/git_2.30.2-1%2bdeb11u5_amd64.deb  404  Not Found [IP: 151.101.130.132 80]\n2.261 E: Failed to fetch http://deb.debian.org/debi",
+            1
+          ],
+          [
+            "//deb.debian.org/debian-security/pool/updates/main/v/vim/vim-common_8.2.2434-3%2bdeb11u3_all.deb  404  Not Found [IP: 151.101.130.132 80]\n1.986 E: Failed to fet",
+            1
+          ],
+          [
+            "ds.lightbend.com/scala/2.11.8/scala-2.11.8.tgz -O /tmp/scala-2.11.8.tgz &&     tar -xzf /tmp/scala-2.11.8.tgz -C /tmp &&     rm /tmp/scala-2.11.8.tgz\" did not c",
+            1
+          ]
+        ]
+      },
+      "large_monai_source": {
+        "status": "failed",
+        "error": "build failed: invalid authenticated environment range index"
+      }
+    }
   }
 }

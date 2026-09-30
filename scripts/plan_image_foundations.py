@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Plan shared foundations or rewrite a recipe index to use a validated catalog.
 
-Both operations write new outputs. Task commands after the explicit upstream
-base installer are preserved; monolithic installers are never rearranged.
+Operations write new outputs. Task commands stay in order; monolithic installers
+are factored only at a recognized literal initial apt/pip boundary.
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from collections import Counter
 from pathlib import Path
 import sqlite3
 
-from ucloud_sandboxes.image_foundations import openswe_foundation, tmax_foundation
+from ucloud_sandboxes.image_foundations import openswe_foundation, tmax_foundation, tmax_inline_foundation
 
 
 def plan(root: Path, output: Path, base: str, revision: str):
@@ -72,6 +72,36 @@ def plan_openswe(recipes: Path, output: Path, base: str, revision: str):
     return {"foundations": len(entries), "tasks": sum(versions.values())}
 
 
+def plan_tmax_inline(root: Path, output: Path, base: str, revision: str):
+    if output.exists():
+        raise ValueError("use a new plan directory")
+    groups = {}
+    skipped = 0
+    for path in sorted(root.glob("*/environment/post_install.sh")):
+        if (path.parent / "base_install.sh").exists():
+            continue
+        try:
+            foundation, _ = tmax_inline_foundation((path.parent / "Dockerfile").read_text(),
+                                                 path.read_bytes(), ubuntu_base=base)
+        except ValueError:
+            skipped += 1
+            continue
+        if foundation.key not in groups:
+            context = output / foundation.image_id
+            context.mkdir(parents=True)
+            (context / "Dockerfile").write_text(foundation.dockerfile)
+            (context / "base_install.sh").write_bytes(foundation.installer)
+            groups[foundation.key] = {"family": "tmax-inline", "image_id": foundation.image_id,
+                "key": foundation.key, "base": base, "source_prefix": foundation.source_prefix,
+                "example": path.parent.parent.name, "tasks": 0}
+        groups[foundation.key]["tasks"] += 1
+    if not groups:
+        raise ValueError("no supported initial dependency prefixes")
+    entries = sorted(groups.values(), key=lambda x: (-x["tasks"], x["key"]))
+    (output / "plan.json").write_text(json.dumps({"schema": 1, "revision": revision, "foundations": entries}, indent=2) + "\n")
+    return {"foundations": len(entries), "tasks": sum(x["tasks"] for x in entries), "skipped": skipped}
+
+
 def rewrite_index(source: Path, output: Path, catalog: dict):
     if output.exists():
         raise ValueError("output index already exists; never rewrite a live index")
@@ -90,20 +120,30 @@ def rewrite_index(source: Path, output: Path, catalog: dict):
                 original.backup(target)
                 rows = target.execute("SELECT source, family, recipe FROM images WHERE family IN ('tmax', 'openswe')").fetchall()
                 for source_name, family, encoded in rows:
-                    candidates = [item for item in ready if item.get("family", "tmax") == family]
+                    candidates = [item for item in ready if item.get("family", "tmax") == family
+                                  or (family == "tmax" and item.get("family") == "tmax-inline")]
                     if not candidates:
                         continue
                     recipe = json.loads(encoded)
                     if family == "tmax":
-                        if "COPY base_install.sh /tmp/base_install.sh\n" not in recipe["dockerfile"]:
+                        explicit = "COPY base_install.sh /tmp/base_install.sh\n" in recipe["dockerfile"]
+                        script_name = "base_install.sh" if explicit else "post_install.sh"
+                        if f"COPY {script_name} /tmp/{script_name}\n" not in recipe["dockerfile"]:
                             continue
-                        inline = recipe.get("files", {}).get("base_install.sh")
+                        inline = recipe.get("files", {}).get(script_name)
                         installer = (inline.encode() if inline is not None else
-                                     (Path(recipe["context_dir"]) / "base_install.sh").read_bytes())
+                                     (Path(recipe["context_dir"]) / script_name).read_bytes())
                     for item in candidates:
                         if family == "tmax":
                             try:
-                                foundation = tmax_foundation(recipe["dockerfile"], installer, ubuntu_base=item["base"])
+                                if item.get("family") == "tmax-inline":
+                                    if explicit:
+                                        continue
+                                    foundation, remainder = tmax_inline_foundation(recipe["dockerfile"], installer, ubuntu_base=item["base"])
+                                else:
+                                    if not explicit:
+                                        continue
+                                    foundation = tmax_foundation(recipe["dockerfile"], installer, ubuntu_base=item["base"])
                             except ValueError:
                                 # Unusual task prefixes must remain unchanged.
                                 continue
@@ -114,6 +154,8 @@ def rewrite_index(source: Path, output: Path, catalog: dict):
                         if foundation.key != item["key"]:
                             continue
                         recipe["dockerfile"] = foundation.task_dockerfile(recipe["dockerfile"], item["reference"])
+                        if item.get("family") == "tmax-inline":
+                            recipe["files"] = {**recipe.get("files", {}), "post_install.sh": remainder.decode()}
                         target.execute("UPDATE images SET recipe = ?, prepared_image = NULL WHERE source = ?",
                                        (json.dumps(recipe, sort_keys=True), source_name))
                         changed += 1
@@ -135,6 +177,11 @@ def main():
     create.add_argument("--output", type=Path, required=True)
     create.add_argument("--ubuntu-base", required=True)
     create.add_argument("--source-revision", required=True)
+    inline = commands.add_parser("plan-tmax-inline")
+    inline.add_argument("--tmax-root", type=Path, required=True)
+    inline.add_argument("--output", type=Path, required=True)
+    inline.add_argument("--ubuntu-base", required=True)
+    inline.add_argument("--source-revision", required=True)
     openswe = commands.add_parser("plan-openswe")
     openswe.add_argument("--recipes", type=Path, required=True)
     openswe.add_argument("--output", type=Path, required=True)
@@ -147,6 +194,8 @@ def main():
     args = parser.parse_args()
     if args.command == "plan":
         result = plan(args.tmax_root, args.output, args.ubuntu_base, args.source_revision)
+    elif args.command == "plan-tmax-inline":
+        result = plan_tmax_inline(args.tmax_root, args.output, args.ubuntu_base, args.source_revision)
     elif args.command == "plan-openswe":
         result = plan_openswe(args.recipes, args.output, args.miniconda_base, args.source_revision)
     else:

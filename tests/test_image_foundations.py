@@ -5,7 +5,7 @@ from pathlib import Path
 import sqlite3
 import tempfile
 
-from ucloud_sandboxes.image_foundations import openswe_foundation, tmax_foundation
+from ucloud_sandboxes.image_foundations import openswe_foundation, tmax_foundation, tmax_inline_foundation
 
 
 BASE = "ubuntu:22.04@sha256:" + "a" * 64
@@ -16,6 +16,49 @@ PREFIX = ("FROM ubuntu:22.04\n\nENV LANG=C.UTF-8\n\n"
 
 
 class ImageFoundationTests(unittest.TestCase):
+    def test_inline_index_override_preserves_context_and_original_script(self):
+        planner = self.load_script("plan_image_foundations")
+        docker = "FROM ubuntu:22.04\nENV DEBIAN_FRONTEND=noninteractive\nCOPY post_install.sh /tmp/post_install.sh\nRUN bash /tmp/post_install.sh && rm /tmp/post_install.sh\n"
+        script = b"apt-get update && apt-get install -y python3 python3-pip\npip3 install pytest\necho broken > /task\n"
+        foundation, remaining = tmax_inline_foundation(docker, script, ubuntu_base=BASE)
+        catalog = {"schema": 1, "foundations": {foundation.key: {"family": "tmax-inline", "key": foundation.key,
+                   "base": BASE, "reference": READY, "validated": True}}}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "post_install.sh").write_bytes(script)
+            source, target = root / "source.sqlite", root / "target.sqlite"
+            recipe = {"dockerfile": docker, "context_dir": str(root), "files": {"fixture": "original"}}
+            with sqlite3.connect(source) as conn:
+                conn.execute("CREATE TABLE images(source TEXT PRIMARY KEY, family TEXT, recipe TEXT, prepared_image TEXT)")
+                conn.execute("INSERT INTO images VALUES ('task','tmax',?,NULL)", (json.dumps(recipe),))
+            self.assertEqual(planner.rewrite_index(source, target, catalog)["rewritten"], 1)
+            self.assertEqual((root / "post_install.sh").read_bytes(), script)
+            with sqlite3.connect(target) as conn:
+                result = json.loads(conn.execute("SELECT recipe FROM images").fetchone()[0])
+            self.assertEqual(result["files"], {"fixture": "original", "post_install.sh": remaining.decode()})
+            self.assertEqual(result["context_dir"], str(root))
+            self.assertIn("COPY post_install.sh", result["dockerfile"])
+
+    def test_inline_dependencies_preserve_shell_options_and_task_bytes(self):
+        docker = "FROM ubuntu:22.04\nENV DEBIAN_FRONTEND=noninteractive\n\nCOPY post_install.sh /tmp/post_install.sh\nRUN bash /tmp/post_install.sh && rm /tmp/post_install.sh\n"
+        prefix = b"#!/bin/bash\nset -e\napt-get update && apt-get install -y python3 python3-pip\npip3 install pytest\n"
+        tail = b"mkdir -p /app\nprintf broken > /app/task\nrm /etc/ssl/certs/ca-certificates.crt\n"
+        foundation, remaining = tmax_inline_foundation(docker, prefix + tail, ubuntu_base=BASE)
+        self.assertTrue(remaining.endswith(tail))
+        self.assertTrue(remaining.startswith(b"#!/bin/bash\nset -e\n"))
+        self.assertNotIn(b"pip3 install", remaining)
+        other, _ = tmax_inline_foundation(docker, prefix + b"echo different task\n", ubuntu_base=BASE)
+        self.assertEqual(foundation.key, other.key)
+        changed, _ = tmax_inline_foundation(docker, prefix.replace(b"pytest", b"pytest==8.4.1") + tail, ubuntu_base=BASE)
+        self.assertNotEqual(foundation.key, changed.key)
+        _, remainder = tmax_inline_foundation(docker, prefix + b"set -eu\npip3 install newpackage\n", ubuntu_base=BASE)
+        self.assertIn(b"set -eu\npip3 install newpackage", remainder)
+        for script in (b"apt-get install -y $(cat packages)\n", prefix + b"echo $?\n"):
+            with self.assertRaises(ValueError):
+                tmax_inline_foundation(docker, script, ubuntu_base=BASE)
+        _, remainder = tmax_inline_foundation(docker, prefix + b"pip3 install -r requirements.txt\n", ubuntu_base=BASE)
+        self.assertIn(b"pip3 install -r requirements.txt", remainder)
+
     def load_script(self, name):
         spec = importlib.util.spec_from_file_location(name, Path(__file__).parents[1] / "scripts" / (name + ".py"))
         module = importlib.util.module_from_spec(spec)

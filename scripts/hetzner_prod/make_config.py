@@ -139,9 +139,9 @@ if IMMUTABLE_WORKERS:
     sandbox["docker_quota_image_gb"] = 32
     sandbox["direct_disk_headroom_mb"] = 256 * GIB
 builder = raw["builder"]
-# Up to four builders: a harness with ~100 task images queued 90 builds behind
-# one CCX33. They still stop after 5 idle minutes.
-builder.update({"product_id": "ccx33", "disk_gb": 223, "docker_quota_image_gb": 160, "max_nodes": 4,
+# Offline image preparation can spread across eight builders. Admission still
+# bounds execution and finishing on each node; idle nodes stop after 5 minutes.
+builder.update({"product_id": "ccx33", "disk_gb": 223, "docker_quota_image_gb": 160, "max_nodes": 8,
                 "scale_down_idle_seconds": 300})
 # Shared final-layer BuildKit cache survives ephemeral builders. Runtime exports
 # are immutable; hourly retention caps referenced bytes/entries, with the

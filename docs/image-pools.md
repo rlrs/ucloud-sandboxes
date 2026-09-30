@@ -18,7 +18,7 @@ Prepare an inventory with `schema: 1` and an `images` array. Each entry has a un
 }
 ```
 
-Use the planner to reserve a small per-family sample, then prioritize remaining entries by task reuse. Optional `repository` metadata makes that sample prefer distinct repositories, ordered by their total declared task count. Repository membership is a diversity hint, not proof that those images share dependency layers:
+Use the planner to reserve a small per-family sample, then prioritize remaining entries by task reuse. Optional `repository` metadata makes that sample prefer distinct repositories, ordered by their total declared task count. Add `--balanced` to continue by the fraction of each family visited after the initial sample; otherwise the remaining order prioritizes task reuse. Repository membership is a diversity hint, not proof that those images share dependency layers:
 
 ```sh
 uv run python scripts/plan_image_pool.py plan \
@@ -39,7 +39,7 @@ python scripts/prepare_image_pool.py \
   --growth-limit-gib 160 --free-floor-gib 300 --max-image-gib 5
 ```
 
-At most two images are processed concurrently. Each source resolution and accepted build is recorded before waiting. An image's preparation identity includes its pinned source, platform, and actual Dockerfile. Published artifacts are checked before build history; completed publication receipts and gateway image records survive builder replacement. The signed registry closure is checked again on resume. Fleet inventory is fetched at most once per run, rather than once per image. Per-image claims and accepted-build journals are shared across pool directories on the same gateway. They do not claim coordination across independent gateways.
+`--workers` accepts 1–32 concurrent preparations; backend admission still controls actual build and finishing slots. Each source resolution and accepted build is recorded before waiting. Public source resolution is serialized per registry across coordinators, with a persisted cooldown for rate limits and transient gateway errors. Long cooldowns become explicit deferrals. An image's preparation identity includes its pinned source, platform, and actual Dockerfile. Published artifacts are checked before build history; completed publication receipts and gateway image records survive builder replacement. Every outcome has an atomic per-source journal; the large catalog is checkpointed periodically and recovered from those journals on restart. The signed registry closure is checked again on resume. Fleet inventory is fetched at most once per run, rather than once per image. Per-image claims and accepted-build journals are shared across pool directories on the same gateway. They do not claim coordination across independent gateways.
 
 The batch's initial disk usage persists across restarts. Admission accounts for current registry growth, a configurable free-space floor, and estimated space for other images in that coordinator. Per-image compressed size is capped before submission. The estimate is four times compressed source bytes with a 1 GiB minimum; this is a conservative scheduling estimate for ordinary images, not a hard decompression or filesystem quota. Other coordinators can consume space concurrently, so retain substantial headroom and the gateway's existing disk-pressure controls. Deferred entries remain visible rather than silently dropping tasks.
 

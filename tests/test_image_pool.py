@@ -7,6 +7,7 @@ import sqlite3
 import unittest
 import tempfile
 from unittest.mock import patch
+from urllib.error import HTTPError
 
 
 spec = importlib.util.spec_from_file_location("prepare_image_pool", Path(__file__).parents[1] / "scripts/prepare_image_pool.py")
@@ -21,6 +22,68 @@ qualification_spec.loader.exec_module(qualification)
 
 
 class ImagePoolTests(unittest.TestCase):
+    def test_source_resolution_shares_cooldown_without_hammering_registry(self):
+        now = [1000.0]
+        calls = []
+
+        def resolve(source):
+            calls.append(now[0])
+            if len(calls) == 1:
+                raise HTTPError("https://registry.invalid", 429, "rate limited", {"Retry-After": "120"}, None)
+            return {"source": source}
+
+        def sleep(seconds):
+            now[0] += seconds
+
+        with tempfile.TemporaryDirectory() as directory:
+            resolver = pool.SourceResolver(Path(directory), resolve=resolve, clock=lambda: now[0], sleep=sleep)
+            with patch("builtins.print"):
+                self.assertEqual(resolver("ubuntu:22.04"), {"source": "ubuntu:22.04"})
+            self.assertEqual(calls, [1000.0, 1120.0])
+            # A new coordinator observes the same persisted host gate.
+            other = pool.SourceResolver(Path(directory), resolve=resolve, clock=lambda: now[0], sleep=sleep)
+            other("python:3.13")
+            self.assertEqual(calls[-1], 1121.0)
+
+    def test_source_resolution_defers_long_cooldown_and_preserves_nontransient_errors(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            limited = HTTPError("https://registry.invalid", 429, "rate limited", {"Retry-After": "7200"}, None)
+            with patch.object(pool, "resolve_source", side_effect=limited) as resolve, patch("builtins.print"):
+                resolver = pool.SourceResolver(root)
+                with self.assertRaisesRegex(RuntimeError, "deferred: public registry cooldown"):
+                    resolver("ubuntu:22.04")
+                with self.assertRaisesRegex(RuntimeError, "deferred: public registry cooldown"):
+                    resolver("python:3.13")
+                self.assertEqual(resolve.call_count, 1)
+            with patch.object(pool, "resolve_source", side_effect=HTTPError("url", 404, "missing", {}, None)):
+                with self.assertRaises(HTTPError):
+                    pool.SourceResolver(root)("ghcr.io/org/missing:latest")
+
+    def test_retry_after_supports_http_dates_and_invalid_values(self):
+        self.assertEqual(pool.retry_delay({"Retry-After": "Thu, 01 Jan 1970 00:02:00 GMT"}, 0, 0), 120)
+        self.assertEqual(pool.retry_delay({"Retry-After": "invalid"}, 2, 0), 240)
+
+    def test_result_journal_recovers_after_a_stale_catalog_snapshot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            pool.save(root / "catalog.json", {"schema": 1, "initial_used_bytes": 123, "images": {}})
+            pool.recover_catalog(root)
+            result = {"source": "source", "status": "ready", "reference": "fixed"}
+            pool.journal_result(root, result)
+            recovered = pool.recover_catalog(root)
+            self.assertEqual(recovered["initial_used_bytes"], 123)
+            self.assertEqual(recovered["images"]["source"], result)
+            pool.journal_result(root, {**result, "status": "failed"})
+            self.assertEqual(pool.recover_catalog(root)["images"]["source"]["status"], "failed")
+
+    def test_balanced_selection_does_not_starve_smaller_families(self):
+        images = [{"source": str(n), "families": ["large"], "task_rows": 100} for n in range(100)]
+        images += [{"source": "small-" + str(n), "families": ["small"], "task_rows": 1} for n in range(10)]
+        selected = planner.select_images(images, 55, 0, balanced=True)
+        self.assertEqual(sum("small" in x["families"] for x in selected), 5)
+        self.assertEqual(len({x["source"] for x in selected}), 55)
+
     def test_successful_receipt_survives_missing_builder_history(self):
         published = {"id": "expected", "pushed": True, "manifest_digest": "sha256:" + "a" * 64}
         receipt = {"build": {"status": "succeeded", "image": published}}

@@ -14,7 +14,7 @@ import sqlite3
 from ucloud_sandboxes.image_foundations import require_pinned_reference
 
 
-def select_images(images, limit, per_family):
+def select_images(images, limit, per_family, *, balanced=False):
     if limit < 1 or per_family < 0:
         raise ValueError("invalid selection limits")
     by_source = {}
@@ -45,6 +45,24 @@ def select_images(images, limit, per_family):
             if index < len(queues[family]) and len(selected) < limit:
                 item = queues[family][index]
                 selected[item["source"]] = item
+    if balanced:
+        # Equalize the fraction visited within each family's queue so a huge
+        # family cannot postpone all smaller evaluation pools until the end.
+        import heapq
+        heap = [(0.0, family, 0) for family in families if queues[family]]
+        heapq.heapify(heap)
+        ordered = []
+        seen = set(selected)
+        while heap and len(selected) + len(ordered) < limit:
+            _, family, index = heapq.heappop(heap)
+            item = queues[family][index]
+            if item["source"] not in seen:
+                ordered.append(item)
+                seen.add(item["source"])
+            index += 1
+            if index < len(queues[family]):
+                heapq.heappush(heap, (index / len(queues[family]), family, index))
+        ranked = ordered
     for item in ranked:
         if len(selected) >= limit:
             break
@@ -237,6 +255,7 @@ def main():
     plan.add_argument("--output", type=Path, required=True)
     plan.add_argument("--limit", type=int, default=100)
     plan.add_argument("--per-family", type=int, default=2)
+    plan.add_argument("--balanced", action="store_true", help="distribute remaining work by fraction of each family visited")
     rewrite = commands.add_parser("rewrite-index")
     rewrite.add_argument("--source", type=Path, required=True)
     rewrite.add_argument("--output", type=Path, required=True)
@@ -254,7 +273,7 @@ def main():
         inventory = json.loads(args.inventory.read_text())
         if inventory.get("schema") != 1:
             raise ValueError("unsupported inventory")
-        images = select_images(inventory["images"], args.limit, args.per_family)
+        images = select_images(inventory["images"], args.limit, args.per_family, balanced=args.balanced)
         args.output.mkdir(exist_ok=False)
         (args.output / "plan.json").write_text(json.dumps({**inventory, "images": images}, indent=2) + "\n")
         print(json.dumps({"images": len(images), "task_rows": sum(x["task_rows"] for x in images)}))

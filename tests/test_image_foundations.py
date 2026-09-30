@@ -4,6 +4,10 @@ import json
 from pathlib import Path
 import sqlite3
 import tempfile
+from contextlib import ExitStack
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
+import sys
 
 from ucloud_sandboxes.image_foundations import openswe_foundation, tmax_foundation, tmax_inline_foundation
 
@@ -16,6 +20,71 @@ PREFIX = ("FROM ubuntu:22.04\n\nENV LANG=C.UTF-8\n\n"
 
 
 class ImageFoundationTests(unittest.TestCase):
+    def test_preparer_isolates_failed_build_and_resumes_accepted_work(self):
+        preparer = self.load_script("prepare_image_foundations")
+        pool = self.load_script("prepare_image_pool")
+        from ucloud_sandboxes.images import ImageRecord
+        from ucloud_sandboxes.models import utc_now
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            foundations = [tmax_foundation(PREFIX, text, ubuntu_base=BASE) for text in (b"bad", b"good")]
+            items = []
+            for foundation in foundations:
+                context = root / foundation.image_id
+                context.mkdir()
+                (context / "Dockerfile").write_text(foundation.dockerfile)
+                (context / "base_install.sh").write_bytes(foundation.installer)
+                items.append({"key": foundation.key, "image_id": foundation.image_id, "tasks": 1})
+            (root / "plan.json").write_text(json.dumps({"schema": 1, "foundations": items}))
+            (root / "token").write_text("test")
+            (root / "config.json").write_text("{}")
+            config = SimpleNamespace(control_state_file=lambda: root / "control",
+                sandbox_api_token_file=lambda: root / "token", registry_usage_file=lambda: root / "usage",
+                image_file=lambda: root / "images")
+            client = Mock()
+            client.list_images.return_value = []
+            client.submit_image_build.side_effect = [{"build_id": "bad"}, {"build_id": "good"}]
+            now = utc_now()
+            image = ImageRecord(id=foundations[1].image_id, tag="registry/good:latest", source="build",
+                state="available", created_at=now, updated_at=now, pushed=True,
+                manifest_digest="sha256:" + "b" * 64).to_dict()
+            client.wait_for_image_build.side_effect = lambda identity, **kwargs: (
+                {"status": "failed", "error": "upstream package missing"} if identity == "bad"
+                else {"status": "succeeded", "image": image})
+            client.exec.return_value = SimpleNamespace(exit_code=0, stdout='{"cpu_only":true}', stderr="")
+            sdk = SimpleNamespace(SandboxClient=Mock(return_value=client), Image=Mock(), SandboxSpec=Mock())
+            store = Mock()
+            store.get.return_value = None
+            with ExitStack() as stack:
+                stack.enter_context(patch.dict(sys.modules, {"ucloud_sandboxes_sdk": sdk, "prepare_image_pool": pool}))
+                stack.enter_context(patch.object(sys, "path", list(sys.path)))
+                stack.enter_context(patch.object(sys, "argv", ["prepare", "--root", str(root), "--sdk-wheel", "unused",
+                    "--config", str(root / "config.json"), "--gateway", "https://example.invalid", "--limit", "2"]))
+                replacements = {
+                    "ucloud_sandboxes.config.DeploymentConfig.from_dict": config,
+                    "ucloud_sandboxes.environment_config.environment_registry_from_deployment": Mock(),
+                    "ucloud_sandboxes.managed_registry.RegistryUsageStore": Mock(),
+                    "ucloud_sandboxes.environment_dependencies.EnvironmentDependencyResolver": Mock(),
+                    "ucloud_sandboxes.images.ImageStore": store,
+                    "ucloud_sandboxes.control_plane._persist_registry_image_protection": True,
+                    "ucloud_sandboxes.environment_artifact.load_image_environment": ("root", SimpleNamespace(components=[])),
+                    "ucloud_sandboxes.registry_disk.registry_disk_usage": SimpleNamespace(used_bytes=0, available_bytes=1024**4),
+                    "ucloud_sandboxes.host_locks.HOST_LOCKS.configure": None,
+                }
+                for target, value in replacements.items():
+                    stack.enter_context(patch(target, return_value=value))
+                stack.enter_context(patch("builtins.print"))
+                for _ in range(2):
+                    with self.assertRaises(SystemExit) as exit_status:
+                        preparer.main()
+                    self.assertEqual(exit_status.exception.code, 1)
+                    catalog = json.loads((root / "catalog.json").read_text())
+                    self.assertEqual(set(catalog["foundations"]), {foundations[1].key})
+                    self.assertEqual(catalog["failures"][foundations[0].key]["status"], "failed")
+                self.assertEqual(client.submit_image_build.call_count, 2)
+                self.assertEqual(client.create_sandbox.call_count, 1)
+                self.assertEqual(len(list((root / "results").glob("*.json"))), 2)
+
     def test_inline_index_override_preserves_context_and_original_script(self):
         planner = self.load_script("plan_image_foundations")
         docker = "FROM ubuntu:22.04\nENV DEBIAN_FRONTEND=noninteractive\nCOPY post_install.sh /tmp/post_install.sh\nRUN bash /tmp/post_install.sh && rm /tmp/post_install.sh\n"

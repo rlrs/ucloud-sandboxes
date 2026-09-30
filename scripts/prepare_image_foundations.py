@@ -51,10 +51,16 @@ def main():
     parser.add_argument("--config", type=Path, default=Path("/etc/ucloud-sandboxes/deployment.json"))
     parser.add_argument("--gateway", required=True)
     parser.add_argument("--limit", type=int, default=1)
-    parser.add_argument("--workers", type=int, choices=(1, 2), default=1)
+    parser.add_argument("--workers", type=int, default=1)
+    parser.add_argument("--growth-limit-gib", type=int, default=128)
+    parser.add_argument("--free-floor-gib", type=int, default=300)
+    parser.add_argument("--reservation-gib", type=int, default=8)
     args = parser.parse_args()
-    if not 1 <= args.limit <= 64:
-        parser.error("limit must be 1..64")
+    if min(args.limit, args.growth_limit_gib, args.free_floor_gib, args.reservation_gib) < 1:
+        parser.error("limits must be positive")
+    if not 1 <= args.workers <= 32:
+        parser.error("workers must be 1..32")
+    from prepare_image_pool import admission, GIB
     sys.path.insert(0, str(args.sdk_wheel))
     import ucloud_sandboxes_sdk as sdk
     from ucloud_sandboxes.config import DeploymentConfig
@@ -66,6 +72,7 @@ def main():
     from ucloud_sandboxes.images import ImageRecord, ImageStore
     from ucloud_sandboxes.managed_registry import RegistryUsageStore, registry_repository_tag_from_image_ref
     from ucloud_sandboxes.models import utc_now
+    from ucloud_sandboxes.registry_disk import registry_disk_usage
 
     config = DeploymentConfig.from_dict(json.loads(args.config.read_text()))
     HOST_LOCKS.configure(config.control_state_file().parent / "gateway-locks")
@@ -74,6 +81,8 @@ def main():
     usage = RegistryUsageStore(config.registry_usage_file())
     dependencies = EnvironmentDependencyResolver(registry)
     image_store = ImageStore(config.image_file())
+    claim_root = config.control_state_file().parent / "image-foundation-locks"
+    claim_root.mkdir(parents=True, exist_ok=True)
     plan = json.loads((args.root / "plan.json").read_text())
     if plan.get("schema") != 1:
         raise ValueError("unsupported foundation plan")
@@ -84,9 +93,39 @@ def main():
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         catalog_path = args.root / "catalog.json"
         catalog = json.loads(catalog_path.read_text()) if catalog_path.exists() else {"schema": 1, "foundations": {}}
+        outcomes = args.root / "results"
+        outcomes.mkdir(exist_ok=True)
+        for path in outcomes.glob("*.json"):
+            item = json.loads(path.read_text())
+            if path.stem != item["key"]:
+                raise ValueError("foundation result identity mismatch")
+            if item.get("validated") is True:
+                catalog["foundations"][item["key"]] = item
+                catalog.setdefault("failures", {}).pop(item["key"], None)
+            else:
+                catalog["foundations"].pop(item["key"], None)
+                catalog.setdefault("failures", {})[item["key"]] = item
+        disk = registry_disk_usage(config)
+        if disk is None:
+            raise ValueError("foundation preparation requires measurable registry storage")
+        catalog.setdefault("initial_used_bytes", disk.used_bytes)
+        save(catalog_path, catalog)
         catalog_guard = threading.Lock()
+        inventory_guard = threading.Lock()
+        inventory = None
+        reserved = 0
+        last_checkpoint = time.monotonic()
+        since_checkpoint = 0
 
-        def prepare(item):
+        def fleet_image(client, image_id):
+            nonlocal inventory
+            with inventory_guard:
+                if inventory is None:
+                    inventory = {r["id"]: r for r in client.list_images() if r.get("manifest_digest")}
+                return inventory.get(image_id)
+
+        def prepare(item, reservation):
+            nonlocal reserved
             client = sdk.SandboxClient(args.gateway, api_token=token, timeout_seconds=120)
             context = validate_context(args.root, item)
             image_id = item["image_id"]
@@ -114,12 +153,27 @@ def main():
                 published = ImageRecord(id=image_id, tag=tag, source="registry", state="available",
                     created_at=now, updated_at=now, pushed=True, manifest_digest=digest).to_dict()
             if published is None:
-                published = next((r for r in client.list_images() if r.get("id") == image_id and r.get("manifest_digest")), None)
+                published = fleet_image(client, image_id)
             if published is None:
+                with catalog_guard:
+                    current = registry_disk_usage(config)
+                    estimate = args.reservation_gib * GIB
+                    reason = admission(current.used_bytes, current.available_bytes,
+                                       catalog["initial_used_bytes"], reserved,
+                                       growth_limit=args.growth_limit_gib * GIB,
+                                       free_floor=args.free_floor_gib * GIB, estimate=estimate)
+                    if reason:
+                        raise RuntimeError("deferred: " + reason)
+                    reserved += estimate
+                    reservation[0] = estimate
+                accepted_path = claim_root / (item["key"] + ".build.json")
+                if not receipt.get("build_id") and accepted_path.exists():
+                    receipt.update(json.loads(accepted_path.read_text()))
                 if not receipt.get("build_id"):
                     build = client.submit_image_build(sdk.Image.from_dockerfile(name=image_id, context_path=context),
                                                       timeout_seconds=600)
                     receipt.update(build_id=build["build_id"], build=build)
+                    save(accepted_path, {"build_id": build["build_id"]})
                     save(receipt_path, receipt)
                 print(json.dumps({"image": image_id, "build_id": receipt["build_id"], "status": "waiting"}), flush=True)
                 build = client.wait_for_image_build(receipt["build_id"], timeout_seconds=7200, poll_interval_seconds=10)
@@ -141,7 +195,7 @@ def main():
             if previous and previous.get("validated") is True and previous.get("reference") == reference:
                 image_store.upsert_if_changed(record)
                 print(json.dumps({"image": image_id, "status": "ready", "artifact_reused": True}), flush=True)
-                return
+                return previous
             sandbox = "foundation-check-" + uuid4().hex[:16]
             started = time.monotonic()
             try:
@@ -174,14 +228,52 @@ def main():
                      "retention_owner": owner, "validated": True, "validation": validation,
                      "smoke_seconds": time.monotonic() - started}
             image_store.upsert_if_changed(record)
-            with catalog_guard:
-                catalog["foundations"][item["key"]] = ready
-                save(catalog_path, catalog)
             print(json.dumps({"image": image_id, "status": "ready", "tasks": item["tasks"],
                               "erofs_bytes": sum(c.image_size for c in components)}), flush=True)
+            return ready
+
+        def bounded_prepare(item):
+            nonlocal reserved, last_checkpoint, since_checkpoint
+            reservation = [0]
+            # Validate identity before using it as a shared lock pathname.
+            try:
+                validate_context(args.root, item)
+                with (claim_root / (item["key"] + ".lock")).open("a") as claim:
+                    fcntl.flock(claim, fcntl.LOCK_EX)
+                    result = prepare(item, reservation)
+            except Exception as error:
+                result = {"key": item["key"], "image_id": item["image_id"], "validated": False,
+                          "status": "deferred" if str(error).startswith("deferred:") else "failed",
+                          "error": str(error)[-1000:]}
+                print(json.dumps(result), flush=True)
+            finally:
+                with catalog_guard:
+                    reserved -= reservation[0]
+            # Invalid identities fail before any path is derived from their key.
+            key = result["key"]
+            if not re.fullmatch(r"[a-f0-9]{64}", key):
+                raise ValueError("invalid foundation identity")
+            save(outcomes / (key + ".json"), result)
+            with catalog_guard:
+                if result.get("validated") is True:
+                    catalog["foundations"][key] = result
+                    catalog.setdefault("failures", {}).pop(key, None)
+                else:
+                    catalog["foundations"].pop(key, None)
+                    catalog.setdefault("failures", {})[key] = result
+                since_checkpoint += 1
+                if since_checkpoint >= 50 or time.monotonic() - last_checkpoint >= 30:
+                    save(catalog_path, catalog)
+                    last_checkpoint = time.monotonic()
+                    since_checkpoint = 0
+            return result.get("validated") is True
 
         with ThreadPoolExecutor(max_workers=args.workers) as workers:
-            list(workers.map(prepare, plan["foundations"][:args.limit]))
+            results = list(workers.map(bounded_prepare, plan["foundations"][:args.limit]))
+        save(catalog_path, catalog)
+        print(json.dumps({"ready": sum(results), "failed_or_deferred": len(results) - sum(results)}), flush=True)
+        if not all(results):
+            raise SystemExit(1)
 
 
 if __name__ == "__main__":

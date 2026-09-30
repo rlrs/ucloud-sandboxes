@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from email.utils import parsedate_to_datetime
 import fcntl
 import hashlib
 import json
@@ -18,7 +19,7 @@ import re
 import sys
 import threading
 import time
-from urllib import parse, request
+from urllib import error as urlerror, parse, request
 from uuid import uuid4
 
 
@@ -29,10 +30,83 @@ ACCEPT = ",".join(("application/vnd.oci.image.index.v1+json",
 GIB = 1024 ** 3
 
 
+def retry_delay(headers, attempt, now):
+    """Honor registry cooldowns, including HTTP-date Retry-After values."""
+    fallback = min(900, 60 * 2 ** attempt)
+    value = headers.get("Retry-After", "")
+    try:
+        delay = float(value)
+    except ValueError:
+        try:
+            delay = parsedate_to_datetime(value).timestamp() - now
+        except (ValueError, TypeError, OverflowError):
+            delay = fallback
+    return max(fallback, delay)
+
+
+class SourceResolver:
+    """Serialize each public host and persist cooldowns across coordinators."""
+
+    def __init__(self, root, *, resolve=None, clock=time.time, sleep=time.sleep):
+        self.root = root
+        self.resolve = resolve or resolve_source
+        self.clock = clock
+        self.sleep = sleep
+
+    def __call__(self, source):
+        host = registry_parts(source)[0]
+        path = self.root / ("source-" + host + ".json")
+        deadline = self.clock() + 3600
+        attempt = 0
+        while True:
+            with path.with_suffix(".lock").open("a") as handle:
+                fcntl.flock(handle, fcntl.LOCK_EX)
+                now = self.clock()
+                state = json.loads(path.read_text()) if path.exists() else {}
+                delay = max(0, state.get("next_request_at", 0) - now)
+                if delay <= 0:
+                    try:
+                        result = self.resolve(source)
+                    except urlerror.HTTPError as error:
+                        if error.code not in {429, 502, 503, 504}:
+                            raise
+                        delay = retry_delay(error.headers, attempt, self.clock())
+                        error.close()
+                        attempt += 1
+                        save(path, {"next_request_at": self.clock() + delay})
+                        print(json.dumps({"registry": host, "status": "backoff", "seconds": delay}), flush=True)
+                    else:
+                        # Avoid a burst of token/manifest requests after each
+                        # completion; builds proceed independently of this lock.
+                        save(path, {"next_request_at": self.clock() + 1})
+                        return result
+            if self.clock() + delay >= deadline or attempt >= 6:
+                raise RuntimeError("deferred: public registry cooldown for " + host)
+            self.sleep(min(delay, 60))
+
+
 def save(path, value):
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(value, indent=2) + "\n")
     temporary.replace(path)
+
+
+def recover_catalog(root):
+    path = root / "catalog.json"
+    catalog = json.loads(path.read_text()) if path.exists() else {"schema": 1, "images": {}}
+    results = root / "results"
+    results.mkdir(exist_ok=True)
+    for path in results.glob("*.json"):
+        item = json.loads(path.read_text())
+        if path.stem != hashlib.sha256(item["source"].encode()).hexdigest():
+            raise ValueError("result journal identity mismatch")
+        catalog["images"][item["source"]] = item
+    return catalog
+
+
+def journal_result(root, result):
+    key = hashlib.sha256(result["source"].encode()).hexdigest()
+    save(root / "results" / (key + ".json"), result)
 
 
 def source_parts(source):
@@ -182,13 +256,15 @@ def main():
     parser.add_argument("--config", type=Path, default=Path("/etc/ucloud-sandboxes/deployment.json"))
     parser.add_argument("--gateway", required=True)
     parser.add_argument("--limit", type=int, default=50)
-    parser.add_argument("--workers", type=int, choices=(1, 2), default=1)
+    parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--growth-limit-gib", type=int, default=128)
     parser.add_argument("--free-floor-gib", type=int, default=200)
     parser.add_argument("--max-image-gib", type=int, default=5)
     args = parser.parse_args()
     if min(args.limit, args.growth_limit_gib, args.free_floor_gib, args.max_image_gib) <= 0:
         parser.error("limits must be positive")
+    if not 1 <= args.workers <= 32:
+        parser.error("workers must be 1..32")
     sys.path.insert(0, str(args.sdk_wheel))
     import ucloud_sandboxes_sdk as sdk
     from ucloud_sandboxes.config import DeploymentConfig
@@ -210,13 +286,14 @@ def main():
     image_store = ImageStore(config.image_file())
     claim_root = config.control_state_file().parent / "image-pool-locks"
     claim_root.mkdir(parents=True, exist_ok=True)
+    resolve = SourceResolver(claim_root)
     plan = json.loads((args.root / "plan.json").read_text())
     if plan.get("schema") != 1:
         raise ValueError("unsupported pool plan")
     lock = (args.root / "prepare.lock").open("a")
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     catalog_path = args.root / "catalog.json"
-    catalog = json.loads(catalog_path.read_text()) if catalog_path.exists() else {"schema": 1, "images": {}}
+    catalog = recover_catalog(args.root)
     disk = registry_disk_usage(config)
     if disk is None:
         raise ValueError("pool preparation requires measurable registry storage")
@@ -228,6 +305,8 @@ def main():
     inventory_guard = threading.Lock()
     inventory = None
     reserved = 0
+    last_checkpoint = time.monotonic()
+    since_checkpoint = 0
 
     def fleet_image(client, image_id):
         nonlocal inventory
@@ -239,7 +318,7 @@ def main():
             return inventory.get(image_id)
 
     def prepare(item):
-        nonlocal reserved
+        nonlocal reserved, last_checkpoint, since_checkpoint
         source = item["source"]
         source_key = hashlib.sha256(source.encode()).hexdigest()
         receipt_path = args.root / (source_key + ".json")
@@ -250,7 +329,17 @@ def main():
             if receipt["source"] != source:
                 raise ValueError("receipt source mismatch")
             if "resolved" not in receipt:
-                receipt["resolved"] = resolve_source(source)
+                # Once even the minimum reservation cannot fit, avoid spending
+                # public-registry requests on thousands of inadmissible inputs.
+                with guard:
+                    current = registry_disk_usage(config)
+                    reason = admission(current.used_bytes, current.available_bytes,
+                                       catalog["initial_used_bytes"], reserved,
+                                       growth_limit=args.growth_limit_gib * GIB,
+                                       free_floor=args.free_floor_gib * GIB, estimate=GIB)
+                    if reason:
+                        raise RuntimeError("deferred: " + reason)
+                receipt["resolved"] = resolve(source)
                 save(receipt_path, receipt)
             resolved = receipt["resolved"]
             preparation = item.get("preparation", "source")
@@ -362,10 +451,18 @@ def main():
         finally:
             with guard:
                 reserved -= reservation
+        # Journal each result before periodically replacing the large snapshot.
+        # This bounds write amplification for pools with tens of thousands of
+        # images, without losing acknowledged results after interruption.
+        journal_result(args.root, result)
         with guard:
             catalog["images"][source] = result
             catalog["updated_at_unix"] = time.time()
-            save(catalog_path, catalog)
+            since_checkpoint += 1
+            if since_checkpoint >= 50 or time.monotonic() - last_checkpoint >= 30:
+                save(catalog_path, catalog)
+                since_checkpoint = 0
+                last_checkpoint = time.monotonic()
         print(json.dumps({"source": source, "status": result["status"], "error": result.get("error")}), flush=True)
         return result
 
@@ -378,6 +475,7 @@ def main():
         unique[item["source"]] = item
     with ThreadPoolExecutor(max_workers=args.workers) as workers:
         results = list(workers.map(prepare, list(unique.values())[:args.limit]))
+    save(catalog_path, catalog)
     counts = {status: sum(r["status"] == status for r in results) for status in ("ready", "failed", "deferred")}
     print(json.dumps(counts), flush=True)
     if counts["failed"] or counts["deferred"]:

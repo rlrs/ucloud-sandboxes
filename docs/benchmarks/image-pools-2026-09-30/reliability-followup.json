@@ -326,5 +326,1222 @@
         "error": "build failed: invalid authenticated environment range index"
       }
     }
+  },
+  "complete_generic_bases_20260930": {
+    "coverage": {
+      "families": {
+        "MultiSWE": {
+          "upstream_image_rows": 2232,
+          "upstream_image_rows_ready": 50
+        },
+        "R2E-Gym": {
+          "upstream_image_rows": 4522,
+          "upstream_image_rows_ready": 50
+        },
+        "SWE-Lego": {
+          "upstream_image_rows": 4323,
+          "upstream_image_rows_ready": 52
+        },
+        "SWE-rebench v2": {
+          "upstream_image_rows": 6272,
+          "upstream_image_rows_ready": 53
+        },
+        "ScaleSWE": {
+          "upstream_image_rows": 17202,
+          "upstream_image_rows_ready": 140
+        },
+        "SWE-smith": {
+          "upstream_image_rows": 88130,
+          "upstream_image_rows_ready": 59879
+        },
+        "OpenThoughts TBLite": {
+          "base_only_rows": 100,
+          "base_only_rows_ready": 100
+        },
+        "Terminal-Lego": {
+          "base_only_rows": 13825,
+          "base_only_rows_ready": 13825
+        },
+        "Senior SWE-Bench": {
+          "base_only_rows": 50,
+          "base_only_rows_ready": 50
+        },
+        "Terminal-Bench 2": {
+          "upstream_image_rows": 89,
+          "upstream_image_rows_ready": 50
+        },
+        "SWE-bench Multilingual": {
+          "upstream_image_rows": 300,
+          "upstream_image_rows_ready": 50
+        },
+        "SWE-bench Verified": {
+          "upstream_image_rows": 500,
+          "upstream_image_rows_ready": 50
+        }
+      },
+      "ready_source_references": 692,
+      "generic_base_references": 94,
+      "generic_base_references_ready": 94,
+      "missing_generic_bases": [],
+      "unique_erofs_bytes": 514824216576,
+      "summed_erofs_bytes": 802753581056,
+      "scope": "Upstream image/base coverage; not proof of task-specific setup or an unavailable training selection"
+    },
+    "qualification": {
+      "schema": 1,
+      "images": 94,
+      "workers": 8,
+      "passed": 94,
+      "elapsed_seconds": 35.01532631900045,
+      "create_p50_seconds": 1.7692666040093172,
+      "create_p95_seconds": 3.606408025021665,
+      "create_max_seconds": 3.868073021993041,
+      "results": [
+        {
+          "source": "python:3.13-slim-bookworm",
+          "families": [
+            "OpenThoughts TBLite",
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 2.1791528800094966,
+          "exec_seconds": 0.3768633700092323,
+          "new_import_build": false
+        },
+        {
+          "source": "ubuntu:22.04",
+          "families": [
+            "OpenThoughts TBLite",
+            "Terminal-Lego",
+            "Senior SWE-Bench"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 2.3097820880066138,
+          "exec_seconds": 0.425313808984356,
+          "new_import_build": false
+        },
+        {
+          "source": "node:20-slim",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 2.628268789994763,
+          "exec_seconds": 0.40369905799161643,
+          "new_import_build": false
+        },
+        {
+          "source": "mcr.microsoft.com/dotnet/sdk:8.0",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 2.4664403310162015,
+          "exec_seconds": 0.34247007200610824,
+          "new_import_build": false
+        },
+        {
+          "source": "php:8.2-cli-bookworm",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 2.602927824977087,
+          "exec_seconds": 0.44450473599135876,
+          "new_import_build": false
+        },
+        {
+          "source": "ruby:3.2-slim-bookworm",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 2.6429049700091127,
+          "exec_seconds": 0.46526191500015557,
+          "new_import_build": false
+        },
+        {
+          "source": "mcr.microsoft.com/dotnet/sdk:8.0-bookworm-slim",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 2.5793887569743674,
+          "exec_seconds": 0.34114559399313293,
+          "new_import_build": false
+        },
+        {
+          "source": "php:8.2-cli",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 2.5978900030022487,
+          "exec_seconds": 0.42912393700680695,
+          "new_import_build": false
+        },
+        {
+          "source": "php:8.3-cli-bookworm",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.7557953110081144,
+          "exec_seconds": 0.44586579300812446,
+          "new_import_build": false
+        },
+        {
+          "source": "mcr.microsoft.com/dotnet/sdk:6.0",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 3.7868963170039933,
+          "exec_seconds": 0.24467856402043253,
+          "new_import_build": false
+        },
+        {
+          "source": "docker.io/ubuntu:22.04",
+          "families": [
+            "OpenThoughts TBLite"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.3190597780048847,
+          "exec_seconds": 0.430612611991819,
+          "new_import_build": false
+        },
+        {
+          "source": "golang:1.21-bookworm",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 3.606408025021665,
+          "exec_seconds": 0.4829899710020982,
+          "new_import_build": false
+        },
+        {
+          "source": "maven:3.9-eclipse-temurin-17",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 3.2308202339918353,
+          "exec_seconds": 0.541659956012154,
+          "new_import_build": false
+        },
+        {
+          "source": "swift:5.9-jammy",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 3.1865514680102933,
+          "exec_seconds": 0.3452493179938756,
+          "new_import_build": false
+        },
+        {
+          "source": "swift:5.10-jammy",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 3.1366230080020614,
+          "exec_seconds": 0.5510442060185596,
+          "new_import_build": false
+        },
+        {
+          "source": "python:3.9-slim-bookworm",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 2.3066708440019283,
+          "exec_seconds": 0.47969794800155796,
+          "new_import_build": false
+        },
+        {
+          "source": "continuumio/miniconda3:latest",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.9643346880038735,
+          "exec_seconds": 0.5323154880024958,
+          "new_import_build": false
+        },
+        {
+          "source": "ruby:3.2-slim",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.1758894109807443,
+          "exec_seconds": 0.5524346160236746,
+          "new_import_build": false
+        },
+        {
+          "source": "php:8.3-cli",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 2.0909403130062856,
+          "exec_seconds": 0.41725314399809577,
+          "new_import_build": false
+        },
+        {
+          "source": "hexpm/elixir:1.19.4-erlang-27.3.4.6-debian-bookworm-20260518-slim",
+          "families": [
+            "Senior SWE-Bench"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 2.0237747140054125,
+          "exec_seconds": 0.5313062859931961,
+          "new_import_build": false
+        },
+        {
+          "source": "python:3.11-slim",
+          "families": [
+            "OpenThoughts TBLite"
+          ],
+          "status": "passed",
+          "lookup": "prepared_image_id",
+          "create_seconds": 1.56519156700233,
+          "exec_seconds": 0.5479712469968945,
+          "new_import_build": false
+        },
+        {
+          "source": "python:3.12-slim",
+          "families": [
+            "OpenThoughts TBLite",
+            "Senior SWE-Bench"
+          ],
+          "status": "passed",
+          "lookup": "prepared_image_id",
+          "create_seconds": 1.7069613929779734,
+          "exec_seconds": 0.5570737280067988,
+          "new_import_build": false
+        },
+        {
+          "source": "hexpm/elixir:1.19.5-erlang-28.4-debian-bookworm-20260518-slim",
+          "families": [
+            "Senior SWE-Bench"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.7692666040093172,
+          "exec_seconds": 0.47263426799327135,
+          "new_import_build": false
+        },
+        {
+          "source": "ghcr.io/laude-institute/t-bench/python-3-13:20250620",
+          "families": [
+            "OpenThoughts TBLite"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.5245545330108143,
+          "exec_seconds": 0.38009239701204933,
+          "new_import_build": false
+        },
+        {
+          "source": "debian:bookworm-slim",
+          "families": [
+            "OpenThoughts TBLite",
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.2575891189917456,
+          "exec_seconds": 0.42308515298645943,
+          "new_import_build": false
+        },
+        {
+          "source": "python:3.12-slim-bookworm",
+          "families": [
+            "OpenThoughts TBLite",
+            "Terminal-Lego",
+            "Senior SWE-Bench"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.3016894850006793,
+          "exec_seconds": 0.44262539100600407,
+          "new_import_build": false
+        },
+        {
+          "source": "ubuntu:24.04",
+          "families": [
+            "OpenThoughts TBLite"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.2242399509996176,
+          "exec_seconds": 0.25220493201049976,
+          "new_import_build": false
+        },
+        {
+          "source": "hexpm/elixir:1.19.1-erlang-28.1.1-debian-bookworm-20251020-slim",
+          "families": [
+            "Senior SWE-Bench"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.9928508750163019,
+          "exec_seconds": 0.4508010449935682,
+          "new_import_build": false
+        },
+        {
+          "source": "hexpm/elixir:1.19.4-erlang-27.3.4.6-ubuntu-jammy-20260509",
+          "families": [
+            "Senior SWE-Bench"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 2.081396672001574,
+          "exec_seconds": 0.5540604899870232,
+          "new_import_build": false
+        },
+        {
+          "source": "ghcr.io/immich-app/postgres:14-vectorchord0.4.3",
+          "families": [
+            "Senior SWE-Bench"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 2.1910269079962745,
+          "exec_seconds": 0.47183611799846403,
+          "new_import_build": false
+        },
+        {
+          "source": "python:3.13-slim",
+          "families": [
+            "OpenThoughts TBLite"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.8080647820024751,
+          "exec_seconds": 0.3777198409952689,
+          "new_import_build": false
+        },
+        {
+          "source": "hexpm/elixir:1.19.4-erlang-28.3-debian-bookworm-20260518",
+          "families": [
+            "Senior SWE-Bench"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.8660706880036741,
+          "exec_seconds": 0.5534076780022588,
+          "new_import_build": false
+        },
+        {
+          "source": "hexpm/elixir:1.19.5-erlang-28.4-debian-bookworm-20260316-slim",
+          "families": [
+            "Senior SWE-Bench"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.7011745760100894,
+          "exec_seconds": 0.4470055869896896,
+          "new_import_build": false
+        },
+        {
+          "source": "continuumio/miniconda3:24.4.0-0",
+          "families": [
+            "OpenThoughts TBLite"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.598263523017522,
+          "exec_seconds": 0.5652398789825384,
+          "new_import_build": false
+        },
+        {
+          "source": "hexpm/elixir:1.19.5-erlang-28.4-debian-bookworm-20260421-slim",
+          "families": [
+            "Senior SWE-Bench"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.2339764200150967,
+          "exec_seconds": 0.4460476450040005,
+          "new_import_build": false
+        },
+        {
+          "source": "eclipse-temurin:17-jdk-jammy",
+          "families": [
+            "OpenThoughts TBLite",
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 2.8542067400121596,
+          "exec_seconds": 0.3782838199986145,
+          "new_import_build": false
+        },
+        {
+          "source": "node:24.15.0-bookworm-slim",
+          "families": [
+            "Senior SWE-Bench"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 2.089542102999985,
+          "exec_seconds": 0.5423699550156016,
+          "new_import_build": false
+        },
+        {
+          "source": "eclipse-temurin:11-jdk",
+          "families": [
+            "OpenThoughts TBLite"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 2.941598092991626,
+          "exec_seconds": 0.6729328219953459,
+          "new_import_build": false
+        },
+        {
+          "source": "gcc:13.2.0-bookworm",
+          "families": [
+            "OpenThoughts TBLite"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 2.756085728004109,
+          "exec_seconds": 0.4294240520102903,
+          "new_import_build": false
+        },
+        {
+          "source": "ghcr.io/laude-institute/t-bench/ubuntu-24-04:20250624",
+          "families": [
+            "OpenThoughts TBLite"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.8206377729948144,
+          "exec_seconds": 0.45220411199261434,
+          "new_import_build": false
+        },
+        {
+          "source": "python:3.12.3-slim-bookworm",
+          "families": [
+            "OpenThoughts TBLite"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 2.121738298999844,
+          "exec_seconds": 0.4371515180100687,
+          "new_import_build": false
+        },
+        {
+          "source": "rust:1.91-bookworm",
+          "families": [
+            "Senior SWE-Bench"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 2.664931099017849,
+          "exec_seconds": 0.450790099974256,
+          "new_import_build": false
+        },
+        {
+          "source": "swift:5.9",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 2.54387633499573,
+          "exec_seconds": 0.38280279698665254,
+          "new_import_build": false
+        },
+        {
+          "source": "ubuntu:16.04",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.2470707220199984,
+          "exec_seconds": 0.3397846650041174,
+          "new_import_build": false
+        },
+        {
+          "source": "php:8.1-cli-bookworm",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.5179045340046287,
+          "exec_seconds": 0.4722872400016058,
+          "new_import_build": false
+        },
+        {
+          "source": "dart:stable",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.9552084020106122,
+          "exec_seconds": 0.27861029500490986,
+          "new_import_build": false
+        },
+        {
+          "source": "mcr.microsoft.com/powershell:latest",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.7522224000131246,
+          "exec_seconds": 0.4391915930027608,
+          "new_import_build": false
+        },
+        {
+          "source": "postgres:15-bookworm",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.897973148006713,
+          "exec_seconds": 0.43832909301272593,
+          "new_import_build": false
+        },
+        {
+          "source": "ubuntu:18.04",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.6864043499808758,
+          "exec_seconds": 0.4453922300017439,
+          "new_import_build": false
+        },
+        {
+          "source": "centos:7",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.7235325119982008,
+          "exec_seconds": 0.5798429239948746,
+          "new_import_build": false
+        },
+        {
+          "source": "clojure:temurin-21-tools-deps-bookworm-slim",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.7316034719988238,
+          "exec_seconds": 0.2756322349887341,
+          "new_import_build": false
+        },
+        {
+          "source": "debian:bookworm",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.4346189869975206,
+          "exec_seconds": 0.4290322720189579,
+          "new_import_build": false
+        },
+        {
+          "source": "erlang:26-slim",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.1716768349870108,
+          "exec_seconds": 0.33818163399701007,
+          "new_import_build": false
+        },
+        {
+          "source": "fedora:39",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.1739444760023616,
+          "exec_seconds": 0.47254933102522045,
+          "new_import_build": false
+        },
+        {
+          "source": "maven:3.9.4-eclipse-temurin-17",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.2737689400091767,
+          "exec_seconds": 0.5423796979885083,
+          "new_import_build": false
+        },
+        {
+          "source": "mcr.microsoft.com/dotnet/sdk:6.0-bookworm-slim",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 3.868073021993041,
+          "exec_seconds": 0.3340349600184709,
+          "new_import_build": false
+        },
+        {
+          "source": "maven:3.9.6-eclipse-temurin-17",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 3.809728467982495,
+          "exec_seconds": 0.5246169820020441,
+          "new_import_build": false
+        },
+        {
+          "source": "mcr.microsoft.com/dotnet/sdk:8.0-jammy",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 3.622329968988197,
+          "exec_seconds": 0.4347170469991397,
+          "new_import_build": false
+        },
+        {
+          "source": "nvidia/cuda:12.2.0-devel-ubuntu22.04",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 3.5338835289876442,
+          "exec_seconds": 0.6277860720001627,
+          "new_import_build": false
+        },
+        {
+          "source": "perl:5.38-slim-bookworm",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 2.0405567660054658,
+          "exec_seconds": 0.4558242190105375,
+          "new_import_build": false
+        },
+        {
+          "source": "php:8.1-cli",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 2.862371577997692,
+          "exec_seconds": 0.5431970569770783,
+          "new_import_build": false
+        },
+        {
+          "source": "postgres:16",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 2.580448770982912,
+          "exec_seconds": 0.41361113800667226,
+          "new_import_build": false
+        },
+        {
+          "source": "python:3.10-slim-bookworm",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 2.138310440990608,
+          "exec_seconds": 0.4806084739975631,
+          "new_import_build": false
+        },
+        {
+          "source": "python:3.8-slim-bookworm",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.202514787990367,
+          "exec_seconds": 0.47026912501314655,
+          "new_import_build": false
+        },
+        {
+          "source": "r-base:4.3.0",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 3.495327766984701,
+          "exec_seconds": 0.5048059900000226,
+          "new_import_build": false
+        },
+        {
+          "source": "swift:5.10",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 2.629365062020952,
+          "exec_seconds": 0.4414180159801617,
+          "new_import_build": false
+        },
+        {
+          "source": "alpine:3.18",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.8521708339976612,
+          "exec_seconds": 0.2580414080002811,
+          "new_import_build": false
+        },
+        {
+          "source": "clojure:temurin-17-lein-2.10.0-jammy",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 2.6769082109967712,
+          "exec_seconds": 0.47586657901410945,
+          "new_import_build": false
+        },
+        {
+          "source": "clojure:temurin-21-tools-deps",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 2.6795961699972395,
+          "exec_seconds": 0.3457732310052961,
+          "new_import_build": false
+        },
+        {
+          "source": "clojure:temurin-21-tools-deps-bookworm",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 2.5970623299945146,
+          "exec_seconds": 0.3347499469819013,
+          "new_import_build": false
+        },
+        {
+          "source": "debian:11-slim",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.4805831559933722,
+          "exec_seconds": 0.4039109600125812,
+          "new_import_build": false
+        },
+        {
+          "source": "mcr.microsoft.com/dotnet/sdk:3.1-focal",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.5891169180104043,
+          "exec_seconds": 0.5183085459866561,
+          "new_import_build": false
+        },
+        {
+          "source": "mcr.microsoft.com/mssql/server:2022-latest",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.4674367120023817,
+          "exec_seconds": 0.45726279402151704,
+          "new_import_build": false
+        },
+        {
+          "source": "debian:bullseye-slim",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.106645652995212,
+          "exec_seconds": 0.24730722300591879,
+          "new_import_build": false
+        },
+        {
+          "source": "debian:12-slim",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.0588259150099475,
+          "exec_seconds": 0.3605184409825597,
+          "new_import_build": false
+        },
+        {
+          "source": "elixir:1.16-slim",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.6912824930041097,
+          "exec_seconds": 0.14431469701230526,
+          "new_import_build": false
+        },
+        {
+          "source": "docker:24-dind",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.5700770810071845,
+          "exec_seconds": 0.26873940200312063,
+          "new_import_build": false
+        },
+        {
+          "source": "fedora:33",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.236547927983338,
+          "exec_seconds": 0.3417194159992505,
+          "new_import_build": false
+        },
+        {
+          "source": "fedora:40",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.2771552340127528,
+          "exec_seconds": 0.46884701200178824,
+          "new_import_build": false
+        },
+        {
+          "source": "mongo:4.4",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.588694364996627,
+          "exec_seconds": 0.364224535995163,
+          "new_import_build": false
+        },
+        {
+          "source": "maven:3.9.5-eclipse-temurin-17",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.3524210010073148,
+          "exec_seconds": 0.43918626601225697,
+          "new_import_build": false
+        },
+        {
+          "source": "nginx:stable",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.288446067017503,
+          "exec_seconds": 0.4682479150069412,
+          "new_import_build": false
+        },
+        {
+          "source": "perl:5-slim",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.3106984369806014,
+          "exec_seconds": 0.45793526200577617,
+          "new_import_build": false
+        },
+        {
+          "source": "php:7.4-cli",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.2433088090037927,
+          "exec_seconds": 0.270599998999387,
+          "new_import_build": false
+        },
+        {
+          "source": "php:8-cli",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.7403905010141898,
+          "exec_seconds": 0.3694495669915341,
+          "new_import_build": false
+        },
+        {
+          "source": "postgres:15",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.624187040986726,
+          "exec_seconds": 0.25681817898293957,
+          "new_import_build": false
+        },
+        {
+          "source": "php:8.2-apache",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.37443156100926,
+          "exec_seconds": 0.5360205010219943,
+          "new_import_build": false
+        },
+        {
+          "source": "python:3.6-slim",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.2035885479999706,
+          "exec_seconds": 0.4970557149790693,
+          "new_import_build": false
+        },
+        {
+          "source": "postgres:16-bookworm",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.4871234410093166,
+          "exec_seconds": 0.3624853770015761,
+          "new_import_build": false
+        },
+        {
+          "source": "r-base:4.4.1",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.5614293959806673,
+          "exec_seconds": 0.542273382015992,
+          "new_import_build": false
+        },
+        {
+          "source": "ruby:2.7-slim-bullseye",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.3190893580031116,
+          "exec_seconds": 0.3858151039748918,
+          "new_import_build": false
+        },
+        {
+          "source": "ubuntu:20.04",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 0.8983046509965789,
+          "exec_seconds": 0.5381426200037822,
+          "new_import_build": false
+        },
+        {
+          "source": "ubuntu:25.04",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 0.9790092639741488,
+          "exec_seconds": 0.46517088802647777,
+          "new_import_build": false
+        },
+        {
+          "source": "rocker/tidyverse:4.3.2",
+          "families": [
+            "Terminal-Lego"
+          ],
+          "status": "passed",
+          "lookup": "original_source",
+          "create_seconds": 1.6414542919956148,
+          "exec_seconds": 0.4609231239883229,
+          "new_import_build": false
+        }
+      ]
+    },
+    "erofs_prefix_canaries": [
+      {
+        "key": "955d858630a719f4336cb1201149d5e455dde1835f65c96b60e402db2fd57622",
+        "check": "numpy_import",
+        "exit_code": 0,
+        "stdout": "2.5.3",
+        "timings": {
+          "end_to_end_ms": 5898,
+          "environment": {
+            "component_lookup_ms": 3.208,
+            "docker_pull_skipped": 1,
+            "erofs_bytes_built": 4096,
+            "groups_built": 1,
+            "groups_reused": 1,
+            "layer_lock_wait_ms": 0.014,
+            "mkfs_ms": 17.552,
+            "oci_decompress_ms": 0.16977300000320383,
+            "oci_download_bytes": 156,
+            "oci_download_bytes_actual": 156.0,
+            "oci_extract_ms": 0.37225399999840647,
+            "oci_layers_materialized": 1,
+            "oci_transfer_ms": 9.469918999997162,
+            "preflight_misses": 1,
+            "preflight_ms": 637.438,
+            "publish_component_ms": 201.358,
+            "selective_materialization_ms": 10.443,
+            "selective_materializations": 1,
+            "selective_subprocess_ms": 315.326,
+            "sign_ms": 0.616,
+            "squash_ms": 0.0,
+            "total_ms": 825.625
+          },
+          "phases": {
+            "cache_prepare_ms": 19,
+            "cleanup_ms": 0,
+            "docker_build_and_push_ms": 4994,
+            "finishing_wait_ms": 3,
+            "immutable_environment_ms": 865
+          },
+          "preparation_ms": 6,
+          "queue_wait_ms": 4,
+          "total_ms": 5888
+        }
+      },
+      {
+        "key": "6c2a89f4121f7dfe93f14b1b3cc950477ccb1b5a53d1aad57c9b1569b8ebfcd0",
+        "check": "apache_rewrite",
+        "exit_code": 0,
+        "stdout": "rewrite (enabled by site administrator)",
+        "timings": {
+          "end_to_end_ms": 5156,
+          "environment": {
+            "component_lookup_ms": 3.6210000000000004,
+            "docker_pull_skipped": 1,
+            "erofs_bytes_built": 4096,
+            "groups_built": 1,
+            "groups_reused": 1,
+            "layer_lock_wait_ms": 0.013,
+            "mkfs_ms": 9.607,
+            "oci_decompress_ms": 0.14302099999952134,
+            "oci_download_bytes": 156,
+            "oci_download_bytes_actual": 156.0,
+            "oci_extract_ms": 0.3719640000028335,
+            "oci_layers_materialized": 1,
+            "oci_transfer_ms": 7.80693300000479,
+            "prefix_component_probes": 1,
+            "prefix_components_reused": 1,
+            "preflight_misses": 1,
+            "preflight_ms": 524.126,
+            "publish_component_ms": 130.064,
+            "selective_materialization_ms": 8.78,
+            "selective_materializations": 1,
+            "selective_subprocess_ms": 315.519,
+            "sign_ms": 0.481,
+            "squash_ms": 0.0,
+            "total_ms": 721.488
+          },
+          "phases": {
+            "cache_prepare_ms": 7,
+            "cleanup_ms": 0,
+            "docker_build_and_push_ms": 4326,
+            "finishing_wait_ms": 6,
+            "immutable_environment_ms": 745
+          },
+          "preparation_ms": 7,
+          "queue_wait_ms": 4,
+          "total_ms": 5145
+        }
+      }
+    ],
+    "portable_source_pins": 693,
+    "exact_unfinished_prefix_matches": 647,
+    "remaining_prefix_campaign": {
+      "candidates": 645,
+      "workers": 4,
+      "growth_limit_gib": 24,
+      "free_floor_gib": 500
+    },
+    "wheel_sha256": "2ccf7e0f4da530dc2567dec99378e13aaed35fefe3912aba4fd458a4e8c9c4b6",
+    "bundle_sha256": "5be01496fb3142f7e57b3b74b470cd3e4d53b50ee75d1a259bd718ef2db5e44d",
+    "test_count": 126,
+    "privileged_skips": 2
   }
 }

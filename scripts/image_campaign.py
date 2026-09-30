@@ -132,8 +132,18 @@ def materialize(bundle, output, generation):
                 "foundations": sorted(items, key=lambda x: (-x["tasks"], x["key"]))}
         (output / family / "plan.json").write_bytes(encode(plan))
     (output / "sources").mkdir()
+    task_bases = [item for item in payload["sources"]
+                  if any(use.get("level") == "base_only" for use in item.get("uses", []))]
+    if any(item.get("preparation", "source") != "source" for item in task_bases):
+        raise ValueError("generic task bases require faithful source preparation")
+    task_base_sources = {item["source"] for item in task_bases}
+    remaining_sources = [item for item in payload["sources"] if item["source"] not in task_base_sources]
     (output / "sources" / "plan.json").write_bytes(encode({"schema": 1,
-        "rebuild_generation": generation, "images": payload["sources"]}))
+        "rebuild_generation": generation, "images": remaining_sources}))
+    (output / "task-bases").mkdir()
+    (output / "task-bases" / "plan.json").write_bytes(encode({"schema": 1,
+        "rebuild_generation": generation,
+        "images": sorted(task_bases, key=lambda x: (-x["task_rows"], x["source"]))}))
     (output / "bases").mkdir()
     (output / "bases" / "plan.json").write_bytes(encode({"schema": 1,
         "rebuild_generation": generation,
@@ -141,7 +151,8 @@ def materialize(bundle, output, generation):
     manifest = {"schema": 1, "rebuild_generation": generation, "policy": payload["policy"],
                 "bundle_sha256": hashlib.sha256(bundle.read_bytes()).hexdigest(),
                 "foundation_groups": {name: len(items) for name, items in groups.items()},
-                "sources": len(payload["sources"]), "foundation_bases": len(bases)}
+                "sources": len(remaining_sources), "task_bases": len(task_bases),
+                "foundation_bases": len(bases)}
     (output / "campaign.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return manifest
 
@@ -154,9 +165,10 @@ def commands(root, gateway, sdk_wheel, config, python):
     result = []
     # Resolve/stage the small common base set first. Foundation builds then
     # read private bases even when the upstream registry throttles task images.
-    for family in ("bases", "tmax", "openswe", "tmax-inline", "terminal-prefix", "sources"):
-        source = family in {"sources", "bases"}
+    for family in ("bases", "task-bases", "tmax", "openswe", "tmax-inline", "terminal-prefix", "sources"):
+        source = family in {"sources", "bases", "task-bases"}
         count = (manifest.get("foundation_bases", 0) if family == "bases" else
+                 manifest.get("task_bases", 0) if family == "task-bases" else
                  manifest["sources"] if source else manifest["foundation_groups"].get(family, 0))
         if not count:
             continue
@@ -171,6 +183,8 @@ def commands(root, gateway, sdk_wheel, config, python):
                 ["--reservation-gib", str(policy["foundation_reservation_gib"])])
         if not source and manifest.get("foundation_bases"):
             cmd += ["--base-catalog", str(root / "bases" / "catalog.json")]
+        if not source and manifest.get("task_bases"):
+            cmd += ["--base-catalog", str(root / "task-bases" / "catalog.json")]
         result.append(shlex.join(cmd))
     return result
 

@@ -66,17 +66,52 @@ def prepared_base_mappings(paths):
     return mappings
 
 
-def execution_context(root, item, mappings):
+def prepared_prefixes(roots):
+    """Load exact, validated context-free prefixes; never infer package equivalence."""
+    prefixes = {}
+    for root in roots:
+        plan = json.loads((root / "plan.json").read_text())
+        catalog = json.loads((root / "catalog.json").read_text())
+        if plan.get("schema") != 1 or catalog.get("schema") != 1:
+            raise ValueError("unsupported prepared prefix plan/catalog")
+        for item in plan["foundations"]:
+            if item.get("family") != "terminal-prefix":
+                continue
+            ready = catalog["foundations"].get(item["key"])
+            if not ready or ready.get("validated") is not True:
+                continue
+            if ready.get("key") != item["key"]:
+                raise ValueError("prepared prefix identity mismatch")
+            reference = ready["reference"]
+            if not re.fullmatch(r"[^\s@]+@sha256:[a-f0-9]{64}", reference):
+                raise ValueError("prepared prefix must pin its artifact")
+            body = (validate_context(root, item) / "Dockerfile").read_text()
+            if not body.endswith("\n"):
+                raise ValueError("prepared prefix must end at an instruction boundary")
+            previous = prefixes.setdefault(body, reference)
+            if previous != reference:
+                raise ValueError("conflicting prepared prefix artifacts")
+    return sorted(prefixes.items(), key=lambda pair: (-len(pair[0]), pair[0]))
+
+
+def execution_context(root, item, mappings, prefixes=()):
     from prepare_image_pool import registry_parts
     original = validate_context(root, item)
-    if not mappings:
-        return original, None
-    host, repository, digest = registry_parts(item["base"])
-    base = mappings.get(host + "/" + repository + "@" + digest)
-    if base is None:
+    if not mappings and not prefixes:
         return original, None
     dockerfile = (original / "Dockerfile").read_text()
     prefix = "FROM " + item["base"] + "\n"
+    base = None
+    if item.get("family") == "terminal-prefix":
+        for candidate, reference in prefixes:
+            if dockerfile.startswith(candidate):
+                prefix, base = candidate, reference
+                break
+    host, repository, digest = registry_parts(item["base"])
+    if base is None:
+        base = mappings.get(host + "/" + repository + "@" + digest)
+    if base is None:
+        return original, None
     if not dockerfile.startswith(prefix):
         raise ValueError("foundation base differs from its canonical context")
     context = root / "execution-contexts" / (item["image_id"] + "-" + hashlib.sha256(base.encode()).hexdigest()[:12])
@@ -100,6 +135,8 @@ def main():
     parser.add_argument("--reservation-gib", type=int, default=8)
     parser.add_argument("--base-catalog", type=Path, action="append", default=[],
                         help="reuse faithful, digest-matched prepared bases from source pool catalogs")
+    parser.add_argument("--prepared-prefix-root", type=Path, action="append", default=[],
+                        help="reuse exact validated Terminal prefixes from a plan and catalog directory")
     parser.add_argument("--retry-recorded-failures", action="store_true")
     args = parser.parse_args()
     if min(args.limit, args.growth_limit_gib, args.free_floor_gib, args.reservation_gib) < 1:
@@ -134,6 +171,10 @@ def main():
         raise ValueError("unsupported foundation plan")
     generation = rebuild_generation(plan)
     base_mappings = prepared_base_mappings(args.base_catalog)
+    prefix_roots = list(args.prepared_prefix_root)
+    if (args.root / "catalog.json").exists() and args.root not in prefix_roots:
+        prefix_roots.append(args.root)
+    prefixes = prepared_prefixes(prefix_roots)
     identities = [item["image_id"] for item in plan["foundations"]]
     if len(set(identities)) != len(identities):
         raise ValueError("duplicate foundation identity in plan")
@@ -229,7 +270,7 @@ def main():
                 if not retry and not receipt.get("build_id") and accepted_path.exists():
                     receipt.update(json.loads(accepted_path.read_text()))
                 if not receipt.get("build_id"):
-                    context, prepared_base = execution_context(args.root, item, base_mappings)
+                    context, prepared_base = execution_context(args.root, item, base_mappings, prefixes)
                     if prepared_base:
                         from stage_source_image import mount_prepared_base, publication_repositories
                         receipt["source_mounts"] = mount_prepared_base(registry.client, prepared_base,

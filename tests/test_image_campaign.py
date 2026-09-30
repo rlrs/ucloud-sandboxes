@@ -83,6 +83,26 @@ class ImageCampaignTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'changed'):
                 campaign.pack(sources, [foundations], root / 'new.gz')
 
+    def test_recovery_prepares_rare_task_bases_before_foundations_and_task_tail(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            sources, foundations, _ = self.inputs(root)
+            plan = json.loads((sources / 'plan.json').read_text())
+            plan['images'].append({'source': 'rare:latest', 'families': ['terminal'], 'task_rows': 1,
+                                   'uses': [{'level': 'base_only', 'task_rows': 1}]})
+            (sources / 'plan.json').write_text(json.dumps(plan))
+            archive = root / 'inputs.gz'
+            campaign.pack(sources, [foundations], archive)
+            restored = root / 'restored'
+            manifest = campaign.materialize(archive, restored, 'fresh')
+            self.assertEqual(manifest['task_bases'], 1)
+            self.assertEqual(manifest['sources'], 1)
+            task_bases = json.loads((restored / 'task-bases/plan.json').read_text())['images']
+            self.assertEqual([r['source'] for r in task_bases], ['rare:latest'])
+            commands = campaign.commands(restored, 'https://example.invalid', Path('/wheel'), Path('/config'), '/python')
+            self.assertIn(str(restored / 'task-bases'), commands[1])
+            self.assertIn(str(restored / 'task-bases/catalog.json'), commands[2])
+
     def test_recovery_identity_cannot_reuse_lost_volume_publication(self):
         old = pool.image_identity(BASE)
         new = pool.image_identity(BASE, generation='recovery-1')

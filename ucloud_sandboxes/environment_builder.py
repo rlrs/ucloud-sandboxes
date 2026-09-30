@@ -504,7 +504,9 @@ class FreshEnvironmentBuilder:
                     return None
                 layer_format = self.layer_format()
                 components, reused = [], 0
-                for start, end in plan_layer_groups([size for _, _, size in layers], max_groups=max_groups):
+                planned, _ = self._reusable_layer_groups(
+                    [(diff_id, size) for diff_id, _, size in layers], layer_format, max_groups=max_groups)
+                for _tag, _group, _parent, start, end in planned:
                     digest, hit = self._publish_layer_group(
                         [item[1] for item in layers[start:end]], [item[0] for item in layers[start:end]],
                         lower_dirs=[item[1] for item in layers[:start]],
@@ -626,16 +628,8 @@ class FreshEnvironmentBuilder:
             # Older mkfs versions can still publish a whole-image component
             # through the existing fallback even if version discovery fails.
             return None
-        components, groups = [], []
-        for start, end in plan_layer_groups([item[1] for item in source], max_groups=max_groups):
-            group = [item[0] for item in source[start:end]]
-            parent = layer_chain_id(item[0] for item in source[:start])
-            tag = LAYER_TAG_PREFIX + layer_group_key(layer_format, parent, group)
-            component = self._reuse_layer_component(tag, group, parent, layer_format, refresh=False)
-            if component is None:
-                _measure("preflight_misses")
-            components.append(component)
-            groups.append((tag, group, parent, start, end))
+        groups, components = self._reusable_layer_groups(source, layer_format, max_groups=max_groups)
+        _measure("preflight_misses", sum(component is None for component in components))
         if any(component is None for component in components):
             return self._materialize_registry_groups(repository, source, groups, components,
                 image_id, image_config, diff_ids, layer_format)
@@ -651,6 +645,51 @@ class FreshEnvironmentBuilder:
         _measure("docker_pull_skipped")
         return {"image_id": image_id, "image_config": image_config,
                 "components": components, "diff_ids": diff_ids, "reused": len(components)}
+
+    def _reusable_layer_groups(self, source, layer_format, *, max_groups):
+        """Keep a cached trailing base group separate from a new small delta.
+
+        Greedy byte grouping alone combines an unfinished (<64 MiB) base group
+        with every new task layer. Probe a bounded number of shorter prefixes
+        on misses, accepting only the existing signed, chain-bound components.
+        Optional probes have a shared one-second budget and never increase the
+        composition's existing device/group limit. Publication refreshes hits.
+        """
+        pending = list(plan_layer_groups([item[1] for item in source], max_groups=max_groups))
+        groups, components = [], []
+        probes = 0
+        deadline = time.monotonic() + 1.0
+        while pending:
+            start, end = pending.pop(0)
+            group = [item[0] for item in source[start:end]]
+            parent = layer_chain_id(item[0] for item in source[:start])
+            tag = LAYER_TAG_PREFIX + layer_group_key(layer_format, parent, group)
+            component = self._reuse_layer_component(tag, group, parent, layer_format, refresh=False)
+            if component is None and len(groups) + len(pending) + 1 < max_groups:
+                for split in range(end - 1, start, -1):
+                    remaining = deadline - time.monotonic()
+                    if probes >= 16 or remaining <= 0:
+                        break
+                    prefix = [item[0] for item in source[start:split]]
+                    prefix_tag = LAYER_TAG_PREFIX + layer_group_key(layer_format, parent, prefix)
+                    probes += 1
+                    _measure("prefix_component_probes")
+                    try:
+                        with build_execution_deadline(remaining):
+                            hit = self._reuse_layer_component(prefix_tag, prefix, parent, layer_format, refresh=False)
+                    except (ImageBuildTimeoutError, OSError, RegistryRequestError):
+                        # A speculative miss must not turn a build into a failure.
+                        # The authoritative publication path keeps normal errors.
+                        deadline = 0
+                        break
+                    if hit is not None:
+                        pending.insert(0, (split, end))
+                        tag, group, component, end = prefix_tag, prefix, hit, split
+                        _measure("prefix_components_reused")
+                        break
+            groups.append((tag, group, parent, start, end))
+            components.append(component)
+        return groups, components
 
     def _materialize_registry_groups(self, repository, source, groups, components,
                                      image_id, image_config, diff_ids, layer_format):

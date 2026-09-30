@@ -105,6 +105,37 @@ class LayerComponentSchemaTests(unittest.TestCase):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 LayerEnvironmentComponent.from_dict(layer.to_dict() | invalid)
 
+    def test_small_task_delta_preserves_a_signed_cached_base_group(self):
+        a, b, c = [diff_id(name) for name in ('base-a', 'base-b', 'task')]
+        _, base_digest = self.layer((a, b), None)
+        builder = FreshEnvironmentBuilder(None, self.registry, self.keys.key, self.root / 'work')
+        source = [(a, MIB), (b, MIB), (c, 100)]
+        with publication_metrics() as metrics:
+            groups, components = builder._reusable_layer_groups(source, FORMAT, max_groups=24)
+        self.assertEqual([(g[3], g[4]) for g in groups], [(0, 2), (2, 3)])
+        self.assertEqual(components, [base_digest, None])
+        self.assertEqual(groups[1][2], layer_chain_id([a, b]))
+        self.assertEqual(metrics['prefix_components_reused'], 1)
+        # No spare mount slot: retain the normal single-group plan.
+        groups, components = builder._reusable_layer_groups(source, FORMAT, max_groups=1)
+        self.assertEqual([(g[3], g[4]) for g in groups], [(0, 3)])
+        self.assertEqual(components, [None])
+        # Different mkfs/parent provenance cannot be used as a prefix hit.
+        groups, _ = builder._reusable_layer_groups(source, FORMAT | {'compression': ''}, max_groups=24)
+        self.assertEqual([(g[3], g[4]) for g in groups], [(0, 3)])
+
+    def test_prefix_probes_are_bounded_and_optional_failure_keeps_original_plan(self):
+        builder = FreshEnvironmentBuilder(None, self.registry, self.keys.key, self.root / 'work')
+        source = [(diff_id(str(n)), 1) for n in range(100)]
+        with publication_metrics() as metrics:
+            groups, _ = builder._reusable_layer_groups(source, FORMAT, max_groups=24)
+        self.assertEqual(metrics['prefix_component_probes'], 16)
+        self.assertEqual([(g[3], g[4]) for g in groups], [(0, 100)])
+        with patch.object(builder, '_reuse_layer_component', side_effect=[None, TimeoutError('probe')]):
+            groups, components = builder._reusable_layer_groups(source, FORMAT, max_groups=24)
+        self.assertEqual([(g[3], g[4]) for g in groups], [(0, 100)])
+        self.assertEqual(components, [None])
+
     def test_group_key_is_content_addressed_by_format_parent_and_layers(self):
         layers = [diff_id("a"), diff_id("b")]
         key = layer_group_key(FORMAT, None, layers)
@@ -641,10 +672,10 @@ class LayerPublicationTests(unittest.TestCase):
         self.views.clear()
         self.client.puts.clear()
         _annotated, task, task_environment = self.publish("task")
-        # The base's two closed groups are reused; its open top group joins the task layer.
-        self.assertEqual(task_environment.components[:2], base_environment.components[:2])
-        self.assertEqual(task[2].source_layers, (diff_id("b3"), diff_id("t0")))
-        self.assertEqual(task[2].parent, layer_chain_id([diff_id(name) for name in ("b0", "b1", "b2")]))
+        # Even the base's unfinished top group stays shared with a new task.
+        self.assertEqual(task_environment.components[:3], base_environment.components)
+        self.assertEqual(task[3].source_layers, (diff_id("t0"),))
+        self.assertEqual(task[3].parent, layer_chain_id([diff_id(name) for name in ("b0", "b1", "b2", "b3")]))
         self.assertEqual(len(self.views), 1)
         # Reuse re-puts each index tag, restarting its retention grace.
         self.assertEqual([tag for tag in self.client.puts if tag.startswith("layer-")],

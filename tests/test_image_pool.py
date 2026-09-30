@@ -104,6 +104,17 @@ class ImagePoolTests(unittest.TestCase):
         self.assertEqual(sum("small" in x["families"] for x in selected), 5)
         self.assertEqual(len({x["source"] for x in selected}), 55)
 
+    def test_rare_generic_bases_precede_high_fanout_task_images(self):
+        images = [{"source": "task", "families": ["swe"], "task_rows": 10000},
+                  {"source": "rare-base", "families": ["terminal"], "task_rows": 1,
+                   "uses": [{"level": "base_only", "task_rows": 1}]},
+                  {"source": "common-base", "families": ["terminal"], "task_rows": 100,
+                   "uses": [{"level": "base_only", "task_rows": 100}]}]
+        for balanced in (False, True):
+            selected = planner.select_images(images, 2, 2, balanced=balanced)
+            self.assertEqual([r['source'] for r in selected], ['common-base', 'rare-base'])
+            self.assertEqual(len(planner.select_images(images, 3, 2, balanced=balanced)), 3)
+
     def test_successful_receipt_survives_missing_builder_history(self):
         published = {"id": "expected", "pushed": True, "manifest_digest": "sha256:" + "a" * 64}
         receipt = {"build": {"status": "succeeded", "image": published}}
@@ -160,6 +171,25 @@ class ImagePoolTests(unittest.TestCase):
         self.assertEqual(result["live_builds"], 4)
         self.assertEqual(result["builds_with_prepared_bases"], 1)
         self.assertEqual(result["cold_or_unknown_builds"], 3)
+        self.assertEqual(result["unqualified_live_builds"], 2)
+        self.assertEqual(result["remaining_live_work"]["context_transfer"], 2)
+
+    def test_warm_base_does_not_qualify_remaining_package_or_script_work(self):
+        self.assertEqual(planner.remaining_live_work('FROM private\nENV X=1\nCMD ["bash"]\n'), [])
+        work = planner.remaining_live_work('FROM private\nRUN apt-get update && apt-get install -y gcc\nRUN bash /setup.sh\n')
+        self.assertIn('package_manager', work)
+        self.assertIn('run_requires_qualification', work)
+        self.assertIn('context_transfer', planner.remaining_live_work('FROM private\nCOPY . /app\n'))
+        self.assertIn('source_or_network', planner.remaining_live_work('FROM private\nRUN curl https://example.invalid\n'))
+
+    def test_base_coverage_does_not_count_an_enriched_image_as_faithful(self):
+        inventory = {'images': [{'source': 'base', 'families': ['terminal'], 'task_rows': 1,
+                                 'uses': [{'family': 'terminal', 'level': 'base_only', 'task_rows': 1}]}]}
+        catalog = {'schema': 1, 'images': {'base': {'status': 'ready', 'reference': 'private',
+                    'preparation': 'swesmith-v1', 'components': []}}}
+        report = planner.coverage_report(inventory, [catalog])
+        self.assertEqual(report['generic_base_references_ready'], 0)
+        self.assertEqual(report['missing_generic_bases'], ['base'])
 
     def test_index_shortcuts_only_complete_recipes_and_keeps_source_database(self):
         reference = "registry/prepared@sha256:" + "a" * 64

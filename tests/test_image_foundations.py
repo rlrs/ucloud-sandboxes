@@ -20,6 +20,41 @@ PREFIX = ("FROM ubuntu:22.04\n\nENV LANG=C.UTF-8\n\n"
 
 
 class ImageFoundationTests(unittest.TestCase):
+    def test_longest_ready_prefix_is_reused_without_changing_canonical_context(self):
+        preparer = self.load_script('prepare_image_foundations')
+        pool = self.load_script('prepare_image_pool')
+        with patch.dict(sys.modules, {'prepare_image_pool': pool}):
+            with tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                short = terminal_foundation('FROM ubuntu:22.04\nRUN apt-get update\nCOPY task_file /app\n',
+                    source_base='ubuntu:22.04', resolved_base={'reference': BASE, 'onbuild': []})
+                long = terminal_foundation('FROM ubuntu:22.04\nRUN apt-get update\nRUN apt-get install -y python3\nCOPY task_file /app\n',
+                    source_base='ubuntu:22.04', resolved_base={'reference': BASE, 'onbuild': []})
+                target = terminal_foundation('FROM ubuntu:22.04\nRUN apt-get update\nRUN apt-get install -y python3\nRUN python3 -V\nCOPY task_file /app\n',
+                    source_base='ubuntu:22.04', resolved_base={'reference': BASE, 'onbuild': []})
+                items = []
+                for foundation in (short, long, target):
+                    context = root / foundation.image_id
+                    context.mkdir()
+                    (context / 'Dockerfile').write_text(foundation.dockerfile)
+                    items.append({'key': foundation.key, 'image_id': foundation.image_id,
+                                  'family': 'terminal-prefix', 'base': BASE})
+                (root / 'plan.json').write_text(json.dumps({'schema': 1, 'foundations': items}))
+                entries = {f.key: {'key': f.key, 'validated': True, 'reference': ref}
+                           for f, ref in [(short, 'registry/short@sha256:' + 'b' * 64), (long, READY)]}
+                (root / 'catalog.json').write_text(json.dumps({'schema': 1, 'foundations': entries}))
+                prefixes = preparer.prepared_prefixes([root])
+                context, used = preparer.execution_context(root, items[-1], {}, prefixes)
+                self.assertEqual(used, READY)
+                self.assertEqual((context / 'Dockerfile').read_text(), 'FROM ' + READY + '\nRUN python3 -V\n')
+                self.assertEqual((root / target.image_id / 'Dockerfile').read_text(), target.dockerfile)
+                # A similar package list or instruction is not an exact prefix.
+                self.assertEqual(preparer.execution_context(root, items[-1], {},
+                    [(long.dockerfile.replace('python3', 'python2'), READY)])[1], None)
+                (root / short.image_id / 'Dockerfile').write_text('FROM tampered\n')
+                with self.assertRaisesRegex(ValueError, 'changed after planning'):
+                    preparer.prepared_prefixes([root])
+
     def test_foundation_reuses_only_faithful_exact_pinned_base(self):
         preparer = self.load_script("prepare_image_foundations")
         pool = self.load_script("prepare_image_pool")

@@ -27,7 +27,11 @@ def select_images(images, limit, per_family, *, balanced=False):
         by_source[source] = item
     ranked = sorted(by_source.values(), key=lambda x: (-x["task_rows"], x["source"]))
     families = sorted({f for item in ranked for f in item["families"]})
-    selected = {}
+    # Cover every generic task base before spending storage on the much larger
+    # task-image tail, including bases referenced by only one recipe.
+    bases = [item for item in ranked if any(use.get("level") == "base_only"
+                                          for use in item.get("uses", []))]
+    selected = {item["source"]: item for item in bases[:limit]}
     # A small round-robin floor prevents a single high-fanout family from
     # hiding unresolved inputs in every other family.
     queues = {}
@@ -89,15 +93,25 @@ def coverage_report(inventory, catalogs):
                 components[component["digest"]] = component["bytes"]
                 summed_bytes += component["bytes"]
     families = defaultdict(Counter)
+    base_sources, missing_bases = set(), []
     for item in inventory["images"]:
         uses = item.get("uses") or [{"family": f, "level": "upstream_task_image", "task_rows": item["task_rows"]}
                                     for f in item["families"]]
         for use in uses:
             bucket = "base_only" if use["level"] == "base_only" else "upstream_image"
             families[use["family"]][bucket + "_rows"] += use["task_rows"]
-            if item["source"] in ready:
+            prepared = ready.get(item["source"])
+            faithful = prepared and prepared.get("preparation", "source") == "source"
+            if prepared and (bucket != "base_only" or faithful):
                 families[use["family"]][bucket + "_rows_ready"] += use["task_rows"]
+            if bucket == "base_only" and item["source"] not in base_sources:
+                base_sources.add(item["source"])
+                if not faithful:
+                    missing_bases.append(item["source"])
     return {"families": dict(families), "ready_source_references": len(ready),
+            "generic_base_references": len(base_sources),
+            "generic_base_references_ready": len(base_sources) - len(missing_bases),
+            "missing_generic_bases": sorted(missing_bases),
             "unique_erofs_bytes": sum(components.values()), "summed_erofs_bytes": summed_bytes,
             "scope": "Upstream image/base coverage; not proof of task-specific setup or an unavailable training selection"}
 
@@ -192,6 +206,38 @@ def rewrite_index(source, output, catalogs):
     return {"rewritten": changed}
 
 
+def remaining_live_work(text):
+    """Describe work left after FROM, without equating warm bases with cheap builds.
+
+    Only metadata instructions are statically cheap. RUN and context transfers
+    need measured qualification, including commands whose cost is not recognized.
+    This deliberately does not guess that an arbitrary shell script is small.
+    """
+    metadata = {"FROM", "ENV", "ARG", "LABEL", "USER", "WORKDIR", "CMD", "ENTRYPOINT",
+                "EXPOSE", "VOLUME", "SHELL", "STOPSIGNAL", "HEALTHCHECK"}
+    work = set()
+    for line in text.replace("\\\n", " ").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        kind = stripped.split(None, 1)[0].upper()
+        if kind in metadata:
+            continue
+        if kind in {"COPY", "ADD"}:
+            work.add("context_transfer")
+        elif kind == "RUN":
+            work.add("run_requires_qualification")
+            if re.search(r"\b(?:apt(?:-get)?|pip[23]?|conda|mamba|npm|yarn|pnpm|dnf|yum|apk)\b", stripped):
+                work.add("package_manager")
+            if re.search(r"\b(?:git|curl|wget)\b", stripped):
+                work.add("source_or_network")
+            if re.search(r"\b(?:make|cmake|ninja|cargo|gradle|mvn|gcc|g\+\+)\b", stripped):
+                work.add("compilation")
+        else:
+            work.add("unknown_instruction")
+    return sorted(work)
+
+
 def audit_index(source, catalogs):
     """Account for every recipe without inferring task readiness from a warm base.
 
@@ -211,6 +257,7 @@ def audit_index(source, catalogs):
             image_ids.add(item["image_id"])
     counts = Counter()
     cold_sources = Counter()
+    live_work = Counter()
     with closing(sqlite3.connect(source.resolve().as_uri() + "?mode=ro", uri=True)) as connection:
         for _, encoded, prepared in connection.execute("SELECT source,recipe,prepared_image FROM images"):
             counts["recipes"] += 1
@@ -220,6 +267,9 @@ def audit_index(source, catalogs):
             counts["live_builds"] += 1
             recipe = json.loads(encoded)
             text = recipe["dockerfile"]
+            work = remaining_live_work(text)
+            live_work.update(work)
+            counts["unqualified_live_builds" if work else "metadata_only_live_builds"] += 1
             supported = not re.search(r"^\s*#\s*(syntax|escape|check)\s*=", text, re.I | re.M)
             pattern = r"^[ \t]*FROM[ \t]+([^\s\\]+)(?:[ \t]+AS[ \t]+([\w.-]+))?[ \t]*$"
             matches = list(re.finditer(pattern, text, re.I | re.M))
@@ -242,8 +292,10 @@ def audit_index(source, catalogs):
             else:
                 counts["builds_with_prepared_bases"] += 1
     return {**{key: counts[key] for key in ("recipes", "prepared", "unverified_prepared", "live_builds",
-                                          "cold_or_unknown_builds", "builds_with_prepared_bases")},
+                                          "cold_or_unknown_builds", "builds_with_prepared_bases",
+                                          "unqualified_live_builds", "metadata_only_live_builds")},
             "cold_bases": dict(cold_sources.most_common()),
+            "remaining_live_work": dict(live_work),
             "scope": "Catalog receipt audit; remaining RUN/COPY work and live artifact availability are not qualified"}
 
 
@@ -268,6 +320,8 @@ def main():
     audit.add_argument("--catalog", type=Path, action="append", required=True)
     audit.add_argument("--max-live-builds", type=int, required=True)
     audit.add_argument("--max-cold-builds", type=int, default=0)
+    audit.add_argument("--max-unqualified-live-builds", type=int, default=0,
+                       help="explicit allowance for recipes with unmeasured RUN/COPY/ADD work")
     args = parser.parse_args()
     if args.command == "plan":
         inventory = json.loads(args.inventory.read_text())
@@ -281,11 +335,12 @@ def main():
         print(json.dumps(coverage_report(json.loads(args.inventory.read_text()),
                                          [json.loads(p.read_text()) for p in args.catalog]), indent=2))
     elif args.command == "audit-index":
-        if min(args.max_live_builds, args.max_cold_builds) < 0:
+        if min(args.max_live_builds, args.max_cold_builds, args.max_unqualified_live_builds) < 0:
             parser.error("build allowances cannot be negative")
         result = audit_index(args.source, [json.loads(p.read_text()) for p in args.catalog])
         result["within_budget"] = (result["live_builds"] <= args.max_live_builds
                                    and result["cold_or_unknown_builds"] <= args.max_cold_builds
+                                   and result["unqualified_live_builds"] <= args.max_unqualified_live_builds
                                    and result["unverified_prepared"] == 0)
         print(json.dumps(result, indent=2))
         if not result["within_budget"]:

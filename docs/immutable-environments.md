@@ -46,7 +46,14 @@ original OCI layer diffs as reusable EROFS components. Layers are grouped from
 bottom to top around a 64 MiB compressed-input threshold, with at most 24 groups
 (fewer when explicit toolkits need manifest slots). Completed lower groups stay
 stable across related images. Small trailing base layers may join task-specific
-layers; those bytes are not necessarily shared.
+layers. On a cache miss, publication now probes shorter group prefixes for an
+already signed component, keeping that base component separate from the new
+delta. Speculative lookups are limited to 16 per plan and a shared one-second
+budget, and never exceed the existing group limit. Both selective extraction and
+the Docker fallback use this refinement. The signed source layers, parent chain
+and format must match exactly; publication refreshes each reused component's
+retention before referencing it. Missing or unsupported prefixes keep the
+ordinary grouping behavior.
 
 A component's identity binds its ordered diff IDs, parent ChainID, mkfs version,
 compression and exclusions. The signed v2 schema is `ucloud-environment-erofs-v2`.

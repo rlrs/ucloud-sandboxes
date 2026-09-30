@@ -92,6 +92,7 @@ def materialize(bundle, output, generation):
     output.mkdir(parents=True)
     groups = {}
     revisions = {}
+    bases = {}
     for entry in payload["foundations"]:
         item = entry["item"]
         family = item.get("family", "tmax")
@@ -108,6 +109,18 @@ def materialize(bundle, output, generation):
                 raise ValueError("unexpected foundation input file")
             (context / name).write_text(content)
         validate_context(root, item)
+        first_line = entry["files"]["Dockerfile"].splitlines()[0]
+        if not first_line.startswith("FROM "):
+            raise ValueError("foundation must start with its pinned base")
+        host, repository, digest = registry_parts(first_line[5:])
+        if not re.fullmatch(r"sha256:[a-f0-9]{64}", digest):
+            raise ValueError("foundation recovery base must be immutable")
+        reference = host + "/" + repository + "@" + digest
+        base = bases.setdefault(reference, {"source": reference, "pinned_source": reference,
+            "families": [], "task_rows": 0, "preparation": "source"})
+        base["task_rows"] += item["tasks"]
+        if family not in base["families"]:
+            base["families"].append(family)
         groups.setdefault(family, []).append(item)
         if family in revisions and revisions[family] != entry["revision"]:
             raise ValueError("conflicting source revisions within a foundation family")
@@ -121,10 +134,14 @@ def materialize(bundle, output, generation):
     (output / "sources").mkdir()
     (output / "sources" / "plan.json").write_bytes(encode({"schema": 1,
         "rebuild_generation": generation, "images": payload["sources"]}))
+    (output / "bases").mkdir()
+    (output / "bases" / "plan.json").write_bytes(encode({"schema": 1,
+        "rebuild_generation": generation,
+        "images": sorted(bases.values(), key=lambda x: (-x["task_rows"], x["source"]))}))
     manifest = {"schema": 1, "rebuild_generation": generation, "policy": payload["policy"],
                 "bundle_sha256": hashlib.sha256(bundle.read_bytes()).hexdigest(),
                 "foundation_groups": {name: len(items) for name, items in groups.items()},
-                "sources": len(payload["sources"])}
+                "sources": len(payload["sources"]), "foundation_bases": len(bases)}
     (output / "campaign.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return manifest
 
@@ -135,10 +152,12 @@ def commands(root, gateway, sdk_wheel, config, python):
     policy = manifest["policy"]
     scripts = Path(__file__).resolve().parent
     result = []
-    # Run these first; the remaining three commands may run concurrently.
-    for family in ("tmax", "openswe", "tmax-inline", "terminal-prefix", "sources"):
-        source = family == "sources"
-        count = manifest["sources"] if source else manifest["foundation_groups"].get(family, 0)
+    # Resolve/stage the small common base set first. Foundation builds then
+    # read private bases even when the upstream registry throttles task images.
+    for family in ("bases", "tmax", "openswe", "tmax-inline", "terminal-prefix", "sources"):
+        source = family in {"sources", "bases"}
+        count = (manifest.get("foundation_bases", 0) if family == "bases" else
+                 manifest["sources"] if source else manifest["foundation_groups"].get(family, 0))
         if not count:
             continue
         workers = (policy["source_workers"] if source else policy["terminal_workers"]
@@ -148,8 +167,10 @@ def commands(root, gateway, sdk_wheel, config, python):
                "--config", str(config), "--limit", str(count), "--workers", str(workers),
                "--growth-limit-gib", str(policy["source_growth_limit_gib"] if source else policy["growth_limit_gib"]),
                "--free-floor-gib", str(policy["free_floor_gib"])]
-        cmd += (["--max-image-gib", str(policy["max_source_compressed_gib"])] if source else
+        cmd += (["--max-image-gib", str(policy["max_source_compressed_gib"]), "--stage-upstream"] if source else
                 ["--reservation-gib", str(policy["foundation_reservation_gib"])])
+        if not source and manifest.get("foundation_bases"):
+            cmd += ["--base-catalog", str(root / "bases" / "catalog.json")]
         result.append(shlex.join(cmd))
     return result
 

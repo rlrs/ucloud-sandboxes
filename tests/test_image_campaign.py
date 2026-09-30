@@ -57,6 +57,13 @@ class ImageCampaignTests(unittest.TestCase):
             commands = campaign.commands(restored, 'https://example.invalid', Path('/wheel with space'), Path('/config'), '/python')
             self.assertIn('--growth-limit-gib 1200', commands[-1])
             self.assertIn("'/wheel with space'", commands[-1])
+            self.assertIn('--stage-upstream', commands[0])
+            self.assertIn(str(restored / 'bases'), commands[0])
+            self.assertIn('--limit 1', commands[0])
+            self.assertIn('--base-catalog', commands[1])
+            bases = json.loads((restored / 'bases/plan.json').read_text())
+            self.assertEqual(bases['images'][0]['pinned_source'], BASE)
+            self.assertEqual(bases['images'][0]['preparation'], 'source')
             with self.assertRaises(ValueError):
                 campaign.materialize(archive, restored, 'another')
 

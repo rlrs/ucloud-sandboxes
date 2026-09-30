@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 from urllib.request import Request
+from urllib.error import HTTPError
 
 from ucloud_sandboxes.managed_registry import RegistryRequestError
 
@@ -123,3 +124,31 @@ class StageSourceTests(unittest.TestCase):
                 list(staging.verified_chunks(io.BytesIO(content), digest(b'ab'), 2, deadline=float('inf')))
         with self.assertRaises(TimeoutError):
             list(staging.verified_chunks(io.BytesIO(b'ab'), digest(b'ab'), 2, deadline=0))
+
+    def test_expired_blob_token_refreshes_once_and_real_denial_still_fails(self):
+        resolved, config, layer, manifest = self.source()
+        for denied in (False, True):
+            with self.subTest(denied=denied), tempfile.TemporaryDirectory() as directory, \
+                 patch.dict(sys.modules, {'prepare_image_pool': pool}), \
+                 patch.object(staging, 'upload_stream') as upload:
+                client = Mock()
+                client.blob_exists.side_effect = lambda repo, d: d == digest(config)
+                client.manifest_digest.return_value = digest(manifest)
+                auth = Mock(side_effect=[{'Authorization': 'Bearer expired'}, {'Authorization': 'Bearer fresh'}])
+                expired = HTTPError('https://registry/blob', 401, 'expired', {}, io.BytesIO())
+                outcome = HTTPError('https://registry/blob', 401, 'denied', {}, io.BytesIO()) if denied else io.BytesIO(layer)
+                opener = Mock(side_effect=[expired, outcome])
+                def stage():
+                    return staging.stage_source(resolved, client, Path(directory), publication_url='http://registry:5000',
+                        protect=lambda *args: True, opener=opener, headers_factory=auth)
+                if denied:
+                    with self.assertRaises(HTTPError):
+                        stage()
+                    upload.assert_not_called()
+                    client.manifest_digest.assert_not_called()
+                else:
+                    stage()
+                    upload.assert_called_once()
+                self.assertEqual(auth.call_count, 2)
+                self.assertEqual(opener.call_count, 2)
+                self.assertEqual(opener.call_args.args[0].get_header('Authorization'), 'Bearer fresh')

@@ -12,7 +12,7 @@ import json
 import sqlite3
 import time
 from contextlib import closing
-from urllib import parse, request
+from urllib import error as urlerror, parse, request
 
 from ucloud_sandboxes.managed_registry import RegistryRequestError
 
@@ -143,8 +143,19 @@ def stage_source(resolved, client, lock_root, *, publication_url, protect, opene
             if headers is None:
                 headers = headers_factory(host, repository)
             endpoint = "registry-1.docker.io" if host == "docker.io" else host
-            req = request.Request(f"https://{endpoint}/v2/{repository}/blobs/{blob}", headers=headers)
-            with opener(req, timeout=60) as stream:
+            url = f"https://{endpoint}/v2/{repository}/blobs/{blob}"
+            try:
+                stream = opener(request.Request(url, headers=headers), timeout=60)
+            except urlerror.HTTPError as error:
+                if error.code != 401:
+                    raise
+                # A large layer can outlive a short registry bearer token.
+                # Refresh once at the next blob boundary, preserving already
+                # verified local blobs. Real access denial still propagates.
+                error.close()
+                headers = headers_factory(host, repository)
+                stream = opener(request.Request(url, headers=headers), timeout=60)
+            with stream:
                 upload_stream(client, REPOSITORY, descriptor, stream)
             metrics["downloaded_bytes"] += descriptor["size"]
     try:

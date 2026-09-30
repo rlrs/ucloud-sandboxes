@@ -67,7 +67,9 @@ def main():
                     raise ValueError('result belongs to another preparation')
                 results[item['source']] = row
                 if ((args.retry_failed and row['status'] == 'failed')
-                        or (row['status'] == 'deferred' and 'deferred: public registry cooldown' in row.get('error', ''))):
+                        or (row['status'] == 'deferred' and (
+                            'deferred: public registry cooldown' in row.get('error', '')
+                            or row.get('error') in {'deferred: batch storage budget', 'deferred: free-space reserve'}))):
                     history = root / 'attempts'
                     history.mkdir(exist_ok=True)
                     save(history / (key + '-' + str(time.time_ns()) + '.json'), row)

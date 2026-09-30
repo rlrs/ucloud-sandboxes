@@ -44,7 +44,9 @@
     "free_floor_gib": 500,
     "provider_volume_gb": 3000,
     "gateway_cpu_quota_percent": 150,
-    "gateway_memory_max_gib": 3
+    "gateway_memory_max_gib": 3,
+    "continuation_growth_limit_gib": 64,
+    "continuation_policy": "Starts after the initial stage exits; same budget baseline and free-space floor, no concurrent second pool."
   },
   "sources": [
     {
@@ -647,5 +649,20 @@
       "filesystem_entries": 42477,
       "mode": "identical_filesystem_certificate"
     }
-  ]
+  ],
+  "larger_delta_profile": {
+    "source": "aweaiteam/scaleswe:facelessuser_coloraide_pr103",
+    "changed_regular_file_bytes": 256190089,
+    "bytes_by_change": {
+      "new_file": 253924323,
+      "timestamp_only": 1933116,
+      "changed_content": 332650
+    },
+    "files_by_change": {
+      "new_file": 2190,
+      "timestamp_only": 70,
+      "changed_content": 48
+    },
+    "scope": "Logical bytes of changed entries, not compressed physical savings."
+  }
 }

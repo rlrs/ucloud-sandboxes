@@ -52,6 +52,24 @@ class SharedTaskPoolTests(unittest.TestCase):
             self.assertEqual(catalog['images']['good']['status'], 'ready')
             self.assertEqual(catalog['images']['bad']['status'], 'failed')
 
+    def test_resume_reevaluates_storage_deferrals_without_resetting_budget(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'plan.json').write_text(json.dumps({'schema': 1, 'images': [{'source': 'task', 'anchor': 'base'}]}))
+            self.run_pool(root, 1, lambda *a, **kw: self.fail('unexpected child'))
+            original_budget = (root / 'budget.json').read_bytes()
+            def run(command, **kwargs):
+                work = Path(command[command.index('--root') + 1])
+                work.mkdir(parents=True)
+                (work / 'catalog.json').write_text(json.dumps({'images': {'task': {
+                    'source': 'task', 'status': 'ready', 'qualification': {'equivalent': True}}}}))
+                return SimpleNamespace(returncode=0)
+            catalog, invoked = self.run_pool(root, 16, run)
+            self.assertEqual(invoked.call_count, 1)
+            self.assertEqual(catalog['images']['task']['status'], 'ready')
+            self.assertEqual((root / 'budget.json').read_bytes(), original_budget)
+            self.assertEqual(len(list((root / 'attempts').glob('*.json'))), 1)
+
     def test_public_cooldown_pauses_admission_without_starting_waiting_children(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

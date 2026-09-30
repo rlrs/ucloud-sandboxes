@@ -12,7 +12,7 @@ This is an offline preparation tool, not an automatic rewrite in the request pat
 
 There were 36 full source filesystem scans and 12 checks using a prior exact-filesystem certificate plus a fresh sandbox mount/exec. One initial verification failure involved Helm files under `/tmp`; the deployed sandbox always replaces `/tmp` with tmpfs. The verifier now follows that runtime contract, and the image passed on retry. Failed verification did not register its source aliases.
 
-The expanded queue contains 8,565 candidates over 118 retained anchors. It runs two children at a time, under 150% gateway CPU and 3 GiB memory limits, with a **persisted 16 GiB growth allowance** and **500 GiB free-space floor** on the existing 3,000 provider-GB volume. Candidates are not coverage. Storage admission includes a 2 GiB reservation per active child. New projects can have much larger deltas than the initial pilot; actual growth determines how far the batch proceeds.
+The expanded queue contains 8,565 candidates over 118 retained anchors. It runs two children at a time, under 150% gateway CPU and 3 GiB memory limits, with a **persisted 16 GiB growth allowance** and **500 GiB free-space floor** on the existing 3,000 provider-GB volume. A non-overlapping continuation can use up to 64 GiB total growth from that same baseline after the initial stage exits. Storage-deferred rows are reconsidered against current admission on resume; the floor is unchanged. Candidates are not coverage. Storage admission includes a 2 GiB reservation per active child. New projects can have much larger deltas than the initial pilot; actual growth determines how far the batch proceeds.
 
 ## Qualification and failure behavior
 
@@ -22,7 +22,7 @@ The expanded queue contains 8,565 candidates over 118 retained anchors. It runs 
 - Compare actual sandbox contents, metadata, links and xattrs against the authenticated source. Follow existing EROFS timestamp normalization (`mkfs -T 0`) and runtime mounts/injected files; this does not promise preservation of Docker's original timestamps or files hidden by sandbox mounts.
 - Reuse a full scan for at most 24 hours only when expected source contents, physical component identities/order/ranges/formats, runtime config, scanner contract and worker bundle match. Every image still gets a fresh sandbox mount/exec. Source provenance remains authenticated separately.
 - Preserve accepted and successful build receipts. A successful artifact can be rechecked after its builder scales down and job history disappears. Cleanup removes only this locked job's marked, recognized temporary input files.
-- Respect the shared public-registry cooldown outside child admission. Source failures, unsupported cases and storage deferrals never count ready. `--retry-failed` archives prior failed journals and preserves the original budget baseline.
+- Respect the shared public-registry cooldown outside child admission. Source failures, unsupported cases and storage deferrals never count ready. Storage deferrals are reconsidered on resume without resetting the accounting baseline. `--retry-failed` archives prior failed journals and preserves the original budget baseline.
 
 The scanner requires Python 3 in the source image. Qualification establishes the platform filesystem contract, not execution of every benchmark test or grading command. Full upstream downloads and indexing remain offline costs; the accepted backend build duration alone understates preparation wall time.
 
@@ -60,3 +60,5 @@ python scripts/image_campaign.py refresh \
 ```
 
 Refresh preserves every earlier pin and foundation byte, rejects conflicting source pins and writes no success receipts or credentials. Preserve the resulting bundle off-host. Public images can disappear; recipe recovery is not a registry-blob backup or a guarantee of a byte-identical rebuild.
+
+A larger expanded-queue delta was profiled separately: 253,924,323 changed logical bytes were new files, 1,933,116 were timestamp-only changes and 332,650 were changed file contents. Its large size is therefore not explained by redundant timestamp copying. These are logical bytes, not compressed savings.

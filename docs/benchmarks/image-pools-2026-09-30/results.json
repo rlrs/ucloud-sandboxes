@@ -1,0 +1,195 @@
+{
+  "families": {
+    "MultiSWE": {
+      "upstream_image_rows": 2232,
+      "upstream_image_rows_ready": 18
+    },
+    "R2E-Gym": {
+      "upstream_image_rows": 4522,
+      "upstream_image_rows_ready": 17
+    },
+    "SWE-Lego": {
+      "upstream_image_rows": 4323,
+      "upstream_image_rows_ready": 19
+    },
+    "SWE-rebench v2": {
+      "upstream_image_rows": 6272,
+      "upstream_image_rows_ready": 18
+    },
+    "ScaleSWE": {
+      "upstream_image_rows": 17202,
+      "upstream_image_rows_ready": 17
+    },
+    "SWE-smith": {
+      "upstream_image_rows": 88130,
+      "upstream_image_rows_ready": 59395
+    },
+    "OpenThoughts TBLite": {
+      "base_only_rows": 100,
+      "base_only_rows_ready": 100
+    },
+    "Terminal-Lego": {
+      "base_only_rows": 13825,
+      "base_only_rows_ready": 13733
+    },
+    "Senior SWE-Bench": {
+      "base_only_rows": 50,
+      "base_only_rows_ready": 50
+    },
+    "Terminal-Bench 2": {
+      "upstream_image_rows": 89,
+      "upstream_image_rows_ready": 15
+    },
+    "SWE-bench Multilingual": {
+      "upstream_image_rows": 300,
+      "upstream_image_rows_ready": 16
+    },
+    "SWE-bench Verified": {
+      "upstream_image_rows": 500,
+      "upstream_image_rows_ready": 16
+    }
+  },
+  "ready_source_references": 280,
+  "unique_erofs_bytes": 210645262336,
+  "summed_erofs_bytes": 359576416256,
+  "scope": "Upstream image/base coverage; not proof of task-specific setup or an unavailable training selection",
+  "source_pool_status_counts": {
+    "ready": 280,
+    "failed": 11
+  },
+  "foundations": {
+    "images": 149,
+    "unique_erofs_bytes": 47134859264,
+    "initial_tmax_recipes_rewritten": 9321,
+    "tmax_recipes_total": 14600,
+    "initial_openswe_recipes_rewritten": 36385,
+    "openswe_recipes_total": 36884
+  },
+  "expanded_queue": {
+    "source_references": 35984,
+    "tmax_inline_foundations": 2786,
+    "tmax_inline_recipe_candidates": 9383,
+    "registry_ceiling_gb": 3000,
+    "source_workers": 16,
+    "foundation_workers": 8,
+    "builder_max_nodes": 8,
+    "growth_limit_gib": 1800,
+    "free_floor_gib": 500,
+    "max_source_compressed_gib": 5,
+    "terminal_prefix_foundations": 5804,
+    "terminal_recipe_candidates": 12545,
+    "terminal_workers": 4,
+    "status": "running on verified 3 TB registry; old 8 TB volume deleted"
+  },
+  "qualifications": {
+    "before_migration": {
+      "schema": 1,
+      "images": 181,
+      "workers": 8,
+      "passed": 181,
+      "elapsed_seconds": 187.58101797901327,
+      "create_p50_seconds": 2.637908968987176,
+      "create_p95_seconds": 7.620629331009695,
+      "create_max_seconds": 97.97391460798099,
+      "new_import_builds": 0,
+      "lookup_modes": {
+        "original_source": 58,
+        "prepared_image_id": 123
+      }
+    },
+    "after_migration": {
+      "schema": 1,
+      "images": 181,
+      "workers": 8,
+      "passed": 181,
+      "elapsed_seconds": 176.54042595700594,
+      "create_p50_seconds": 2.5414365559990983,
+      "create_p95_seconds": 5.937683851982001,
+      "create_max_seconds": 94.84027636499377,
+      "new_import_builds": 0,
+      "lookup_modes": {
+        "original_source": 58,
+        "prepared_image_id": 123
+      }
+    }
+  },
+  "storage_migration": {
+    "registry_capacity_gb": 3000,
+    "old_volume_deleted": true,
+    "qualification_images": 181,
+    "qualification_passed": 181
+  },
+  "observed_at_unix": 1790770524.3529193,
+  "live_queue_snapshot": {
+    "image-pool-wide-20260930": {
+      "ready": 281,
+      "ready_recipe_uses": 0,
+      "unique_erofs_bytes": 211347210240,
+      "unit_active": true,
+      "status_counts": {
+        "ready": 281,
+        "failed": 11
+      },
+      "failed_or_deferred": 11
+    },
+    "tmax-inline-foundations-wide-20260930": {
+      "ready": 81,
+      "ready_recipe_uses": 5300,
+      "unique_erofs_bytes": 33513783296,
+      "unit_active": true,
+      "status_counts": {
+        "validated": 81
+      },
+      "failed_or_deferred": 0
+    },
+    "terminal-foundations-full-20260930": {
+      "ready": 57,
+      "ready_recipe_uses": 3939,
+      "unique_erofs_bytes": 5288435712,
+      "unit_active": true,
+      "status_counts": {
+        "validated": 57
+      },
+      "failed_or_deferred": 3
+    }
+  },
+  "terminal_task_comparison": {
+    "checked_equivalent": true,
+    "scope": "task input files, pip versions, selected environment and cwd; not full grading",
+    "cases": [
+      {
+        "image_id": "terminal-prefix-original-20260930",
+        "shared_foundation_bytes": 157233152,
+        "new_erofs_bytes": 4096,
+        "wall_seconds": 240.30181518601603,
+        "backend_timings": {
+          "cache_prepare_ms": 6,
+          "cleanup_ms": 0,
+          "docker_build_and_push_ms": 26316,
+          "finishing_wait_ms": 130822,
+          "immutable_environment_ms": 856
+        }
+      },
+      {
+        "image_id": "terminal-prefix-factored-20260930",
+        "shared_foundation_bytes": 157233152,
+        "new_erofs_bytes": 4096,
+        "wall_seconds": 43.562257968995254,
+        "backend_timings": {
+          "cache_prepare_ms": 2,
+          "cleanup_ms": 0,
+          "docker_build_and_push_ms": 33962,
+          "finishing_wait_ms": 1,
+          "immutable_environment_ms": 965
+        }
+      }
+    ]
+  },
+  "recovery_validation": {
+    "portable_context_materialization": "passed for all 8602 foundations",
+    "fresh_generation_source": "passed, pinned Microsoft SDK image",
+    "fresh_generation_terminal_foundation": "passed",
+    "ubuntu_source": "blocked by Docker Hub 429",
+    "scope": "fresh job identities and sandbox checks on existing registry; not a destructive empty-registry disaster drill"
+  }
+}

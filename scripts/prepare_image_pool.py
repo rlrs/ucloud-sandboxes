@@ -14,6 +14,7 @@ from email.utils import parsedate_to_datetime
 import fcntl
 import hashlib
 import json
+import math
 from pathlib import Path
 import re
 import sys
@@ -47,7 +48,10 @@ def retry_delay(headers, attempt, now):
 class SourceResolver:
     """Serialize each public host and persist cooldowns across coordinators."""
 
-    def __init__(self, root, *, resolve=None, clock=time.time, sleep=time.sleep):
+    def __init__(self, root, *, resolve=None, clock=time.time, sleep=time.sleep, max_wait_seconds=3600):
+        if not math.isfinite(max_wait_seconds) or max_wait_seconds <= 0:
+            raise ValueError("source resolver wait must be finite and positive")
+        self.max_wait_seconds = max_wait_seconds
         self.root = root
         self.resolve = resolve or resolve_source
         self.clock = clock
@@ -56,7 +60,7 @@ class SourceResolver:
     def __call__(self, source):
         host = registry_parts(source)[0]
         path = self.root / ("source-" + host + ".json")
-        deadline = self.clock() + 3600
+        deadline = self.clock() + self.max_wait_seconds
         attempt = 0
         while True:
             with path.with_suffix(".lock").open("a") as handle:

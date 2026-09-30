@@ -21,6 +21,33 @@ BASE = 'docker.io/library/ubuntu@sha256:' + 'a' * 64
 
 
 class ImageCampaignTests(unittest.TestCase):
+    def test_refresh_preserves_inputs_and_rejects_changed_or_private_pins(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            sources, foundations, _ = self.inputs(root)
+            (sources / 'catalog.json').unlink()
+            archive = root / 'initial.gz'
+            campaign.pack(sources, [foundations], archive)
+            catalog = root / 'qualified.json'
+            row = {'source_reference': BASE, 'status': 'ready', 'credential': 'omit-this'}
+            catalog.write_text(json.dumps({'schema': 1, 'images': {'ubuntu:22.04': row}}))
+            refreshed = root / 'next.gz'
+            report = campaign.refresh(archive, [catalog], refreshed)
+            self.assertEqual(report['pinned_sources'], 1)
+            self.assertNotIn(b'omit-this', gzip.decompress(refreshed.read_bytes()))
+            original, updated = campaign.load_bundle(archive), campaign.load_bundle(refreshed)
+            self.assertEqual(original['foundations'], updated['foundations'])
+            self.assertEqual(updated['sources'][0].pop('pinned_source'), BASE)
+            self.assertEqual(original, updated)
+            row['source_reference'] = BASE[:-1] + 'b'
+            catalog.write_text(json.dumps({'schema': 1, 'images': {'ubuntu:22.04': row}}))
+            with self.assertRaisesRegex(ValueError, 'existing source pin'):
+                campaign.refresh(refreshed, [catalog], root / 'conflict.gz')
+            row['source_reference'] = BASE.replace('docker.io', 'private.invalid')
+            catalog.write_text(json.dumps({'schema': 1, 'images': {'ubuntu:22.04': row}}))
+            with self.assertRaises(ValueError):
+                campaign.refresh(archive, [catalog], root / 'private.gz')
+
     def inputs(self, root):
         sources = root / 'sources'
         sources.mkdir()

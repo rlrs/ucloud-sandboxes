@@ -1,0 +1,1068 @@
+{
+  "schema": 1,
+  "scope": "Original public anchors for verified flat task-image sharing; inputs only, not completed coverage. Set a fresh rebuild_generation after volume loss.",
+  "images": [
+    {
+      "source": "aweaiteam/scaleswe:app-sre_qontract-reconcile_pr1",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:17aa3ca41d546d191245997704c6f9c561b17333b99040c47b65a8ca39d4f16a",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:appium_python-client_pr294",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:e283b0d955950b3fdddeaf34637fb883b9fdb095aa904a7fa4eaa1bcccf5a7c7",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:audreyr_cookiecutter_pr1096",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:8968a843801e0e781c2500cf0ec91eb708fca002fd328e0a6452a117c281774b",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:auth0_auth0-python_pr108",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:8616ab040f2d01f79278bfb3c8ad7971b2222ea2149aa2094323682cc44449f9",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:beetbox_beets_pr2554",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:5595c938be6e417cef4b63368ea32226fa2c2a7156bfc62a5d0f22cd27bb358a",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:bids-standard_pybids_pr1016",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:083971cb5160d070a979070abe29bcde9c3ccbf1c81d963607c8e010aa209f67",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:blackducksoftware_hub-rest-api-python_pr101",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:8137f940143c8a80b3183f75f315097a99906cbd1068b3e4c52ac1e2f4439115",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:bluesky_event-model_pr104",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:e9f6d55b525f94dab99b3651c625921f09d36fc576bfeb3a5283d668a4641b55",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:burnash_gspread_pr1008",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:f05f42fd34787d8cc03cc64d91e91df8f771e72028da85a45f82f7edcbd9d6d4",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:canonical_operator_pr1000",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:09ded84afb9f294be3b5c3533297cd91cd8c6f0fe0d623344631951e6ecfb0de",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:chimpler_pyhocon_pr108",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:5f6c538cdcbb3ac367a9aea539422f9bb172ec8cdb94408e6533a579e455a00c",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:cloudtools_troposphere_pr1966",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:28a3bf1766572c6ae5105e3de0c601d009adeb45fca18a41b901c8a126a4ea0a",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:configcat_python-sdk_pr16",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:a8fd273d8fa4b3273b72e7ea27febfc03c5a1da7469282569f468cac82a82b21",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:dbcli_pgcli_pr608",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:1b72740c067085767dc87a96654b738eff9c108a66bab98b8b7b4f75ceb7e7db",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:delta-io_delta-sharing_pr105",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:865a2a9b86d70ed089dd0960e005807a78e843a31d8b0213b3c6afd298f84a34",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:erikbern_synchronicity_pr106",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:e376e8ebf45d210d02cde1b9dffa9a2ebef567c7f92bd5a564dd36a9fac92a86",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:esphome_aioesphomeapi_pr1038",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:a144ca59386393dfdd03e69fcef6b17f183ed1ea041e3188d2f85f270b8fde8c",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:espressif_idf-build-apps_pr103",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:c009c3cea078af950dead30127f0a08725795416f858726f79ee2e56cd82df38",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:evergreen-ci_evergreen.py_pr100",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:4898c506f78914925946c4e0ade4b61003414dbb85a1c177e97d6fe9f092e8f6",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:facelessuser_coloraide_pr10",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:aeebc4c60c1e68f14fd128a033d5d2bf482608eded5aeb043678fda80d7b7ec0",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:facelessuser_soupsieve_pr100",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:79999ce1ce61c592e613ae83ba33e1f6e2c221945813b1efcbecff02c1b53035",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:facelessuser_wcmatch_pr100",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:01e774c415a4119773ce70e57dbaebe6e1229c7b671ee8fcf979dfeafa3a0e92",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:fonttools_fonttools_pr1359",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:b489b233619f38ff0de250878ced7292a2ba495c2380e0be701965cfbe38a54d",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:frictionlessdata_tableschema-py_pr120",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:aeeb35b9a2df3ea7814341da3d7646c7745479ce31554a9349b282b0bd0f770b",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:frictionlessdata_tabulator-py_pr107",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:6602447e90fc022323bc46414c0e7bc81fe2232de36c17b620e320496c8d865f",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:getsentry_responses_pr278",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:67c0081f7511dd948a738fdf71a6fdd234e73c66393f7a8553d85b43da7150d3",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:globus_globus-sdk-python_pr1000",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:56dc57b8cdbd784b861cba339a81a15303157218ca4857a4964e9d0f17a14577",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:google_brotli_pr1021",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:5cb525b0d9219b262e0b2db8e4036ba62e19dbc467705c06d3360f70db0e2b1d",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:google_flatbuffers_pr235",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:78a53a226331a39a3a9c435ed00dac6851885bfe05133b3d14f8e140e53db87f",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:googleapis_proto-plus-python_pr107",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:bf57b0d3b1da59aefafe74e97ead088e6f801cecac30d12088071e167322e862",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:googleapis_python-firestore_pr182",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:28317067839944aa44e4d2b67b4e389736fa582a189d333d33d3e9bb82879b47",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:googlefonts_ufo2ft_pr289",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:99e2a9190da1299c0a4c2dc2fb870160d9432c7455d073e6de71a9e6e722bcd8",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:goose3_goose3_pr118",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:3047ff7d98abe259645146165fa6e7de73626eb50ac04f97c54f530d3a618754",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:gorakhargosh_watchdog_pr1014",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:a71b71fdb78295637e6e8b0761183e65d550844380cd6f07d9721379a18aff8c",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:h5netcdf_h5netcdf_pr102",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:d40ba850338775280dc07a303c2fbe5e76d359e1528f659c79702951cbc8b894",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:hadialqattan_pycln_pr100",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:713f42709d56cd811c53d1b8a61a658941cc443f958a7f767b8e04647290a10b",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:hakancelikdev_unimport_pr102",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:031da999013574d29f7a2ebfa649d2889e193f82fd287ee9e936ed0e80ab13e0",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:hetznercloud_hcloud-python_pr104",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:fc5d0aaf87a7c354aa2c654da00c59ac605191dede27a5869369aa29b7dce08f",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:hhatto_autopep8_pr266",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:2f2bf3eaa251e0b3081a1b4a2b8f0e595f5aaf5845e773f9c857f18861bc02e9",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:holoviz_param_pr1002",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:d3d6e726016e8291c41f369b6f6eb92d94eb5655a6667f9e101262739175da1f",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:influxdb_influxdb-python_pr18",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:e1a681e0cb561fd2d9f40fe9b31656385f5afe8b7f9e22ce5c62d045d24ba1b4",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:infobloxopen_infoblox-client_pr102",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:089b2069a9a27e73cd48e8b1657304906375f8a9401e2ad5ac345d91af912b11",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:ipython_ipython_pr13483",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:5867b2a4c1a006bf0510521f625803b1b6c856c18cbcd683d3d4f2508383290d",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:ipython_traitlets_pr10",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:a4c7567a5b25885bc81d2b90e80d5fd9b5960badd7232a4f5f7a366cffc49dc1",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:itamarst_eliot_pr118",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:16a9622b44a6645a8e72f0f6d5e1077eb949330f93a7b4b8ad0dd7c3fd4aaf2f",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:iterative_dvc-data_pr103",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:f63c4c9842ad117049fa73355ae8b61873bef7aa59c1d772fba375141feb49e8",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:iterative_gto_pr101",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:472aebe4aebbb49152de0683310803348ea96c2ccb40cc972e978eebe6edcca5",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:iterative_scmrepo_pr10",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:fa4bfff3550452ab8fb3d10dd969a933cb6560f9ec7a67513b61fb3d120a05cd",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:jazzband_tablib_pr272",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:87e8e6cbc6cdb7b8590243da60a66664f5a0800d8fa059dd221090b14b27a1c9",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:jodal_biip_pr102",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:b1450126c6e5b625d02ae3c04126a8b4d9a9d856519893c47efce8db5b8eee24",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:joke2k_faker_pr1011",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:d3478aa533533c0b4d4800479a6524efd4348c18047469f3fcf18c1543162e60",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:jpadilla_pyjwt_pr1001",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:afedcc802047b94d8b4c7a1e44c3174dbb37afba7ddaaef8f9a9d03b156ed663",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:jschneier_django-storages_pr1000",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:fa5cf5c47decce051c5eb2b329dbb0e896ba8f2f89f40d6efb4ad1aa83d26b29",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:jsh9_pydoclint_pr120",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:5cb8cf6dc80c353307d806afd2840121d6f6351a47fd794ce3c34cf672b6c880",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:jupyterhub_oauthenticator_pr358",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:44ef68f61f1d7e92c4d1f9918f080e734007a1111c876298eec4791c9264616b",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:jxtech_wechatpy_pr100",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:6e1eb534a9b165877a988062d5e0a3fc1b42bc7e11997291ef875daeaa99f029",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:k2-fsa_sherpa-onnx_pr1003",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:c979c33f9c02e2d975cfd24fcdcb0878eb83b5249181de3f6886377b42bc4ff7",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:karpetrosyan_hishel_pr104",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:bf81b56ee431783cad0a23449b38e097f0593c74ac4e597a1e4f4b8eeafd2995",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:lancedb_lancedb_pr111",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:3ac084a526083a27b209cb78cdecdd49b415cb1138833461c971a5ba0223077e",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:lasp_cdflib_pr106",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:1123b8cdeea7029f57b2506ae067f0c8f39d7e91e24733da4455f0b67e159b44",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:ludeeus_awesomeversion_pr107",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:9f92d58cf401b4e850243c9a9c3f285fbd5e2536da407b3e7a7204f0a5d6f76b",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:marcosschroh_dataclasses-avroschema_pr16",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:2a755661e6cfa642a7472848c36a24389e77f270d03dcbd8e233009201ced40b",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:matrix-org_matrix-python-sdk_pr101",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:323d12f41e52add305c91384a4cea8e052985ff76859877672995ebd37188cfa",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:mcu-tools_mcuboot_pr1007",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:aefc3c70950b0b9a147dbb7936a8de35987b6c9f56bc69d1a02b63a6719eb653",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:meerk40t_svgelements_pr100",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:a665c6c20d3b709b2b295a3060136876eee43b9c7330b06355f1e3307e0bd2f6",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:mercedes-benz_odxtools_pr10",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:f0c53a3cf35f9263aaa12f7fadf745abd4e3216bba14695e8d354469071aa127",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:mesonbuild_meson-python_pr110",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:1a37698fe3baf062addb54d47fb2ac879e6ce3288a4a3e65807bcc8768909ae6",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:microsoft_fabric-cicd_pr108",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:3808cd57a243065f2860f25160754292645d4a653a1d42caed3283cea4173d5c",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:microsoft_lsprotocol_pr106",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:2aa09ce14f68b0e0419b99cdf6ba28efdafb4b4f7df2c48d844b267d2988cc63",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:mirumee_ariadne-codegen_pr106",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:d8ddb4b48219686308d9c9329a43645398f3b739da24e949c73f8acb6a37e0cc",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:mitmproxy_mitmproxy_pr4860",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:604cdcd36815c3bafe458d8ca2635f5df09a7d4fef1a3ba45163fc75abb2e33e",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:mongodb_mongo-python-driver_pr1246",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:e078c4dd781fb670566ff5424804389afbd53385480e6f620e28ac00d7b07187",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:more-itertools_more-itertools_pr1000",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:5c6eb32893ee5cc81a21ab070e71133cbd155c82752547285c41efd7efc270a5",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:ncclient_ncclient_pr200",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:ae1a82d5aab79bd763c9903aac0d6825eebd6be7179a69c1292112675b123995",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:nylas_nylas-python_pr101",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:de51538bb448765e8bbfc52f0a5d833f1e3cbd9c33e3455d574dc4d9230cc072",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:oauthlib_oauthlib_pr103",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:e8c5243aff8a2b26d9bc57953baccdaad483c1d90115ac3b9d7ffeb1d47e7a6c",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:omni-us_jsonargparse_pr145",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:d8fde2a5e8b1a0ae9812ed6676e040210414f13b292541f3a52d8af7251ace76",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:openedx_edx-django-utils_pr10",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:9a6bd24f88d81222b518d3a340d5bed2810a74f33974467323752a830266aa03",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:openedx_openedx-events_pr104",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:ce8de6ff26361e8ce29d1ca9a2e1418d01911a964c7f4036e17e70b953631fa4",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:pallets-eco_wtforms_pr389",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:f9efdf13dfeee52495d801066e166d58fceda5544a4e5a709c6d9fcf00bb9cd4",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:pallets_click_pr1000",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:c9b31e40c55534fa4de77641e195419dd9e04430fc440044b104c6966dbc75f8",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:pallets_jinja_pr1002",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:6fb7ffef516323c05e517846f172e704ebda696eb52ac72c04bf3c45b3ae67b6",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:pallets_werkzeug_pr1458",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:694a5cff049ddc8d6fa3983eeeef22b6d84a1cda90a278adc1a3b9ca2b927d66",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:pdm-project_pdm-backend_pr105",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:da4e29d0c15ff3e41c08300fa0777c71a2d665337163be68629dff3df47087f9",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:pinterest_pymemcache_pr115",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:f89fc089a6e4b17befe1165eda6f289704abaa7cdb9f943eb26ac56b1edb28e8",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:podhmo_dictknife_pr101",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:45b6167a7971547b5b6a3fcd40a237afaa0e3390f3062a670c1a708e4dc1aaa2",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:praw-dev_prawcore_pr105",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:c94a98c7513f88c5173cf1431e6c2308f27327c50a4be9ac9d20102211738d47",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:pre-commit_pre-commit-hooks_pr1014",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:25ec098302bbe1b6e45ce5b32e77174facf1ead905dce2b41f1fc1cab2703ed6",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:projectmesa_mesa_pr1001",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:83ff702aebb5a54c1b1c6bb1bf9c8664ffbad33bc4c9c9de258242cc5b0c13b4",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:prompt-toolkit_python-prompt-toolkit_pr1007",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:ff676bc79f63fd60b66f55743cb17876dd7c30388586ef7811202db2048581bc",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:pypa_twine_pr1024",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:3b2901f961fcc05e203ad0167c28d82a76ccc5c365b81a7dcd93041757e9c818",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:python-poetry_cleo_pr10",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:8fb90be146e92fd2db24b6b34c2e060330f14bfaf7e12a22ed8d29f89bb11366",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:python-poetry_poetry-core_pr100",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:091f7eca85807955ba6bf5cf21d3838a2c80eb7a64d8b8df8d6a642ee1542397",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:python-trio_flake8-async_pr10",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:52ef23d1f4cdcd73fa7630bf2c2304d1e5a4fd094239d80bf4dcfc5b25acb554",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:python-validators_validators_pr184",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:e539e3d4a917b6f3192641554ebe5097a44097afd6ba771bb542ec8a78828395",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:pytransitions_transitions_pr109",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:a633cafa3b3ba04c84cde4039756dbcb0cb8ba0f6c173a28c26d43839c3c9b2f",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:pyvisa_pyvisa_pr143",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:1fdec8f78be8d865894b78b908734661a9b54c71746b671ce05d22145a6cd2fa",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:rokam_midea-local_pr127",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:0c3df0432e706ecc8de5ca132e57a16d268195cbda1539e3b22a9961447f7f1c",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:roniemartinez_latex2mathml_pr10",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:030ee8fe1baa27836838fe8e2eba70a4c1eec38edf66f526e19384f4fd1f0879",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:scikit-hep_particle_pr101",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:afc604bb70d892aec11dc9c5f81ff5a44892dc48f88a8d9cf7b89c46a125af21",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:scikit-hep_uproot3_pr106",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:07ab4da6bc6c0991d28efde2aeaa931402442f6a956cf5b1af02739f31ba1e9c",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:sktime_skbase_pr117",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:49fb9bb3823c8aeead3f8db97b061a0831332d91f9bf6cfaccea1565b9a6446f",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:snok_flake8-type-checking_pr103",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:45263be7604d8697baf3ef9faabfb80da1723f37733eadbe3e40524725529346",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:snowflakedb_snowflake-cli_pr195",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:2500e59c5d479f34ddfbc783c0163736261d608695e893c3e373e6591f776e1c",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:spdx_tools-python_pr107",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:8f242bab7f8211e0df3e7d6c944475b169bb2f3635d03d82abf8be5a44d4701d",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:sphinx-contrib_confluencebuilder_pr1002",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:7f93f4792efe0f4963b8c3167fe744dd2f0a74a73f65d2e35276b060570ec2f4",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:spulec_freezegun_pr105",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:12380d5a2ed45a92ba9fc237d89a5edcce8bb6c7abd3d91ef2ca3726c68d2c5e",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:tconbeer_sqlfmt_pr111",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:296738de96c6c693e17912548f3cbd99513dcb76eacc266a75c2867445ef654c",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:tefra_xsdata_pr1004",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:ec1c38f91564fe55e03f02caccf4dda89469fe5b643ad7fc5d70509b94756b4e",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:telefonica_toolium_pr100",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:c17be9d9e95672a8b944ad0ad08ee90ea2bb47a94da7e1ef96cb5c7aacaa1223",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:us-irs_spacepackets-py_pr10",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:862ce95ad2dc3f442763aa0e766a8f7c599d098c108d6a05cbbcec2e43c7bb47",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:valohai_valohai-cli_pr11",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:f337b7ab209e2558c4d6a0a933d4dcfce7de64334b2d6be15f19da6178b61c5d",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:valohai_valohai-yaml_pr101",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:e2c468df9838cb464800c395ab66b393b5b16d4f14ca680de62bd0ad88433c2e",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:vedro-universe_vedro_pr10",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:cedac60ff6d2ed4a148ddcf048d230f82f8147e7af5316c8b32f5b61cc1e33fa",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:wireservice_csvkit_pr1037",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:b54d40c4939c9eba0fdd3a3a13c45e430f218d5b7cc03c5589763281c5e6ef82",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:xarray-contrib_cf-xarray_pr103",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:fcb0cbf2429aababb86954b06d1a389ba95471507c28daaf24cc3addb7a5650d",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:xnuinside_simple-ddl-parser_pr102",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:6c08076ab5455fa053e7fb38269ad13cfd98123320325539c18dbeb628724243",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    },
+    {
+      "source": "aweaiteam/scaleswe:yt-project_unyt_pr102",
+      "pinned_source": "docker.io/aweaiteam/scaleswe@sha256:ed939d433fccd21df4eeb47b6eb37d83654f4f1388b134d95c5abbf911152622",
+      "families": [
+        "ScaleSWE"
+      ],
+      "task_rows": 1,
+      "preparation": "source"
+    }
+  ]
+}

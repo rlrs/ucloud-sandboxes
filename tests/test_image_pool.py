@@ -60,6 +60,17 @@ class ImagePoolTests(unittest.TestCase):
                 with self.assertRaises(HTTPError):
                     pool.SourceResolver(root)("ghcr.io/org/missing:latest")
 
+    def test_short_resolver_wait_defers_without_holding_a_batch_worker(self):
+        with tempfile.TemporaryDirectory() as directory:
+            error = HTTPError('url', 429, 'rate limited', {'Retry-After': '120'}, None)
+            resolve, sleep = Mock(side_effect=error), Mock()
+            resolver = pool.SourceResolver(Path(directory), resolve=resolve, clock=lambda: 1000, sleep=sleep, max_wait_seconds=60)
+            with patch('builtins.print'), self.assertRaisesRegex(RuntimeError, 'deferred: public registry cooldown'):
+                resolver('ubuntu:22.04')
+            sleep.assert_not_called()
+            resolve.assert_called_once()
+            self.assertEqual(json.loads((Path(directory) / 'source-docker.io.json').read_text())['next_request_at'], 1120)
+
     def test_retry_after_supports_http_dates_and_invalid_values(self):
         self.assertEqual(pool.retry_delay({"Retry-After": "Thu, 01 Jan 1970 00:02:00 GMT"}, 0, 0), 120)
         self.assertEqual(pool.retry_delay({"Retry-After": "invalid"}, 2, 0), 240)

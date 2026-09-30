@@ -130,5 +130,74 @@ class FlatDeltaCommandTests(unittest.TestCase):
             self.assertFalse((root / 'bad').exists())
 
 
+class SourceFilesystemQualificationTests(unittest.TestCase):
+    def test_source_model_includes_link_identity_and_rejects_mismatches(self):
+        from copy import deepcopy
+        from ucloud_sandboxes.flat_image_qualification import (
+            RUNTIME_FILES, RUNTIME_TREES, SCAN_OUTPUT, compare_snapshot, expected_filesystem,
+        )
+        data = archive(ROOT + [('app/a', tarfile.REGTYPE, 'payload', 0o640),
+                               ('app/b', tarfile.LNKTYPE, 'app/a', 0o640),
+                               ('app/link', tarfile.SYMTYPE, 'a', 0o777)])
+        index = index_flat_tar(io.BytesIO(data))
+        expected = expected_filesystem(index)
+        self.assertEqual(expected['/app/b']['sha256'], hashlib.sha256(b'payload').hexdigest())
+        self.assertEqual(expected['/app/b']['nlink'], 2)
+        self.assertEqual(expected['/app/b']['hardlinks'], ['/app/a', '/app/b'])
+        self.assertEqual(expected['/app/a']['mtime_ns'], 0)
+        snapshot = {'entries': expected, 'errors': [],
+                    'excluded': sorted(RUNTIME_TREES | (RUNTIME_FILES - {'/.ucloud-init'}) | {SCAN_OUTPUT})}
+        formats = [{'layout': 1, 'excludes': ['dev', 'proc', 'sys', 'run']}]
+        self.assertTrue(compare_snapshot(index, snapshot, layer_formats=formats)['equivalent'])
+        for field, value in [('sha256', 'bad'), ('mode', 0o777), ('nlink', 1), ('mtime_ns', 123)]:
+            with self.subTest(field=field):
+                changed = deepcopy(snapshot)
+                changed['entries']['/app/a'][field] = value
+                self.assertFalse(compare_snapshot(index, changed, layer_formats=formats)['equivalent'])
+        for changed in (dict(snapshot, errors=['unreadable']), dict(snapshot, excluded=[])):
+            with self.assertRaises(ValueError):
+                compare_snapshot(index, changed, layer_formats=formats)
+        with self.assertRaises(ValueError):
+            compare_snapshot(index, snapshot, layer_formats=[{'layout': 2}])
+
+    def test_scan_certificate_requires_identical_bytes_ranges_model_and_runtime(self):
+        from copy import deepcopy
+        from types import SimpleNamespace
+        from ucloud_sandboxes.flat_image_qualification import qualification_key
+        index = index_flat_tar(io.BytesIO(archive(ROOT + [('app/a', tarfile.REGTYPE, 'payload', 0o644)])))
+        profile = {'source_layers': ['old-layer'], 'parent': 'old-parent', 'image_digest': 'image',
+                   'image_size': 4096, 'chunks': [{'digest': 'range', 'offset': 0, 'length': 4096}],
+                   'format': {'layout': 1}, 'producer_key': 'trusted'}
+        def component(value):
+            return SimpleNamespace(unsigned=lambda: deepcopy(value))
+        config = {'Env': ['MODE=safe']}
+        key = qualification_key(index, [component(profile)], config, 'worker-v1')
+        same_bytes = {**profile, 'source_layers': ['new-layer'], 'parent': 'new-parent'}
+        self.assertEqual(key, qualification_key(index, [component(same_bytes)], config, 'worker-v1'))
+        different_range = {**profile, 'chunks': [{'digest': 'different', 'offset': 0, 'length': 4096}]}
+        self.assertNotEqual(key, qualification_key(index, [component(different_range)], config, 'worker-v1'))
+        self.assertNotEqual(key, qualification_key(index, [component(profile)], {'Env': ['MODE=changed']}, 'worker-v1'))
+        self.assertNotEqual(key, qualification_key(index, [component(profile)], config, 'worker-v2'))
+        changed = index_flat_tar(io.BytesIO(archive(ROOT + [('app/a', tarfile.REGTYPE, 'changed', 0o644)])))
+        self.assertNotEqual(key, qualification_key(changed, [component(profile)], config, 'worker-v1'))
+
+    def test_runtime_tmpfs_contents_are_excluded_but_app_files_are_not(self):
+        from ucloud_sandboxes.flat_image_qualification import expected_filesystem
+        data = archive(ROOT + [('tmp', tarfile.DIRTYPE, '', 0o1777),
+                               ('tmp/installer.tar.gz', tarfile.REGTYPE, 'runtime hides this', 0o644),
+                               ('app/required', tarfile.REGTYPE, 'runtime retains this', 0o644)])
+        expected = expected_filesystem(index_flat_tar(io.BytesIO(data)))
+        self.assertNotIn('/tmp', expected)
+        self.assertNotIn('/tmp/installer.tar.gz', expected)
+        self.assertEqual(expected['/app/required']['sha256'], hashlib.sha256(b'runtime retains this').hexdigest())
+
+    def test_scanner_output_cannot_hide_a_source_file(self):
+        from ucloud_sandboxes.flat_image_qualification import expected_filesystem
+        data = archive([('.', tarfile.DIRTYPE, '', 0o755), ('tmp', tarfile.DIRTYPE, '', 0o1777),
+                        ('tmp/ucloud-filesystem-proof.json.gz', tarfile.REGTYPE, 'source data', 0o644)])
+        with self.assertRaisesRegex(ValueError, 'qualification output'):
+            expected_filesystem(index_flat_tar(io.BytesIO(data)))
+
+
 if __name__ == '__main__':
     unittest.main()

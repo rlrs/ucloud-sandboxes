@@ -82,6 +82,36 @@ def load_bundle(path):
     return payload
 
 
+def refresh(bundle, catalogs, output):
+    """Add public digest pins, preserving all earlier inputs and no success state."""
+    if output.exists():
+        raise ValueError('refusing to replace an existing recovery bundle')
+    payload = load_bundle(bundle)
+    sources = {row['source']: row for row in payload['sources']}
+    for path in catalogs:
+        catalog = read(path)
+        if catalog.get('schema') != 1:
+            raise ValueError('unsupported source catalog')
+        for source, entry in catalog['images'].items():
+            if source not in sources or not entry.get('source_reference'):
+                continue
+            pin = entry['source_reference']
+            if (not re.fullmatch(r'[^\s@]+@sha256:[a-f0-9]{64}', pin)
+                    or registry_parts(pin)[:2] != registry_parts(source)[:2]):
+                raise ValueError('source pin must identify the original public repository')
+            row = sources[source]
+            if row.get('pinned_source', pin) != pin:
+                raise ValueError('refusing to change an existing source pin')
+            row['pinned_source'] = pin
+    envelope = {'payload_sha256': hashlib.sha256(encode(payload)).hexdigest(), 'payload': payload}
+    data = gzip.compress(encode(envelope), mtime=0)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open('xb') as stream:
+        stream.write(data)
+    return {'sources': len(sources), 'pinned_sources': sum('pinned_source' in s for s in sources.values()),
+            'foundations': len(payload['foundations']), 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest()}
+
+
 def materialize(bundle, output, generation):
     if not generation:
         raise ValueError("a fresh rebuild generation is required")
@@ -196,6 +226,10 @@ def main():
     export.add_argument("--pool-root", type=Path, required=True)
     export.add_argument("--foundation-root", type=Path, action="append", required=True)
     export.add_argument("--output", type=Path, required=True)
+    update = sub.add_parser('refresh')
+    update.add_argument('--bundle', type=Path, required=True)
+    update.add_argument('--catalog', type=Path, action='append', required=True)
+    update.add_argument('--output', type=Path, required=True)
     restore = sub.add_parser("materialize")
     restore.add_argument("--bundle", type=Path, required=True)
     restore.add_argument("--output", type=Path, required=True)
@@ -210,6 +244,8 @@ def main():
     action = args.pop("command")
     if action == "pack":
         args["foundation_roots"] = args.pop("foundation_root")
+    elif action == 'refresh':
+        args['catalogs'] = args.pop('catalog')
     result = globals()[action](**args)
     print("\n".join(result) if action == "commands" else json.dumps(result, indent=2))
 

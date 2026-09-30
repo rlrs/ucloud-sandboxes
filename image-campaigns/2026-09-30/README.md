@@ -62,3 +62,11 @@ python scripts/image_campaign.py pack \
 ```
 
 Use original planner directories for snapshotting. Copy the new bundle off the gateway and commit it with its input counts and checksum. Never replace an existing bundle silently. After materialization, source pins are reverified against the public registry by immutable digest.
+
+## Compact flat task-image preparations
+
+`inputs-shared-pilot.json.gz` preserves **743 public source pins** and the unchanged 8,602 foundation contexts (SHA-256 `84747fdc570b71e1550e088df8b92581a0374604ba5f6fabeb4e1f2604a27c9b`). This includes the newly qualified Click canary and 48-source pilot. It is an input snapshot, not completed-task coverage.
+
+`shared-anchors.json` preserves the 118 public, pinned source anchors used by the expanded compact preparation queue. Restore these original sources with a fresh recovery generation, then regenerate private shared-task plans from the new catalogs. [Compact task-image preparation](../../docs/shared-task-images.md) describes qualification, storage limits, resume and recovery. The original full-source preparer remains a fallback; blindly restoring every source in full can exhaust the storage budget.
+
+`image_campaign.py refresh --bundle OLD --catalog READY_CATALOG --output NEW` adds public source pins without changing earlier pins or foundation contexts. It excludes runtime receipts and private prepared references, and fails on source-pin conflicts. Preserve each refreshed bundle off-host.

@@ -1,0 +1,312 @@
+{
+  "date_utc": "2026-09-30",
+  "research_revision": "c7ea0d7fe3379f0e6ffb0a68c82c80c184601f92",
+  "prime_tasks_revision": "8b38d35b53271a5f955dfc5dd8197d562cebf46e",
+  "openswe_dataset_revision": "a8db93af5335df2c8baac0cd1ff367e4d475d3d7",
+  "unique_foundation_erofs_bytes": 4310667264,
+  "foundations": [
+    {
+      "family": "tmax",
+      "python_version": null,
+      "candidate_recipes": 5134,
+      "erofs_bytes": 1985335296,
+      "validated": true,
+      "build_timings": {
+        "end_to_end_ms": 393415,
+        "environment": {
+          "component_lookup_ms": 3.654,
+          "docker_pull_ms": 104006.798,
+          "erofs_bytes_built": 1985335296,
+          "groups_built": 2,
+          "layer_lock_wait_ms": 0.027,
+          "mkfs_ms": 3752.845,
+          "preflight_misses": 2,
+          "preflight_ms": 24.569,
+          "publish_component_ms": 8645.636,
+          "sign_ms": 2484.668,
+          "squash_ms": 357.385,
+          "total_ms": 120351.252
+        },
+        "phases": {
+          "cache_prepare_ms": 18,
+          "cleanup_ms": 0,
+          "docker_build_and_push_ms": 273016,
+          "finishing_wait_ms": 7,
+          "immutable_environment_ms": 120351
+        },
+        "preparation_ms": 6,
+        "queue_wait_ms": 4,
+        "total_ms": 393405
+      }
+    },
+    {
+      "family": "openswe",
+      "python_version": "3.12",
+      "candidate_recipes": 10623,
+      "erofs_bytes": 1198120960,
+      "validated": true,
+      "build_timings": {
+        "end_to_end_ms": 149688,
+        "environment": {
+          "component_lookup_ms": 113.09499999999998,
+          "docker_pull_ms": 55232.581,
+          "erofs_bytes_built": 790679552,
+          "groups_built": 3,
+          "groups_reused": 2,
+          "layer_lock_wait_ms": 0.08599999999999998,
+          "mkfs_ms": 1999.342,
+          "oci_decompress_ms": 1039.9455860011813,
+          "oci_download_bytes_actual": 127009032.0,
+          "oci_extract_ms": 0.23808900004951283,
+          "oci_transfer_ms": 40.161016999604726,
+          "preflight_misses": 3,
+          "preflight_ms": 1816.63,
+          "publish_component_ms": 4005.7320000000004,
+          "selective_fallback_whiteout": 1,
+          "selective_fallbacks": 1,
+          "selective_materialization_ms": 1359.836,
+          "selective_subprocess_ms": 1719.632,
+          "sign_ms": 1003.212,
+          "squash_ms": 0.0,
+          "total_ms": 64822.599
+        },
+        "phases": {
+          "cache_prepare_ms": 3,
+          "cleanup_ms": 0,
+          "docker_build_and_push_ms": 84818,
+          "finishing_wait_ms": 5,
+          "immutable_environment_ms": 64822
+        },
+        "preparation_ms": 6,
+        "queue_wait_ms": 4,
+        "total_ms": 149678
+      }
+    },
+    {
+      "family": "openswe",
+      "python_version": "3.11",
+      "candidate_recipes": 5290,
+      "erofs_bytes": 1184616448,
+      "validated": true,
+      "build_timings": {
+        "end_to_end_ms": 65767,
+        "environment": {
+          "component_lookup_ms": 5.749,
+          "docker_pull_skipped": 1,
+          "erofs_bytes_built": 578441216,
+          "groups_built": 2,
+          "groups_reused": 3,
+          "layer_lock_wait_ms": 0.024,
+          "mkfs_ms": 1436.351,
+          "oci_decompress_ms": 2472.158673001559,
+          "oci_download_bytes": 383170759,
+          "oci_download_bytes_actual": 383170759.0,
+          "oci_extract_ms": 1449.56258600007,
+          "oci_layers_materialized": 2,
+          "oci_transfer_ms": 96.54707099878124,
+          "preflight_misses": 2,
+          "preflight_ms": 11171.854,
+          "publish_component_ms": 2759.432,
+          "selective_materialization_ms": 5069.243,
+          "selective_materializations": 1,
+          "selective_subprocess_ms": 5484.435,
+          "sign_ms": 754.8299999999999,
+          "squash_ms": 0.0,
+          "total_ms": 11352.258
+        },
+        "phases": {
+          "cache_prepare_ms": 3,
+          "cleanup_ms": 0,
+          "docker_build_and_push_ms": 54358,
+          "finishing_wait_ms": 5,
+          "immutable_environment_ms": 11352
+        },
+        "preparation_ms": 5,
+        "queue_wait_ms": 3,
+        "total_ms": 65759
+      }
+    },
+    {
+      "family": "openswe",
+      "python_version": "3.10",
+      "candidate_recipes": 4849,
+      "erofs_bytes": 1154953216,
+      "validated": true,
+      "build_timings": {
+        "end_to_end_ms": 59351,
+        "environment": {
+          "component_lookup_ms": 5.93,
+          "docker_pull_skipped": 1,
+          "erofs_bytes_built": 548777984,
+          "groups_built": 2,
+          "groups_reused": 3,
+          "layer_lock_wait_ms": 0.019,
+          "mkfs_ms": 1296.0720000000001,
+          "oci_decompress_ms": 2384.906698997497,
+          "oci_download_bytes": 361476451,
+          "oci_download_bytes_actual": 361476451.0,
+          "oci_extract_ms": 1425.0551350000933,
+          "oci_layers_materialized": 2,
+          "oci_transfer_ms": 107.07658300350431,
+          "preflight_misses": 2,
+          "preflight_ms": 10757.116,
+          "publish_component_ms": 2720.7799999999997,
+          "selective_materialization_ms": 4976.926,
+          "selective_materializations": 1,
+          "selective_subprocess_ms": 5333.886,
+          "sign_ms": 705.908,
+          "squash_ms": 0.0,
+          "total_ms": 10975.121
+        },
+        "phases": {
+          "cache_prepare_ms": 3,
+          "cleanup_ms": 0,
+          "docker_build_and_push_ms": 48316,
+          "finishing_wait_ms": 3,
+          "immutable_environment_ms": 10975
+        },
+        "preparation_ms": 9,
+        "queue_wait_ms": 4,
+        "total_ms": 59338
+      }
+    }
+  ],
+  "task_qualification": {
+    "matching_task_files_packages_and_environment": true,
+    "warm_cache": true,
+    "cases": [
+      {
+        "case": "tmax-baseline-000023_004a85b4",
+        "shared_foundation_bytes": 1985335296,
+        "new_erofs_bytes": 80338944,
+        "build_and_smoke_seconds": 25.448549792025005,
+        "build_timings": {
+          "end_to_end_ms": 15946,
+          "environment": {
+            "component_lookup_ms": 123.50500000000001,
+            "docker_pull_ms": 2554.269,
+            "erofs_bytes_built": 80338944,
+            "groups_built": 1,
+            "groups_reused": 2,
+            "layer_lock_wait_ms": 0.033,
+            "mkfs_ms": 163.772,
+            "oci_decompress_ms": 378.97524000231897,
+            "oci_download_bytes_actual": 54426259.0,
+            "oci_extract_ms": 2.2213579998151545,
+            "oci_transfer_ms": 35.55883899764467,
+            "preflight_misses": 1,
+            "preflight_ms": 867.726,
+            "publish_component_ms": 453.424,
+            "selective_fallback_whiteout": 1,
+            "selective_fallbacks": 1,
+            "selective_materialization_ms": 479.384,
+            "selective_subprocess_ms": 818.327,
+            "sign_ms": 105.875,
+            "squash_ms": 43.063,
+            "total_ms": 4852.174
+          },
+          "phases": {
+            "cache_prepare_ms": 3,
+            "cleanup_ms": 0,
+            "docker_build_and_push_ms": 11042,
+            "finishing_wait_ms": 2,
+            "immutable_environment_ms": 4852
+          },
+          "preparation_ms": 12,
+          "queue_wait_ms": 6,
+          "total_ms": 15928
+        }
+      },
+      {
+        "case": "tmax-factored-000023_004a85b4",
+        "shared_foundation_bytes": 1985335296,
+        "new_erofs_bytes": 80338944,
+        "build_and_smoke_seconds": 24.84423362999223,
+        "build_timings": {
+          "end_to_end_ms": 15474,
+          "environment": {
+            "component_lookup_ms": 163.668,
+            "docker_pull_ms": 2591.595,
+            "erofs_bytes_built": 80338944,
+            "groups_built": 1,
+            "groups_reused": 2,
+            "layer_lock_wait_ms": 0.045,
+            "mkfs_ms": 150.248,
+            "oci_decompress_ms": 379.87092099888287,
+            "oci_download_bytes_actual": 54426153.0,
+            "oci_extract_ms": 2.4957839999615317,
+            "oci_transfer_ms": 33.635928001331195,
+            "preflight_misses": 1,
+            "preflight_ms": 932.087,
+            "publish_component_ms": 134.713,
+            "selective_fallback_whiteout": 1,
+            "selective_fallbacks": 1,
+            "selective_materialization_ms": 479.741,
+            "selective_subprocess_ms": 867.063,
+            "sign_ms": 132.381,
+            "squash_ms": 49.642,
+            "total_ms": 4679.468
+          },
+          "phases": {
+            "cache_prepare_ms": 4,
+            "cleanup_ms": 0,
+            "docker_build_and_push_ms": 10733,
+            "finishing_wait_ms": 4,
+            "immutable_environment_ms": 4679
+          },
+          "preparation_ms": 12,
+          "queue_wait_ms": 5,
+          "total_ms": 15457
+        }
+      },
+      {
+        "case": "tmax-factored-000099_1cd88af1",
+        "shared_foundation_bytes": 1985335296,
+        "new_erofs_bytes": 80338944,
+        "build_and_smoke_seconds": 25.044993237010203,
+        "build_timings": {
+          "end_to_end_ms": 15715,
+          "environment": {
+            "component_lookup_ms": 120.624,
+            "docker_pull_ms": 2575.136,
+            "erofs_bytes_built": 80338944,
+            "groups_built": 1,
+            "groups_reused": 2,
+            "layer_lock_wait_ms": 0.043,
+            "mkfs_ms": 164.57,
+            "oci_decompress_ms": 387.09647199971187,
+            "oci_download_bytes_actual": 54427613.0,
+            "oci_extract_ms": 2.2798860002239962,
+            "oci_transfer_ms": 32.66105100055938,
+            "preflight_misses": 1,
+            "preflight_ms": 882.176,
+            "publish_component_ms": 483.302,
+            "selective_fallback_whiteout": 1,
+            "selective_fallbacks": 1,
+            "selective_materialization_ms": 483.993,
+            "selective_subprocess_ms": 816.656,
+            "sign_ms": 128.276,
+            "squash_ms": 43.686,
+            "total_ms": 4896.317
+          },
+          "phases": {
+            "cache_mount_ms": 107,
+            "cache_prepare_ms": 4,
+            "cleanup_ms": 0,
+            "docker_build_and_push_ms": 10756,
+            "finishing_wait_ms": 4,
+            "immutable_environment_ms": 4896
+          },
+          "preparation_ms": 11,
+          "queue_wait_ms": 5,
+          "total_ms": 15699
+        }
+      }
+    ]
+  },
+  "openswe_rewrite_qualification": {
+    "source_recipes": 36884,
+    "exact_prefix_rewrites": 20759,
+    "actual_training_index": false
+  }
+}

@@ -446,8 +446,14 @@ def main():
                                 usage, ref, owner, touch=True, persistent=True))
                         receipt["staged_source"] = build_source
                         receipt["staging"] = staging_metrics
+                        from stage_source_image import mount_source_layers, publication_repositories, REPOSITORY
+                        receipt["source_mounts"] = mount_source_layers(registry.client, REPOSITORY,
+                            resolved["layers"], publication_repositories(image_id, config.registry_worker_url,
+                                                                        config.builder.buildx_cache_ref))
                         save(receipt_path, receipt)
                         print(json.dumps({"source": source, "status": "staged", **staging_metrics}), flush=True)
+                        print(json.dumps({"source": source, "status": "base_layers_linked",
+                                          **receipt["source_mounts"]}), flush=True)
                     (context / "Dockerfile").write_text(image_recipe(build_source, preparation))
                     build_path = claim_root / (key + ".build.json")
                     previous_path = args.root / (key + ".build.json")

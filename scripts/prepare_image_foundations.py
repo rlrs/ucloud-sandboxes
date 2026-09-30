@@ -230,6 +230,11 @@ def main():
                     receipt.update(json.loads(accepted_path.read_text()))
                 if not receipt.get("build_id"):
                     context, prepared_base = execution_context(args.root, item, base_mappings)
+                    if prepared_base:
+                        from stage_source_image import mount_prepared_base, publication_repositories
+                        receipt["source_mounts"] = mount_prepared_base(registry.client, prepared_base,
+                            publication_repositories(image_id, config.registry_worker_url,
+                                                     config.builder.buildx_cache_ref))
                     build = client.submit_image_build(sdk.Image.from_dockerfile(name=image_id, context_path=context),
                                                       timeout_seconds=600)
                     receipt.update(build_id=build["build_id"], build=build)

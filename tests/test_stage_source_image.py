@@ -25,6 +25,48 @@ def digest(data):
 
 
 class StageSourceTests(unittest.TestCase):
+    def test_prelinking_reuses_largest_base_bytes_in_image_and_cache_repositories(self):
+        client = Mock()
+        client.mount_blob.return_value = True
+        layers = [{'digest': digest(b'small'), 'size': 1}, {'digest': digest(b'large'), 'size': 10**10}]
+        targets = staging.publication_repositories('fixture', 'http://registry.internal:5000',
+                                                    'registry.internal:5000/ucloud-build-cache')
+        self.assertTrue(targets[0].startswith('ucloud-managed/fixture-'))
+        self.assertEqual(targets[1], 'ucloud-build-cache')
+        result = staging.mount_source_layers(client, staging.REPOSITORY, layers, targets)
+        self.assertEqual(result['mounted'], 4)
+        self.assertEqual(result['mounted_descriptor_bytes'], 2 * (10**10 + 1))
+        self.assertEqual(client.mount_blob.call_args_list[0].args, (targets[0], staging.REPOSITORY, digest(b'large')))
+        client.put_manifest.assert_not_called()
+        client.start_blob_upload.assert_not_called()
+        with self.assertRaises(ValueError):
+            staging.publication_repositories('fixture', 'http://registry.internal:5000', 'different.example/cache')
+
+    def test_prelinking_is_bounded_and_optional_on_registry_failure(self):
+        client = Mock()
+        client.mount_blob.return_value = True
+        layers = [{'digest': digest(b'layer'), 'size': 20}]
+        with patch.object(staging.time, 'monotonic', side_effect=[0, 1, 2, 3, 4]):
+            result = staging.mount_source_layers(client, 'source', layers, ['a', 'b', 'c'])
+        self.assertEqual(client.mount_blob.call_count, 2)
+        self.assertEqual(result['error'], 'TimeoutError')
+        client.mount_blob.side_effect = RegistryRequestError(503, 'POST', '/mount', '')
+        self.assertEqual(staging.mount_source_layers(client, 'source', layers, ['a'])['error'], 'RegistryRequestError')
+
+    def test_prepared_base_prelink_uses_verified_immutable_manifest(self):
+        _, _, layer, manifest = self.source()
+        client = Mock()
+        client._request.side_effect = lambda *args, **kwargs: io.BytesIO(manifest)
+        client.mount_blob.return_value = True
+        reference = 'registry.internal:5000/ucloud-managed/base:latest@' + digest(manifest)
+        result = staging.mount_prepared_base(client, reference, ['ucloud-managed/next'])
+        self.assertEqual(result['mounted_descriptor_bytes'], len(layer))
+        self.assertIn('/manifests/' + digest(manifest), client._request.call_args.args[0])
+        client.mount_blob.reset_mock()
+        client._request.side_effect = lambda *args, **kwargs: io.BytesIO(manifest + b' ')
+        self.assertEqual(staging.mount_prepared_base(client, reference, ['next'])['error'], 'ValueError')
+        client.mount_blob.assert_not_called()
+
     def source(self):
         config = b'{"os":"linux","architecture":"amd64","rootfs":{"diff_ids":[]}}'
         layer = b'compressed layer bytes'

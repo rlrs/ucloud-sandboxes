@@ -19,6 +19,76 @@ from ucloud_sandboxes.managed_registry import RegistryRequestError
 REPOSITORY = "ucloud-upstream"
 
 
+def publication_repositories(image_id, registry_url, cache_ref=""):
+    from ucloud_sandboxes.control_plane import _managed_registry_build_tag
+    from ucloud_sandboxes.managed_registry import registry_repository_tag_from_image_ref
+    target, _ = registry_repository_tag_from_image_ref(_managed_registry_build_tag(image_id, registry_url))
+    repositories = [target]
+    if cache_ref:
+        authority = parse.urlparse(registry_url).netloc
+        if cache_ref.partition("/")[0] != authority:
+            raise ValueError("build cache must use the same publication registry")
+        cache, _ = registry_repository_tag_from_image_ref(cache_ref)
+        repositories.append(cache)
+    return list(dict.fromkeys(repositories))
+
+
+def mount_source_layers(client, source_repository, layers, target_repositories, *, deadline=None):
+    """Pre-link existing base blobs before BuildKit's image and cache exports.
+
+    Repository links share the registry's existing content-addressed bytes.
+    No manifest or cache result is published here; misses retain normal push.
+    Largest layers first and a short deadline bound this optional optimization.
+    """
+    result = {"attempted": 0, "mounted": 0, "mounted_descriptor_bytes": 0}
+    started = time.monotonic()
+    deadline = deadline if deadline is not None else started + 3
+    try:
+        descriptors = {r["digest"]: r["size"] for r in layers}
+        for digest, size in sorted(descriptors.items(), key=lambda r: (-r[1], r[0]))[:64]:
+            for target in dict.fromkeys(target_repositories):
+                if target == source_repository:
+                    continue
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("source blob mount deadline")
+                result["attempted"] += 1
+                if client.mount_blob(target, source_repository, digest, timeout_seconds=remaining):
+                    result["mounted"] += 1
+                    result["mounted_descriptor_bytes"] += size
+    except (OSError, ValueError, RuntimeError, TypeError, KeyError, IndexError) as error:
+        result["error"] = type(error).__name__
+    result["elapsed_ms"] = round((time.monotonic() - started) * 1000, 3)
+    return result
+
+
+def mount_prepared_base(client, reference, target_repositories):
+    from ucloud_sandboxes.managed_registry import (
+        MANIFEST_ACCEPT, _read_response_bytes, registry_repository_tag_from_image_ref,
+    )
+    started = time.monotonic()
+    deadline = started + 3
+    try:
+        repository, _ = registry_repository_tag_from_image_ref(reference)
+        digest = reference.rsplit("@", 1)[1]
+        response = client._request(f"/v2/{parse.quote(repository, safe='/')}/manifests/{parse.quote(digest, safe=':')}",
+            headers={"Accept": MANIFEST_ACCEPT}, timeout_seconds=3)
+        try:
+            payload = _read_response_bytes(response, 256 * 1024 + 1, deadline=deadline)
+        finally:
+            response.close()
+        if len(payload) > 256 * 1024 or "sha256:" + hashlib.sha256(payload).hexdigest() != digest:
+            raise ValueError("prepared source mount manifest identity mismatch")
+        document = json.loads(payload)
+        if document.get("schemaVersion") != 2 or not isinstance(document.get("layers"), list):
+            raise ValueError("prepared source requires a flat image manifest")
+        result = mount_source_layers(client, repository, document["layers"], target_repositories, deadline=deadline)
+    except (OSError, ValueError, RuntimeError, TypeError, KeyError, IndexError) as error:
+        result = {"error": type(error).__name__}
+    result["elapsed_ms"] = round((time.monotonic() - started) * 1000, 3)
+    return result
+
+
 class BlobSourceIndex:
     """Hints for server-side mounts from already retained image repositories.
 

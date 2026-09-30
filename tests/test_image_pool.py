@@ -238,7 +238,8 @@ class ImagePoolTests(unittest.TestCase):
             pool.image_recipe("docker.io/library/ubuntu@sha256:" + "a" * 64, "unknown")
 
     def test_registry_resolution_verifies_platform_and_content(self):
-        config = json.dumps({"os": "linux", "architecture": "amd64", "rootfs": {"diff_ids": ["sha256:" + "c" * 64]}}).encode()
+        config = json.dumps({"os": "linux", "architecture": "amd64", "config": {"OnBuild": ["COPY . /task"]},
+                             "rootfs": {"diff_ids": ["sha256:" + "c" * 64]}}).encode()
         config_digest = "sha256:" + hashlib.sha256(config).hexdigest()
         manifest = json.dumps({"config": {"digest": config_digest}, "layers": [{"digest": "sha256:" + "d" * 64, "size": 123}]}).encode()
         digest = "sha256:" + hashlib.sha256(manifest).hexdigest()
@@ -252,6 +253,7 @@ class ImagePoolTests(unittest.TestCase):
             resolved = pool.resolve_source("org/repo:latest")
         self.assertEqual(resolved["reference"], "docker.io/org/repo@" + digest)
         self.assertEqual(resolved["compressed_bytes"], 123)
+        self.assertEqual(resolved["onbuild"], ["COPY . /task"])
         with patch.object(pool.request, "urlopen", side_effect=[response(b'{"token":"test-token"}'), response(manifest), response(config + b" ")]):
             with self.assertRaisesRegex(ValueError, "digest mismatch"):
                 pool.resolve_source("org/repo:latest")

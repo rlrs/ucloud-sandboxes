@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 import sys
 
-from ucloud_sandboxes.image_foundations import openswe_foundation, tmax_foundation, tmax_inline_foundation
+from ucloud_sandboxes.image_foundations import openswe_foundation, terminal_foundation, tmax_foundation, tmax_inline_foundation
 
 
 BASE = "ubuntu:22.04@sha256:" + "a" * 64
@@ -20,6 +20,66 @@ PREFIX = ("FROM ubuntu:22.04\n\nENV LANG=C.UTF-8\n\n"
 
 
 class ImageFoundationTests(unittest.TestCase):
+    def test_terminal_prefix_reuses_dependencies_and_preserves_task_bytes(self):
+        base = {"reference": BASE, "onbuild": []}
+        prefix = "FROM ubuntu:22.04\nWORKDIR /app\n# Packages\nRUN apt-get update && apt-get install -y bash\n"
+        tail = "\n# Task data\nCOPY task_file /app/task_file\nRUN rm /app/task_file/config\n"
+        text = "# Task canary A\n" + prefix + tail
+        foundation = terminal_foundation(text, source_base="ubuntu:22.04", resolved_base=base)
+        other = terminal_foundation(text.replace("canary A", "canary B").replace("# Packages\n", ""),
+                                    source_base="ubuntu:22.04", resolved_base=base)
+        self.assertEqual(foundation.key, other.key)
+        self.assertNotIn("task_file", foundation.dockerfile)
+        self.assertEqual(foundation.task_dockerfile(text, READY), "# Task canary A\nFROM " + READY + "\n" + tail)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            context = root / foundation.image_id
+            context.mkdir()
+            (context / "Dockerfile").write_text(foundation.dockerfile)
+            self.load_script("prepare_image_foundations").validate_context(root, {
+                "key": foundation.key, "family": "terminal-prefix", "image_id": foundation.image_id})
+
+    def test_terminal_prefix_rejects_context_triggers_and_unsupported_layouts(self):
+        prefix = "FROM ubuntu:22.04\nRUN apt-get update\n"
+        for base in ({"reference": BASE}, {"reference": BASE, "onbuild": ["COPY . /task"]}):
+            with self.assertRaises(ValueError):
+                terminal_foundation(prefix, source_base="ubuntu:22.04", resolved_base=base)
+        base = {"reference": BASE, "onbuild": []}
+        for text in ("# syntax=custom/frontend\n" + prefix, prefix + "FROM other\n",
+                     prefix.replace("ubuntu:22.04", "ubuntu:22.04 AS build"), "ARG BASE\n" + prefix,
+                     prefix + "COPY . /app\n", prefix + 'COPY ["Dockerfile", "/app/Dockerfile"]\n',
+                     prefix + "COPY task_file/../Dockerfile /app/Dockerfile\n",
+                     "FROM ubuntu:22.04\nRUN --mount=type=bind,target=/input true\n"):
+            with self.assertRaises(ValueError):
+                terminal_foundation(text, source_base="ubuntu:22.04", resolved_base=base)
+        tail = "ARG VERSION\nRUN --mount=type=bind,target=/input cat /input/file\n"
+        foundation = terminal_foundation(prefix + tail, source_base="ubuntu:22.04", resolved_base=base)
+        self.assertTrue(foundation.task_dockerfile(prefix + tail, READY).endswith(tail))
+
+    def test_terminal_rewrite_keeps_context_overrides_and_unknown_families(self):
+        planner = self.load_script("plan_image_foundations")
+        base = {"reference": BASE, "onbuild": []}
+        text = "FROM ubuntu:22.04\nRUN apt-get update\nCOPY task_file /app/\n"
+        foundation = terminal_foundation(text, source_base="ubuntu:22.04", resolved_base=base)
+        catalog = {"schema": 1, "foundations": {foundation.key: {"family": "terminal-prefix", "key": foundation.key,
+                   "source_base": "ubuntu:22.04", "resolved_base": base, "reference": READY, "validated": True}}}
+        with tempfile.TemporaryDirectory() as directory:
+            source, output = Path(directory) / "source.sqlite", Path(directory) / "output.sqlite"
+            recipe = {"dockerfile": text, "context_dir": "/task/context", "files": {"task_file/input": "unchanged"}}
+            with sqlite3.connect(source) as db:
+                db.execute("CREATE TABLE images(source TEXT, family TEXT, recipe TEXT, prepared_image TEXT)")
+                for family in ("terminal-lego", "other"):
+                    db.execute("INSERT INTO images VALUES(?,?,?,?)", (family, family, json.dumps(recipe), "old"))
+            self.assertEqual(planner.rewrite_index(source, output, catalog)["rewritten"], 1)
+            with sqlite3.connect(output) as db:
+                encoded, prepared = db.execute("SELECT recipe,prepared_image FROM images WHERE family='terminal-lego'").fetchone()
+                result = json.loads(encoded)
+                self.assertEqual(result["context_dir"], recipe["context_dir"])
+                self.assertEqual(result["files"], recipe["files"])
+                self.assertEqual(result["dockerfile"], "FROM " + READY + "\nCOPY task_file /app/\n")
+                self.assertIsNone(prepared)
+                self.assertEqual(db.execute("SELECT prepared_image FROM images WHERE family='other'").fetchone()[0], "old")
+
     def test_preparer_isolates_failed_build_and_resumes_accepted_work(self):
         preparer = self.load_script("prepare_image_foundations")
         pool = self.load_script("prepare_image_pool")

@@ -30,7 +30,7 @@ def validate_context(root, item):
     if len(key) != 64 or any(c not in "0123456789abcdef" for c in key):
         raise ValueError("invalid foundation identity")
     family = item.get("family", "tmax")
-    if family not in {"tmax", "tmax-inline", "openswe"} or item["image_id"] != "foundation-" + family + "-" + key[:32]:
+    if family not in {"tmax", "tmax-inline", "openswe", "terminal-prefix"} or item["image_id"] != "foundation-" + family + "-" + key[:32]:
         raise ValueError("foundation image identity mismatch")
     context = root / item["image_id"]
     files = {"Dockerfile", "base_install.sh"} if family in {"tmax", "tmax-inline"} else {"Dockerfile"}
@@ -166,7 +166,7 @@ def main():
                         raise RuntimeError("deferred: " + reason)
                     reserved += estimate
                     reservation[0] = estimate
-                accepted_path = claim_root / (item["key"] + ".build.json")
+                accepted_path = claim_root / (image_id + ".build.json")
                 if not receipt.get("build_id") and accepted_path.exists():
                     receipt.update(json.loads(accepted_path.read_text()))
                 if not receipt.get("build_id"):
@@ -209,6 +209,8 @@ def main():
                         "print(json.dumps({'numpy':numpy.__version__,'torch':torch.__version__,'cpu_only':True}))"]
                 elif item.get("family") == "tmax-inline":
                     command = ["/bin/sh", "-c", 'dpkg-query -W >/dev/null && printf \'{"packages_readable":true}\\n\'']
+                elif item.get("family") == "terminal-prefix":
+                    command = ["/bin/sh", "-c", 'test -d / && test -r /etc/os-release && printf \'{"filesystem_readable":true}\\n\'']
                 else:
                     command = ["/opt/conda/envs/testbed/bin/python", "-c",
                         "import json,ssl,sys; assert sys.version_info[:2]==tuple(map(int,sys.argv[1].split('.'))); "
@@ -238,7 +240,7 @@ def main():
             # Validate identity before using it as a shared lock pathname.
             try:
                 validate_context(args.root, item)
-                with (claim_root / (item["key"] + ".lock")).open("a") as claim:
+                with (claim_root / (item["image_id"] + ".lock")).open("a") as claim:
                     fcntl.flock(claim, fcntl.LOCK_EX)
                     result = prepare(item, reservation)
             except Exception as error:

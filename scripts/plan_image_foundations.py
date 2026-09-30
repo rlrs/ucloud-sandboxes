@@ -16,7 +16,7 @@ from collections import Counter
 from pathlib import Path
 import sqlite3
 
-from ucloud_sandboxes.image_foundations import openswe_foundation, tmax_foundation, tmax_inline_foundation
+from ucloud_sandboxes.image_foundations import openswe_foundation, terminal_foundation, tmax_foundation, tmax_inline_foundation
 
 
 def plan(root: Path, output: Path, base: str, revision: str):
@@ -102,6 +102,40 @@ def plan_tmax_inline(root: Path, output: Path, base: str, revision: str):
     return {"foundations": len(entries), "tasks": sum(x["tasks"] for x in entries), "skipped": skipped}
 
 
+def plan_terminal(root: Path, output: Path, pins: dict, revision: str, limit: int):
+    if output.exists() or limit < 1:
+        raise ValueError("use a new plan directory and a positive limit")
+    groups = {}
+    contexts = {}
+    skipped = 0
+    for path in sorted(root.glob("*/environment/Dockerfile")):
+        text = path.read_text()
+        source = re.search(r"^FROM[ \t]+([^\s]+)[ \t]*$", text, re.M)
+        if source is None or source[1] not in pins:
+            skipped += 1
+            continue
+        try:
+            foundation = terminal_foundation(text, source_base=source[1], resolved_base=pins[source[1]])
+        except ValueError:
+            skipped += 1
+            continue
+        if foundation.key not in groups:
+            contexts[foundation.key] = foundation.dockerfile
+            groups[foundation.key] = {"family": "terminal-prefix", "image_id": foundation.image_id,
+                "key": foundation.key, "base": pins[source[1]]["reference"], "source_base": source[1],
+                "resolved_base": pins[source[1]], "example": path.parent.parent.name, "tasks": 0}
+        groups[foundation.key]["tasks"] += 1
+    if not groups:
+        raise ValueError("no supported terminal dependency prefixes")
+    entries = sorted(groups.values(), key=lambda x: (-x["tasks"], x["key"]))[:limit]
+    for entry in entries:
+        context = output / entry["image_id"]
+        context.mkdir(parents=True)
+        (context / "Dockerfile").write_text(contexts[entry["key"]])
+    (output / "plan.json").write_text(json.dumps({"schema": 1, "revision": revision, "foundations": entries}, indent=2) + "\n")
+    return {"foundations": len(entries), "candidate_prefixes": len(groups), "tasks": sum(x["tasks"] for x in entries), "skipped": skipped}
+
+
 def rewrite_index(source: Path, output: Path, catalog: dict):
     if output.exists():
         raise ValueError("output index already exists; never rewrite a live index")
@@ -118,10 +152,11 @@ def rewrite_index(source: Path, output: Path, catalog: dict):
         with closing(sqlite3.connect(source.resolve().as_uri() + "?mode=ro", uri=True)) as original:
             with closing(sqlite3.connect(temporary)) as target:
                 original.backup(target)
-                rows = target.execute("SELECT source, family, recipe FROM images WHERE family IN ('tmax', 'openswe')").fetchall()
+                rows = target.execute("SELECT source, family, recipe FROM images WHERE family IN ('tmax', 'openswe', 'terminal-lego')").fetchall()
                 for source_name, family, encoded in rows:
                     candidates = [item for item in ready if item.get("family", "tmax") == family
-                                  or (family == "tmax" and item.get("family") == "tmax-inline")]
+                                  or (family == "tmax" and item.get("family") == "tmax-inline")
+                                  or (family == "terminal-lego" and item.get("family") == "terminal-prefix")]
                     if not candidates:
                         continue
                     recipe = json.loads(encoded)
@@ -146,6 +181,12 @@ def rewrite_index(source: Path, output: Path, catalog: dict):
                                     foundation = tmax_foundation(recipe["dockerfile"], installer, ubuntu_base=item["base"])
                             except ValueError:
                                 # Unusual task prefixes must remain unchanged.
+                                continue
+                        elif family == "terminal-lego":
+                            try:
+                                foundation = terminal_foundation(recipe["dockerfile"], source_base=item["source_base"],
+                                                                 resolved_base=item["resolved_base"])
+                            except ValueError:
                                 continue
                         else:
                             foundation = openswe_foundation(item["python_version"], miniconda_base=item["base"])
@@ -187,6 +228,12 @@ def main():
     openswe.add_argument("--output", type=Path, required=True)
     openswe.add_argument("--miniconda-base", required=True)
     openswe.add_argument("--source-revision", required=True)
+    terminal = commands.add_parser("plan-terminal")
+    terminal.add_argument("--terminal-root", type=Path, required=True)
+    terminal.add_argument("--pins", type=Path, required=True)
+    terminal.add_argument("--output", type=Path, required=True)
+    terminal.add_argument("--source-revision", required=True)
+    terminal.add_argument("--limit", type=int, default=25)
     rewrite = commands.add_parser("rewrite-index")
     rewrite.add_argument("--source", type=Path, required=True)
     rewrite.add_argument("--output", type=Path, required=True)
@@ -198,6 +245,8 @@ def main():
         result = plan_tmax_inline(args.tmax_root, args.output, args.ubuntu_base, args.source_revision)
     elif args.command == "plan-openswe":
         result = plan_openswe(args.recipes, args.output, args.miniconda_base, args.source_revision)
+    elif args.command == "plan-terminal":
+        result = plan_terminal(args.terminal_root, args.output, json.loads(args.pins.read_text()), args.source_revision, args.limit)
     else:
         catalog = {"schema": 1, "foundations": {}}
         for path in args.catalog:

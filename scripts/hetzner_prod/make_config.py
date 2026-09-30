@@ -49,8 +49,8 @@ raw.update({
         "enable_private_egress": True,
         "private_dns_servers": ["1.1.1.1", "8.8.8.8"],
     },
-    # The registry lives on a Hetzner Volume on the gateway (1 TB on the fresh
-    # 0.7.0 deployment): Object Storage
+    # The registry lives on a Hetzner Volume on the gateway. The production
+    # image-preparation storage ceiling is 3000 GB. Object Storage
     # took ~1.3 s per upload and ~320 ms per read against 50 ms and 3 ms on the
     # volume (docs/image-import.md). `hz.py volume sandboxes-registry 1000 ...`,
     # grown online with `hz.py resize-volume sandboxes-registry <GB>` + resize2fs.

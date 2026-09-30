@@ -75,6 +75,8 @@ For broader pool accounting, use `report --inventory /data/inventory.json --cata
 
 ## Coverage and storage limits
 
+The production preparation campaign has a 3 TB registry ceiling. Its expanded queues use a 500 GiB free-space admission reserve, account for pending work, and stop admitting new images when their growth budget is exhausted. Raising builder capacity does not raise the storage ceiling. Oversized or inadmissible images remain deferred; this workflow never automatically resizes the volume.
+
 Report three separate states: prepared task image, shared foundation/base ready with task work remaining, and cold/unresolved. A cached operating system or Python image does not imply that a task's dependencies are prepared. A mounted upstream task image does not prove that every later verifier command is offline-ready. Bash/OpenCode/Pi harness setup remains separate from these task artifacts.
 
 Measure storage from the union of component digests, and also account for OCI/cache blobs and conversion scratch space. Flattened upstream images can contain gigabytes of unique data even when repository names match. Importing every such image into a bounded registry is not a substitute for measuring the selected working set or designing file-level sharing.

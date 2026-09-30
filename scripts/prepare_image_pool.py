@@ -160,7 +160,7 @@ def resolve_source(source):
     return {"reference": host + "/" + repository + "@" + digest,
             "compressed_bytes": sum(layer["size"] for layer in manifest["layers"]),
             "layer_count": len(manifest["layers"]), "layers": manifest["layers"],
-            "diff_ids": config["rootfs"]["diff_ids"]}
+            "diff_ids": config["rootfs"]["diff_ids"], "onbuild": (config.get("config") or {}).get("OnBuild") or []}
 
 
 def registry_parts(source):

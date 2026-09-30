@@ -4,7 +4,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import posixpath
 import re
+import shlex
 
 
 _BASE_COPY = "COPY base_install.sh /tmp/base_install.sh\n"
@@ -91,6 +93,70 @@ def openswe_foundation(python_version: str, *, miniconda_base: str) -> ImageFoun
     )
     pinned = prefix.replace("FROM continuumio/miniconda3:25.3.1-1\n", "FROM " + miniconda_base + "\n", 1)
     return ImageFoundation(pinned, b"", prefix, "openswe")
+
+
+def terminal_foundation(dockerfile: str, *, source_base: str, resolved_base: dict) -> ImageFoundation:
+    """Freeze a context-free initial stage, without moving task instructions.
+
+    Base ONBUILD triggers must have been inspected from the pinned config: an
+    inherited COPY could otherwise silently consume the foundation's context.
+    Comments outside heredocs are ignored for identity, but task bytes survive.
+    """
+    base = require_pinned_reference(resolved_base["reference"])
+    if resolved_base.get("onbuild") != []:
+        raise ValueError("base ONBUILD configuration is unknown or nonempty")
+    if re.search(r"^\s*#\s*(syntax|escape|check)\s*=", dockerfile, re.I | re.M):
+        raise ValueError("custom Dockerfile frontend is unsupported")
+    if len(re.findall(r"^\s*FROM\b", dockerfile, re.I | re.M)) != 1:
+        raise ValueError("only a single unnamed stage can be factored")
+    # The pinned Terminal-Lego tooling copies task_file and its verifier script.
+    # A broad COPY could include the rewritten Dockerfile itself in task state.
+    for copied in re.finditer(r"^\s*(?:COPY|ADD)\s+(.+)$", dockerfile.replace("\\\n", " "), re.I | re.M):
+        fields = shlex.split(copied[1])
+        options = []
+        while fields and fields[0].startswith("--"):
+            options.append(fields.pop(0))
+        if any(option.startswith("--from=") for option in options):
+            continue
+        if (len(fields) < 2 or any(posixpath.normpath(source).split("/", 1)[0]
+                                  not in {"task_file", "verifier-bootstrap.sh"} for source in fields[:-1])):
+            raise ValueError("unsupported terminal context copy")
+    instructions = []
+    pending = ""
+    cursor = 0
+    start = None
+    end = 0
+    runs = 0
+    for line in dockerfile.splitlines(keepends=True):
+        before = cursor
+        cursor += len(line)
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if start is None:
+            start = before
+        pending += line
+        if line.rstrip().endswith("\\"):
+            continue
+        match = re.match(r"\s*([A-Za-z]+)\s+", pending)
+        if match is None:
+            break
+        kind = match[1].upper()
+        if not instructions:
+            if not re.fullmatch(r"FROM[ \t]+" + re.escape(source_base) + r"\s*", pending, re.I):
+                raise ValueError("source base must be literal and unnamed")
+            instructions.append("FROM " + base + "\n")
+        elif kind not in {"RUN", "ENV", "WORKDIR", "USER", "SHELL"}:
+            break
+        elif kind == "RUN" and (re.match(r"\s*RUN\s+--", pending, re.I) or "<<" in pending):
+            break
+        else:
+            instructions.append(pending.rstrip("\r\n") + "\n")
+            runs += kind == "RUN"
+        end = cursor
+        pending = ""
+    if not runs or start is None:
+        raise ValueError("no supported dependency RUN prefix")
+    return ImageFoundation("".join(instructions), b"", dockerfile[start:end], "terminal-prefix")
 
 
 def tmax_inline_foundation(dockerfile: str, script: bytes, *, ubuntu_base: str) -> tuple[ImageFoundation, bytes]:

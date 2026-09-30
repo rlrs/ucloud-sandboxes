@@ -36,7 +36,8 @@ python scripts/prepare_image_pool.py \
   --sdk-wheel /data/ucloud_sandboxes_sdk-0.4.34-py3-none-any.whl \
   --gateway https://sandbox.example \
   --limit 100 --workers 2 \
-  --growth-limit-gib 160 --free-floor-gib 300 --max-image-gib 5
+  --growth-limit-gib 160 --free-floor-gib 300 --max-image-gib 5 \
+  --stage-upstream --retry-recorded-failures
 ```
 
 `--workers` accepts 1–32 concurrent preparations; backend admission still controls actual build and finishing slots. Each source resolution and accepted build is recorded before waiting. Public source resolution is serialized per registry across coordinators, with a persisted cooldown for rate limits and transient gateway errors. Long cooldowns become explicit deferrals. An image's preparation identity includes its pinned source, platform, and actual Dockerfile. Published artifacts are checked before build history; completed publication receipts and gateway image records survive builder replacement. Every outcome has an atomic per-source journal; the large catalog is checkpointed periodically and recovered from those journals on restart. The signed registry closure is checked again on resume. Fleet inventory is fetched at most once per run, rather than once per image. Per-image claims and accepted-build journals are shared across pool directories on the same gateway. They do not claim coordination across independent gateways.
@@ -86,3 +87,13 @@ Persistent preparation owners require explicit retirement when a pool is no long
 ## Rebuilding after volume loss
 
 The [portable campaign and recovery procedure](../image-campaigns/2026-09-30/README.md) stores source inventory, known digest pins and dependency contexts in Git, independently of the registry. Materialize a fresh recovery generation to avoid reusing stale successful build records. Rebuild and qualify new artifacts, then rewrite the actual task index; this does not automatically repair old aliases or guarantee identical unpinned package versions.
+
+## Avoiding duplicate upstream pulls
+
+`--stage-upstream` copies each admitted immutable source into the existing managed registry before submitting the build. Run `stage_source_image.py` alongside the preparer. The resolver saves exact verified manifest/config bytes in its receipt; the stager streams layer blobs with digest and length checks and publishes the unchanged upstream manifest. It checks local blob presence first and attempts server-side mounts from already prepared images using a durable hint index. Stale hints fall back to a verified download. Builders use the fleet-reachable private registry address, not the gateway client's loopback address.
+
+Staged sources acquire persistent retention owners. Raw OCI blobs share the same registry's digest-addressed storage with existing image/cache blobs; there is no second registry volume. Transfer and mount counters are saved in each receipt. The same growth allowance, compressed-size cap and free-space reserve apply before copying. Large blobs stream through the gateway without a second local scratch copy. Registry and client both verify their hashes before any source manifest is published.
+
+This conserves quota for new image manifests; it does not remove Docker Hub's allowance for acquiring unseen images. Shared exponential backoff persists across worker threads and processes. Separate non-Hub preparations can progress while Docker Hub is exhausted. `--retry-recorded-failures` preserves previous receipts and submits a fresh job only for recorded failed builds or explicit missing-build errors; an ambiguous timeout is not treated as proof that an accepted job stopped.
+
+The expanded production queue targets all 35,890 inventoried task-image references plus 94 base references. Its current source compressed-size admission cap is 20 GiB, with four times compressed bytes reserved per pending source. A 1,200 GiB observed-growth allowance for full source imports leaves 600 GiB of the overall 1,800 GiB campaign allowance available for foundations. These remain estimates, and admission can leave explicit gaps under the 3 TB registry limit. A queued candidate is not covered until the artifact and sandbox checks pass.

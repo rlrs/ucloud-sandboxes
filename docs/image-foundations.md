@@ -82,3 +82,9 @@ Foundations alone do not make every task image ready. Use the normal bounded ima
 Persistent foundation references deliberately survive opportunistic cache pruning. Retire them explicitly once no active preparation catalog needs them, using the registry's existing reference-release mechanism. Do not delete the shared component blobs directly.
 
 For retained external task images, mixed-family batches, import aliases, and storage admission, see [image-pools.md](image-pools.md).
+
+## Reusing already prepared upstream bases
+
+Pass `--base-catalog /data/source-pool/catalog.json` (repeatable) to the foundation preparer. It accepts only ready, faithful source preparations whose immutable upstream digest exactly matches the foundation's base. Enriched preparations are excluded. A separate execution context replaces just that FROM operand with the prepared private artifact; canonical dependency contexts and remaining installer bytes stay unchanged. Existing accepted jobs resume before any new job is submitted. Use `--retry-recorded-failures` to retry a recorded failed or missing job with the locally prepared base.
+
+The current catalogs contain exact bases for all 2,786 planned TMax-inline and 5,804 Terminal-prefix foundations. Their base acquisition need not contact Docker Hub. Dependency RUN commands may still contact apt, pip or other package services; this option does not make those commands offline. Verify a canary and preserve the new catalogs before switching a task index.

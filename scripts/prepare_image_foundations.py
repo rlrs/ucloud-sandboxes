@@ -51,6 +51,42 @@ def build_image_id(item, generation):
     return "foundation-" + item.get("family", "tmax") + "-" + digest[:32]
 
 
+def prepared_base_mappings(paths):
+    from prepare_image_pool import registry_parts
+    mappings = {}
+    for path in paths:
+        for row in json.loads(path.read_text())["images"].values():
+            if row.get("status") != "ready" or row.get("preparation", "source") != "source":
+                continue
+            host, repository, digest = registry_parts(row["source_reference"])
+            reference = row["reference"]
+            if not re.fullmatch(r"sha256:[a-f0-9]{64}", digest) or not re.fullmatch(r"[^\s@]+@sha256:[a-f0-9]{64}", reference):
+                raise ValueError("prepared base mapping must pin both source and artifact")
+            mappings[host + "/" + repository + "@" + digest] = reference
+    return mappings
+
+
+def execution_context(root, item, mappings):
+    from prepare_image_pool import registry_parts
+    original = validate_context(root, item)
+    if not mappings:
+        return original, None
+    host, repository, digest = registry_parts(item["base"])
+    base = mappings.get(host + "/" + repository + "@" + digest)
+    if base is None:
+        return original, None
+    dockerfile = (original / "Dockerfile").read_text()
+    prefix = "FROM " + item["base"] + "\n"
+    if not dockerfile.startswith(prefix):
+        raise ValueError("foundation base differs from its canonical context")
+    context = root / "execution-contexts" / (item["image_id"] + "-" + hashlib.sha256(base.encode()).hexdigest()[:12])
+    context.mkdir(parents=True, exist_ok=True)
+    for path in original.iterdir():
+        (context / path.name).write_bytes(path.read_bytes())
+    (context / "Dockerfile").write_text("FROM " + base + "\n" + dockerfile[len(prefix):])
+    return context, base
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", required=True, type=Path)
@@ -62,12 +98,15 @@ def main():
     parser.add_argument("--growth-limit-gib", type=int, default=128)
     parser.add_argument("--free-floor-gib", type=int, default=300)
     parser.add_argument("--reservation-gib", type=int, default=8)
+    parser.add_argument("--base-catalog", type=Path, action="append", default=[],
+                        help="reuse faithful, digest-matched prepared bases from source pool catalogs")
+    parser.add_argument("--retry-recorded-failures", action="store_true")
     args = parser.parse_args()
     if min(args.limit, args.growth_limit_gib, args.free_floor_gib, args.reservation_gib) < 1:
         parser.error("limits must be positive")
     if not 1 <= args.workers <= 32:
         parser.error("workers must be 1..32")
-    from prepare_image_pool import admission, GIB, rebuild_generation
+    from prepare_image_pool import admission, GIB, rebuild_generation, recorded_build_failed
     sys.path.insert(0, str(args.sdk_wheel))
     import ucloud_sandboxes_sdk as sdk
     from ucloud_sandboxes.config import DeploymentConfig
@@ -94,6 +133,7 @@ def main():
     if plan.get("schema") != 1:
         raise ValueError("unsupported foundation plan")
     generation = rebuild_generation(plan)
+    base_mappings = prepared_base_mappings(args.base_catalog)
     identities = [item["image_id"] for item in plan["foundations"]]
     if len(set(identities)) != len(identities):
         raise ValueError("duplicate foundation identity in plan")
@@ -178,12 +218,23 @@ def main():
                     reserved += estimate
                     reservation[0] = estimate
                 accepted_path = claim_root / (image_id + ".build.json")
-                if not receipt.get("build_id") and accepted_path.exists():
+                with catalog_guard:
+                    failure = catalog.get("failures", {}).get(item["key"])
+                retry = args.retry_recorded_failures and recorded_build_failed(receipt, failure)
+                if retry:
+                    history = args.root / "attempts"
+                    history.mkdir(exist_ok=True)
+                    save(history / (image_id + "-" + str(time.time_ns()) + ".json"), receipt)
+                    receipt = {"key": item["key"]}
+                if not retry and not receipt.get("build_id") and accepted_path.exists():
                     receipt.update(json.loads(accepted_path.read_text()))
                 if not receipt.get("build_id"):
+                    context, prepared_base = execution_context(args.root, item, base_mappings)
                     build = client.submit_image_build(sdk.Image.from_dockerfile(name=image_id, context_path=context),
                                                       timeout_seconds=600)
                     receipt.update(build_id=build["build_id"], build=build)
+                    if prepared_base:
+                        receipt["prepared_base"] = prepared_base
                     save(accepted_path, {"build_id": build["build_id"]})
                     save(receipt_path, receipt)
                 print(json.dumps({"image": image_id, "build_id": receipt["build_id"], "status": "waiting"}), flush=True)

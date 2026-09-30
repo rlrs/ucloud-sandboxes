@@ -6,7 +6,7 @@ from pathlib import Path
 import sqlite3
 import unittest
 import tempfile
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from urllib.error import HTTPError
 
 
@@ -63,6 +63,26 @@ class ImagePoolTests(unittest.TestCase):
     def test_retry_after_supports_http_dates_and_invalid_values(self):
         self.assertEqual(pool.retry_delay({"Retry-After": "Thu, 01 Jan 1970 00:02:00 GMT"}, 0, 0), 120)
         self.assertEqual(pool.retry_delay({"Retry-After": "invalid"}, 2, 0), 240)
+
+    def test_registry_backoff_survives_a_different_waiter(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            pool.save(root / "source-docker.io.json", {"next_request_at": 0, "failures": 3})
+            now = [1000.0]
+            resolver = pool.SourceResolver(root, resolve=Mock(side_effect=[
+                HTTPError("url", 429, "limited", {}, None), {"reference": "resolved"}]),
+                clock=lambda: now[0], sleep=lambda seconds: now.__setitem__(0, now[0] + seconds))
+            with patch("builtins.print"):
+                resolver("ubuntu:22.04")
+            self.assertEqual(now[0], 1480)
+            self.assertEqual(json.loads((root / "source-docker.io.json").read_text())["failures"], 0)
+
+    def test_retry_only_known_failed_or_missing_builds(self):
+        self.assertTrue(pool.recorded_build_failed({"build": {"status": "failed"}}, None))
+        self.assertTrue(pool.recorded_build_failed({}, {"status": "failed", "error": "node-agent: image build not found"}))
+        self.assertFalse(pool.recorded_build_failed({"build": {"status": "running"}}, None))
+        self.assertFalse(pool.recorded_build_failed({}, {"status": "failed", "error": "temporary timeout"}))
+        self.assertFalse(pool.recorded_build_failed({"build": {"status": "succeeded"}}, None))
 
     def test_result_journal_recovers_after_a_stale_catalog_snapshot(self):
         with tempfile.TemporaryDirectory() as directory:

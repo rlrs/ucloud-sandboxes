@@ -70,15 +70,21 @@ class SourceResolver:
                     except urlerror.HTTPError as error:
                         if error.code not in {429, 502, 503, 504}:
                             raise
-                        delay = retry_delay(error.headers, attempt, self.clock())
+                        # All threads/processes share the same upstream quota.
+                        # A different waiter must not reset exponential backoff.
+                        failures = max(attempt, state.get("failures", 0))
+                        delay = retry_delay(error.headers, failures, self.clock())
+                        limits = {key: error.headers.get(key) for key in ("ratelimit-limit", "ratelimit-remaining")
+                                  if error.headers.get(key) is not None}
                         error.close()
                         attempt += 1
-                        save(path, {"next_request_at": self.clock() + delay})
+                        save(path, {"next_request_at": self.clock() + delay, "failures": failures + 1,
+                                    "limits": limits})
                         print(json.dumps({"registry": host, "status": "backoff", "seconds": delay}), flush=True)
                     else:
                         # Avoid a burst of token/manifest requests after each
                         # completion; builds proceed independently of this lock.
-                        save(path, {"next_request_at": self.clock() + 1})
+                        save(path, {"next_request_at": self.clock() + 1, "failures": 0})
                         return result
             if self.clock() + delay >= deadline or attempt >= 6:
                 raise RuntimeError("deferred: public registry cooldown for " + host)
@@ -122,8 +128,7 @@ def source_parts(source):
     return repository, digest or tag
 
 
-def resolve_source(source):
-    host, repository, selector = registry_parts(source)
+def public_registry_headers(host, repository):
     headers = {"Accept": ACCEPT}
     if host in {"docker.io", "ghcr.io"}:
         auth = "https://auth.docker.io/token" if host == "docker.io" else "https://ghcr.io/token"
@@ -132,27 +137,35 @@ def resolve_source(source):
         with request.urlopen(auth + "?" + query, timeout=60) as response:
             token = json.load(response)["token"]
         headers["Authorization"] = "Bearer " + token
+    return headers
+
+
+def resolve_source(source):
+    host, repository, selector = registry_parts(source)
+    headers = public_registry_headers(host, repository)
 
     def get(kind, ref):
         endpoint = "registry-1.docker.io" if host == "docker.io" else host
         url = f"https://{endpoint}/v2/{repository}/{kind}/{ref}"
         with request.urlopen(request.Request(url, headers=headers), timeout=120) as response:
-            content = response.read()
+            content = response.read(16 * 1024 * 1024 + 1)
+            if len(content) > 16 * 1024 * 1024:
+                raise ValueError("upstream image metadata is too large")
             digest = "sha256:" + hashlib.sha256(content).hexdigest()
             if ref.startswith("sha256:") and digest != ref:
                 raise ValueError("registry content digest mismatch")
             if response.headers.get("Docker-Content-Digest", digest) != digest:
                 raise ValueError("registry digest header mismatch")
-            return json.loads(content), digest
+            return json.loads(content), digest, content.decode("utf-8")
 
-    manifest, digest = get("manifests", selector)
+    manifest, digest, manifest_json = get("manifests", selector)
     if "manifests" in manifest:
         matches = [m for m in manifest["manifests"] if m.get("platform", {}).get("os") == "linux"
                    and m.get("platform", {}).get("architecture") == "amd64"]
         if len(matches) != 1:
             raise ValueError("expected exactly one linux/amd64 image")
-        manifest, digest = get("manifests", matches[0]["digest"])
-    config, _ = get("blobs", manifest["config"]["digest"])
+        manifest, digest, manifest_json = get("manifests", matches[0]["digest"])
+    config, _, config_json = get("blobs", manifest["config"]["digest"])
     if config.get("os") != "linux" or config.get("architecture") != "amd64":
         raise ValueError("source is not linux/amd64")
     if len(manifest["layers"]) != len(config["rootfs"]["diff_ids"]):
@@ -160,7 +173,8 @@ def resolve_source(source):
     return {"reference": host + "/" + repository + "@" + digest,
             "compressed_bytes": sum(layer["size"] for layer in manifest["layers"]),
             "layer_count": len(manifest["layers"]), "layers": manifest["layers"],
-            "diff_ids": config["rootfs"]["diff_ids"], "onbuild": (config.get("config") or {}).get("OnBuild") or []}
+            "diff_ids": config["rootfs"]["diff_ids"], "onbuild": (config.get("config") or {}).get("OnBuild") or [],
+            "manifest_json": manifest_json, "config_json": config_json}
 
 
 def registry_parts(source):
@@ -212,6 +226,13 @@ def receipt_image(receipt, image_id):
         if image.get("id") == image_id and image.get("pushed") and image.get("manifest_digest"):
             return image
     return None
+
+
+def recorded_build_failed(receipt, previous):
+    if receipt.get("build", {}).get("status") == "failed":
+        return True
+    return bool(previous and previous.get("status") == "failed"
+                and "image build not found" in previous.get("error", ""))
 
 
 def catalog_publication(item, key):
@@ -269,6 +290,10 @@ def main():
     parser.add_argument("--growth-limit-gib", type=int, default=128)
     parser.add_argument("--free-floor-gib", type=int, default=200)
     parser.add_argument("--max-image-gib", type=int, default=5)
+    parser.add_argument("--stage-upstream", action="store_true",
+                        help="copy verified OCI inputs into the managed registry before building")
+    parser.add_argument("--retry-recorded-failures", action="store_true",
+                        help="submit a fresh job for a recorded failed or missing build; preserve old receipts")
     args = parser.parse_args()
     if min(args.limit, args.growth_limit_gib, args.free_floor_gib, args.max_image_gib) <= 0:
         parser.error("limits must be positive")
@@ -307,6 +332,18 @@ def main():
     if catalog_path.exists() and catalog.get("rebuild_generation", "") != generation:
         raise ValueError("use a fresh output directory for a different rebuild generation")
     catalog["rebuild_generation"] = generation
+    blob_sources = None
+    if args.stage_upstream:
+        from stage_source_image import BlobSourceIndex
+        blob_sources = BlobSourceIndex(claim_root / "upstream-blob-sources.sqlite")
+        for source, previous in catalog["images"].items():
+            if previous.get("status") != "ready":
+                continue
+            saved_path = args.root / (hashlib.sha256(source.encode()).hexdigest() + ".json")
+            if saved_path.exists():
+                saved = json.loads(saved_path.read_text())
+                repository, _ = registry_repository_tag_from_image_ref(previous["reference"])
+                blob_sources.remember(saved.get("resolved", {}), repository)
     disk = registry_disk_usage(config)
     if disk is None:
         raise ValueError("pool preparation requires measurable registry storage")
@@ -393,11 +430,37 @@ def main():
                         reserved += reservation
                     context = args.root / image_id
                     context.mkdir(exist_ok=True)
-                    (context / "Dockerfile").write_text(image_recipe(resolved["reference"], preparation))
+                    build_source = resolved["reference"]
+                    if args.stage_upstream:
+                        from stage_source_image import stage_source
+                        if "manifest_json" not in resolved:
+                            # Upgrade an old receipt by digest, never by its mutable tag.
+                            resolved = resolve(resolved["reference"])
+                            receipt["resolved"] = resolved
+                            save(receipt_path, receipt)
+                        staging_metrics = {}
+                        build_source = stage_source(resolved, registry.client, claim_root,
+                            publication_url=config.registry_worker_url, metrics=staging_metrics,
+                            blob_sources=blob_sources,
+                            protect=lambda ref, owner: _persist_registry_image_protection(
+                                usage, ref, owner, touch=True, persistent=True))
+                        receipt["staged_source"] = build_source
+                        receipt["staging"] = staging_metrics
+                        save(receipt_path, receipt)
+                        print(json.dumps({"source": source, "status": "staged", **staging_metrics}), flush=True)
+                    (context / "Dockerfile").write_text(image_recipe(build_source, preparation))
                     build_path = claim_root / (key + ".build.json")
                     previous_path = args.root / (key + ".build.json")
                     accepted_path = build_path if build_path.exists() else previous_path
                     accepted = json.loads(accepted_path.read_text()) if accepted_path.exists() else None
+                    with guard:
+                        previous = catalog["images"].get(source)
+                    if accepted and args.retry_recorded_failures and recorded_build_failed(receipt, previous):
+                        history = args.root / "attempts"
+                        history.mkdir(exist_ok=True)
+                        save(history / (key + "-" + hashlib.sha256(accepted["build_id"].encode()).hexdigest()[:16] + ".json"),
+                             {"accepted": accepted, "receipt": receipt, "previous": previous})
+                        accepted = None
                     if accepted is None:
                         accepted = client.submit_image_build(sdk.Image.from_dockerfile(name=image_id, context_path=context),
                                                              timeout_seconds=600)
@@ -452,6 +515,8 @@ def main():
                 image_store.upsert_if_changed(record)
                 receipt["published"] = record.to_dict()
                 save(receipt_path, receipt)
+                if blob_sources is not None:
+                    blob_sources.remember(resolved, repository)
                 host, repository, selector = registry_parts(source)
                 separator = "@" if selector.startswith("sha256:") else ":"
                 # A preparation recipe changes image contents/defaults. Only

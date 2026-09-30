@@ -20,6 +20,33 @@ PREFIX = ("FROM ubuntu:22.04\n\nENV LANG=C.UTF-8\n\n"
 
 
 class ImageFoundationTests(unittest.TestCase):
+    def test_foundation_reuses_only_faithful_exact_pinned_base(self):
+        preparer = self.load_script("prepare_image_foundations")
+        pool = self.load_script("prepare_image_pool")
+        foundation = tmax_foundation(PREFIX, b"apt-get update\n", ubuntu_base=BASE)
+        with tempfile.TemporaryDirectory() as directory, patch.dict(sys.modules, {"prepare_image_pool": pool}):
+            root = Path(directory)
+            original = root / foundation.image_id
+            original.mkdir()
+            (original / "Dockerfile").write_text(foundation.dockerfile)
+            (original / "base_install.sh").write_bytes(foundation.installer)
+            catalog = root / "bases.json"
+            row = {"status": "ready", "source_reference": "docker.io/library/ubuntu@sha256:" + "a" * 64,
+                   "reference": READY}
+            catalog.write_text(json.dumps({"images": {"base": row,
+                "enriched": {**row, "source_reference": "docker.io/library/ubuntu@sha256:" + "c" * 64,
+                             "preparation": "swesmith-v1"}}}))
+            mappings = preparer.prepared_base_mappings([catalog])
+            self.assertEqual(len(mappings), 1)
+            item = {"key": foundation.key, "image_id": foundation.image_id, "base": BASE}
+            context, used = preparer.execution_context(root, item, mappings)
+            self.assertEqual(used, READY)
+            self.assertEqual((context / "Dockerfile").read_text(),
+                             foundation.dockerfile.replace("FROM " + BASE + "\n", "FROM " + READY + "\n", 1))
+            self.assertEqual((context / "base_install.sh").read_bytes(), foundation.installer)
+            self.assertEqual((original / "Dockerfile").read_text(), foundation.dockerfile)
+            self.assertEqual(preparer.execution_context(root, item, {}), (original, None))
+
     def test_terminal_prefix_reuses_dependencies_and_preserves_task_bytes(self):
         base = {"reference": BASE, "onbuild": []}
         prefix = "FROM ubuntu:22.04\nWORKDIR /app\n# Packages\nRUN apt-get update && apt-get install -y bash\n"

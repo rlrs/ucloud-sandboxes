@@ -120,6 +120,35 @@ def deserialize(rows):
     return entries
 
 
+def write_flat_index(path, layer, index):
+    rows = []
+    for entry in index.values():
+        row = asdict(entry)
+        row['kind'] = entry.kind.decode()
+        rows.append(row)
+    payload = {'schema': 1, 'layer': layer, 'entries': rows}
+    data = gzip.compress(encode({'payload': payload, 'checksum': hashlib.sha256(encode(payload)).hexdigest()}),
+                         compresslevel=1, mtime=0)
+    partial = path.with_suffix('.partial')
+    partial.write_bytes(data)
+    partial.replace(path)
+
+
+def read_flat_index(path, layer):
+    if path.stat().st_size > 32 * 1024**2:
+        raise ValueError('cached index exceeds compressed metadata bound')
+    with gzip.open(path, 'rb') as stream:
+        raw = stream.read(128 * 1024**2 + 1)
+    if len(raw) > 128 * 1024**2:
+        raise ValueError('cached index exceeds metadata bound')
+    document = json.loads(raw)
+    payload = document['payload']
+    if (payload['schema'] != 1 or payload['layer'] != layer or len(payload['entries']) > 200_000
+            or hashlib.sha256(encode(payload)).hexdigest() != document['checksum']):
+        raise ValueError('cached anchor identity mismatch')
+    return deserialize(payload['entries'])
+
+
 def cached_anchor(client, repository, layer, cache, scratch, *, source_path=None):
     cache.mkdir(parents=True, exist_ok=True)
     key = layer['digest'].split(':')[1]
@@ -127,28 +156,14 @@ def cached_anchor(client, repository, layer, cache, scratch, *, source_path=None
         fcntl.flock(lock, fcntl.LOCK_EX)
         path = cache / (key + '.json.gz')
         if path.exists():
-            document = json.loads(gzip.decompress(path.read_bytes()))
-            payload = document['payload']
-            if (payload['schema'] != 1 or payload['layer'] != layer
-                    or hashlib.sha256(encode(payload)).hexdigest() != document['checksum']):
-                raise ValueError('cached anchor identity mismatch')
-            return deserialize(payload['entries'])
+            return read_flat_index(path, layer)
         blob = source_path or scratch / 'anchor.tar.gz'
         if source_path is None:
             with client.open_blob(repository, layer['digest']) as stream:
                 copy_verified(stream, blob, layer)
         with verified_tar(blob, layer['digest']) as stream:
             index = index_flat_tar(stream)
-        rows = []
-        for entry in index.values():
-            row = asdict(entry)
-            row['kind'] = entry.kind.decode()
-            rows.append(row)
-        payload = {'schema': 1, 'layer': layer, 'entries': rows}
-        data = gzip.compress(encode({'payload': payload, 'checksum': hashlib.sha256(encode(payload)).hexdigest()}), mtime=0)
-        partial = path.with_suffix('.partial')
-        partial.write_bytes(data)
-        partial.replace(path)
+        write_flat_index(path, layer, index)
         return index
 
 
@@ -225,6 +240,7 @@ def main():
     parser.add_argument('--anchor-cache', type=Path, required=True)
     parser.add_argument('--filesystem-exports', type=Path, help='protected offline exports for multi-layer source qualification')
     parser.add_argument('--anchor-filesystem-source', help='pinned original flat source of a qualified compact anchor')
+    parser.add_argument('--record-source-index', action='store_true', help='save authenticated flat metadata for alternate-anchor cost analysis')
     parser.add_argument('--gateway', required=True)
     parser.add_argument('--sdk-wheel', type=Path, required=True)
     parser.add_argument('--config', type=Path, default=Path('/etc/ucloud-sandboxes/deployment.json'))
@@ -237,6 +253,8 @@ def main():
     args.export_inputs = read_filesystem_exports(args.filesystem_exports)
     if args.export_inputs and args.anchor_filesystem_source:
         parser.error('choose exported filesystems or a flat anchor source')
+    if args.export_inputs and args.record_source_index:
+        parser.error('source index recording requires an original flat source')
     if min(args.free_floor_gib, args.max_layer_gib, args.max_delta_mib) < 1:
         parser.error('storage limits must be positive')
     if '@sha256:' not in args.anchor:
@@ -385,6 +403,8 @@ def prepare(args):
             input_digest = target_layer['digest']
         with verified_tar(blob, input_digest) as stream:
             target_index = index_flat_tar(stream)
+        if args.record_source_index:
+            write_flat_index(args.root / 'source-index.json.gz', target_layer, target_index)
         plan = plan_flat_delta(anchor_index, target_index)
         save(args.root / 'cost.json', {'source': args.source, 'source_reference': resolved['reference'],
                                       'source_compressed_bytes': target_compressed_bytes,

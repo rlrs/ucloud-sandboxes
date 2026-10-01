@@ -68,8 +68,11 @@ def main():
     parser.add_argument('--growth-limit-gib', type=int, default=256)
     parser.add_argument('--free-floor-gib', type=int, default=500)
     parser.add_argument('--compression-level', type=int, choices=range(1, 10), default=6)
+    parser.add_argument('--seed-max-delta-mib', type=int, default=256,
+                        help='larger one-time project seeds; task deltas retain the 256 MiB bound')
     args = parser.parse_args()
-    if not 1 <= args.workers <= 8 or min(args.growth_limit_gib, args.free_floor_gib) < 1:
+    if (not 1 <= args.workers <= 8 or not 1 <= args.seed_max_delta_mib <= 1024
+            or min(args.growth_limit_gib, args.free_floor_gib) < 1):
         parser.error('invalid campaign bounds')
     from ucloud_sandboxes.config import DeploymentConfig
     from ucloud_sandboxes.registry_disk import registry_disk_usage
@@ -105,7 +108,8 @@ def main():
             if phase == 'seeds':
                 plan = seed_plan(inventory, catalogs, args.fallback_anchor_source, excluded)
             else:
-                plan = plan_shared(inventory, catalogs, exclude_sources=excluded, allow_compact_anchors=True)
+                plan = plan_shared(inventory, catalogs, exclude_sources=excluded, allow_compact_anchors=True,
+                                   max_anchor_bytes=1024**3 + args.seed_max_delta_mib * 1024**2)
             plan = stage_inputs(root, plan, baseline)
             save(args.root / 'progress.json', {'phase': phase, 'planned': len(plan['images']), 'status': 'running'})
             if plan['images']:
@@ -115,6 +119,8 @@ def main():
                        '--limit', str(len(plan['images'])), '--growth-limit-gib', str(args.growth_limit_gib),
                        '--free-floor-gib', str(args.free_floor_gib), '--compression-level', str(args.compression_level),
                        '--retry-failed']
+                if phase == 'seeds':
+                    cmd.extend(['--record-source-index', '--max-delta-mib', str(args.seed_max_delta_mib)])
                 print(json.dumps({'phase': phase, 'planned': len(plan['images'])}), flush=True)
                 subprocess.run(cmd, check=True)
                 catalogs.append(json.loads((root / 'catalog.json').read_text()))

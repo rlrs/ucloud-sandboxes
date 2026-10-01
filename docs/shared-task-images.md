@@ -218,3 +218,57 @@ low CPU scheduling weight. Builder provisioning remains bounded by the existing
 ceiling of eight. These overlap settings do not add host capacity. The registry
 remains at 3,500 provider GB with a 500 GiB free-space floor; no further expansion
 has been justified or performed.
+
+## Measured seed limits and serial layered queue (October 1 01:20 UTC)
+
+Comparing two oversized seeds against all 118 cached original anchor indexes
+saved only 871,199 changed bytes in each case: Pipecat Flows remained 713,025,793
+bytes and DVC Render 321,407,041 bytes. `score_shared_task_anchors.py` performs
+these comparisons from authenticated, bounded metadata without downloading source
+blobs or publishing images. Source index recording is optional and enabled for
+project seeds; its compressed/uncompressed bounds are 32/128 MiB. Scores estimate
+changed logical bytes, not compressed storage or readiness.
+
+A larger fakeredis project seed passed full source equivalence: 403,655,716 changed
+bytes became a 214,245,450-byte compressed delta, versus 649,070,428 bytes for the
+original source. The inventory contains 31 tasks for that project; the other 30
+are candidates, not qualified coverage. This supports a separate one-time seed
+limit rather than relaxing every task's bound. The project campaign now uses
+`--seed-max-delta-mib 1024`, three concurrent preparations under the same 200% CPU /
+4 GiB cap, and its unchanged 256 GiB registry-growth baseline. Its task phase
+retains 256 MiB deltas and admits qualified project anchors up to 2 GiB of EROFS.
+A measured delta deferral is retried only if it fits the explicitly requested
+limit. The larger setting reserves 3 GiB per active seed before admission.
+
+`prepare_layered_task_pool.py` turns the successful isolated-export path into a
+serial queue against one pinned, exported project anchor. A root-owned immutable
+`plan.json` contains `schema: 1`, `anchor`, `anchor_source`, and inventory `images`.
+The coordinator checks disk and registry availability before each job, observes
+the shared public quota as the service account, and preserves authenticated source
+receipts and accepted build journals. Exporting uses the existing bounded,
+non-executing unpacker; preparation and full sandbox qualification run as the
+service account. Temporary target exports are removed after each attempt. Cleanup
+refuses any tree containing an active mount and never follows symlinks out of it.
+The shared anchor export remains available for the queue.
+
+```sh
+sudo -E python scripts/prepare_layered_task_pool.py \
+  --root /data/layered-project --anchor-exports /data/protected-anchor-export \
+  --umoci /data/umoci --umoci-sha256 UNPACKER_SHA256 \
+  --gateway https://sandbox.example --sdk-wheel /data/sdk.whl \
+  --growth-limit-gib 64 --free-floor-gib 500 --max-delta-mib 512
+```
+
+The first deployed queue has 229 remaining aiohttp R2E images, one at a time under
+100% coordinator CPU / 3 GiB memory, plus the separately bounded unpacker. Its
+64 GiB growth budget includes other concurrent registry growth. It stops admission
+at a budget/reserve boundary, preserving pending work. Unsupported sources remain
+explicit outcomes; this queue does not imply coverage of the other R2E projects or
+of the entire layered corpus. A fresh registry recovery needs newly built anchors,
+new exports and a new plan; old ready receipts are not recovery inputs.
+
+At 01:13 UTC, the aggregate inventory had 1,539/35,984 source references prepared,
+including 94/94 generic bases and 89/89 Terminal-Bench 2 sources. Full task-base
+coverage remains incomplete. The nested project seed catalog is included in this
+snapshot. Saved source receipts and updated pins are copied off the server and
+committed separately from disposable private runtime catalogs.

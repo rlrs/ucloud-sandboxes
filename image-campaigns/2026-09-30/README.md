@@ -110,3 +110,14 @@ Use the latest inputs in the recovery commands and hydrate source metadata while
 coordinators are stopped. Existing immutable pins and context bytes remain intact.
 The production volume is 3,500 provider GB; the original bundle's 3 TB recovery
 policy is unchanged and no command automatically expands it.
+
+## Project snapshot, October 1 01:13 UTC
+
+`inputs-projects-20261001.json.gz` advances to **1,611 public source pins**, preserving
+all 35,984 inputs and 8,602 foundation contexts. SHA-256:
+`73c008e2c7e153863d81bedfe9cdec1b1f9431347054fbe081be760cf059ad29`.
+`source-receipts-20261001T011305Z.json.gz` contains **1,329** authenticated public
+manifest/config receipts, 869,392 bytes compressed. SHA-256:
+`947d352fd7ac069987fbde5172859e7e5924d60e4f3489aa3db2215aad212785`.
+This includes nested project-seed work directories. Pins and saved metadata do
+not count as prepared images; the corresponding aggregate had 1,539 ready sources.

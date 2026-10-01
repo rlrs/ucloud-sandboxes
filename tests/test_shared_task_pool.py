@@ -13,6 +13,26 @@ import prepare_shared_task_pool as pool
 
 
 class SharedTaskPoolTests(unittest.TestCase):
+    def test_larger_seed_limit_only_retries_measured_deltas_that_fit(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            row = {'status': 'deferred', 'error': 'RuntimeError: deferred: changed-file delta exceeds preparation bound'}
+            self.assertFalse(pool.retry_delta_bound(row, root, 1024))
+            (root / 'cost.json').write_text(json.dumps({'changed_regular_file_bytes': 400 * 1024**2}))
+            self.assertFalse(pool.retry_delta_bound(row, root, 256))
+            self.assertTrue(pool.retry_delta_bound(row, root, 1024))
+            self.assertFalse(pool.retry_delta_bound({**row, 'status': 'ready'}, root, 1024))
+            self.assertFalse(pool.retry_delta_bound({**row, 'error': 'compressed input bound'}, root, 1024))
+
+    def test_larger_seed_reserves_more_disk_before_starting(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'plan.json').write_text(json.dumps({'schema': 1, 'images': [{'source': 'task', 'anchor': 'base'}]}))
+            catalog, invoked = self.run_pool(root, 2, lambda *a, **kw: self.fail('unexpected child'),
+                                             ['--max-delta-mib', '1024'])
+            invoked.assert_not_called()
+            self.assertEqual(catalog['images']['task']['status'], 'deferred')
+
     def run_pool(self, root, growth, run, extra=(), health=None):
         config = root / 'config.json'
         config.write_text('{}')
@@ -84,7 +104,7 @@ class SharedTaskPoolTests(unittest.TestCase):
             def run(command, **kwargs):
                 progress = json.loads((root / 'progress.json').read_text())
                 self.assertEqual(progress['counts']['deferred'], 1)
-                self.assertEqual(progress['queued'], 1)
+                self.assertEqual(progress['queued'] + progress['active'], 1)
                 self.assertIsNone(progress['admission_block'])
                 work = Path(command[command.index('--root') + 1])
                 work.mkdir(parents=True)

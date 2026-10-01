@@ -1,0 +1,115 @@
+{
+  "families": {
+    "MultiSWE": {
+      "upstream_image_rows": 2232,
+      "upstream_image_rows_ready": 60
+    },
+    "OpenThoughts TBLite": {
+      "base_only_rows": 100,
+      "base_only_rows_ready": 100
+    },
+    "Terminal-Lego": {
+      "base_only_rows": 13825,
+      "base_only_rows_ready": 13825
+    },
+    "R2E-Gym": {
+      "upstream_image_rows": 4522,
+      "upstream_image_rows_ready": 60
+    },
+    "SWE-Lego": {
+      "upstream_image_rows": 4323,
+      "upstream_image_rows_ready": 62
+    },
+    "SWE-bench Multilingual": {
+      "upstream_image_rows": 300,
+      "upstream_image_rows_ready": 178
+    },
+    "SWE-bench Verified": {
+      "upstream_image_rows": 500,
+      "upstream_image_rows_ready": 179
+    },
+    "SWE-rebench v2": {
+      "upstream_image_rows": 6272,
+      "upstream_image_rows_ready": 63
+    },
+    "SWE-smith": {
+      "upstream_image_rows": 88130,
+      "upstream_image_rows_ready": 59879
+    },
+    "ScaleSWE": {
+      "upstream_image_rows": 17202,
+      "upstream_image_rows_ready": 651
+    },
+    "Senior SWE-Bench": {
+      "base_only_rows": 50,
+      "base_only_rows_ready": 50
+    },
+    "Terminal-Bench 2": {
+      "upstream_image_rows": 89,
+      "upstream_image_rows_ready": 89
+    }
+  },
+  "ready_source_references": 1539,
+  "task_base_references": 35984,
+  "task_base_references_ready": 1539,
+  "missing_task_base_references_count": 34445,
+  "missing_task_base_references_sample": [
+    "aweaiteam/scaleswe:adamchainz_django-cors-headers_pr380",
+    "aweaiteam/scaleswe:adamchainz_django-cors-headers_pr388",
+    "aweaiteam/scaleswe:adamchainz_django-cors-headers_pr396",
+    "aweaiteam/scaleswe:adamchainz_django-cors-headers_pr397",
+    "aweaiteam/scaleswe:adamchainz_django-cors-headers_pr405",
+    "aweaiteam/scaleswe:adamchainz_django-cors-headers_pr418",
+    "aweaiteam/scaleswe:adamchainz_django-cors-headers_pr451",
+    "aweaiteam/scaleswe:adamchainz_ec2-metadata_pr339",
+    "aweaiteam/scaleswe:adamchainz_ec2-metadata_pr40",
+    "aweaiteam/scaleswe:adamchainz_flake8-comprehensions_pr195",
+    "aweaiteam/scaleswe:adamchainz_flake8-comprehensions_pr202",
+    "aweaiteam/scaleswe:adamchainz_flake8-comprehensions_pr205",
+    "aweaiteam/scaleswe:adamchainz_flake8-comprehensions_pr491",
+    "aweaiteam/scaleswe:adamchainz_flake8-logging_pr4",
+    "aweaiteam/scaleswe:adamchainz_flake8-no-pep420_pr103",
+    "aweaiteam/scaleswe:adamchainz_pytest-reverse_pr10",
+    "aweaiteam/scaleswe:adamchainz_treepoem_pr437",
+    "aweaiteam/scaleswe:adamchainz_treepoem_pr587",
+    "aweaiteam/scaleswe:adamtheturtle_doccmd_pr158",
+    "aweaiteam/scaleswe:adamtheturtle_doccmd_pr191",
+    "aweaiteam/scaleswe:adamtheturtle_doccmd_pr193",
+    "aweaiteam/scaleswe:adamtheturtle_doccmd_pr195",
+    "aweaiteam/scaleswe:adamtheturtle_doccmd_pr282",
+    "aweaiteam/scaleswe:adamtheturtle_doccmd_pr316",
+    "aweaiteam/scaleswe:adamtheturtle_doccmd_pr317",
+    "aweaiteam/scaleswe:adamtheturtle_doccmd_pr330",
+    "aweaiteam/scaleswe:adamtheturtle_doccmd_pr345",
+    "aweaiteam/scaleswe:adamtheturtle_doccmd_pr361",
+    "aweaiteam/scaleswe:adamtheturtle_doccmd_pr363",
+    "aweaiteam/scaleswe:adamtheturtle_doccmd_pr383",
+    "aweaiteam/scaleswe:adamtheturtle_doccmd_pr408",
+    "aweaiteam/scaleswe:adamtheturtle_doccmd_pr42",
+    "aweaiteam/scaleswe:adamtheturtle_doccmd_pr420",
+    "aweaiteam/scaleswe:adamtheturtle_doccmd_pr426",
+    "aweaiteam/scaleswe:adamtheturtle_doccmd_pr44",
+    "aweaiteam/scaleswe:adamtheturtle_doccmd_pr45",
+    "aweaiteam/scaleswe:adamtheturtle_doccmd_pr50",
+    "aweaiteam/scaleswe:adamtheturtle_pip-check-reqs_pr38",
+    "aweaiteam/scaleswe:adamtheturtle_pip-check-reqs_pr84",
+    "aweaiteam/scaleswe:adamtheturtle_sybil-extras_pr12",
+    "aweaiteam/scaleswe:adamtheturtle_sybil-extras_pr150",
+    "aweaiteam/scaleswe:adamtheturtle_sybil-extras_pr296",
+    "aweaiteam/scaleswe:adamtheturtle_sybil-extras_pr297",
+    "aweaiteam/scaleswe:adamtheturtle_sybil-extras_pr304",
+    "aweaiteam/scaleswe:adamtheturtle_sybil-extras_pr342",
+    "aweaiteam/scaleswe:adamtheturtle_sybil-extras_pr344",
+    "aweaiteam/scaleswe:adamtheturtle_sybil-extras_pr345",
+    "aweaiteam/scaleswe:adamtheturtle_sybil-extras_pr346",
+    "aweaiteam/scaleswe:adamtheturtle_sybil-extras_pr347",
+    "aweaiteam/scaleswe:adamtheturtle_sybil-extras_pr354"
+  ],
+  "all_task_bases_prepared": false,
+  "generic_base_references": 94,
+  "generic_base_references_ready": 94,
+  "missing_generic_bases": [],
+  "unique_erofs_bytes": 654871023616,
+  "summed_erofs_bytes": 1639278120960,
+  "scope": "Upstream image/base coverage; not proof of task-specific setup or an unavailable training selection"
+}

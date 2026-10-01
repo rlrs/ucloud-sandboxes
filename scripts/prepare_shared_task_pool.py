@@ -30,6 +30,17 @@ def job_compression_level(work, requested):
     return level
 
 
+def retry_delta_bound(row, work, maximum_mib):
+    """Only retry a measured delta when a larger explicit limit admits it."""
+    if row.get('status') != 'deferred' or 'changed-file delta exceeds preparation bound' not in row.get('error', ''):
+        return False
+    cost = work / 'cost.json'
+    if not cost.exists():
+        return False
+    size = json.loads(cost.read_text()).get('changed_regular_file_bytes')
+    return type(size) is int and 0 <= size <= maximum_mib * 1024**2
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', required=True, type=Path)
@@ -43,8 +54,11 @@ def main():
     parser.add_argument('--retry-failed', action='store_true', help='retry failed rows once, preserving their previous journal')
     parser.add_argument('--compression-level', type=int, choices=range(1, 10), default=9,
                         help='new jobs only; existing jobs preserve their recorded compression')
+    parser.add_argument('--record-source-index', action='store_true')
+    parser.add_argument('--max-delta-mib', type=int, default=256)
     args = parser.parse_args()
-    if not 1 <= args.workers <= 8 or min(args.limit, args.growth_limit_gib, args.free_floor_gib) < 1:
+    if (not 1 <= args.workers <= 8 or not 1 <= args.max_delta_mib <= 1024
+            or min(args.limit, args.growth_limit_gib, args.free_floor_gib) < 1):
         parser.error('invalid bounds')
     from ucloud_sandboxes.config import DeploymentConfig
     from ucloud_sandboxes.registry_disk import registry_disk_usage
@@ -60,7 +74,7 @@ def main():
         raise ValueError('duplicate plan sources')
     (root / 'results').mkdir(exist_ok=True)
     (root / 'work').mkdir(exist_ok=True)
-    reservation = 2 * 1024**3
+    reservation = max(2 * 1024**3, 3 * args.max_delta_mib * 1024**2)
     with (root / 'pool.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         disk = registry_disk_usage(c)
@@ -79,7 +93,8 @@ def main():
                 if row['source'] != item['source'] or row['anchor'] != item['anchor']:
                     raise ValueError('result belongs to another preparation')
                 results[item['source']] = row
-                if ((args.retry_failed and row['status'] == 'failed')
+                if (retry_delta_bound(row, root / 'work' / key, args.max_delta_mib)
+                        or (args.retry_failed and row['status'] == 'failed')
                         or (row['status'] == 'deferred' and (
                             'deferred: public registry cooldown' in row.get('error', '')
                             or row.get('error') in {'deferred: batch storage budget', 'deferred: free-space reserve'}))):
@@ -111,6 +126,7 @@ def main():
                        '--anchor-cache', str(root / 'anchor-cache'), '--gateway', args.gateway,
                        '--sdk-wheel', str(args.sdk_wheel), '--config', str(args.config),
                        '--free-floor-gib', str(args.free_floor_gib),
+                       '--max-delta-mib', str(args.max_delta_mib),
                        '--compression-level', str(job_compression_level(work, args.compression_level))]
             for family in item.get('families', []):
                 command.extend(['--family', family])
@@ -120,6 +136,8 @@ def main():
                 command.extend(['--anchor-filesystem-source', item['anchor_filesystem_source']])
             if args.retry_failed:
                 command.append('--retry-recorded-failures')
+            if args.record_source_index:
+                command.append('--record-source-index')
             log_path = root / 'work' / (key + '.log')
             try:
                 with log_path.open('w') as output:

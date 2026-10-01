@@ -149,3 +149,72 @@ including all 94 generic bases and all 89 Terminal-Bench 2 sources. Overall task
 coverage is still incomplete. The portable inputs now preserve 1,204 immutable
 source pins; the separate metadata snapshot has 922 authenticated manifest/config
 receipts. Neither archive claims blob backup or completed coverage.
+
+## Compact project bases
+
+`--allow-compact-anchors` permits a fully source-qualified compact ScaleSWE image
+as an anchor within its own project. Original anchors remain the default and the
+explicit cross-project fallback must still be an original image. Compact planning
+chooses the closest available PR number within a project, preferring an original
+anchor on ties. PR proximity is a deterministic heuristic, not proof of similarity;
+full source qualification still decides correctness. Existing job assignments are
+preserved when a campaign resumes.
+
+The preparer accepts `--anchor-filesystem-source` only as an immutable public pin.
+It authenticates that source's original flat manifest/config/layer and indexes it
+as the comparison input, while retaining the **actual compact anchor's OCI chain**.
+Only the target delta is published. The final sandbox is compared against the full
+original target filesystem before aliases are registered. This avoids keeping a
+second complete flattened source for every compact project base. Compact anchor
+chains are bounded at eight layers; source bounds and scratch reserves still apply.
+
+Three cases passed: an existing Optimizely source (PR102, not new coverage), a new
+Cookiecutter source (PR1496), and a new Optimizely source (PR128). The fresh PR128
+used **449 compressed bytes and a 4,096-byte EROFS component**, reusing both anchor
+components. Cookiecutter used 13.65 MB of OCI plus 19.27 MB EROFS. All source entries
+were checked. The remaining 23 fresh public-alias checks passed at four concurrent
+checks with no import builds, create p50 1.26 s / p95 1.53 s. The earlier 33 checks
+also passed; their report was recovered from exact journal records after its output
+file write failed because the parent directory was root-only.
+
+`prepare_project_image_campaign.py` makes this a supervised two-stage workflow:
+
+```sh
+python scripts/prepare_project_image_campaign.py \
+  --root /data/project-campaign --inventory /data/inventory.json \
+  --catalog /data/immutable-ready-catalog.json \
+  --exclude-plan /data/other-active-queue.json \
+  --fallback-anchor-source aweaiteam/scaleswe:pallets_click_pr1000 \
+  --gateway https://sandbox.example --sdk-wheel /data/sdk.whl \
+  --workers 4 --growth-limit-gib 256 --free-floor-gib 500
+```
+
+First it attempts one compact base per project without a qualified anchor. Then it
+plans remaining tasks against the qualified project bases. Both stages inherit
+one immutable observed-growth baseline; entering the second stage does not reset
+the budget. Inputs are checksummed, assignments survive resumption, and additional
+qualified projects can append previously unassigned tasks. Failed/deferred seeds
+remain uncovered. The deployed seed stage contains **996 projects**, excluding the
+existing 8,565-source queue and the separate pilot/canaries. It has a 200% CPU cap,
+4 GiB memory cap and low CPU scheduling weight. The first large candidates exceeded
+size bounds; they are not counted as ready. `cost.json` records compressed input
+size and, after indexing, changed-file bytes so later capacity decisions are based
+on measurements.
+
+Registry unavailability now pauses new source work and shared-child admission.
+A five-second cached health check prevents an outage from immediately consuming
+thousands of pending candidates as failures. It cannot prevent an already-running
+request from failing; explicit terminal-failure retry preserves its journal.
+
+A three-delta compression benchmark used 20.17 CPU seconds at gzip level 9 versus
+6.73 at level 6, with compressed bytes increasing from 102,329,326 to 102,773,018
+(**0.43%**). New project jobs use level 6. Compression is part of the preparation
+identity, and existing jobs preserve their recorded setting, including legacy
+level 9. A fresh level-6 source passed full equivalence and public-alias checks.
+
+The existing same-project queue now overlaps six preparations under a 300% CPU /
+6 GiB limit; evaluation overlaps two under 100% / 2 GiB. All three campaigns have
+low CPU scheduling weight. Builder provisioning remains bounded by the existing
+ceiling of eight. These overlap settings do not add host capacity. The registry
+remains at 3,500 provider GB with a 500 GiB free-space floor; no further expansion
+has been justified or performed.

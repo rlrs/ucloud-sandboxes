@@ -34,8 +34,16 @@ def encode(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':')).encode()
 
 
-def source_identity(source, anchor, pinned_source=None, exports=None):
+def source_identity(source, anchor, pinned_source=None, exports=None, compression_level=9, anchor_filesystem_source=None):
+    if type(compression_level) is not int or not 1 <= compression_level <= 9:
+        raise ValueError('invalid delta compression level')
     identity = {'source': source, 'anchor': anchor, 'version': 1}
+    if compression_level != 9:
+        identity['compression_level'] = compression_level
+    if anchor_filesystem_source:
+        from ucloud_sandboxes.environment_artifact import require_digest
+        require_digest(registry_parts(anchor_filesystem_source)[2])
+        identity['anchor_filesystem_source'] = anchor_filesystem_source
     if pinned_source:
         host, repository, selector = registry_parts(pinned_source)
         from ucloud_sandboxes.environment_artifact import require_digest
@@ -144,6 +152,28 @@ def cached_anchor(client, repository, layer, cache, scratch, *, source_path=None
         return index
 
 
+class PublicLayerReader:
+    def __init__(self, host):
+        self.host = host
+
+    def open_blob(self, repository, digest):
+        endpoint = 'registry-1.docker.io' if self.host == 'docker.io' else self.host
+        return request.build_opener(PublicBlobRedirect()).open(request.Request(
+            f'https://{endpoint}/v2/{repository}/blobs/{digest}',
+            headers=public_registry_headers(self.host, repository)), timeout=120)
+
+
+def flat_anchor_source(resolved, expected, maximum):
+    """Authenticate a flat filesystem index input, never a substitute runtime image."""
+    from cache_source_receipts import validated
+    if registry_parts(resolved['reference']) != registry_parts(expected):
+        raise ValueError('anchor filesystem source differs from immutable pin')
+    verified = validated(expected, resolved)
+    if verified['layer_count'] != 1 or verified['onbuild'] or verified['compressed_bytes'] > maximum:
+        raise ValueError('anchor filesystem source must be a bounded flat image')
+    return verified['layers'][0]
+
+
 def remove_abandoned_inputs(root, key):
     """Delete only this locked job's marked, known temporary input files."""
     allowed = {'.owner.json', 'anchor.tar.gz', 'target.tar.gz', 'delta.tar.gz', 'config.json'}
@@ -194,6 +224,7 @@ def main():
     parser.add_argument('--root', type=Path, required=True)
     parser.add_argument('--anchor-cache', type=Path, required=True)
     parser.add_argument('--filesystem-exports', type=Path, help='protected offline exports for multi-layer source qualification')
+    parser.add_argument('--anchor-filesystem-source', help='pinned original flat source of a qualified compact anchor')
     parser.add_argument('--gateway', required=True)
     parser.add_argument('--sdk-wheel', type=Path, required=True)
     parser.add_argument('--config', type=Path, default=Path('/etc/ucloud-sandboxes/deployment.json'))
@@ -201,8 +232,11 @@ def main():
     parser.add_argument('--max-layer-gib', type=int, default=2)
     parser.add_argument('--max-delta-mib', type=int, default=256)
     parser.add_argument('--retry-recorded-failures', action='store_true')
+    parser.add_argument('--compression-level', type=int, choices=range(1, 10), default=9)
     args = parser.parse_args()
     args.export_inputs = read_filesystem_exports(args.filesystem_exports)
+    if args.export_inputs and args.anchor_filesystem_source:
+        parser.error('choose exported filesystems or a flat anchor source')
     if min(args.free_floor_gib, args.max_layer_gib, args.max_delta_mib) < 1:
         parser.error('storage limits must be positive')
     if '@sha256:' not in args.anchor:
@@ -211,7 +245,8 @@ def main():
     with (args.root / 'prepare.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         identity_path, resolved_path = args.root / 'identity.json', args.root / 'resolved.json'
-        identity = source_identity(args.source, args.anchor, args.pinned_source, args.export_inputs)
+        identity = source_identity(args.source, args.anchor, args.pinned_source, args.export_inputs,
+                                   args.compression_level, args.anchor_filesystem_source)
         if identity_path.exists() and resolved_path.exists() and json.loads(identity_path.read_text()) == identity:
             resolved = json.loads(resolved_path.read_text())
             old_key = hashlib.sha256(encode({**identity, 'source': resolved['reference']})).hexdigest()
@@ -251,10 +286,12 @@ def prepare(args):
     if any(component.format.get('layout') != 1 for component in anchor_components):
         raise ValueError('unknown anchor filesystem format')
     anchor_manifest, _ = registry.client.manifest_document(anchor_repo, anchor_digest)
-    if len(anchor_manifest['layers']) != 1 and not args.export_inputs:
+    if len(anchor_manifest['layers']) != 1 and not (args.export_inputs or args.anchor_filesystem_source):
         raise ValueError('anchor must be a single flat OCI layer')
     if not anchor_manifest['layers']:
         raise ValueError('anchor has no filesystem layers')
+    if args.anchor_filesystem_source and len(anchor_manifest['layers']) > 8:
+        raise ValueError('compact anchor exceeds layer-chain bound')
     anchor_layer = anchor_manifest['layers'][0]
     require_digest(anchor_layer['digest'])
     maximum = (5 if args.export_inputs else args.max_layer_gib) * 1024**3
@@ -270,7 +307,8 @@ def prepare(args):
     if 'sha256:' + hashlib.sha256(anchor_data).hexdigest() != anchor_manifest['config']['digest']:
         raise ValueError('anchor config identity mismatch')
     anchor_config = json.loads(anchor_data)
-    identity = source_identity(args.source, args.anchor, args.pinned_source, args.export_inputs)
+    identity = source_identity(args.source, args.anchor, args.pinned_source, args.export_inputs,
+                               args.compression_level, args.anchor_filesystem_source)
     identity_path = args.root / 'identity.json'
     if identity_path.exists() and json.loads(identity_path.read_text()) != identity:
         raise ValueError('work directory belongs to another source')
@@ -294,18 +332,29 @@ def prepare(args):
     target_config = json.loads(config_bytes)
     if ((not args.export_inputs and (len(target_manifest['layers']) != 1
                                     or len(target_config['rootfs']['diff_ids']) != 1
-                                    or len(anchor_config['rootfs']['diff_ids']) != 1))
+                                    or (not args.anchor_filesystem_source and len(anchor_config['rootfs']['diff_ids']) != 1)))
             or not target_manifest['layers'] or (target_config.get('config') or {}).get('OnBuild')
             or target_config.get('architecture') != 'amd64' or target_config.get('os') != 'linux'):
         raise ValueError('source requires unsupported image preparation')
     target_layer = target_manifest['layers'][0]
     require_digest(target_layer['digest'])
     target_compressed_bytes = sum(layer['size'] for layer in target_manifest['layers'])
+    save(args.root / 'cost.json', {'source': args.source, 'source_reference': resolved['reference'],
+                                   'source_compressed_bytes': target_compressed_bytes})
     if target_compressed_bytes > maximum:
-        raise ValueError('source exceeds compressed input bound')
+        raise RuntimeError('deferred: source exceeds compressed input bound')
     if args.export_inputs:
         validate_filesystem_export(args.export_inputs['anchor'], args.anchor, anchor_manifest, anchor_config)
         validate_filesystem_export(args.export_inputs['target'], resolved['reference'], target_manifest, target_config)
+    anchor_filesystem = None
+    if args.anchor_filesystem_source:
+        anchor_receipt = args.root / 'anchor-resolved.json'
+        if anchor_receipt.exists():
+            anchor_filesystem = json.loads(anchor_receipt.read_text())
+        else:
+            anchor_filesystem = SourceResolver(c.control_state_file().parent / 'image-pool-locks', max_wait_seconds=60)(args.anchor_filesystem_source)
+            save(anchor_receipt, anchor_filesystem)
+        anchor_layer = flat_anchor_source(anchor_filesystem, args.anchor_filesystem_source, maximum)
     key = hashlib.sha256(encode({**identity, 'source': resolved['reference']})).hexdigest()
     image_id, repository, tag = 'shared-task-' + key[:32], 'ucloud-shared-sources', 'flat-v1-' + key
     remove_abandoned_inputs(args.root, key)
@@ -321,7 +370,11 @@ def prepare(args):
             blob = args.filesystem_exports / 'target/filesystem.tar.gz'
             input_digest = 'sha256:' + args.export_inputs['target']['export_sha256']
         else:
-            anchor_index = cached_anchor(registry.client, anchor_repo, anchor_layer, args.anchor_cache, scratch)
+            if anchor_filesystem:
+                anchor_host, original_repo, _ = registry_parts(anchor_filesystem['reference'])
+                anchor_index = cached_anchor(PublicLayerReader(anchor_host), original_repo, anchor_layer, args.anchor_cache, scratch)
+            else:
+                anchor_index = cached_anchor(registry.client, anchor_repo, anchor_layer, args.anchor_cache, scratch)
             host, source_repo, _ = registry_parts(resolved['reference'])
             endpoint = 'registry-1.docker.io' if host == 'docker.io' else host
             url = f'https://{endpoint}/v2/{source_repo}/blobs/{target_layer["digest"]}'
@@ -333,11 +386,15 @@ def prepare(args):
         with verified_tar(blob, input_digest) as stream:
             target_index = index_flat_tar(stream)
         plan = plan_flat_delta(anchor_index, target_index)
+        save(args.root / 'cost.json', {'source': args.source, 'source_reference': resolved['reference'],
+                                      'source_compressed_bytes': target_compressed_bytes,
+                                      'changed_regular_file_bytes': plan.regular_file_bytes,
+                                      'changed_paths': len(plan.changed), 'removed_paths': len(plan.removed)})
         if plan.regular_file_bytes > args.max_delta_mib * 1024**2:
             raise RuntimeError('deferred: changed-file delta exceeds preparation bound')
         delta = scratch / 'delta.tar.gz'
         with delta.open('wb') as raw:
-            with gzip.GzipFile(fileobj=raw, mode='wb', filename='', mtime=0) as compressed:
+            with gzip.GzipFile(fileobj=raw, mode='wb', filename='', mtime=0, compresslevel=args.compression_level) as compressed:
                 writer = CheckedWriter(compressed)
                 with verified_tar(blob, input_digest) as stream:
                     write_flat_delta(stream, writer, target_index, plan)
@@ -474,6 +531,8 @@ def prepare(args):
                   'original_compressed_bytes_not_retained': target_compressed_bytes, 'qualification': qualification,
                   'import_aliases': {alias: register_import_alias(store, record, alias) for alias in sorted(aliases)},
                   'seconds': time.monotonic() - started, 'artifact_reused': artifact_reused, 'timings': build.get('timings', {})}
+        if args.anchor_filesystem_source:
+            result['anchor_filesystem_source'] = args.anchor_filesystem_source
         if args.family:
             result['families'] = args.family
         save(args.root / 'catalog.json', {'schema': 1, 'images': {args.source: result}})

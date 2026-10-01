@@ -12,13 +12,22 @@ import subprocess
 import sys
 import time
 
-from prepare_image_pool import SourceResolver, admission, registry_parts
+from prepare_image_pool import RegistryHealthGate, SourceResolver, admission, registry_parts
 
 
 def save(path, value):
     temporary = path.with_suffix('.partial')
     temporary.write_text(json.dumps(value, sort_keys=True, separators=(',', ':')))
     temporary.replace(path)
+
+
+def job_compression_level(work, requested):
+    """Old jobs keep their byte identity even if a resumed queue changes policy."""
+    identity = work / 'identity.json'
+    level = json.loads(identity.read_text()).get('compression_level', 9) if identity.exists() else requested
+    if type(level) is not int or not 1 <= level <= 9:
+        raise ValueError('invalid saved delta compression level')
+    return level
 
 
 def main():
@@ -32,13 +41,16 @@ def main():
     parser.add_argument('--growth-limit-gib', type=int, default=16)
     parser.add_argument('--free-floor-gib', type=int, default=500)
     parser.add_argument('--retry-failed', action='store_true', help='retry failed rows once, preserving their previous journal')
+    parser.add_argument('--compression-level', type=int, choices=range(1, 10), default=9,
+                        help='new jobs only; existing jobs preserve their recorded compression')
     args = parser.parse_args()
-    if not 1 <= args.workers <= 4 or min(args.limit, args.growth_limit_gib, args.free_floor_gib) < 1:
+    if not 1 <= args.workers <= 8 or min(args.limit, args.growth_limit_gib, args.free_floor_gib) < 1:
         parser.error('invalid bounds')
     from ucloud_sandboxes.config import DeploymentConfig
     from ucloud_sandboxes.registry_disk import registry_disk_usage
     c = DeploymentConfig.from_dict(json.loads(args.config.read_text()))
     resolver = SourceResolver(c.control_state_file().parent / 'image-pool-locks', clock=time.time)
+    registry_health = RegistryHealthGate(c.registry_url)
     root = args.root
     plan = json.loads((root / 'plan.json').read_text())
     if plan.get('schema') != 1:
@@ -79,14 +91,17 @@ def main():
                 pending.append(item)
         active, offset, completed_count = {}, 0, 0
         admission_block = None
-        def checkpoint():
-            save(root / 'catalog.json', {'schema': 1, 'images': results})
+        def progress():
             counts = {status: sum(row['status'] == status for row in results.values())
                       for status in ('ready', 'failed', 'deferred')}
             save(root / 'progress.json', {'updated_at_unix': time.time(), 'counts': counts,
                                          'planned': len(items), 'unprocessed': len(items) - len(results),
                                          'queued': len(pending) - offset, 'active': len(active),
                                          'completed_current_run': completed_count, 'admission_block': admission_block})
+            return counts
+        def checkpoint():
+            save(root / 'catalog.json', {'schema': 1, 'images': results})
+            counts = progress()
             print(json.dumps(counts), flush=True)
         def run(item):
             key = hashlib.sha256(item['source'].encode()).hexdigest()
@@ -95,11 +110,14 @@ def main():
                        '--source', item['source'], '--anchor', item['anchor'], '--root', str(work),
                        '--anchor-cache', str(root / 'anchor-cache'), '--gateway', args.gateway,
                        '--sdk-wheel', str(args.sdk_wheel), '--config', str(args.config),
-                       '--free-floor-gib', str(args.free_floor_gib)]
+                       '--free-floor-gib', str(args.free_floor_gib),
+                       '--compression-level', str(job_compression_level(work, args.compression_level))]
             for family in item.get('families', []):
                 command.extend(['--family', family])
             if item.get('pinned_source'):
                 command.extend(['--pinned-source', item['pinned_source']])
+            if item.get('anchor_filesystem_source'):
+                command.extend(['--anchor-filesystem-source', item['anchor_filesystem_source']])
             if args.retry_failed:
                 command.append('--retry-recorded-failures')
             log_path = root / 'work' / (key + '.log')
@@ -124,6 +142,13 @@ def main():
         with ThreadPoolExecutor(max_workers=args.workers) as executor:
             while offset < len(pending) or active:
                 while offset < len(pending) and len(active) < args.workers:
+                    if not registry_health.ready():
+                        admission_block = 'registry unavailable'
+                        progress()
+                        if not active:
+                            time.sleep(5)
+                        break
+                    admission_block = None
                     current = registry_disk_usage(c)
                     if current is None:
                         raise ValueError('registry storage became unmeasurable')
@@ -157,6 +182,7 @@ def main():
                     offset += 1
                     attempts[item['source']] = attempts.get(item['source'], 0) + 1
                     active[executor.submit(run, item)] = item
+                    progress()
                 if active:
                     done, _ = wait(active, return_when=FIRST_COMPLETED)
                     for future in done:
@@ -167,6 +193,7 @@ def main():
                             pending.append(item)
                         results[result['source']] = result
                         completed_count += 1
+                        progress()
                         print(json.dumps({'source': result['source'], 'status': result['status']}), flush=True)
                         if completed_count % 4 == 0:
                             checkpoint()

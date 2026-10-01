@@ -370,7 +370,8 @@
   "notes": [
     "The existing-target proof did not reclaim its previously imported original blobs.",
     "Fresh source preparations retained only deltas plus shared existing anchors. Reported added bytes exclude anchor cost.",
-    "Storage estimate for 90 evaluation candidates is extrapolation from a selected 14-image sample, not a complete-corpus forecast."
+    "Storage estimate for 90 evaluation candidates is extrapolation from a selected 14-image sample, not a complete-corpus forecast.",
+    "Compact-anchor Optimizely PR102 was an already-retained source; it proves equivalence but does not add coverage or reclaim the earlier artifact. PR128 and Cookiecutter PR1496 were fresh."
   ],
   "fresh_layered": [
     {
@@ -2561,5 +2562,1076 @@
     "cause": "Scheduled quiescent collector stops the serving registry; not storage exhaustion.",
     "fix": "CLI maintenance requires explicit --allow-service-interruption or --offline; timer invocations defer without stopping registry.",
     "deployed_at_utc": "2026-10-01T00:12:52Z"
+  },
+  "post_maintenance_public_alias_qualification": {
+    "schema": 1,
+    "images": 33,
+    "passed": 33,
+    "workers": 4,
+    "report_recovered_from_journal": true,
+    "note": "Checks completed; original report write was denied by a root-only parent directory. Recovered exact emitted per-source results.",
+    "create_p50_seconds": 1.08925198201905,
+    "create_p95_seconds": 3.0452652479871176,
+    "results": [
+      {
+        "source": "alexgshaw/pytorch-model-recovery:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.7212229070137255,
+        "exec_seconds": 0.34500866298913024,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/mteb-leaderboard:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.826213807973545,
+        "exec_seconds": 0.4418595169845503,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/mteb-retrieve:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 3.12152352600242,
+        "exec_seconds": 0.36630846597836353,
+        "new_import_build": false
+      },
+      {
+        "source": "namanjain12/aiohttp_final:30850babb43a8e28dd2df036776c62fd613d3d89",
+        "families": [
+          "R2E-Gym"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 3.0452652479871176,
+        "exec_seconds": 0.45957745402120054,
+        "new_import_build": false
+      },
+      {
+        "source": "namanjain12/aiohttp_final:37e3aa4639193c6423562a4a4dfbf3310772b7a6",
+        "families": [
+          "R2E-Gym"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.2135837800160516,
+        "exec_seconds": 0.2649441609974019,
+        "new_import_build": false
+      },
+      {
+        "source": "namanjain12/aiohttp_final:37b2604d10e78b96b1fed51bab7f22221c868fc9",
+        "families": [
+          "R2E-Gym"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.2203876730054617,
+        "exec_seconds": 0.4372177580080461,
+        "new_import_build": false
+      },
+      {
+        "source": "namanjain12/aiohttp_final:312f747de91f20fa33af03fd368f857fbd32f36a",
+        "families": [
+          "R2E-Gym"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.108285976020852,
+        "exec_seconds": 0.290017182007432,
+        "new_import_build": false
+      },
+      {
+        "source": "namanjain12/aiohttp_final:3cc00d3cdbab8ec6cf511700b15e33858a608d40",
+        "families": [
+          "R2E-Gym"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.2816005510103423,
+        "exec_seconds": 0.2751468349888455,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:optimizely_python-sdk_pr102",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.144103268015897,
+        "exec_seconds": 0.4442907230113633,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:argyle-engineering_pyap_pr11",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.0689209380070679,
+        "exec_seconds": 0.45895853999536484,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:argyle-engineering_pyap_pr13",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 0.9436669059796259,
+        "exec_seconds": 0.456736672000261,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:cookiecutter_cookiecutter_pr1200",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.114396010991186,
+        "exec_seconds": 0.1772903430100996,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:cookiecutter_cookiecutter_pr1284",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 0.9777225859870669,
+        "exec_seconds": 0.36623140901792794,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:hugovk_pypistats_pr12",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 0.906447167013539,
+        "exec_seconds": 0.3319798579905182,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:hugovk_pypistats_pr13",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.05128721499932,
+        "exec_seconds": 0.16981380298966542,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:jborean93_smbprotocol_pr102",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 0.927330755017465,
+        "exec_seconds": 0.35171078401617706,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:jborean93_smbprotocol_pr125",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.1320724020188209,
+        "exec_seconds": 0.3622341000009328,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:msiemens_tinydb_pr104",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.0225407730031293,
+        "exec_seconds": 0.3590322509990074,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:msiemens_tinydb_pr11",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.0908328639925458,
+        "exec_seconds": 0.29022411798359826,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:open-feature_python-sdk_pr103",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.070738867012551,
+        "exec_seconds": 0.26784344197949395,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:open-feature_python-sdk_pr134",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.1114304279908538,
+        "exec_seconds": 0.3712013089971151,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:optimizely_python-sdk_pr104",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.0544932300108485,
+        "exec_seconds": 0.3497355690051336,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:open-feature_python-sdk_pr136",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.0658351769961882,
+        "exec_seconds": 0.36720516299828887,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:optimizely_python-sdk_pr107",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.0545973339758348,
+        "exec_seconds": 0.34314137502224185,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:optimizely_python-sdk_pr111",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.0626907359983306,
+        "exec_seconds": 0.3577198589919135,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:pyapp-kit_app-model_pr10",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.0085515340033453,
+        "exec_seconds": 0.3517789680045098,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:pyapp-kit_app-model_pr119",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.1141669249918777,
+        "exec_seconds": 0.34945147499092855,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:sciunto-org_python-bibtexparser_pr20",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 0.8957668429939076,
+        "exec_seconds": 0.4463085590105038,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:sciunto-org_python-bibtexparser_pr28",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.08925198201905,
+        "exec_seconds": 0.3441120960051194,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:scrapy_w3lib_pr118",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.1065180459991097,
+        "exec_seconds": 0.3602305950189475,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:scrapy_w3lib_pr119",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.2073822999955155,
+        "exec_seconds": 0.28646168400882743,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:singingwolfboy_flask-dance_pr121",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 0.903128885984188,
+        "exec_seconds": 0.4459220349963289,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:singingwolfboy_flask-dance_pr153",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 0.9635118400037754,
+        "exec_seconds": 0.3618765270221047,
+        "new_import_build": false
+      }
+    ]
+  },
+  "delta_compression_benchmark": [
+    {
+      "source": "aweaiteam/scaleswe:msiemens_tinydb_pr104",
+      "level": 3,
+      "original_compressed_bytes": 2421464,
+      "raw_bytes": 4802560,
+      "output_bytes": 2524611,
+      "cpu_seconds": 0.088889737,
+      "wall_seconds": 0.09858571100630797
+    },
+    {
+      "source": "aweaiteam/scaleswe:msiemens_tinydb_pr104",
+      "level": 6,
+      "original_compressed_bytes": 2421464,
+      "raw_bytes": 4802560,
+      "output_bytes": 2437102,
+      "cpu_seconds": 0.143172704,
+      "wall_seconds": 0.14417831899481826
+    },
+    {
+      "source": "aweaiteam/scaleswe:msiemens_tinydb_pr104",
+      "level": 9,
+      "original_compressed_bytes": 2421464,
+      "raw_bytes": 4802560,
+      "output_bytes": 2421464,
+      "cpu_seconds": 0.493264614,
+      "wall_seconds": 0.49776355898939073
+    },
+    {
+      "source": "aweaiteam/scaleswe:cookiecutter_cookiecutter_pr1284",
+      "level": 3,
+      "original_compressed_bytes": 12823320,
+      "raw_bytes": 28395520,
+      "output_bytes": 13409525,
+      "cpu_seconds": 0.48710144600000005,
+      "wall_seconds": 0.5052430309879128
+    },
+    {
+      "source": "aweaiteam/scaleswe:cookiecutter_cookiecutter_pr1284",
+      "level": 6,
+      "original_compressed_bytes": 12823320,
+      "raw_bytes": 28395520,
+      "output_bytes": 12903779,
+      "cpu_seconds": 0.8446377910000002,
+      "wall_seconds": 0.9037928039906546
+    },
+    {
+      "source": "aweaiteam/scaleswe:cookiecutter_cookiecutter_pr1284",
+      "level": 9,
+      "original_compressed_bytes": 12823320,
+      "raw_bytes": 28395520,
+      "output_bytes": 12823320,
+      "cpu_seconds": 2.875154856,
+      "wall_seconds": 2.9430335159995593
+    },
+    {
+      "source": "aweaiteam/scaleswe:singingwolfboy_flask-dance_pr121",
+      "level": 3,
+      "original_compressed_bytes": 87084542,
+      "raw_bytes": 177397760,
+      "output_bytes": 90564392,
+      "cpu_seconds": 3.297260776,
+      "wall_seconds": 3.479441331990529
+    },
+    {
+      "source": "aweaiteam/scaleswe:singingwolfboy_flask-dance_pr121",
+      "level": 6,
+      "original_compressed_bytes": 87084542,
+      "raw_bytes": 177397760,
+      "output_bytes": 87432137,
+      "cpu_seconds": 5.746177029999998,
+      "wall_seconds": 6.165474409994204
+    },
+    {
+      "source": "aweaiteam/scaleswe:singingwolfboy_flask-dance_pr121",
+      "level": 9,
+      "original_compressed_bytes": 87084542,
+      "raw_bytes": 177397760,
+      "output_bytes": 87084542,
+      "cpu_seconds": 16.802541848,
+      "wall_seconds": 17.989988922025077
+    }
+  ],
+  "compact_project_anchors": [
+    {
+      "anchor_filesystem_source": "docker.io/aweaiteam/scaleswe@sha256:f834c99f08002b7d4e09506c1e81feeec9148718e35e288c342f52085f2615e1",
+      "changed_regular_file_bytes": 26385923,
+      "components": [
+        {
+          "bytes": 772345856,
+          "digest": "sha256:ce1e20298e0506591a7059cde00391cd4ed0e67624b5bee4d13417a7bd6117e5"
+        },
+        {
+          "bytes": 35155968,
+          "digest": "sha256:cce9c20e51d3cbcad56ad65d69f2686e0e21ddab7f12df26b394c5266a74ac93"
+        },
+        {
+          "bytes": 19271680,
+          "digest": "sha256:d8e7014906b48fce71106bcb1b199239949d436a871b46cdd9fdf90c260a46fa"
+        }
+      ],
+      "delta_compressed_bytes": 13653495,
+      "qualification": {
+        "actual_entries": 42556,
+        "certificate_key": "bfe29d1c01150bb3d5c688650484ff5ee077343f13593458c8eb9f2ce00aa2df",
+        "created_runtime_workspace": false,
+        "difference_count": 0,
+        "difference_sample": [],
+        "equivalent": true,
+        "excluded_runtime_files": [
+          "/.ucloud-init",
+          "/etc/hostname",
+          "/etc/hosts",
+          "/etc/resolv.conf"
+        ],
+        "excluded_runtime_trees": [
+          "/dev",
+          "/proc",
+          "/run",
+          "/sys",
+          "/tmp"
+        ],
+        "expected_entries": 42556,
+        "mode": "full_source_scan",
+        "runtime_contract_version": 3,
+        "scanner_output": "/tmp/ucloud-filesystem-proof.json.gz",
+        "timestamp_contract": "layout-1 mkfs -T 0; startup modifies root, etc and a newly created workspace"
+      },
+      "seconds": 157.67105633797473,
+      "source": "aweaiteam/scaleswe:cookiecutter_cookiecutter_pr1496",
+      "source_reference": "docker.io/aweaiteam/scaleswe@sha256:3c553a7b2aa83f87591c4fa1b8405cd419ef8736a4ed10729f099742526fa10c",
+      "status": "ready",
+      "timings": {
+        "end_to_end_ms": 51884,
+        "environment": {
+          "component_lookup_ms": 105.95200000000001,
+          "docker_pull_ms": 46285.773,
+          "erofs_bytes_built": 19271680,
+          "groups_built": 1,
+          "groups_reused": 2,
+          "layer_lock_wait_ms": 0.038,
+          "mkfs_ms": 140.557,
+          "oci_decompress_ms": 84.1383710012451,
+          "oci_download_bytes_actual": 13653495.0,
+          "oci_extract_ms": 0.15906999988146708,
+          "oci_transfer_ms": 13.083383998946374,
+          "prefix_component_probes": 2,
+          "prefix_components_reused": 2,
+          "preflight_misses": 1,
+          "preflight_ms": 453.404,
+          "publish_component_ms": 259.651,
+          "selective_fallback_whiteout": 1,
+          "selective_fallbacks": 1,
+          "selective_materialization_ms": 119.033,
+          "selective_subprocess_ms": 415.155,
+          "sign_ms": 47.355,
+          "squash_ms": 0.0,
+          "total_ms": 47786.636
+        },
+        "phases": {
+          "cache_prepare_ms": 15,
+          "cleanup_ms": 0,
+          "docker_build_and_push_ms": 725,
+          "finishing_wait_ms": 3,
+          "immutable_environment_ms": 51076
+        },
+        "preparation_ms": 15,
+        "queue_wait_ms": 8,
+        "total_ms": 51861
+      }
+    },
+    {
+      "anchor_filesystem_source": "docker.io/aweaiteam/scaleswe@sha256:f6992d61ea461d85f54ca617f03b4f80655980e3d898e8f0a51afffad6cd3bce",
+      "changed_regular_file_bytes": 18,
+      "components": [
+        {
+          "bytes": 772345856,
+          "digest": "sha256:ce1e20298e0506591a7059cde00391cd4ed0e67624b5bee4d13417a7bd6117e5"
+        },
+        {
+          "bytes": 15765504,
+          "digest": "sha256:faf3fc76904ac2dcf00e64973dffc7850ca00578b0f3c0328ae06801fb3cb95d"
+        },
+        {
+          "bytes": 4096,
+          "digest": "sha256:1e017b1f1e609aefd21355a87088db3cd3cdfdc595175e342a107ac08f1915a8"
+        }
+      ],
+      "delta_compressed_bytes": 446,
+      "qualification": {
+        "actual_entries": 41669,
+        "certificate_key": "c42a4f563d4392df5106e5043624b3906a0259fb3159f3da16547e4fb65170a2",
+        "created_runtime_workspace": false,
+        "difference_count": 0,
+        "difference_sample": [],
+        "equivalent": true,
+        "excluded_runtime_files": [
+          "/.ucloud-init",
+          "/etc/hostname",
+          "/etc/hosts",
+          "/etc/resolv.conf"
+        ],
+        "excluded_runtime_trees": [
+          "/dev",
+          "/proc",
+          "/run",
+          "/sys",
+          "/tmp"
+        ],
+        "expected_entries": 41669,
+        "mode": "full_source_scan",
+        "runtime_contract_version": 3,
+        "scanner_output": "/tmp/ucloud-filesystem-proof.json.gz",
+        "timestamp_contract": "layout-1 mkfs -T 0; startup modifies root, etc and a newly created workspace"
+      },
+      "seconds": 110.11516361800022,
+      "source": "aweaiteam/scaleswe:optimizely_python-sdk_pr102",
+      "source_reference": "docker.io/aweaiteam/scaleswe@sha256:f28a1df902dee5a44eac63c087802bfca19b0946d9857bb6a05936353d50859f",
+      "status": "ready",
+      "timings": {
+        "end_to_end_ms": 1718,
+        "environment": {
+          "component_lookup_ms": 6.516,
+          "docker_pull_skipped": 1,
+          "erofs_bytes_built": 4096,
+          "groups_built": 1,
+          "groups_reused": 2,
+          "layer_lock_wait_ms": 0.01,
+          "mkfs_ms": 11.699,
+          "oci_decompress_ms": 0.33447199984948384,
+          "oci_download_bytes": 446,
+          "oci_download_bytes_actual": 446.0,
+          "oci_extract_ms": 1.54990999999427,
+          "oci_layers_materialized": 1,
+          "oci_transfer_ms": 14.26408099996479,
+          "prefix_component_probes": 1,
+          "prefix_components_reused": 1,
+          "preflight_misses": 1,
+          "preflight_ms": 808.358,
+          "publish_component_ms": 171.558,
+          "selective_materialization_ms": 16.922,
+          "selective_materializations": 1,
+          "selective_subprocess_ms": 465.518,
+          "sign_ms": 0.519,
+          "squash_ms": 0.0,
+          "total_ms": 1045.97
+        },
+        "phases": {
+          "cache_prepare_ms": 10,
+          "cleanup_ms": 0,
+          "docker_build_and_push_ms": 490,
+          "finishing_wait_ms": 1,
+          "immutable_environment_ms": 1069
+        },
+        "preparation_ms": 30,
+        "queue_wait_ms": 16,
+        "total_ms": 1672
+      }
+    },
+    {
+      "anchor_filesystem_source": "docker.io/aweaiteam/scaleswe@sha256:f6992d61ea461d85f54ca617f03b4f80655980e3d898e8f0a51afffad6cd3bce",
+      "changed_regular_file_bytes": 18,
+      "components": [
+        {
+          "bytes": 772345856,
+          "digest": "sha256:ce1e20298e0506591a7059cde00391cd4ed0e67624b5bee4d13417a7bd6117e5"
+        },
+        {
+          "bytes": 15765504,
+          "digest": "sha256:faf3fc76904ac2dcf00e64973dffc7850ca00578b0f3c0328ae06801fb3cb95d"
+        },
+        {
+          "bytes": 4096,
+          "digest": "sha256:1e017b1f1e609aefd21355a87088db3cd3cdfdc595175e342a107ac08f1915a8"
+        }
+      ],
+      "delta_compressed_bytes": 449,
+      "qualification": {
+        "actual_entries": 41669,
+        "certificate_key": "c42a4f563d4392df5106e5043624b3906a0259fb3159f3da16547e4fb65170a2",
+        "certificate_reference": "10.42.0.2:5000/ucloud-managed/shared-task-f154f65b22a3d4406c9907f60870-83fece167444:latest@sha256:868517fa26cca1b9ff6bd5545240cf9aa87fd3da95b43667a98f422c62fab094",
+        "created_runtime_workspace": false,
+        "difference_count": 0,
+        "difference_sample": [],
+        "equivalent": true,
+        "excluded_runtime_files": [
+          "/.ucloud-init",
+          "/etc/hostname",
+          "/etc/hosts",
+          "/etc/resolv.conf"
+        ],
+        "excluded_runtime_trees": [
+          "/dev",
+          "/proc",
+          "/run",
+          "/sys",
+          "/tmp"
+        ],
+        "expected_entries": 41669,
+        "mode": "identical_filesystem_certificate",
+        "runtime_contract_version": 3,
+        "scanner_output": "/tmp/ucloud-filesystem-proof.json.gz",
+        "timestamp_contract": "layout-1 mkfs -T 0; startup modifies root, etc and a newly created workspace"
+      },
+      "seconds": 36.279112135001924,
+      "source": "aweaiteam/scaleswe:optimizely_python-sdk_pr128",
+      "source_reference": "docker.io/aweaiteam/scaleswe@sha256:826867a8e3a07f524e55173cf152e8a06a723fbbec550fe17fbe041494507b47",
+      "status": "ready",
+      "timings": {
+        "end_to_end_ms": 1639,
+        "environment": {
+          "component_lookup_ms": 2.293,
+          "docker_pull_skipped": 1,
+          "erofs_bytes_built": 4096,
+          "groups_built": 1,
+          "groups_reused": 2,
+          "layer_lock_wait_ms": 0.01,
+          "mkfs_ms": 11.96,
+          "oci_decompress_ms": 0.36455999907047953,
+          "oci_download_bytes": 449,
+          "oci_download_bytes_actual": 449.0,
+          "oci_extract_ms": 1.6558759998588357,
+          "oci_layers_materialized": 1,
+          "oci_transfer_ms": 9.842146000664798,
+          "prefix_component_probes": 1,
+          "prefix_components_reused": 1,
+          "preflight_misses": 1,
+          "preflight_ms": 757.451,
+          "publish_component_ms": 139.706,
+          "selective_materialization_ms": 12.628,
+          "selective_materializations": 1,
+          "selective_subprocess_ms": 465.14,
+          "sign_ms": 0.43,
+          "squash_ms": 0.0,
+          "total_ms": 959.3
+        },
+        "phases": {
+          "cache_prepare_ms": 10,
+          "cleanup_ms": 0,
+          "docker_build_and_push_ms": 470,
+          "finishing_wait_ms": 2,
+          "immutable_environment_ms": 982
+        },
+        "preparation_ms": 31,
+        "queue_wait_ms": 17,
+        "total_ms": 1591
+      }
+    }
+  ],
+  "compression_canary": [
+    {
+      "changed_regular_file_bytes": 22539699,
+      "components": [
+        {
+          "bytes": 772345856,
+          "digest": "sha256:ce1e20298e0506591a7059cde00391cd4ed0e67624b5bee4d13417a7bd6117e5"
+        },
+        {
+          "bytes": 15765504,
+          "digest": "sha256:faf3fc76904ac2dcf00e64973dffc7850ca00578b0f3c0328ae06801fb3cb95d"
+        }
+      ],
+      "delta_compressed_bytes": 10623650,
+      "qualification": {
+        "actual_entries": 41669,
+        "certificate_key": "4ce9414c23041e06243fbca21d8cd77042c67d9f857f6b7379b9a592cfdea33d",
+        "created_runtime_workspace": false,
+        "difference_count": 0,
+        "difference_sample": [],
+        "equivalent": true,
+        "excluded_runtime_files": [
+          "/.ucloud-init",
+          "/etc/hostname",
+          "/etc/hosts",
+          "/etc/resolv.conf"
+        ],
+        "excluded_runtime_trees": [
+          "/dev",
+          "/proc",
+          "/run",
+          "/sys",
+          "/tmp"
+        ],
+        "expected_entries": 41669,
+        "mode": "full_source_scan",
+        "runtime_contract_version": 3,
+        "scanner_output": "/tmp/ucloud-filesystem-proof.json.gz",
+        "timestamp_contract": "layout-1 mkfs -T 0; startup modifies root, etc and a newly created workspace"
+      },
+      "seconds": 153.43592507299036,
+      "source": "aweaiteam/scaleswe:optimizely_python-sdk_pr119",
+      "source_reference": "docker.io/aweaiteam/scaleswe@sha256:e621b2e2f7ec1eea1fa7622b6d2f3b4a67b72faa431198c958e82a0f9eaef161",
+      "status": "ready",
+      "timings": {
+        "end_to_end_ms": 67846,
+        "environment": {
+          "component_lookup_ms": 86.62899999999999,
+          "docker_pull_ms": 46965.322,
+          "erofs_bytes_built": 15765504,
+          "groups_built": 1,
+          "groups_reused": 1,
+          "layer_lock_wait_ms": 0.034999999999999996,
+          "mkfs_ms": 136.778,
+          "oci_decompress_ms": 68.47931400022844,
+          "oci_download_bytes_actual": 10623650.0,
+          "oci_extract_ms": 0.1759000000447486,
+          "oci_transfer_ms": 11.046402000147282,
+          "preflight_misses": 1,
+          "preflight_ms": 463.823,
+          "publish_component_ms": 151.296,
+          "selective_fallback_whiteout": 1,
+          "selective_fallbacks": 1,
+          "selective_materialization_ms": 97.722,
+          "selective_subprocess_ms": 415.507,
+          "sign_ms": 35.428,
+          "squash_ms": 0.0,
+          "total_ms": 48344.102
+        },
+        "phases": {
+          "cache_prepare_ms": 9,
+          "cleanup_ms": 0,
+          "docker_build_and_push_ms": 575,
+          "finishing_wait_ms": 17274,
+          "immutable_environment_ms": 49926
+        },
+        "preparation_ms": 15,
+        "queue_wait_ms": 9,
+        "total_ms": 67822
+      }
+    }
+  ],
+  "remaining_compact_alias_qualification": {
+    "schema": 1,
+    "images": 23,
+    "workers": 4,
+    "passed": 23,
+    "elapsed_seconds": 11.97799686100916,
+    "create_p50_seconds": 1.2610268250282388,
+    "create_p95_seconds": 1.5260018359986134,
+    "create_max_seconds": 1.5376740049978253,
+    "results": [
+      {
+        "source": "aweaiteam/scaleswe:argyle-engineering_pyap_pr14",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.4839500169910025,
+        "exec_seconds": 0.4264005770091899,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:argyle-engineering_pyap_pr15",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.4300124139990658,
+        "exec_seconds": 0.3506988439767156,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:cookiecutter_cookiecutter_pr1468",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.4861941039853264,
+        "exec_seconds": 0.385760797013063,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:cookiecutter_cookiecutter_pr1493",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.5130058999930043,
+        "exec_seconds": 0.4199260099849198,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:hugovk_pypistats_pr14",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.5376740049978253,
+        "exec_seconds": 0.4262963919900358,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:hugovk_pypistats_pr15",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.3305016919912305,
+        "exec_seconds": 0.3642689539992716,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:jborean93_smbprotocol_pr13",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.5260018359986134,
+        "exec_seconds": 0.36629604201880284,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:jborean93_smbprotocol_pr138",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.268120254011592,
+        "exec_seconds": 0.43035080801928416,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:msiemens_tinydb_pr114",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.1781531449814793,
+        "exec_seconds": 0.375829689000966,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:msiemens_tinydb_pr12",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.1450282970035914,
+        "exec_seconds": 0.3429767380002886,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:open-feature_python-sdk_pr139",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.2610268250282388,
+        "exec_seconds": 0.34256320699932985,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:optimizely_python-sdk_pr113",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.1574036169913597,
+        "exec_seconds": 0.34805592699558474,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:pyapp-kit_app-model_pr130",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.196921858994756,
+        "exec_seconds": 0.35882972698891535,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:pyapp-kit_app-model_pr133",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.199606012989534,
+        "exec_seconds": 0.38231082502170466,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:sciunto-org_python-bibtexparser_pr29",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.3684589399781544,
+        "exec_seconds": 0.3366111110080965,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:sciunto-org_python-bibtexparser_pr290",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.2380330179876182,
+        "exec_seconds": 0.37686683097854257,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:scrapy_w3lib_pr126",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.3406737920013256,
+        "exec_seconds": 0.266179853992071,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:scrapy_w3lib_pr127",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.2751814299845137,
+        "exec_seconds": 0.3708671409985982,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:singingwolfboy_flask-dance_pr161",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.2215478959842585,
+        "exec_seconds": 0.3579524959786795,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:singingwolfboy_flask-dance_pr162",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.1180032470147125,
+        "exec_seconds": 0.36563500901684165,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:optimizely_python-sdk_pr119",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.1903998669877183,
+        "exec_seconds": 0.3565257670124993,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:cookiecutter_cookiecutter_pr1496",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.2291571290115826,
+        "exec_seconds": 0.38414064998505637,
+        "new_import_build": false
+      },
+      {
+        "source": "aweaiteam/scaleswe:optimizely_python-sdk_pr128",
+        "families": [
+          "ScaleSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.238851058005821,
+        "exec_seconds": 0.26779108698247,
+        "new_import_build": false
+      }
+    ]
   }
 }

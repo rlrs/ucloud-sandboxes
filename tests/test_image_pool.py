@@ -416,3 +416,23 @@ class ImagePoolTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RegistryHealthGateTests(unittest.TestCase):
+    def test_outage_is_cached_then_recovers_without_spending_source_requests(self):
+        from prepare_image_pool import RegistryHealthGate
+        now = [0.0]
+        calls = []
+        def probe():
+            calls.append(now[0])
+            if now[0] == 0:
+                raise OSError('registry unavailable')
+            return True
+        gate = RegistryHealthGate('http://registry', clock=lambda: now[0], probe=probe)
+        self.assertFalse(gate.ready())
+        now[0] = 4
+        self.assertFalse(gate.ready())
+        self.assertEqual(calls, [0])
+        now[0] = 5
+        self.assertTrue(gate.ready())
+        self.assertEqual(calls, [0, 5])

@@ -31,6 +31,29 @@ ACCEPT = ",".join(("application/vnd.oci.image.index.v1+json",
 GIB = 1024 ** 3
 
 
+class RegistryHealthGate:
+    """Bound local outage fallout before spending work on more candidates."""
+
+    def __init__(self, url, *, clock=time.monotonic, probe=None):
+        self.url, self.clock, self.probe = url.rstrip('/') + '/v2/', clock, probe
+        self.lock = threading.Lock()
+        self.checked_until, self.healthy = 0, False
+
+    def ready(self):
+        with self.lock:
+            if self.clock() >= self.checked_until:
+                try:
+                    if self.probe is not None:
+                        self.healthy = self.probe() is True
+                    else:
+                        with request.urlopen(self.url, timeout=5) as response:
+                            self.healthy = response.status == 200
+                except (OSError, ValueError):
+                    self.healthy = False
+                self.checked_until = self.clock() + 5
+            return self.healthy
+
+
 def retry_delay(headers, attempt, now):
     """Honor registry cooldowns, including HTTP-date Retry-After values."""
     fallback = min(900, 60 * 2 ** attempt)
@@ -426,6 +449,7 @@ def main():
     claim_root = config.control_state_file().parent / "image-pool-locks"
     claim_root.mkdir(parents=True, exist_ok=True)
     resolve = SourceResolver(claim_root)
+    registry_health = RegistryHealthGate(config.registry_url)
     plan = json.loads((args.root / "plan.json").read_text())
     if plan.get("schema") != 1:
         raise ValueError("unsupported pool plan")
@@ -481,6 +505,8 @@ def main():
         reservation = 0
         client = sdk.SandboxClient(args.gateway, api_token=token, timeout_seconds=120)
         try:
+            while not registry_health.ready():
+                time.sleep(5)
             if receipt["source"] != source:
                 raise ValueError("receipt source mismatch")
             if "resolved" not in receipt:

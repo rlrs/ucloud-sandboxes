@@ -1,0 +1,119 @@
+{
+  "scope": "Read-only diagnosis of real production workload 2026-09-30T04:50Z through05:12Z. No production mutations.",
+  "confirmed_http_failures": {
+    "sandbox_create_504_responses": 32,
+    "window": [
+      "2026-09-30T05:00:50Z",
+      "2026-09-30T05:01:06Z"
+    ],
+    "unique_sandbox_count_unknown": true,
+    "build_endpoint_503_responses": 6176,
+    "build_503_are_retryable_admission_responses_not_terminal_build_failures": true
+  },
+  "captured_deadline_failure": {
+    "sandbox_id": "d6d194059d3b46fbac1739261995c51b",
+    "created_at": "2026-09-30T05:00:56.448944Z",
+    "completed_at": "2026-09-30T05:10:57.878711Z",
+    "attempts": 345,
+    "status": 504,
+    "error_code": "placement_deadline_expired",
+    "image": "aweaiteam/scaleswe:materialsvirtuallab_monty_pr152",
+    "matching_import_id": "import-d2e4a2f335c1f5741b6c9642fa08d9b119deef07",
+    "first_build_started_at": "2026-09-30T05:03:23.794112Z",
+    "first_build_finished_at": "2026-09-30T05:11:37.062891Z",
+    "build_seconds": 493.285,
+    "build_and_push_seconds": 266.842,
+    "environment_seconds": 226.379279,
+    "docker_pull_seconds": 140.31934,
+    "erofs_bytes": 10546360320,
+    "redundant_followup_builds": 14
+  },
+  "build_history": {
+    "records": 103,
+    "eventually_succeeded": 103,
+    "distinct_images": 61,
+    "import_build_records": 60,
+    "distinct_import_images": 18,
+    "repeat_import_records": 42,
+    "distinct_images_requiring_docker_pull": 40,
+    "selective_fallback_compressed_budget_count": 8,
+    "selective_fallback_whiteout_count": 7,
+    "limitation": "Only terminal states observed by gateway are persisted; eventual success does not establish client success or no unseen failures.",
+    "repeat_import_service_seconds": 359.701,
+    "repeat_import_finishing_wait_seconds": 246.355,
+    "repeat_imports_built_new_erofs_groups": 0
+  },
+  "capacity": {
+    "pending_image_demand_peak": 85,
+    "pending_sandbox_create_peak": 100,
+    "max_builder_nodes": 4,
+    "max_sandbox_nodes": 3,
+    "builder_cpu_peak_cores_per_8": 7.99,
+    "prewarmed_builders_retired_window": [
+      "2026-09-30T04:32:43Z",
+      "2026-09-30T04:34:12Z"
+    ],
+    "replacement_builders_first_ready_window": [
+      "2026-09-30T04:51:54Z",
+      "2026-09-30T04:52:13Z"
+    ],
+    "worker_memory_limitation": "Autoscaler reported configured memory/headroom deficits blocked by max_nodes=3 despite substantial available physical RAM; reservations and physical use are different quantities."
+  },
+  "gateway_pressure": {
+    "cpu_window": [
+      "2026-09-30T04:50:15Z",
+      "2026-09-30T05:00:10Z"
+    ],
+    "busy_cores_mean": 3.14,
+    "cpu_count": 4,
+    "cpu_psi_some_percent": 65.7,
+    "registry_write_mib_per_second_hot_windows": [
+      123.62,
+      125.85
+    ],
+    "registry_await_ms_hot_windows": [
+      48.2,
+      67.6
+    ],
+    "root_disk_await_ms_0500_0510": 885.22,
+    "root_disk_average_queue_0500_0510": 225.14,
+    "postgres_serialization_aborts": 4087,
+    "postgres_deadlocks": 1,
+    "limitation": "Retained host intervals are approximately10minutes; cannot assign precise per-request delay fractions. PostgreSQL conflicts are retried by code, not all exposed failures."
+  },
+  "excluded_or_unproved": {
+    "service_restarts_since_deploy": 0,
+    "gateway_oom_evidence": false,
+    "retained_sandbox_losses": 0,
+    "retained_exec_losses": 0,
+    "prune_started_at": "2026-09-30T05:03:22.801Z",
+    "prune_explains_initial_504_onset": false,
+    "training_runner_terminal_error_unavailable": true
+  },
+  "qualification_gap": "Previous shared-layer benchmark did not reproduce the heterogeneous cold-image import burst, expired warm capacity and concurrent real sandbox traffic.",
+  "evidence_files_sha256": {
+    "metric-detail.json": "c1985bf1cc79b26fc2fc5efa83ade829daec483aa5e84cdf9822f192575f125e",
+    "failed-creates.jsonl": "451c5260372546eeff006069403de1d85eaceea4cd87a3ceed87151e413a153a",
+    "system-evidence.json": "2e655354c2f036e67fd9922e3c37d18b14ba1ead760ed1ada12756b785506bc4",
+    "read-metric-summary.py": "b81426b91fe48495bdd84a84e3668e20c5205ae0a63d85b9d3c458a2a916c985",
+    "host-findings.json": "9725ad6ca98abf9a8bb6233b35145ed2473e47627e462e0dedd619ef67d8e41c",
+    "history.json": "785be3acb47296d54e237f1f8eabd89808e9eb76056f38940281473e8845c260",
+    "lifecycle.jsonl": "5c44142658d1c48886d8a5a1f75fdfada645cd231762b659de44f9fc0dcdc6d9",
+    "read-lifecycle.sql": "7bafa22423cd15dd001ecd7427bb0ec3b9fe089d2edd6991e231580fbb2c796d",
+    "host-findings.md": "935674cb612935aa7a7cf20b2137cd4f1f0de1bd8702d7cf545ae2c8b2ad8424",
+    "journal-warning.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "sysstat-sa29-late.json": "3bbc79092ceff04fa9f1bbd0952f5f5a731bf45dd30f4b5149cb3be552a52f56",
+    "read-events.py": "790c2b109d1bbe6c08df79706285a5c697d7d0d3b9e4c913d99e735bb83fb8b2",
+    "database-routes-detail.json": "5e64b7ad173e4f264628c720223d65eed0443272233b21a7e3e62ea72cb2e32e",
+    "sysstat-sa30.json": "b01abf4092a52afcc188fb456ba4817610bf1bbbeb06ae7827b4135e84250959",
+    "events.json": "5946c6a1886eeafac321d93b4cf2c74da28f72b051bc3aadf93a8615d8fd3b30",
+    "read-failed-create-image.sql": "a7ff43b130ba89ad6931924928497627f426a071d838d14fbd6974f12bc0508d",
+    "gateway-placement-incident.jsonl": "6ceafc13ef4ce0b1aee49c480c46a37b3b9853910dd41499e2e6a41d478641db",
+    "read-history.py": "876e7ac219362eea760ba56894541a5db920d01ad2ca1ee1ed94485fa87a7eb1",
+    "read-failed-create.sql": "fef156e10a70e11af32d2457ffa9099afaad02cab1174a04ec26d6ff61ce133c",
+    "cpu-network-retained.txt": "86823f1a59a2bdbf8d95f026bae6659f5696ba36ca3ae6681f122b1edd476f2a",
+    "maintenance-workload.json": "21ce0348f6420bdda62490199617af9ec3d003da57faeb105bfba59867ce93fb",
+    "http-db-evidence.json": "a4dc13e2d5ccee9d614c3e5a8304181bb6f2e9ba8366eb70751292678ba1bcd4",
+    "failed-create-image.jsonl": "3dd6c8a03123eaf5ac542b905e2e2d6604167525ea96eb7b612691e8a4d8a30a"
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "configuration_changed_keys": [
+    "node_package_root"
+  ],
+  "dependencies_unchanged": true,
+  "deployed_at": "2026-09-29T22:59:59Z",
+  "health": {
+    "database_pools": {
+      "database_pool": {
+        "connections_ms": 2,
+        "connections_num": 1,
+        "pool_available": 1,
+        "pool_max": 16,
+        "pool_min": 1,
+        "pool_size": 1,
+        "requests_num": 7,
+        "requests_waiting": 0,
+        "usage_ms": 11
+      },
+      "lifecycle_database_pool": {
+        "connections_ms": 3,
+        "connections_num": 1,
+        "pool_available": 1,
+        "pool_max": 4,
+        "pool_min": 1,
+        "pool_size": 1,
+        "requests_num": 16,
+        "requests_waiting": 0,
+        "usage_ms": 18
+      }
+    },
+    "gateway_https": true,
+    "metrics_ok": true,
+    "relay_https": true,
+    "relay_storage_budget_bytes": 68719476736
+  },
+  "native_bundle_files_unchanged": true,
+  "node_package_root": "/work/ucloud-sandboxes/registry-pulls-20260930-r1",
+  "rollback": "/work/ucloud-sandboxes/registry-pulls-20260930-r1/rollback",
+  "staging_receipt_sha256": "cc637c13d4a6360feb4b5d8d3245165700a4ccb7d092732862910793960b34ec",
+  "wheel_sha256": "3f29209df80e27d3aad2d1edb3c1677ce05bb44d50b78da1797b6b0a212c13f3"
+}

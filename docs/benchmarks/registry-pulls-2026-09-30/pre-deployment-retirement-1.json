@@ -1,0 +1,94 @@
+{
+  "provider": "hetzner",
+  "mutations": 0,
+  "all_absent": false,
+  "verified_at": "2026-09-29T22:57:11.171200+00:00",
+  "nodes": [
+    {
+      "id": "168016286",
+      "http_status": 404,
+      "absent": true
+    },
+    {
+      "id": "168016287",
+      "http_status": 404,
+      "absent": true
+    },
+    {
+      "id": "168016314",
+      "http_status": 404,
+      "absent": true
+    },
+    {
+      "id": "168016315",
+      "http_status": 200,
+      "absent": false
+    },
+    {
+      "id": "168016994",
+      "http_status": 404,
+      "absent": true
+    },
+    {
+      "id": "168017780",
+      "http_status": 404,
+      "absent": true
+    },
+    {
+      "id": "168018553",
+      "http_status": 404,
+      "absent": true
+    }
+  ],
+  "qualification_submissions": [
+    {
+      "id": "168016286",
+      "submitted_at": "2026-09-29T22:15:00.172657+00:00",
+      "role": "builder"
+    },
+    {
+      "id": "168016287",
+      "submitted_at": "2026-09-29T22:15:00.172773+00:00",
+      "role": "builder"
+    },
+    {
+      "id": "168016314",
+      "submitted_at": "2026-09-29T22:15:05.844094+00:00",
+      "role": "builder"
+    },
+    {
+      "id": "168016315",
+      "submitted_at": "2026-09-29T22:15:05.844245+00:00",
+      "role": "builder"
+    },
+    {
+      "id": "168016994",
+      "submitted_at": "2026-09-29T22:24:27.915412+00:00",
+      "role": "sandbox"
+    },
+    {
+      "id": "168017780",
+      "submitted_at": "2026-09-29T22:36:09.476798+00:00",
+      "role": "sandbox"
+    },
+    {
+      "id": "168018553",
+      "submitted_at": "2026-09-29T22:46:22.727791+00:00",
+      "role": "sandbox"
+    }
+  ],
+  "window_start": "2026-09-29T22:14:55.622731+00:00",
+  "window_end": "2026-09-29T22:51:53.129576+00:00",
+  "live": {
+    "fleet_count": 1,
+    "fleet_ids": [
+      "168016315"
+    ],
+    "sandbox_count": 0,
+    "active_builds": 0,
+    "prepared_builder_count": 0,
+    "prepared_sandbox_count": 0,
+    "pending_count": 0,
+    "pending_image_builds": 0
+  }
+}

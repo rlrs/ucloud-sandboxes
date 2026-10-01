@@ -1,0 +1,25 @@
+{
+  "after": {
+    "finishing_capacity": 2,
+    "job_id": "168008411",
+    "node_epoch": "f51d239504784ae6b08c2e5b3bb04dd0",
+    "runtime_root": "/work/builder-pipeline-upgrade-20260929-r2/site-packages"
+  },
+  "before": {
+    "active_builds": 0,
+    "admission_open": true,
+    "advertised_capacity": null,
+    "at": "2026-09-29T21:04:33Z",
+    "draining": false,
+    "images_sha256": "8a7380f99e99680c32da071e1a10353668633cf980e9921954ec5a82e7b10f41",
+    "job_id": "168008411",
+    "node_epoch": "f51d239504784ae6b08c2e5b3bb04dd0",
+    "runtime_root": "/var/cache/ucloud-sandboxes/init-packages/c3691624b2588fa5bdf263a802116ba3fc1dc11f524d1224e6b7585026a45cac/agent-runtime/site-packages",
+    "service": "ucloud-sandbox-node.service",
+    "unit_sha256": "255134ac96cb4eac28b41821366a42da0e91118d53c39ab63b38538eb2cdd6ed"
+  },
+  "complete": true,
+  "runtime_root": "/work/builder-pipeline-upgrade-20260929-r2/site-packages",
+  "service_changed": true,
+  "wheel_sha256": "405516727b99eed510a0bcfcee39203cb69f67a4b56ad7c68bc5d3eaa672e628"
+}

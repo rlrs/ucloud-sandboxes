@@ -1,0 +1,27 @@
+{
+  "executed": true,
+  "status": "completed",
+  "complete": true,
+  "explicit_user_approval": "Yes, delete those test images",
+  "deleted_manifests": 240,
+  "deleted_aliases": 480,
+  "images_retained": 0,
+  "all_owned_manifests_absent_verified": true,
+  "exact_stale_smoke_pull_leases_released": 3,
+  "shared_cache_components_blobs_preserved": true,
+  "automatic_approval_review": "Initial deletion attempt was rejected. No execution occurred before subsequent explicit user approval.",
+  "first_apply": "image-cleanup-applied.json",
+  "resume": "image-cleanup-resumed.json",
+  "lease_release": "smoke-pull-lease-released.json",
+  "idle_after": {
+    "sandbox_count": 0,
+    "active_builds": 0,
+    "live_nodes_checked": 0
+  },
+  "finished_at": "2026-09-29T21:39:12.577695+00:00",
+  "receipt_sha256": {
+    "image-cleanup-applied.json": "f3abd65c363ef0986fafc597901264a60fa957611ec32a9a668e94018a0f24da",
+    "image-cleanup-resumed.json": "79e5a56a995fb968a6cecd2e8d1ea8b692861280db6c88af33613731d3bae1c2",
+    "smoke-pull-lease-released.json": "0143df2a9329f78a2e00adff2d71eda48670690e035a3d310b36ac0b8af0c09f"
+  }
+}

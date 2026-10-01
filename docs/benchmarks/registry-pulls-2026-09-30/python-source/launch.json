@@ -1,0 +1,15 @@
+{
+  "at": "2026-09-29T22:18:51.642979+00:00",
+  "image_id": "registry-pull-canary-d81f2c41758a-045",
+  "expected_nodes": [
+    "168016286",
+    "168016287",
+    "168016314",
+    "168016315"
+  ],
+  "cases_sha256": "ff3e4555fc44dbbaf131f9ed610f03b8400ee3d4a1c1ddecf77d3a7c5d7d4704",
+  "source_manifest": "sha256:85b141c8f4642fe36d4cabe46e18a73494ce9c9b5224412b2ecc7c26d493875d",
+  "source_config": "sha256:e3eabd6dfdb2c0bbc2c8c6119040d630e60a01cd5d4017b2cbec02ddd4e47777",
+  "sdk_sha256": "520b15d66c828193179e86a1521d2871c1e08bfef2227d0bc7a1036445fd8957",
+  "helper_sha256": "d349f7b6db9a566c0eec091b46421caf0851587d32e9e4ef3afcec4300ec2702"
+}

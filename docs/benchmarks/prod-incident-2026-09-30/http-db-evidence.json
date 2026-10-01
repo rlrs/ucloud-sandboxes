@@ -1,0 +1,1111 @@
+{
+  "nginx_route_status_counts": {
+    "GET /healthz 200": 1,
+    "GET other 200": 15943,
+    "GET other 401": 27,
+    "GET other 308": 40,
+    "POST other 401": 12,
+    "GET other 400": 4,
+    "OPTIONS other 308": 2,
+    "EXHX other 308": 1,
+    "HEAD other 308": 1,
+    "POST other 308": 1,
+    "POST builders 201": 2,
+    "POST other 201": 360,
+    "GET image-build-status 404": 80,
+    "GET other 404": 244,
+    "PUT other 201": 85,
+    "POST images-other 503": 6176,
+    "POST sandboxes 201": 507,
+    "POST sandbox-exec 201": 5809,
+    "PUT sandboxes 200": 2123,
+    "POST sandboxes 200": 217,
+    "GET sandboxes 200": 102281,
+    "POST other 200": 7452,
+    "PUT other 200": 174,
+    "DELETE other 200": 162,
+    "POST images-other 202": 66,
+    "GET image-build-status 200": 2198,
+    "DELETE sandboxes 200": 426,
+    "PUT sandboxes 503": 36,
+    "GET sandboxes 503": 8,
+    "POST sandboxes 503": 4,
+    "POST sandboxes 504": 32,
+    "POST other 410": 13,
+    "POST images-other 499": 1,
+    "POST sandboxes 409": 1,
+    "POST other 503": 9,
+    "GET other 499": 187,
+    "POST sandboxes 499": 129,
+    "DELETE sandboxes 499": 3,
+    "GET sandboxes 499": 1,
+    "DELETE builders 200": 1,
+    "OPTIONS other 501": 2,
+    "JWRI other 501": 1,
+    "HEAD other 501": 1
+  },
+  "nginx_minutes": {
+    "2026-09-29T23:11": {
+      "GET /healthz 200": 1,
+      "GET other 200": 1
+    },
+    "2026-09-29T23:21": {
+      "GET other 401": 1
+    },
+    "2026-09-29T23:28": {
+      "GET other 308": 1
+    },
+    "2026-09-29T23:35": {
+      "GET other 200": 1,
+      "GET other 401": 1
+    },
+    "2026-09-29T23:36": {
+      "GET other 401": 1
+    },
+    "2026-09-29T23:49": {
+      "GET other 401": 1
+    },
+    "2026-09-29T23:54": {
+      "GET other 308": 1
+    },
+    "2026-09-29T23:55": {
+      "GET other 308": 1
+    },
+    "2026-09-29T23:56": {
+      "GET other 308": 1
+    },
+    "2026-09-29T23:57": {
+      "GET other 401": 1
+    },
+    "2026-09-30T00:02": {
+      "GET other 308": 1
+    },
+    "2026-09-30T00:04": {
+      "GET other 308": 2,
+      "GET other 200": 1
+    },
+    "2026-09-30T00:05": {
+      "GET other 308": 1
+    },
+    "2026-09-30T00:07": {
+      "GET other 308": 1
+    },
+    "2026-09-30T00:11": {
+      "GET other 308": 1
+    },
+    "2026-09-30T00:12": {
+      "GET other 308": 1,
+      "GET other 200": 1
+    },
+    "2026-09-30T00:19": {
+      "GET other 401": 1
+    },
+    "2026-09-30T00:23": {
+      "GET other 200": 1
+    },
+    "2026-09-30T00:28": {
+      "GET other 401": 1
+    },
+    "2026-09-30T00:32": {
+      "GET other 308": 1
+    },
+    "2026-09-30T00:46": {
+      "GET other 401": 1
+    },
+    "2026-09-30T01:26": {
+      "GET other 401": 1
+    },
+    "2026-09-30T01:30": {
+      "GET other 308": 2,
+      "GET other 200": 1
+    },
+    "2026-09-30T01:36": {
+      "GET other 200": 1
+    },
+    "2026-09-30T01:54": {
+      "GET other 200": 1,
+      "POST other 401": 1
+    },
+    "2026-09-30T02:13": {
+      "GET other 308": 1
+    },
+    "2026-09-30T02:24": {
+      "GET other 400": 1
+    },
+    "2026-09-30T02:26": {
+      "GET other 308": 1
+    },
+    "2026-09-30T02:38": {
+      "GET other 400": 1
+    },
+    "2026-09-30T02:40": {
+      "GET other 200": 1,
+      "GET other 401": 1,
+      "GET other 308": 2
+    },
+    "2026-09-30T02:46": {
+      "GET other 308": 1
+    },
+    "2026-09-30T02:47": {
+      "GET other 200": 1
+    },
+    "2026-09-30T03:16": {
+      "GET other 308": 1
+    },
+    "2026-09-30T03:29": {
+      "GET other 308": 1,
+      "GET other 200": 1
+    },
+    "2026-09-30T03:38": {
+      "GET other 400": 1,
+      "POST other 401": 1
+    },
+    "2026-09-30T03:42": {
+      "GET other 200": 2
+    },
+    "2026-09-30T03:51": {
+      "GET other 401": 1,
+      "GET other 400": 1
+    },
+    "2026-09-30T03:58": {
+      "GET other 308": 4,
+      "OPTIONS other 308": 2,
+      "EXHX other 308": 1,
+      "HEAD other 308": 1,
+      "POST other 308": 1
+    },
+    "2026-09-30T04:10": {
+      "GET other 308": 1
+    },
+    "2026-09-30T04:12": {
+      "GET other 308": 1
+    },
+    "2026-09-30T04:23": {
+      "GET other 308": 1
+    },
+    "2026-09-30T04:26": {
+      "POST builders 201": 1,
+      "POST other 201": 1
+    },
+    "2026-09-30T04:27": {
+      "POST other 201": 1,
+      "GET other 200": 3
+    },
+    "2026-09-30T04:28": {
+      "GET other 200": 6
+    },
+    "2026-09-30T04:29": {
+      "GET other 200": 6,
+      "GET other 308": 4
+    },
+    "2026-09-30T04:30": {
+      "GET other 200": 6
+    },
+    "2026-09-30T04:31": {
+      "GET other 200": 6
+    },
+    "2026-09-30T04:32": {
+      "GET other 200": 6
+    },
+    "2026-09-30T04:33": {
+      "GET other 200": 6
+    },
+    "2026-09-30T04:34": {
+      "GET other 200": 6
+    },
+    "2026-09-30T04:35": {
+      "GET other 200": 1
+    },
+    "2026-09-30T04:36": {
+      "GET other 200": 6
+    },
+    "2026-09-30T04:37": {
+      "GET other 200": 6
+    },
+    "2026-09-30T04:38": {
+      "GET other 200": 6
+    },
+    "2026-09-30T04:39": {
+      "GET other 200": 4
+    },
+    "2026-09-30T04:40": {
+      "GET other 200": 2
+    },
+    "2026-09-30T04:41": {
+      "GET other 200": 6
+    },
+    "2026-09-30T04:42": {
+      "GET other 200": 6
+    },
+    "2026-09-30T04:43": {
+      "GET other 200": 6
+    },
+    "2026-09-30T04:44": {
+      "GET other 200": 6
+    },
+    "2026-09-30T04:45": {
+      "GET other 200": 6
+    },
+    "2026-09-30T04:46": {
+      "GET other 200": 6
+    },
+    "2026-09-30T04:47": {
+      "GET other 200": 7
+    },
+    "2026-09-30T04:48": {
+      "GET other 200": 6
+    },
+    "2026-09-30T04:49": {
+      "GET other 200": 6
+    },
+    "2026-09-30T04:50": {
+      "GET other 200": 51,
+      "GET image-build-status 404": 14,
+      "GET other 404": 14,
+      "PUT other 201": 14,
+      "POST images-other 503": 48,
+      "POST sandboxes 201": 11,
+      "POST sandbox-exec 201": 45,
+      "PUT sandboxes 200": 12,
+      "POST sandboxes 200": 1,
+      "GET sandboxes 200": 1
+    },
+    "2026-09-30T04:51": {
+      "POST images-other 503": 926,
+      "GET image-build-status 404": 40,
+      "GET other 404": 41,
+      "PUT other 201": 40,
+      "GET other 200": 289,
+      "POST sandbox-exec 201": 24,
+      "PUT sandboxes 200": 18,
+      "POST other 201": 12,
+      "POST sandboxes 201": 13,
+      "GET sandboxes 200": 127,
+      "POST other 200": 113,
+      "PUT other 200": 13,
+      "DELETE other 200": 1,
+      "POST images-other 202": 8,
+      "GET image-build-status 200": 14
+    },
+    "2026-09-30T04:52": {
+      "POST images-other 503": 1079,
+      "GET image-build-status 200": 197,
+      "GET sandboxes 200": 279,
+      "GET image-build-status 404": 6,
+      "GET other 404": 6,
+      "PUT other 201": 6,
+      "POST other 200": 203,
+      "GET other 200": 601,
+      "POST sandboxes 201": 50,
+      "POST sandbox-exec 201": 256,
+      "PUT sandboxes 200": 69,
+      "POST images-other 202": 17,
+      "PUT other 200": 35,
+      "POST other 201": 16,
+      "DELETE other 200": 1,
+      "DELETE sandboxes 200": 1,
+      "POST sandboxes 200": 4
+    },
+    "2026-09-30T04:53": {
+      "GET sandboxes 200": 3770,
+      "POST sandbox-exec 201": 661,
+      "POST images-other 503": 804,
+      "PUT sandboxes 200": 240,
+      "POST other 200": 505,
+      "GET other 200": 1208,
+      "GET image-build-status 200": 255,
+      "PUT other 200": 26,
+      "POST other 201": 47,
+      "POST sandboxes 201": 104,
+      "DELETE other 200": 5,
+      "GET other 404": 7,
+      "DELETE sandboxes 200": 3,
+      "GET image-build-status 404": 2,
+      "PUT other 201": 2,
+      "POST images-other 202": 9
+    },
+    "2026-09-30T04:54": {
+      "GET sandboxes 200": 7898,
+      "POST other 200": 707,
+      "POST sandbox-exec 201": 1080,
+      "POST images-other 503": 604,
+      "GET other 200": 1558,
+      "PUT sandboxes 200": 410,
+      "PUT other 200": 21,
+      "GET image-build-status 200": 227,
+      "POST other 201": 73,
+      "POST sandboxes 201": 83,
+      "POST sandboxes 200": 49,
+      "DELETE other 200": 10,
+      "GET other 404": 11,
+      "POST images-other 202": 3,
+      "DELETE sandboxes 200": 11,
+      "GET image-build-status 404": 1,
+      "PUT other 201": 1,
+      "PUT sandboxes 503": 15
+    },
+    "2026-09-30T04:55": {
+      "GET sandboxes 200": 13896,
+      "PUT sandboxes 200": 235,
+      "POST sandbox-exec 201": 628,
+      "GET other 200": 1754,
+      "POST other 200": 806,
+      "POST images-other 503": 543,
+      "POST other 201": 31,
+      "GET image-build-status 200": 253,
+      "POST sandboxes 201": 43,
+      "PUT other 200": 21,
+      "PUT sandboxes 503": 8,
+      "DELETE other 200": 23,
+      "GET other 404": 26,
+      "POST images-other 202": 6,
+      "DELETE sandboxes 200": 14,
+      "POST sandboxes 200": 5,
+      "GET image-build-status 404": 3,
+      "PUT other 201": 3,
+      "GET sandboxes 503": 8
+    },
+    "2026-09-30T04:56": {
+      "GET sandboxes 200": 12921,
+      "POST images-other 503": 481,
+      "POST sandbox-exec 201": 829,
+      "DELETE other 200": 29,
+      "GET other 404": 30,
+      "POST other 200": 878,
+      "GET other 200": 1909,
+      "PUT sandboxes 200": 306,
+      "GET image-build-status 200": 249,
+      "POST other 201": 52,
+      "POST sandboxes 201": 64,
+      "DELETE sandboxes 200": 26,
+      "PUT other 200": 14,
+      "POST sandboxes 200": 42,
+      "POST images-other 202": 5,
+      "PUT sandboxes 503": 4,
+      "PUT other 201": 1,
+      "POST builders 201": 1
+    },
+    "2026-09-30T04:57": {
+      "GET sandboxes 200": 12540,
+      "POST other 200": 966,
+      "GET other 200": 2119,
+      "PUT sandboxes 200": 261,
+      "POST sandbox-exec 201": 738,
+      "GET image-build-status 200": 219,
+      "POST images-other 503": 423,
+      "POST other 201": 35,
+      "POST sandboxes 201": 42,
+      "DELETE sandboxes 200": 30,
+      "PUT other 200": 9,
+      "POST images-other 202": 4,
+      "DELETE other 200": 30,
+      "GET other 404": 34,
+      "POST sandboxes 200": 43,
+      "GET image-build-status 404": 3,
+      "PUT other 201": 4,
+      "POST other 401": 1,
+      "PUT sandboxes 503": 1
+    },
+    "2026-09-30T04:58": {
+      "GET sandboxes 200": 13900,
+      "POST other 200": 969,
+      "POST sandbox-exec 201": 827,
+      "GET other 200": 2011,
+      "PUT sandboxes 200": 315,
+      "POST images-other 503": 423,
+      "GET image-build-status 200": 239,
+      "DELETE other 200": 26,
+      "GET other 404": 33,
+      "POST sandboxes 201": 49,
+      "POST images-other 202": 6,
+      "POST other 201": 49,
+      "DELETE sandboxes 200": 31,
+      "PUT other 201": 7,
+      "POST sandboxes 200": 45,
+      "PUT other 200": 6,
+      "GET image-build-status 404": 5,
+      "PUT sandboxes 503": 7
+    },
+    "2026-09-30T04:59": {
+      "GET sandboxes 200": 17079,
+      "POST sandbox-exec 201": 335,
+      "GET other 200": 2023,
+      "POST images-other 503": 423,
+      "GET image-build-status 200": 255,
+      "PUT sandboxes 200": 144,
+      "POST other 200": 1054,
+      "POST other 201": 34,
+      "POST sandboxes 201": 38,
+      "DELETE sandboxes 200": 15,
+      "PUT other 200": 13,
+      "DELETE other 200": 9,
+      "GET other 404": 9,
+      "GET image-build-status 404": 1,
+      "POST sandboxes 200": 10,
+      "PUT other 201": 1,
+      "POST images-other 202": 2,
+      "PUT sandboxes 503": 1
+    },
+    "2026-09-30T05:00": {
+      "GET sandboxes 200": 17366,
+      "GET other 200": 1939,
+      "POST other 200": 983,
+      "GET image-build-status 200": 258,
+      "POST images-other 503": 376,
+      "DELETE other 200": 21,
+      "GET other 404": 25,
+      "POST sandbox-exec 201": 280,
+      "PUT sandboxes 200": 79,
+      "PUT other 200": 14,
+      "DELETE sandboxes 200": 15,
+      "GET image-build-status 404": 3,
+      "PUT other 201": 4,
+      "POST images-other 202": 6,
+      "POST sandboxes 200": 17,
+      "POST sandboxes 201": 7,
+      "POST other 201": 5,
+      "POST sandboxes 503": 3,
+      "POST sandboxes 504": 14,
+      "GET other 308": 1
+    },
+    "2026-09-30T05:01": {
+      "POST other 200": 268,
+      "GET sandboxes 200": 2181,
+      "POST sandbox-exec 201": 106,
+      "GET other 200": 332,
+      "DELETE other 200": 6,
+      "POST other 410": 1,
+      "GET other 404": 8,
+      "GET image-build-status 200": 32,
+      "POST images-other 503": 46,
+      "PUT sandboxes 200": 34,
+      "POST images-other 499": 1,
+      "POST other 201": 4,
+      "POST sandboxes 200": 1,
+      "POST sandboxes 201": 3,
+      "PUT other 200": 2,
+      "DELETE sandboxes 200": 1,
+      "POST sandboxes 504": 18,
+      "POST sandboxes 503": 1,
+      "POST sandboxes 409": 1,
+      "GET image-build-status 404": 2,
+      "PUT other 201": 2,
+      "POST other 503": 9,
+      "GET other 499": 187,
+      "POST sandboxes 499": 129,
+      "DELETE sandboxes 499": 3,
+      "GET sandboxes 499": 1
+    },
+    "2026-09-30T05:02": {
+      "DELETE builders 200": 1,
+      "DELETE other 200": 1,
+      "GET sandboxes 200": 179,
+      "DELETE sandboxes 200": 170,
+      "POST other 410": 7
+    },
+    "2026-09-30T05:03": {
+      "DELETE sandboxes 200": 95,
+      "GET sandboxes 200": 90,
+      "POST other 410": 5
+    },
+    "2026-09-30T05:04": {
+      "GET sandboxes 200": 15,
+      "DELETE sandboxes 200": 11
+    },
+    "2026-09-30T05:05": {
+      "GET sandboxes 200": 7,
+      "DELETE sandboxes 200": 3
+    },
+    "2026-09-30T05:06": {
+      "GET sandboxes 200": 2
+    },
+    "2026-09-30T05:07": {
+      "GET sandboxes 200": 4
+    },
+    "2026-09-30T05:08": {
+      "GET sandboxes 200": 4
+    },
+    "2026-09-30T05:09": {
+      "GET sandboxes 200": 4
+    },
+    "2026-09-30T05:10": {
+      "GET sandboxes 200": 2
+    },
+    "2026-09-30T05:11": {
+      "GET sandboxes 200": 4
+    },
+    "2026-09-30T05:12": {
+      "GET sandboxes 200": 4
+    },
+    "2026-09-30T05:13": {
+      "GET sandboxes 200": 4
+    },
+    "2026-09-30T05:14": {
+      "GET sandboxes 200": 2
+    },
+    "2026-09-30T05:24": {
+      "GET other 401": 12,
+      "POST other 401": 8,
+      "GET other 200": 4
+    },
+    "2026-09-30T05:26": {
+      "GET other 308": 1
+    },
+    "2026-09-30T05:31": {
+      "GET other 308": 4,
+      "GET other 200": 1,
+      "GET other 401": 2
+    },
+    "2026-09-30T05:33": {
+      "GET other 308": 1
+    },
+    "2026-09-30T05:34": {
+      "GET other 200": 1
+    },
+    "2026-09-30T05:44": {
+      "GET other 308": 1,
+      "GET other 200": 2
+    },
+    "2026-09-30T05:53": {
+      "GET other 200": 3,
+      "OPTIONS other 501": 2,
+      "JWRI other 501": 1,
+      "HEAD other 501": 1,
+      "POST other 401": 1,
+      "GET other 401": 1
+    },
+    "2026-09-30T06:01": {
+      "GET other 401": 1
+    },
+    "2026-09-30T06:02": {
+      "GET sandboxes 200": 2
+    }
+  },
+  "nginx_unparsed_lines": 66,
+  "nginx_duration_detection": {},
+  "nginx_errors": [],
+  "nginx_log_directives": [
+    "error_log /var/log/nginx/error.log;",
+    "access_log /var/log/nginx/access.log;"
+  ],
+  "postgres_severity_counts": {
+    "LOG": 14,
+    "ERROR": 4088
+  },
+  "postgres_errors": [
+    {
+      "at": "2026-09-30 04:50:50.695",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:50:50.715",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:50:50.772",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:50:50.775",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:50:50.777",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:50:50.778",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:50:53.788",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:50:55.635",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:51:01.167",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:51:10.913",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:51:15.798",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:51:21.179",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:51:21.198",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:51:21.199",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:51:21.203",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:51:21.206",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:51:21.207",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:51:21.207",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:51:21.215",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:51:21.314",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:51:21.423",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:51:21.436",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:51:21.436",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:51:21.442",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:51:27.209",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:51:29.722",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:51:31.054",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:51:31.391",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:51:38.011",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:51:42.194",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:51:42.198",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:51:46.926",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:51:48.197",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:51:48.739",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:51:51.786",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:51:55.070",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:03.726",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:07.978",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:10.180",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:12.494",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:12.544",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:12.547",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:15.348",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:15.351",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:16.474",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:16.539",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:18.752",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:22.784",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:26.274",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:26.283",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:26.297",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:26.303",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:26.364",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:27.171",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:30.419",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:32.845",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:32.927",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:32.927",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:32.928",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:32.928",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:32.928",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:32.934",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:32.935",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:32.938",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:32.959",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:32.966",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:32.972",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:32.978",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:32.991",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:32.991",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:32.991",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:33.002",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:33.004",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:36.642",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:39.060",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:39.061",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:39.079",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:39.336",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:45.452",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:45.504",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:54.681",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:54.735",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:54.735",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:54.736",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:54.771",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:54.771",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:54.793",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:58.921",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:58.921",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:58.951",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:58.951",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:58.952",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:58.966",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:58.978",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:58.979",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:58.979",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:58.979",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:59.003",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:59.003",
+      "severity": "ERROR",
+      "category": "could not"
+    },
+    {
+      "at": "2026-09-30 04:52:59.003",
+      "severity": "ERROR",
+      "category": "could not"
+    }
+  ],
+  "postgres_checkpoints": [
+    {
+      "at": "2026-09-30 05:10:22.275",
+      "message": "checkpoint complete: wrote 5933 buffers (4.5%), wrote 68 SLRU buffers; 0 WAL file(s) added, 0 removed, 12 recycled; write=703.117 s, sync=0.006 s, total=703.133 s; sync files=140, longest=0.001 s, average=0.001 s; distance=203399 kB, estimate=203399 kB; lsn=0/7BAB52F8, redo lsn=0/727898C8"
+    },
+    {
+      "at": "2026-09-30 05:19:15.592",
+      "message": "checkpoint complete: wrote 3357 buffers (2.6%), wrote 6 SLRU buffers; 0 WAL file(s) added, 0 removed, 9 recycled; write=336.223 s, sync=0.003 s, total=336.231 s; sync files=76, longest=0.001 s, average=0.001 s; distance=150782 kB, estimate=198137 kB; lsn=0/7BACAE90, redo lsn=0/7BAC91E8"
+    },
+    {
+      "at": "2026-09-30 06:03:17.883",
+      "message": "checkpoint complete: wrote 2769 buffers (2.1%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 1 recycled; write=278.009 s, sync=0.003 s, total=278.015 s; sync files=62, longest=0.001 s, average=0.001 s; distance=14439 kB, estimate=179767 kB; lsn=0/7D036408, redo lsn=0/7C8E2E38"
+    }
+  ]
+}

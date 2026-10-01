@@ -1,0 +1,1367 @@
+{
+  "schema": 1,
+  "analysis_date_utc": "2026-09-30",
+  "scope": "Upstream default pools and pinned recipe sources; not the unavailable training images.sqlite or an admission-filtered training selection.",
+  "source_commits": {
+    "research-environments": "c7ea0d7fe3379f0e6ffb0a68c82c80c184601f92",
+    "verifiers-ucloud": "7856cc18faceae31aa533605ea812d81b92a85ea",
+    "ucloud-sandboxes": "02811a724241d4dabcc9d94dcba6f3da620f6fdb",
+    "PrimeIntellect-ai/prime-tasks": "8b38d35b53271a5f955dfc5dd8197d562cebf46e",
+    "PrimeIntellect/Terminal-Lego-15k": "92e6b5f577610cec9b040250a94ce66cfce24839"
+  },
+  "method": {
+    "swe": "Projected image and repository identity columns from all 37 Parquet files; dataset revisions recorded below.",
+    "openswe": "Streamed the complete pinned openswe_oss.jsonl and verified its SHA256 against the HF LFS metadata. Retained only image/repository/base commit/Dockerfile fields.",
+    "terminal": "Inspected all checked-out Dockerfiles and used the pinned research verifier splitter on all test.sh files; no builds or task scripts executed. FROM counts use the first FROM only.",
+    "tmax": "Hashed complete base_install.sh scripts; extracted conservative initial recognized provisioning statements from remaining post_install.sh files, stopping at the first unrecognized statement. Candidate text groups are not validated environment-equivalence keys.",
+    "registry": "Read linux/amd64 manifests and configs for 27 selected images; validated platform-manifest and config digests. No filesystem layer downloads. Deterministic stratified sample, not a random or representative estimate. Component reuse modeled with the repository plan_layer_groups function, fixed format, and full parent diff-ID chain."
+  },
+  "swe": [
+    {
+      "dataset": "PrimeIntellect/Multi-SWE-RL-Verified",
+      "revision": "80de95c62ac792c99dcfa8e26569bcd7d036bdc3",
+      "rows": 2232,
+      "unique_image_refs": 2232,
+      "missing_image_rows": 0,
+      "unique_repo_values": 43,
+      "top_images": [
+        [
+          "mswebench/checkstyle_m_checkstyle:pr-7903",
+          1
+        ],
+        [
+          "mswebench/checkstyle_m_checkstyle:pr-7899",
+          1
+        ],
+        [
+          "mswebench/checkstyle_m_checkstyle:pr-7894",
+          1
+        ],
+        [
+          "mswebench/checkstyle_m_checkstyle:pr-7890",
+          1
+        ],
+        [
+          "mswebench/checkstyle_m_checkstyle:pr-7886",
+          1
+        ]
+      ],
+      "top_repos": [
+        [
+          "checkstyle",
+          610
+        ],
+        [
+          "hugo",
+          490
+        ],
+        [
+          "svelte",
+          190
+        ],
+        [
+          "cli",
+          108
+        ],
+        [
+          "react-router",
+          78
+        ]
+      ],
+      "files": 3
+    },
+    {
+      "dataset": "PrimeIntellect/R2E-Gym-Subset-Verified",
+      "revision": "151f9950e62cac613e07be1bb92e5dd19687315e",
+      "rows": 4522,
+      "unique_image_refs": 4522,
+      "missing_image_rows": 0,
+      "unique_repo_values": 10,
+      "top_images": [
+        [
+          "namanjain12/pyramid_final:15afe5e7fb5dafa570faf055eb4b4a4518349409",
+          1
+        ],
+        [
+          "namanjain12/pyramid_final:469f410c38b49b895f4f31de0423be0a4f2de47a",
+          1
+        ],
+        [
+          "namanjain12/pyramid_final:1bd3157143c7ae6e0a35fa07e4f0888ddd347ab5",
+          1
+        ],
+        [
+          "namanjain12/pyramid_final:1c0db5f78473bed04dd9aa972fe53c683a02d8eb",
+          1
+        ],
+        [
+          "namanjain12/pyramid_final:796af58e3741a03cbddbaed19def5984fe8601e4",
+          1
+        ]
+      ],
+      "top_repos": [
+        [
+          "pandas",
+          1440
+        ],
+        [
+          "numpy",
+          779
+        ],
+        [
+          "pillow",
+          620
+        ],
+        [
+          "orange3",
+          481
+        ],
+        [
+          "aiohttp",
+          280
+        ]
+      ],
+      "files": 8
+    },
+    {
+      "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+      "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+      "rows": 4323,
+      "unique_image_refs": 4323,
+      "missing_image_rows": 0,
+      "unique_repo_values": 1496,
+      "top_images": [
+        [
+          "jierun/sweb.eval.x86_64.googleapis_1776_python-bigquery-644:latest",
+          1
+        ],
+        [
+          "jierun/sweb.eval.x86_64.globocom_1776_m3u8-125:latest",
+          1
+        ],
+        [
+          "jierun/sweb.eval.x86_64.pybamm-team_1776_pybamm-314:latest",
+          1
+        ],
+        [
+          "jierun/sweb.eval.x86_64.plotly_1776_plotly.py-1447:latest",
+          1
+        ],
+        [
+          "jierun/sweb.eval.x86_64.reportportal_1776_client-python-98:latest",
+          1
+        ]
+      ],
+      "top_repos": [
+        [
+          "sympy/sympy",
+          249
+        ],
+        [
+          "tobymao/sqlglot",
+          125
+        ],
+        [
+          "python-pillow/Pillow",
+          56
+        ],
+        [
+          "iterative/dvc",
+          53
+        ],
+        [
+          "sphinx-doc/sphinx",
+          52
+        ]
+      ],
+      "files": 3
+    },
+    {
+      "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+      "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+      "rows": 6272,
+      "unique_image_refs": 6272,
+      "missing_image_rows": 0,
+      "unique_repo_values": 1890,
+      "top_images": [
+        [
+          "prime/primeintellect/elastic-synthetics:316-f52f0bf",
+          1
+        ],
+        [
+          "prime/primeintellect/webpack-contrib-copy-webpack-plugin:590-a9b06a6",
+          1
+        ],
+        [
+          "prime/primeintellect/bvanelli-actualpy:56-2ad5f63",
+          1
+        ],
+        [
+          "prime/primeintellect/rust-bitcoin-rust-bitcoin:2255-db37bd2",
+          1
+        ],
+        [
+          "prime/primeintellect/filecoin-project-specs-actors:592-db0bbaa",
+          1
+        ]
+      ],
+      "top_repos": [
+        [
+          "getmoto/moto",
+          77
+        ],
+        [
+          "aws-cloudformation/cfn-lint",
+          56
+        ],
+        [
+          "PennyLaneAI/pennylane",
+          55
+        ],
+        [
+          "FHIR/sushi",
+          49
+        ],
+        [
+          "cqfn/diKTat",
+          44
+        ]
+      ],
+      "files": 1
+    },
+    {
+      "dataset": "PrimeIntellect/Scale-SWE-Verified",
+      "revision": "8935f8e55244fd56080cdb8dcd0819a57e8a003c",
+      "rows": 17202,
+      "unique_image_refs": 17202,
+      "missing_image_rows": 0,
+      "unique_repo_values": 1120,
+      "top_images": [
+        [
+          "aweaiteam/scaleswe:lancedb_lancedb_pr73",
+          1
+        ],
+        [
+          "aweaiteam/scaleswe:jxtech_wechatpy_pr306",
+          1
+        ],
+        [
+          "aweaiteam/scaleswe:jxtech_wechatpy_pr86",
+          1
+        ],
+        [
+          "aweaiteam/scaleswe:lancedb_lancedb_pr314",
+          1
+        ],
+        [
+          "aweaiteam/scaleswe:jxtech_wechatpy_pr279",
+          1
+        ]
+      ],
+      "top_repos": [
+        [
+          "qontract-reconcile",
+          577
+        ],
+        [
+          "fonttools",
+          277
+        ],
+        [
+          "operator",
+          244
+        ],
+        [
+          "poetry-core",
+          228
+        ],
+        [
+          "flatbuffers",
+          227
+        ]
+      ],
+      "files": 2
+    },
+    {
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "revision": "b1554a5f12603c825f9b48b361b9b97032347e48",
+      "rows": 5123,
+      "unique_image_refs": 69,
+      "missing_image_rows": 0,
+      "unique_repo_values": 69,
+      "top_images": [
+        [
+          "swebench/swesmith.x86_64.khronosgroup_1776_glslang.e966816a",
+          476
+        ],
+        [
+          "swebench/swesmith.x86_64.async-profiler_1776_async-profiler.dbd9fc75",
+          408
+        ],
+        [
+          "swebench/swesmith.x86_64.behaviortree_1776_behaviortree.cpp.3ff6a32b",
+          310
+        ],
+        [
+          "swebench/swesmith.x86_64.vowpalwabbit_1776_vowpal_wabbit.0d344494",
+          304
+        ],
+        [
+          "swebench/swesmith.x86_64.chaiscript_1776_chaiscript.2eb3279c",
+          300
+        ]
+      ],
+      "top_repos": [
+        [
+          "swesmith/KhronosGroup__glslang.e966816a",
+          476
+        ],
+        [
+          "swesmith/async-profiler__async-profiler.dbd9fc75",
+          408
+        ],
+        [
+          "swesmith/BehaviorTree__BehaviorTree.CPP.3ff6a32b",
+          310
+        ],
+        [
+          "swesmith/VowpalWabbit__vowpal_wabbit.0d344494",
+          304
+        ],
+        [
+          "swesmith/ChaiScript__ChaiScript.2eb3279c",
+          300
+        ]
+      ],
+      "files": 1
+    },
+    {
+      "dataset": "SWE-bench/SWE-smith-go",
+      "revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015",
+      "rows": 8212,
+      "unique_image_refs": 87,
+      "missing_image_rows": 0,
+      "unique_repo_values": 87,
+      "top_images": [
+        [
+          "swebench/swesmith.x86_64.caddyserver_1776_caddy.77dd12cc",
+          544
+        ],
+        [
+          "swebench/swesmith.x86_64.krotik_1776_eliasdb.88a1da66",
+          370
+        ],
+        [
+          "swebench/swesmith.x86_64.workiva_1776_go-datastructures.18d77378",
+          366
+        ],
+        [
+          "swebench/swesmith.x86_64.blevesearch_1776_bleve.f2876b5e",
+          351
+        ],
+        [
+          "swebench/swesmith.x86_64.roaringbitmap_1776_roaring.09c46a0a",
+          307
+        ]
+      ],
+      "top_repos": [
+        [
+          "swesmith/caddyserver__caddy.77dd12cc",
+          544
+        ],
+        [
+          "swesmith/krotik__eliasdb.88a1da66",
+          370
+        ],
+        [
+          "swesmith/Workiva__go-datastructures.18d77378",
+          366
+        ],
+        [
+          "swesmith/blevesearch__bleve.f2876b5e",
+          351
+        ],
+        [
+          "swesmith/RoaringBitmap__roaring.09c46a0a",
+          307
+        ]
+      ],
+      "files": 1
+    },
+    {
+      "dataset": "SWE-bench/SWE-smith-java",
+      "revision": "1172df9919a8232e066562dfdb6e0193156de0c4",
+      "rows": 7470,
+      "unique_image_refs": 59,
+      "missing_image_rows": 0,
+      "unique_repo_values": 59,
+      "top_images": [
+        [
+          "swebench/swesmith.x86_64.remkop_1776_picocli.121646e4",
+          492
+        ],
+        [
+          "swebench/swesmith.x86_64.alibaba_1776_nacos.f39ce37f",
+          387
+        ],
+        [
+          "swebench/swesmith.x86_64.traccar_1776_traccar.dc1dfe15",
+          373
+        ],
+        [
+          "swebench/swesmith.x86_64.mybatis_1776_mybatis-3.59a0bcab",
+          368
+        ],
+        [
+          "swebench/swesmith.x86_64.google_1776_gson.dd2fe59c",
+          319
+        ]
+      ],
+      "top_repos": [
+        [
+          "swesmith/remkop__picocli.121646e4",
+          492
+        ],
+        [
+          "swesmith/alibaba__nacos.f39ce37f",
+          387
+        ],
+        [
+          "swesmith/traccar__traccar.dc1dfe15",
+          373
+        ],
+        [
+          "swesmith/mybatis__mybatis-3.59a0bcab",
+          368
+        ],
+        [
+          "swesmith/google__gson.dd2fe59c",
+          319
+        ]
+      ],
+      "files": 3
+    },
+    {
+      "dataset": "SWE-bench/SWE-smith-js",
+      "revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4",
+      "rows": 6073,
+      "unique_image_refs": 34,
+      "missing_image_rows": 0,
+      "unique_repo_values": 34,
+      "top_images": [
+        [
+          "swebench/swesmith.x86_64.josdejong_1776_mathjs.04e6e2d7",
+          845
+        ],
+        [
+          "swebench/swesmith.x86_64.novnc_1776_novnc.d44f7e04",
+          715
+        ],
+        [
+          "swebench/swesmith.x86_64.automattic_1776_mongoose.5f57a5bb",
+          652
+        ],
+        [
+          "swebench/swesmith.x86_64.bootstrap-vue_1776_bootstrap-vue.9a246f45",
+          492
+        ],
+        [
+          "swebench/swesmith.x86_64.foliojs_1776_pdfkit.d0108157",
+          408
+        ]
+      ],
+      "top_repos": [
+        [
+          "swesmith/josdejong__mathjs.04e6e2d7",
+          845
+        ],
+        [
+          "swesmith/novnc__noVNC.d44f7e04",
+          715
+        ],
+        [
+          "swesmith/Automattic__mongoose.5f57a5bb",
+          652
+        ],
+        [
+          "swesmith/bootstrap-vue__bootstrap-vue.9a246f45",
+          492
+        ],
+        [
+          "swesmith/foliojs__pdfkit.d0108157",
+          408
+        ]
+      ],
+      "files": 1
+    },
+    {
+      "dataset": "SWE-bench/SWE-smith-php",
+      "revision": "6b5da17f1e3543fb2ed5d151a6f4972a457a8c36",
+      "rows": 1,
+      "unique_image_refs": 1,
+      "missing_image_rows": 0,
+      "unique_repo_values": 1,
+      "top_images": [
+        [
+          "swebench/swesmith.x86_64.doctrine_1776_dbal.acb68b38",
+          1
+        ]
+      ],
+      "top_repos": [
+        [
+          "swesmith/doctrine__dbal.acb68b38",
+          1
+        ]
+      ],
+      "files": 1
+    },
+    {
+      "dataset": "SWE-bench/SWE-smith-py",
+      "revision": "77cab9055d42ab4a5c25c89a8f937096db13558e",
+      "rows": 50908,
+      "unique_image_refs": 131,
+      "missing_image_rows": 0,
+      "unique_repo_values": 131,
+      "top_images": [
+        [
+          "swebench/swesmith.x86_64.scanny_1776_python-pptx.278b47b1",
+          2389
+        ],
+        [
+          "swebench/swesmith.x86_64.pandas-dev_1776_pandas.95280573",
+          2354
+        ],
+        [
+          "swebench/swesmith.x86_64.pylint-dev_1776_astroid.b114f6b5",
+          1770
+        ],
+        [
+          "swebench/swesmith.x86_64.python-openxml_1776_python-docx.0cf6d71f",
+          1686
+        ],
+        [
+          "swebench/swesmith.x86_64.cantools_1776_cantools.0c6a7871",
+          1440
+        ]
+      ],
+      "top_repos": [
+        [
+          "swesmith/scanny__python-pptx.278b47b1",
+          2389
+        ],
+        [
+          "swesmith/pandas-dev__pandas.95280573",
+          2354
+        ],
+        [
+          "swesmith/pylint-dev__astroid.b114f6b5",
+          1770
+        ],
+        [
+          "swesmith/python-openxml__python-docx.0cf6d71f",
+          1686
+        ],
+        [
+          "swesmith/cantools__cantools.0c6a7871",
+          1440
+        ]
+      ],
+      "files": 11
+    },
+    {
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "revision": "1ae20d63edd611309d86133466247e3a9723a27d",
+      "rows": 5311,
+      "unique_image_refs": 39,
+      "missing_image_rows": 0,
+      "unique_repo_values": 39,
+      "top_images": [
+        [
+          "swebench/swesmith.x86_64.parcel-bundler_1776_lightningcss.400f705e",
+          445
+        ],
+        [
+          "swebench/swesmith.x86_64.chronotope_1776_chrono.d43108cb",
+          436
+        ],
+        [
+          "swebench/swesmith.x86_64.burntsushi_1776_ripgrep.3b7fd442",
+          426
+        ],
+        [
+          "swebench/swesmith.x86_64.rust-lang_1776_rustfmt.86261bfb",
+          407
+        ],
+        [
+          "swebench/swesmith.x86_64.image-rs_1776_image.26edc698",
+          401
+        ]
+      ],
+      "top_repos": [
+        [
+          "swesmith/parcel-bundler__lightningcss.400f705e",
+          445
+        ],
+        [
+          "swesmith/chronotope__chrono.d43108cb",
+          436
+        ],
+        [
+          "swesmith/BurntSushi__ripgrep.3b7fd442",
+          426
+        ],
+        [
+          "swesmith/rust-lang__rustfmt.86261bfb",
+          407
+        ],
+        [
+          "swesmith/image-rs__image.26edc698",
+          401
+        ]
+      ],
+      "files": 1
+    },
+    {
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "revision": "c243d86f112d01b8507d311af912668aa1d74449",
+      "rows": 5032,
+      "unique_image_refs": 30,
+      "missing_image_rows": 0,
+      "unique_repo_values": 30,
+      "top_images": [
+        [
+          "swebench/swesmith.x86_64.fabricjs_1776_fabric.js.6742471c",
+          713
+        ],
+        [
+          "swebench/swesmith.x86_64.vitejs_1776_vite.8b47ff76",
+          698
+        ],
+        [
+          "swebench/swesmith.x86_64.fuellabs_1776_fuels-ts.b3f37c91",
+          597
+        ],
+        [
+          "swebench/swesmith.x86_64.antvis_1776_g6.91c0ac85",
+          595
+        ],
+        [
+          "swebench/swesmith.x86_64.trpc_1776_trpc.2f40ba93",
+          323
+        ]
+      ],
+      "top_repos": [
+        [
+          "swesmith/fabricjs__fabric.js.6742471c",
+          713
+        ],
+        [
+          "swesmith/vitejs__vite.8b47ff76",
+          698
+        ],
+        [
+          "swesmith/FuelLabs__fuels-ts.b3f37c91",
+          597
+        ],
+        [
+          "swesmith/antvis__G6.91c0ac85",
+          595
+        ],
+        [
+          "swesmith/trpc__trpc.2f40ba93",
+          323
+        ]
+      ],
+      "files": 1
+    }
+  ],
+  "swesmith_total": {
+    "rows": 88130,
+    "unique_image_refs": 450
+  },
+  "openswe": {
+    "dataset": "GAIR/OpenSWE",
+    "revision": "a8db93af5335df2c8baac0cd1ff367e4d475d3d7",
+    "source_bytes": 3250152211,
+    "source_sha256": "a9f284c3bb615c28f96394319c7e02522908a058c73a198c146e065d64bf4588",
+    "rows": 36884,
+    "unique_image_aliases": 36884,
+    "unique_mapped_refs": 36884,
+    "conflicting_recipe_aliases": 0,
+    "unique_repositories": 10501,
+    "unique_original_dockerfiles": 36884,
+    "first_from_counts": {
+      "openswe-python-3.11": 5290,
+      "openswe-python-3.8": 4389,
+      "openswe-python-3.10": 4849,
+      "openswe-python-3.9": 4584,
+      "openswe-python-3.12": 10622,
+      "python:3.6-slim": 1,
+      "openswe-python-3.7": 2491,
+      "openswe-python-3.6": 1403,
+      "openswe-python-3.13": 1829,
+      "python:3.11-slim": 11,
+      "openswe-python-2.7": 460,
+      "continuumio/miniconda3:25.3.1-1": 275,
+      "python:3.12-slim-bookworm": 9,
+      "openswe-python-3.5": 306,
+      "openswe-python-3.14": 165,
+      "continuumio/miniconda3:latest": 20,
+      "python:3.12.2-slim": 2,
+      "debian:bookworm-slim": 2,
+      "continuumio/miniconda3:25.3.1-1 AS base": 4,
+      "ubuntu:18.04": 11,
+      "python:3.8-slim": 14,
+      "python:3.12": 5,
+      "python:3.12-slim": 40,
+      "openswe-python-${PYTHON_VERSION}": 3,
+      "python:3.12.7-slim": 1,
+      "python:3.12-bookworm": 7,
+      "python:3.10.5-slim": 1,
+      "python:3.10-slim": 7,
+      "ubuntu:20.04": 6,
+      "python:3.3-slim": 1,
+      "python:3.9-slim": 12,
+      "continuumio/miniconda3:24.7.1-0": 3,
+      "docker.io/python:3.12-slim-bullseye": 1,
+      "python:3.13-slim": 2,
+      "python:3.4": 5,
+      "python:3.13.1-slim": 1,
+      "python:3.10-slim-bullseye": 2,
+      "continuumio/miniconda3:24.1.2-0": 1,
+      "python:3.10": 2,
+      "python:3.5": 1,
+      "continuumio/miniconda3:4.12.0": 2,
+      "openswe-python-3.12 AS base": 1,
+      "almalinux:9": 2,
+      "qgis/qgis:release-3_28": 2,
+      "python:3.8-slim-bullseye": 2,
+      "openswe-python-3.8 AS base": 1,
+      "python:3.12.3-slim-bookworm": 1,
+      "python:3.10.1-slim": 1,
+      "python:3.7-slim": 3,
+      "ubuntu:22.04": 4,
+      "ubuntu:16.04": 1,
+      "quay.io/packit/base:c9s": 1,
+      "python:2.7-slim": 1,
+      "openswe-python-3.12 AS builder": 1,
+      "ubuntu:24.04": 2,
+      "openswe-python-3.11:latest": 1,
+      "python:3.8-slim-bookworm": 1,
+      "fedora:39": 2,
+      "python:3.11-alpine": 1,
+      "openmc/openmc:latest": 1,
+      "continuumio/miniconda3:23.3.1-0": 1,
+      "python:3.12-slim-bullseye": 2,
+      "obolibrary/odkfull:latest": 1,
+      "continuumio/miniconda3:24.9.2-0": 1,
+      "python:3.11.2-bullseye": 1,
+      "python:2.7-buster": 2,
+      "python:3.8.17-slim": 1,
+      "mcr.microsoft.com/vscode/devcontainers/python:3.12": 1,
+      "debian:bullseye-slim": 1,
+      "fedora:32": 1,
+      "python:3.12-alpine": 1,
+      "continuumio/miniconda3:25.3.1-1 as base": 1,
+      "python:3.5-slim": 1
+    },
+    "images_with_literal_copy_repo_testbed": 36856,
+    "images_with_package_manager_run_after_copy_repo": 36033,
+    "top_repositories": [
+      [
+        "pandas-dev/pandas",
+        579
+      ],
+      [
+        "getmoto/moto",
+        419
+      ],
+      [
+        "conan-io/conan",
+        298
+      ],
+      [
+        "ansible/ansible",
+        257
+      ],
+      [
+        "scikit-learn/scikit-learn",
+        209
+      ],
+      [
+        "PrefectHQ/prefect",
+        120
+      ],
+      [
+        "pydata/xarray",
+        105
+      ],
+      [
+        "jax-ml/jax",
+        104
+      ],
+      [
+        "dask/dask",
+        104
+      ],
+      [
+        "privacyidea/privacyidea",
+        103
+      ],
+      [
+        "sqlfluff/sqlfluff",
+        103
+      ],
+      [
+        "quantumlib/Cirq",
+        99
+      ],
+      [
+        "modin-project/modin",
+        98
+      ],
+      [
+        "open-telemetry/opentelemetry-python",
+        98
+      ],
+      [
+        "marimo-team/marimo",
+        93
+      ],
+      [
+        "Qiskit/qiskit",
+        90
+      ],
+      [
+        "softlayer/softlayer-python",
+        89
+      ],
+      [
+        "vkbo/novelWriter",
+        85
+      ],
+      [
+        "pylint-dev/astroid",
+        81
+      ],
+      [
+        "nilearn/nilearn",
+        81
+      ]
+    ],
+    "literal_openswe_python_version_counts": {
+      "3.11": 5291,
+      "3.8": 4390,
+      "3.10": 4849,
+      "3.9": 4584,
+      "3.12": 10624,
+      "3.7": 2491,
+      "3.6": 1403,
+      "3.13": 1829,
+      "2.7": 460,
+      "3.5": 306,
+      "3.14": 165
+    }
+  },
+  "terminal_lego": {
+    "dockerfiles": 13825,
+    "first_from_counts": {
+      "FROM ubuntu:22.04": 5669,
+      "FROM node:20-slim": 925,
+      "FROM python:3.13-slim-bookworm": 5819,
+      "FROM fedora:39": 2,
+      "FROM php:8.2-cli-bookworm": 191,
+      "FROM fedora:40": 1,
+      "FROM maven:3.9-eclipse-temurin-17": 11,
+      "FROM swift:5.9-jammy": 22,
+      "FROM golang:1.21-bookworm": 38,
+      "FROM mcr.microsoft.com/dotnet/sdk:8.0-bookworm-slim": 140,
+      "FROM nginx:stable": 1,
+      "FROM ubuntu:20.04": 1,
+      "FROM ubuntu:16.04": 6,
+      "FROM debian:bullseye-slim": 1,
+      "FROM debian:bookworm-slim": 4,
+      "FROM php:8.2-cli": 58,
+      "FROM php:8.2-apache": 1,
+      "FROM mcr.microsoft.com/dotnet/sdk:8.0": 515,
+      "FROM ruby:3.2-slim-bookworm": 142,
+      "FROM docker:24-dind": 1,
+      "FROM mcr.microsoft.com/dotnet/sdk:6.0": 44,
+      "FROM php:8.3-cli-bookworm": 58,
+      "FROM mcr.microsoft.com/powershell:latest": 3,
+      "FROM ruby:2.7-slim-bullseye": 1,
+      "FROM php:8.1-cli-bookworm": 4,
+      "FROM mcr.microsoft.com/dotnet/sdk:8.0-jammy": 2,
+      "FROM centos:7": 2,
+      "FROM swift:5.10-jammy": 20,
+      "FROM mcr.microsoft.com/dotnet/sdk:3.1-focal": 1,
+      "FROM perl:5.38-slim-bookworm": 2,
+      "FROM python:3.12-slim-bookworm": 1,
+      "FROM python:3.10-slim-bookworm": 2,
+      "FROM continuumio/miniconda3:latest": 17,
+      "FROM python:3.8-slim-bookworm": 2,
+      "FROM python:3.9-slim-bookworm": 19,
+      "FROM ubuntu:18.04": 3,
+      "FROM mcr.microsoft.com/dotnet/sdk:6.0-bookworm-slim": 2,
+      "FROM swift:5.9": 8,
+      "FROM php:8.1-cli": 2,
+      "FROM php:8.3-cli": 11,
+      "FROM dart:stable": 3,
+      "FROM ruby:3.2-slim": 17,
+      "FROM swift:5.10": 2,
+      "FROM rocker/tidyverse:4.3.2": 1,
+      "FROM clojure:temurin-21-tools-deps-bookworm-slim": 2,
+      "FROM erlang:26-slim": 2,
+      "FROM postgres:15-bookworm": 3,
+      "FROM postgres:16": 2,
+      "FROM postgres:15": 1,
+      "FROM postgres:16-bookworm": 1,
+      "FROM php:7.4-cli": 1,
+      "FROM mongo:4.4": 1,
+      "FROM r-base:4.3.0": 2,
+      "FROM elixir:1.16-slim": 1,
+      "FROM clojure:temurin-21-tools-deps": 1,
+      "FROM perl:5-slim": 1,
+      "FROM clojure:temurin-21-tools-deps-bookworm": 1,
+      "FROM python:3.6-slim": 1,
+      "FROM php:8-cli": 1,
+      "FROM r-base:4.4.1": 1,
+      "FROM ubuntu:25.04": 1,
+      "FROM nvidia/cuda:12.2.0-devel-ubuntu22.04": 2,
+      "FROM debian:12-slim": 1,
+      "FROM debian:bookworm": 2,
+      "FROM debian:11-slim": 1,
+      "FROM eclipse-temurin:17-jdk-jammy": 1,
+      "FROM alpine:3.18": 1,
+      "FROM fedora:33": 1,
+      "FROM maven:3.9.4-eclipse-temurin-17 AS base": 2,
+      "FROM maven:3.9-eclipse-temurin-17 AS base": 11,
+      "FROM mcr.microsoft.com/mssql/server:2022-latest": 1,
+      "FROM maven:3.9.5-eclipse-temurin-17 AS base": 1,
+      "FROM maven:3.9.6-eclipse-temurin-17 AS base": 2,
+      "FROM clojure:temurin-17-lein-2.10.0-jammy": 1
+    },
+    "unique_warm_commands": 447,
+    "unique_bootstrap_warm_plans": 1332,
+    "plan_coverage": {
+      "1": 8381,
+      "5": 9397,
+      "10": 9985,
+      "25": 11029,
+      "50": 11647,
+      "100": 12091
+    },
+    "warm_coverage": {
+      "1": 11615,
+      "5": 12310,
+      "10": 12724,
+      "25": 13042,
+      "50": 13250,
+      "100": 13432
+    },
+    "common_plan_first_from": {
+      "FROM ubuntu:22.04": 3745,
+      "FROM fedora:39": 2,
+      "FROM python:3.13-slim-bookworm": 3611,
+      "FROM php:8.2-cli-bookworm": 24,
+      "FROM fedora:40": 1,
+      "FROM node:20-slim": 369,
+      "FROM maven:3.9-eclipse-temurin-17": 10,
+      "FROM swift:5.9-jammy": 19,
+      "FROM golang:1.21-bookworm": 4,
+      "FROM mcr.microsoft.com/dotnet/sdk:8.0-bookworm-slim": 116,
+      "FROM ubuntu:20.04": 1,
+      "FROM debian:bullseye-slim": 1,
+      "FROM debian:bookworm-slim": 3,
+      "FROM php:8.2-cli": 3,
+      "FROM mcr.microsoft.com/dotnet/sdk:8.0": 276,
+      "FROM ruby:3.2-slim-bookworm": 41,
+      "FROM mcr.microsoft.com/dotnet/sdk:6.0": 17,
+      "FROM mcr.microsoft.com/powershell:latest": 1,
+      "FROM ruby:2.7-slim-bullseye": 1,
+      "FROM centos:7": 1,
+      "FROM swift:5.10-jammy": 18,
+      "FROM python:3.10-slim-bookworm": 1,
+      "FROM continuumio/miniconda3:latest": 15,
+      "FROM python:3.8-slim-bookworm": 2,
+      "FROM python:3.9-slim-bookworm": 15,
+      "FROM ubuntu:18.04": 3,
+      "FROM swift:5.9": 8,
+      "FROM swift:5.10": 2,
+      "FROM clojure:temurin-21-tools-deps-bookworm-slim": 1,
+      "FROM mcr.microsoft.com/dotnet/sdk:8.0-jammy": 1,
+      "FROM postgres:15-bookworm": 3,
+      "FROM postgres:16": 1,
+      "FROM postgres:15": 1,
+      "FROM postgres:16-bookworm": 1,
+      "FROM php:7.4-cli": 1,
+      "FROM mongo:4.4": 1,
+      "FROM ruby:3.2-slim": 1,
+      "FROM clojure:temurin-21-tools-deps-bookworm": 1,
+      "FROM python:3.6-slim": 1,
+      "FROM r-base:4.4.1": 1,
+      "FROM ubuntu:16.04": 5,
+      "FROM ubuntu:25.04": 1,
+      "FROM nvidia/cuda:12.2.0-devel-ubuntu22.04": 2,
+      "FROM debian:12-slim": 1,
+      "FROM debian:bookworm": 2,
+      "FROM php:8.3-cli-bookworm": 24,
+      "FROM eclipse-temurin:17-jdk-jammy": 1,
+      "FROM php:8.1-cli-bookworm": 1,
+      "FROM fedora:33": 1,
+      "FROM maven:3.9.4-eclipse-temurin-17 AS base": 2,
+      "FROM maven:3.9-eclipse-temurin-17 AS base": 11,
+      "FROM mcr.microsoft.com/mssql/server:2022-latest": 1,
+      "FROM mcr.microsoft.com/dotnet/sdk:6.0-bookworm-slim": 1,
+      "FROM maven:3.9.5-eclipse-temurin-17 AS base": 1,
+      "FROM maven:3.9.6-eclipse-temurin-17 AS base": 2,
+      "FROM clojure:temurin-17-lein-2.10.0-jammy": 1
+    },
+    "unique_full_verifier_fingerprints": 13825,
+    "verifier_parser_errors": 0
+  },
+  "tmax": {
+    "dockerfiles": 14600,
+    "first_from_counts": {
+      "FROM ubuntu:22.04": 14600
+    },
+    "unique_normalized_dockerfile_templates": 7,
+    "base_install_script_counts": [
+      [
+        "0e71b3e06fcf8cc6f9d95ba2e9664dfbba7786949a0e21b810ada563ae27a637",
+        5134
+      ],
+      [
+        "9f84b8d5c7acdfe646c5b1d1657321e71157737a3a421c377be091052073f588",
+        1
+      ]
+    ],
+    "monolithic": {
+      "tasks": 9465,
+      "with_recognized_initial_dependencies": 9463,
+      "unique_initial_prefixes": 2883,
+      "coverage": {
+        "1": 1376,
+        "5": 2458,
+        "10": 3146,
+        "25": 4195,
+        "50": 4866,
+        "100": 5468
+      },
+      "top20": [
+        {
+          "sha256": "fff03fab2f8db34e32599c838577967e302d427f54788bbed26d0b9b9a15335b",
+          "tasks": 1376,
+          "task": "task_000004_aeddda76",
+          "prefix": "apt-get update && apt-get install -y python3 python3-pip\npip3 install pytest"
+        },
+        {
+          "sha256": "225e9baaf4580753967faedecb115a654b75f74e8bf040fef5f9730842fd4778",
+          "tasks": 319,
+          "task": "task_000043_b591addd",
+          "prefix": "apt-get update && apt-get install -y python3 python3-pip gcc\npip3 install pytest"
+        },
+        {
+          "sha256": "2c90a8ac7e2c44a2a49ba0395c31cb27a341b67e86c159b6048c34d80f845904",
+          "tasks": 318,
+          "task": "task_000003_b73a4413",
+          "prefix": "apt-get update && apt-get install -y python3 python3-pip g++\npip3 install pytest"
+        },
+        {
+          "sha256": "f2c215a72857af7459cf981bdafe617240e52628310d3b30e1294986ea5f144a",
+          "tasks": 249,
+          "task": "task_000012_58fdcccc",
+          "prefix": "apt-get update && apt-get install -y python3 python3-pip sqlite3\npip3 install pytest"
+        },
+        {
+          "sha256": "7d926a80f9d30e14be0e926436218f5c0d3b3512557ac3abf58bcfcf04926aab",
+          "tasks": 196,
+          "task": "task_000022_21389603",
+          "prefix": "apt-get update && apt-get install -y python3 python3-pip golang\npip3 install pytest"
+        },
+        {
+          "sha256": "aaca7cb682575834d46390d9f344b6549c19bb5df4e49a2432813f727c762cc3",
+          "tasks": 194,
+          "task": "task_000005_ceefb305",
+          "prefix": "apt-get update && apt-get install -y python3 python3-pip gcc libc6-dev\npip3 install pytest"
+        },
+        {
+          "sha256": "bcdc8079779d9ec4f6e3984bd002a44a8b903be4cc7293af4a9b099f20cc2968",
+          "tasks": 144,
+          "task": "task_000045_c4175c6d",
+          "prefix": "apt-get update && apt-get install -y python3 python3-pip golang-go\npip3 install pytest"
+        },
+        {
+          "sha256": "9f54ef30e050f273c517d2a1a9d8d029378e46ea0b6d28db79844e8de408ec67",
+          "tasks": 132,
+          "task": "task_000483_7c866820",
+          "prefix": "apt-get update && apt-get install -y python3 python3-pip\npip3 install pytest pandas"
+        },
+        {
+          "sha256": "fe3add1df1d6c41b23d8ac8a6f9e24252acde0381abf3a6561b0c48daa528f5b",
+          "tasks": 112,
+          "task": "task_000035_88acd16c",
+          "prefix": "apt-get update && apt-get install -y python3 python3-pip cargo rustc\npip3 install pytest"
+        },
+        {
+          "sha256": "655390c2cbebadc395532aaedf02dc388ecb81e590cdabfcab0f281bd60c83dd",
+          "tasks": 106,
+          "task": "task_000091_e1698167",
+          "prefix": "apt-get update && apt-get install -y python3 python3-pip git\npip3 install pytest"
+        },
+        {
+          "sha256": "c2d3425ca3c4d6eccfe5eb1e46dd91dc8d43cc9a68e97d195fa100fbad0616e8",
+          "tasks": 101,
+          "task": "task_000183_2ce41474",
+          "prefix": "apt-get update && apt-get install -y python3 python3-pip\npip3 install pytest numpy scipy"
+        },
+        {
+          "sha256": "ce1c3f424cc45af13777e2010807caee55e335f156228a25c6f939a0e5de49d1",
+          "tasks": 99,
+          "task": "task_000031_bae35058",
+          "prefix": "apt-get update && apt-get install -y python3 python3-pip cargo\npip3 install pytest"
+        },
+        {
+          "sha256": "c9665a4ad052bf4085465d73779570b849574fbf74015f25307577ed7e24ea73",
+          "tasks": 87,
+          "task": "task_000216_b6246864",
+          "prefix": "apt-get update && apt-get install -y python3 python3-pip gcc make\npip3 install pytest"
+        },
+        {
+          "sha256": "9a6af730a5c12839e9e09beb1e312fe5feea5c618b9038091b2f36add9699d2e",
+          "tasks": 83,
+          "task": "task_000026_1eea1aa7",
+          "prefix": "apt-get update && apt-get install -y python3 python3-pip\npip3 install pytest pandas numpy"
+        },
+        {
+          "sha256": "97d19b2fc8a49a6ac502dfbd63d5d4f6ef48eedff4680e7360ead627b43a855f",
+          "tasks": 76,
+          "task": "task_000089_d3fd1f01",
+          "prefix": "apt-get update && apt-get install -y python3 python3-pip gawk\npip3 install pytest"
+        },
+        {
+          "sha256": "feaf3fb0cbd3924ca6af297f8541fe2462878ee4bdca14cb9ab58ba1f5f89bd9",
+          "tasks": 74,
+          "task": "task_000048_b0bd6829",
+          "prefix": "apt-get update && apt-get install -y python3 python3-pip python3-venv\npip3 install pytest"
+        },
+        {
+          "sha256": "2c0de0cd04e0fa8d3192552d3a97750a2b99b03877a86e4049d9b740eedbd4e1",
+          "tasks": 65,
+          "task": "task_000142_395c1c7f",
+          "prefix": "apt-get update && apt-get install -y python3 python3-pip\npip3 install pytest numpy"
+        },
+        {
+          "sha256": "0221a65ee8c08664cf7dbe7578d6fc2bea138f13ecdbfabe433c96b4e390fc9c",
+          "tasks": 63,
+          "task": "task_000075_827b7baa",
+          "prefix": "apt-get update && apt-get install -y python3 python3-pip build-essential\npip3 install pytest"
+        },
+        {
+          "sha256": "be2c020f3552bb7bb2571e8efae9bc1c186f507951803951c328722cd56b9f42",
+          "tasks": 62,
+          "task": "task_000314_931a6afc",
+          "prefix": "apt-get update && apt-get install -y python3 python3-pip rustc cargo\npip3 install pytest"
+        },
+        {
+          "sha256": "85ea9313c170c5cb35e29303a8ac6885f1d9d2740afbc18468edef8b1df3f551",
+          "tasks": 61,
+          "task": "task_000209_cecbee3d",
+          "prefix": "apt-get update && apt-get install -y python3 python3-pip\npip3 install pytest pandas numpy scikit-learn"
+        }
+      ],
+      "unrecognized_first_commands": [
+        [
+          "echo \"wireshark-common wireshark-common/install-setuid boolean false\" | debconf-set-selections",
+          1
+        ],
+        [
+          "apt-get clean && apt-get update",
+          1
+        ]
+      ]
+    }
+  },
+  "registry_sample": [
+    {
+      "dataset": "PrimeIntellect/Scale-SWE-Verified",
+      "repo_group": "monty",
+      "images": 3,
+      "layer_counts": [
+        1,
+        1,
+        1
+      ],
+      "compressed_bytes": 26219254112,
+      "unique_blob_bytes": 26219254112,
+      "duplicate_blob_bytes": 0,
+      "unique_blobs": 3,
+      "shared_blob_count": 0,
+      "common_diff_id_prefix_layers": 0,
+      "planned_component_occurrences": 3,
+      "unique_planned_components": 3,
+      "components_reusable_between_images": 0,
+      "component_input_compressed_bytes_saved": 0
+    },
+    {
+      "dataset": "PrimeIntellect/Scale-SWE-Verified",
+      "repo_group": "qontract-reconcile",
+      "images": 3,
+      "layer_counts": [
+        1,
+        1,
+        1
+      ],
+      "compressed_bytes": 1727102346,
+      "unique_blob_bytes": 1727102346,
+      "duplicate_blob_bytes": 0,
+      "unique_blobs": 3,
+      "shared_blob_count": 0,
+      "common_diff_id_prefix_layers": 0,
+      "planned_component_occurrences": 3,
+      "unique_planned_components": 3,
+      "components_reusable_between_images": 0,
+      "component_input_compressed_bytes_saved": 0
+    },
+    {
+      "dataset": "PrimeIntellect/Scale-SWE-Verified",
+      "repo_group": "fonttools",
+      "images": 3,
+      "layer_counts": [
+        1,
+        1,
+        1
+      ],
+      "compressed_bytes": 2228491686,
+      "unique_blob_bytes": 2228491686,
+      "duplicate_blob_bytes": 0,
+      "unique_blobs": 3,
+      "shared_blob_count": 0,
+      "common_diff_id_prefix_layers": 0,
+      "planned_component_occurrences": 3,
+      "unique_planned_components": 3,
+      "components_reusable_between_images": 0,
+      "component_input_compressed_bytes_saved": 0
+    },
+    {
+      "dataset": "PrimeIntellect/R2E-Gym-Subset-Verified",
+      "repo_group": "pandas",
+      "images": 3,
+      "layer_counts": [
+        14,
+        14,
+        14
+      ],
+      "compressed_bytes": 3294107493,
+      "unique_blob_bytes": 3235036053,
+      "duplicate_blob_bytes": 59071440,
+      "unique_blobs": 38,
+      "shared_blob_count": 2,
+      "common_diff_id_prefix_layers": 1,
+      "planned_component_occurrences": 24,
+      "unique_planned_components": 24,
+      "components_reusable_between_images": 0,
+      "component_input_compressed_bytes_saved": 0
+    },
+    {
+      "dataset": "PrimeIntellect/R2E-Gym-Subset-Verified",
+      "repo_group": "numpy",
+      "images": 3,
+      "layer_counts": [
+        16,
+        16,
+        16
+      ],
+      "compressed_bytes": 1714804843,
+      "unique_blob_bytes": 1653924913,
+      "duplicate_blob_bytes": 60879930,
+      "unique_blobs": 44,
+      "shared_blob_count": 2,
+      "common_diff_id_prefix_layers": 1,
+      "planned_component_occurrences": 23,
+      "unique_planned_components": 23,
+      "components_reusable_between_images": 0,
+      "component_input_compressed_bytes_saved": 0
+    },
+    {
+      "dataset": "PrimeIntellect/Multi-SWE-RL-Verified",
+      "repo_group": "checkstyle",
+      "images": 3,
+      "layer_counts": [
+        13,
+        13,
+        13
+      ],
+      "compressed_bytes": 1643431964,
+      "unique_blob_bytes": 716293040,
+      "duplicate_blob_bytes": 927138924,
+      "unique_blobs": 31,
+      "shared_blob_count": 4,
+      "common_diff_id_prefix_layers": 4,
+      "planned_component_occurrences": 18,
+      "unique_planned_components": 12,
+      "components_reusable_between_images": 3,
+      "component_input_compressed_bytes_saved": 927137972
+    },
+    {
+      "dataset": "PrimeIntellect/Multi-SWE-RL-Verified",
+      "repo_group": "hugo",
+      "images": 3,
+      "layer_counts": [
+        16,
+        16,
+        16
+      ],
+      "compressed_bytes": 2057374579,
+      "unique_blob_bytes": 1142658763,
+      "duplicate_blob_bytes": 914715816,
+      "unique_blobs": 32,
+      "shared_blob_count": 8,
+      "common_diff_id_prefix_layers": 8,
+      "planned_component_occurrences": 24,
+      "unique_planned_components": 12,
+      "components_reusable_between_images": 6,
+      "component_input_compressed_bytes_saved": 914715816
+    },
+    {
+      "dataset": "SWE-bench/SWE-smith-py",
+      "repo_group": null,
+      "images": 3,
+      "layer_counts": [
+        12,
+        12,
+        12
+      ],
+      "compressed_bytes": 5769806612,
+      "unique_blob_bytes": 3887809490,
+      "duplicate_blob_bytes": 1881997122,
+      "unique_blobs": 20,
+      "shared_blob_count": 9,
+      "common_diff_id_prefix_layers": 7,
+      "planned_component_occurrences": 24,
+      "unique_planned_components": 14,
+      "components_reusable_between_images": 5,
+      "component_input_compressed_bytes_saved": 1881994550
+    },
+    {
+      "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+      "repo_group": "sympy/sympy",
+      "images": 3,
+      "layer_counts": [
+        15,
+        15,
+        15
+      ],
+      "compressed_bytes": 3667661729,
+      "unique_blob_bytes": 3638124075,
+      "duplicate_blob_bytes": 29537654,
+      "unique_blobs": 42,
+      "shared_blob_count": 3,
+      "common_diff_id_prefix_layers": 0,
+      "planned_component_occurrences": 21,
+      "unique_planned_components": 20,
+      "components_reusable_between_images": 1,
+      "component_input_compressed_bytes_saved": 29536935
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "kind": "installed_runtime",
+  "complete": true,
+  "service_changed": false,
+  "wheel_sha256": "405516727b99eed510a0bcfcee39203cb69f67a4b56ad7c68bc5d3eaa672e628",
+  "inspector_sha256": "46f98bbdf3ea82e7a64be1d36529e5a2a1dd8183a680d1ddf830f2fd742446fd",
+  "upgrade_helper_sha256": "160559f723d08e83b88759f1e4f8b9d9b4675db319315a598cd22e22a898591c",
+  "installed_files_match_wheel": 165,
+  "runtime_file_set_matches": true,
+  "import_origins_match": true,
+  "after": {
+    "job_id": "168016314",
+    "node_epoch": "e0bbfdd81d8e476e855aae0264d8b281",
+    "finishing_capacity": 2,
+    "active_builds": 0,
+    "admission_open": true,
+    "draining": false
+  }
+}

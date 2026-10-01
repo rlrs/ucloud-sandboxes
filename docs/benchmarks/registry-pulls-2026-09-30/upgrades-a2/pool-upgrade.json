@@ -1,0 +1,22 @@
+[
+  {
+    "job_id": "168016286",
+    "complete": true,
+    "receipt": "/work/ucloud-sandboxes/registry-pull-qualification-20260930/upgrades-a2/upgrade-168016286.json"
+  },
+  {
+    "job_id": "168016287",
+    "complete": true,
+    "receipt": "/work/ucloud-sandboxes/registry-pull-qualification-20260930/upgrades-a2/upgrade-168016287.json"
+  },
+  {
+    "job_id": "168016314",
+    "complete": true,
+    "receipt": "/work/ucloud-sandboxes/registry-pull-qualification-20260930/upgrades-a2/upgrade-168016314.json"
+  },
+  {
+    "job_id": "168016315",
+    "complete": true,
+    "receipt": "/work/ucloud-sandboxes/registry-pull-qualification-20260930/upgrades-a2/upgrade-168016315.json"
+  }
+]

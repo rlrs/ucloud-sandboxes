@@ -1,0 +1,17 @@
+{
+  "at": "2026-09-29T23:00:34.731234+00:00",
+  "sandbox_ids": [
+    "registry-pull-smoke-294a07ecc9b5-45",
+    "registry-pull-smoke-294a07ecc9b5-46",
+    "registry-pull-smoke-294a07ecc9b5-47"
+  ],
+  "image_ids": [
+    "slotq-pulls-b-cold-976f3bff-045",
+    "slotq-pulls-b-cold-976f3bff-046",
+    "slotq-pulls-b-cold-976f3bff-047"
+  ],
+  "summary_sha256": "4b1688320a7d541bcac414580cb8e2e7c9d44772e56a130bc64db7a2f659b4e6",
+  "cases_sha256": "53427e6af642efddb6c1fd554b16676608f5e1c92a819595f2d758a84c6e5e21",
+  "sdk_sha256": "520b15d66c828193179e86a1521d2871c1e08bfef2227d0bc7a1036445fd8957",
+  "helper_sha256": "1a5f47ab23892e42d81af894a1a687aabf4c99b79e71c90674e21218b912d5a2"
+}

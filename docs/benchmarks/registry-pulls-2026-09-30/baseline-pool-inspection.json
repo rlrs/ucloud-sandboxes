@@ -1,0 +1,46 @@
+{
+  "complete": true,
+  "nodes": [
+    {
+      "job_id": "168016286",
+      "node_epoch": "aa3931953e4f41c4be60e514de6acf9c",
+      "node_ip": "10.42.0.3",
+      "installed_files_match_wheel": 165,
+      "started_at": "2026-09-29T22:18:05.310992+00:00",
+      "finished_at": "2026-09-29T22:18:06.626260+00:00",
+      "sampler_active": true,
+      "complete": true
+    },
+    {
+      "job_id": "168016287",
+      "node_epoch": "f057e61a7d5d4e359b3a037662ae8c43",
+      "node_ip": "10.42.0.4",
+      "installed_files_match_wheel": 165,
+      "started_at": "2026-09-29T22:18:05.311248+00:00",
+      "finished_at": "2026-09-29T22:18:06.731819+00:00",
+      "sampler_active": true,
+      "complete": true
+    },
+    {
+      "job_id": "168016314",
+      "node_epoch": "e0bbfdd81d8e476e855aae0264d8b281",
+      "node_ip": "10.42.0.5",
+      "installed_files_match_wheel": 165,
+      "started_at": "2026-09-29T22:18:05.311528+00:00",
+      "finished_at": "2026-09-29T22:18:06.748196+00:00",
+      "sampler_active": true,
+      "complete": true
+    },
+    {
+      "job_id": "168016315",
+      "node_epoch": "8403872997404a67b2059cbbde49528d",
+      "node_ip": "10.42.0.6",
+      "installed_files_match_wheel": 165,
+      "started_at": "2026-09-29T22:18:05.322633+00:00",
+      "finished_at": "2026-09-29T22:18:06.684364+00:00",
+      "sampler_active": true,
+      "complete": true
+    }
+  ],
+  "baseline_wheel_sha256": "405516727b99eed510a0bcfcee39203cb69f67a4b56ad7c68bc5d3eaa672e628"
+}

@@ -1,0 +1,7 @@
+{
+  "passed": true,
+  "max_finishing_builds": 2,
+  "max_builder_nodes": 4,
+  "writes_intercepted": true,
+  "note": "Executed actual production config renderer with project venv and its DeploymentConfig validation, capturing output without overwriting local build configuration."
+}

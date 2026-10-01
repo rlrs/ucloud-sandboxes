@@ -1,0 +1,45 @@
+{
+  "complete": true,
+  "at": "2026-09-29T23:03:45.726435+00:00",
+  "worker": {
+    "job_id": "168019452",
+    "node_id": "10.42.0.3",
+    "node_epoch": "d4183e8cf4304fa1bd075ea17055b571",
+    "node_url": "http://10.42.0.3:8090"
+  },
+  "wheel_sha256": "3f29209df80e27d3aad2d1edb3c1677ce05bb44d50b78da1797b6b0a212c13f3",
+  "installed_files_match_wheel": 165,
+  "runtime_file_set_matches": true,
+  "launcher_import_origins_match": true,
+  "runtime_root": "/var/cache/ucloud-sandboxes/init-packages/bd5adc828c453ca39af8cec198bd5468ebd8851fb8f6c1304189017009e95dd8/agent-runtime/site-packages",
+  "pid": 9091,
+  "automatic_upgrade_units": {
+    "apt-daily.timer": {
+      "ActiveState": "inactive",
+      "UnitFileState": "masked"
+    },
+    "apt-daily-upgrade.timer": {
+      "ActiveState": "inactive",
+      "UnitFileState": "masked"
+    },
+    "apt-daily.service": {
+      "ActiveState": "inactive",
+      "UnitFileState": "masked"
+    },
+    "apt-daily-upgrade.service": {
+      "ActiveState": "inactive",
+      "UnitFileState": "masked"
+    },
+    "unattended-upgrades.service": {
+      "ActiveState": "inactive",
+      "UnitFileState": "masked"
+    }
+  },
+  "apt_periodic": {
+    "Enable": 0,
+    "Update-Package-Lists": 0,
+    "Unattended-Upgrade": 0
+  },
+  "helper_sha256": "216bfbcc873d0842d88d1d422c1bb485d3a5afa263683d76869530bbca192028",
+  "service_changed": false
+}

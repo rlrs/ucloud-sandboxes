@@ -1,0 +1,990 @@
+{"sysstat": {
+	"hosts": [
+		{
+			"nodename": "sandboxes-gateway",
+			"sysname": "Linux",
+			"release": "7.0.0-34-generic",
+			"machine": "x86_64",
+			"number-of-cpus": 4,
+			"file-date": "2026-09-30",
+			"file-utc-time": "00:00:00",
+			"timezone": "UTC",
+			"statistics": [
+				{
+					"timestamp": {"date": "2026-09-30", "time": "00:10:00", "tz": "UTC", "interval": 600},
+					"cpu-load": [
+						{"cpu": "all", "usr": 2.96, "nice": 0.00, "sys": 1.24, "iowait": 0.18, "steal": 0.00, "irq": 0.00, "soft": 0.06, "guest": 0.00, "gnice": 0.00, "idle": 95.56}
+					],
+					"memory": {"memfree": 3349800, "avail": 13737904, "memused": 1368716, "memused-percent": 8.57, "buffers": 269488, "cached": 9042880, "commit": 3974400, "commit-percent": 24.87, "active": 1611148, "inactive": 8896184, "dirty": 3920, "anonpg": 1207272, "slab": 1948932, "kstack": 5776, "pgtbl": 19824, "vmused": 17904, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 0, "plist-sz": 358, "ldavg-1": 0.18, "ldavg-5": 0.24, "ldavg-15": 0.18, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 13.09, "rd_sec": 161.47, "wr_sec": 1275.43, "dc_sec": 0.00, "rkB": 80.73, "wkB": 637.71, "dkB": 0.00, "avgrq-sz": 109.76, "areq-sz": 54.88, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.32, "util-percent": 0.05},
+						{"disk-device": "sdb", "tps": 11.18, "rd_sec": 81.37, "wr_sec": 126.64, "dc_sec": 0.00, "rkB": 40.69, "wkB": 63.32, "dkB": 0.00, "avgrq-sz": 18.60, "areq-sz": 9.30, "avgqu-sz": 0.03, "aqu-sz": 0.03, "await": 2.67, "util-percent": 0.71}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 348.75, "txpck": 348.75, "rxkB": 101.76, "txkB": 101.76, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.59, "txpck": 1.88, "rxkB": 1.29, "txkB": 0.53, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 286, "tcpsck": 16, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 0}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.33, "some_avg": 0.72},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.08, "some_avg": 0.33, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.07, "full_avg": 0.33},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "00:20:00", "tz": "UTC", "interval": 600},
+					"cpu-load": [
+						{"cpu": "all", "usr": 0.52, "nice": 0.00, "sys": 0.16, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.00, "guest": 0.00, "gnice": 0.00, "idle": 99.32}
+					],
+					"memory": {"memfree": 3382064, "avail": 13769532, "memused": 1337180, "memused-percent": 8.37, "buffers": 269748, "cached": 9042000, "commit": 3968720, "commit-percent": 24.84, "active": 1609364, "inactive": 8895152, "dirty": 4212, "anonpg": 1205208, "slab": 1948824, "kstack": 5728, "pgtbl": 19620, "vmused": 17888, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 0, "plist-sz": 356, "ldavg-1": 0.22, "ldavg-5": 0.15, "ldavg-15": 0.15, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 4.35, "rd_sec": 0.07, "wr_sec": 275.48, "dc_sec": 0.00, "rkB": 0.03, "wkB": 137.74, "dkB": 0.00, "avgrq-sz": 63.37, "areq-sz": 31.68, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.31, "util-percent": 0.02},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 0.82, "txpck": 0.82, "rxkB": 0.13, "txkB": 0.13, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.65, "txpck": 1.97, "rxkB": 1.31, "txkB": 0.54, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 284, "tcpsck": 16, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 1}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.01, "some_avg": 0.04},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "00:30:00", "tz": "UTC", "interval": 600},
+					"cpu-load": [
+						{"cpu": "all", "usr": 0.51, "nice": 0.02, "sys": 0.15, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.00, "guest": 0.00, "gnice": 0.00, "idle": 99.30}
+					],
+					"memory": {"memfree": 3379560, "avail": 13775776, "memused": 1330988, "memused-percent": 8.33, "buffers": 270196, "cached": 9050296, "commit": 3969380, "commit-percent": 24.84, "active": 1611012, "inactive": 8902924, "dirty": 3176, "anonpg": 1205912, "slab": 1948776, "kstack": 5728, "pgtbl": 19824, "vmused": 17920, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 0, "plist-sz": 356, "ldavg-1": 0.05, "ldavg-5": 0.11, "ldavg-15": 0.12, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 5.91, "rd_sec": 410.30, "wr_sec": 303.07, "dc_sec": 0.00, "rkB": 205.15, "wkB": 151.54, "dkB": 0.00, "avgrq-sz": 120.70, "areq-sz": 60.35, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.26, "util-percent": 0.04},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 0.82, "txpck": 0.82, "rxkB": 0.13, "txkB": 0.13, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.67, "txpck": 1.95, "rxkB": 1.31, "txkB": 0.57, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 284, "tcpsck": 16, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 0}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.04},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "00:40:00", "tz": "UTC", "interval": 600},
+					"cpu-load": [
+						{"cpu": "all", "usr": 0.52, "nice": 0.00, "sys": 0.15, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.00, "guest": 0.00, "gnice": 0.00, "idle": 99.32}
+					],
+					"memory": {"memfree": 3370872, "avail": 13768192, "memused": 1338496, "memused-percent": 8.38, "buffers": 270396, "cached": 9051296, "commit": 3969376, "commit-percent": 24.84, "active": 1611932, "inactive": 8902888, "dirty": 2888, "anonpg": 1205652, "slab": 1948756, "kstack": 5728, "pgtbl": 19824, "vmused": 17888, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 0, "plist-sz": 356, "ldavg-1": 0.14, "ldavg-5": 0.09, "ldavg-15": 0.09, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 4.11, "rd_sec": 0.00, "wr_sec": 271.46, "dc_sec": 0.00, "rkB": 0.00, "wkB": 135.73, "dkB": 0.00, "avgrq-sz": 66.05, "areq-sz": 33.03, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.36, "util-percent": 0.02},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 0.77, "txpck": 0.77, "rxkB": 0.06, "txkB": 0.06, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.51, "txpck": 1.84, "rxkB": 1.29, "txkB": 0.50, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 284, "tcpsck": 16, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 0}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.04},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "00:50:00", "tz": "UTC", "interval": 600},
+					"cpu-load": [
+						{"cpu": "all", "usr": 0.54, "nice": 0.00, "sys": 0.16, "iowait": 0.03, "steal": 0.00, "irq": 0.00, "soft": 0.00, "guest": 0.00, "gnice": 0.00, "idle": 99.27}
+					],
+					"memory": {"memfree": 3360096, "avail": 13762944, "memused": 1343904, "memused-percent": 8.41, "buffers": 273544, "cached": 9053588, "commit": 3969376, "commit-percent": 24.84, "active": 1612448, "inactive": 8908160, "dirty": 3816, "anonpg": 1205752, "slab": 1948684, "kstack": 5728, "pgtbl": 19824, "vmused": 17904, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 0, "plist-sz": 356, "ldavg-1": 0.10, "ldavg-5": 0.11, "ldavg-15": 0.09, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 3.78, "rd_sec": 0.00, "wr_sec": 262.67, "dc_sec": 0.00, "rkB": 0.00, "wkB": 131.34, "dkB": 0.00, "avgrq-sz": 69.46, "areq-sz": 34.73, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.29, "util-percent": 0.02},
+						{"disk-device": "sdb", "tps": 1.69, "rd_sec": 9.85, "wr_sec": 8.92, "dc_sec": 0.00, "rkB": 4.93, "wkB": 4.46, "dkB": 0.00, "avgrq-sz": 11.09, "areq-sz": 5.54, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 2.03, "util-percent": 0.11}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 0.80, "txpck": 0.80, "rxkB": 0.07, "txkB": 0.07, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.56, "txpck": 1.87, "rxkB": 1.30, "txkB": 0.52, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 284, "tcpsck": 16, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 0}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.05},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.05, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.05},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "01:00:00", "tz": "UTC", "interval": 600},
+					"cpu-load": [
+						{"cpu": "all", "usr": 0.54, "nice": 0.00, "sys": 0.16, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.00, "guest": 0.00, "gnice": 0.00, "idle": 99.29}
+					],
+					"memory": {"memfree": 3351896, "avail": 13770216, "memused": 1336532, "memused-percent": 8.36, "buffers": 274880, "cached": 9067820, "commit": 3991608, "commit-percent": 24.98, "active": 1630308, "inactive": 8913992, "dirty": 2952, "anonpg": 1214332, "slab": 1948688, "kstack": 5776, "pgtbl": 20380, "vmused": 17920, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 0, "plist-sz": 359, "ldavg-1": 0.07, "ldavg-5": 0.08, "ldavg-15": 0.09, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 4.77, "rd_sec": 49.00, "wr_sec": 271.30, "dc_sec": 0.00, "rkB": 24.50, "wkB": 135.65, "dkB": 0.00, "avgrq-sz": 67.15, "areq-sz": 33.58, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.31, "util-percent": 0.03},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 0.79, "txpck": 0.79, "rxkB": 0.07, "txkB": 0.07, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.54, "txpck": 1.87, "rxkB": 1.31, "txkB": 0.51, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 292, "tcpsck": 16, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 0}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.04},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "01:10:00", "tz": "UTC", "interval": 600},
+					"cpu-load": [
+						{"cpu": "all", "usr": 1.30, "nice": 0.00, "sys": 0.58, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.04, "guest": 0.00, "gnice": 0.00, "idle": 98.07}
+					],
+					"memory": {"memfree": 3292928, "avail": 13769616, "memused": 1337456, "memused-percent": 8.37, "buffers": 275180, "cached": 9125780, "commit": 3970672, "commit-percent": 24.85, "active": 1645712, "inactive": 8947612, "dirty": 1740, "anonpg": 1204840, "slab": 1948472, "kstack": 5760, "pgtbl": 19360, "vmused": 17936, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 0, "plist-sz": 358, "ldavg-1": 0.05, "ldavg-5": 0.11, "ldavg-15": 0.10, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 4.88, "rd_sec": 0.15, "wr_sec": 637.00, "dc_sec": 0.00, "rkB": 0.07, "wkB": 318.50, "dkB": 0.00, "avgrq-sz": 130.61, "areq-sz": 65.30, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.83, "util-percent": 0.02},
+						{"disk-device": "sdb", "tps": 0.01, "rd_sec": 0.03, "wr_sec": 0.05, "dc_sec": 0.00, "rkB": 0.01, "wkB": 0.03, "dkB": 0.00, "avgrq-sz": 9.60, "areq-sz": 4.80, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 2.20, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 251.91, "txpck": 251.91, "rxkB": 83.71, "txkB": 83.71, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.51, "txpck": 1.84, "rxkB": 1.29, "txkB": 0.51, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 284, "tcpsck": 16, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 0}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.11, "some_avg": 0.44},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "01:20:00", "tz": "UTC", "interval": 600},
+					"cpu-load": [
+						{"cpu": "all", "usr": 0.52, "nice": 0.00, "sys": 0.16, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.00, "guest": 0.00, "gnice": 0.00, "idle": 99.31}
+					],
+					"memory": {"memfree": 3301412, "avail": 13778804, "memused": 1328156, "memused-percent": 8.31, "buffers": 275356, "cached": 9126424, "commit": 3971000, "commit-percent": 24.85, "active": 1646748, "inactive": 8947740, "dirty": 1752, "anonpg": 1205264, "slab": 1948468, "kstack": 5728, "pgtbl": 19364, "vmused": 17888, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 0, "plist-sz": 356, "ldavg-1": 0.05, "ldavg-5": 0.08, "ldavg-15": 0.08, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 3.05, "rd_sec": 0.01, "wr_sec": 172.58, "dc_sec": 0.00, "rkB": 0.01, "wkB": 86.29, "dkB": 0.00, "avgrq-sz": 56.68, "areq-sz": 28.34, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.35, "util-percent": 0.02},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 0.78, "txpck": 0.78, "rxkB": 0.06, "txkB": 0.06, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.69, "txpck": 1.97, "rxkB": 1.32, "txkB": 0.57, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 284, "tcpsck": 16, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 1}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.04},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "01:30:00", "tz": "UTC", "interval": 600},
+					"cpu-load": [
+						{"cpu": "all", "usr": 0.53, "nice": 0.00, "sys": 0.15, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.00, "guest": 0.00, "gnice": 0.00, "idle": 99.31}
+					],
+					"memory": {"memfree": 3292260, "avail": 13770504, "memused": 1336600, "memused-percent": 8.36, "buffers": 275552, "cached": 9126968, "commit": 3971000, "commit-percent": 24.85, "active": 1647276, "inactive": 8948272, "dirty": 2332, "anonpg": 1205468, "slab": 1948436, "kstack": 5728, "pgtbl": 19364, "vmused": 17920, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 1, "plist-sz": 356, "ldavg-1": 0.20, "ldavg-5": 0.15, "ldavg-15": 0.10, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 2.90, "rd_sec": 0.01, "wr_sec": 177.72, "dc_sec": 0.00, "rkB": 0.01, "wkB": 88.86, "dkB": 0.00, "avgrq-sz": 61.29, "areq-sz": 30.64, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.35, "util-percent": 0.02},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 0.80, "txpck": 0.80, "rxkB": 0.07, "txkB": 0.07, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.53, "txpck": 1.85, "rxkB": 1.30, "txkB": 0.51, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 284, "tcpsck": 16, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 0}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.04},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "01:40:27", "tz": "UTC", "interval": 626},
+					"cpu-load": [
+						{"cpu": "all", "usr": 0.52, "nice": 0.00, "sys": 0.15, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.00, "guest": 0.00, "gnice": 0.00, "idle": 99.32}
+					],
+					"memory": {"memfree": 3286584, "avail": 13765772, "memused": 1341320, "memused-percent": 8.39, "buffers": 275768, "cached": 9127708, "commit": 3971000, "commit-percent": 24.85, "active": 1647428, "inactive": 8948832, "dirty": 1804, "anonpg": 1205448, "slab": 1948436, "kstack": 5712, "pgtbl": 19172, "vmused": 17856, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 0, "plist-sz": 355, "ldavg-1": 0.19, "ldavg-5": 0.15, "ldavg-15": 0.10, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 2.94, "rd_sec": 0.14, "wr_sec": 188.80, "dc_sec": 0.00, "rkB": 0.07, "wkB": 94.40, "dkB": 0.00, "avgrq-sz": 64.16, "areq-sz": 32.08, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.34, "util-percent": 0.02},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 0.82, "txpck": 0.82, "rxkB": 0.18, "txkB": 0.18, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.60, "txpck": 1.92, "rxkB": 1.31, "txkB": 0.56, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 284, "tcpsck": 16, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 0}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.04},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "01:50:25", "tz": "UTC", "interval": 599},
+					"cpu-load": [
+						{"cpu": "all", "usr": 0.52, "nice": 0.00, "sys": 0.15, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.00, "guest": 0.00, "gnice": 0.00, "idle": 99.33}
+					],
+					"memory": {"memfree": 3291412, "avail": 13772352, "memused": 1334748, "memused-percent": 8.35, "buffers": 275984, "cached": 9129236, "commit": 3973904, "commit-percent": 24.87, "active": 1649048, "inactive": 8949688, "dirty": 1892, "anonpg": 1205936, "slab": 1948436, "kstack": 5828, "pgtbl": 19452, "vmused": 17904, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 1, "plist-sz": 357, "ldavg-1": 0.08, "ldavg-5": 0.12, "ldavg-15": 0.09, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 2.94, "rd_sec": 0.00, "wr_sec": 189.49, "dc_sec": 0.00, "rkB": 0.00, "wkB": 94.75, "dkB": 0.00, "avgrq-sz": 64.40, "areq-sz": 32.20, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.33, "util-percent": 0.01},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 0.77, "txpck": 0.77, "rxkB": 0.06, "txkB": 0.06, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.59, "txpck": 1.92, "rxkB": 1.30, "txkB": 0.54, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 286, "tcpsck": 16, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 0}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.04},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "02:00:05", "tz": "UTC", "interval": 580},
+					"cpu-load": [
+						{"cpu": "all", "usr": 0.53, "nice": 0.00, "sys": 0.15, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.00, "guest": 0.00, "gnice": 0.00, "idle": 99.31}
+					],
+					"memory": {"memfree": 3282156, "avail": 13763680, "memused": 1343312, "memused-percent": 8.41, "buffers": 276160, "cached": 9129752, "commit": 3994816, "commit-percent": 25.00, "active": 1656780, "inactive": 8949888, "dirty": 2444, "anonpg": 1213324, "slab": 1948436, "kstack": 5844, "pgtbl": 20332, "vmused": 17968, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 1, "plist-sz": 361, "ldavg-1": 0.05, "ldavg-5": 0.09, "ldavg-15": 0.08, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 3.16, "rd_sec": 0.00, "wr_sec": 194.22, "dc_sec": 0.00, "rkB": 0.00, "wkB": 97.11, "dkB": 0.00, "avgrq-sz": 61.52, "areq-sz": 30.76, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.36, "util-percent": 0.02},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 0.82, "txpck": 0.82, "rxkB": 0.13, "txkB": 0.13, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.69, "txpck": 1.97, "rxkB": 1.32, "txkB": 0.58, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 294, "tcpsck": 16, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 0}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.04},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "02:10:01", "tz": "UTC", "interval": 595},
+					"cpu-load": [
+						{"cpu": "all", "usr": 1.31, "nice": 0.00, "sys": 0.57, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.04, "guest": 0.00, "gnice": 0.00, "idle": 98.07}
+					],
+					"memory": {"memfree": 3227244, "avail": 13765256, "memused": 1342044, "memused-percent": 8.40, "buffers": 276332, "cached": 9185952, "commit": 3971180, "commit-percent": 24.85, "active": 1677528, "inactive": 8983032, "dirty": 1972, "anonpg": 1210744, "slab": 1948244, "kstack": 5760, "pgtbl": 19476, "vmused": 17904, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 0, "plist-sz": 358, "ldavg-1": 0.06, "ldavg-5": 0.15, "ldavg-15": 0.14, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 3.34, "rd_sec": 0.00, "wr_sec": 417.68, "dc_sec": 0.00, "rkB": 0.00, "wkB": 208.84, "dkB": 0.00, "avgrq-sz": 125.05, "areq-sz": 62.52, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.46, "util-percent": 0.02},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 253.98, "txpck": 253.98, "rxkB": 84.39, "txkB": 84.39, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.51, "txpck": 1.85, "rxkB": 1.29, "txkB": 0.50, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 285, "tcpsck": 17, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 0}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.11, "some_avg": 0.44},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "02:20:02", "tz": "UTC", "interval": 602},
+					"cpu-load": [
+						{"cpu": "all", "usr": 0.53, "nice": 0.00, "sys": 0.15, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.00, "guest": 0.00, "gnice": 0.00, "idle": 99.32}
+					],
+					"memory": {"memfree": 3224872, "avail": 13763460, "memused": 1343840, "memused-percent": 8.41, "buffers": 276548, "cached": 9186312, "commit": 3971256, "commit-percent": 24.85, "active": 1677848, "inactive": 8983224, "dirty": 2180, "anonpg": 1210684, "slab": 1948244, "kstack": 5728, "pgtbl": 19284, "vmused": 17872, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 0, "plist-sz": 356, "ldavg-1": 0.18, "ldavg-5": 0.10, "ldavg-15": 0.09, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 3.14, "rd_sec": 0.00, "wr_sec": 210.82, "dc_sec": 0.00, "rkB": 0.00, "wkB": 105.41, "dkB": 0.00, "avgrq-sz": 67.12, "areq-sz": 33.56, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.35, "util-percent": 0.02},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 0.78, "txpck": 0.78, "rxkB": 0.06, "txkB": 0.06, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.53, "txpck": 1.85, "rxkB": 1.30, "txkB": 0.50, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 285, "tcpsck": 17, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 0}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.04},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "02:30:00", "tz": "UTC", "interval": 598},
+					"cpu-load": [
+						{"cpu": "all", "usr": 0.52, "nice": 0.00, "sys": 0.15, "iowait": 0.00, "steal": 0.00, "irq": 0.00, "soft": 0.00, "guest": 0.00, "gnice": 0.00, "idle": 99.32}
+					],
+					"memory": {"memfree": 3230172, "avail": 13768684, "memused": 1338504, "memused-percent": 8.38, "buffers": 276792, "cached": 9186104, "commit": 3971256, "commit-percent": 24.85, "active": 1678712, "inactive": 8982696, "dirty": 2628, "anonpg": 1211052, "slab": 1948244, "kstack": 5744, "pgtbl": 19492, "vmused": 17920, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 0, "plist-sz": 357, "ldavg-1": 0.22, "ldavg-5": 0.16, "ldavg-15": 0.11, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 3.01, "rd_sec": 0.00, "wr_sec": 210.61, "dc_sec": 0.00, "rkB": 0.00, "wkB": 105.30, "dkB": 0.00, "avgrq-sz": 70.06, "areq-sz": 35.03, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.34, "util-percent": 0.02},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 0.78, "txpck": 0.78, "rxkB": 0.06, "txkB": 0.06, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.52, "txpck": 1.85, "rxkB": 1.30, "txkB": 0.51, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 284, "tcpsck": 16, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 0}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.04},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "02:40:05", "tz": "UTC", "interval": 605},
+					"cpu-load": [
+						{"cpu": "all", "usr": 0.53, "nice": 0.00, "sys": 0.15, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.00, "guest": 0.00, "gnice": 0.00, "idle": 99.32}
+					],
+					"memory": {"memfree": 3220492, "avail": 13762844, "memused": 1344488, "memused-percent": 8.41, "buffers": 277020, "cached": 9189604, "commit": 3974160, "commit-percent": 24.87, "active": 1679504, "inactive": 8985900, "dirty": 2352, "anonpg": 1211404, "slab": 1948212, "kstack": 5796, "pgtbl": 19688, "vmused": 17920, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 1, "plist-sz": 358, "ldavg-1": 0.13, "ldavg-5": 0.15, "ldavg-15": 0.11, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 3.13, "rd_sec": 0.11, "wr_sec": 195.40, "dc_sec": 0.00, "rkB": 0.05, "wkB": 97.70, "dkB": 0.00, "avgrq-sz": 62.52, "areq-sz": 31.26, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.35, "util-percent": 0.02},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 0.77, "txpck": 0.77, "rxkB": 0.06, "txkB": 0.06, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.52, "txpck": 1.85, "rxkB": 1.29, "txkB": 0.51, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 286, "tcpsck": 16, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 0}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.04},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "02:50:07", "tz": "UTC", "interval": 602},
+					"cpu-load": [
+						{"cpu": "all", "usr": 0.52, "nice": 0.00, "sys": 0.15, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.00, "guest": 0.00, "gnice": 0.00, "idle": 99.31}
+					],
+					"memory": {"memfree": 3234632, "avail": 13777644, "memused": 1329692, "memused-percent": 8.32, "buffers": 277260, "cached": 9190020, "commit": 3971364, "commit-percent": 24.85, "active": 1679768, "inactive": 8986172, "dirty": 2092, "anonpg": 1210948, "slab": 1948212, "kstack": 5760, "pgtbl": 19404, "vmused": 17888, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 0, "plist-sz": 357, "ldavg-1": 0.18, "ldavg-5": 0.21, "ldavg-15": 0.15, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 4.30, "rd_sec": 0.00, "wr_sec": 217.21, "dc_sec": 0.00, "rkB": 0.00, "wkB": 108.61, "dkB": 0.00, "avgrq-sz": 50.55, "areq-sz": 25.28, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.31, "util-percent": 0.02},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 0.85, "txpck": 0.85, "rxkB": 0.19, "txkB": 0.19, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.59, "txpck": 1.94, "rxkB": 1.31, "txkB": 0.56, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 285, "tcpsck": 17, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 0}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.04},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "03:00:09", "tz": "UTC", "interval": 602},
+					"cpu-load": [
+						{"cpu": "all", "usr": 0.52, "nice": 0.00, "sys": 0.15, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.00, "guest": 0.00, "gnice": 0.00, "idle": 99.32}
+					],
+					"memory": {"memfree": 3220716, "avail": 13762948, "memused": 1344384, "memused-percent": 8.41, "buffers": 277392, "cached": 9189112, "commit": 3992276, "commit-percent": 24.98, "active": 1687408, "inactive": 8985012, "dirty": 2196, "anonpg": 1218356, "slab": 1948212, "kstack": 5808, "pgtbl": 20260, "vmused": 17936, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 0, "plist-sz": 361, "ldavg-1": 0.20, "ldavg-5": 0.20, "ldavg-15": 0.18, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 3.58, "rd_sec": 0.00, "wr_sec": 204.36, "dc_sec": 0.00, "rkB": 0.00, "wkB": 102.18, "dkB": 0.00, "avgrq-sz": 57.14, "areq-sz": 28.57, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.32, "util-percent": 0.02},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 0.78, "txpck": 0.78, "rxkB": 0.06, "txkB": 0.06, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.52, "txpck": 1.86, "rxkB": 1.29, "txkB": 0.50, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 293, "tcpsck": 17, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 0}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.04},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "03:10:10", "tz": "UTC", "interval": 601},
+					"cpu-load": [
+						{"cpu": "all", "usr": 1.30, "nice": 0.00, "sys": 0.57, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.04, "guest": 0.00, "gnice": 0.00, "idle": 98.08}
+					],
+					"memory": {"memfree": 3170468, "avail": 13766044, "memused": 1341152, "memused-percent": 8.39, "buffers": 277548, "cached": 9242304, "commit": 3978364, "commit-percent": 24.90, "active": 1696428, "inactive": 9017176, "dirty": 3736, "anonpg": 1206072, "slab": 1948344, "kstack": 5780, "pgtbl": 19784, "vmused": 17920, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 1, "plist-sz": 357, "ldavg-1": 0.20, "ldavg-5": 0.16, "ldavg-15": 0.16, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 4.82, "rd_sec": 0.00, "wr_sec": 669.13, "dc_sec": 0.00, "rkB": 0.00, "wkB": 334.56, "dkB": 0.00, "avgrq-sz": 138.74, "areq-sz": 69.37, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.42, "util-percent": 0.02},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 251.35, "txpck": 251.35, "rxkB": 83.50, "txkB": 83.50, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.51, "txpck": 1.84, "rxkB": 1.29, "txkB": 0.50, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 286, "tcpsck": 16, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 0}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.11, "some_avg": 0.45},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "03:20:12", "tz": "UTC", "interval": 602},
+					"cpu-load": [
+						{"cpu": "all", "usr": 0.53, "nice": 0.00, "sys": 0.15, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.00, "guest": 0.00, "gnice": 0.00, "idle": 99.31}
+					],
+					"memory": {"memfree": 3176492, "avail": 13775956, "memused": 1331224, "memused-percent": 8.33, "buffers": 277700, "cached": 9246140, "commit": 3975460, "commit-percent": 24.88, "active": 1697456, "inactive": 9019648, "dirty": 2804, "anonpg": 1205688, "slab": 1948260, "kstack": 5776, "pgtbl": 19480, "vmused": 17904, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 0, "plist-sz": 358, "ldavg-1": 0.12, "ldavg-5": 0.13, "ldavg-15": 0.15, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 3.59, "rd_sec": 0.00, "wr_sec": 251.36, "dc_sec": 0.00, "rkB": 0.00, "wkB": 125.68, "dkB": 0.00, "avgrq-sz": 70.04, "areq-sz": 35.02, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.33, "util-percent": 0.02},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 0.78, "txpck": 0.78, "rxkB": 0.07, "txkB": 0.07, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.55, "txpck": 1.85, "rxkB": 1.30, "txkB": 0.50, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 285, "tcpsck": 17, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 0}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.04},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "03:30:14", "tz": "UTC", "interval": 602},
+					"cpu-load": [
+						{"cpu": "all", "usr": 0.51, "nice": 0.00, "sys": 0.15, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.00, "guest": 0.00, "gnice": 0.00, "idle": 99.33}
+					],
+					"memory": {"memfree": 3173852, "avail": 13772460, "memused": 1334724, "memused-percent": 8.35, "buffers": 277820, "cached": 9245160, "commit": 3975460, "commit-percent": 24.88, "active": 1697628, "inactive": 9018472, "dirty": 2460, "anonpg": 1205664, "slab": 1948260, "kstack": 5744, "pgtbl": 19396, "vmused": 17888, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 0, "plist-sz": 356, "ldavg-1": 0.05, "ldavg-5": 0.07, "ldavg-15": 0.09, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 3.62, "rd_sec": 0.00, "wr_sec": 239.41, "dc_sec": 0.00, "rkB": 0.00, "wkB": 119.70, "dkB": 0.00, "avgrq-sz": 66.19, "areq-sz": 33.10, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.34, "util-percent": 0.02},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 0.80, "txpck": 0.80, "rxkB": 0.13, "txkB": 0.13, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.53, "txpck": 1.88, "rxkB": 1.30, "txkB": 0.53, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 285, "tcpsck": 17, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 2}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.04},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "03:40:10", "tz": "UTC", "interval": 597},
+					"cpu-load": [
+						{"cpu": "all", "usr": 0.51, "nice": 0.00, "sys": 0.15, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.00, "guest": 0.00, "gnice": 0.00, "idle": 99.34}
+					],
+					"memory": {"memfree": 3184528, "avail": 13786200, "memused": 1321080, "memused-percent": 8.27, "buffers": 278000, "cached": 9247948, "commit": 3978364, "commit-percent": 24.90, "active": 1698824, "inactive": 9021152, "dirty": 2944, "anonpg": 1206680, "slab": 1948260, "kstack": 5796, "pgtbl": 19788, "vmused": 17920, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 1, "plist-sz": 358, "ldavg-1": 0.12, "ldavg-5": 0.10, "ldavg-15": 0.09, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 3.41, "rd_sec": 0.00, "wr_sec": 236.42, "dc_sec": 0.00, "rkB": 0.00, "wkB": 118.21, "dkB": 0.00, "avgrq-sz": 69.23, "areq-sz": 34.62, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.31, "util-percent": 0.01},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 0.80, "txpck": 0.80, "rxkB": 0.07, "txkB": 0.07, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.53, "txpck": 1.87, "rxkB": 1.30, "txkB": 0.52, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 287, "tcpsck": 17, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 0}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.04},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "03:50:17", "tz": "UTC", "interval": 607},
+					"cpu-load": [
+						{"cpu": "all", "usr": 0.53, "nice": 0.00, "sys": 0.16, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.00, "guest": 0.00, "gnice": 0.00, "idle": 99.31}
+					],
+					"memory": {"memfree": 3172040, "avail": 13782484, "memused": 1324788, "memused-percent": 8.29, "buffers": 280280, "cached": 9254448, "commit": 3980580, "commit-percent": 24.91, "active": 1702716, "inactive": 9027136, "dirty": 2760, "anonpg": 1207384, "slab": 1948260, "kstack": 5776, "pgtbl": 19768, "vmused": 17936, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 0, "plist-sz": 358, "ldavg-1": 0.03, "ldavg-5": 0.07, "ldavg-15": 0.08, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 4.62, "rd_sec": 29.01, "wr_sec": 236.17, "dc_sec": 0.00, "rkB": 14.50, "wkB": 118.09, "dkB": 0.00, "avgrq-sz": 57.42, "areq-sz": 28.71, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.33, "util-percent": 0.03},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 0.83, "txpck": 0.83, "rxkB": 0.19, "txkB": 0.19, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.58, "txpck": 1.92, "rxkB": 1.31, "txkB": 0.55, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 287, "tcpsck": 17, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 0}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.04},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.01, "some_avg300": 0.00, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.01, "full_avg300": 0.00, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "04:00:19", "tz": "UTC", "interval": 602},
+					"cpu-load": [
+						{"cpu": "all", "usr": 0.53, "nice": 0.00, "sys": 0.15, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.00, "guest": 0.00, "gnice": 0.00, "idle": 99.31}
+					],
+					"memory": {"memfree": 3148252, "avail": 13758848, "memused": 1348336, "memused-percent": 8.44, "buffers": 280452, "cached": 9254516, "commit": 3991252, "commit-percent": 24.98, "active": 1707712, "inactive": 9026372, "dirty": 2528, "anonpg": 1211528, "slab": 1948260, "kstack": 5776, "pgtbl": 20184, "vmused": 17936, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 0, "plist-sz": 359, "ldavg-1": 0.18, "ldavg-5": 0.12, "ldavg-15": 0.10, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 3.88, "rd_sec": 0.00, "wr_sec": 234.95, "dc_sec": 0.00, "rkB": 0.00, "wkB": 117.47, "dkB": 0.00, "avgrq-sz": 60.57, "areq-sz": 30.29, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.35, "util-percent": 0.02},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 0.80, "txpck": 0.80, "rxkB": 0.07, "txkB": 0.07, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.65, "txpck": 1.97, "rxkB": 1.31, "txkB": 0.52, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 291, "tcpsck": 17, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 1}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.05},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "04:10:21", "tz": "UTC", "interval": 602},
+					"cpu-load": [
+						{"cpu": "all", "usr": 1.31, "nice": 0.00, "sys": 0.57, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.04, "guest": 0.00, "gnice": 0.00, "idle": 98.07}
+					],
+					"memory": {"memfree": 3098328, "avail": 13766084, "memused": 1341044, "memused-percent": 8.39, "buffers": 280540, "cached": 9311600, "commit": 3975460, "commit-percent": 24.88, "active": 1725372, "inactive": 9062276, "dirty": 3072, "anonpg": 1208312, "slab": 1948304, "kstack": 5744, "pgtbl": 19696, "vmused": 17920, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 0, "plist-sz": 357, "ldavg-1": 0.16, "ldavg-5": 0.12, "ldavg-15": 0.09, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 3.94, "rd_sec": 0.00, "wr_sec": 549.41, "dc_sec": 0.00, "rkB": 0.00, "wkB": 274.70, "dkB": 0.00, "avgrq-sz": 139.31, "areq-sz": 69.66, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.49, "util-percent": 0.02},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 251.25, "txpck": 251.25, "rxkB": 83.47, "txkB": 83.47, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.53, "txpck": 1.85, "rxkB": 1.30, "txkB": 0.50, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 285, "tcpsck": 17, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 0}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.11, "some_avg": 0.45},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "04:20:10", "tz": "UTC", "interval": 590},
+					"cpu-load": [
+						{"cpu": "all", "usr": 0.53, "nice": 0.00, "sys": 0.16, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.00, "guest": 0.00, "gnice": 0.00, "idle": 99.30}
+					],
+					"memory": {"memfree": 3102876, "avail": 13770420, "memused": 1336896, "memused-percent": 8.37, "buffers": 280688, "cached": 9311128, "commit": 3978364, "commit-percent": 24.90, "active": 1726232, "inactive": 9061616, "dirty": 2112, "anonpg": 1208660, "slab": 1948228, "kstack": 5796, "pgtbl": 19892, "vmused": 17904, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 1, "plist-sz": 358, "ldavg-1": 0.09, "ldavg-5": 0.09, "ldavg-15": 0.09, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 3.97, "rd_sec": 0.00, "wr_sec": 233.24, "dc_sec": 0.00, "rkB": 0.00, "wkB": 116.62, "dkB": 0.00, "avgrq-sz": 58.71, "areq-sz": 29.36, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.35, "util-percent": 0.02},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 0.77, "txpck": 0.77, "rxkB": 0.06, "txkB": 0.06, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.59, "txpck": 1.89, "rxkB": 1.30, "txkB": 0.51, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 286, "tcpsck": 16, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 0}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.04},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "04:30:28", "tz": "UTC", "interval": 617},
+					"cpu-load": [
+						{"cpu": "all", "usr": 0.62, "nice": 0.00, "sys": 0.19, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.01, "guest": 0.00, "gnice": 0.00, "idle": 99.16}
+					],
+					"memory": {"memfree": 3083528, "avail": 13753672, "memused": 1353736, "memused-percent": 8.47, "buffers": 281004, "cached": 9313448, "commit": 4036136, "commit-percent": 25.26, "active": 1741528, "inactive": 9063480, "dirty": 2460, "anonpg": 1223020, "slab": 1948100, "kstack": 5888, "pgtbl": 20836, "vmused": 18048, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 0, "plist-sz": 366, "ldavg-1": 0.07, "ldavg-5": 0.11, "ldavg-15": 0.09, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 6.15, "rd_sec": 0.05, "wr_sec": 321.75, "dc_sec": 0.00, "rkB": 0.03, "wkB": 160.87, "dkB": 0.00, "avgrq-sz": 52.32, "areq-sz": 26.16, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.31, "util-percent": 0.04},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 1.04, "txpck": 1.04, "rxkB": 0.11, "txkB": 0.11, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 63.11, "txpck": 27.71, "rxkB": 728.45, "txkB": 2.88, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 76.02, "txpck": 125.63, "rxkB": 7.53, "txkB": 2764.23, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 300, "tcpsck": 20, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 13}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.05},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "04:40:24", "tz": "UTC", "interval": 597},
+					"cpu-load": [
+						{"cpu": "all", "usr": 0.59, "nice": 0.00, "sys": 0.16, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.00, "guest": 0.00, "gnice": 0.00, "idle": 99.24}
+					],
+					"memory": {"memfree": 3095208, "avail": 13768400, "memused": 1339112, "memused-percent": 8.38, "buffers": 281256, "cached": 9316212, "commit": 4012084, "commit-percent": 25.11, "active": 1735008, "inactive": 9065956, "dirty": 2672, "anonpg": 1215920, "slab": 1948028, "kstack": 5840, "pgtbl": 19608, "vmused": 18016, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 0, "plist-sz": 362, "ldavg-1": 0.06, "ldavg-5": 0.11, "ldavg-15": 0.09, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 6.32, "rd_sec": 0.00, "wr_sec": 322.69, "dc_sec": 0.00, "rkB": 0.00, "wkB": 161.35, "dkB": 0.00, "avgrq-sz": 51.09, "areq-sz": 25.54, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.28, "util-percent": 0.04},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 1.07, "txpck": 1.07, "rxkB": 0.13, "txkB": 0.13, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 3.57, "txpck": 3.64, "rxkB": 5.08, "txkB": 0.70, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 1.53, "txpck": 1.48, "rxkB": 0.99, "txkB": 0.93, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 287, "tcpsck": 17, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 6}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.04},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "04:50:15", "tz": "UTC", "interval": 591},
+					"cpu-load": [
+						{"cpu": "all", "usr": 0.59, "nice": 0.00, "sys": 0.16, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.00, "guest": 0.00, "gnice": 0.00, "idle": 99.24}
+					],
+					"memory": {"memfree": 3083296, "avail": 13759136, "memused": 1348408, "memused-percent": 8.44, "buffers": 281516, "cached": 9318600, "commit": 4013292, "commit-percent": 25.11, "active": 1734484, "inactive": 9068032, "dirty": 1884, "anonpg": 1214864, "slab": 1947996, "kstack": 5860, "pgtbl": 19980, "vmused": 18000, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 1, "plist-sz": 362, "ldavg-1": 0.29, "ldavg-5": 0.17, "ldavg-15": 0.11, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 5.51, "rd_sec": 0.00, "wr_sec": 295.37, "dc_sec": 0.00, "rkB": 0.00, "wkB": 147.69, "dkB": 0.00, "avgrq-sz": 53.60, "areq-sz": 26.80, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.34, "util-percent": 0.03},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 1.10, "txpck": 1.10, "rxkB": 0.20, "txkB": 0.20, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 3.02, "txpck": 3.07, "rxkB": 3.59, "txkB": 0.75, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.79, "txpck": 0.76, "rxkB": 0.59, "txkB": 0.56, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 291, "tcpsck": 19, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 5}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.04},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "05:00:10", "tz": "UTC", "interval": 594},
+					"cpu-load": [
+						{"cpu": "all", "usr": 48.41, "nice": 0.00, "sys": 20.96, "iowait": 2.34, "steal": 0.00, "irq": 0.00, "soft": 9.02, "guest": 0.00, "gnice": 0.00, "idle": 19.26}
+					],
+					"memory": {"memfree": 1806588, "avail": 12650708, "memused": 2421488, "memused-percent": 15.15, "buffers": 79196, "cached": 9854760, "commit": 8340720, "commit-percent": 52.20, "active": 1792164, "inactive": 10238312, "dirty": 650572, "anonpg": 2109388, "slab": 1817784, "kstack": 13696, "pgtbl": 67624, "vmused": 25856, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 32, "plist-sz": 854, "ldavg-1": 55.73, "ldavg-5": 35.97, "ldavg-15": 16.62, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 684.34, "rd_sec": 243.71, "wr_sec": 15429.31, "dc_sec": 0.00, "rkB": 121.85, "wkB": 7714.65, "dkB": 0.00, "avgrq-sz": 22.90, "areq-sz": 11.45, "avgqu-sz": 0.14, "aqu-sz": 0.14, "await": 0.17, "util-percent": 5.42},
+						{"disk-device": "sdb", "tps": 263.74, "rd_sec": 140710.48, "wr_sec": 253165.88, "dc_sec": 0.00, "rkB": 70355.24, "wkB": 126582.94, "dkB": 0.00, "avgrq-sz": 1493.42, "areq-sz": 746.71, "avgqu-sz": 12.88, "aqu-sz": 12.88, "await": 48.19, "util-percent": 58.57}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 11939.58, "txpck": 11939.58, "rxkB": 82033.33, "txkB": 82033.33, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 13479.34, "txpck": 6087.51, "rxkB": 143906.17, "txkB": 1455.77, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 17040.52, "txpck": 15505.17, "rxkB": 128786.51, "txkB": 206653.80, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 2890, "tcpsck": 2278, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 18587}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 94.39, "some_avg60": 92.92, "some_avg300": 69.56, "some_avg": 65.72},
+						"psi-io": {"some_avg10": 31.59, "some_avg60": 29.51, "some_avg300": 24.38, "some_avg": 25.68, "full_avg10": 0.00, "full_avg60": 0.04, "full_avg300": 1.04, "full_avg": 2.56},
+						"psi-mem": {"some_avg10": 3.40, "some_avg60": 3.52, "some_avg300": 2.16, "some_avg": 2.16, "full_avg10": 0.86, "full_avg60": 1.41, "full_avg300": 1.04, "full_avg": 1.24}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "05:10:26", "tz": "UTC", "interval": 617},
+					"cpu-load": [
+						{"cpu": "all", "usr": 14.35, "nice": 0.00, "sys": 9.42, "iowait": 20.76, "steal": 0.00, "irq": 0.00, "soft": 3.53, "guest": 0.00, "gnice": 0.00, "idle": 51.94}
+					],
+					"memory": {"memfree": 2352100, "avail": 12779508, "memused": 2310752, "memused-percent": 14.46, "buffers": 64836, "cached": 9429048, "commit": 8603196, "commit-percent": 53.84, "active": 2307400, "inactive": 9292432, "dirty": 2868, "anonpg": 2118692, "slab": 1823080, "kstack": 14004, "pgtbl": 68000, "vmused": 26112, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 1, "plist-sz": 871, "ldavg-1": 0.40, "ldavg-5": 8.27, "ldavg-15": 12.07, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 254.33, "rd_sec": 461.26, "wr_sec": 12894.84, "dc_sec": 0.00, "rkB": 230.63, "wkB": 6447.42, "dkB": 0.00, "avgrq-sz": 52.51, "areq-sz": 26.26, "avgqu-sz": 225.14, "aqu-sz": 225.14, "await": 885.22, "util-percent": 1.53},
+						{"disk-device": "sdb", "tps": 231.31, "rd_sec": 102082.31, "wr_sec": 257749.61, "dc_sec": 0.00, "rkB": 51041.16, "wkB": 128874.80, "dkB": 0.00, "avgrq-sz": 1555.65, "areq-sz": 777.82, "avgqu-sz": 15.80, "aqu-sz": 15.80, "await": 67.64, "util-percent": 57.73}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 1257.46, "txpck": 1257.46, "rxkB": 4646.43, "txkB": 4646.43, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 11674.42, "txpck": 5988.57, "rxkB": 38336.28, "txkB": 758.19, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 14316.86, "txpck": 15151.43, "rxkB": 128334.17, "txkB": 91159.30, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 546, "tcpsck": 80, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 61}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.07, "some_avg300": 12.95, "some_avg": 13.72},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 4.44, "some_avg300": 23.15, "some_avg": 33.66, "full_avg10": 0.00, "full_avg60": 4.09, "full_avg300": 15.78, "full_avg": 23.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.06, "some_avg300": 0.72, "some_avg": 1.25, "full_avg10": 0.00, "full_avg60": 0.06, "full_avg300": 0.47, "full_avg": 0.89}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "05:20:00", "tz": "UTC", "interval": 574},
+					"cpu-load": [
+						{"cpu": "all", "usr": 1.18, "nice": 0.00, "sys": 0.77, "iowait": 2.18, "steal": 0.00, "irq": 0.00, "soft": 0.10, "guest": 0.00, "gnice": 0.00, "idle": 95.78}
+					],
+					"memory": {"memfree": 514604, "avail": 12828364, "memused": 2263528, "memused-percent": 14.16, "buffers": 71752, "cached": 11287788, "commit": 8464044, "commit-percent": 52.97, "active": 2262756, "inactive": 11147904, "dirty": 1924, "anonpg": 2064244, "slab": 1842144, "kstack": 13572, "pgtbl": 61048, "vmused": 25712, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 1, "plist-sz": 844, "ldavg-1": 0.21, "ldavg-5": 1.38, "ldavg-15": 6.59, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 12.23, "rd_sec": 42.81, "wr_sec": 617.11, "dc_sec": 0.00, "rkB": 21.41, "wkB": 308.55, "dkB": 0.00, "avgrq-sz": 53.96, "areq-sz": 26.98, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.29, "util-percent": 0.08},
+						{"disk-device": "sdb", "tps": 16.20, "rd_sec": 0.89, "wr_sec": 35962.20, "dc_sec": 0.00, "rkB": 0.45, "wkB": 17981.10, "dkB": 0.00, "avgrq-sz": 2219.50, "areq-sz": 1109.75, "avgqu-sz": 3.32, "aqu-sz": 3.32, "await": 205.00, "util-percent": 6.20}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 1.99, "txpck": 1.99, "rxkB": 0.42, "txkB": 0.42, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 2.97, "txpck": 2.99, "rxkB": 3.38, "txkB": 0.75, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 838.71, "txpck": 282.49, "rxkB": 18007.67, "txkB": 313.16, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 475, "tcpsck": 39, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 0}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 1.78, "some_avg": 0.13},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 4.25, "some_avg": 3.21, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 3.12, "full_avg": 2.93},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.08, "some_avg": 0.06, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.05, "full_avg": 0.06}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "05:30:34", "tz": "UTC", "interval": 634},
+					"cpu-load": [
+						{"cpu": "all", "usr": 0.77, "nice": 0.00, "sys": 0.18, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.00, "guest": 0.00, "gnice": 0.00, "idle": 99.03}
+					],
+					"memory": {"memfree": 567476, "avail": 12886756, "memused": 2205588, "memused-percent": 13.80, "buffers": 73232, "cached": 11291804, "commit": 8363664, "commit-percent": 52.34, "active": 2223664, "inactive": 11143868, "dirty": 1920, "anonpg": 2015416, "slab": 1841716, "kstack": 13248, "pgtbl": 53988, "vmused": 25424, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 0, "plist-sz": 826, "ldavg-1": 0.21, "ldavg-5": 0.32, "ldavg-15": 3.38, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 4.87, "rd_sec": 10.92, "wr_sec": 224.27, "dc_sec": 0.00, "rkB": 5.46, "wkB": 112.13, "dkB": 0.00, "avgrq-sz": 48.27, "areq-sz": 24.14, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.28, "util-percent": 0.03},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 1.25, "txpck": 1.25, "rxkB": 0.34, "txkB": 0.34, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.76, "txpck": 2.11, "rxkB": 1.32, "txkB": 0.81, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 442, "tcpsck": 40, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 0}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.17, "some_avg": 0.06},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.45, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.32, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "05:40:27", "tz": "UTC", "interval": 593},
+					"cpu-load": [
+						{"cpu": "all", "usr": 0.77, "nice": 0.00, "sys": 0.20, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.00, "guest": 0.00, "gnice": 0.00, "idle": 99.02}
+					],
+					"memory": {"memfree": 605788, "avail": 12930488, "memused": 2162384, "memused-percent": 13.53, "buffers": 74612, "cached": 11295716, "commit": 8282104, "commit-percent": 51.83, "active": 2192112, "inactive": 11142780, "dirty": 1348, "anonpg": 1977300, "slab": 1841316, "kstack": 13024, "pgtbl": 47944, "vmused": 25216, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 0, "plist-sz": 812, "ldavg-1": 0.05, "ldavg-5": 0.13, "ldavg-15": 1.83, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 6.08, "rd_sec": 9.54, "wr_sec": 223.24, "dc_sec": 0.00, "rkB": 4.77, "wkB": 111.62, "dkB": 0.00, "avgrq-sz": 38.29, "areq-sz": 19.14, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.28, "util-percent": 0.04},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 0.86, "txpck": 0.86, "rxkB": 0.19, "txkB": 0.19, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 2.03, "txpck": 2.20, "rxkB": 1.36, "txkB": 0.64, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 413, "tcpsck": 39, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 0}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.05},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.03, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.01, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "05:50:10", "tz": "UTC", "interval": 583},
+					"cpu-load": [
+						{"cpu": "all", "usr": 0.78, "nice": 0.00, "sys": 0.19, "iowait": 0.01, "steal": 0.00, "irq": 0.00, "soft": 0.00, "guest": 0.00, "gnice": 0.00, "idle": 99.01}
+					],
+					"memory": {"memfree": 628080, "avail": 12958124, "memused": 2134768, "memused-percent": 13.36, "buffers": 75872, "cached": 11299888, "commit": 8252476, "commit-percent": 51.64, "active": 2179748, "inactive": 11137120, "dirty": 996, "anonpg": 1953928, "slab": 1841208, "kstack": 13028, "pgtbl": 44644, "vmused": 25136, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 1, "plist-sz": 810, "ldavg-1": 0.15, "ldavg-5": 0.11, "ldavg-15": 1.01, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 5.18, "rd_sec": 9.31, "wr_sec": 186.80, "dc_sec": 0.00, "rkB": 4.66, "wkB": 93.40, "dkB": 0.00, "avgrq-sz": 37.89, "areq-sz": 18.94, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.29, "util-percent": 0.03},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 0.82, "txpck": 0.82, "rxkB": 0.19, "txkB": 0.19, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.57, "txpck": 1.92, "rxkB": 1.30, "txkB": 0.55, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 409, "tcpsck": 39, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 0}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.05},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.01, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.01},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				},
+				{
+					"timestamp": {"date": "2026-09-30", "time": "06:00:41", "tz": "UTC", "interval": 630},
+					"cpu-load": [
+						{"cpu": "all", "usr": 0.77, "nice": 0.00, "sys": 0.21, "iowait": 0.02, "steal": 0.00, "irq": 0.00, "soft": 0.00, "guest": 0.00, "gnice": 0.00, "idle": 99.00}
+					],
+					"memory": {"memfree": 629208, "avail": 12988280, "memused": 2104716, "memused-percent": 13.17, "buffers": 77200, "cached": 11327584, "commit": 8201164, "commit-percent": 51.32, "active": 2163276, "inactive": 11149820, "dirty": 1876, "anonpg": 1921096, "slab": 1841108, "kstack": 12912, "pgtbl": 43136, "vmused": 25088, "swpfree": 0, "swpused": 0, "swpused-percent": 0.00, "swpcad": 0, "swpcad-percent": 0.00},
+					"queue": {"runq-sz": 0, "plist-sz": 805, "ldavg-1": 0.05, "ldavg-5": 0.06, "ldavg-15": 0.53, "blocked": 0},
+					"disk": [
+						{"disk-device": "loop0", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00},
+						{"disk-device": "sda", "tps": 7.88, "rd_sec": 8.09, "wr_sec": 311.56, "dc_sec": 0.00, "rkB": 4.04, "wkB": 155.78, "dkB": 0.00, "avgrq-sz": 40.55, "areq-sz": 20.27, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.46, "util-percent": 0.07},
+						{"disk-device": "sdb", "tps": 0.00, "rd_sec": 0.00, "wr_sec": 0.00, "dc_sec": 0.00, "rkB": 0.00, "wkB": 0.00, "dkB": 0.00, "avgrq-sz": 0.00, "areq-sz": 0.00, "avgqu-sz": 0.00, "aqu-sz": 0.00, "await": 0.00, "util-percent": 0.00}
+					],
+					"network": {
+						"net-dev": [
+							{"iface": "lo", "rxpck": 0.95, "txpck": 0.95, "rxkB": 0.25, "txkB": 0.25, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "eth0", "rxpck": 1.82, "txpck": 2.15, "rxkB": 1.33, "txkB": 0.75, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "enp7s0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00},
+							{"iface": "docker0", "rxpck": 0.00, "txpck": 0.00, "rxkB": 0.00, "txkB": 0.00, "rxcmp": 0.00, "txcmp": 0.00, "rxmcst": 0.00, "ifutil-percent": 0.00}
+						],
+						"net-sock": {"totsck": 399, "tcpsck": 39, "udpsck": 5, "rawsck": 0, "ip-frag": 0, "tcp-tw": 4}
+					},
+					"psi": {
+						"psi-cpu": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.05},
+						"psi-io": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.02, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.02},
+						"psi-mem": {"some_avg10": 0.00, "some_avg60": 0.00, "some_avg300": 0.00, "some_avg": 0.00, "full_avg10": 0.00, "full_avg60": 0.00, "full_avg300": 0.00, "full_avg": 0.00}
+					}
+				}
+			],
+			"restarts": [
+			]
+		}
+	]
+}}

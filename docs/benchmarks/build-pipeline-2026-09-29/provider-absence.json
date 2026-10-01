@@ -1,0 +1,64 @@
+{
+  "verified_at": "2026-09-29T21:29:06.128651+00:00",
+  "provider": "hetzner",
+  "method": "GET /servers/<owned_id>",
+  "checked_count": 9,
+  "all_absent": true,
+  "nodes": [
+    {
+      "id": "168007483",
+      "absent": true,
+      "http_status": 404,
+      "status": "absent"
+    },
+    {
+      "id": "168007485",
+      "absent": true,
+      "http_status": 404,
+      "status": "absent"
+    },
+    {
+      "id": "168007489",
+      "absent": true,
+      "http_status": 404,
+      "status": "absent"
+    },
+    {
+      "id": "168007491",
+      "absent": true,
+      "http_status": 404,
+      "status": "absent"
+    },
+    {
+      "id": "168008406",
+      "absent": true,
+      "http_status": 404,
+      "status": "absent"
+    },
+    {
+      "id": "168008407",
+      "absent": true,
+      "http_status": 404,
+      "status": "absent"
+    },
+    {
+      "id": "168008410",
+      "absent": true,
+      "http_status": 404,
+      "status": "absent"
+    },
+    {
+      "id": "168008411",
+      "absent": true,
+      "http_status": 404,
+      "status": "absent"
+    },
+    {
+      "id": "168011780",
+      "absent": true,
+      "http_status": 404,
+      "status": "absent"
+    }
+  ],
+  "mutations": 0
+}

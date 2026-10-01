@@ -1,0 +1,26 @@
+[
+  {
+    "job_id": "168008406",
+    "active": true,
+    "output": "/work/slotq-admission-r2.jsonl",
+    "sampler_sha256": "dc2a9617f278dd4fa09c010cf54aace4ee598c02c342646e0310d02d5873feb2"
+  },
+  {
+    "job_id": "168008407",
+    "active": true,
+    "output": "/work/slotq-admission-r2.jsonl",
+    "sampler_sha256": "dc2a9617f278dd4fa09c010cf54aace4ee598c02c342646e0310d02d5873feb2"
+  },
+  {
+    "job_id": "168008410",
+    "active": true,
+    "output": "/work/slotq-admission-r2.jsonl",
+    "sampler_sha256": "dc2a9617f278dd4fa09c010cf54aace4ee598c02c342646e0310d02d5873feb2"
+  },
+  {
+    "job_id": "168008411",
+    "active": true,
+    "output": "/work/slotq-admission-r2.jsonl",
+    "sampler_sha256": "dc2a9617f278dd4fa09c010cf54aace4ee598c02c342646e0310d02d5873feb2"
+  }
+]

@@ -1,0 +1,2662 @@
+{
+  "started_at": "2026-09-29T21:21:05.981224+00:00",
+  "apply": false,
+  "complete": true,
+  "ledger_sha256": "77ad2a45ae495389b80b832ae74136a93f1bef01d04c401778fc0187cdf34780",
+  "smokes_sha256": "2c756e473e54cbbb43211ad9fd9ca7f713be2e07da3d149ebc9707a5abb6fcee",
+  "image_count": 240,
+  "items": [
+    {
+      "image_id": "slotq-a-condition-fa920093-000",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-000-1e13e6c1b45a",
+      "manifest_digest": "sha256:096ece2e471b3af1021e5d730bc9c8d57deb4b3a645dc1b062338615f693fa62",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-096ece2e471b3af1021e5d730bc9c8d57deb4b3a645dc1b062338615f693fa62"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-001",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-001-e62879580edb",
+      "manifest_digest": "sha256:f38a45ae4bdb2b3199451e4a03120b9803c3a0944d2afed1734b4faefdfc83f3",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-f38a45ae4bdb2b3199451e4a03120b9803c3a0944d2afed1734b4faefdfc83f3"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-002",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-002-40ffdbfccc8d",
+      "manifest_digest": "sha256:1761e0f3265cd682aadf14ccacd47adf126ab86f904f20420d391a0c87aa27ba",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-1761e0f3265cd682aadf14ccacd47adf126ab86f904f20420d391a0c87aa27ba"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-003",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-003-6a0ffb208029",
+      "manifest_digest": "sha256:b10b563f6122393ffb4868b20883c107f17de4d8e99b2cf4b84fd745064d779e",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-b10b563f6122393ffb4868b20883c107f17de4d8e99b2cf4b84fd745064d779e"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-004",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-004-a4ede42b7f20",
+      "manifest_digest": "sha256:8fcf6c1f413b29c364b3b5b684a0b8d361585574d6de938a939375fea2d37bfb",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-8fcf6c1f413b29c364b3b5b684a0b8d361585574d6de938a939375fea2d37bfb"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-005",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-005-af38044f5104",
+      "manifest_digest": "sha256:e76af83a2c804ddd2be2e301c55ef2407b3e1b50c476691188e228f5e82d75e8",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-e76af83a2c804ddd2be2e301c55ef2407b3e1b50c476691188e228f5e82d75e8"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-006",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-006-4f529385a80d",
+      "manifest_digest": "sha256:3496bf22d9f696c90a8a93d428d92c70ef9dcc944e79dea7e8a13dcc89ef6b46",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-3496bf22d9f696c90a8a93d428d92c70ef9dcc944e79dea7e8a13dcc89ef6b46"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-007",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-007-8cfc0eeef1e3",
+      "manifest_digest": "sha256:07f9aad7bd5bf80674f37023c7e5afd4442c0690f6d6de2a7bb2d75948b21ee7",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-07f9aad7bd5bf80674f37023c7e5afd4442c0690f6d6de2a7bb2d75948b21ee7"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-008",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-008-806c18265254",
+      "manifest_digest": "sha256:e85fc9b816d1d68ae6885ba79b3b2173460568b9757742179a61db2f316d4d68",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-e85fc9b816d1d68ae6885ba79b3b2173460568b9757742179a61db2f316d4d68"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-009",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-009-4aecab6d3a7b",
+      "manifest_digest": "sha256:2437de926303455e9073d89fbaaa8c5bb0e4a8acd7319b21e0944f09b0aefdf0",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-2437de926303455e9073d89fbaaa8c5bb0e4a8acd7319b21e0944f09b0aefdf0"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-010",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-010-ed6b3518e555",
+      "manifest_digest": "sha256:f15700a5b9d0d6f5621b0e198f9e0c7230fd4a97936ffb38a1282c539db037e3",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-f15700a5b9d0d6f5621b0e198f9e0c7230fd4a97936ffb38a1282c539db037e3"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-011",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-011-b69e39318334",
+      "manifest_digest": "sha256:de6190c6e36a74aad478aaf3acabce498b386166d2d30a72caac7db376d3e1de",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-de6190c6e36a74aad478aaf3acabce498b386166d2d30a72caac7db376d3e1de"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-012",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-012-16ec5c83b76c",
+      "manifest_digest": "sha256:8259111612ed6df788eb050fcf43a4184367ebe9c79684f495d583d7f91a2f44",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-8259111612ed6df788eb050fcf43a4184367ebe9c79684f495d583d7f91a2f44"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-013",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-013-4434ff587b79",
+      "manifest_digest": "sha256:cdf0e3ba9f996168dad4ca6e1c94596d3d2806c1ac63d55d2f552651a34d73b7",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-cdf0e3ba9f996168dad4ca6e1c94596d3d2806c1ac63d55d2f552651a34d73b7"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-014",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-014-6902ff1ed551",
+      "manifest_digest": "sha256:45b6347a7f3f9a652c9effbf6a5aff21f1d98f4df4cccf6db333955c50c796ff",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-45b6347a7f3f9a652c9effbf6a5aff21f1d98f4df4cccf6db333955c50c796ff"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-015",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-015-74f899f8aeef",
+      "manifest_digest": "sha256:947407cfca4a8e311a860451f106436cfa1d11ef9bdeb41a133e501bd151e207",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-947407cfca4a8e311a860451f106436cfa1d11ef9bdeb41a133e501bd151e207"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-016",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-016-9c2cadafede0",
+      "manifest_digest": "sha256:13531fb4e885936b5847e03af0a4eb10e4b81ec22cd02f84f23bfbf7f6fa1a3c",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-13531fb4e885936b5847e03af0a4eb10e4b81ec22cd02f84f23bfbf7f6fa1a3c"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-017",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-017-bd301dd04781",
+      "manifest_digest": "sha256:9eebd21992dfb526dd0059f390ad613fa235c6760e8cef35d739886278d95355",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-9eebd21992dfb526dd0059f390ad613fa235c6760e8cef35d739886278d95355"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-018",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-018-253d9677d979",
+      "manifest_digest": "sha256:698cb7a8b8158263ed748dcb422fccf4e33a4a0534a1b5a59e1515a512be8c7e",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-698cb7a8b8158263ed748dcb422fccf4e33a4a0534a1b5a59e1515a512be8c7e"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-019",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-019-6a48dc057f7f",
+      "manifest_digest": "sha256:7311477b11a8c2d03b6475b91b63483609542e6caa19bf256de988ecbe10fc6c",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-7311477b11a8c2d03b6475b91b63483609542e6caa19bf256de988ecbe10fc6c"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-020",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-020-941fec3f32ce",
+      "manifest_digest": "sha256:f022ee1ecb8fad4f07a1972965b864814ef048f4be12dcdad94ff2d9ee30b779",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-f022ee1ecb8fad4f07a1972965b864814ef048f4be12dcdad94ff2d9ee30b779"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-021",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-021-84fc7f9a670d",
+      "manifest_digest": "sha256:a441e02f70edd4f383fb5388708f5cbaba5f0a989d32a41b7657cb07f57dc22a",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-a441e02f70edd4f383fb5388708f5cbaba5f0a989d32a41b7657cb07f57dc22a"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-022",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-022-56e168ed2747",
+      "manifest_digest": "sha256:b4efe92fa842e8d8d271eb666c1b6f62dc12b84d348b3437c55fda3ee66807a7",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-b4efe92fa842e8d8d271eb666c1b6f62dc12b84d348b3437c55fda3ee66807a7"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-023",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-023-fcdb2b0e36f6",
+      "manifest_digest": "sha256:bbc1ba88a8e91b904aac24db7121c17575d3cbd34404d9cf691c6ae380fc85b4",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-bbc1ba88a8e91b904aac24db7121c17575d3cbd34404d9cf691c6ae380fc85b4"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-024",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-024-50cb11122fe6",
+      "manifest_digest": "sha256:27f83b27b15152ee1034a3fb2b0fce289ef8401c88ef450bb795edc54ea048ec",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-27f83b27b15152ee1034a3fb2b0fce289ef8401c88ef450bb795edc54ea048ec"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-025",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-025-8f3c4d863a41",
+      "manifest_digest": "sha256:2fa159626eea33877283bae7113d03a84ff4a32cc8e11cfe2fcc8440b1db46d0",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-2fa159626eea33877283bae7113d03a84ff4a32cc8e11cfe2fcc8440b1db46d0"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-026",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-026-772f6ebbbb69",
+      "manifest_digest": "sha256:82853e7c50995e68a5edef48ed78db38d7027dd0066cb4930a175aed414d0a08",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-82853e7c50995e68a5edef48ed78db38d7027dd0066cb4930a175aed414d0a08"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-027",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-027-ad5b63c107d8",
+      "manifest_digest": "sha256:426f1129135cddc10a6eeeba0911f5638cfb8d7530415bf90c2cf1f61abfabbb",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-426f1129135cddc10a6eeeba0911f5638cfb8d7530415bf90c2cf1f61abfabbb"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-028",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-028-40aa4528ee29",
+      "manifest_digest": "sha256:036231eadb5a27e18a5d0b0c41476e867ab8237a7de0bd6e88c70afbaf4fa5b3",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-036231eadb5a27e18a5d0b0c41476e867ab8237a7de0bd6e88c70afbaf4fa5b3"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-029",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-029-ee89c78aac3a",
+      "manifest_digest": "sha256:4241fc361c58d24378ef7146bfd1b94ddced4b899286d32c583529090b10e5b4",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-4241fc361c58d24378ef7146bfd1b94ddced4b899286d32c583529090b10e5b4"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-030",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-030-1c70f408d6ff",
+      "manifest_digest": "sha256:7e24757bc9c059321354647295acb48fe8903b346a7f7e976bd53509080af306",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-7e24757bc9c059321354647295acb48fe8903b346a7f7e976bd53509080af306"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-031",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-031-910c5e574009",
+      "manifest_digest": "sha256:a2f99179571387efa71c4c231ac2e255ddddc531bbcebdab60202df4f82809ab",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-a2f99179571387efa71c4c231ac2e255ddddc531bbcebdab60202df4f82809ab"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-032",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-032-42f1ffe64201",
+      "manifest_digest": "sha256:33b949b434f92ef4406e5381c3253363e071b977682f4217b5e442b494fed9c3",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-33b949b434f92ef4406e5381c3253363e071b977682f4217b5e442b494fed9c3"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-033",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-033-db4e312ba363",
+      "manifest_digest": "sha256:16ef0612f65f584a5b3b008fd9eb7f42c95ee1ffb6d1edc71b43e9707e20d7d4",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-16ef0612f65f584a5b3b008fd9eb7f42c95ee1ffb6d1edc71b43e9707e20d7d4"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-034",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-034-c1b8d13fc58e",
+      "manifest_digest": "sha256:b5e5c3ff3efd99e7d2c6f6e411f58619f93d5808d46aedea79583caa5680de5a",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-b5e5c3ff3efd99e7d2c6f6e411f58619f93d5808d46aedea79583caa5680de5a"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-035",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-035-0d6b5a074634",
+      "manifest_digest": "sha256:6db2c8c53a2893980561b25398c453402a99bb93de30bd2a1f5cf8f03c51b766",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-6db2c8c53a2893980561b25398c453402a99bb93de30bd2a1f5cf8f03c51b766"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-036",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-036-9e19cd8ad61a",
+      "manifest_digest": "sha256:5666f1d1ea3eb68716836a4b8474f2ba4e553ccc241d167326077bbef6105c14",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-5666f1d1ea3eb68716836a4b8474f2ba4e553ccc241d167326077bbef6105c14"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-037",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-037-b95bcbeb9315",
+      "manifest_digest": "sha256:3b3c34cd1a3ed81894667bdaeb57ff7faaebac9b6b0a3a00209ca962cb997661",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-3b3c34cd1a3ed81894667bdaeb57ff7faaebac9b6b0a3a00209ca962cb997661"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-038",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-038-60736860e299",
+      "manifest_digest": "sha256:9de5c6151c538bbff8ce24d97ec47d4f304a61f0a79e54f3aea0cd06e8f5348a",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-9de5c6151c538bbff8ce24d97ec47d4f304a61f0a79e54f3aea0cd06e8f5348a"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-039",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-039-d9a5d5a988ec",
+      "manifest_digest": "sha256:a0847ae0387cea76e98bdfc67c7306443241946200d55e8f086d88660310ee67",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-a0847ae0387cea76e98bdfc67c7306443241946200d55e8f086d88660310ee67"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-040",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-040-d8cdf18eafa4",
+      "manifest_digest": "sha256:bec0fa52a1d694e8675e361fa1eadd12830b2b672255ac8f5c4bba2f39579bac",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-bec0fa52a1d694e8675e361fa1eadd12830b2b672255ac8f5c4bba2f39579bac"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-041",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-041-b1d78b132a93",
+      "manifest_digest": "sha256:62bb6c99b756e72fa869d17a36825771d5b9cce6843599c544d60da2054ac93c",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-62bb6c99b756e72fa869d17a36825771d5b9cce6843599c544d60da2054ac93c"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-042",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-042-2051f703b622",
+      "manifest_digest": "sha256:090daaee95a435473d562ae8924206b2d0aa9a99a70f8452c256e96fbe488b58",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-090daaee95a435473d562ae8924206b2d0aa9a99a70f8452c256e96fbe488b58"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-043",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-043-340c275eceb0",
+      "manifest_digest": "sha256:f3acdc8ca3b34019702f3bf30370fa14639708a605b5484c08e84fee8b1026dd",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-f3acdc8ca3b34019702f3bf30370fa14639708a605b5484c08e84fee8b1026dd"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-044",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-044-9d5795e5039b",
+      "manifest_digest": "sha256:b4d6ea53eb7f226bb447ab18600f8e74fc037ca3dce7bdb55091449503ecfd65",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-b4d6ea53eb7f226bb447ab18600f8e74fc037ca3dce7bdb55091449503ecfd65"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-045",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-045-a5d3f423d1bd",
+      "manifest_digest": "sha256:d5b9416968b2a5e4f8003cfe84a5cd79efb0babc88df2db8a1aba8e7e0d03395",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-d5b9416968b2a5e4f8003cfe84a5cd79efb0babc88df2db8a1aba8e7e0d03395"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-046",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-046-9e0142077481",
+      "manifest_digest": "sha256:eec1c90b266b821affaac134048151300640fc66fdfecf7e2da8ddc434d7562c",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-eec1c90b266b821affaac134048151300640fc66fdfecf7e2da8ddc434d7562c"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-condition-fa920093-047",
+      "repository": "ucloud-managed/slotq-a-condition-fa920093-047-9d14b422251f",
+      "manifest_digest": "sha256:faa1bceffbc03f258d4fcc93638697e586732ffbc372e044c20343189853d1ed",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-faa1bceffbc03f258d4fcc93638697e586732ffbc372e044c20343189853d1ed"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-000",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-000-8ef5dd8f1f2e",
+      "manifest_digest": "sha256:f5e449dd95afb041eccac7e649fefa3baf38e1855a680cf5b24b4ff75a12b67f",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-f5e449dd95afb041eccac7e649fefa3baf38e1855a680cf5b24b4ff75a12b67f"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-001",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-001-6fc2cb40f78f",
+      "manifest_digest": "sha256:959428be87ebcbb9f9a618d4ae0cf2018812cfca739996ed2aaef2ffb2bc311e",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-959428be87ebcbb9f9a618d4ae0cf2018812cfca739996ed2aaef2ffb2bc311e"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-002",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-002-19256ca55918",
+      "manifest_digest": "sha256:ad25d0a238064d4656df191235497a57a197a2160f56f475142a0f5a52b7cee9",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-ad25d0a238064d4656df191235497a57a197a2160f56f475142a0f5a52b7cee9"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-003",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-003-85f1e5a34617",
+      "manifest_digest": "sha256:0cdf914d22cd5eb0d89000589cbc8e81b2ad3688a65fe378234ce055b14513da",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-0cdf914d22cd5eb0d89000589cbc8e81b2ad3688a65fe378234ce055b14513da"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-004",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-004-60b4f85d6d96",
+      "manifest_digest": "sha256:f97bce86762e7a0bc84b4e3fe24fa85a7807f8d19e890c0d962bad52808423f4",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-f97bce86762e7a0bc84b4e3fe24fa85a7807f8d19e890c0d962bad52808423f4"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-005",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-005-68f0f8113a4d",
+      "manifest_digest": "sha256:d682c9a31fcf850461ec3a01b817bb4d683918ba1f0ae53866eec1ec18296768",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-d682c9a31fcf850461ec3a01b817bb4d683918ba1f0ae53866eec1ec18296768"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-006",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-006-8d9878e4f154",
+      "manifest_digest": "sha256:bd437c7d67aa312a64fabc24fb15122f0fa6720c617a3637fcc6a2999c76ce89",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-bd437c7d67aa312a64fabc24fb15122f0fa6720c617a3637fcc6a2999c76ce89"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-007",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-007-0af8bb545f58",
+      "manifest_digest": "sha256:d59fd776be8227917e8f209a2c7b1e892043fefd4661c168be0f5e6c938bdd10",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-d59fd776be8227917e8f209a2c7b1e892043fefd4661c168be0f5e6c938bdd10"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-008",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-008-5da7b293d7f8",
+      "manifest_digest": "sha256:31fe2e4c82ae2a1f44cb08e1988bf892848dc20f2874e9bca3670d08859df201",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-31fe2e4c82ae2a1f44cb08e1988bf892848dc20f2874e9bca3670d08859df201"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-009",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-009-e0e70a6ca4b8",
+      "manifest_digest": "sha256:02c9468f447f7d112fd8878d910df4c5a2c4d052fb753b97518eaeec94b7a052",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-02c9468f447f7d112fd8878d910df4c5a2c4d052fb753b97518eaeec94b7a052"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-010",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-010-0382d6acc730",
+      "manifest_digest": "sha256:71371a33be73c27e9d657059e5384398fc7975eb3313e5887fd3bc0e2d148ccb",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-71371a33be73c27e9d657059e5384398fc7975eb3313e5887fd3bc0e2d148ccb"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-011",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-011-8594ca1b3eac",
+      "manifest_digest": "sha256:e8ee7493507d368e522987485dfad68914831c8da580f111a77eae73705bb4a0",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-e8ee7493507d368e522987485dfad68914831c8da580f111a77eae73705bb4a0"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-012",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-012-8b8f2b7a4bf1",
+      "manifest_digest": "sha256:a13924517cdd2c68a85234054dd2caa0b51fec1481c586e5f8a454d1960749fb",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-a13924517cdd2c68a85234054dd2caa0b51fec1481c586e5f8a454d1960749fb"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-013",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-013-610e2ffa6bbb",
+      "manifest_digest": "sha256:314bd65462ab2831b5d7f21b044fdc9f7a8c62d6172c7dc20b457ae6c35f4649",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-314bd65462ab2831b5d7f21b044fdc9f7a8c62d6172c7dc20b457ae6c35f4649"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-014",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-014-fe3535fea32f",
+      "manifest_digest": "sha256:72d256ac8060904cfe277db44c9405aa90564aed94c212ac6d3bf2e30ce94e31",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-72d256ac8060904cfe277db44c9405aa90564aed94c212ac6d3bf2e30ce94e31"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-015",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-015-f76c72da7291",
+      "manifest_digest": "sha256:b34ee08c9eff558b3fb56d21a74151d656fb4e899845b92953138e2624a936d0",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-b34ee08c9eff558b3fb56d21a74151d656fb4e899845b92953138e2624a936d0"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-016",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-016-42fd5c0aea8a",
+      "manifest_digest": "sha256:cf0a644decb623d66585d7ece0083e23cc91bd11b51ef9217f105689b4400c29",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-cf0a644decb623d66585d7ece0083e23cc91bd11b51ef9217f105689b4400c29"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-017",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-017-2b28390eb777",
+      "manifest_digest": "sha256:7326dc78c3888a9d3d9ba8f21a0ea457e02db9cc704816b744aa3e8f8ef88341",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-7326dc78c3888a9d3d9ba8f21a0ea457e02db9cc704816b744aa3e8f8ef88341"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-018",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-018-88996ecd9c1b",
+      "manifest_digest": "sha256:282530d89bc182c2c5661c44b02369682047877f8bb258d6d72f685fe02c066d",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-282530d89bc182c2c5661c44b02369682047877f8bb258d6d72f685fe02c066d"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-019",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-019-25aa5581d6d3",
+      "manifest_digest": "sha256:72f10cb2046dd932c4f9c29116913adacfe408465e1b1f8af8ec854f5995d600",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-72f10cb2046dd932c4f9c29116913adacfe408465e1b1f8af8ec854f5995d600"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-020",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-020-bbc40141e5fe",
+      "manifest_digest": "sha256:357f9225b3f4abc2c8e823f0e89c92fe5b15a427d4dd61fb7bb70f0a183144fb",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-357f9225b3f4abc2c8e823f0e89c92fe5b15a427d4dd61fb7bb70f0a183144fb"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-021",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-021-417350789626",
+      "manifest_digest": "sha256:ed1d1816e2b1beb523cfb0e4a38931f305150349ff7b14d065218d4afa7b5244",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-ed1d1816e2b1beb523cfb0e4a38931f305150349ff7b14d065218d4afa7b5244"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-022",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-022-9389712a8ed7",
+      "manifest_digest": "sha256:396f261dea95c641b632240ea6efacb6bfb15b7b63804d7e822c568f04156a94",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-396f261dea95c641b632240ea6efacb6bfb15b7b63804d7e822c568f04156a94"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-023",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-023-4b35cf992eae",
+      "manifest_digest": "sha256:ddd909895efdbf88bdf639f63d76a8d8c98c55a56d218f651a624592234c640c",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-ddd909895efdbf88bdf639f63d76a8d8c98c55a56d218f651a624592234c640c"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-024",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-024-a109afa23342",
+      "manifest_digest": "sha256:98829c0265e3c50019a85fb20803432251284b7853306a7b942e347612185898",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-98829c0265e3c50019a85fb20803432251284b7853306a7b942e347612185898"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-025",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-025-a4c358c2435e",
+      "manifest_digest": "sha256:33153520f784da4d719a8172a5391db5789782aa0873ca10127158b7e4ff9cd2",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-33153520f784da4d719a8172a5391db5789782aa0873ca10127158b7e4ff9cd2"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-026",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-026-d82edaae3b2a",
+      "manifest_digest": "sha256:482b0a30577ea5c2c43b51805d1272d35195f0c38f02d7222ab103d8947fd0ec",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-482b0a30577ea5c2c43b51805d1272d35195f0c38f02d7222ab103d8947fd0ec"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-027",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-027-62814108916a",
+      "manifest_digest": "sha256:06fda87d3eb9b6b8db6be16b5634cccf340fbd490424069a4a1b63b07ce90fe1",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-06fda87d3eb9b6b8db6be16b5634cccf340fbd490424069a4a1b63b07ce90fe1"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-028",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-028-e86972c4de1d",
+      "manifest_digest": "sha256:27743f22f89e3b70e57f689a9c0f6313757f1fe2c574c05099aa4fa2807153d7",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-27743f22f89e3b70e57f689a9c0f6313757f1fe2c574c05099aa4fa2807153d7"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-029",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-029-74df6709a85d",
+      "manifest_digest": "sha256:ec645c813a8396b69cd406c2d617c605e76e0960d862c7bc8c169cc2cefa535e",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-ec645c813a8396b69cd406c2d617c605e76e0960d862c7bc8c169cc2cefa535e"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-030",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-030-b13d271f5c9c",
+      "manifest_digest": "sha256:bfbedd2507c8058cb923074f769b93b3f738becf7e317d37a574aefe0248839a",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-bfbedd2507c8058cb923074f769b93b3f738becf7e317d37a574aefe0248839a"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-031",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-031-45e53b8ba780",
+      "manifest_digest": "sha256:6a149910b5f95026f63853645713f37e2f3c19d6a3a218b89b2a6e429209a52b",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-6a149910b5f95026f63853645713f37e2f3c19d6a3a218b89b2a6e429209a52b"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-032",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-032-347f4eba4f46",
+      "manifest_digest": "sha256:6b52548710e553fa675a542383eec01c308d768c117cdd47698cbd6bb0e27427",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-6b52548710e553fa675a542383eec01c308d768c117cdd47698cbd6bb0e27427"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-033",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-033-b619ca9f3527",
+      "manifest_digest": "sha256:dc59b6b32e0b9d03c025ef6e4c4ce4cedf67682c0e8b726b343d8a0fbc3e54b7",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-dc59b6b32e0b9d03c025ef6e4c4ce4cedf67682c0e8b726b343d8a0fbc3e54b7"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-034",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-034-f7a123c6a3d9",
+      "manifest_digest": "sha256:5aed9ada16c8cde7f23bd7d976fd6987497b236e490ee30dc42c4d5c5c5a39e1",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-5aed9ada16c8cde7f23bd7d976fd6987497b236e490ee30dc42c4d5c5c5a39e1"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-035",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-035-a91fe2d9c94d",
+      "manifest_digest": "sha256:a7fc4b2472264e4ae3f35cc4b24cc6aa92f339785c4bd02fc349b1a9faa8c7f0",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-a7fc4b2472264e4ae3f35cc4b24cc6aa92f339785c4bd02fc349b1a9faa8c7f0"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-036",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-036-ca548c609546",
+      "manifest_digest": "sha256:8952db7a5682fcb76192364a5a5800fef0113f0f1c0fbf4d9320961e8062b831",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-8952db7a5682fcb76192364a5a5800fef0113f0f1c0fbf4d9320961e8062b831"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-037",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-037-82f8d9e3a170",
+      "manifest_digest": "sha256:7211cd04d6fea517df122ea1766182cea918959149530a229ab7c154584acadb",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-7211cd04d6fea517df122ea1766182cea918959149530a229ab7c154584acadb"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-038",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-038-91bec6e32318",
+      "manifest_digest": "sha256:994abf6223268a3d7c125968da8e79445e921ee9a0529aa722d59a31442cbb59",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-994abf6223268a3d7c125968da8e79445e921ee9a0529aa722d59a31442cbb59"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-039",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-039-e09d09c5bfe5",
+      "manifest_digest": "sha256:ed674f226b0e7f25ccbc42cdce173af7989a279b724bf9b6932a44dc971964c6",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-ed674f226b0e7f25ccbc42cdce173af7989a279b724bf9b6932a44dc971964c6"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-040",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-040-95dd7aaccfd7",
+      "manifest_digest": "sha256:f089b94eeba0b27bfa1d73a0eb0d71b0a60fce2bd0ebc2ee9b2499df677c60fb",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-f089b94eeba0b27bfa1d73a0eb0d71b0a60fce2bd0ebc2ee9b2499df677c60fb"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-041",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-041-f6e222a43410",
+      "manifest_digest": "sha256:74d115fdc3e9ec5bf3d3b89389aacca6de0c0a0a535f60fa7d31f863233c3ae1",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-74d115fdc3e9ec5bf3d3b89389aacca6de0c0a0a535f60fa7d31f863233c3ae1"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-042",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-042-8c9b5ac6f6d6",
+      "manifest_digest": "sha256:a2101cfa841bf31ef3ed34669f2f5e05f700582400832f60cae582d69b02c891",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-a2101cfa841bf31ef3ed34669f2f5e05f700582400832f60cae582d69b02c891"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-043",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-043-f1e02a0c46cc",
+      "manifest_digest": "sha256:71cffa0543543545cb9bc568ee2e6fc149880ec724a6c7c4f5ce43148ef8020a",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-71cffa0543543545cb9bc568ee2e6fc149880ec724a6c7c4f5ce43148ef8020a"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-044",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-044-ff619b29b432",
+      "manifest_digest": "sha256:011ba9f03ac095adb39449f7df83b0b546e440627de3a910304083aaca66a551",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-011ba9f03ac095adb39449f7df83b0b546e440627de3a910304083aaca66a551"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-045",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-045-de3935c1f988",
+      "manifest_digest": "sha256:10c5f3e8105e06dbb9d051e0273bb35d5f325d2d9b72349e3b1f307a35283ee0",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-10c5f3e8105e06dbb9d051e0273bb35d5f325d2d9b72349e3b1f307a35283ee0"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-046",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-046-0e6231cef19c",
+      "manifest_digest": "sha256:990e78418b1131f1520527837131bf6978e462d3e0a9fbcdbbcd32b27948a7a0",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-990e78418b1131f1520527837131bf6978e462d3e0a9fbcdbbcd32b27948a7a0"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-warm-c055927f-047",
+      "repository": "ucloud-managed/slotq-a-warm-c055927f-047-ec484e2ac15c",
+      "manifest_digest": "sha256:860164e9a4f95cbf08466540ac3ebeb004936f2414a943a2e4948f6d7d558b01",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-860164e9a4f95cbf08466540ac3ebeb004936f2414a943a2e4948f6d7d558b01"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-000",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-000-8ec2138aa978",
+      "manifest_digest": "sha256:3dc5a93145a80fb7796ac21480b9933d40cb2234e9e9909bf040914920947c3c",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-3dc5a93145a80fb7796ac21480b9933d40cb2234e9e9909bf040914920947c3c"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-001",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-001-71c5a1165680",
+      "manifest_digest": "sha256:78b4dc237927ea62f51da6ff212b29a50a128f0c65f8d8211ea4a722427172ad",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-78b4dc237927ea62f51da6ff212b29a50a128f0c65f8d8211ea4a722427172ad"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-002",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-002-d855c7ada132",
+      "manifest_digest": "sha256:e47cedbd81174e27894aec74a23ae411dd9fc520904337f411c92fb765fa1aa4",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-e47cedbd81174e27894aec74a23ae411dd9fc520904337f411c92fb765fa1aa4"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-003",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-003-361dba37e90b",
+      "manifest_digest": "sha256:85fd1daf45006830075c900dc2e1d7407083b37f84fbadff96a5e9764a46dd4b",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-85fd1daf45006830075c900dc2e1d7407083b37f84fbadff96a5e9764a46dd4b"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-004",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-004-59e97e67a320",
+      "manifest_digest": "sha256:81746de23eab3d87faf293522dd7870b1ec2af4aed01c918e793d4fca0ddf775",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-81746de23eab3d87faf293522dd7870b1ec2af4aed01c918e793d4fca0ddf775"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-005",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-005-1b3ac821166b",
+      "manifest_digest": "sha256:9e76ce365695321c1dab33a1897491c78f374a0edf8f74071e0c4ca23448d3aa",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-9e76ce365695321c1dab33a1897491c78f374a0edf8f74071e0c4ca23448d3aa"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-006",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-006-a149f28b11a2",
+      "manifest_digest": "sha256:26e520ae2686f6e2936de8cc6b3a949429a67569894882edc530b0a92d253fb1",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-26e520ae2686f6e2936de8cc6b3a949429a67569894882edc530b0a92d253fb1"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-007",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-007-955f63784350",
+      "manifest_digest": "sha256:086da98b1780eee0d38311bcaf26fb00880c3f112bc911f57395173cfd10b551",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-086da98b1780eee0d38311bcaf26fb00880c3f112bc911f57395173cfd10b551"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-008",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-008-bf7e91452410",
+      "manifest_digest": "sha256:3ccc1b20f04c932c3de4fed2d72f1710680c1404ba7793ec8ffe1f0f435ddbf9",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-3ccc1b20f04c932c3de4fed2d72f1710680c1404ba7793ec8ffe1f0f435ddbf9"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-009",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-009-61aacae06742",
+      "manifest_digest": "sha256:5cb628f111a742da7103a011f8a0f93805ffab3e8eab61a8dc555956431d88a6",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-5cb628f111a742da7103a011f8a0f93805ffab3e8eab61a8dc555956431d88a6"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-010",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-010-c1916991fa67",
+      "manifest_digest": "sha256:4417a946e206069caa2931bef5a495e3adcd5afd5ecf382606a3e57206a0997f",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-4417a946e206069caa2931bef5a495e3adcd5afd5ecf382606a3e57206a0997f"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-011",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-011-65a0d64471b7",
+      "manifest_digest": "sha256:76038d44ef0acafcf511bd0a5a25069fca4bfcce56573c9a1925af281938be0e",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-76038d44ef0acafcf511bd0a5a25069fca4bfcce56573c9a1925af281938be0e"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-012",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-012-96caad6d97d2",
+      "manifest_digest": "sha256:0db12ab960899950c275d1186ce04d3da64632183e8ceb41c9db83444bc60b6c",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-0db12ab960899950c275d1186ce04d3da64632183e8ceb41c9db83444bc60b6c"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-013",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-013-cf5f441b4df8",
+      "manifest_digest": "sha256:70ba808fc6bb9459fd504cefe7732358c84d67ee0b4db93ad6819006d047326f",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-70ba808fc6bb9459fd504cefe7732358c84d67ee0b4db93ad6819006d047326f"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-014",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-014-a3b2c9650236",
+      "manifest_digest": "sha256:27fce9cfe4ad0e490b1216c2ad65ce0356cdc6094beff5da96d1c94b9966c45e",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-27fce9cfe4ad0e490b1216c2ad65ce0356cdc6094beff5da96d1c94b9966c45e"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-015",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-015-0d53bc41c414",
+      "manifest_digest": "sha256:d49ced47d9f0978f2ff484aa41b5cd50b4e6ff9a8e44afe1e0e9b2030f2723c7",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-d49ced47d9f0978f2ff484aa41b5cd50b4e6ff9a8e44afe1e0e9b2030f2723c7"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-016",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-016-d460a4e6fc78",
+      "manifest_digest": "sha256:e0bef846918cb7839aa051b2913635cfa00ab4c9b31198e3dcd465a6b6dada1b",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-e0bef846918cb7839aa051b2913635cfa00ab4c9b31198e3dcd465a6b6dada1b"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-017",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-017-47e4a74cf638",
+      "manifest_digest": "sha256:7b7c23de414639280c7703785dfc520c39d31668b35049c4f60022344730ef5f",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-7b7c23de414639280c7703785dfc520c39d31668b35049c4f60022344730ef5f"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-018",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-018-df32faefbd73",
+      "manifest_digest": "sha256:82d824c6e7ac7aef2e694057d145b9bae3f98950b717a932dfb0f6d4e79550ff",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-82d824c6e7ac7aef2e694057d145b9bae3f98950b717a932dfb0f6d4e79550ff"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-019",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-019-776e2c15ed54",
+      "manifest_digest": "sha256:10eb35066883929982bf6d035dca32c7d16030e8a94c8cec538156c535a037cf",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-10eb35066883929982bf6d035dca32c7d16030e8a94c8cec538156c535a037cf"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-020",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-020-e95a58605339",
+      "manifest_digest": "sha256:3cedfc60da7ef6c52f81d02ea8a7a823fde19539375cf1ed6028462c79dc346d",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-3cedfc60da7ef6c52f81d02ea8a7a823fde19539375cf1ed6028462c79dc346d"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-021",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-021-f3a33f0f6567",
+      "manifest_digest": "sha256:96b137b355e8dca8957a5ad07c6afbe74b2121c16ec895902b8d52cd037da763",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-96b137b355e8dca8957a5ad07c6afbe74b2121c16ec895902b8d52cd037da763"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-022",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-022-07510837527f",
+      "manifest_digest": "sha256:e142ff877dff8e57da2a6b8ba767b08a471c2bd4e137f43bb24dd6da0603a3bb",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-e142ff877dff8e57da2a6b8ba767b08a471c2bd4e137f43bb24dd6da0603a3bb"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-023",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-023-0bd55216c0ca",
+      "manifest_digest": "sha256:6a890f82c70d9905fa1bbc69761ed7f37abee705dd0a23a9c882e09991bac344",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-6a890f82c70d9905fa1bbc69761ed7f37abee705dd0a23a9c882e09991bac344"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-024",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-024-c4c464e780fd",
+      "manifest_digest": "sha256:358547e0cb5b501b8b0cb6d6476c0d63c3b56610f901f56ea7c0f2c40819d3bf",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-358547e0cb5b501b8b0cb6d6476c0d63c3b56610f901f56ea7c0f2c40819d3bf"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-025",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-025-70357b892b52",
+      "manifest_digest": "sha256:ea96124f993a055084656790eb49f37cbaae09eedf0b787d67c2200492ec6e7e",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-ea96124f993a055084656790eb49f37cbaae09eedf0b787d67c2200492ec6e7e"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-026",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-026-aa3da9fd6068",
+      "manifest_digest": "sha256:fc6f36f9b6578fb6a60d83d8ec6877eedb4631cf01572cfa3808b3c3299acc71",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-fc6f36f9b6578fb6a60d83d8ec6877eedb4631cf01572cfa3808b3c3299acc71"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-027",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-027-a9ece9d4ac15",
+      "manifest_digest": "sha256:f684d7b12779ce0045a1831cdaf29f72c3c168b071d698babce8b7971da89add",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-f684d7b12779ce0045a1831cdaf29f72c3c168b071d698babce8b7971da89add"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-028",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-028-fa3112ad34f4",
+      "manifest_digest": "sha256:0aa269453922a93c5584ba0f45e76ee710df3b24e9cf328f8822df0c7555cb5c",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-0aa269453922a93c5584ba0f45e76ee710df3b24e9cf328f8822df0c7555cb5c"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-029",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-029-13beb539cc04",
+      "manifest_digest": "sha256:981ac28a2c64f505cd63e63a2b6686e7d9d2c69b2c4a82352d037b66a9f395a0",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-981ac28a2c64f505cd63e63a2b6686e7d9d2c69b2c4a82352d037b66a9f395a0"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-030",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-030-1fcbc3a73ce4",
+      "manifest_digest": "sha256:9e7bfaab6fa2be17adc2ecb2289bb9b52a7561800c221f3486803530c5cdc85a",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-9e7bfaab6fa2be17adc2ecb2289bb9b52a7561800c221f3486803530c5cdc85a"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-031",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-031-9724b2051faf",
+      "manifest_digest": "sha256:ea38551e4c1c2ab227affe8145aced831c8b3d8c1d4dfeed6b1acf667c1114c4",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-ea38551e4c1c2ab227affe8145aced831c8b3d8c1d4dfeed6b1acf667c1114c4"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-032",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-032-a24c3dd23335",
+      "manifest_digest": "sha256:37a5a29d5a46225a68879375e51bc7084ab69b031c917231ccca1d94855df462",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-37a5a29d5a46225a68879375e51bc7084ab69b031c917231ccca1d94855df462"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-033",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-033-bfedf2e6c49d",
+      "manifest_digest": "sha256:25451064c2dd33b3110a1c77691be1ddb01c9dff9314d95fbc077e608cf17f46",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-25451064c2dd33b3110a1c77691be1ddb01c9dff9314d95fbc077e608cf17f46"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-034",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-034-c313b06a959b",
+      "manifest_digest": "sha256:c37d6274a077c24fff7e106f5385ed173857eb88a2bde19e86598691d05d5aab",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-c37d6274a077c24fff7e106f5385ed173857eb88a2bde19e86598691d05d5aab"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-035",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-035-f41c8ca1df2a",
+      "manifest_digest": "sha256:de339cf167aa2c1ba724770c4ec40dc4f385e4472c3b6fbd9c3ca95af988602f",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-de339cf167aa2c1ba724770c4ec40dc4f385e4472c3b6fbd9c3ca95af988602f"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-036",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-036-2259e56be9d5",
+      "manifest_digest": "sha256:e232e7c851112da13a544abc2025edbffa67809ad9231cf1d0bfad0acdb6204f",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-e232e7c851112da13a544abc2025edbffa67809ad9231cf1d0bfad0acdb6204f"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-037",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-037-f4882d449403",
+      "manifest_digest": "sha256:aabb494fc2c03778cb6e33b6fc12951f61c45ccb64250cba7823482166f5d1b3",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-aabb494fc2c03778cb6e33b6fc12951f61c45ccb64250cba7823482166f5d1b3"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-038",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-038-24218fc63d06",
+      "manifest_digest": "sha256:7a402a5e14c2683e3dc6b3cd551f06a49811e3b79192817005778e3246818312",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-7a402a5e14c2683e3dc6b3cd551f06a49811e3b79192817005778e3246818312"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-039",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-039-403b9f61e110",
+      "manifest_digest": "sha256:8197b3136265de733b624369977ae42706fe87a4d83bc3ff828445a7a8e703dd",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-8197b3136265de733b624369977ae42706fe87a4d83bc3ff828445a7a8e703dd"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-040",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-040-a10369fde83b",
+      "manifest_digest": "sha256:e88139486bf4cfcf5807a1f250ff9efe10ee08c16293fa3eafb57e3672c743fa",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-e88139486bf4cfcf5807a1f250ff9efe10ee08c16293fa3eafb57e3672c743fa"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-041",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-041-c46b138f73da",
+      "manifest_digest": "sha256:958ddd6ce1e2c91c1ee0cf0202e639528e330b117319bbd35ddabdfdd560db26",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-958ddd6ce1e2c91c1ee0cf0202e639528e330b117319bbd35ddabdfdd560db26"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-042",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-042-ede162c524a7",
+      "manifest_digest": "sha256:1126512c8a0d61e23f281a3274f42caf2612c489a4e1a2c5ec618a698b15622b",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-1126512c8a0d61e23f281a3274f42caf2612c489a4e1a2c5ec618a698b15622b"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-043",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-043-f93ddaf1a2a4",
+      "manifest_digest": "sha256:a4ce44217f41ae2cf1b58768b03861e05d3a54fd9a0c7701c088ed163b536d81",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-a4ce44217f41ae2cf1b58768b03861e05d3a54fd9a0c7701c088ed163b536d81"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-044",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-044-2eb3c1d26848",
+      "manifest_digest": "sha256:83818a66effe83b4e9b6aac98f7f95ce853ccd946e1d327e3cd983ebad8dc4ed",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-83818a66effe83b4e9b6aac98f7f95ce853ccd946e1d327e3cd983ebad8dc4ed"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-045",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-045-e9e880b2edc6",
+      "manifest_digest": "sha256:e26bc79bceee46b60f8b54acac099f866120af90d99806c13c9958846ff70b3d",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-e26bc79bceee46b60f8b54acac099f866120af90d99806c13c9958846ff70b3d"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-046",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-046-933b2beed146",
+      "manifest_digest": "sha256:9cdd26037251a9689896dc33d33f2c4f210b9f742f3bcafe1abd432019c22d3d",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-9cdd26037251a9689896dc33d33f2c4f210b9f742f3bcafe1abd432019c22d3d"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-a-cold-e64b206c-047",
+      "repository": "ucloud-managed/slotq-a-cold-e64b206c-047-fedb16f5812f",
+      "manifest_digest": "sha256:42927d181aca93fb9bcb3b1d5869b34df00d61f13e20f1461ae87e5d8981a454",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-42927d181aca93fb9bcb3b1d5869b34df00d61f13e20f1461ae87e5d8981a454"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-000",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-000-3c9a9df1a378",
+      "manifest_digest": "sha256:9f245b1a9264647a62ab931c4a714342613e8ca73358d800f2db52cd9fa45fc7",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-9f245b1a9264647a62ab931c4a714342613e8ca73358d800f2db52cd9fa45fc7"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-001",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-001-68e7c4cfce58",
+      "manifest_digest": "sha256:2934e8515b1c6079a1f2d4291b48ffba9dd6213449059030df5a9f47cc0f813b",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-2934e8515b1c6079a1f2d4291b48ffba9dd6213449059030df5a9f47cc0f813b"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-002",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-002-654c0ca06472",
+      "manifest_digest": "sha256:cd54a2cc1e3040273c5ffb769865cc27c4d0f08741642cd08d77f3ba263e7e37",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-cd54a2cc1e3040273c5ffb769865cc27c4d0f08741642cd08d77f3ba263e7e37"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-003",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-003-f0e1bb41c110",
+      "manifest_digest": "sha256:0e0837214605e5dd2bf7a3f4c2ba08ed98bb1bdfe23e7fe60744262b3acec515",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-0e0837214605e5dd2bf7a3f4c2ba08ed98bb1bdfe23e7fe60744262b3acec515"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-004",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-004-c1c58a50bba8",
+      "manifest_digest": "sha256:41f9dbb79fdfb1d69fb9efcbb3efc327a873649fbc39ff2b71e889885f13e15f",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-41f9dbb79fdfb1d69fb9efcbb3efc327a873649fbc39ff2b71e889885f13e15f"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-005",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-005-c7b4f052d088",
+      "manifest_digest": "sha256:2197d9af8b85bc2d0beb396b929c0cbf27a8384a0359239e105054b2bb145bba",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-2197d9af8b85bc2d0beb396b929c0cbf27a8384a0359239e105054b2bb145bba"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-006",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-006-3c46b97d2725",
+      "manifest_digest": "sha256:b21972ca16a2e037d667151bc02d3b7bbab0e5362d1413582b4f90db42cc06f2",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-b21972ca16a2e037d667151bc02d3b7bbab0e5362d1413582b4f90db42cc06f2"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-007",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-007-3eb6218ad2ed",
+      "manifest_digest": "sha256:785052706f6ba6e6c300da76866e17bc37a7b1819257221a4940aeb5f0c544b9",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-785052706f6ba6e6c300da76866e17bc37a7b1819257221a4940aeb5f0c544b9"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-008",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-008-23d4571dc8a0",
+      "manifest_digest": "sha256:ea7f7ce4550512d1491b98dd9ae4a4d6eb18fa689e43bc7eefd152a590b7a07a",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-ea7f7ce4550512d1491b98dd9ae4a4d6eb18fa689e43bc7eefd152a590b7a07a"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-009",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-009-4965714d3d22",
+      "manifest_digest": "sha256:d3a32d4278fd568fc84789484a1708b83e1321433403b6e2108206fa55ddf6a6",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-d3a32d4278fd568fc84789484a1708b83e1321433403b6e2108206fa55ddf6a6"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-010",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-010-9229e3466e3b",
+      "manifest_digest": "sha256:e4734d49e78d48258849e671370f4c90544337c3bf9167321369ebf9a23162ec",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-e4734d49e78d48258849e671370f4c90544337c3bf9167321369ebf9a23162ec"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-011",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-011-f8f3ddc51286",
+      "manifest_digest": "sha256:0ce763c86979c6b7d25882ac0d2002cb6d6a8a07fcb613e649b4251baf7abfff",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-0ce763c86979c6b7d25882ac0d2002cb6d6a8a07fcb613e649b4251baf7abfff"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-012",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-012-0ef8b8f73871",
+      "manifest_digest": "sha256:01105156b4a7d6accd02e063f0c1b927de1e538dec9177ac2e6c969e5280a332",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-01105156b4a7d6accd02e063f0c1b927de1e538dec9177ac2e6c969e5280a332"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-013",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-013-332287c4a439",
+      "manifest_digest": "sha256:32c2e19887be9601f72b9b28d32e863edf10b7d9f4da636c53f71a0d7e89891e",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-32c2e19887be9601f72b9b28d32e863edf10b7d9f4da636c53f71a0d7e89891e"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-014",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-014-ca5cfe554f13",
+      "manifest_digest": "sha256:516bd1f933e214535e18df074e7dced7e99634193c195aa948688095219dd072",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-516bd1f933e214535e18df074e7dced7e99634193c195aa948688095219dd072"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-015",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-015-6d7ecda20aa9",
+      "manifest_digest": "sha256:529a7653cee1ce363d53e9eb242dd19f5651022d6ad97eacadd81127a786e1f1",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-529a7653cee1ce363d53e9eb242dd19f5651022d6ad97eacadd81127a786e1f1"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-016",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-016-81bce08b33a9",
+      "manifest_digest": "sha256:0c039ac955be30a06231bc90a142a766d5c6552a01012f6a9881bd00f9212a56",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-0c039ac955be30a06231bc90a142a766d5c6552a01012f6a9881bd00f9212a56"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-017",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-017-9fbc97a9df3a",
+      "manifest_digest": "sha256:b973f79ae034f69c426e25671d9da73b368b5fb621f6da7046fedfe69b20d404",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-b973f79ae034f69c426e25671d9da73b368b5fb621f6da7046fedfe69b20d404"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-018",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-018-9cc64ae5479a",
+      "manifest_digest": "sha256:37a82156af06f3e913006920ea6f7db8bf04978e3fbf3ff91a9cf0dc4098da28",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-37a82156af06f3e913006920ea6f7db8bf04978e3fbf3ff91a9cf0dc4098da28"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-019",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-019-66c3c836e67a",
+      "manifest_digest": "sha256:e633d294fa484d5f965f6cc17c0601f0e90f7ed828a37aa1602d0126aa0567c4",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-e633d294fa484d5f965f6cc17c0601f0e90f7ed828a37aa1602d0126aa0567c4"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-020",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-020-2b6322cd689c",
+      "manifest_digest": "sha256:6939b45e19b2d2cf4c70c4f7ed7395098795ac5a52b7bac134d57329ef0dfa7e",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-6939b45e19b2d2cf4c70c4f7ed7395098795ac5a52b7bac134d57329ef0dfa7e"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-021",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-021-97fcf67b9c78",
+      "manifest_digest": "sha256:15733b01c9e8c53e08b4f13d98ee56ca2a52b006cfd3506ecece0d6aa1aa1a8a",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-15733b01c9e8c53e08b4f13d98ee56ca2a52b006cfd3506ecece0d6aa1aa1a8a"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-022",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-022-d383a6aa01f9",
+      "manifest_digest": "sha256:16a1d65a240b85f12baa3f19e05a6423b9c5e9cef0337521140bc5db694e6f7f",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-16a1d65a240b85f12baa3f19e05a6423b9c5e9cef0337521140bc5db694e6f7f"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-023",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-023-13f68941d31c",
+      "manifest_digest": "sha256:abfc3199b7a82710196472cd5af377258248c59b17b6c59e6ed6050d23cfe17f",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-abfc3199b7a82710196472cd5af377258248c59b17b6c59e6ed6050d23cfe17f"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-024",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-024-7b46d22efa81",
+      "manifest_digest": "sha256:545f2b1285c44089d8308bf5e657247e0d9026d5bf18df83829bdc8f23786dbf",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-545f2b1285c44089d8308bf5e657247e0d9026d5bf18df83829bdc8f23786dbf"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-025",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-025-fae92c982e50",
+      "manifest_digest": "sha256:a2d473b06ab8b5d261c5869f191e591256efb7eeb5c395c2facdd75748039150",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-a2d473b06ab8b5d261c5869f191e591256efb7eeb5c395c2facdd75748039150"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-026",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-026-1d5a6bbc2d97",
+      "manifest_digest": "sha256:49c0fad8afa8753700c946ab34268ac546b0cbd5ce98b16899096ddf3d0342bd",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-49c0fad8afa8753700c946ab34268ac546b0cbd5ce98b16899096ddf3d0342bd"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-027",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-027-27f2f7230d2f",
+      "manifest_digest": "sha256:1de1bf892471c01cda91d4fdb3843aa871473250666c3b028ec53c46bb02ee84",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-1de1bf892471c01cda91d4fdb3843aa871473250666c3b028ec53c46bb02ee84"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-028",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-028-68d22cf04a82",
+      "manifest_digest": "sha256:da0b76d4e4348467eff330a951b0914ff244e2d99fd0c5e42f146da84e033ea0",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-da0b76d4e4348467eff330a951b0914ff244e2d99fd0c5e42f146da84e033ea0"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-029",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-029-925da233ed23",
+      "manifest_digest": "sha256:c6c9eece7f4fbfca8dc8c6c1f0b55275648f8beb78d724c623a60831a4f8bbb9",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-c6c9eece7f4fbfca8dc8c6c1f0b55275648f8beb78d724c623a60831a4f8bbb9"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-030",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-030-434d90242ba3",
+      "manifest_digest": "sha256:0e0f95f49af34c74e7cfa42f181376306f5850ca45256acf3fedccc7af64b3bf",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-0e0f95f49af34c74e7cfa42f181376306f5850ca45256acf3fedccc7af64b3bf"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-031",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-031-da8cdc7c52bc",
+      "manifest_digest": "sha256:8cc0bdce4762c395f233f44cd1918ab202153abbad84c97ffe7b4fc8e9b3e8eb",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-8cc0bdce4762c395f233f44cd1918ab202153abbad84c97ffe7b4fc8e9b3e8eb"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-032",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-032-dcba417f1def",
+      "manifest_digest": "sha256:4e833f0c981d7dac16672eef195864dafa0c7f11e88275df30ac9192379168dd",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-4e833f0c981d7dac16672eef195864dafa0c7f11e88275df30ac9192379168dd"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-033",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-033-98a29ec92efa",
+      "manifest_digest": "sha256:aa37dc692434bff1f10a5afb2068c9cc9ad1b72bb60245a8663726a74021e3b5",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-aa37dc692434bff1f10a5afb2068c9cc9ad1b72bb60245a8663726a74021e3b5"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-034",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-034-a8f1589a6a56",
+      "manifest_digest": "sha256:216a7ee9e02fba16cb43e958929b11fc9c6660dd3081806b82f83f1072c7e343",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-216a7ee9e02fba16cb43e958929b11fc9c6660dd3081806b82f83f1072c7e343"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-035",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-035-3b9906bfdc0c",
+      "manifest_digest": "sha256:d6710ae5105f7c4feac2b6092b1b71159d56e93f6a4fbdda68f466d173aff63c",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-d6710ae5105f7c4feac2b6092b1b71159d56e93f6a4fbdda68f466d173aff63c"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-036",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-036-31e6ccb19989",
+      "manifest_digest": "sha256:f6550c778fab90d4d719df3a2fd03e2213319b2983877f71501a2d04ce0a956e",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-f6550c778fab90d4d719df3a2fd03e2213319b2983877f71501a2d04ce0a956e"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-037",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-037-ffe9f096b836",
+      "manifest_digest": "sha256:c0df02c4e8915a4332959fd084354a061d9064d0a619d07b5f29e879b2d7ae1d",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-c0df02c4e8915a4332959fd084354a061d9064d0a619d07b5f29e879b2d7ae1d"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-038",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-038-051690f6b51b",
+      "manifest_digest": "sha256:54ce81407994426d532716636d873c1b50e287291606ef394a08b22fc8edae0d",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-54ce81407994426d532716636d873c1b50e287291606ef394a08b22fc8edae0d"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-039",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-039-b4884faad1e7",
+      "manifest_digest": "sha256:827dfe5ff2e5ba6282c4dc677d96751e1ba16eb684370e6720b72d05d087e46f",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-827dfe5ff2e5ba6282c4dc677d96751e1ba16eb684370e6720b72d05d087e46f"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-040",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-040-606f387bb336",
+      "manifest_digest": "sha256:242e08b1e5c6e029949167faa4d605f09077b4a98e204aba98b926def5ec0a82",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-242e08b1e5c6e029949167faa4d605f09077b4a98e204aba98b926def5ec0a82"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-041",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-041-c0cded8ae228",
+      "manifest_digest": "sha256:617ef7b7f932abddd0082f1e88bfab720e47863dd931e5df2bfaf9e3b190ee66",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-617ef7b7f932abddd0082f1e88bfab720e47863dd931e5df2bfaf9e3b190ee66"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-042",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-042-caeeda12bd94",
+      "manifest_digest": "sha256:abac86e01f5225fcf74a431559bdf371606f545055d4f421792c28cd487cccab",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-abac86e01f5225fcf74a431559bdf371606f545055d4f421792c28cd487cccab"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-043",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-043-3d2b10e728af",
+      "manifest_digest": "sha256:0dfd501b79b2563e46194d7f7574589e1d174cebb1413c6cec600c269a7d4633",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-0dfd501b79b2563e46194d7f7574589e1d174cebb1413c6cec600c269a7d4633"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-044",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-044-5dd11aa777c0",
+      "manifest_digest": "sha256:be338adf06a5299b513491e985ea836abd15b1b3c80e419f32c5ad3194c0fc23",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-be338adf06a5299b513491e985ea836abd15b1b3c80e419f32c5ad3194c0fc23"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-045",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-045-75f0a24691e1",
+      "manifest_digest": "sha256:afd8b337ffa768580dd94b34d77441148d66c183f1ace765fc2f76b6823dc1c6",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-afd8b337ffa768580dd94b34d77441148d66c183f1ace765fc2f76b6823dc1c6"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-046",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-046-8ae5573cec94",
+      "manifest_digest": "sha256:cbbcca6ffdc7b551b71b2e4604d84a4cc7c6f5362af35566aa964ac86a6dedb1",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-cbbcca6ffdc7b551b71b2e4604d84a4cc7c6f5362af35566aa964ac86a6dedb1"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-warm-6085a56a-047",
+      "repository": "ucloud-managed/slotq-b-warm-6085a56a-047-9d9d5d6437bc",
+      "manifest_digest": "sha256:a99737e1cf43122bdcfc3df951c250cf79350c6eaf874491ce8356c5b7c9d155",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-a99737e1cf43122bdcfc3df951c250cf79350c6eaf874491ce8356c5b7c9d155"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-000",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-000-f811fa500ee6",
+      "manifest_digest": "sha256:bb5101910b05f5c85455c6f267ba6ee02c4804d4db853c94b991a020a05d57b1",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-bb5101910b05f5c85455c6f267ba6ee02c4804d4db853c94b991a020a05d57b1"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-001",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-001-dd1154b10f51",
+      "manifest_digest": "sha256:92485fcd877daa605aa56166bb9c1882b366d463dcae098dee5d98eb0cde0fde",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-92485fcd877daa605aa56166bb9c1882b366d463dcae098dee5d98eb0cde0fde"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-002",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-002-dc045488daee",
+      "manifest_digest": "sha256:fca5ef93e09fc4103a541c156a1f646b46a1f50989c3f246729f2c6454cdd281",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-fca5ef93e09fc4103a541c156a1f646b46a1f50989c3f246729f2c6454cdd281"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-003",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-003-7a878bf36b53",
+      "manifest_digest": "sha256:88206775d00871dc0ca3600786b07ba3c1c44562472d1dd29202c93c8e747290",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-88206775d00871dc0ca3600786b07ba3c1c44562472d1dd29202c93c8e747290"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-004",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-004-9dfe0a9d4b51",
+      "manifest_digest": "sha256:07ffdae28fd4fb2de0d96c109014a5092b4e5cc354c4349b9a3dca724fbad727",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-07ffdae28fd4fb2de0d96c109014a5092b4e5cc354c4349b9a3dca724fbad727"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-005",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-005-6b45582b6fcc",
+      "manifest_digest": "sha256:e7689de71448d141076209571fda1a580701f2aefa744d76a687cd43cbbcdecc",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-e7689de71448d141076209571fda1a580701f2aefa744d76a687cd43cbbcdecc"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-006",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-006-a03dcafdce21",
+      "manifest_digest": "sha256:d301eb3080bc124fd78d9ff49e696371ad2fcc146d249e9f6b890c7bca3282d0",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-d301eb3080bc124fd78d9ff49e696371ad2fcc146d249e9f6b890c7bca3282d0"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-007",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-007-f0041254437b",
+      "manifest_digest": "sha256:01a8ea7aa66d83fa4f3022cfacfefe7a42b292e8f0ce2cc3090cbd1a95d9b6a3",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-01a8ea7aa66d83fa4f3022cfacfefe7a42b292e8f0ce2cc3090cbd1a95d9b6a3"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-008",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-008-d4a1ecd7f707",
+      "manifest_digest": "sha256:7b3be77d79655f899cfb26fdda3da62ef3b0f44c8ba510bb1014ee6d9e1c4289",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-7b3be77d79655f899cfb26fdda3da62ef3b0f44c8ba510bb1014ee6d9e1c4289"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-009",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-009-f5590bab02f1",
+      "manifest_digest": "sha256:341ef62ffa7d89229ef9648e00c4173bda25b245f8a689c02e77989a5018620d",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-341ef62ffa7d89229ef9648e00c4173bda25b245f8a689c02e77989a5018620d"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-010",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-010-37aa470b5736",
+      "manifest_digest": "sha256:b3c50fc4dd82b9c446f7991a8cb856ac91fbb5dd26474e7384eb781cd15401c8",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-b3c50fc4dd82b9c446f7991a8cb856ac91fbb5dd26474e7384eb781cd15401c8"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-011",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-011-327da5dd8a64",
+      "manifest_digest": "sha256:e05d6d8ee1b97395c0ccbddc431d70ee0f2934b59e019c99d0dcc6f130738715",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-e05d6d8ee1b97395c0ccbddc431d70ee0f2934b59e019c99d0dcc6f130738715"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-012",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-012-bd49a89f814b",
+      "manifest_digest": "sha256:701550d57d60aa318a61985e1153db9ff02d5aab22c123be0c7857989bca7d3d",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-701550d57d60aa318a61985e1153db9ff02d5aab22c123be0c7857989bca7d3d"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-013",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-013-0075882f908e",
+      "manifest_digest": "sha256:6849fbd2c8d979ddbe6b9596c133dd0f85847d4f473162f0354346061849ef49",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-6849fbd2c8d979ddbe6b9596c133dd0f85847d4f473162f0354346061849ef49"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-014",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-014-4ccf93e6d930",
+      "manifest_digest": "sha256:ca75470c9247b115dc4dea5057d3bca7eda2a834539466f1ef2c0d4b76c5bd56",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-ca75470c9247b115dc4dea5057d3bca7eda2a834539466f1ef2c0d4b76c5bd56"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-015",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-015-ea562cc69299",
+      "manifest_digest": "sha256:c0ce20ae218689941fbd90a096b1bb16c4642b1fc20ccaffa198a71a06627dcd",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-c0ce20ae218689941fbd90a096b1bb16c4642b1fc20ccaffa198a71a06627dcd"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-016",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-016-b4b657b119ac",
+      "manifest_digest": "sha256:0257a34c7c6df79b248d9d4ebde97c4c9f8b2e3930e6239713714ed5dd465324",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-0257a34c7c6df79b248d9d4ebde97c4c9f8b2e3930e6239713714ed5dd465324"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-017",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-017-cfa6b6d3956c",
+      "manifest_digest": "sha256:daf0ece878fbe54663ca93001ec786375f8cff015a25d466f0d984369af499b1",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-daf0ece878fbe54663ca93001ec786375f8cff015a25d466f0d984369af499b1"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-018",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-018-f39fb00e8489",
+      "manifest_digest": "sha256:116fbdaba2ac4aeee6f06260e11776005839b3c642a39ffbe52e1fb9c8884aa6",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-116fbdaba2ac4aeee6f06260e11776005839b3c642a39ffbe52e1fb9c8884aa6"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-019",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-019-cb10bc495fc1",
+      "manifest_digest": "sha256:a176abf6cc548251c3da11bd6797e660b37587b6bde511d0456711134994a1e1",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-a176abf6cc548251c3da11bd6797e660b37587b6bde511d0456711134994a1e1"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-020",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-020-c6138f7cfc15",
+      "manifest_digest": "sha256:5b038fce93399e95652002ce9d10519532f044a5a65200d42248702bc87f4f07",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-5b038fce93399e95652002ce9d10519532f044a5a65200d42248702bc87f4f07"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-021",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-021-930fdb6d5215",
+      "manifest_digest": "sha256:cc78ba7b5f976ca2ac1abae1669b0d721bc52ce93d54cbce238c62db699318be",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-cc78ba7b5f976ca2ac1abae1669b0d721bc52ce93d54cbce238c62db699318be"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-022",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-022-2558b4e69ec6",
+      "manifest_digest": "sha256:3d8e7ad02653bf0b190a4c23f07ce0a1e0363918ddb7cfee8d6ee07682393cac",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-3d8e7ad02653bf0b190a4c23f07ce0a1e0363918ddb7cfee8d6ee07682393cac"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-023",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-023-9ed05e267dae",
+      "manifest_digest": "sha256:f607b0faf1cd8da22e16d241c2c16096c54176d2a9da48ded095c9c10bf8173e",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-f607b0faf1cd8da22e16d241c2c16096c54176d2a9da48ded095c9c10bf8173e"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-024",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-024-4165179d7829",
+      "manifest_digest": "sha256:4c5e282c5bcf6ebe72eba11518ecb07fe75d831a86bff8cfae394447ab666898",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-4c5e282c5bcf6ebe72eba11518ecb07fe75d831a86bff8cfae394447ab666898"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-025",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-025-ea022a10ddb6",
+      "manifest_digest": "sha256:a47dbd11b5c071321a2adebcf2dbf5281824e5c930ef93c782b7ce685196b9a9",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-a47dbd11b5c071321a2adebcf2dbf5281824e5c930ef93c782b7ce685196b9a9"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-026",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-026-876cce3f161b",
+      "manifest_digest": "sha256:69904abf0c68a32f95a1f83040cbcc581cd1b0a6f2fdbbc29346a809f20bd248",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-69904abf0c68a32f95a1f83040cbcc581cd1b0a6f2fdbbc29346a809f20bd248"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-027",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-027-8a88b14cc8d8",
+      "manifest_digest": "sha256:bec6e435435ce3f782268408c982c5c3644bcac48d3d60df25e2f32542cb9b6d",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-bec6e435435ce3f782268408c982c5c3644bcac48d3d60df25e2f32542cb9b6d"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-028",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-028-a9f2060ca8fa",
+      "manifest_digest": "sha256:3ebaf40af0c759734a69d1cae9d6884b23b106f4545eb46447c803737965a286",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-3ebaf40af0c759734a69d1cae9d6884b23b106f4545eb46447c803737965a286"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-029",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-029-4a6edd77f390",
+      "manifest_digest": "sha256:ada3258d22fdfd4bd33445e696bc33164abf3ce85d08bc2da6b79b21ad4854ef",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-ada3258d22fdfd4bd33445e696bc33164abf3ce85d08bc2da6b79b21ad4854ef"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-030",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-030-d10a0e031cf9",
+      "manifest_digest": "sha256:f434f008f8ebe2757f14acbaaafcd403efb84f0579b4977c50bad8cbfcd3feb6",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-f434f008f8ebe2757f14acbaaafcd403efb84f0579b4977c50bad8cbfcd3feb6"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-031",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-031-e105ac689cf4",
+      "manifest_digest": "sha256:6c0b66a3d256c7b4abb5dce084b15ac7aa3a9ac81146cb5510d357dd2bccb744",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-6c0b66a3d256c7b4abb5dce084b15ac7aa3a9ac81146cb5510d357dd2bccb744"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-032",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-032-b613f3599e27",
+      "manifest_digest": "sha256:79e6c87a4aeb1c7600c9838d96bec4d70a67aced5f7695ab9d23b89a816d694d",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-79e6c87a4aeb1c7600c9838d96bec4d70a67aced5f7695ab9d23b89a816d694d"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-033",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-033-1087806b6c82",
+      "manifest_digest": "sha256:c0c560b7de5f3fba75e712dc3763c76acf689b0885006ec7b04e3033084a2ecc",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-c0c560b7de5f3fba75e712dc3763c76acf689b0885006ec7b04e3033084a2ecc"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-034",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-034-7f167f412679",
+      "manifest_digest": "sha256:119dbf74e27f7778ce1a2e97ad2bff1737e17c30756d63a640b5b322885f656e",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-119dbf74e27f7778ce1a2e97ad2bff1737e17c30756d63a640b5b322885f656e"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-035",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-035-86a9ea0e8d35",
+      "manifest_digest": "sha256:821878d98f0fe75e2031400098996e015685fe79db1d9d2ea5701841c39feed5",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-821878d98f0fe75e2031400098996e015685fe79db1d9d2ea5701841c39feed5"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-036",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-036-519267302910",
+      "manifest_digest": "sha256:ffcb63c215b7f5e7a7418cee55fccecf764b2464e455477457baf3e0c0bbabd3",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-ffcb63c215b7f5e7a7418cee55fccecf764b2464e455477457baf3e0c0bbabd3"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-037",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-037-74e5609f84aa",
+      "manifest_digest": "sha256:c0f8b163d72159cb32d9970ca941780822bee8ecbc2f0f1f89208d9dc0cea871",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-c0f8b163d72159cb32d9970ca941780822bee8ecbc2f0f1f89208d9dc0cea871"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-038",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-038-4a19318e53dc",
+      "manifest_digest": "sha256:8ae1a22c1ccf4f18833bb718b8f79da1493c2c48a611936bd4c6e6de3220b675",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-8ae1a22c1ccf4f18833bb718b8f79da1493c2c48a611936bd4c6e6de3220b675"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-039",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-039-9352cab2c11c",
+      "manifest_digest": "sha256:0a25095afe51304bb1498f8ad8b0ac29b4d7e2be202f8311e845c30eae395282",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-0a25095afe51304bb1498f8ad8b0ac29b4d7e2be202f8311e845c30eae395282"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-040",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-040-dcef57051bc7",
+      "manifest_digest": "sha256:bd310a01b7c8af90c5cbe1793b6f937c173fb5cc6e2bf854520ed6d277e3cabd",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-bd310a01b7c8af90c5cbe1793b6f937c173fb5cc6e2bf854520ed6d277e3cabd"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-041",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-041-3cf775d58fa7",
+      "manifest_digest": "sha256:824bd9c97b1de62af003c32b415c0a26aebd002869d435c34039ee1bf6b13500",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-824bd9c97b1de62af003c32b415c0a26aebd002869d435c34039ee1bf6b13500"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-042",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-042-7575b8365be6",
+      "manifest_digest": "sha256:c2208d42549431b73ddd54a4d45b37b40b8eea8ffd852e58bbff7ff40478b1f7",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-c2208d42549431b73ddd54a4d45b37b40b8eea8ffd852e58bbff7ff40478b1f7"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-043",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-043-1f9a99a24cf6",
+      "manifest_digest": "sha256:60d20d84f1045c3596812e556b1b656ea9bca8fae8a115ae4e665333e40f339e",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-60d20d84f1045c3596812e556b1b656ea9bca8fae8a115ae4e665333e40f339e"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-044",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-044-74bc75c3b410",
+      "manifest_digest": "sha256:967778da409b2dbca27f3e9ba7281731d5ab2ba82123fe5123a730fe42742a5a",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-967778da409b2dbca27f3e9ba7281731d5ab2ba82123fe5123a730fe42742a5a"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-045",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-045-6a383a6e05bd",
+      "manifest_digest": "sha256:85b141c8f4642fe36d4cabe46e18a73494ce9c9b5224412b2ecc7c26d493875d",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-85b141c8f4642fe36d4cabe46e18a73494ce9c9b5224412b2ecc7c26d493875d"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-046",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-046-29278bc87c46",
+      "manifest_digest": "sha256:87fa2e96bf8f35b31775aab3098993970fc3258fca6d7e128a833aedf89b9c98",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-87fa2e96bf8f35b31775aab3098993970fc3258fca6d7e128a833aedf89b9c98"
+      ],
+      "unrelated_aliases": 0
+    },
+    {
+      "image_id": "slotq-b-cold-71e13d91-047",
+      "repository": "ucloud-managed/slotq-b-cold-71e13d91-047-dcae728dc9ca",
+      "manifest_digest": "sha256:25168decd6bd1a4e3e1f7b6d8d3188d7baa81c0aeebe519611e94a460c6d0d95",
+      "state": "present",
+      "aliases": [
+        "latest",
+        "ucloud-digest-sha256-25168decd6bd1a4e3e1f7b6d8d3188d7baa81c0aeebe519611e94a460c6d0d95"
+      ],
+      "unrelated_aliases": 0
+    }
+  ],
+  "scope": "Exact owned managed manifests only. Shared cache/components/environments, unrelated aliases and all blobs are preserved.",
+  "idle_before": {
+    "sandbox_count": 0,
+    "active_builds": 0,
+    "live_nodes_checked": 5
+  },
+  "idle_after": {
+    "sandbox_count": 0,
+    "active_builds": 0,
+    "live_nodes_checked": 5
+  },
+  "finished_at": "2026-09-29T21:21:07.571083+00:00"
+}

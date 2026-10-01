@@ -1,0 +1,13 @@
+{
+  "active_builds": 0,
+  "admission_open": true,
+  "advertised_capacity": "4",
+  "at": "2026-09-29T22:41:43Z",
+  "draining": false,
+  "images_sha256": "d04d15b635ab68058725c7d76157a81a053e113995353965312d671d48a35c85",
+  "job_id": "168016286",
+  "node_epoch": "aa3931953e4f41c4be60e514de6acf9c",
+  "runtime_root": "/work/registry-pulls-upgrade-20260930-r1/site-packages",
+  "service": "ucloud-sandbox-node.service",
+  "unit_sha256": "20d4a3eb30c149bc8f80b61d7551080fc3e77e267584f26aa5b408949c4ef145"
+}

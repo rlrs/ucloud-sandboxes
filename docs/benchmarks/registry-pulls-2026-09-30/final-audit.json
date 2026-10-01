@@ -1,0 +1,73 @@
+{
+  "verified_at": "2026-09-29T23:11:01Z",
+  "wheel_sha256": "3f29209df80e27d3aad2d1edb3c1677ce05bb44d50b78da1797b6b0a212c13f3",
+  "runtime_source_commit": "c09e2228197a41c755e13a1cceb9ad0714edaef1",
+  "installed_files_match_wheel": 165,
+  "node_package_root": "/work/ucloud-sandboxes/registry-pulls-20260930-r1",
+  "runtime_file_set_matches": true,
+  "staging_receipt_sha256": "cc637c13d4a6360feb4b5d8d3245165700a4ccb7d092732862910793960b34ec",
+  "node_bundle_sha256": {
+    "builder": "7f2770bec6cace27e672bf83c025d8b7d306f6605f8c92066356d7ff2f432afb",
+    "sandbox": "bd5adc828c453ca39af8cec198bd5468ebd8851fb8f6c1304189017009e95dd8"
+  },
+  "max_preparing_solving": 4,
+  "max_finishing_builds": 2,
+  "max_owned_builds": 6,
+  "buildkit_parallelism": 4,
+  "builder_execution_timeout_seconds": 1800,
+  "cache_max_entries": 512,
+  "cache_max_bytes": 34359738368,
+  "configuration_mode": "0o644",
+  "fleet_nodes": 0,
+  "prepared_builders": 0,
+  "active_builds": 0,
+  "sandboxes": 0,
+  "services": {
+    "ucloud-sandbox-autoscaler": "active",
+    "ucloud-sandbox-placement": "active",
+    "ucloud-sandbox-gateway": "active",
+    "ucloud-sandbox-relay": "active"
+  },
+  "automatic_upgrade_units": {
+    "apt-daily.timer": "masked",
+    "apt-daily-upgrade.timer": "masked",
+    "apt-daily.service": "masked",
+    "apt-daily-upgrade.service": "masked",
+    "unattended-upgrades.service": "masked"
+  },
+  "apt_periodic": {
+    "Enable": 0,
+    "Update-Package-Lists": 0,
+    "Unattended-Upgrade": 0
+  },
+  "health": {
+    "gateway_https": true,
+    "relay_https": true,
+    "metrics_ok": true,
+    "relay_storage_budget_bytes": 68719476736,
+    "database_pools": {
+      "database_pool": {
+        "connections_num": 1,
+        "connections_ms": 2,
+        "requests_num": 1330,
+        "usage_ms": 100,
+        "pool_min": 1,
+        "pool_max": 16,
+        "pool_size": 1,
+        "pool_available": 1,
+        "requests_waiting": 0
+      },
+      "lifecycle_database_pool": {
+        "connections_num": 1,
+        "connections_ms": 3,
+        "requests_num": 5298,
+        "usage_ms": 244,
+        "pool_min": 1,
+        "pool_max": 4,
+        "pool_size": 1,
+        "pool_available": 1,
+        "requests_waiting": 0
+      }
+    }
+  }
+}

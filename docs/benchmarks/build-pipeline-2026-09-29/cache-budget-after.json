@@ -1,0 +1,34 @@
+{
+  "captured_at": "2026-09-29T21:18:25.387136+00:00",
+  "cache_prune_dry_run": {
+    "repository": "ucloud-build-cache",
+    "execute": false,
+    "inventoried_tags": 304,
+    "retained_entries": 304,
+    "retained_bytes": 12019741559,
+    "protected_entries": 0,
+    "candidate_tags": [],
+    "candidate_digests": [],
+    "deleted_digests": [],
+    "deleted_manifests": 0,
+    "max_bytes": 34359738368,
+    "max_entries": 512,
+    "max_age_seconds": 604800,
+    "physical_reclamation_requires_registry_gc": true
+  },
+  "registry_disk": {
+    "path": "/mnt/ucloud-registry/docker-registry",
+    "total_bytes": 1055735832576,
+    "used_bytes": 176581513216,
+    "available_bytes": 825450450944,
+    "used_percent": 17.62,
+    "cleanup_percent": 70.0,
+    "target_percent": 60.0,
+    "refuse_percent": 90.0,
+    "state": "ok"
+  },
+  "limits": [
+    "Read-only retention plan, not an executed prune. Shared cache and components remain intact.",
+    "Retained bytes are unique descriptor bytes for the planned retained cache, not total registry physical usage."
+  ]
+}

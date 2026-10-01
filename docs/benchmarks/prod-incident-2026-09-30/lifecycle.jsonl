@@ -1,0 +1,6 @@
+{"query" : "commands", "rows" : [{"kind":"create","state":"done","result_status":504,"count":1,"first":"2026-09-30T05:00:56.448944+00:00","last":"2026-09-30T05:00:56.448944+00:00","max_seconds":601.429767,"max_attempts":345}]}
+{"query" : "sandbox_losses", "rows" : []}
+{"query" : "exec_losses", "rows" : []}
+{"query" : "program_summary", "rows" : [{"state":"terminal","last_error":"sandbox deletion requested","count":7043,"first":"2026-09-30T04:51:05.755007+00:00","last":"2026-09-30T05:03:07.261464+00:00"}]}
+{"query" : "relay_summary", "rows" : [{"state":"leased","status":null,"count":1,"first":"2026-09-30T05:01:04.709837+00:00","last":"2026-09-30T05:01:04.709837+00:00","max_seconds":null,"max_deliveries":1}]}
+{"query" : "relay_lifecycle_errors", "rows" : []}

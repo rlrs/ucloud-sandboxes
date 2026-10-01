@@ -1,0 +1,72 @@
+{
+  "apply": false,
+  "complete": true,
+  "started_at": "2026-09-29T23:08:49.642354+00:00",
+  "pins": {
+    "cleanup-owned-images.py": "6e4dd31b0528a66ce20801118012abc466ddf6fda3bfde3d3c5df06ac58cbd3d",
+    "owned-images.json": "b33e586c1994c42a2a9f676c48ef6655668360be640af497ad0f12594ec36056",
+    "image-smokes/summary.json": "7ab663edd0d381c6676097dfc958046e0d9f3f0967b49a0e84e68fa4bce0b832",
+    "provider-absence.json": "f7df813392390760b42181437b4e9250573ba76b3fbae36bfc84e6864056ac71"
+  },
+  "captured_receipt_sha256": {
+    "launch.json": "e722a3892fae35851b24eb4294813c5ef847efaa32ae2eb478afd5c3ae2d6e39",
+    "registry-pull-smoke-294a07ecc9b5-45-created.json": "4fbec4d9c479f759b3440acb416ad0ab57366e4abc20c3585823009681ba6262",
+    "registry-pull-smoke-294a07ecc9b5-46-created.json": "534d54a52e0bc56af0525ee4a7aed0342e07a946434d64b863624929bcefece5",
+    "registry-pull-smoke-294a07ecc9b5-47-created.json": "4c534b8c3b12abb895c0d4fde72a927f49cb498306eef655383745f84e120318"
+  },
+  "worker_ids": [
+    "168019452"
+  ],
+  "owner_hash_recomputed": true,
+  "leases": [
+    {
+      "image_id": "slotq-pulls-b-cold-976f3bff-045",
+      "expected": {
+        "repository": "ucloud-managed/slotq-pulls-b-cold-976f3bff-045-c2be92a2023f",
+        "tag": "latest",
+        "owner": "create-image-pull:v1:975b5e9227f7fbb82b14ff7b99c738018558a34350957c94e47660f6106da21a",
+        "acquired_at": "2026-09-29T23:02:01.955333+00:00",
+        "renewed_at": "2026-09-29T23:02:01.955333+00:00",
+        "expires_at": "2026-09-30T00:02:01.955333+00:00",
+        "digest": "sha256:225b282a5d4933a8936236de305754f2655225d008297f61aa7a504852ba03fa"
+      },
+      "state": "active",
+      "released": false
+    },
+    {
+      "image_id": "slotq-pulls-b-cold-976f3bff-046",
+      "expected": {
+        "repository": "ucloud-managed/slotq-pulls-b-cold-976f3bff-046-0336c63c841d",
+        "tag": "latest",
+        "owner": "create-image-pull:v1:8bcc61c597cce9acc3c7ec5f446ed0fed3ec4770307ebd7d15a7e898749e8613",
+        "acquired_at": "2026-09-29T23:02:01.979485+00:00",
+        "renewed_at": "2026-09-29T23:02:01.979485+00:00",
+        "expires_at": "2026-09-30T00:02:01.979485+00:00",
+        "digest": "sha256:95b5b57551ee866cd5bdf8490c64de893a3618a7dd4b28586cdc5564718788cd"
+      },
+      "state": "active",
+      "released": false
+    },
+    {
+      "image_id": "slotq-pulls-b-cold-976f3bff-047",
+      "expected": {
+        "repository": "ucloud-managed/slotq-pulls-b-cold-976f3bff-047-d571452ddcf4",
+        "tag": "latest",
+        "owner": "create-image-pull:v1:03784a59899868ef878c31c7e475d37c84d35cd78170a8c1dd760d7f9f110f5a",
+        "acquired_at": "2026-09-29T23:02:01.994994+00:00",
+        "renewed_at": "2026-09-29T23:02:01.994994+00:00",
+        "expires_at": "2026-09-30T00:02:01.994994+00:00",
+        "digest": "sha256:17ec4c2b4bf80c4a1ed06badb2a83a1b6cd3cddde969b3107dcc5fd006692457"
+      },
+      "state": "active",
+      "released": false
+    }
+  ],
+  "scope": "Only three exact create-image-pull lease tuples; dependency/unrelated leases and registry content untouched.",
+  "idle": {
+    "sandbox_count": 0,
+    "active_builds": 0,
+    "live_nodes_checked": 0
+  },
+  "finished_at": "2026-09-29T23:08:49.652410+00:00"
+}

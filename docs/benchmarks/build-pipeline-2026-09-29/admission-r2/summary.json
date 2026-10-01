@@ -1,0 +1,241 @@
+{
+  "schema_version": 1,
+  "sample_interval_seconds": 2,
+  "bounds": {
+    "active_builds": 6,
+    "preparing_solving_builds": 4,
+    "finishing_builds": 2
+  },
+  "interpretation": "Read-only samples establish observed ownership and coverage; intervals between samples are not a continuous proof. Atomic admission tests independently check bounds.",
+  "nodes": [
+    {
+      "job_id": "168008406",
+      "source": "168008406.jsonl.gz",
+      "first_sample": "2026-09-29T21:04:39.388353+00:00",
+      "last_sample": "2026-09-29T21:16:19.447112+00:00",
+      "total_samples": 351,
+      "total_error_samples": 0,
+      "total_violating_samples": 0,
+      "phases": {
+        "warm": {
+          "window_start": "2026-09-29T21:06:25.670259+00:00",
+          "window_end": "2026-09-29T21:06:42.865242+00:00",
+          "samples": 8,
+          "error_samples": 0,
+          "violating_samples": 0,
+          "sample_before_start": true,
+          "sample_after_end": true,
+          "max_sample_gap_seconds": 2.0002450942993164,
+          "observed_maxima": {
+            "active_builds": 4,
+            "preparing_solving_builds": 4,
+            "finishing_builds": 2,
+            "terminal_cleanup_builds": 0
+          },
+          "probe_ms": {
+            "mean": 0.22789499996633822,
+            "p95": 0.25876524988461824,
+            "max": 0.25999199988291366
+          },
+          "at_least_five_owned_samples": 0,
+          "six_owned_samples": 0
+        },
+        "cold": {
+          "window_start": "2026-09-29T21:08:16.300969+00:00",
+          "window_end": "2026-09-29T21:13:07.567574+00:00",
+          "samples": 146,
+          "error_samples": 0,
+          "violating_samples": 0,
+          "sample_before_start": true,
+          "sample_after_end": true,
+          "max_sample_gap_seconds": 2.0338828563690186,
+          "observed_maxima": {
+            "active_builds": 6,
+            "preparing_solving_builds": 4,
+            "finishing_builds": 2,
+            "terminal_cleanup_builds": 0
+          },
+          "probe_ms": {
+            "mean": 0.7991821027414131,
+            "p95": 0.7358622498827572,
+            "max": 33.97972900006607
+          },
+          "at_least_five_owned_samples": 35,
+          "six_owned_samples": 21
+        }
+      }
+    },
+    {
+      "job_id": "168008407",
+      "source": "168008407.jsonl.gz",
+      "first_sample": "2026-09-29T21:04:39.366412+00:00",
+      "last_sample": "2026-09-29T21:16:19.425558+00:00",
+      "total_samples": 351,
+      "total_error_samples": 0,
+      "total_violating_samples": 0,
+      "phases": {
+        "warm": {
+          "window_start": "2026-09-29T21:06:25.670259+00:00",
+          "window_end": "2026-09-29T21:06:42.865242+00:00",
+          "samples": 8,
+          "error_samples": 0,
+          "violating_samples": 0,
+          "sample_before_start": true,
+          "sample_after_end": true,
+          "max_sample_gap_seconds": 2.001317024230957,
+          "observed_maxima": {
+            "active_builds": 6,
+            "preparing_solving_builds": 4,
+            "finishing_builds": 2,
+            "terminal_cleanup_builds": 1
+          },
+          "probe_ms": {
+            "mean": 0.311112749983522,
+            "p95": 0.9670215000710408,
+            "max": 1.3523610000447661
+          },
+          "at_least_five_owned_samples": 2,
+          "six_owned_samples": 1
+        },
+        "cold": {
+          "window_start": "2026-09-29T21:08:16.300969+00:00",
+          "window_end": "2026-09-29T21:13:07.567574+00:00",
+          "samples": 146,
+          "error_samples": 0,
+          "violating_samples": 0,
+          "sample_before_start": true,
+          "sample_after_end": true,
+          "max_sample_gap_seconds": 2.018143892288208,
+          "observed_maxima": {
+            "active_builds": 6,
+            "preparing_solving_builds": 4,
+            "finishing_builds": 2,
+            "terminal_cleanup_builds": 0
+          },
+          "probe_ms": {
+            "mean": 0.49398529453144074,
+            "p95": 0.6339007499036597,
+            "max": 18.471236999857865
+          },
+          "at_least_five_owned_samples": 39,
+          "six_owned_samples": 13
+        }
+      }
+    },
+    {
+      "job_id": "168008410",
+      "source": "168008410.jsonl.gz",
+      "first_sample": "2026-09-29T21:04:39.372654+00:00",
+      "last_sample": "2026-09-29T21:16:19.433643+00:00",
+      "total_samples": 351,
+      "total_error_samples": 0,
+      "total_violating_samples": 0,
+      "phases": {
+        "warm": {
+          "window_start": "2026-09-29T21:06:25.670259+00:00",
+          "window_end": "2026-09-29T21:06:42.865242+00:00",
+          "samples": 8,
+          "error_samples": 0,
+          "violating_samples": 0,
+          "sample_before_start": true,
+          "sample_after_end": true,
+          "max_sample_gap_seconds": 2.0003130435943604,
+          "observed_maxima": {
+            "active_builds": 5,
+            "preparing_solving_builds": 4,
+            "finishing_builds": 2,
+            "terminal_cleanup_builds": 1
+          },
+          "probe_ms": {
+            "mean": 0.20840612495476307,
+            "p95": 0.39908584986960705,
+            "max": 0.4156369998327136
+          },
+          "at_least_five_owned_samples": 2,
+          "six_owned_samples": 0
+        },
+        "cold": {
+          "window_start": "2026-09-29T21:08:16.300969+00:00",
+          "window_end": "2026-09-29T21:13:07.567574+00:00",
+          "samples": 146,
+          "error_samples": 0,
+          "violating_samples": 0,
+          "sample_before_start": true,
+          "sample_after_end": true,
+          "max_sample_gap_seconds": 2.0032148361206055,
+          "observed_maxima": {
+            "active_builds": 6,
+            "preparing_solving_builds": 4,
+            "finishing_builds": 2,
+            "terminal_cleanup_builds": 0
+          },
+          "probe_ms": {
+            "mean": 0.37347264384457607,
+            "p95": 0.6473002499092217,
+            "max": 3.343120999943494
+          },
+          "at_least_five_owned_samples": 49,
+          "six_owned_samples": 27
+        }
+      }
+    },
+    {
+      "job_id": "168008411",
+      "source": "168008411.jsonl.gz",
+      "first_sample": "2026-09-29T21:04:39.324280+00:00",
+      "last_sample": "2026-09-29T21:16:19.380602+00:00",
+      "total_samples": 351,
+      "total_error_samples": 0,
+      "total_violating_samples": 0,
+      "phases": {
+        "warm": {
+          "window_start": "2026-09-29T21:06:25.670259+00:00",
+          "window_end": "2026-09-29T21:06:42.865242+00:00",
+          "samples": 8,
+          "error_samples": 0,
+          "violating_samples": 0,
+          "sample_before_start": true,
+          "sample_after_end": true,
+          "max_sample_gap_seconds": 2.000298023223877,
+          "observed_maxima": {
+            "active_builds": 6,
+            "preparing_solving_builds": 4,
+            "finishing_builds": 2,
+            "terminal_cleanup_builds": 0
+          },
+          "probe_ms": {
+            "mean": 0.19169412504993488,
+            "p95": 0.28290485013258143,
+            "max": 0.3058680001686298
+          },
+          "at_least_five_owned_samples": 2,
+          "six_owned_samples": 2
+        },
+        "cold": {
+          "window_start": "2026-09-29T21:08:16.300969+00:00",
+          "window_end": "2026-09-29T21:13:07.567574+00:00",
+          "samples": 146,
+          "error_samples": 0,
+          "violating_samples": 0,
+          "sample_before_start": true,
+          "sample_after_end": true,
+          "max_sample_gap_seconds": 2.0051109790802,
+          "observed_maxima": {
+            "active_builds": 6,
+            "preparing_solving_builds": 4,
+            "finishing_builds": 2,
+            "terminal_cleanup_builds": 1
+          },
+          "probe_ms": {
+            "mean": 0.3685266096005625,
+            "p95": 0.7197512500169978,
+            "max": 3.7436799998431525
+          },
+          "at_least_five_owned_samples": 31,
+          "six_owned_samples": 20
+        }
+      }
+    }
+  ],
+  "all_phase_checks_pass": true
+}

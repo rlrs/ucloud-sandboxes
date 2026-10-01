@@ -1,0 +1,10 @@
+{
+  "executed": false,
+  "deleted_manifests": 0,
+  "images_retained": 240,
+  "plan_sha256": "e2baf3bff5e459de2806823f2c4e72a639237c4fff015c0c395fc391909c1c15",
+  "ledger_sha256": "77ad2a45ae495389b80b832ae74136a93f1bef01d04c401778fc0187cdf34780",
+  "status": "awaiting_explicit_user_approval",
+  "automatic_approval_review": "Rejected the destructive removal of240 registry manifests/480 tags as insufficiently covered by earlier authorization to improve pruning; execution did not start. No retry or indirect execution occurred.",
+  "unaffected_work": "All owned builder sampler units stopped; final metrics archived; workload qualification and deployed optimization remain valid."
+}

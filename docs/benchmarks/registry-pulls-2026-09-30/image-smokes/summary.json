@@ -1,0 +1,152 @@
+{
+  "passed": true,
+  "started_at": "2026-09-29T23:00:34.813794+00:00",
+  "finished_at": "2026-09-29T23:02:23.751019+00:00",
+  "results": [
+    {
+      "started_at": "2026-09-29T23:00:34.813794+00:00",
+      "sandbox_id": "registry-pull-smoke-294a07ecc9b5-45",
+      "image_id": "slotq-pulls-b-cold-976f3bff-045",
+      "recipe": "python-agent",
+      "variant": "app-change-20",
+      "published_image_tag": "10.42.0.2:5000/ucloud-managed/slotq-pulls-b-cold-976f3bff-045-c2be92a2023f:latest",
+      "published_manifest_digest": "sha256:225b282a5d4933a8936236de305754f2655225d008297f61aa7a504852ba03fa",
+      "create_seconds": 88.26522960700095,
+      "worker": {
+        "job_id": "168019452",
+        "node_id": "10.42.0.3",
+        "node_epoch": "d4183e8cf4304fa1bd075ea17055b571",
+        "node_url": "http://10.42.0.3:8090"
+      },
+      "resolved_image_ref": "10.42.0.2:5000/ucloud-managed/slotq-pulls-b-cold-976f3bff-045-c2be92a2023f:latest@sha256:225b282a5d4933a8936236de305754f2655225d008297f61aa7a504852ba03fa",
+      "create_image_pull_lease_owner": "create-image-pull:v1:975b5e9227f7fbb82b14ff7b99c738018558a34350957c94e47660f6106da21a",
+      "create_image_pull_lease": {
+        "repository": "ucloud-managed/slotq-pulls-b-cold-976f3bff-045-c2be92a2023f",
+        "tag": "latest",
+        "owner": "create-image-pull:v1:975b5e9227f7fbb82b14ff7b99c738018558a34350957c94e47660f6106da21a",
+        "acquired_at": "2026-09-29T23:02:01.955333+00:00",
+        "renewed_at": "2026-09-29T23:02:01.955333+00:00",
+        "expires_at": "2026-09-30T00:02:01.955333+00:00",
+        "digest": "sha256:225b282a5d4933a8936236de305754f2655225d008297f61aa7a504852ba03fa"
+      },
+      "create_image_pull_lease_owner_verified": true,
+      "exit_code": 0,
+      "verified": true,
+      "output": {
+        "grouped_rows": 11,
+        "revision": 20,
+        "score": 703028,
+        "source_modules": 1500
+      },
+      "deleted": true,
+      "finished_at": "2026-09-29T23:02:23.750449+00:00"
+    },
+    {
+      "started_at": "2026-09-29T23:00:34.814032+00:00",
+      "sandbox_id": "registry-pull-smoke-294a07ecc9b5-46",
+      "image_id": "slotq-pulls-b-cold-976f3bff-046",
+      "recipe": "typescript-tools",
+      "variant": "app-change-20",
+      "published_image_tag": "10.42.0.2:5000/ucloud-managed/slotq-pulls-b-cold-976f3bff-046-0336c63c841d:latest",
+      "published_manifest_digest": "sha256:95b5b57551ee866cd5bdf8490c64de893a3618a7dd4b28586cdc5564718788cd",
+      "create_seconds": 88.26561398699414,
+      "worker": {
+        "job_id": "168019452",
+        "node_id": "10.42.0.3",
+        "node_epoch": "d4183e8cf4304fa1bd075ea17055b571",
+        "node_url": "http://10.42.0.3:8090"
+      },
+      "resolved_image_ref": "10.42.0.2:5000/ucloud-managed/slotq-pulls-b-cold-976f3bff-046-0336c63c841d:latest@sha256:95b5b57551ee866cd5bdf8490c64de893a3618a7dd4b28586cdc5564718788cd",
+      "create_image_pull_lease_owner": "create-image-pull:v1:8bcc61c597cce9acc3c7ec5f446ed0fed3ec4770307ebd7d15a7e898749e8613",
+      "create_image_pull_lease": {
+        "repository": "ucloud-managed/slotq-pulls-b-cold-976f3bff-046-0336c63c841d",
+        "tag": "latest",
+        "owner": "create-image-pull:v1:8bcc61c597cce9acc3c7ec5f446ed0fed3ec4770307ebd7d15a7e898749e8613",
+        "acquired_at": "2026-09-29T23:02:01.979485+00:00",
+        "renewed_at": "2026-09-29T23:02:01.979485+00:00",
+        "expires_at": "2026-09-30T00:02:01.979485+00:00",
+        "digest": "sha256:95b5b57551ee866cd5bdf8490c64de893a3618a7dd4b28586cdc5564718788cd"
+      },
+      "create_image_pull_lease_owner_verified": true,
+      "exit_code": 0,
+      "verified": true,
+      "output": {
+        "grouped_rows": 11,
+        "revision": 20,
+        "score": 946539,
+        "source_modules": 2000
+      },
+      "deleted": true,
+      "finished_at": "2026-09-29T23:02:06.283379+00:00"
+    },
+    {
+      "started_at": "2026-09-29T23:00:34.814252+00:00",
+      "sandbox_id": "registry-pull-smoke-294a07ecc9b5-47",
+      "image_id": "slotq-pulls-b-cold-976f3bff-047",
+      "recipe": "typescript-multistage",
+      "variant": "app-change-20",
+      "published_image_tag": "10.42.0.2:5000/ucloud-managed/slotq-pulls-b-cold-976f3bff-047-d571452ddcf4:latest",
+      "published_manifest_digest": "sha256:17ec4c2b4bf80c4a1ed06badb2a83a1b6cd3cddde969b3107dcc5fd006692457",
+      "create_seconds": 88.30073510899092,
+      "worker": {
+        "job_id": "168019452",
+        "node_id": "10.42.0.3",
+        "node_epoch": "d4183e8cf4304fa1bd075ea17055b571",
+        "node_url": "http://10.42.0.3:8090"
+      },
+      "resolved_image_ref": "10.42.0.2:5000/ucloud-managed/slotq-pulls-b-cold-976f3bff-047-d571452ddcf4:latest@sha256:17ec4c2b4bf80c4a1ed06badb2a83a1b6cd3cddde969b3107dcc5fd006692457",
+      "create_image_pull_lease_owner": "create-image-pull:v1:03784a59899868ef878c31c7e475d37c84d35cd78170a8c1dd760d7f9f110f5a",
+      "create_image_pull_lease": {
+        "repository": "ucloud-managed/slotq-pulls-b-cold-976f3bff-047-d571452ddcf4",
+        "tag": "latest",
+        "owner": "create-image-pull:v1:03784a59899868ef878c31c7e475d37c84d35cd78170a8c1dd760d7f9f110f5a",
+        "acquired_at": "2026-09-29T23:02:01.994994+00:00",
+        "renewed_at": "2026-09-29T23:02:01.994994+00:00",
+        "expires_at": "2026-09-30T00:02:01.994994+00:00",
+        "digest": "sha256:17ec4c2b4bf80c4a1ed06badb2a83a1b6cd3cddde969b3107dcc5fd006692457"
+      },
+      "create_image_pull_lease_owner_verified": true,
+      "exit_code": 0,
+      "verified": true,
+      "output": {
+        "grouped_rows": 11,
+        "revision": 20,
+        "score": 946539,
+        "source_modules": 2000
+      },
+      "deleted": true,
+      "finished_at": "2026-09-29T23:02:05.701173+00:00"
+    }
+  ],
+  "fleet_after": [
+    {
+      "job_id": "168019452",
+      "node_id": "10.42.0.3",
+      "node_epoch": "d4183e8cf4304fa1bd075ea17055b571",
+      "node_url": "http://10.42.0.3:8090",
+      "capabilities": [
+        "request-body-keepalive-v1",
+        "environment-contract-v1",
+        "sandbox",
+        "image-cache",
+        "disk-quota",
+        "hibernate-local-v2",
+        "relay-wake-fence-v1",
+        "resource-phase-advice-v1",
+        "direct-runsc-v1",
+        "network-policy-relay-v1:default",
+        "managed-primary-v1",
+        "static-file-management-v1",
+        "storage-native-v1",
+        "sandbox-detach-published-v1",
+        "sandbox-migrate-storage-native-v1",
+        "sandbox-checkpoint-v3",
+        "runtime-compatibility-sha256:8e689189ddd3e7ac4d6bb82a83b4ff3cf5bfb448c9b961fbd2cfe20de1354ab2",
+        "runtime-cpu-features-sha256:7caa1f7c2807e6e4a5dfea7e392b246753e6be75257a9e00591756f4e39e52e4",
+        "immutable-environment-host-erofs-v1"
+      ],
+      "active_sandboxes": 0,
+      "active_image_builds": 0
+    }
+  ]
+}

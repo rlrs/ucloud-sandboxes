@@ -1,0 +1,44 @@
+{
+  "expected_nodes": [
+    "168016286",
+    "168016287",
+    "168016314",
+    "168016315"
+  ],
+  "samples": [
+    {
+      "at": "2026-09-29T22:21:53.051890+00:00",
+      "nodes": [
+        {
+          "job_id": "168016286",
+          "node_epoch": "aa3931953e4f41c4be60e514de6acf9c",
+          "active_image_builds": 0,
+          "active_sandboxes": 0,
+          "updated_at": "2026-09-29T22:21:53.041294+00:00"
+        },
+        {
+          "job_id": "168016287",
+          "node_epoch": "f057e61a7d5d4e359b3a037662ae8c43",
+          "active_image_builds": 0,
+          "active_sandboxes": 0,
+          "updated_at": "2026-09-29T22:21:53.045627+00:00"
+        },
+        {
+          "job_id": "168016314",
+          "node_epoch": "e0bbfdd81d8e476e855aae0264d8b281",
+          "active_image_builds": 0,
+          "active_sandboxes": 0,
+          "updated_at": "2026-09-29T22:21:53.048586+00:00"
+        },
+        {
+          "job_id": "168016315",
+          "node_epoch": "8403872997404a67b2059cbbde49528d",
+          "active_image_builds": 0,
+          "active_sandboxes": 0,
+          "updated_at": "2026-09-29T22:21:53.052161+00:00"
+        }
+      ]
+    }
+  ],
+  "idle": true
+}

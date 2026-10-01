@@ -1,0 +1,27 @@
+{
+  "counts": {
+    "members": 35471,
+    "directory": 3809,
+    "extended_metadata_members": 0,
+    "xattr_members": 0,
+    "regular": 31662
+  },
+  "regular_payload_bytes": 987691718,
+  "incompatibility_counts": {},
+  "first_semantic_reason": null,
+  "semantically_supported_by_current_extractor": true,
+  "captured_at": "2026-09-29T21:57:52.254012+00:00",
+  "compressed_digest": "sha256:7b29f1d441e07730761768ae9c744462ca030908ac6484419570cb4b101d0f6b",
+  "diff_id": "sha256:3d88eae54bf2dda823d666c29bcb5e60dda13ea68a748f9ea9d9aacfa66c828a",
+  "compressed_bytes": 313043301,
+  "unpacked_bytes": 1014097920,
+  "compressed_digest_verified": true,
+  "diff_id_verified": true,
+  "exceeds_current_compressed_limit": true,
+  "exceeds_current_unpacked_limit": false,
+  "wall_seconds": 4.415752328000963,
+  "extracted_files": 0,
+  "registry_mutations": 0,
+  "helper_sha256": "6f96c2cc902be9fde27aae8f46cd075734fcd6d54ae2d69f4b81a844aef40a8f",
+  "complete": true
+}

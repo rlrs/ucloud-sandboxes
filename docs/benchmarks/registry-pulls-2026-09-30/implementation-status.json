@@ -1,0 +1,145 @@
+{
+  "runtime_commit": "c09e2228197a41c755e13a1cceb9ad0714edaef1",
+  "tooling_commit": "2c4b2a7",
+  "pushed": true,
+  "deployed": true,
+  "release_root": "/work/ucloud-sandboxes/registry-pulls-20260930-r1",
+  "qualification_root": "/work/ucloud-sandboxes/registry-pull-qualification-20260930",
+  "wheel_sha256": "3f29209df80e27d3aad2d1edb3c1677ce05bb44d50b78da1797b6b0a212c13f3",
+  "staging_receipt_sha256": "cc637c13d4a6360feb4b5d8d3245165700a4ccb7d092732862910793960b34ec",
+  "runtime_tests": {
+    "count": 170,
+    "seconds": 6.64,
+    "passed": true,
+    "existing_platform_skips": 2
+  },
+  "tooling_tests": {
+    "count": 23,
+    "seconds": 0.239,
+    "passed": true
+  },
+  "ruff": "passed",
+  "artifacts": {
+    "ucloud_sandboxes/environment_builder.py": "0bbac1d7901653b7ca525bc6b80dc5955953c24ea8e7a1218c1428f90d65d1ba",
+    "ucloud_sandboxes/environment_prepare.py": "338c863f3d8b7d1268c42a1cb9e1548a09271ebdd7cdfc1eb5445de3a819fefd",
+    "ucloud_sandboxes/oci_layer_materialize.py": "46b10cc16bf1177ca33b5ba82919771297f4f0864709ded344720390cc332ba6",
+    "ucloud_sandboxes/build_history.py": "8efe74609d0170b2701922c3e9c6d09e067305b2292d55e70fd605f882713a57",
+    "scripts/qualify_builder_slots.py": "c83fc28d7585d93a4a33c5e9b28ef5969260be4aa67091f799ddf05406fba968",
+    "scripts/inspect_owned_builder.py": "46f98bbdf3ea82e7a64be1d36529e5a2a1dd8183a680d1ddf830f2fd742446fd",
+    "scripts/qualify_selective_environment.py": "52a53df000c491ebc235a898eb0331315177062af5297a05b04a6b263e326bbb",
+    "scripts/inspect_oci_layer.py": "6f96c2cc902be9fde27aae8f46cd075734fcd6d54ae2d69f4b81a844aef40a8f",
+    "docs/benchmarks/registry-pulls-2026-09-30/upgrade-owned-pool.py": "024c8821fd35f1d16b5de304e625bd470c7da73be4c125ed56eb8b0b82823199",
+    "docs/benchmarks/registry-pulls-2026-09-30/restore-owned-pool-a2.py": "be65048ca5a8fc5c8a190374ffba17733f4081547d62d52655f3eb625cc1bf49",
+    "docs/benchmarks/registry-pulls-2026-09-30/upgrade_owned_builder_a2.py": "52d10206df72996fc83c66f0e1480b4542adc143cec46a36c873baf516a718dc",
+    "docs/benchmarks/registry-pulls-2026-09-30/final-audit.py": "7a20c7c43c5a23dbcf86f5770654b4da35581a815473f3cff0ac879e388cc2b4",
+    "docs/benchmarks/registry-pulls-2026-09-30/host-attribution.py": "31eb4fca85106ff0649ca4bb0c64510e30dc8856c3552bf8ab793bf13bfd9249",
+    "docs/benchmarks/registry-pulls-2026-09-30/build-warm-workers.json": "2c4a4dd81b9a26a893f79ae093e5701dadd3cdbd1ff15551d06c531879db02ce",
+    "docs/benchmarks/registry-pulls-2026-09-30/telemetry-collection.json": "4e78484e52420dc531ed2b0ab3478fc4f2c13d91043db78aee11bbbc7f54dda4",
+    "docs/benchmarks/registry-pulls-2026-09-30/resource-attribution.json": "65feeb70292ca28b7c1b8fd2b30c462e196297999905d0d5600a884cf2a098b5",
+    "docs/benchmarks/registry-pulls-2026-09-30/build-load-report.json": "f4fb80920a35b690206535ed77452da935c914c2c572220260896a79164a017c",
+    "docs/benchmarks/registry-pulls-2026-09-30/image-smokes/summary.json": "7ab663edd0d381c6676097dfc958046e0d9f3f0967b49a0e84e68fa4bce0b832",
+    "docs/benchmarks/registry-pulls-2026-09-30/worker-audits/168019452.json": "d0ebefc588f2084c3ff17f94fe38f72c1ac9df744cc258a6cda89907731a611f",
+    "docs/benchmarks/registry-pulls-2026-09-30/provider-absence.json": "f7df813392390760b42181437b4e9250573ba76b3fbae36bfc84e6864056ac71",
+    "docs/benchmarks/registry-pulls-2026-09-30/owned-images.json": "b33e586c1994c42a2a9f676c48ef6655668360be640af497ad0f12594ec36056",
+    "docs/benchmarks/registry-pulls-2026-09-30/image-cleanup-plan-final.json": "47896106191434e3a09061dd52b3bb4510d6f8620e5e33ba49b6ad73490ea76f",
+    "docs/benchmarks/registry-pulls-2026-09-30/smoke-pull-lease-plan.json": "e5b0f4d15ffc380c2be407000b5cf633d75f267c6e446d6c9586082c28e81b6c",
+    "docs/benchmarks/registry-pulls-2026-09-30/smoke-pull-lease-released.json": "8fb469693fafe79d454f85f6f1d4c4abb5a3a7f297ebe21fa6f7a9234545ea93",
+    "docs/benchmarks/registry-pulls-2026-09-30/image-cleanup-applied.json": "f7bae95474fbc94c631a76ff0cfa600f74314109f6858de49da09746f9e3c307",
+    "docs/benchmarks/registry-pulls-2026-09-30/final-audit.json": "b8d7b2d543a7d1e974c67ec2e16ce3e57ef0b3fe1b3513128ec976c6d2724424"
+  },
+  "raw_publication": "local_only",
+  "qualification_order": [
+    "baseline_a_cold48",
+    "isolated_byte_equivalence_abba",
+    "candidate_b_cold48",
+    "baseline_a2_cold48",
+    "owned_builder_retirement",
+    "global_deploy",
+    "fresh_worker_three_recipe_smokes"
+  ],
+  "qualification_status": "complete",
+  "a2_helper_tests": {
+    "passed": true,
+    "count": 5,
+    "seconds": 0.007,
+    "scope": "adapted helper: admission race, candidate health rollback, lost fence and lost admission reopen response"
+  },
+  "byte_qualification": {
+    "passed": true,
+    "arms": "ABBA",
+    "trials": 4,
+    "selected_groups": [
+      3,
+      4,
+      5
+    ],
+    "registry_writes": 0,
+    "receipt_sha256": "7b17dbd1d92f0c24a0da9009b5511fe2b78c795d4d7bf3bcd9581140a3fab76a"
+  },
+  "baseline_a": {
+    "passed": true,
+    "builds": 48,
+    "client_errors": 0,
+    "deadline_misses": 0,
+    "batch_wall_seconds": 271.0676091409987
+  },
+  "candidate_owned_pool_upgraded": true,
+  "candidate_b": {
+    "passed": true,
+    "builds": 48,
+    "client_errors": 0,
+    "deadline_misses": 0,
+    "batch_wall_seconds": 246.4986956520006,
+    "python_publication_mean_seconds": 15.594448,
+    "python_selective_builds": 16,
+    "docker_pulls": 0
+  },
+  "owned_pool_restored_for_a2": true,
+  "build_warm_policy_classified": true,
+  "baseline_a2": {
+    "passed": true,
+    "builds": 48,
+    "client_errors": 0,
+    "deadline_misses": 0,
+    "batch_wall_seconds": 275.43738233300974,
+    "python_publication_mean_seconds": 34.6666245
+  },
+  "telemetry_archived": true,
+  "owned_samplers_stopped": true,
+  "owned_hold_released_at": "2026-09-29T22:55:09.452+00:00",
+  "measured_total_builds": 144,
+  "health_probes": {
+    "count": 70,
+    "failures": 0,
+    "candidate_count": 21,
+    "candidate_p95_ms": 11.86159098870121
+  },
+  "deployed_at": "2026-09-29T22:59:59Z",
+  "old_qualification_fleet_retired": true,
+  "fresh_worker_smokes": {
+    "passed": true,
+    "count": 3,
+    "sandboxes_deleted": 3,
+    "runtime_files_verified": 165,
+    "automatic_apt_upgrades_disabled": true
+  },
+  "cleanup": {
+    "complete": true,
+    "owned_images_deleted": 145,
+    "owned_aliases_deleted": 290,
+    "owned_smoke_leases_released": 3,
+    "temporary_nodes_provider_absent": 8,
+    "shared_blobs_and_caches_preserved": true
+  },
+  "final_production_audit": {
+    "passed": true,
+    "verified_at": "2026-09-29T23:11:01Z",
+    "gateway_https": true,
+    "relay_https": true,
+    "database_pool_waiters": 0,
+    "remaining_test_workload": 0
+  },
+  "sdk_change_required": false,
+  "report_commit": "02811a724241d4dabcc9d94dcba6f3da620f6fdb",
+  "report_pushed": true
+}

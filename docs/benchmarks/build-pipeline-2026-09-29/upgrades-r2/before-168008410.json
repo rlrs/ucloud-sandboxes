@@ -1,0 +1,13 @@
+{
+  "active_builds": 0,
+  "admission_open": true,
+  "advertised_capacity": null,
+  "at": "2026-09-29T21:04:32Z",
+  "draining": false,
+  "images_sha256": "8a7380f99e99680c32da071e1a10353668633cf980e9921954ec5a82e7b10f41",
+  "job_id": "168008410",
+  "node_epoch": "0b6a258bed3345be9094cb699929004c",
+  "runtime_root": "/var/cache/ucloud-sandboxes/init-packages/c3691624b2588fa5bdf263a802116ba3fc1dc11f524d1224e6b7585026a45cac/agent-runtime/site-packages",
+  "service": "ucloud-sandbox-node.service",
+  "unit_sha256": "d615c92cf560856aba74099ddb6909ee05f3d5608f11c38f100c008ef6f546ef"
+}

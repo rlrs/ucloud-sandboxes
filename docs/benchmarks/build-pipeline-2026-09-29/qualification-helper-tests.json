@@ -1,0 +1,21 @@
+{
+  "command": ".venv/bin/python -m unittest tests.test_qualify_builder_slots tests.test_upgrade_owned_builder -q",
+  "tests": 17,
+  "seconds": 0.186,
+  "passed": true,
+  "ruff": "scripts/qualify_builder_slots.py scripts/upgrade_owned_builder.py tests/test_qualify_builder_slots.py tests/test_upgrade_owned_builder.py: all checks passed",
+  "git_diff_check": true,
+  "admission_sampler": {
+    "tests": 2,
+    "seconds": 0.108,
+    "passed": true,
+    "ruff": "all checks passed"
+  },
+  "owned_image_cleanup_and_exact_lease_release": {
+    "command": ".venv/bin/python -m unittest tests.test_cleanup_owned_slotq_images -q",
+    "tests": 6,
+    "seconds": 0.064,
+    "passed": true,
+    "ruff": "all checks passed"
+  }
+}

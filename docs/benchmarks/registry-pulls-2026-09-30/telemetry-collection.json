@@ -1,0 +1,37 @@
+{
+  "complete": true,
+  "started_at": "2026-09-29T22:52:51.956036+00:00",
+  "finished_at": "2026-09-29T22:52:54.083838+00:00",
+  "sampler_unit": "ucloud-registry-pulls-monitor",
+  "gateway": {
+    "sampler_stopped": true,
+    "samples": 1046,
+    "sha256": "c3a9c90aee9530da0188f2a4725b92d3c22bf3aee3a557c84b3579e2439c2514"
+  },
+  "builders": [
+    {
+      "job_id": "168016286",
+      "sampler_stopped": true,
+      "samples": 1046,
+      "sha256": "b76cfd5f0859816b4247edc2f6df64834d8f89201cd94a8b9c438f829a43a2be"
+    },
+    {
+      "job_id": "168016287",
+      "sampler_stopped": true,
+      "samples": 1046,
+      "sha256": "82c4dcf453f6b0bb1a77cae9156025fb8b708444ad7492b385f1e575a3312829"
+    },
+    {
+      "job_id": "168016314",
+      "sampler_stopped": true,
+      "samples": 1046,
+      "sha256": "737ebfc8f75855dc5711f123deab2f68e3e7a50b832bbc6a3a4e3c8dbfee8b5e"
+    },
+    {
+      "job_id": "168016315",
+      "sampler_stopped": true,
+      "samples": 1046,
+      "sha256": "e8371ca9184693b0bc98d82de21a3cc928d700bff3f47fd6b36f6f7788a335da"
+    }
+  ]
+}

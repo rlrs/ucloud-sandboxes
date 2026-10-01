@@ -1,0 +1,15 @@
+{
+  "terminal_history_records": 256,
+  "log_tail_bytes_each": 65536,
+  "iterations": 200,
+  "snapshot": {
+    "median_ms": 0.18249289132654667,
+    "p95_ms": 0.20288396626710892,
+    "max_ms": 0.29415497556328773
+  },
+  "blocked_finish_transfer": {
+    "median_ms": 0.2318744082003832,
+    "p95_ms": 0.25500496849417686,
+    "max_ms": 0.30105700716376305
+  }
+}

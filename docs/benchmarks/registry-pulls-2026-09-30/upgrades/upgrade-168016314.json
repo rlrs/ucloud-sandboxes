@@ -1,0 +1,25 @@
+{
+  "after": {
+    "finishing_capacity": 2,
+    "job_id": "168016314",
+    "node_epoch": "e0bbfdd81d8e476e855aae0264d8b281",
+    "runtime_root": "/work/registry-pulls-upgrade-20260930-r1/site-packages"
+  },
+  "before": {
+    "active_builds": 0,
+    "admission_open": true,
+    "advertised_capacity": "4",
+    "at": "2026-09-29T22:34:03Z",
+    "draining": false,
+    "images_sha256": "d04d15b635ab68058725c7d76157a81a053e113995353965312d671d48a35c85",
+    "job_id": "168016314",
+    "node_epoch": "e0bbfdd81d8e476e855aae0264d8b281",
+    "runtime_root": "/var/cache/ucloud-sandboxes/init-packages/fa1e69c40ae963a5c32ae9bd475129e79287177817e3ae7e6b7063154f680885/agent-runtime/site-packages",
+    "service": "ucloud-sandbox-node.service",
+    "unit_sha256": "1148142cb19917e3b307fe6f81b80e384aedb8556592400976fab391c1bbcc76"
+  },
+  "complete": true,
+  "runtime_root": "/work/registry-pulls-upgrade-20260930-r1/site-packages",
+  "service_changed": true,
+  "wheel_sha256": "3f29209df80e27d3aad2d1edb3c1677ce05bb44d50b78da1797b6b0a212c13f3"
+}

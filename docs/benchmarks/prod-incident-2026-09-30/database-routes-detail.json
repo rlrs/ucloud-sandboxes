@@ -1,0 +1,372 @@
+{
+  "postgres_errors": {
+    "could not serialize access due to read/write dependencies among transactions": 517,
+    "could not serialize access due to concurrent update": 3568,
+    "could not serialize access due to concurrent delete": 2,
+    "deadlock detected": 1
+  },
+  "postgres_error_minutes": {
+    "2026-09-30 04:50": 8,
+    "2026-09-30 04:51": 28,
+    "2026-09-30 04:52": 67,
+    "2026-09-30 04:53": 114,
+    "2026-09-30 04:54": 325,
+    "2026-09-30 04:55": 282,
+    "2026-09-30 04:56": 486,
+    "2026-09-30 04:57": 457,
+    "2026-09-30 04:58": 735,
+    "2026-09-30 04:59": 747,
+    "2026-09-30 05:00": 520,
+    "2026-09-30 05:01": 287,
+    "2026-09-30 05:02": 12,
+    "2026-09-30 05:03": 6,
+    "2026-09-30 05:04": 14
+  },
+  "postgres_error_spans": {
+    "could not serialize access due to read/write dependencies among transactions": {
+      "first": "2026-09-30 04:50:50.695",
+      "last": "2026-09-30 05:04:16.481"
+    },
+    "could not serialize access due to concurrent update": {
+      "first": "2026-09-30 04:50:50.777",
+      "last": "2026-09-30 05:04:16.285"
+    },
+    "could not serialize access due to concurrent delete": {
+      "first": "2026-09-30 04:56:01.328",
+      "last": "2026-09-30 04:56:01.332"
+    },
+    "deadlock detected": {
+      "first": "2026-09-30 05:00:44.514",
+      "last": "2026-09-30 05:00:44.514"
+    }
+  },
+  "postgres_error_statement_groups": [
+    {
+      "error": "could not serialize access due to read/write dependencies among transactions",
+      "operation": "INSERT",
+      "tables": "image_builds",
+      "count": 20
+    },
+    {
+      "error": "could not serialize access due to read/write dependencies among transactions",
+      "operation": "COMMIT",
+      "tables": "",
+      "count": 55
+    },
+    {
+      "error": "could not serialize access due to concurrent update",
+      "operation": "INSERT",
+      "tables": "worker_capacity_revisions",
+      "count": 3444
+    },
+    {
+      "error": "could not serialize access due to read/write dependencies among transactions",
+      "operation": "INSERT",
+      "tables": "exec_sessions",
+      "count": 29
+    },
+    {
+      "error": "could not serialize access due to read/write dependencies among transactions",
+      "operation": "DELETE",
+      "tables": "image_builds",
+      "count": 1
+    },
+    {
+      "error": "could not serialize access due to read/write dependencies among transactions",
+      "operation": "SELECT",
+      "tables": "program_requests",
+      "count": 40
+    },
+    {
+      "error": "could not serialize access due to read/write dependencies among transactions",
+      "operation": "SELECT",
+      "tables": "program_requests,sandboxes",
+      "count": 14
+    },
+    {
+      "error": "could not serialize access due to read/write dependencies among transactions",
+      "operation": "UPDATE",
+      "tables": "sandboxes",
+      "count": 245
+    },
+    {
+      "error": "could not serialize access due to read/write dependencies among transactions",
+      "operation": "INSERT",
+      "tables": "program_requests",
+      "count": 20
+    },
+    {
+      "error": "could not serialize access due to read/write dependencies among transactions",
+      "operation": "INSERT",
+      "tables": "sandbox_generation_hwm",
+      "count": 2
+    },
+    {
+      "error": "could not serialize access due to read/write dependencies among transactions",
+      "operation": "DELETE",
+      "tables": "pending",
+      "count": 13
+    },
+    {
+      "error": "could not serialize access due to read/write dependencies among transactions",
+      "operation": "SELECT",
+      "tables": "sandboxes",
+      "count": 6
+    },
+    {
+      "error": "could not serialize access due to read/write dependencies among transactions",
+      "operation": "INSERT",
+      "tables": "sandboxes",
+      "count": 12
+    },
+    {
+      "error": "could not serialize access due to read/write dependencies among transactions",
+      "operation": "INSERT",
+      "tables": "managed_processes",
+      "count": 3
+    },
+    {
+      "error": "could not serialize access due to concurrent update",
+      "operation": "INSERT",
+      "tables": "prepared_capacity",
+      "count": 38
+    },
+    {
+      "error": "could not serialize access due to concurrent update",
+      "operation": "INSERT",
+      "tables": "program_requests",
+      "count": 38
+    },
+    {
+      "error": "could not serialize access due to read/write dependencies among transactions",
+      "operation": "SELECT",
+      "tables": "managed_processes,sandboxes",
+      "count": 1
+    },
+    {
+      "error": "could not serialize access due to read/write dependencies among transactions",
+      "operation": "INSERT",
+      "tables": "sandbox_storage_dependencies",
+      "count": 38
+    },
+    {
+      "error": "could not serialize access due to concurrent update",
+      "operation": "UPDATE",
+      "tables": "sandboxes",
+      "count": 44
+    },
+    {
+      "error": "could not serialize access due to read/write dependencies among transactions",
+      "operation": "INSERT",
+      "tables": "worker_capacity_revisions",
+      "count": 11
+    },
+    {
+      "error": "could not serialize access due to concurrent delete",
+      "operation": "DELETE",
+      "tables": "prepared_capacity",
+      "count": 2
+    },
+    {
+      "error": "could not serialize access due to read/write dependencies among transactions",
+      "operation": "DELETE",
+      "tables": "sandbox_storage_dependencies",
+      "count": 3
+    },
+    {
+      "error": "could not serialize access due to read/write dependencies among transactions",
+      "operation": "UPDATE",
+      "tables": "program_requests",
+      "count": 2
+    },
+    {
+      "error": "could not serialize access due to concurrent update",
+      "operation": "INSERT",
+      "tables": "managed_processes",
+      "count": 4
+    },
+    {
+      "error": "could not serialize access due to read/write dependencies among transactions",
+      "operation": "DELETE",
+      "tables": "exec_sessions",
+      "count": 1
+    },
+    {
+      "error": "deadlock detected",
+      "operation": "DELETE",
+      "tables": "sandbox_storage_dependencies",
+      "count": 1
+    },
+    {
+      "error": "could not serialize access due to read/write dependencies among transactions",
+      "operation": "DELETE",
+      "tables": "sandboxes",
+      "count": 1
+    }
+  ],
+  "postgres_deadlock_detail": [
+    {
+      "at": "2026-09-30 05:00:44.514",
+      "message": "Process 111105 waits for ShareLock on transaction 1232169; blocked by process 111873. Process 111873 waits for ShareLock on transaction 1232170; blocked by process 111105. Process 111105: DELETE FROM sandbox_storage_dependencies WHERE sandbox_id = $1 Process 111873: UPDATE sandboxes SET activity_epoch = $1, updated_at = $2 WHERE sandbox_id IN (SELECT jsonb_array_elements_text($3::jsonb))"
+    }
+  ],
+  "nginx_routes": {
+    "POST /v1/builders/prepare 201": 2,
+    "POST /v1/{id}/prepare 201": 2,
+    "GET /v1/images/builds/{id} 404": 80,
+    "GET /v1/{id}/{id} 404": 85,
+    "PUT /v1/{id}/{id} 201": 85,
+    "POST /v1/images/build 503": 6176,
+    "POST /v1/sandboxes 201": 151,
+    "POST /v1/sandboxes/{id}/exec 201": 5809,
+    "GET /v1/exec/{id}/events 200": 4531,
+    "PUT /v1/sandboxes/{id}/{id} 200": 2123,
+    "POST /v1/sandboxes 200": 217,
+    "GET /v1/sandboxes/{id}/{id} 200": 191,
+    "POST /v1/sandboxes/{id}/{id} 201": 356,
+    "GET /v1/sandboxes/{id}/{id}/{id} 200": 37952,
+    "GET /v1/sandboxes/{id}/{id}/{id}/{id}/{id} 200": 31957,
+    "POST /v1/images/build 202": 66,
+    "GET /v1/images/builds/{id} 200": 2198,
+    "DELETE /v1/sandboxes/{id} 200": 426,
+    "GET /v1/sandboxes 200": 32179,
+    "PUT /v1/sandboxes/{id}/{id} 503": 36,
+    "GET /v1/sandboxes/{id}/{id}/{id}/{id}/{id} 503": 8,
+    "POST /v1/sandboxes 503": 4,
+    "POST /v1/sandboxes 504": 32,
+    "POST /v1/images/build 499": 1,
+    "POST /v1/sandboxes 409": 1,
+    "POST /v1/sandboxes 499": 129,
+    "GET /v1/exec/{id}/events 499": 13,
+    "DELETE /v1/sandboxes/{id} 499": 3,
+    "GET /v1/sandboxes/{id}/{id}/{id}/{id}/{id} 499": 1,
+    "DELETE /v1/builders/prepare/{id} 200": 1,
+    "DELETE /v1/{id}/prepare/{id} 200": 1
+  },
+  "nginx_route_spans": {
+    "POST /v1/builders/prepare 201": {
+      "first": "30/Sep/2026:04:26:36 +0000",
+      "last": "30/Sep/2026:04:56:48 +0000"
+    },
+    "POST /v1/{id}/prepare 201": {
+      "first": "30/Sep/2026:04:26:36 +0000",
+      "last": "30/Sep/2026:04:56:48 +0000"
+    },
+    "GET /v1/images/builds/{id} 404": {
+      "first": "30/Sep/2026:04:50:50 +0000",
+      "last": "30/Sep/2026:05:01:07 +0000"
+    },
+    "GET /v1/{id}/{id} 404": {
+      "first": "30/Sep/2026:04:50:50 +0000",
+      "last": "30/Sep/2026:05:01:06 +0000"
+    },
+    "PUT /v1/{id}/{id} 201": {
+      "first": "30/Sep/2026:04:50:50 +0000",
+      "last": "30/Sep/2026:05:01:06 +0000"
+    },
+    "POST /v1/images/build 503": {
+      "first": "30/Sep/2026:04:50:50 +0000",
+      "last": "30/Sep/2026:05:01:08 +0000"
+    },
+    "POST /v1/sandboxes 201": {
+      "first": "30/Sep/2026:04:50:52 +0000",
+      "last": "30/Sep/2026:05:00:24 +0000"
+    },
+    "POST /v1/sandboxes/{id}/exec 201": {
+      "first": "30/Sep/2026:04:50:52 +0000",
+      "last": "30/Sep/2026:05:01:08 +0000"
+    },
+    "GET /v1/exec/{id}/events 200": {
+      "first": "30/Sep/2026:04:50:53 +0000",
+      "last": "30/Sep/2026:05:01:08 +0000"
+    },
+    "PUT /v1/sandboxes/{id}/{id} 200": {
+      "first": "30/Sep/2026:04:50:53 +0000",
+      "last": "30/Sep/2026:05:01:07 +0000"
+    },
+    "POST /v1/sandboxes 200": {
+      "first": "30/Sep/2026:04:50:54 +0000",
+      "last": "30/Sep/2026:05:01:02 +0000"
+    },
+    "GET /v1/sandboxes/{id}/{id} 200": {
+      "first": "30/Sep/2026:04:50:56 +0000",
+      "last": "30/Sep/2026:05:01:07 +0000"
+    },
+    "POST /v1/sandboxes/{id}/{id} 201": {
+      "first": "30/Sep/2026:04:51:01 +0000",
+      "last": "30/Sep/2026:05:01:05 +0000"
+    },
+    "GET /v1/sandboxes/{id}/{id}/{id} 200": {
+      "first": "30/Sep/2026:04:51:01 +0000",
+      "last": "30/Sep/2026:05:01:08 +0000"
+    },
+    "GET /v1/sandboxes/{id}/{id}/{id}/{id}/{id} 200": {
+      "first": "30/Sep/2026:04:51:42 +0000",
+      "last": "30/Sep/2026:05:01:08 +0000"
+    },
+    "POST /v1/images/build 202": {
+      "first": "30/Sep/2026:04:51:54 +0000",
+      "last": "30/Sep/2026:05:00:57 +0000"
+    },
+    "GET /v1/images/builds/{id} 200": {
+      "first": "30/Sep/2026:04:51:54 +0000",
+      "last": "30/Sep/2026:05:01:07 +0000"
+    },
+    "DELETE /v1/sandboxes/{id} 200": {
+      "first": "30/Sep/2026:04:52:41 +0000",
+      "last": "30/Sep/2026:05:05:58 +0000"
+    },
+    "GET /v1/sandboxes 200": {
+      "first": "30/Sep/2026:04:52:52 +0000",
+      "last": "30/Sep/2026:05:14:21 +0000"
+    },
+    "PUT /v1/sandboxes/{id}/{id} 503": {
+      "first": "30/Sep/2026:04:54:12 +0000",
+      "last": "30/Sep/2026:04:59:36 +0000"
+    },
+    "GET /v1/sandboxes/{id}/{id}/{id}/{id}/{id} 503": {
+      "first": "30/Sep/2026:04:55:52 +0000",
+      "last": "30/Sep/2026:04:55:53 +0000"
+    },
+    "POST /v1/sandboxes 503": {
+      "first": "30/Sep/2026:05:00:50 +0000",
+      "last": "30/Sep/2026:05:01:05 +0000"
+    },
+    "POST /v1/sandboxes 504": {
+      "first": "30/Sep/2026:05:00:50 +0000",
+      "last": "30/Sep/2026:05:01:06 +0000"
+    },
+    "POST /v1/images/build 499": {
+      "first": "30/Sep/2026:05:01:01 +0000",
+      "last": "30/Sep/2026:05:01:01 +0000"
+    },
+    "POST /v1/sandboxes 409": {
+      "first": "30/Sep/2026:05:01:05 +0000",
+      "last": "30/Sep/2026:05:01:05 +0000"
+    },
+    "POST /v1/sandboxes 499": {
+      "first": "30/Sep/2026:05:01:08 +0000",
+      "last": "30/Sep/2026:05:01:08 +0000"
+    },
+    "GET /v1/exec/{id}/events 499": {
+      "first": "30/Sep/2026:05:01:08 +0000",
+      "last": "30/Sep/2026:05:01:08 +0000"
+    },
+    "DELETE /v1/sandboxes/{id} 499": {
+      "first": "30/Sep/2026:05:01:08 +0000",
+      "last": "30/Sep/2026:05:01:08 +0000"
+    },
+    "GET /v1/sandboxes/{id}/{id}/{id}/{id}/{id} 499": {
+      "first": "30/Sep/2026:05:01:08 +0000",
+      "last": "30/Sep/2026:05:01:08 +0000"
+    },
+    "DELETE /v1/builders/prepare/{id} 200": {
+      "first": "30/Sep/2026:05:02:42 +0000",
+      "last": "30/Sep/2026:05:02:42 +0000"
+    },
+    "DELETE /v1/{id}/prepare/{id} 200": {
+      "first": "30/Sep/2026:05:02:42 +0000",
+      "last": "30/Sep/2026:05:02:42 +0000"
+    }
+  }
+}

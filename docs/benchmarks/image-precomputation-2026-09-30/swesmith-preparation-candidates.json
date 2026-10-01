@@ -1,0 +1,3157 @@
+{
+  "schema": 1,
+  "status": "candidates_only_not_built_or_validated",
+  "notes": "Ranked by upstream row count, not the unknown training sampler. Resolve immutable linux/amd64 digests and pin repository refs before preparation. Dataset exclusions may reduce admitted task coverage.",
+  "candidates": [
+    {
+      "source": "swebench/swesmith.x86_64.scanny_1776_python-pptx.278b47b1",
+      "upstream_task_rows": 2389,
+      "repository_environment": "swesmith/scanny__python-pptx.278b47b1",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.pandas-dev_1776_pandas.95280573",
+      "upstream_task_rows": 2354,
+      "repository_environment": "swesmith/pandas-dev__pandas.95280573",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.pylint-dev_1776_astroid.b114f6b5",
+      "upstream_task_rows": 1770,
+      "repository_environment": "swesmith/pylint-dev__astroid.b114f6b5",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.python-openxml_1776_python-docx.0cf6d71f",
+      "upstream_task_rows": 1686,
+      "repository_environment": "swesmith/python-openxml__python-docx.0cf6d71f",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.cantools_1776_cantools.0c6a7871",
+      "upstream_task_rows": 1440,
+      "repository_environment": "swesmith/cantools__cantools.0c6a7871",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.pygments_1776_pygments.27649ebb",
+      "upstream_task_rows": 1430,
+      "repository_environment": "swesmith/pygments__pygments.27649ebb",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.pydicom_1776_pydicom.7d361b3d",
+      "upstream_task_rows": 1328,
+      "repository_environment": "swesmith/pydicom__pydicom.7d361b3d",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.sqlfluff_1776_sqlfluff.50a1c4b6",
+      "upstream_task_rows": 1293,
+      "repository_environment": "swesmith/sqlfluff__sqlfluff.50a1c4b6",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.conan-io_1776_conan.86f29e13",
+      "upstream_task_rows": 978,
+      "repository_environment": "swesmith/conan-io__conan.86f29e13",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.seperman_1776_deepdiff.ed252022",
+      "upstream_task_rows": 964,
+      "repository_environment": "swesmith/seperman__deepdiff.ed252022",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.pallets_1776_jinja.ada0a9a6",
+      "upstream_task_rows": 957,
+      "repository_environment": "swesmith/pallets__jinja.ada0a9a6",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.oauthlib_1776_oauthlib.1fd52536",
+      "upstream_task_rows": 940,
+      "repository_environment": "swesmith/oauthlib__oauthlib.1fd52536",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.paramiko_1776_paramiko.23f92003",
+      "upstream_task_rows": 920,
+      "repository_environment": "swesmith/paramiko__paramiko.23f92003",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.josdejong_1776_mathjs.04e6e2d7",
+      "upstream_task_rows": 845,
+      "repository_environment": "swesmith/josdejong__mathjs.04e6e2d7",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.pydata_1776_patsy.a5d16484",
+      "upstream_task_rows": 814,
+      "repository_environment": "swesmith/pydata__patsy.a5d16484",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.tobymao_1776_sqlglot.036601ba",
+      "upstream_task_rows": 790,
+      "repository_environment": "swesmith/tobymao__sqlglot.036601ba",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.python-trio_1776_trio.cfbbe2c1",
+      "upstream_task_rows": 778,
+      "repository_environment": "swesmith/python-trio__trio.cfbbe2c1",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.pyasn1_1776_pyasn1.0f07d724",
+      "upstream_task_rows": 766,
+      "repository_environment": "swesmith/pyasn1__pyasn1.0f07d724",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.pyupio_1776_safety.7654596b",
+      "upstream_task_rows": 759,
+      "repository_environment": "swesmith/pyupio__safety.7654596b",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.kayak_1776_pypika.1c9646f0",
+      "upstream_task_rows": 745,
+      "repository_environment": "swesmith/kayak__pypika.1c9646f0",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.sunpy_1776_sunpy.f8edfd5c",
+      "upstream_task_rows": 743,
+      "repository_environment": "swesmith/sunpy__sunpy.f8edfd5c",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.mahmoud_1776_boltons.3bfcfdd0",
+      "upstream_task_rows": 737,
+      "repository_environment": "swesmith/mahmoud__boltons.3bfcfdd0",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.lepture_1776_mistune.bf54ef67",
+      "upstream_task_rows": 729,
+      "repository_environment": "swesmith/lepture__mistune.bf54ef67",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.encode_1776_starlette.db5063c2",
+      "upstream_task_rows": 721,
+      "repository_environment": "swesmith/encode__starlette.db5063c2",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.novnc_1776_novnc.d44f7e04",
+      "upstream_task_rows": 715,
+      "repository_environment": "swesmith/novnc__noVNC.d44f7e04",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.fabricjs_1776_fabric.js.6742471c",
+      "upstream_task_rows": 713,
+      "repository_environment": "swesmith/fabricjs__fabric.js.6742471c",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.vitejs_1776_vite.8b47ff76",
+      "upstream_task_rows": 698,
+      "repository_environment": "swesmith/vitejs__vite.8b47ff76",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.tkrajina_1776_gpxpy.09fc46b3",
+      "upstream_task_rows": 679,
+      "repository_environment": "swesmith/tkrajina__gpxpy.09fc46b3",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.pydantic_1776_pydantic.acb0f10f",
+      "upstream_task_rows": 676,
+      "repository_environment": "swesmith/pydantic__pydantic.acb0f10f",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.stanfordnlp_1776_dspy.651a4c71",
+      "upstream_task_rows": 661,
+      "repository_environment": "swesmith/stanfordnlp__dspy.651a4c71",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.pdfminer_1776_pdfminer.six.1a8bd2f7",
+      "upstream_task_rows": 660,
+      "repository_environment": "swesmith/pdfminer__pdfminer.six.1a8bd2f7",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.automattic_1776_mongoose.5f57a5bb",
+      "upstream_task_rows": 652,
+      "repository_environment": "swesmith/Automattic__mongoose.5f57a5bb",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.pallets_1776_click.fde47b4b",
+      "upstream_task_rows": 645,
+      "repository_environment": "swesmith/pallets__click.fde47b4b",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.davidhalter_1776_parso.338a5760",
+      "upstream_task_rows": 611,
+      "repository_environment": "swesmith/davidhalter__parso.338a5760",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.fuellabs_1776_fuels-ts.b3f37c91",
+      "upstream_task_rows": 597,
+      "repository_environment": "swesmith/FuelLabs__fuels-ts.b3f37c91",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.kurtmckee_1776_feedparser.cad965a3",
+      "upstream_task_rows": 597,
+      "repository_environment": "swesmith/kurtmckee__feedparser.cad965a3",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.antvis_1776_g6.91c0ac85",
+      "upstream_task_rows": 595,
+      "repository_environment": "swesmith/antvis__G6.91c0ac85",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.caddyserver_1776_caddy.77dd12cc",
+      "upstream_task_rows": 544,
+      "repository_environment": "swesmith/caddyserver__caddy.77dd12cc",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.getmoto_1776_moto.694ce1f4",
+      "upstream_task_rows": 541,
+      "repository_environment": "swesmith/getmoto__moto.694ce1f4",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.project-monai_1776_monai.a09c1f08",
+      "upstream_task_rows": 527,
+      "repository_environment": "swesmith/Project-MONAI__MONAI.a09c1f08",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.mahmoud_1776_glom.fb3c4e76",
+      "upstream_task_rows": 523,
+      "repository_environment": "swesmith/mahmoud__glom.fb3c4e76",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.bootstrap-vue_1776_bootstrap-vue.9a246f45",
+      "upstream_task_rows": 492,
+      "repository_environment": "swesmith/bootstrap-vue__bootstrap-vue.9a246f45",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.remkop_1776_picocli.121646e4",
+      "upstream_task_rows": 492,
+      "repository_environment": "swesmith/remkop__picocli.121646e4",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.facebookresearch_1776_fvcore.a491d5b9",
+      "upstream_task_rows": 484,
+      "repository_environment": "swesmith/facebookresearch__fvcore.a491d5b9",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.mozilla_1776_bleach.73871d76",
+      "upstream_task_rows": 483,
+      "repository_environment": "swesmith/mozilla__bleach.73871d76",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.graphql-python_1776_graphene.82903263",
+      "upstream_task_rows": 480,
+      "repository_environment": "swesmith/graphql-python__graphene.82903263",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.khronosgroup_1776_glslang.e966816a",
+      "upstream_task_rows": 476,
+      "repository_environment": "swesmith/KhronosGroup__glslang.e966816a",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.iterative_1776_dvc.1d6ea681",
+      "upstream_task_rows": 467,
+      "repository_environment": "swesmith/iterative__dvc.1d6ea681",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.cog-creators_1776_red-discordbot.33e0eac7",
+      "upstream_task_rows": 460,
+      "repository_environment": "swesmith/Cog-Creators__Red-DiscordBot.33e0eac7",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.andialbrecht_1776_sqlparse.e57923b3",
+      "upstream_task_rows": 459,
+      "repository_environment": "swesmith/andialbrecht__sqlparse.e57923b3",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.pycqa_1776_flake8.cf1542ce",
+      "upstream_task_rows": 454,
+      "repository_environment": "swesmith/PyCQA__flake8.cf1542ce",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.parcel-bundler_1776_lightningcss.400f705e",
+      "upstream_task_rows": 445,
+      "repository_environment": "swesmith/parcel-bundler__lightningcss.400f705e",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.chronotope_1776_chrono.d43108cb",
+      "upstream_task_rows": 436,
+      "repository_environment": "swesmith/chronotope__chrono.d43108cb",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.getnikola_1776_nikola.0f4c230e",
+      "upstream_task_rows": 435,
+      "repository_environment": "swesmith/getnikola__nikola.0f4c230e",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.facebookresearch_1776_hydra.0f03eb60",
+      "upstream_task_rows": 428,
+      "repository_environment": "swesmith/facebookresearch__hydra.0f03eb60",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.burntsushi_1776_ripgrep.3b7fd442",
+      "upstream_task_rows": 426,
+      "repository_environment": "swesmith/BurntSushi__ripgrep.3b7fd442",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.async-profiler_1776_async-profiler.dbd9fc75",
+      "upstream_task_rows": 408,
+      "repository_environment": "swesmith/async-profiler__async-profiler.dbd9fc75",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.foliojs_1776_pdfkit.d0108157",
+      "upstream_task_rows": 408,
+      "repository_environment": "swesmith/foliojs__pdfkit.d0108157",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.rust-lang_1776_rustfmt.86261bfb",
+      "upstream_task_rows": 407,
+      "repository_environment": "swesmith/rust-lang__rustfmt.86261bfb",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.image-rs_1776_image.26edc698",
+      "upstream_task_rows": 401,
+      "repository_environment": "swesmith/image-rs__image.26edc698",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.python-jsonschema_1776_jsonschema.93e0caa5",
+      "upstream_task_rows": 393,
+      "repository_environment": "swesmith/python-jsonschema__jsonschema.93e0caa5",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.marshmallow-code_1776_marshmallow.9716fc62",
+      "upstream_task_rows": 389,
+      "repository_environment": "swesmith/marshmallow-code__marshmallow.9716fc62",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.alibaba_1776_nacos.f39ce37f",
+      "upstream_task_rows": 387,
+      "repository_environment": "swesmith/alibaba__nacos.f39ce37f",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.pyparsing_1776_pyparsing.533adf47",
+      "upstream_task_rows": 386,
+      "repository_environment": "swesmith/pyparsing__pyparsing.533adf47",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.benoitc_1776_gunicorn.bacbf8aa",
+      "upstream_task_rows": 373,
+      "repository_environment": "swesmith/benoitc__gunicorn.bacbf8aa",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.bottlepy_1776_bottle.a8dfef30",
+      "upstream_task_rows": 373,
+      "repository_environment": "swesmith/bottlepy__bottle.a8dfef30",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.traccar_1776_traccar.dc1dfe15",
+      "upstream_task_rows": 373,
+      "repository_environment": "swesmith/traccar__traccar.dc1dfe15",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.rsalmei_1776_alive-progress.35853799",
+      "upstream_task_rows": 371,
+      "repository_environment": "swesmith/rsalmei__alive-progress.35853799",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.krotik_1776_eliasdb.88a1da66",
+      "upstream_task_rows": 370,
+      "repository_environment": "swesmith/krotik__eliasdb.88a1da66",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.mybatis_1776_mybatis-3.59a0bcab",
+      "upstream_task_rows": 368,
+      "repository_environment": "swesmith/mybatis__mybatis-3.59a0bcab",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.workiva_1776_go-datastructures.18d77378",
+      "upstream_task_rows": 366,
+      "repository_environment": "swesmith/Workiva__go-datastructures.18d77378",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.mido_1776_mido.a0158ff9",
+      "upstream_task_rows": 361,
+      "repository_environment": "swesmith/mido__mido.a0158ff9",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.joke2k_1776_faker.8b401a7d",
+      "upstream_task_rows": 360,
+      "repository_environment": "swesmith/joke2k__faker.8b401a7d",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.rust-lang_1776_rust-clippy.f4f579f4",
+      "upstream_task_rows": 357,
+      "repository_environment": "swesmith/rust-lang__rust-clippy.f4f579f4",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.blevesearch_1776_bleve.f2876b5e",
+      "upstream_task_rows": 351,
+      "repository_environment": "swesmith/blevesearch__bleve.f2876b5e",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.adrienverge_1776_yamllint.8513d9b9",
+      "upstream_task_rows": 350,
+      "repository_environment": "swesmith/adrienverge__yamllint.8513d9b9",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.dask_1776_dask.5f61e423",
+      "upstream_task_rows": 336,
+      "repository_environment": "swesmith/dask__dask.5f61e423",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.agronholm_1776_typeguard.b6a7e438",
+      "upstream_task_rows": 333,
+      "repository_environment": "swesmith/agronholm__typeguard.b6a7e438",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.arrow-py_1776_arrow.1d70d009",
+      "upstream_task_rows": 333,
+      "repository_environment": "swesmith/arrow-py__arrow.1d70d009",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.trpc_1776_trpc.2f40ba93",
+      "upstream_task_rows": 323,
+      "repository_environment": "swesmith/trpc__trpc.2f40ba93",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.marshmallow-code_1776_webargs.dbde72fe",
+      "upstream_task_rows": 321,
+      "repository_environment": "swesmith/marshmallow-code__webargs.dbde72fe",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.mozillazg_1776_python-pinyin.e42dede5",
+      "upstream_task_rows": 321,
+      "repository_environment": "swesmith/mozillazg__python-pinyin.e42dede5",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.google_1776_gson.dd2fe59c",
+      "upstream_task_rows": 319,
+      "repository_environment": "swesmith/google__gson.dd2fe59c",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.tornadoweb_1776_tornado.d5ac65c1",
+      "upstream_task_rows": 312,
+      "repository_environment": "swesmith/tornadoweb__tornado.d5ac65c1",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.behaviortree_1776_behaviortree.cpp.3ff6a32b",
+      "upstream_task_rows": 310,
+      "repository_environment": "swesmith/BehaviorTree__BehaviorTree.CPP.3ff6a32b",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.ibotpeaches_1776_apktool.1981d35b",
+      "upstream_task_rows": 308,
+      "repository_environment": "swesmith/iBotPeaches__Apktool.1981d35b",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.json-path_1776_jsonpath.b6c60b3d",
+      "upstream_task_rows": 308,
+      "repository_environment": "swesmith/json-path__JsonPath.b6c60b3d",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.roaringbitmap_1776_roaring.09c46a0a",
+      "upstream_task_rows": 307,
+      "repository_environment": "swesmith/RoaringBitmap__roaring.09c46a0a",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.suor_1776_funcy.207a7810",
+      "upstream_task_rows": 306,
+      "repository_environment": "swesmith/Suor__funcy.207a7810",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.vowpalwabbit_1776_vowpal_wabbit.0d344494",
+      "upstream_task_rows": 304,
+      "repository_environment": "swesmith/VowpalWabbit__vowpal_wabbit.0d344494",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.tweepy_1776_tweepy.91a41c6e",
+      "upstream_task_rows": 302,
+      "repository_environment": "swesmith/tweepy__tweepy.91a41c6e",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.marshmallow-code_1776_apispec.8b421526",
+      "upstream_task_rows": 301,
+      "repository_environment": "swesmith/marshmallow-code__apispec.8b421526",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.pyca_1776_pyopenssl.04766a49",
+      "upstream_task_rows": 301,
+      "repository_environment": "swesmith/pyca__pyopenssl.04766a49",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.chaiscript_1776_chaiscript.2eb3279c",
+      "upstream_task_rows": 300,
+      "repository_environment": "swesmith/ChaiScript__ChaiScript.2eb3279c",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.lincolnloop_1776_python-qrcode.456b01d4",
+      "upstream_task_rows": 291,
+      "repository_environment": "swesmith/lincolnloop__python-qrcode.456b01d4",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.facelessuser_1776_soupsieve.a8080d97",
+      "upstream_task_rows": 285,
+      "repository_environment": "swesmith/facelessuser__soupsieve.a8080d97",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.tox-dev_1776_pipdeptree.c31b6418",
+      "upstream_task_rows": 284,
+      "repository_environment": "swesmith/tox-dev__pipdeptree.c31b6418",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.lfdt-web3j_1776_web3j.37d9bc9b",
+      "upstream_task_rows": 283,
+      "repository_environment": "swesmith/LFDT-web3j__web3j.37d9bc9b",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.clap-rs_1776_clap.3716f9f4",
+      "upstream_task_rows": 282,
+      "repository_environment": "swesmith/clap-rs__clap.3716f9f4",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.cweill_1776_gotests.16a93f6e",
+      "upstream_task_rows": 282,
+      "repository_environment": "swesmith/cweill__gotests.16a93f6e",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.prettytable_1776_prettytable.ca90b055",
+      "upstream_task_rows": 276,
+      "repository_environment": "swesmith/prettytable__prettytable.ca90b055",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.life4_1776_textdistance.c3aca916",
+      "upstream_task_rows": 269,
+      "repository_environment": "swesmith/life4__textdistance.c3aca916",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.dropwizard_1776_metrics.968f367a",
+      "upstream_task_rows": 266,
+      "repository_environment": "swesmith/dropwizard__metrics.968f367a",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.bpampuch_1776_pdfmake.719e7314",
+      "upstream_task_rows": 264,
+      "repository_environment": "swesmith/bpampuch__pdfmake.719e7314",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.jsvine_1776_pdfplumber.02ff4313",
+      "upstream_task_rows": 261,
+      "repository_environment": "swesmith/jsvine__pdfplumber.02ff4313",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.serde-rs_1776_json.cd55b5a0",
+      "upstream_task_rows": 261,
+      "repository_environment": "swesmith/serde-rs__json.cd55b5a0",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.apache_1776_calcite.84e35baf",
+      "upstream_task_rows": 260,
+      "repository_environment": "swesmith/apache__calcite.84e35baf",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.ariga_1776_atlas.1afaaba2",
+      "upstream_task_rows": 260,
+      "repository_environment": "swesmith/ariga__atlas.1afaaba2",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.django-money_1776_django-money.835c1ab8",
+      "upstream_task_rows": 256,
+      "repository_environment": "swesmith/django-money__django-money.835c1ab8",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.zxing_1776_zxing.50799640",
+      "upstream_task_rows": 254,
+      "repository_environment": "swesmith/zxing__zxing.50799640",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.tencent_1776_ncnn.a64aa7ff",
+      "upstream_task_rows": 251,
+      "repository_environment": "swesmith/Tencent__ncnn.a64aa7ff",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.apache_1776_pulsar.c51346fa",
+      "upstream_task_rows": 249,
+      "repository_environment": "swesmith/apache__pulsar.c51346fa",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.diffplug_1776_spotless.8e776ec8",
+      "upstream_task_rows": 249,
+      "repository_environment": "swesmith/diffplug__spotless.8e776ec8",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.gawel_1776_pyquery.811cd048",
+      "upstream_task_rows": 249,
+      "repository_environment": "swesmith/gawel__pyquery.811cd048",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.alecthomas_1776_voluptuous.a7a55f83",
+      "upstream_task_rows": 248,
+      "repository_environment": "swesmith/alecthomas__voluptuous.a7a55f83",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.caolan_1776_async.23dbf76a",
+      "upstream_task_rows": 233,
+      "repository_environment": "swesmith/caolan__async.23dbf76a",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.arp242_1776_goatcounter.854b1dd2",
+      "upstream_task_rows": 232,
+      "repository_environment": "swesmith/arp242__goatcounter.854b1dd2",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.killme2008_1776_aviatorscript.231198d3",
+      "upstream_task_rows": 232,
+      "repository_environment": "swesmith/killme2008__aviatorscript.231198d3",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.redocly_1776_redoc.d41fd46f",
+      "upstream_task_rows": 231,
+      "repository_environment": "swesmith/Redocly__redoc.d41fd46f",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.alibaba_1776_sentinel.222670e6",
+      "upstream_task_rows": 229,
+      "repository_environment": "swesmith/alibaba__Sentinel.222670e6",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.enzymejs_1776_enzyme.61e1b47c",
+      "upstream_task_rows": 228,
+      "repository_environment": "swesmith/enzymejs__enzyme.61e1b47c",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.strapi_1776_strapi.e5b87a54",
+      "upstream_task_rows": 225,
+      "repository_environment": "swesmith/strapi__strapi.e5b87a54",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.contentsquare_1776_chproxy.a9364c8b",
+      "upstream_task_rows": 224,
+      "repository_environment": "swesmith/ContentSquare__chproxy.a9364c8b",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.pyutils_1776_line_profiler.a646bf0f",
+      "upstream_task_rows": 223,
+      "repository_environment": "swesmith/pyutils__line_profiler.a646bf0f",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.hamba_1776_avro.ec06b38c",
+      "upstream_task_rows": 219,
+      "repository_environment": "swesmith/hamba__avro.ec06b38c",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.mgechev_1776_revive.03e81029",
+      "upstream_task_rows": 219,
+      "repository_environment": "swesmith/mgechev__revive.03e81029",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.rust-itertools_1776_itertools.041c733c",
+      "upstream_task_rows": 219,
+      "repository_environment": "swesmith/rust-itertools__itertools.041c733c",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.chardet_1776_chardet.9630f238",
+      "upstream_task_rows": 215,
+      "repository_environment": "swesmith/chardet__chardet.9630f238",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.ueberdosis_1776_tiptap.2d6de06c",
+      "upstream_task_rows": 215,
+      "repository_environment": "swesmith/ueberdosis__tiptap.2d6de06c",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.col-e_1776_recaf.2a93d630",
+      "upstream_task_rows": 213,
+      "repository_environment": "swesmith/Col-E__Recaf.2a93d630",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.cisco_1776_openh264.cf568c83",
+      "upstream_task_rows": 211,
+      "repository_environment": "swesmith/cisco__openh264.cf568c83",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.msiemens_1776_tinydb.10644a0e",
+      "upstream_task_rows": 209,
+      "repository_environment": "swesmith/msiemens__tinydb.10644a0e",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.reactor_1776_reactor-core.2198701c",
+      "upstream_task_rows": 208,
+      "repository_environment": "swesmith/reactor__reactor-core.2198701c",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.foambubble_1776_foam.2cac8162",
+      "upstream_task_rows": 206,
+      "repository_environment": "swesmith/foambubble__foam.2cac8162",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.rubik_1776_radon.54b88e58",
+      "upstream_task_rows": 205,
+      "repository_environment": "swesmith/rubik__radon.54b88e58",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.haivision_1776_srt.ce54b5ea",
+      "upstream_task_rows": 201,
+      "repository_environment": "swesmith/Haivision__srt.ce54b5ea",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.scrapy_1776_scrapy.35212ec5",
+      "upstream_task_rows": 198,
+      "repository_environment": "swesmith/scrapy__scrapy.35212ec5",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.btraceio_1776_btrace.3ba0198d",
+      "upstream_task_rows": 197,
+      "repository_environment": "swesmith/btraceio__btrace.3ba0198d",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.python-hyper_1776_h11.bed0dd4a",
+      "upstream_task_rows": 197,
+      "repository_environment": "swesmith/python-hyper__h11.bed0dd4a",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.gruns_1776_furl.da386f68",
+      "upstream_task_rows": 196,
+      "repository_environment": "swesmith/gruns__furl.da386f68",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.apache_1776_thrift.32776c0f",
+      "upstream_task_rows": 195,
+      "repository_environment": "swesmith/apache__thrift.32776c0f",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.hips_1776_autograd.ac044f0d",
+      "upstream_task_rows": 193,
+      "repository_environment": "swesmith/HIPS__autograd.ac044f0d",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.signalapp_1776_signal-server.065e7302",
+      "upstream_task_rows": 192,
+      "repository_environment": "swesmith/signalapp__Signal-Server.065e7302",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.jawah_1776_charset_normalizer.1fdd6463",
+      "upstream_task_rows": 187,
+      "repository_environment": "swesmith/jawah__charset_normalizer.1fdd6463",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.rayon-rs_1776_rayon.5b4eb339",
+      "upstream_task_rows": 184,
+      "repository_environment": "swesmith/rayon-rs__rayon.5b4eb339",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.uncrustify_1776_uncrustify.7e055694",
+      "upstream_task_rows": 183,
+      "repository_environment": "swesmith/uncrustify__uncrustify.7e055694",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.reactivex_1776_rxjs.c15b37f8",
+      "upstream_task_rows": 174,
+      "repository_environment": "swesmith/ReactiveX__rxjs.c15b37f8",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.go-critic_1776_go-critic.db2ec6f4",
+      "upstream_task_rows": 171,
+      "repository_environment": "swesmith/go-critic__go-critic.db2ec6f4",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.ledisdb_1776_ledisdb.d35789ec",
+      "upstream_task_rows": 168,
+      "repository_environment": "swesmith/ledisdb__ledisdb.d35789ec",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.hdt3213_1776_rdb.087190b9",
+      "upstream_task_rows": 166,
+      "repository_environment": "swesmith/HDT3213__rdb.087190b9",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.netflix_1776_falcor.39d64776",
+      "upstream_task_rows": 166,
+      "repository_environment": "swesmith/Netflix__falcor.39d64776",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.baomidou_1776_mybatis-plus.9c06ccaf",
+      "upstream_task_rows": 162,
+      "repository_environment": "swesmith/baomidou__mybatis-plus.9c06ccaf",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.nock_1776_nock.e7418da2",
+      "upstream_task_rows": 161,
+      "repository_environment": "swesmith/nock__nock.e7418da2",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.qpdf_1776_qpdf.9352f6f8",
+      "upstream_task_rows": 160,
+      "repository_environment": "swesmith/qpdf__qpdf.9352f6f8",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.servo_1776_html5ever.b93afc94",
+      "upstream_task_rows": 156,
+      "repository_environment": "swesmith/servo__html5ever.b93afc94",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.redux-saga_1776_redux-saga.a4ace10d",
+      "upstream_task_rows": 153,
+      "repository_environment": "swesmith/redux-saga__redux-saga.a4ace10d",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.akrylysov_1776_pogreb.76e9512d",
+      "upstream_task_rows": 152,
+      "repository_environment": "swesmith/akrylysov__pogreb.76e9512d",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.jd_1776_tenacity.0d40e76f",
+      "upstream_task_rows": 152,
+      "repository_environment": "swesmith/jd__tenacity.0d40e76f",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.mozilla_1776_sccache.cd7dcd5f",
+      "upstream_task_rows": 151,
+      "repository_environment": "swesmith/mozilla__sccache.cd7dcd5f",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.sveltejs_1776_svelte.6c9717a9",
+      "upstream_task_rows": 151,
+      "repository_environment": "swesmith/sveltejs__svelte.6c9717a9",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.antchfx_1776_xpath.8d50c252",
+      "upstream_task_rows": 146,
+      "repository_environment": "swesmith/antchfx__xpath.8d50c252",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.bits-and-blooms_1776_bitset.167865a2",
+      "upstream_task_rows": 146,
+      "repository_environment": "swesmith/bits-and-blooms__bitset.167865a2",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.microsoft_1776_vscode.4166e90a",
+      "upstream_task_rows": 143,
+      "repository_environment": "swesmith/microsoft__vscode.4166e90a",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.theskumar_1776_python-dotenv.2b8635b7",
+      "upstream_task_rows": 141,
+      "repository_environment": "swesmith/theskumar__python-dotenv.2b8635b7",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.hjson_1776_hjson-go.f3219653",
+      "upstream_task_rows": 140,
+      "repository_environment": "swesmith/hjson__hjson-go.f3219653",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.jf-tech_1776_omniparser.d4371ab7",
+      "upstream_task_rows": 140,
+      "repository_environment": "swesmith/jf-tech__omniparser.d4371ab7",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.sharkdp_1776_pastel.b60e8993",
+      "upstream_task_rows": 140,
+      "repository_environment": "swesmith/sharkdp__pastel.b60e8993",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.agronholm_1776_exceptiongroup.0b4f4937",
+      "upstream_task_rows": 139,
+      "repository_environment": "swesmith/agronholm__exceptiongroup.0b4f4937",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.cknd_1776_stackprinter.219fcc52",
+      "upstream_task_rows": 137,
+      "repository_environment": "swesmith/cknd__stackprinter.219fcc52",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.nalgeon_1776_redka.7c532df9",
+      "upstream_task_rows": 137,
+      "repository_environment": "swesmith/nalgeon__redka.7c532df9",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.homebridge_1776_homebridge.3a341e08",
+      "upstream_task_rows": 136,
+      "repository_environment": "swesmith/homebridge__homebridge.3a341e08",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.crowcpp_1776_crow.b8c021a7",
+      "upstream_task_rows": 135,
+      "repository_environment": "swesmith/CrowCpp__Crow.b8c021a7",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.necolas_1776_react-native-web.a9de220b",
+      "upstream_task_rows": 134,
+      "repository_environment": "swesmith/necolas__react-native-web.a9de220b",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.axios_1776_axios.ef36347f",
+      "upstream_task_rows": 133,
+      "repository_environment": "swesmith/axios__axios.ef36347f",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.instagram_1776_monkeytype.70c3acf6",
+      "upstream_task_rows": 133,
+      "repository_environment": "swesmith/Instagram__MonkeyType.70c3acf6",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.jaraco_1776_inflect.c079a96a",
+      "upstream_task_rows": 133,
+      "repository_environment": "swesmith/jaraco__inflect.c079a96a",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.websockets_1776_ws.726c3732",
+      "upstream_task_rows": 131,
+      "repository_environment": "swesmith/websockets__ws.726c3732",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.go-ini_1776_ini.b2f570e5",
+      "upstream_task_rows": 129,
+      "repository_environment": "swesmith/go-ini__ini.b2f570e5",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.gweis_1776_isodate.17cb25eb",
+      "upstream_task_rows": 129,
+      "repository_environment": "swesmith/gweis__isodate.17cb25eb",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.nestjs_1776_nest.346c9543",
+      "upstream_task_rows": 129,
+      "repository_environment": "swesmith/nestjs__nest.346c9543",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.stanfordnlp_1776_string2string.c4a72f59",
+      "upstream_task_rows": 128,
+      "repository_environment": "swesmith/stanfordnlp__string2string.c4a72f59",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.svg_1776_svgo.c06d8f68",
+      "upstream_task_rows": 126,
+      "repository_environment": "swesmith/svg__svgo.c06d8f68",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.doug-martin_1776_goqu.21b6e6d1",
+      "upstream_task_rows": 125,
+      "repository_environment": "swesmith/doug-martin__goqu.21b6e6d1",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.netflix_1776_eureka.459fcf59",
+      "upstream_task_rows": 124,
+      "repository_environment": "swesmith/Netflix__eureka.459fcf59",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.cliutils_1776_cli11.fe3772d3",
+      "upstream_task_rows": 122,
+      "repository_environment": "swesmith/CLIUtils__CLI11.fe3772d3",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.weaveworks_1776_grafanalib.5c3b17ed",
+      "upstream_task_rows": 122,
+      "repository_environment": "swesmith/weaveworks__grafanalib.5c3b17ed",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.nightwatchjs_1776_nightwatch.54c8550c",
+      "upstream_task_rows": 121,
+      "repository_environment": "swesmith/nightwatchjs__nightwatch.54c8550c",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.rust-lang_1776_mdbook.37273ba8",
+      "upstream_task_rows": 121,
+      "repository_environment": "swesmith/rust-lang__mdBook.37273ba8",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.bytedance_1776_sonic.de4f017f",
+      "upstream_task_rows": 120,
+      "repository_environment": "swesmith/bytedance__sonic.de4f017f",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.emirpasic_1776_gods.1d83d5ae",
+      "upstream_task_rows": 120,
+      "repository_environment": "swesmith/emirpasic__gods.1d83d5ae",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.hyperium_1776_hyper.c88df788",
+      "upstream_task_rows": 120,
+      "repository_environment": "swesmith/hyperium__hyper.c88df788",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.redis_1776_lettuce.fa5433c2",
+      "upstream_task_rows": 120,
+      "repository_environment": "swesmith/redis__lettuce.fa5433c2",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.mimino666_1776_langdetect.a1598f1a",
+      "upstream_task_rows": 118,
+      "repository_environment": "swesmith/Mimino666__langdetect.a1598f1a",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.go-chi_1776_chi.23c395f8",
+      "upstream_task_rows": 116,
+      "repository_environment": "swesmith/go-chi__chi.23c395f8",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.jankotek_1776_mapdb.8721c0e8",
+      "upstream_task_rows": 116,
+      "repository_environment": "swesmith/jankotek__mapdb.8721c0e8",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.cloudpipe_1776_cloudpickle.6220b0ce",
+      "upstream_task_rows": 115,
+      "repository_environment": "swesmith/cloudpipe__cloudpickle.6220b0ce",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.emotion-js_1776_emotion.b882bcba",
+      "upstream_task_rows": 113,
+      "repository_environment": "swesmith/emotion-js__emotion.b882bcba",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.labstack_1776_echo.98ca08e7",
+      "upstream_task_rows": 113,
+      "repository_environment": "swesmith/labstack__echo.98ca08e7",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.django_1776_channels.a144b4b8",
+      "upstream_task_rows": 112,
+      "repository_environment": "swesmith/django__channels.a144b4b8",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.orium_1776_rpds.3e7c8ae6",
+      "upstream_task_rows": 112,
+      "repository_environment": "swesmith/orium__rpds.3e7c8ae6",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.pndurette_1776_gtts.dbcda4f3",
+      "upstream_task_rows": 112,
+      "repository_environment": "swesmith/pndurette__gTTS.dbcda4f3",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.allegro_1776_bigcache.5aa251c4",
+      "upstream_task_rows": 111,
+      "repository_environment": "swesmith/allegro__bigcache.5aa251c4",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.josdejong_1776_jsoneditor.0319b213",
+      "upstream_task_rows": 111,
+      "repository_environment": "swesmith/josdejong__jsoneditor.0319b213",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.rubenlagus_1776_telegrambots.082d9846",
+      "upstream_task_rows": 110,
+      "repository_environment": "swesmith/rubenlagus__TelegramBots.082d9846",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.uscilab_1776_cereal.a56bad8b",
+      "upstream_task_rows": 110,
+      "repository_environment": "swesmith/USCiLab__cereal.a56bad8b",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.facebookresearch_1776_faiss.7cfb2500",
+      "upstream_task_rows": 109,
+      "repository_environment": "swesmith/facebookresearch__faiss.7cfb2500",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.hypermodeinc_1776_ristretto.da570116",
+      "upstream_task_rows": 108,
+      "repository_environment": "swesmith/hypermodeinc__ristretto.da570116",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.mochajs_1776_mocha.410ce0d2",
+      "upstream_task_rows": 108,
+      "repository_environment": "swesmith/mochajs__mocha.410ce0d2",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.spulec_1776_freezegun.5f171db0",
+      "upstream_task_rows": 108,
+      "repository_environment": "swesmith/spulec__freezegun.5f171db0",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.pudo_1776_dataset.5c2dc8d3",
+      "upstream_task_rows": 107,
+      "repository_environment": "swesmith/pudo__dataset.5c2dc8d3",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.quinn-rs_1776_quinn.bb359ccd",
+      "upstream_task_rows": 107,
+      "repository_environment": "swesmith/quinn-rs__quinn.bb359ccd",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.react-hook-form_1776_react-hook-form.3adba2b8",
+      "upstream_task_rows": 105,
+      "repository_environment": "swesmith/react-hook-form__react-hook-form.3adba2b8",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.junegunn_1776_fzf.976001e4",
+      "upstream_task_rows": 104,
+      "repository_environment": "swesmith/junegunn__fzf.976001e4",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.burntsushi_1776_rust-csv.da000888",
+      "upstream_task_rows": 102,
+      "repository_environment": "swesmith/BurntSushi__rust-csv.da000888",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.multimc_1776_launcher.4aa2b3ce",
+      "upstream_task_rows": 102,
+      "repository_environment": "swesmith/MultiMC__Launcher.4aa2b3ce",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.gin-gonic_1776_gin.3c12d2a8",
+      "upstream_task_rows": 101,
+      "repository_environment": "swesmith/gin-gonic__gin.3c12d2a8",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.gookit_1776_color.5a495618",
+      "upstream_task_rows": 100,
+      "repository_environment": "swesmith/gookit__color.5a495618",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.john-kurkowski_1776_tldextract.3d1bf184",
+      "upstream_task_rows": 100,
+      "repository_environment": "swesmith/john-kurkowski__tldextract.3d1bf184",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.pistacheio_1776_pistache.8a1ac905",
+      "upstream_task_rows": 100,
+      "repository_environment": "swesmith/pistacheio__pistache.8a1ac905",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.iamkun_1776_dayjs.c8a26460",
+      "upstream_task_rows": 99,
+      "repository_environment": "swesmith/iamkun__dayjs.c8a26460",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.go-gota_1776_gota.f7054095",
+      "upstream_task_rows": 98,
+      "repository_environment": "swesmith/go-gota__gota.f7054095",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.brianc_1776_node-postgres.ecff60dc",
+      "upstream_task_rows": 97,
+      "repository_environment": "swesmith/brianc__node-postgres.ecff60dc",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.payloadcms_1776_payload.8f660355",
+      "upstream_task_rows": 97,
+      "repository_environment": "swesmith/payloadcms__payload.8f660355",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.maypok86_1776_otter.20ae57f9",
+      "upstream_task_rows": 96,
+      "repository_environment": "swesmith/maypok86__otter.20ae57f9",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.plantuml_1776_plantuml.783ae241",
+      "upstream_task_rows": 96,
+      "repository_environment": "swesmith/plantuml__plantuml.783ae241",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.abel533_1776_mapper.3aa82765",
+      "upstream_task_rows": 95,
+      "repository_environment": "swesmith/abel533__Mapper.3aa82765",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.erikrose_1776_parsimonious.0d3f5f93",
+      "upstream_task_rows": 95,
+      "repository_environment": "swesmith/erikrose__parsimonious.0d3f5f93",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.go-gorm_1776_gorm.1e8baf54",
+      "upstream_task_rows": 93,
+      "repository_environment": "swesmith/go-gorm__gorm.1e8baf54",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.rest-assured_1776_rest-assured.a67ed7ac",
+      "upstream_task_rows": 92,
+      "repository_environment": "swesmith/rest-assured__rest-assured.a67ed7ac",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.zeromq_1776_libzmq.51a5a9cb",
+      "upstream_task_rows": 92,
+      "repository_environment": "swesmith/zeromq__libzmq.51a5a9cb",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.modin-project_1776_modin.8c7799fd",
+      "upstream_task_rows": 91,
+      "repository_environment": "swesmith/modin-project__modin.8c7799fd",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.burnash_1776_gspread.a8be3b96",
+      "upstream_task_rows": 90,
+      "repository_environment": "swesmith/burnash__gspread.a8be3b96",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.coder_1776_code-server.e90504b8",
+      "upstream_task_rows": 90,
+      "repository_environment": "swesmith/coder__code-server.e90504b8",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.go-sql-driver_1776_mysql.76c00e35",
+      "upstream_task_rows": 90,
+      "repository_environment": "swesmith/go-sql-driver__mysql.76c00e35",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.pemistahl_1776_grex.fa3e8ed7",
+      "upstream_task_rows": 90,
+      "repository_environment": "swesmith/pemistahl__grex.fa3e8ed7",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.r1chardj0n3s_1776_parse.30da9e4f",
+      "upstream_task_rows": 90,
+      "repository_environment": "swesmith/r1chardj0n3s__parse.30da9e4f",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.shopify_1776_draggable.8a1eed57",
+      "upstream_task_rows": 90,
+      "repository_environment": "swesmith/Shopify__draggable.8a1eed57",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.keleshev_1776_schema.24a30457",
+      "upstream_task_rows": 88,
+      "repository_environment": "swesmith/keleshev__schema.24a30457",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.couchbase_1776_moss.bf10bab2",
+      "upstream_task_rows": 87,
+      "repository_environment": "swesmith/couchbase__moss.bf10bab2",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.antonmedv_1776_fx.1ab8a99b",
+      "upstream_task_rows": 85,
+      "repository_environment": "swesmith/antonmedv__fx.1ab8a99b",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.marshallpierce_1776_rust-base64.cac5ff84",
+      "upstream_task_rows": 85,
+      "repository_environment": "swesmith/marshallpierce__rust-base64.cac5ff84",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.redis_1776_jedis.52483b82",
+      "upstream_task_rows": 85,
+      "repository_environment": "swesmith/redis__jedis.52483b82",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.amueller_1776_word_cloud.ec24191c",
+      "upstream_task_rows": 84,
+      "repository_environment": "swesmith/amueller__word_cloud.ec24191c",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.greg7mdp_1776_parallel-hashmap.8442f1c8",
+      "upstream_task_rows": 84,
+      "repository_environment": "swesmith/greg7mdp__parallel-hashmap.8442f1c8",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.matthewwithanm_1776_python-markdownify.6258f5c3",
+      "upstream_task_rows": 83,
+      "repository_environment": "swesmith/matthewwithanm__python-markdownify.6258f5c3",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.dbader_1776_schedule.82a43db1",
+      "upstream_task_rows": 80,
+      "repository_environment": "swesmith/dbader__schedule.82a43db1",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.hukkin_1776_tomli.443a0c1b",
+      "upstream_task_rows": 80,
+      "repository_environment": "swesmith/hukkin__tomli.443a0c1b",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.masterminds_1776_squirrel.1ded5784",
+      "upstream_task_rows": 80,
+      "repository_environment": "swesmith/Masterminds__squirrel.1ded5784",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.vingarcia_1776_ksql.dadb4199",
+      "upstream_task_rows": 80,
+      "repository_environment": "swesmith/VinGarcia__ksql.dadb4199",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.google_1776_textfsm.c31b6007",
+      "upstream_task_rows": 79,
+      "repository_environment": "swesmith/google__textfsm.c31b6007",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.refined-github_1776_refined-github.d4a7c3fb",
+      "upstream_task_rows": 79,
+      "repository_environment": "swesmith/refined-github__refined-github.d4a7c3fb",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.cool-rr_1776_pysnooper.57472b46",
+      "upstream_task_rows": 78,
+      "repository_environment": "swesmith/cool-RR__PySnooper.57472b46",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.jessevdk_1776_go-flags.8eae68f0",
+      "upstream_task_rows": 77,
+      "repository_environment": "swesmith/jessevdk__go-flags.8eae68f0",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.chinabugotech_1776_hutool.44836454",
+      "upstream_task_rows": 76,
+      "repository_environment": "swesmith/chinabugotech__hutool.44836454",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.google_1776_draco.b91aa918",
+      "upstream_task_rows": 75,
+      "repository_environment": "swesmith/google__draco.b91aa918",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.danmar_1776_cppcheck.67606e6e",
+      "upstream_task_rows": 74,
+      "repository_environment": "swesmith/danmar__cppcheck.67606e6e",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.c-bata_1776_go-prompt.82a91227",
+      "upstream_task_rows": 73,
+      "repository_environment": "swesmith/c-bata__go-prompt.82a91227",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.o2sh_1776_onefetch.e5958cec",
+      "upstream_task_rows": 73,
+      "repository_environment": "swesmith/o2sh__onefetch.e5958cec",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.caarlos0_1776_env.56a09d29",
+      "upstream_task_rows": 72,
+      "repository_environment": "swesmith/caarlos0__env.56a09d29",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.joelittlejohn_1776_jsonschema2pojo.8c90ed48",
+      "upstream_task_rows": 69,
+      "repository_environment": "swesmith/joelittlejohn__jsonschema2pojo.8c90ed48",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.spf13_1776_cobra.6dec1ae2",
+      "upstream_task_rows": 69,
+      "repository_environment": "swesmith/spf13__cobra.6dec1ae2",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.bbc_1776_audiowaveform.9edb233c",
+      "upstream_task_rows": 68,
+      "repository_environment": "swesmith/bbc__audiowaveform.9edb233c",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.ml-explore_1776_mlx.6304c285",
+      "upstream_task_rows": 68,
+      "repository_environment": "swesmith/ml-explore__mlx.6304c285",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.sloria_1776_environs.73c372df",
+      "upstream_task_rows": 68,
+      "repository_environment": "swesmith/sloria__environs.73c372df",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.cookiecutter_1776_cookiecutter.b4451231",
+      "upstream_task_rows": 67,
+      "repository_environment": "swesmith/cookiecutter__cookiecutter.b4451231",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.tinacms_1776_tinacms.dffb104f",
+      "upstream_task_rows": 67,
+      "repository_environment": "swesmith/tinacms__tinacms.dffb104f",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.bluele_1776_gcache.d8b7e051",
+      "upstream_task_rows": 66,
+      "repository_environment": "swesmith/bluele__gcache.d8b7e051",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.bootandy_1776_dust.62bf1e14",
+      "upstream_task_rows": 66,
+      "repository_environment": "swesmith/bootandy__dust.62bf1e14",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.welldone-software_1776_why-did-you-render.3ec3512d",
+      "upstream_task_rows": 66,
+      "repository_environment": "swesmith/welldone-software__why-did-you-render.3ec3512d",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.apache_1776_dubbo.a92d5d08",
+      "upstream_task_rows": 65,
+      "repository_environment": "swesmith/apache__dubbo.a92d5d08",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.dimfeld_1776_httptreemux.53a6a099",
+      "upstream_task_rows": 65,
+      "repository_environment": "swesmith/dimfeld__httptreemux.53a6a099",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.dtolnay_1776_semver.37bcbe69",
+      "upstream_task_rows": 64,
+      "repository_environment": "swesmith/dtolnay__semver.37bcbe69",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.incu6us_1776_goimports-reviser.fb560c58",
+      "upstream_task_rows": 64,
+      "repository_environment": "swesmith/incu6us__goimports-reviser.fb560c58",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.rustedpy_1776_result.0b855e1e",
+      "upstream_task_rows": 64,
+      "repository_environment": "swesmith/rustedpy__result.0b855e1e",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.dropwizard_1776_dropwizard.e01f4694",
+      "upstream_task_rows": 63,
+      "repository_environment": "swesmith/dropwizard__dropwizard.e01f4694",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.pytest-dev_1776_iniconfig.16793ead",
+      "upstream_task_rows": 63,
+      "repository_environment": "swesmith/pytest-dev__iniconfig.16793ead",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.giuspen_1776_cherrytree.6c42a114",
+      "upstream_task_rows": 62,
+      "repository_environment": "swesmith/giuspen__cherrytree.6c42a114",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.spf13_1776_pflag.1c62fb28",
+      "upstream_task_rows": 62,
+      "repository_environment": "swesmith/spf13__pflag.1c62fb28",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.mawww_1776_kakoune.ea233559",
+      "upstream_task_rows": 61,
+      "repository_environment": "swesmith/mawww__kakoune.ea233559",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.anordal_1776_shellharden.6a6ffd42",
+      "upstream_task_rows": 60,
+      "repository_environment": "swesmith/anordal__shellharden.6a6ffd42",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.runelite_1776_runelite.6e2d0b20",
+      "upstream_task_rows": 60,
+      "repository_environment": "swesmith/runelite__runelite.6e2d0b20",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.ccache_1776_ccache.85a885b2",
+      "upstream_task_rows": 59,
+      "repository_environment": "swesmith/ccache__ccache.85a885b2",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.kde_1776_heaptrack.f16e8d33",
+      "upstream_task_rows": 59,
+      "repository_environment": "swesmith/KDE__heaptrack.f16e8d33",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.luozhouyang_1776_python-string-similarity.115acaac",
+      "upstream_task_rows": 59,
+      "repository_environment": "swesmith/luozhouyang__python-string-similarity.115acaac",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.strimzi_1776_strimzi-kafka-operator.2d31a2b6",
+      "upstream_task_rows": 58,
+      "repository_environment": "swesmith/strimzi__strimzi-kafka-operator.2d31a2b6",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.ggml-org_1776_llama.cpp.24464195",
+      "upstream_task_rows": 55,
+      "repository_environment": "swesmith/ggml-org__llama.cpp.24464195",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.golang_1776_groupcache.2c02b820",
+      "upstream_task_rows": 55,
+      "repository_environment": "swesmith/golang__groupcache.2c02b820",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.langchain4j_1776_langchain4j.82b882d8",
+      "upstream_task_rows": 55,
+      "repository_environment": "swesmith/langchain4j__langchain4j.82b882d8",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.lmax-exchange_1776_disruptor.c871ca49",
+      "upstream_task_rows": 55,
+      "repository_environment": "swesmith/LMAX-Exchange__disruptor.c871ca49",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.lqs_1776_sqlingo.ed36ef03",
+      "upstream_task_rows": 55,
+      "repository_environment": "swesmith/lqs__sqlingo.ed36ef03",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.nats-io_1776_nats-server.2ee2e24c",
+      "upstream_task_rows": 55,
+      "repository_environment": "swesmith/nats-io__nats-server.2ee2e24c",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.fastfloat_1776_fast_float.9f30728c",
+      "upstream_task_rows": 54,
+      "repository_environment": "swesmith/fastfloat__fast_float.9f30728c",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.hmcl-dev_1776_hmcl.79a1c3af",
+      "upstream_task_rows": 54,
+      "repository_environment": "swesmith/HMCL-dev__HMCL.79a1c3af",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.plar_1776_go-adaptive-radix-tree.63c2eff3",
+      "upstream_task_rows": 54,
+      "repository_environment": "swesmith/plar__go-adaptive-radix-tree.63c2eff3",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.baomidou_1776_dynamic-datasource.1d7f40ec",
+      "upstream_task_rows": 53,
+      "repository_environment": "swesmith/baomidou__dynamic-datasource.1d7f40ec",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.charmbracelet_1776_bubbletea.ca9473b2",
+      "upstream_task_rows": 52,
+      "repository_environment": "swesmith/charmbracelet__bubbletea.ca9473b2",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.uuid-rs_1776_uuid.2fd9b614",
+      "upstream_task_rows": 52,
+      "repository_environment": "swesmith/uuid-rs__uuid.2fd9b614",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.bojanz_1776_address.ec203a4f",
+      "upstream_task_rows": 50,
+      "repository_environment": "swesmith/bojanz__address.ec203a4f",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.byron_1776_dua-cli.8570c154",
+      "upstream_task_rows": 50,
+      "repository_environment": "swesmith/Byron__dua-cli.8570c154",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.django_1776_daphne.32ac73e1",
+      "upstream_task_rows": 50,
+      "repository_environment": "swesmith/django__daphne.32ac73e1",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.ledger_1776_ledger.920059e6",
+      "upstream_task_rows": 50,
+      "repository_environment": "swesmith/ledger__ledger.920059e6",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.gitbookio_1776_gitbook.81f8ddcf",
+      "upstream_task_rows": 49,
+      "repository_environment": "swesmith/GitbookIO__gitbook.81f8ddcf",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.openmvg_1776_openmvg.c76d8724",
+      "upstream_task_rows": 49,
+      "repository_environment": "swesmith/openMVG__openMVG.c76d8724",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.reactjs_1776_react-transition-group.2989b5b8",
+      "upstream_task_rows": 49,
+      "repository_environment": "swesmith/reactjs__react-transition-group.2989b5b8",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.serenity-rs_1776_serenity.c6219206",
+      "upstream_task_rows": 49,
+      "repository_environment": "swesmith/serenity-rs__serenity.c6219206",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.anuken_1776_mindustry.2ad41a90",
+      "upstream_task_rows": 48,
+      "repository_environment": "swesmith/Anuken__Mindustry.2ad41a90",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.console-rs_1776_indicatif.dbd26eb1",
+      "upstream_task_rows": 48,
+      "repository_environment": "swesmith/console-rs__indicatif.dbd26eb1",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.remy_1776_nodemon.daad5c16",
+      "upstream_task_rows": 47,
+      "repository_environment": "swesmith/remy__nodemon.daad5c16",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.vi3k6i5_1776_flashtext.b316c7e9",
+      "upstream_task_rows": 46,
+      "repository_environment": "swesmith/vi3k6i5__flashtext.b316c7e9",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.advplyr_1776_audiobookshelf.626596b1",
+      "upstream_task_rows": 45,
+      "repository_environment": "swesmith/advplyr__audiobookshelf.626596b1",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.spf13_1776_afero.f5375068",
+      "upstream_task_rows": 45,
+      "repository_environment": "swesmith/spf13__afero.f5375068",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.martinblech_1776_xmltodict.0952f382",
+      "upstream_task_rows": 44,
+      "repository_environment": "swesmith/martinblech__xmltodict.0952f382",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.gephi_1776_gephi.8f9b9faa",
+      "upstream_task_rows": 42,
+      "repository_environment": "swesmith/gephi__gephi.8f9b9faa",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.knio_1776_dominate.9082227e",
+      "upstream_task_rows": 42,
+      "repository_environment": "swesmith/Knio__dominate.9082227e",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.buriy_1776_python-readability.40256f40",
+      "upstream_task_rows": 41,
+      "repository_environment": "swesmith/buriy__python-readability.40256f40",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.segmentio_1776_evergreen.9b774aee",
+      "upstream_task_rows": 41,
+      "repository_environment": "swesmith/segmentio__evergreen.9b774aee",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.sharkdp_1776_hexyl.2e264378",
+      "upstream_task_rows": 41,
+      "repository_environment": "swesmith/sharkdp__hexyl.2e264378",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.go-zoo_1776_bone.31c3a0bb",
+      "upstream_task_rows": 40,
+      "repository_environment": "swesmith/go-zoo__bone.31c3a0bb",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.gperftools_1776_gperftools.a4724315",
+      "upstream_task_rows": 40,
+      "repository_environment": "swesmith/gperftools__gperftools.a4724315",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.canop_1776_broot.d6c798ed",
+      "upstream_task_rows": 39,
+      "repository_environment": "swesmith/Canop__broot.d6c798ed",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.deckarep_1776_golang-set.9480c3eb",
+      "upstream_task_rows": 39,
+      "repository_environment": "swesmith/deckarep__golang-set.9480c3eb",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.ericniebler_1776_range-v3.ca1388fb",
+      "upstream_task_rows": 39,
+      "repository_environment": "swesmith/ericniebler__range-v3.ca1388fb",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.philjay_1776_mpandroidchart.9c7275a0",
+      "upstream_task_rows": 39,
+      "repository_environment": "swesmith/PhilJay__MPAndroidChart.9c7275a0",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.bisq-network_1776_bisq.f2fe13d0",
+      "upstream_task_rows": 38,
+      "repository_environment": "swesmith/bisq-network__bisq.f2fe13d0",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.denisenkom_1776_go-mssqldb.103f0369",
+      "upstream_task_rows": 38,
+      "repository_environment": "swesmith/denisenkom__go-mssqldb.103f0369",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.madzak_1776_python-json-logger.5f85723f",
+      "upstream_task_rows": 38,
+      "repository_environment": "swesmith/madzak__python-json-logger.5f85723f",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.pallets_1776_markupsafe.620c06c9",
+      "upstream_task_rows": 38,
+      "repository_environment": "swesmith/pallets__markupsafe.620c06c9",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.spring-projects_1776_spring-boot.f73a809c",
+      "upstream_task_rows": 38,
+      "repository_environment": "swesmith/spring-projects__spring-boot.f73a809c",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.google_1776_tsunami-security-scanner.cf018549",
+      "upstream_task_rows": 37,
+      "repository_environment": "swesmith/google__tsunami-security-scanner.cf018549",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.balderdashy_1776_sails.ffebacc5",
+      "upstream_task_rows": 36,
+      "repository_environment": "swesmith/balderdashy__sails.ffebacc5",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.gflags_1776_gflags.53193503",
+      "upstream_task_rows": 36,
+      "repository_environment": "swesmith/gflags__gflags.53193503",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.alanjds_1776_drf-nested-routers.6144169d",
+      "upstream_task_rows": 35,
+      "repository_environment": "swesmith/alanjds__drf-nested-routers.6144169d",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.spring-projects_1776_spring-authorization-server.7d72f556",
+      "upstream_task_rows": 35,
+      "repository_environment": "swesmith/spring-projects__spring-authorization-server.7d72f556",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.directus_1776_directus.ac922d18",
+      "upstream_task_rows": 34,
+      "repository_environment": "swesmith/directus__directus.ac922d18",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.kennethreitz_1776_records.5941ab27",
+      "upstream_task_rows": 34,
+      "repository_environment": "swesmith/kennethreitz__records.5941ab27",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.qtox_1776_qtox.2b9cbdca",
+      "upstream_task_rows": 34,
+      "repository_environment": "swesmith/qTox__qTox.2b9cbdca",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.apache_1776_storm.4bc158f0",
+      "upstream_task_rows": 33,
+      "repository_environment": "swesmith/apache__storm.4bc158f0",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.seanmonstar_1776_reqwest.01f03a4c",
+      "upstream_task_rows": 33,
+      "repository_environment": "swesmith/seanmonstar__reqwest.01f03a4c",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.victoriametrics_1776_fastcache.b7ccf30b",
+      "upstream_task_rows": 33,
+      "repository_environment": "swesmith/VictoriaMetrics__fastcache.b7ccf30b",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.pexpect_1776_ptyprocess.1067dbda",
+      "upstream_task_rows": 32,
+      "repository_environment": "swesmith/pexpect__ptyprocess.1067dbda",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.seatgeek_1776_thefuzz.8a05a3ee",
+      "upstream_task_rows": 32,
+      "repository_environment": "swesmith/seatgeek__thefuzz.8a05a3ee",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.skeema_1776_skeema.defb0097",
+      "upstream_task_rows": 32,
+      "repository_environment": "swesmith/skeema__skeema.defb0097",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.tealdeer-rs_1776_tealdeer.c5d62e59",
+      "upstream_task_rows": 32,
+      "repository_environment": "swesmith/tealdeer-rs__tealdeer.c5d62e59",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.apache_1776_hbase.30c42a87",
+      "upstream_task_rows": 31,
+      "repository_environment": "swesmith/apache__hbase.30c42a87",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.pagehelper-org_1776_mybatis-pagehelper.b4212c4d",
+      "upstream_task_rows": 31,
+      "repository_environment": "swesmith/pagehelper-org__Mybatis-PageHelper.b4212c4d",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.webpack_1776_webpack.24e3c2d2",
+      "upstream_task_rows": 31,
+      "repository_environment": "swesmith/webpack__webpack.24e3c2d2",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.tylertreat_1776_boomfilters.db654574",
+      "upstream_task_rows": 30,
+      "repository_environment": "swesmith/tylertreat__BoomFilters.db654574",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.hdt3213_1776_godis.8a81b911",
+      "upstream_task_rows": 29,
+      "repository_environment": "swesmith/HDT3213__godis.8a81b911",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.jaredpalmer_1776_formik.91475adb",
+      "upstream_task_rows": 29,
+      "repository_environment": "swesmith/jaredpalmer__formik.91475adb",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.mewwts_1776_addict.75284f95",
+      "upstream_task_rows": 29,
+      "repository_environment": "swesmith/mewwts__addict.75284f95",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.mistertea_1776_eternalterminal.90b10d5f",
+      "upstream_task_rows": 29,
+      "repository_environment": "swesmith/MisterTea__EternalTerminal.90b10d5f",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.borntyping_1776_python-colorlog.dfa10f59",
+      "upstream_task_rows": 28,
+      "repository_environment": "swesmith/borntyping__python-colorlog.dfa10f59",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.opencut-app_1776_opencut.e84c0cfd",
+      "upstream_task_rows": 28,
+      "repository_environment": "swesmith/OpenCut-app__OpenCut.e84c0cfd",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.vbauerster_1776_mpb.d30b5606",
+      "upstream_task_rows": 28,
+      "repository_environment": "swesmith/vbauerster__mpb.d30b5606",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.ggml-org_1776_ggml.d6754f3d",
+      "upstream_task_rows": 27,
+      "repository_environment": "swesmith/ggml-org__ggml.d6754f3d",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.google_1776_leveldb.ac691084",
+      "upstream_task_rows": 27,
+      "repository_environment": "swesmith/google__leveldb.ac691084",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.mik3y_1776_usb-serial-for-android.a8b9ecc7",
+      "upstream_task_rows": 27,
+      "repository_environment": "swesmith/mik3y__usb-serial-for-android.a8b9ecc7",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.apache_1776_jmeter.b1843c2a",
+      "upstream_task_rows": 26,
+      "repository_environment": "swesmith/apache__jmeter.b1843c2a",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.godror_1776_godror.cc3b65ef",
+      "upstream_task_rows": 26,
+      "repository_environment": "swesmith/godror__godror.cc3b65ef",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.mattn_1776_go-sqlite3.f76bae4b",
+      "upstream_task_rows": 25,
+      "repository_environment": "swesmith/mattn__go-sqlite3.f76bae4b",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.nativescript_1776_nativescript.3d6a4392",
+      "upstream_task_rows": 25,
+      "repository_environment": "swesmith/NativeScript__NativeScript.3d6a4392",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.hatoo_1776_oha.8dc63499",
+      "upstream_task_rows": 24,
+      "repository_environment": "swesmith/hatoo__oha.8dc63499",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.guillaumeblanc_1776_ozz-animation.6cbdc790",
+      "upstream_task_rows": 23,
+      "repository_environment": "swesmith/guillaumeblanc__ozz-animation.6cbdc790",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.rbock_1776_sqlpp11.6180ee5e",
+      "upstream_task_rows": 23,
+      "repository_environment": "swesmith/rbock__sqlpp11.6180ee5e",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.rosedblabs_1776_rosedb.4af513fe",
+      "upstream_task_rows": 23,
+      "repository_environment": "swesmith/rosedblabs__rosedb.4af513fe",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.tomarrell_1776_wrapcheck.486d5bbe",
+      "upstream_task_rows": 22,
+      "repository_environment": "swesmith/tomarrell__wrapcheck.486d5bbe",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.uxlfoundation_1776_onetbb.3ebfedd8",
+      "upstream_task_rows": 22,
+      "repository_environment": "swesmith/uxlfoundation__oneTBB.3ebfedd8",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.viccon_1776_sturdyc.97fc006b",
+      "upstream_task_rows": 21,
+      "repository_environment": "swesmith/viccon__sturdyc.97fc006b",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.yoav-lavi_1776_melody.f4af9b48",
+      "upstream_task_rows": 21,
+      "repository_environment": "swesmith/yoav-lavi__melody.f4af9b48",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.kisielk_1776_errcheck.dacab891",
+      "upstream_task_rows": 20,
+      "repository_environment": "swesmith/kisielk__errcheck.dacab891",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.serenityos_1776_jakt.3c8d7508",
+      "upstream_task_rows": 20,
+      "repository_environment": "swesmith/SerenityOS__jakt.3c8d7508",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.aio-libs_1776_async-timeout.d0baa9f1",
+      "upstream_task_rows": 19,
+      "repository_environment": "swesmith/aio-libs__async-timeout.d0baa9f1",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.http-rs_1776_tide.b32f680d",
+      "upstream_task_rows": 19,
+      "repository_environment": "swesmith/http-rs__tide.b32f680d",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.python_1776_mypy.e93f06ce",
+      "upstream_task_rows": 19,
+      "repository_environment": "swesmith/python__mypy.e93f06ce",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.tidwall_1776_buntdb.3daff4e1",
+      "upstream_task_rows": 19,
+      "repository_environment": "swesmith/tidwall__buntdb.3daff4e1",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.derekparker_1776_trie.4095f8e3",
+      "upstream_task_rows": 18,
+      "repository_environment": "swesmith/derekparker__trie.4095f8e3",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.dtolnay_1776_cxx.0d80b351",
+      "upstream_task_rows": 18,
+      "repository_environment": "swesmith/dtolnay__cxx.0d80b351",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.un33k_1776_python-slugify.872b3750",
+      "upstream_task_rows": 18,
+      "repository_environment": "swesmith/un33k__python-slugify.872b3750",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.gosuri_1776_uiprogress.484b9f69",
+      "upstream_task_rows": 17,
+      "repository_environment": "swesmith/gosuri__uiprogress.484b9f69",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.gruns_1776_icecream.f76fef56",
+      "upstream_task_rows": 17,
+      "repository_environment": "swesmith/gruns__icecream.f76fef56",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.jellydator_1776_ttlcache.7145e12e",
+      "upstream_task_rows": 17,
+      "repository_environment": "swesmith/jellydator__ttlcache.7145e12e",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.jlblancoc_1776_nanoflann.ba47cfcb",
+      "upstream_task_rows": 17,
+      "repository_environment": "swesmith/jlblancoc__nanoflann.ba47cfcb",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.svenstaro_1776_miniserve.8449e8b1",
+      "upstream_task_rows": 17,
+      "repository_environment": "swesmith/svenstaro__miniserve.8449e8b1",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.termcolor_1776_termcolor.3a42086f",
+      "upstream_task_rows": 17,
+      "repository_environment": "swesmith/termcolor__termcolor.3a42086f",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.drogonframework_1776_drogon.34955222",
+      "upstream_task_rows": 16,
+      "repository_environment": "swesmith/drogonframework__drogon.34955222",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.nikepan_1776_clickhouse-bulk.cdc261cb",
+      "upstream_task_rows": 16,
+      "repository_environment": "swesmith/nikepan__clickhouse-bulk.cdc261cb",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.apache_1776_iotdb.36dadf5d",
+      "upstream_task_rows": 15,
+      "repository_environment": "swesmith/apache__iotdb.36dadf5d",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.asmjit_1776_asmjit.64a88ed1",
+      "upstream_task_rows": 15,
+      "repository_environment": "swesmith/asmjit__asmjit.64a88ed1",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.microsoft_1776_proxy.dc3d95c7",
+      "upstream_task_rows": 15,
+      "repository_environment": "swesmith/microsoft__proxy.dc3d95c7",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.nasa-sw-vnv_1776_ikos.ac7f7c17",
+      "upstream_task_rows": 15,
+      "repository_environment": "swesmith/NASA-SW-VnV__ikos.ac7f7c17",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.open-source-parsers_1776_jsoncpp.e799ca05",
+      "upstream_task_rows": 15,
+      "repository_environment": "swesmith/open-source-parsers__jsoncpp.e799ca05",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.ggml-org_1776_whisper.cpp.21411d81",
+      "upstream_task_rows": 14,
+      "repository_environment": "swesmith/ggml-org__whisper.cpp.21411d81",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.google_1776_glog.53d58e45",
+      "upstream_task_rows": 13,
+      "repository_environment": "swesmith/google__glog.53d58e45",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.jantimon_1776_html-webpack-plugin.9a39db80",
+      "upstream_task_rows": 13,
+      "repository_environment": "swesmith/jantimon__html-webpack-plugin.9a39db80",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.prest_1776_prest.c54ddd30",
+      "upstream_task_rows": 13,
+      "repository_environment": "swesmith/prest__prest.c54ddd30",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.raviqqe_1776_muffet.430e6937",
+      "upstream_task_rows": 13,
+      "repository_environment": "swesmith/raviqqe__muffet.430e6937",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.peterh_1776_liner.58a15878",
+      "upstream_task_rows": 12,
+      "repository_environment": "swesmith/peterh__liner.58a15878",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.fatedier_1776_frp.61330d4d",
+      "upstream_task_rows": 11,
+      "repository_environment": "swesmith/fatedier__frp.61330d4d",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.humanlayer_1776_12-factor-agents.d20c7283",
+      "upstream_task_rows": 11,
+      "repository_environment": "swesmith/humanlayer__12-factor-agents.d20c7283",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.julienschmidt_1776_httprouter.48401801",
+      "upstream_task_rows": 11,
+      "repository_environment": "swesmith/julienschmidt__httprouter.48401801",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.odygrd_1776_quill.7c0ffa54",
+      "upstream_task_rows": 11,
+      "repository_environment": "swesmith/odygrd__quill.7c0ffa54",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.papermc_1776_paper.81b91224",
+      "upstream_task_rows": 11,
+      "repository_environment": "swesmith/PaperMC__Paper.81b91224",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.pwaller_1776_pyfiglet.f8c5f35b",
+      "upstream_task_rows": 11,
+      "repository_environment": "swesmith/pwaller__pyfiglet.f8c5f35b",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.kyoh86_1776_richgo.98af5f3a",
+      "upstream_task_rows": 10,
+      "repository_environment": "swesmith/kyoh86__richgo.98af5f3a",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.umijs_1776_qiankun.693cdde7",
+      "upstream_task_rows": 10,
+      "repository_environment": "swesmith/umijs__qiankun.693cdde7",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.babel_1776_babel.2ea3fc8f",
+      "upstream_task_rows": 9,
+      "repository_environment": "swesmith/babel__babel.2ea3fc8f",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.bluesky-social_1776_social-app.cbd48c85",
+      "upstream_task_rows": 9,
+      "repository_environment": "swesmith/bluesky-social__social-app.cbd48c85",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.falcosecurity_1776_falco.43aaffc4",
+      "upstream_task_rows": 9,
+      "repository_environment": "swesmith/falcosecurity__falco.43aaffc4",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.datamade_1776_usaddress.a42a8f0c",
+      "upstream_task_rows": 8,
+      "repository_environment": "swesmith/datamade__usaddress.a42a8f0c",
+      "dataset": "SWE-bench/SWE-smith-py",
+      "dataset_revision": "77cab9055d42ab4a5c25c89a8f937096db13558e"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.jarro2783_1776_cxxopts.370de72b",
+      "upstream_task_rows": 8,
+      "repository_environment": "swesmith/jarro2783__cxxopts.370de72b",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.kokkos_1776_kokkos.21a05468",
+      "upstream_task_rows": 8,
+      "repository_environment": "swesmith/kokkos__kokkos.21a05468",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.mibk_1776_dupl.1bf052b6",
+      "upstream_task_rows": 8,
+      "repository_environment": "swesmith/mibk__dupl.1bf052b6",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.microsoft_1776_verona.bfca50d1",
+      "upstream_task_rows": 8,
+      "repository_environment": "swesmith/microsoft__verona.bfca50d1",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.ceres-solver_1776_ceres-solver.a2bab5af",
+      "upstream_task_rows": 7,
+      "repository_environment": "swesmith/ceres-solver__ceres-solver.a2bab5af",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.ggerganov_1776_ggwave.3b877d07",
+      "upstream_task_rows": 7,
+      "repository_environment": "swesmith/ggerganov__ggwave.3b877d07",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.marmelab_1776_react-admin.823caa0b",
+      "upstream_task_rows": 7,
+      "repository_environment": "swesmith/marmelab__react-admin.823caa0b",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.peterbourgon_1776_diskv.25663860",
+      "upstream_task_rows": 7,
+      "repository_environment": "swesmith/peterbourgon__diskv.25663860",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.apache_1776_shardingsphere.ecf76ffc",
+      "upstream_task_rows": 6,
+      "repository_environment": "swesmith/apache__shardingsphere.ecf76ffc",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.joho_1776_godotenv.3a7a1902",
+      "upstream_task_rows": 6,
+      "repository_environment": "swesmith/joho__godotenv.3a7a1902",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.journeyapps_1776_zxing-android-embedded.d09b7c76",
+      "upstream_task_rows": 6,
+      "repository_environment": "swesmith/journeyapps__zxing-android-embedded.d09b7c76",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.muesli_1776_cache2go.518229cd",
+      "upstream_task_rows": 6,
+      "repository_environment": "swesmith/muesli__cache2go.518229cd",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.zrax_1776_pycdc.a05ddec0",
+      "upstream_task_rows": 6,
+      "repository_environment": "swesmith/zrax__pycdc.a05ddec0",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.doxygen_1776_doxygen.cbd8c4bc",
+      "upstream_task_rows": 5,
+      "repository_environment": "swesmith/doxygen__doxygen.cbd8c4bc",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.psampaz_1776_go-mod-outdated.bb79367d",
+      "upstream_task_rows": 5,
+      "repository_environment": "swesmith/psampaz__go-mod-outdated.bb79367d",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.apache_1776_cassandra.7fe688b0",
+      "upstream_task_rows": 4,
+      "repository_environment": "swesmith/apache__cassandra.7fe688b0",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.cuberite_1776_cuberite.7fd3fa5c",
+      "upstream_task_rows": 4,
+      "repository_environment": "swesmith/cuberite__cuberite.7fd3fa5c",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.effect-ts_1776_effect.5df4da10",
+      "upstream_task_rows": 4,
+      "repository_environment": "swesmith/Effect-TS__effect.5df4da10",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.google_1776_bloaty.a277a440",
+      "upstream_task_rows": 4,
+      "repository_environment": "swesmith/google__bloaty.a277a440",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.keycloak_1776_keycloak.051fcab5",
+      "upstream_task_rows": 4,
+      "repository_environment": "swesmith/keycloak__keycloak.051fcab5",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.leejet_1776_stable-diffusion.cpp.f0f641a1",
+      "upstream_task_rows": 4,
+      "repository_environment": "swesmith/leejet__stable-diffusion.cpp.f0f641a1",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.luanti-org_1776_luanti.fc363085",
+      "upstream_task_rows": 4,
+      "repository_environment": "swesmith/luanti-org__luanti.fc363085",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.descentdevelopers_1776_descent3.156cba8a",
+      "upstream_task_rows": 3,
+      "repository_environment": "swesmith/DescentDevelopers__Descent3.156cba8a",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.leekchan_1776_accounting.2e091173",
+      "upstream_task_rows": 3,
+      "repository_environment": "swesmith/leekchan__accounting.2e091173",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.mholt_1776_papaparse.b10b87ef",
+      "upstream_task_rows": 3,
+      "repository_environment": "swesmith/mholt__PapaParse.b10b87ef",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.ajayyy_1776_sponsorblock.dfddffbc",
+      "upstream_task_rows": 2,
+      "repository_environment": "swesmith/ajayyy__SponsorBlock.dfddffbc",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.apache_1776_incubator-kie-drools.fe6decc7",
+      "upstream_task_rows": 2,
+      "repository_environment": "swesmith/apache__incubator-kie-drools.fe6decc7",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.k2-fsa_1776_sherpa-onnx.cb0828a0",
+      "upstream_task_rows": 2,
+      "repository_environment": "swesmith/k2-fsa__sherpa-onnx.cb0828a0",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.khronosgroup_1776_vulkan-hpp.39609625",
+      "upstream_task_rows": 2,
+      "repository_environment": "swesmith/KhronosGroup__Vulkan-Hpp.39609625",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.marko-js_1776_marko.24b9402c",
+      "upstream_task_rows": 2,
+      "repository_environment": "swesmith/marko-js__marko.24b9402c",
+      "dataset": "SWE-bench/SWE-smith-js",
+      "dataset_revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.openthread_1776_openthread.b81da07a",
+      "upstream_task_rows": 2,
+      "repository_environment": "swesmith/openthread__openthread.b81da07a",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.orf_1776_gping.26eb5b91",
+      "upstream_task_rows": 2,
+      "repository_environment": "swesmith/orf__gping.26eb5b91",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.presmihaylov_1776_todocheck.f0fae9b5",
+      "upstream_task_rows": 2,
+      "repository_environment": "swesmith/presmihaylov__todocheck.f0fae9b5",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.qustavo_1776_dotsql.5d06b890",
+      "upstream_task_rows": 2,
+      "repository_environment": "swesmith/qustavo__dotsql.5d06b890",
+      "dataset": "SWE-bench/SWE-smith-go",
+      "dataset_revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.apache_1776_nifi.ab050e0c",
+      "upstream_task_rows": 1,
+      "repository_environment": "swesmith/apache__nifi.ab050e0c",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.doctrine_1776_dbal.acb68b38",
+      "upstream_task_rows": 1,
+      "repository_environment": "swesmith/doctrine__dbal.acb68b38",
+      "dataset": "SWE-bench/SWE-smith-php",
+      "dataset_revision": "6b5da17f1e3543fb2ed5d151a6f4972a457a8c36"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.osmandapp_1776_osmand.14a13bbc",
+      "upstream_task_rows": 1,
+      "repository_environment": "swesmith/osmandapp__OsmAnd.14a13bbc",
+      "dataset": "SWE-bench/SWE-smith-java",
+      "dataset_revision": "1172df9919a8232e066562dfdb6e0193156de0c4"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.scylladb_1776_seastar.7e457cf7",
+      "upstream_task_rows": 1,
+      "repository_environment": "swesmith/scylladb__seastar.7e457cf7",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.seanmonstar_1776_warp.3449d3d9",
+      "upstream_task_rows": 1,
+      "repository_environment": "swesmith/seanmonstar__warp.3449d3d9",
+      "dataset": "SWE-bench/SWE-smith-rs",
+      "dataset_revision": "1ae20d63edd611309d86133466247e3a9723a27d"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.supercollider_1776_supercollider.438bf480",
+      "upstream_task_rows": 1,
+      "repository_environment": "swesmith/supercollider__supercollider.438bf480",
+      "dataset": "SWE-bench/SWE-smith-cpp",
+      "dataset_revision": "b1554a5f12603c825f9b48b361b9b97032347e48"
+    },
+    {
+      "source": "swebench/swesmith.x86_64.voideditor_1776_void.17e7a5b1",
+      "upstream_task_rows": 1,
+      "repository_environment": "swesmith/voideditor__void.17e7a5b1",
+      "dataset": "SWE-bench/SWE-smith-ts",
+      "dataset_revision": "c243d86f112d01b8507d311af912668aa1d74449"
+    }
+  ]
+}

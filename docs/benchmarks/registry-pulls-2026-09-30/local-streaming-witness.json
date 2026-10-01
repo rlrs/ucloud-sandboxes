@@ -1,0 +1,43 @@
+{
+  "compressed_bytes": 16782541,
+  "uncompressed_tar_bytes": 16783360,
+  "payload_bytes": 16777216,
+  "order": "ABBA",
+  "records": [
+    {
+      "arm": "baseline",
+      "seconds": 0.08289751410484314,
+      "quarantine_write_bytes": {
+        ".blob": 16782541,
+        ".tar": 16783360
+      },
+      "payload_sha256": "0a2e66958b2644bb377f8e27075cac17d5076f8035b92f1a554e8d0efef89226"
+    },
+    {
+      "arm": "candidate",
+      "seconds": 0.07729924097657204,
+      "quarantine_write_bytes": {
+        ".tar": 16783360
+      },
+      "payload_sha256": "0a2e66958b2644bb377f8e27075cac17d5076f8035b92f1a554e8d0efef89226"
+    },
+    {
+      "arm": "candidate",
+      "seconds": 0.07626321818679571,
+      "quarantine_write_bytes": {
+        ".tar": 16783360
+      },
+      "payload_sha256": "0a2e66958b2644bb377f8e27075cac17d5076f8035b92f1a554e8d0efef89226"
+    },
+    {
+      "arm": "baseline",
+      "seconds": 0.09442380489781499,
+      "quarantine_write_bytes": {
+        ".blob": 16782541,
+        ".tar": 16783360
+      },
+      "payload_sha256": "0a2e66958b2644bb377f8e27075cac17d5076f8035b92f1a554e8d0efef89226"
+    }
+  ],
+  "scope": "Synthetic memory registry, one16MiB incompressible payload, local filesystem. Logical quarantine writes measured; no production/network throughput inference."
+}

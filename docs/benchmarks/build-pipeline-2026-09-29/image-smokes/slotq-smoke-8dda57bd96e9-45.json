@@ -1,0 +1,18 @@
+{
+  "sandbox_id": "slotq-smoke-8dda57bd96e9-45",
+  "image_id": "slotq-b-cold-71e13d91-045",
+  "recipe": "python-agent",
+  "variant": "app-change-20",
+  "started_at": "2026-09-29T21:17:42.461407+00:00",
+  "create_seconds": 75.41449748900777,
+  "exit_code": 0,
+  "output": {
+    "grouped_rows": 11,
+    "revision": 20,
+    "score": 703028,
+    "source_modules": 1500
+  },
+  "verified": true,
+  "deleted": true,
+  "finished_at": "2026-09-29T21:19:18.332876+00:00"
+}

@@ -1,0 +1,14 @@
+{
+  "passed": true,
+  "configuration_replacements": [
+    {
+      "max_finishing_builds": 2,
+      "mode": "0o644"
+    },
+    {
+      "max_finishing_builds": 0,
+      "mode": "0o644"
+    }
+  ],
+  "note": "Uses final controller replace_config and activation copy2 behavior; parser subprocess and ownership syscall mocked; actual production config confirmed0644 root:root with ucloud service user."
+}

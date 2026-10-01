@@ -1,0 +1,264 @@
+{
+  "since": "2026-09-29T20:55:00Z",
+  "until": "2026-09-29T21:05:00Z",
+  "units": [
+    "ucloud-sandbox-registry-prune.service",
+    "ucloud-sandbox-registry-gc.service",
+    "ucloud-sandbox-registry-pressure.service"
+  ],
+  "journal_rows": {
+    "ucloud-sandbox-registry-prune.service": 10948,
+    "ucloud-sandbox-registry-gc.service": 0,
+    "ucloud-sandbox-registry-pressure.service": 9
+  },
+  "events": [
+    {
+      "at": "2026-09-29T20:56:00.885481+00:00",
+      "unit": "ucloud-sandbox-registry-pressure.service",
+      "event": "start"
+    },
+    {
+      "at": "2026-09-29T20:56:01.306941+00:00",
+      "unit": "ucloud-sandbox-registry-pressure.service",
+      "event": "finish"
+    },
+    {
+      "at": "2026-09-29T20:57:05.883075+00:00",
+      "unit": "ucloud-sandbox-registry-pressure.service",
+      "event": "start"
+    },
+    {
+      "at": "2026-09-29T20:57:06.261239+00:00",
+      "unit": "ucloud-sandbox-registry-pressure.service",
+      "event": "finish"
+    },
+    {
+      "at": "2026-09-29T20:58:08.135608+00:00",
+      "unit": "ucloud-sandbox-registry-pressure.service",
+      "event": "start"
+    },
+    {
+      "at": "2026-09-29T20:58:08.520406+00:00",
+      "unit": "ucloud-sandbox-registry-pressure.service",
+      "event": "finish"
+    },
+    {
+      "at": "2026-09-29T20:59:10.883200+00:00",
+      "unit": "ucloud-sandbox-registry-pressure.service",
+      "event": "start"
+    },
+    {
+      "at": "2026-09-29T20:59:11.319085+00:00",
+      "unit": "ucloud-sandbox-registry-pressure.service",
+      "event": "finish"
+    },
+    {
+      "at": "2026-09-29T21:00:15.418701+00:00",
+      "unit": "ucloud-sandbox-registry-pressure.service",
+      "event": "start"
+    },
+    {
+      "at": "2026-09-29T21:00:15.865585+00:00",
+      "unit": "ucloud-sandbox-registry-pressure.service",
+      "event": "finish"
+    },
+    {
+      "at": "2026-09-29T21:01:19.883043+00:00",
+      "unit": "ucloud-sandbox-registry-pressure.service",
+      "event": "start"
+    },
+    {
+      "at": "2026-09-29T21:01:20.272419+00:00",
+      "unit": "ucloud-sandbox-registry-pressure.service",
+      "event": "finish"
+    },
+    {
+      "at": "2026-09-29T21:02:20.883250+00:00",
+      "unit": "ucloud-sandbox-registry-pressure.service",
+      "event": "start"
+    },
+    {
+      "at": "2026-09-29T21:02:21.320199+00:00",
+      "unit": "ucloud-sandbox-registry-pressure.service",
+      "event": "finish"
+    },
+    {
+      "at": "2026-09-29T21:03:23.005101+00:00",
+      "unit": "ucloud-sandbox-registry-pressure.service",
+      "event": "start"
+    },
+    {
+      "at": "2026-09-29T21:03:23.396609+00:00",
+      "unit": "ucloud-sandbox-registry-pressure.service",
+      "event": "finish"
+    },
+    {
+      "at": "2026-09-29T21:04:00.882895+00:00",
+      "unit": "ucloud-sandbox-registry-prune.service",
+      "event": "start"
+    },
+    {
+      "at": "2026-09-29T21:04:22.680769+00:00",
+      "unit": "ucloud-sandbox-registry-prune.service",
+      "event": "finish"
+    },
+    {
+      "at": "2026-09-29T21:04:22.749558+00:00",
+      "unit": "ucloud-sandbox-registry-prune.service",
+      "event": "python_finalization_error"
+    },
+    {
+      "at": "2026-09-29T21:04:25.119530+00:00",
+      "unit": "ucloud-sandbox-registry-pressure.service",
+      "event": "start"
+    },
+    {
+      "at": "2026-09-29T21:04:25.496199+00:00",
+      "unit": "ucloud-sandbox-registry-pressure.service",
+      "event": "finish"
+    }
+  ],
+  "reports": [
+    {
+      "at": "2026-09-29T20:56:01.079619+00:00",
+      "unit": "ucloud-sandbox-registry-pressure.service",
+      "action": "none",
+      "gc_runs": 0,
+      "registry_disk_before": {
+        "used_bytes": 157814632448,
+        "available_bytes": 844217331712,
+        "used_percent": 15.75,
+        "state": "ok"
+      }
+    },
+    {
+      "at": "2026-09-29T20:57:06.058724+00:00",
+      "unit": "ucloud-sandbox-registry-pressure.service",
+      "action": "none",
+      "gc_runs": 0,
+      "registry_disk_before": {
+        "used_bytes": 157871149056,
+        "available_bytes": 844160815104,
+        "used_percent": 15.76,
+        "state": "ok"
+      }
+    },
+    {
+      "at": "2026-09-29T20:58:08.309066+00:00",
+      "unit": "ucloud-sandbox-registry-pressure.service",
+      "action": "none",
+      "gc_runs": 0,
+      "registry_disk_before": {
+        "used_bytes": 157871149056,
+        "available_bytes": 844160815104,
+        "used_percent": 15.76,
+        "state": "ok"
+      }
+    },
+    {
+      "at": "2026-09-29T20:59:11.077852+00:00",
+      "unit": "ucloud-sandbox-registry-pressure.service",
+      "action": "none",
+      "gc_runs": 0,
+      "registry_disk_before": {
+        "used_bytes": 160274427904,
+        "available_bytes": 841757536256,
+        "used_percent": 15.99,
+        "state": "ok"
+      }
+    },
+    {
+      "at": "2026-09-29T21:00:15.630424+00:00",
+      "unit": "ucloud-sandbox-registry-pressure.service",
+      "action": "none",
+      "gc_runs": 0,
+      "registry_disk_before": {
+        "used_bytes": 163445694464,
+        "available_bytes": 838586269696,
+        "used_percent": 16.31,
+        "state": "ok"
+      }
+    },
+    {
+      "at": "2026-09-29T21:01:20.059164+00:00",
+      "unit": "ucloud-sandbox-registry-pressure.service",
+      "action": "none",
+      "gc_runs": 0,
+      "registry_disk_before": {
+        "used_bytes": 165158666240,
+        "available_bytes": 836873297920,
+        "used_percent": 16.48,
+        "state": "ok"
+      }
+    },
+    {
+      "at": "2026-09-29T21:02:21.077654+00:00",
+      "unit": "ucloud-sandbox-registry-pressure.service",
+      "action": "none",
+      "gc_runs": 0,
+      "registry_disk_before": {
+        "used_bytes": 167049617408,
+        "available_bytes": 834982346752,
+        "used_percent": 16.67,
+        "state": "ok"
+      }
+    },
+    {
+      "at": "2026-09-29T21:03:23.184981+00:00",
+      "unit": "ucloud-sandbox-registry-pressure.service",
+      "action": "none",
+      "gc_runs": 0,
+      "registry_disk_before": {
+        "used_bytes": 167206686720,
+        "available_bytes": 834825277440,
+        "used_percent": 16.69,
+        "state": "ok"
+      }
+    },
+    {
+      "at": "2026-09-29T21:04:22.749558+00:00",
+      "unit": "ucloud-sandbox-registry-prune.service",
+      "deleted_manifest_count": 0,
+      "active_lease_count": 8,
+      "build_cache": {
+        "inventoried_tags": 208,
+        "retained_entries": 208,
+        "retained_bytes": 6507898138,
+        "deleted_manifests": 0,
+        "max_entries": 512,
+        "max_bytes": 34359738368
+      },
+      "maintenance_state": {
+        "last_gc_at": "2026-09-29T18:20:41.968827+00:00",
+        "last_gc_deleted_bytes": 2277455,
+        "deleted_since_gc": 0
+      }
+    },
+    {
+      "at": "2026-09-29T21:04:25.287472+00:00",
+      "unit": "ucloud-sandbox-registry-pressure.service",
+      "action": "none",
+      "gc_runs": 0,
+      "registry_disk_before": {
+        "used_bytes": 167206686720,
+        "available_bytes": 834825277440,
+        "used_percent": 16.69,
+        "state": "ok"
+      }
+    }
+  ],
+  "incomplete_structured_reports": [],
+  "prune_service_status_observed_at": "2026-09-29T21:09:38.666408+00:00",
+  "prune_service_status": {
+    "ActiveState": "inactive",
+    "SubState": "dead",
+    "MainPID": "0",
+    "ControlPID": "0",
+    "Result": "success",
+    "ExecMainStartTimestamp": "Tue 2026-09-29 21:04:00 UTC",
+    "ExecMainExitTimestamp": "Tue 2026-09-29 21:04:22 UTC",
+    "ExecMainCode": "1",
+    "ExecMainStatus": "0",
+    "TasksCurrent": "[not set]"
+  }
+}

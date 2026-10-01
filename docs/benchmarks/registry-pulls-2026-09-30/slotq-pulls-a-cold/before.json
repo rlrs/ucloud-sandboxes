@@ -1,0 +1,57 @@
+{
+  "at": "2026-09-29T22:24:26.809426+00:00",
+  "fleet": [
+    {
+      "job_id": "168016286",
+      "node_url": "http://10.42.0.3:8090",
+      "active_image_builds": 0,
+      "active_sandboxes": 0,
+      "physical_disk_free_mb": 217304,
+      "capabilities": [
+        "image-cache",
+        "image-build",
+        "request-body-keepalive-v1"
+      ],
+      "updated_at": "2026-09-29 22:24:26.748957+00:00"
+    },
+    {
+      "job_id": "168016287",
+      "node_url": "http://10.42.0.4:8090",
+      "active_image_builds": 0,
+      "active_sandboxes": 0,
+      "physical_disk_free_mb": 217323,
+      "capabilities": [
+        "image-cache",
+        "image-build",
+        "request-body-keepalive-v1"
+      ],
+      "updated_at": "2026-09-29 22:24:24.222994+00:00"
+    },
+    {
+      "job_id": "168016314",
+      "node_url": "http://10.42.0.5:8090",
+      "active_image_builds": 0,
+      "active_sandboxes": 0,
+      "physical_disk_free_mb": 217427,
+      "capabilities": [
+        "image-cache",
+        "image-build",
+        "request-body-keepalive-v1"
+      ],
+      "updated_at": "2026-09-29 22:24:13.916267+00:00"
+    },
+    {
+      "job_id": "168016315",
+      "node_url": "http://10.42.0.6:8090",
+      "active_image_builds": 0,
+      "active_sandboxes": 0,
+      "physical_disk_free_mb": 217311,
+      "capabilities": [
+        "image-cache",
+        "image-build",
+        "request-body-keepalive-v1"
+      ],
+      "updated_at": "2026-09-29 22:24:11.802897+00:00"
+    }
+  ]
+}

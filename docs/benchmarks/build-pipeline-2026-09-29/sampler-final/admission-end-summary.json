@@ -1,0 +1,38 @@
+[
+  {
+    "job_id": "168008406",
+    "type": "end",
+    "at": "2026-09-29T21:23:19.479302+00:00",
+    "samples": 560,
+    "errors": 0,
+    "violating_samples": 0,
+    "interrupted": true
+  },
+  {
+    "job_id": "168008407",
+    "type": "end",
+    "at": "2026-09-29T21:23:19.461530+00:00",
+    "samples": 560,
+    "errors": 0,
+    "violating_samples": 0,
+    "interrupted": true
+  },
+  {
+    "job_id": "168008410",
+    "type": "end",
+    "at": "2026-09-29T21:23:19.465766+00:00",
+    "samples": 560,
+    "errors": 0,
+    "violating_samples": 0,
+    "interrupted": true
+  },
+  {
+    "job_id": "168008411",
+    "type": "end",
+    "at": "2026-09-29T21:23:19.416001+00:00",
+    "samples": 560,
+    "errors": 0,
+    "violating_samples": 0,
+    "interrupted": true
+  }
+]

@@ -1,0 +1,27 @@
+{
+  "complete": true,
+  "image_id": "registry-pull-canary-d81f2c41758a-045",
+  "repository": "ucloud-managed/registry-pull-canary-d81f2c41758a-045-fad689496a17",
+  "manifest_digest": "sha256:8ecf5bcd191213f50073328ef09c171377f5b224e11fab6c4d18f6fed8368fed",
+  "original_manifest": "sha256:85b141c8f4642fe36d4cabe46e18a73494ce9c9b5224412b2ecc7c26d493875d",
+  "original_config": "sha256:e3eabd6dfdb2c0bbc2c8c6119040d630e60a01cd5d4017b2cbec02ddd4e47777",
+  "published_config": "sha256:9439a68de1a4b5155ee2fa18c88eae38272b3e6f65cffd45a228e64f5a2bf525",
+  "source_rootfs_equal": true,
+  "compressed_descriptors_equal": true,
+  "layer_count": 15,
+  "runtime_config_equal_except_owned_name": true,
+  "normalized_label": {
+    "key": "ucloud-sandboxes.image-id",
+    "original": "slotq-b-cold-71e13d91-045",
+    "published": "registry-pull-canary-d81f2c41758a-045"
+  },
+  "selected_groups": [
+    3,
+    4,
+    5
+  ],
+  "registry_mutations": 0,
+  "source_receipt_sha256": "89400c2847d49be68d5e2721382a8ef230b627cacd2e45a5fd34aaba8e505a7f",
+  "source_launch_sha256": "4d946f2d1e89763651584c43d2d9f70398b4155138eac5cc2faf9f2ff0eb0703",
+  "helper_sha256": "ec1f2dd97907eaa05ea8b71d9940e84345e9c526b29273347b77d54ecc05f22a"
+}

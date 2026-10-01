@@ -1,0 +1,22 @@
+[
+  {
+    "job_id": "168008406",
+    "complete": true,
+    "receipt": "/work/ucloud-sandboxes/builder-slot-qualification-20260929/upgrades-r2/upgrade-168008406.json"
+  },
+  {
+    "job_id": "168008407",
+    "complete": true,
+    "receipt": "/work/ucloud-sandboxes/builder-slot-qualification-20260929/upgrades-r2/upgrade-168008407.json"
+  },
+  {
+    "job_id": "168008410",
+    "complete": true,
+    "receipt": "/work/ucloud-sandboxes/builder-slot-qualification-20260929/upgrades-r2/upgrade-168008410.json"
+  },
+  {
+    "job_id": "168008411",
+    "complete": true,
+    "receipt": "/work/ucloud-sandboxes/builder-slot-qualification-20260929/upgrades-r2/upgrade-168008411.json"
+  }
+]

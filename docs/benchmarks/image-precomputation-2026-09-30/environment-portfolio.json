@@ -1,0 +1,706 @@
+{
+  "schema": 1,
+  "scope_source": "User-supplied training and evaluation environment list, 2026-09-30 Europe/Zurich",
+  "research_revision": "c7ea0d7fe3379f0e6ffb0a68c82c80c184601f92",
+  "integration_revision": "7856cc18faceae31aa533605ea812d81b92a85ea",
+  "auxiliary_framework_revision": "555a17a62ee36a2ffe96772b8191402e44f30c43",
+  "auxiliary_framework_qualification": "Local framework checkout used only to trace Harbor grading behavior; not asserted to be the training deployment revision.",
+  "training_agent_variants": [
+    "Bash",
+    "OpenCode",
+    "Pi"
+  ],
+  "environments": [
+    {
+      "name": "BIRD SQL",
+      "role": "training",
+      "family": "BIRD SQL",
+      "priority": "deferred",
+      "evidence": "deferred_by_user",
+      "selected_task_ids_known": false,
+      "readiness": "not_qualified_by_this_study",
+      "judge": null
+    },
+    {
+      "name": "MultiSWE",
+      "role": "training",
+      "family": "MultiSWE",
+      "priority": "active",
+      "evidence": "upstream_default_pool_analyzed_exact_selection_unknown",
+      "selected_task_ids_known": false,
+      "readiness": "not_qualified_by_this_study",
+      "judge": null
+    },
+    {
+      "name": "OpenSWE",
+      "role": "training",
+      "family": "OpenSWE",
+      "priority": "active",
+      "evidence": "upstream_default_pool_analyzed_exact_selection_unknown",
+      "selected_task_ids_known": false,
+      "readiness": "not_qualified_by_this_study",
+      "judge": null
+    },
+    {
+      "name": "R2E-Gym",
+      "role": "training",
+      "family": "R2E-Gym",
+      "priority": "active",
+      "evidence": "upstream_default_pool_analyzed_exact_selection_unknown",
+      "selected_task_ids_known": false,
+      "readiness": "not_qualified_by_this_study",
+      "judge": null
+    },
+    {
+      "name": "ScaleSWE",
+      "role": "training",
+      "family": "ScaleSWE",
+      "priority": "active",
+      "evidence": "upstream_default_pool_analyzed_exact_selection_unknown",
+      "selected_task_ids_known": false,
+      "readiness": "not_qualified_by_this_study",
+      "judge": null
+    },
+    {
+      "name": "SWE-Lego",
+      "role": "training",
+      "family": "SWE-Lego",
+      "priority": "active",
+      "evidence": "upstream_default_pool_analyzed_exact_selection_unknown",
+      "selected_task_ids_known": false,
+      "readiness": "not_qualified_by_this_study",
+      "judge": null
+    },
+    {
+      "name": "SWE-rebench v2",
+      "role": "training",
+      "family": "SWE-rebench v2",
+      "priority": "active",
+      "evidence": "upstream_default_pool_analyzed_exact_selection_unknown",
+      "selected_task_ids_known": false,
+      "readiness": "not_qualified_by_this_study",
+      "judge": null
+    },
+    {
+      "name": "SWE-smith",
+      "role": "training",
+      "family": "SWE-smith",
+      "priority": "active",
+      "evidence": "upstream_default_pool_analyzed_exact_selection_unknown",
+      "selected_task_ids_known": false,
+      "readiness": "not_qualified_by_this_study",
+      "judge": null
+    },
+    {
+      "name": "Terminal-Lego",
+      "role": "training",
+      "family": "Terminal-Lego",
+      "priority": "active",
+      "evidence": "upstream_default_pool_analyzed_exact_selection_unknown",
+      "selected_task_ids_known": false,
+      "readiness": "not_qualified_by_this_study",
+      "judge": null
+    },
+    {
+      "name": "TMax",
+      "role": "training",
+      "family": "TMax",
+      "priority": "active",
+      "evidence": "upstream_default_pool_analyzed_exact_selection_unknown",
+      "selected_task_ids_known": false,
+      "readiness": "not_qualified_by_this_study",
+      "judge": null
+    },
+    {
+      "name": "NeMo Calendar",
+      "role": "training",
+      "family": "NeMo Calendar",
+      "priority": "deferred",
+      "evidence": "deferred_by_user",
+      "selected_task_ids_known": false,
+      "readiness": "not_qualified_by_this_study",
+      "judge": null
+    },
+    {
+      "name": "NeMo Instruction",
+      "role": "training",
+      "family": "NeMo Instruction",
+      "priority": "deferred",
+      "evidence": "deferred_by_user",
+      "selected_task_ids_known": false,
+      "readiness": "not_qualified_by_this_study",
+      "judge": null
+    },
+    {
+      "name": "NeMo Pivot",
+      "role": "training",
+      "family": "NeMo Pivot",
+      "priority": "deferred",
+      "evidence": "deferred_by_user",
+      "selected_task_ids_known": false,
+      "readiness": "not_qualified_by_this_study",
+      "judge": null
+    },
+    {
+      "name": "NeMo Workplace",
+      "role": "training",
+      "family": "NeMo Workplace",
+      "priority": "deferred",
+      "evidence": "deferred_by_user",
+      "selected_task_ids_known": false,
+      "readiness": "not_qualified_by_this_study",
+      "judge": null
+    },
+    {
+      "name": "BIRD dev SQL",
+      "role": "evaluation",
+      "family": "BIRD SQL",
+      "priority": "deferred",
+      "evidence": "deferred_by_user",
+      "selected_task_ids_known": false,
+      "readiness": "not_qualified_by_this_study",
+      "judge": null
+    },
+    {
+      "name": "BrowseComp-Plus",
+      "role": "evaluation",
+      "family": "BrowseComp-Plus",
+      "priority": "active",
+      "evidence": "pinned_shared_index_and_tool_server_code_traced",
+      "selected_task_ids_known": false,
+      "readiness": "not_qualified_by_this_study",
+      "judge": "GLM"
+    },
+    {
+      "name": "OpenThoughts TBLite",
+      "role": "evaluation",
+      "family": "OpenThoughts TBLite",
+      "priority": "active",
+      "evidence": "adapter_traced_pool_not_enumerated",
+      "selected_task_ids_known": false,
+      "readiness": "not_qualified_by_this_study",
+      "judge": null
+    },
+    {
+      "name": "R2E-Gym heldout",
+      "role": "evaluation",
+      "family": "R2E-Gym",
+      "priority": "active",
+      "evidence": "upstream_default_pool_analyzed_exact_selection_unknown",
+      "selected_task_ids_known": false,
+      "readiness": "not_qualified_by_this_study",
+      "judge": null
+    },
+    {
+      "name": "ScaleSWE heldout",
+      "role": "evaluation",
+      "family": "ScaleSWE",
+      "priority": "active",
+      "evidence": "upstream_default_pool_analyzed_exact_selection_unknown",
+      "selected_task_ids_known": false,
+      "readiness": "not_qualified_by_this_study",
+      "judge": null
+    },
+    {
+      "name": "Senior SWE-Bench",
+      "role": "evaluation",
+      "family": "Senior SWE-Bench",
+      "priority": "active",
+      "evidence": "all_50_pinned_recipes_and_verifier_installers_analyzed",
+      "selected_task_ids_known": false,
+      "readiness": "not_qualified_by_this_study",
+      "judge": "GLM 5.3"
+    },
+    {
+      "name": "SWE-bench Multilingual",
+      "role": "evaluation",
+      "family": "SWE-bench Multilingual",
+      "priority": "active",
+      "evidence": "adapter_traced_pool_not_enumerated",
+      "selected_task_ids_known": false,
+      "readiness": "not_qualified_by_this_study",
+      "judge": null
+    },
+    {
+      "name": "SWE-bench Verified",
+      "role": "evaluation",
+      "family": "SWE-bench Verified",
+      "priority": "active",
+      "evidence": "adapter_traced_pool_not_enumerated",
+      "selected_task_ids_known": false,
+      "readiness": "not_qualified_by_this_study",
+      "judge": null
+    },
+    {
+      "name": "SWE-Lego heldout",
+      "role": "evaluation",
+      "family": "SWE-Lego",
+      "priority": "active",
+      "evidence": "upstream_default_pool_analyzed_exact_selection_unknown",
+      "selected_task_ids_known": false,
+      "readiness": "not_qualified_by_this_study",
+      "judge": null
+    },
+    {
+      "name": "Terminal-Bench 2",
+      "role": "evaluation",
+      "family": "Terminal-Bench 2",
+      "priority": "active",
+      "evidence": "adapter_traced_pool_not_enumerated",
+      "selected_task_ids_known": false,
+      "readiness": "not_qualified_by_this_study",
+      "judge": null
+    },
+    {
+      "name": "NeMo Calendar heldout",
+      "role": "evaluation",
+      "family": "NeMo Calendar",
+      "priority": "deferred",
+      "evidence": "deferred_by_user",
+      "selected_task_ids_known": false,
+      "readiness": "not_qualified_by_this_study",
+      "judge": null
+    },
+    {
+      "name": "NeMo Instruction heldout",
+      "role": "evaluation",
+      "family": "NeMo Instruction",
+      "priority": "deferred",
+      "evidence": "deferred_by_user",
+      "selected_task_ids_known": false,
+      "readiness": "not_qualified_by_this_study",
+      "judge": null
+    },
+    {
+      "name": "NeMo Pivot heldout",
+      "role": "evaluation",
+      "family": "NeMo Pivot",
+      "priority": "deferred",
+      "evidence": "deferred_by_user",
+      "selected_task_ids_known": false,
+      "readiness": "not_qualified_by_this_study",
+      "judge": null
+    },
+    {
+      "name": "NeMo Workplace heldout",
+      "role": "evaluation",
+      "family": "NeMo Workplace",
+      "priority": "deferred",
+      "evidence": "deferred_by_user",
+      "selected_task_ids_known": false,
+      "readiness": "not_qualified_by_this_study",
+      "judge": null
+    }
+  ],
+  "senior_swe_bench": {
+    "revision": "e30b0e19fdbc4b099e752c6d5324f5b250aee3dc",
+    "tasks": 50,
+    "first_from_counts": {
+      "ubuntu:22.04": 35,
+      "hexpm/elixir:1.19.5-erlang-28.4-debian-bookworm-20260518-slim": 3,
+      "hexpm/elixir:1.19.5-erlang-28.4-debian-bookworm-20260316-slim": 1,
+      "hexpm/elixir:1.19.1-erlang-28.1.1-debian-bookworm-20251020-slim": 1,
+      "hexpm/elixir:1.19.5-erlang-28.4-debian-bookworm-20260421-slim": 1,
+      "hexpm/elixir:1.19.4-erlang-28.3-debian-bookworm-20260518": 1,
+      "python:3.12-slim-bookworm": 1,
+      "python:3.12-slim": 1,
+      "ghcr.io/immich-app/postgres:14-vectorchord0.4.3": 1,
+      "node:24.15.0-bookworm-slim": 1,
+      "hexpm/elixir:1.19.4-erlang-27.3.4.6-ubuntu-jammy-20260509": 1,
+      "hexpm/elixir:1.19.4-erlang-27.3.4.6-debian-bookworm-20260518-slim": 2,
+      "rust:1.91-bookworm": 1
+    },
+    "repo_name_counts": {
+      "better-auth": 4,
+      "electric": 6,
+      "firezone": 2,
+      "gitea": 6,
+      "harbor": 4,
+      "immich": 3,
+      "paperless-ngx": 4,
+      "plausible": 3,
+      "posthog": 8,
+      "prefect": 4,
+      "teleport": 2,
+      "turborepo": 4
+    },
+    "tasks_with_pip_install_in_verifier": 50,
+    "records": [
+      {
+        "task": "better-auth-fix-api-key-run",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "better-auth",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "better-auth-fix-api-return-response",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "better-auth",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "better-auth-fix-oauth-provider-return",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "better-auth",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "better-auth-fix-resolve-dynamic-baseurl",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "better-auth",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "electric-feat-add-variadic-function",
+        "first_from": "hexpm/elixir:1.19.5-erlang-28.4-debian-bookworm-20260518-slim",
+        "repo_name": "electric",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "electric-feat-sync-service-start",
+        "first_from": "hexpm/elixir:1.19.5-erlang-28.4-debian-bookworm-20260316-slim",
+        "repo_name": "electric",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "electric-fix-classify-admission-control",
+        "first_from": "hexpm/elixir:1.19.5-erlang-28.4-debian-bookworm-20260518-slim",
+        "repo_name": "electric",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "electric-fix-elixir-client-cache",
+        "first_from": "hexpm/elixir:1.19.1-erlang-28.1.1-debian-bookworm-20251020-slim",
+        "repo_name": "electric",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "electric-fix-resolve-pending-shapes",
+        "first_from": "hexpm/elixir:1.19.5-erlang-28.4-debian-bookworm-20260518-slim",
+        "repo_name": "electric",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "electric-perf-array-filter-eval",
+        "first_from": "hexpm/elixir:1.19.5-erlang-28.4-debian-bookworm-20260421-slim",
+        "repo_name": "electric",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "firezone-feat-portal-add-recent",
+        "first_from": "hexpm/elixir:1.19.4-erlang-28.3-debian-bookworm-20260518",
+        "repo_name": "firezone",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "firezone-fix-connlib-align-device",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "firezone",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "gitea-add-project-column-picker",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "gitea",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "gitea-feat-fast-forward-only",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "gitea",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "gitea-fix-codeql-code-scanning",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "gitea",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "gitea-fix-diff-highlight-overlap",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "gitea",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "gitea-fix-force-push-timeline",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "gitea",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "gitea-refactor-auth-middleware",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "gitea",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "harbor-add-agent-file-retention",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "harbor",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "harbor-add-multi-step-tasks",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "harbor",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "harbor-add-windows-tasks-support",
+        "first_from": "python:3.12-slim-bookworm",
+        "repo_name": "harbor",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "harbor-refactor-optional-sandbox-deps",
+        "first_from": "python:3.12-slim",
+        "repo_name": "harbor",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "immich-feat-recently-added-assets",
+        "first_from": "ghcr.io/immich-app/postgres:14-vectorchord0.4.3",
+        "repo_name": "immich",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "immich-feat-release-candidate-detection",
+        "first_from": "node:24.15.0-bookworm-slim",
+        "repo_name": "immich",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "immich-fix-server-live-photo",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "immich",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "paperless-ngx-feat-saved-view-sharing",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "paperless-ngx",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "paperless-ngx-perf-document-counts",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "paperless-ngx",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "paperless-ngx-perf-workflow-queries",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "paperless-ngx",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "paperless-ngx-refactor-task-system",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "paperless-ngx",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "plausible-feat-shared-dashboard-deeplink",
+        "first_from": "hexpm/elixir:1.19.4-erlang-27.3.4.6-ubuntu-jammy-20260509",
+        "repo_name": "plausible",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "plausible-fix-cross-site-resource-attach",
+        "first_from": "hexpm/elixir:1.19.4-erlang-27.3.4.6-debian-bookworm-20260518-slim",
+        "repo_name": "plausible",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "plausible-fix-top-pages-comparison",
+        "first_from": "hexpm/elixir:1.19.4-erlang-27.3.4.6-debian-bookworm-20260518-slim",
+        "repo_name": "plausible",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "posthog-feat-approval-gating",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "posthog",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "posthog-feat-llma-enable-tagger",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "posthog",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "posthog-feat-personhog-writer-add",
+        "first_from": "rust:1.91-bookworm",
+        "repo_name": "posthog",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "posthog-feat-prompt-versioning",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "posthog",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "posthog-feat-schema-ingestion-block",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "posthog",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "posthog-feat-subscriptions-auto-disable",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "posthog",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "posthog-fix-llm-gateway-add",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "posthog",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "posthog-fix-replay-buffering",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "posthog",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "prefect-feat-dbt-per-node-hardening",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "prefect",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "prefect-fix-resolve-race-condition",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "prefect",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "prefect-fix-subflow-cancellation",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "prefect",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "prefect-fix-task-run-recorder",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "prefect",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "teleport-add-traits-matching-logic",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "teleport",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "teleport-fix-scoped-kube-clusters",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "teleport",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "turborepo-feat-add-circular-package",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "turborepo",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "turborepo-fix-preserve-package-json",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "turborepo",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "turborepo-fix-prune-missing-sources",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "turborepo",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      },
+      {
+        "task": "turborepo-perf-reuse-input-hashes",
+        "first_from": "ubuntu:22.04",
+        "repo_name": "turborepo",
+        "pip_install_in_verifier": true,
+        "literal_requirements": null
+      }
+    ],
+    "verifier_requirement_groups": [
+      {
+        "sha256": "f052f4d951b634216f242b671c9e70c0c984bf7c6b5df538e4d449ce5001859f",
+        "tasks": 50,
+        "requirements": "pytest>=7.0,<9.0\nrequests>=2.28,<3.0\njinja2>=3.1,<4.0\nlitellm>=1.0,<2.0\npydantic>=2.0,<3.0\nunidiff>=0.7,<1.0\npygments>=2.17,<3.0\nast-grep-py>=0.30,<1.0"
+      }
+    ],
+    "tasks_with_conditional_miniswe_install": 50
+  },
+  "readiness_artifacts": [
+    "immutable_task_environment",
+    "compatible_agent_toolkit",
+    "verifier_dependencies_and_optional_verifier_environment",
+    "shared_service_corpus_index_and_runtime",
+    "versioned_task_selection_and_split_membership"
+  ],
+  "not_filesystem_identity": [
+    "judge_model_name_alone",
+    "agent_model_name_alone",
+    "training_or_evaluation_label_alone"
+  ],
+  "notes": [
+    "BIRD and NeMo explicitly deferred by user.",
+    "Heldout selections were not supplied; no new image counts are inferred for them.",
+    "Shared immutable artifacts do not authorize sharing mutable state, answers, grader files, or agent edits between episodes or splits."
+  ]
+}

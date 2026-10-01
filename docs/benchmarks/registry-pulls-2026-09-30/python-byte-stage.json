@@ -1,0 +1,7 @@
+{
+  "candidate_path": "/work/registry-pulls-byte-candidate/site-packages",
+  "baseline_source": "/var/cache/ucloud-sandboxes/init-packages/fa1e69c40ae963a5c32ae9bd475129e79287177817e3ae7e6b7063154f680885/agent-runtime/site-packages",
+  "job_id": "168016286",
+  "node_epoch": "aa3931953e4f41c4be60e514de6acf9c",
+  "service_changed": false
+}

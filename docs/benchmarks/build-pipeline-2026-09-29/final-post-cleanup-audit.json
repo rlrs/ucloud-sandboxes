@@ -1,0 +1,66 @@
+{
+  "verified_at": "2026-09-29T21:39:36Z",
+  "wheel_sha256": "405516727b99eed510a0bcfcee39203cb69f67a4b56ad7c68bc5d3eaa672e628",
+  "runtime_source_commit": "3cdae92b546d634c804035e3c6a9efd00ed2441e",
+  "installed_files_match_wheel": 165,
+  "node_package_root": "/work/ucloud-sandboxes/build-pipeline-20260929-r2",
+  "node_bundle_sha256": {
+    "builder": "fa1e69c40ae963a5c32ae9bd475129e79287177817e3ae7e6b7063154f680885",
+    "sandbox": "b34a5d44cc7d33630cd39894bd31f2b4bb4d87423ce3afd76e6c510c9edaff2d"
+  },
+  "max_preparing_solving": 4,
+  "max_finishing_builds": 2,
+  "max_owned_builds": 6,
+  "buildkit_parallelism": 4,
+  "builder_execution_timeout_seconds": 1800,
+  "cache_max_entries": 512,
+  "cache_max_bytes": 34359738368,
+  "configuration_mode": "0o644",
+  "fleet_nodes": 0,
+  "prepared_builders": 0,
+  "active_builds": 0,
+  "sandboxes": 0,
+  "services": {
+    "ucloud-sandbox-autoscaler": "active",
+    "ucloud-sandbox-placement": "active",
+    "ucloud-sandbox-gateway": "active",
+    "ucloud-sandbox-relay": "active"
+  },
+  "automatic_upgrade_units": {
+    "apt-daily.timer": "masked",
+    "apt-daily-upgrade.timer": "masked",
+    "apt-daily.service": "masked",
+    "apt-daily-upgrade.service": "masked",
+    "unattended-upgrades.service": "masked"
+  },
+  "health": {
+    "gateway_https": true,
+    "relay_https": true,
+    "metrics_ok": true,
+    "relay_storage_budget_bytes": 68719476736,
+    "database_pools": {
+      "database_pool": {
+        "connections_num": 1,
+        "connections_ms": 3,
+        "requests_num": 5415,
+        "usage_ms": 329,
+        "pool_min": 1,
+        "pool_max": 16,
+        "pool_size": 1,
+        "pool_available": 1,
+        "requests_waiting": 0
+      },
+      "lifecycle_database_pool": {
+        "connections_num": 1,
+        "connections_ms": 3,
+        "requests_num": 21603,
+        "usage_ms": 1003,
+        "pool_min": 1,
+        "pool_max": 4,
+        "pool_size": 1,
+        "pool_available": 1,
+        "requests_waiting": 0
+      }
+    }
+  }
+}

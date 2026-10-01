@@ -1,0 +1,16 @@
+{
+  "repository": "ucloud-managed/registry-pull-canary-d81f2c41758a-045-fad689496a17",
+  "manifest_digest": "sha256:8ecf5bcd191213f50073328ef09c171377f5b224e11fab6c4d18f6fed8368fed",
+  "image_id": "registry-pull-canary-d81f2c41758a-045",
+  "config_hash_valid": true,
+  "config_size_valid": true,
+  "diff_ids_equal": true,
+  "runtime_config_equal": false,
+  "compressed_descriptors_equal": true,
+  "changed_runtime_config_keys": [
+    "Labels"
+  ],
+  "changed_layer_indices": [],
+  "old_count": 15,
+  "new_count": 15
+}

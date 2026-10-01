@@ -1,0 +1,53 @@
+{
+  "at": "2026-09-29T21:24:05.768392+00:00",
+  "units": {
+    "ucloud-slotq-gateway-host": "inactive",
+    "ucloud-slotq-reservation": "inactive",
+    "ucloud-slotq-image-smokes": "inactive"
+  },
+  "release": {
+    "at": "2026-09-29T21:24:05.484382+00:00",
+    "reservation": "builder-slot-qualification-1c672fa9d3d7",
+    "released": true
+  },
+  "remaining_prepared_builders": {
+    "prepared_builders": [],
+    "demand": {
+      "pending_resources": {
+        "vcpu": 0.0,
+        "memory_mb": 0,
+        "disk_mb": 0
+      },
+      "suppressed_pending_resources": {
+        "vcpu": 0.0,
+        "memory_mb": 0,
+        "disk_mb": 0
+      },
+      "pending_count": 0,
+      "suppressed_pending_count": 0,
+      "prepared_resources": {
+        "vcpu": 0.0,
+        "memory_mb": 0,
+        "disk_mb": 0
+      },
+      "desired_resources": {
+        "vcpu": 0.0,
+        "memory_mb": 0,
+        "disk_mb": 0
+      },
+      "oldest_pending_seconds": 0,
+      "pending_image_builds": 0,
+      "prepared_builder_count": 0,
+      "desired_builders": 0,
+      "pending": [],
+      "prepared": [],
+      "prepared_builders": [],
+      "image_warmups": []
+    }
+  },
+  "owned_hint_absent": true,
+  "gateway_sampler_bytes": 24378174,
+  "gateway_sampler_sha256": "8b68e452f2a63b64ffd6e4b66dfa363371ccc5145dcd0d0ac6a4e27bf67b1d1f",
+  "retained_images": 240,
+  "registry_deletion_executed": false
+}

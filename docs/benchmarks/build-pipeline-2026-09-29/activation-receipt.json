@@ -1,0 +1,48 @@
+{
+  "buildkit_parallelism": 4,
+  "enabled_at": "2026-09-29T21:17:02Z",
+  "health": {
+    "database_pools": {
+      "database_pool": {
+        "connections_ms": 3,
+        "connections_num": 1,
+        "pool_available": 1,
+        "pool_max": 16,
+        "pool_min": 1,
+        "pool_size": 1,
+        "requests_num": 2707,
+        "requests_waiting": 0,
+        "usage_ms": 227
+      },
+      "lifecycle_database_pool": {
+        "connections_ms": 3,
+        "connections_num": 1,
+        "pool_available": 1,
+        "pool_max": 4,
+        "pool_min": 1,
+        "pool_size": 1,
+        "requests_num": 10795,
+        "requests_waiting": 0,
+        "usage_ms": 494
+      }
+    },
+    "gateway_https": true,
+    "metrics_ok": true,
+    "relay_https": true,
+    "relay_storage_budget_bytes": 68719476736
+  },
+  "max_finishing_builds": 2,
+  "max_owned_builds": 6,
+  "max_preparing_solving": 4,
+  "qualification": {
+    "cold": {
+      "phase": "slotq-b-cold",
+      "summary_sha256": "0f8d322994963278ff35bb4adb95ae7f12e6515d29b4e951fead1ed50cd6dde1"
+    },
+    "warm": {
+      "phase": "slotq-b-warm",
+      "summary_sha256": "cc808a5f9c4aff884aecc3c0adba3b970a7937ed073f48150a4851cde9b1be40"
+    }
+  },
+  "wheel_sha256": "405516727b99eed510a0bcfcee39203cb69f67a4b56ad7c68bc5d3eaa672e628"
+}

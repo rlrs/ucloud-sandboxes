@@ -1,0 +1,23 @@
+{
+  "runtime_commits": [
+    "c66317aabccd6438e1f079191716f0fd91b21b1a",
+    "3cdae92b546d634c804035e3c6a9efd00ed2441e"
+  ],
+  "tooling_commit": "ab2a9e4",
+  "sdk_version": "0.4.34",
+  "service_wheel_sha256": "405516727b99eed510a0bcfcee39203cb69f67a4b56ad7c68bc5d3eaa672e628",
+  "artifacts": {
+    "scripts/qualify_builder_slots.py": "01b3679ac88ad767d9275fe7ea9d9b9d93834e4887e2bd13d5e2259c5c044531",
+    "scripts/upgrade_owned_builder.py": "160559f723d08e83b88759f1e4f8b9d9b4675db319315a598cd22e22a898591c",
+    "scripts/sample_builder_admission.py": "dc2a9617f278dd4fa09c010cf54aace4ee598c02c342646e0310d02d5873feb2",
+    "docs/benchmarks/build-pipeline-2026-09-29/deployment-controller.py": "dc0f92fcb13eb946e5dbc2b453a78e726f7bd6347b82c6ce7fd35b0f8ed4b184",
+    "docs/benchmarks/build-pipeline-2026-09-29/enable-pipeline.py": "c680d2307ba3dbc94b2996bfff60d59f6194eed28e87e688e8701d7857178a2e",
+    "docs/benchmarks/build-pipeline-2026-09-29/upgrade-owned-pool.py": "c1699b73a730b731b7dfa9fd1796ca69d14bc05a468115592aa1ea5083942215",
+    "docs/benchmarks/build-pipeline-2026-09-29/qualify-images.py": "ea32f669f0463cfcc2009bfba8fcc8ecec1f4356d1f505a6cafdbfb7529d9095",
+    "docs/benchmarks/build-pipeline-2026-09-29/cleanup-owned-images.py": "77ab34434def2b45cf311ff9f1fe1f213f32643dfb10d9dcb0a731b991274c7a",
+    "docs/benchmarks/build-pipeline-2026-09-29/final-audit.py": "7394d33e315c1a2b764896b35afb7904c41b3dea851391dbfc45f16d766cd857",
+    "tests/test_cleanup_owned_slotq_images.py": "a7b4d9bf841f648586ca1041321e1a37ebb4f51051efff828c2a7a1579eb02f0",
+    "docs/benchmarks/build-pipeline-2026-09-29/release-owned-smoke-pull-leases.py": "2b9f41fd877871b1833f80f6f573e5b2df5f00bb6a04d16c5854b680c6c2d256"
+  },
+  "provisioning_commit": "31c4592"
+}

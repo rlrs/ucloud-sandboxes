@@ -1,0 +1,126 @@
+{
+  "scope": "Read-only production incident assessment; local untracked evidence, not for publication",
+  "windows": [
+    {
+      "ending_at": "2026-09-30T05:00:10Z",
+      "interval_seconds": 594,
+      "busy_cores": 3.136,
+      "iowait_percent": 2.34,
+      "softirq_cores": 0.3608,
+      "available_memory_gib": 12.064655303955078,
+      "cpu_psi_some_percent": 65.72,
+      "io_psi_some_percent": 25.68,
+      "memory_psi_some_percent": 2.16,
+      "private_rx_mib_s": 125.768076171875,
+      "private_tx_mib_s": 201.8103515625,
+      "disks": {
+        "sda": {
+          "read_mib_s": 0.118994140625,
+          "write_mib_s": 7.533837890625,
+          "await_ms": 0.17,
+          "average_queue": 0.14
+        },
+        "sdb": {
+          "read_mib_s": 68.7062890625,
+          "write_mib_s": 123.61615234375,
+          "await_ms": 48.19,
+          "average_queue": 12.88
+        }
+      }
+    },
+    {
+      "ending_at": "2026-09-30T05:10:26Z",
+      "interval_seconds": 617,
+      "busy_cores": 1.092,
+      "iowait_percent": 20.76,
+      "softirq_cores": 0.1412,
+      "available_memory_gib": 12.187488555908203,
+      "cpu_psi_some_percent": 13.72,
+      "io_psi_some_percent": 33.66,
+      "memory_psi_some_percent": 1.25,
+      "private_rx_mib_s": 125.326337890625,
+      "private_tx_mib_s": 89.02275390625,
+      "disks": {
+        "sda": {
+          "read_mib_s": 0.225224609375,
+          "write_mib_s": 6.29630859375,
+          "await_ms": 885.22,
+          "average_queue": 225.14
+        },
+        "sdb": {
+          "read_mib_s": 49.8448828125,
+          "write_mib_s": 125.854296875,
+          "await_ms": 67.64,
+          "average_queue": 15.8
+        }
+      }
+    },
+    {
+      "ending_at": "2026-09-30T05:20:00Z",
+      "interval_seconds": 574,
+      "busy_cores": 0.0816,
+      "iowait_percent": 2.18,
+      "softirq_cores": 0.004,
+      "available_memory_gib": 12.234081268310547,
+      "cpu_psi_some_percent": 0.13,
+      "io_psi_some_percent": 3.21,
+      "memory_psi_some_percent": 0.06,
+      "private_rx_mib_s": 17.585615234375,
+      "private_tx_mib_s": 0.3058203125,
+      "disks": {
+        "sda": {
+          "read_mib_s": 0.020908203125,
+          "write_mib_s": 0.301318359375,
+          "await_ms": 0.29,
+          "average_queue": 0.0
+        },
+        "sdb": {
+          "read_mib_s": 0.000439453125,
+          "write_mib_s": 17.55966796875,
+          "await_ms": 205.0,
+          "average_queue": 3.32
+        }
+      }
+    }
+  ],
+  "limitations": [
+    "Sysstat averages span roughly ten minutes and do not resolve instantaneous peaks.",
+    "Retained process-level CPU attribution is unavailable.",
+    "Disk percent-utilization counters are excluded; prior qualification found them unreliable.",
+    "Default nginx combined logs do not record request duration, bodies, idempotency keys or create IDs; HTTP responses are not unique jobs.",
+    "Database serialization/deadlock aborts have explicit retry handling and are not independently proof of failed user operations.",
+    "Registry logs record completion latency, not a full critical-path decomposition."
+  ],
+  "postgres_errors": {
+    "could not serialize access due to read/write dependencies among transactions": 517,
+    "could not serialize access due to concurrent update": 3568,
+    "could not serialize access due to concurrent delete": 2,
+    "deadlock detected": 1
+  },
+  "maintenance": [
+    {
+      "at": "2026-09-30T05:03:22.800856+00:00",
+      "message": "Starting ucloud-sandbox-registry-prune.service - Prune UCloud sandbox private registry tags by age and reference..."
+    },
+    {
+      "at": "2026-09-30T05:04:27.660921+00:00",
+      "message": "ucloud-sandbox-registry-prune.service: Deactivated successfully."
+    },
+    {
+      "at": "2026-09-30T05:04:27.661939+00:00",
+      "message": "Finished ucloud-sandbox-registry-prune.service - Prune UCloud sandbox private registry tags by age and reference."
+    },
+    {
+      "at": "2026-09-30T05:04:27.663502+00:00",
+      "message": "ucloud-sandbox-registry-prune.service: Consumed 9.691s CPU time over 1min 4.859s wall clock time, 93.9M memory peak."
+    },
+    {
+      "at": "2026-09-30T05:04:27.722194+00:00",
+      "message": "Exception ignored while calling deallocator <function ConnectionPool.__del__ at 0x798cca3024b0>:"
+    },
+    {
+      "at": "2026-09-30T05:04:27.722945+00:00",
+      "message": "PythonFinalizationError: cannot join thread at interpreter shutdown"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "command": [
+    ".venv/bin/python",
+    "-m",
+    "unittest",
+    "tests.test_release_owned_registry_pull_leases",
+    "tests.test_cleanup_owned_registry_pull_images"
+  ],
+  "exit_code": 0,
+  "wall_seconds": 0.823538179975003,
+  "output": "..............\n----------------------------------------------------------------------\nRan 14 tests in 0.484s\n\nOK",
+  "files": {
+    "docs/benchmarks/registry-pulls-2026-09-30/cleanup-owned-images.py": "6e4dd31b0528a66ce20801118012abc466ddf6fda3bfde3d3c5df06ac58cbd3d",
+    "docs/benchmarks/registry-pulls-2026-09-30/release-owned-smoke-pull-leases.py": "52c11174d4b6f56c3e22eef39b04892b9ea918b3be527b18a7c46ffd7524f41e",
+    "tests/test_cleanup_owned_registry_pull_images.py": "25645d58e44f616ad9da47d0ae692368a6c002bbb2a93ce4f418cd80b06c55c1",
+    "tests/test_release_owned_registry_pull_leases.py": "e0638d664d720bebb02a01d64b6bceee7de1c8725ec83fb42c2b535949bb1e4f"
+  },
+  "scope": "Local synthetic file/SQLite fixtures only; no production access or helper execution.",
+  "peer_review": "Root and gateway_background approved frozen cleanup6e4dd31 and lease52c11174 helpers; no execution authorization used."
+}

@@ -272,3 +272,13 @@ including 94/94 generic bases and 89/89 Terminal-Bench 2 sources. Full task-base
 coverage remains incomplete. The nested project seed catalog is included in this
 snapshot. Saved source receipts and updated pins are copied off the server and
 committed separately from disposable private runtime catalogs.
+
+The first fresh queued layered source (`aiohttp_final:3d41df0...`) passed full
+filesystem qualification, using an 86,386,245-byte delta in place of a
+507,437,423-byte original. Its temporary export was removed and the next source
+started. Public-name requests for this image and the larger fakeredis seed both
+passed, creating sandboxes in **1.80 and 1.03 seconds** respectively with no new
+import builds. These two checks validate cache routing, not high-concurrency
+latency. The [request results](benchmarks/image-pools-2026-09-30/cache-path-qualification-20261001.json)
+are retained. The updated path passed 76 targeted tests; all five deployed
+preparation/planning helper hashes matched commit `f1e3ce3`.

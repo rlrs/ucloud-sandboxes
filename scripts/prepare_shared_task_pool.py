@@ -12,7 +12,7 @@ import subprocess
 import sys
 import time
 
-from prepare_image_pool import admission, registry_parts
+from prepare_image_pool import SourceResolver, admission, registry_parts
 
 
 def save(path, value):
@@ -38,6 +38,7 @@ def main():
     from ucloud_sandboxes.config import DeploymentConfig
     from ucloud_sandboxes.registry_disk import registry_disk_usage
     c = DeploymentConfig.from_dict(json.loads(args.config.read_text()))
+    resolver = SourceResolver(c.control_state_file().parent / 'image-pool-locks', clock=time.time)
     root = args.root
     plan = json.loads((root / 'plan.json').read_text())
     if plan.get('schema') != 1:
@@ -76,12 +77,16 @@ def main():
                     pending.append(item)
             else:
                 pending.append(item)
+        active, offset, completed_count = {}, 0, 0
+        admission_block = None
         def checkpoint():
             save(root / 'catalog.json', {'schema': 1, 'images': results})
             counts = {status: sum(row['status'] == status for row in results.values())
                       for status in ('ready', 'failed', 'deferred')}
             save(root / 'progress.json', {'updated_at_unix': time.time(), 'counts': counts,
-                                         'planned': len(items), 'unprocessed': len(items) - len(results)})
+                                         'planned': len(items), 'unprocessed': len(items) - len(results),
+                                         'queued': len(pending) - offset, 'active': len(active),
+                                         'completed_current_run': completed_count, 'admission_block': admission_block})
             print(json.dumps(counts), flush=True)
         def run(item):
             key = hashlib.sha256(item['source'].encode()).hexdigest()
@@ -95,6 +100,8 @@ def main():
                 command.extend(['--family', family])
             if item.get('pinned_source'):
                 command.extend(['--pinned-source', item['pinned_source']])
+            if args.retry_failed:
+                command.append('--retry-recorded-failures')
             log_path = root / 'work' / (key + '.log')
             try:
                 with log_path.open('w') as output:
@@ -112,7 +119,6 @@ def main():
             save(root / 'results' / (key + '.json'), result)
             return result
         checkpoint()
-        active, offset, completed_count = {}, 0, 0
         attempts = {}
         last_cooldown = None
         with ThreadPoolExecutor(max_workers=args.workers) as executor:
@@ -125,6 +131,7 @@ def main():
                                        len(active) * reservation, growth_limit=args.growth_limit_gib * 1024**3,
                                        free_floor=args.free_floor_gib * 1024**3, estimate=reservation)
                     if reason:
+                        admission_block = reason
                         for item in pending[offset:]:
                             key = hashlib.sha256(item['source'].encode()).hexdigest()
                             row = {**item, 'status': 'deferred', 'error': 'deferred: ' + reason}
@@ -134,14 +141,13 @@ def main():
                         break
                     item = pending[offset]
                     host, _, _ = registry_parts(item['source'])
-                    gate_path = c.control_state_file().parent / 'image-pool-locks' / ('source-' + host + '.json')
-                    gate = json.loads(gate_path.read_text()) if gate_path.exists() else {}
                     key = hashlib.sha256(item['source'].encode()).hexdigest()
                     needs_resolution = not (root / 'work' / key / 'resolved.json').exists()
-                    delay = gate.get('next_request_at', 0) - time.time()
-                    if needs_resolution and gate.get('failures', 0) and delay > 0:
-                        if gate.get('next_request_at') != last_cooldown:
-                            last_cooldown = gate['next_request_at']
+                    delay = resolver.cooldown_seconds(item['source']) if needs_resolution else 0
+                    if delay > 0:
+                        resume_after = round(time.time() + delay)
+                        if resume_after != last_cooldown:
+                            last_cooldown = resume_after
                             note = {'status': 'public_registry_cooldown', 'registry': host, 'resume_after_unix': last_cooldown}
                             save(root / 'cooldown.json', note)
                             print(json.dumps(note), flush=True)

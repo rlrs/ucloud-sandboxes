@@ -96,3 +96,17 @@ python scripts/cache_source_receipts.py pack \
 ```
 
 Copy every new snapshot off-host. The layered path also requires rebuilding its public anchor with a fresh generation, recreating protected filesystem exports, and requalifying the delta; see [the preparation workflow](../../docs/shared-task-images.md). No private anchor or successful build receipt in the disposable work directories is a recovery input.
+
+
+## Expanded snapshot, October 1 00:10 UTC
+
+`inputs-expanded-20261001.json.gz` preserves all 35,984 source inputs and 8,602
+foundation contexts, advancing to **1,204 source pins** (SHA-256
+`0d7ac3e8c3c5bf94ccb3ace3ce288b6f8bf7db662ff45456e581c47739e6443e`).
+`source-receipts-20261001T001009Z.json.gz` contains **922** authenticated public
+manifest/config receipts (755,731 bytes; SHA-256
+`ecfc41ce8fb27e7b755fb4596bcbf1b12fa6dee11f7b28b91363bdfbd78df581`).
+Use the latest inputs in the recovery commands and hydrate source metadata while
+coordinators are stopped. Existing immutable pins and context bytes remain intact.
+The production volume is 3,500 provider GB; the original bundle's 3 TB recovery
+policy is unchanged and no command automatically expands it.

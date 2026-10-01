@@ -644,5 +644,1922 @@
     },
     "unpacked_limit_bytes": 17179869184,
     "scratch_removed_after_success": true
+  },
+  "pinned_batch_alias_qualification": {
+    "schema": 1,
+    "images": 111,
+    "workers": 8,
+    "passed": 111,
+    "elapsed_seconds": 57.81405498899403,
+    "create_p50_seconds": 2.225428292003926,
+    "create_p95_seconds": 6.291202004009392,
+    "create_max_seconds": 15.649669948994415,
+    "results": [
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-11532:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 3.669648873008555,
+        "exec_seconds": 0.3519280900072772,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.caddyserver_1776_caddy-5995:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 3.7128128969925456,
+        "exec_seconds": 0.3327631480060518,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-11551:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 3.9654254619963467,
+        "exec_seconds": 0.4482961769972462,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.caddyserver_1776_caddy-6115:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 3.7707120480190497,
+        "exec_seconds": 0.3560311399924103,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-11555:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 3.6963260490156244,
+        "exec_seconds": 0.35332491699955426,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.caddyserver_1776_caddy-6288:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 3.9863449840049725,
+        "exec_seconds": 0.2549016639823094,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/multi-source-data-merger:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 3.7900417080090847,
+        "exec_seconds": 0.6347924650181085,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-11603:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 3.8152674909797497,
+        "exec_seconds": 0.3282850209798198,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.caddyserver_1776_caddy-6345:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.1437715910142288,
+        "exec_seconds": 0.24360134298331104,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/overfull-hbox:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.961019160982687,
+        "exec_seconds": 0.35602397201000713,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-11728:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.2059991260175593,
+        "exec_seconds": 0.1825818049837835,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/password-recovery:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.8670215139864013,
+        "exec_seconds": 0.4563402769854292,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.caddyserver_1776_caddy-6350:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.0335067619744223,
+        "exec_seconds": 0.17491516799782403,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-11734:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.39707513601752,
+        "exec_seconds": 0.2628323460230604,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/path-tracing-reverse:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.4014996889745817,
+        "exec_seconds": 0.3225411759922281,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.caddyserver_1776_caddy-6411:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.3693303559848573,
+        "exec_seconds": 0.34087497100699693,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-11740:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 5.9039920149953105,
+        "exec_seconds": 0.24295057699782774,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/path-tracing:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 4.00182118700468,
+        "exec_seconds": 0.3613569790031761,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-11749:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 4.81927483601612,
+        "exec_seconds": 0.3420010340050794,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.facebook_1776_docusaurus-10130:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 3.9780005019856617,
+        "exec_seconds": 0.3510810410080012,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/polyglot-c-py:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.8293045519967563,
+        "exec_seconds": 0.35178791801445186,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-11790:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.013042417005636,
+        "exec_seconds": 0.34732837401679717,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.facebook_1776_docusaurus-10309:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.8403415229986422,
+        "exec_seconds": 0.3533980990177952,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/polyglot-rust-c:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.6082201690005604,
+        "exec_seconds": 0.27776912398985587,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.facebook_1776_docusaurus-8927:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.5414454200072214,
+        "exec_seconds": 0.3349704740103334,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.facebook_1776_docusaurus-9183:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.322559755994007,
+        "exec_seconds": 0.33144035399891436,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-11815:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.7554218620061874,
+        "exec_seconds": 0.4554983940033708,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/portfolio-optimization:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.8052843349869363,
+        "exec_seconds": 0.3518955850158818,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-11820:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.225428292003926,
+        "exec_seconds": 0.354943471000297,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/protein-assembly:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.5539156360027846,
+        "exec_seconds": 0.41826513400883414,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-11848:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.0729023429739755,
+        "exec_seconds": 0.349766778992489,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.facebook_1776_docusaurus-9897:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.604201523005031,
+        "exec_seconds": 0.3319402039924171,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.faker-ruby_1776_faker-2705:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.5094466489972547,
+        "exec_seconds": 0.5483563090092503,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-11880:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.277668597002048,
+        "exec_seconds": 0.35191025599488057,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/prove-plus-comm:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.3201526020129677,
+        "exec_seconds": 0.3599849359889049,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.fastlane_1776_fastlane-19207:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.2105790649948176,
+        "exec_seconds": 0.3404658460058272,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.faker-ruby_1776_faker-2970:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.9263511390017811,
+        "exec_seconds": 0.3733836020110175,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-11885:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.6964626359986141,
+        "exec_seconds": 0.3414605690049939,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/pypi-server:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.8983477840083651,
+        "exec_seconds": 0.4506466799939517,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/pytorch-model-cli:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.9454141299938783,
+        "exec_seconds": 0.28740645200014114,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-11964:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.602918591001071,
+        "exec_seconds": 0.32195555698126554,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-11951:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.5083414239925332,
+        "exec_seconds": 0.2475230740092229,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.fastlane_1776_fastlane-19765:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.015424532990437,
+        "exec_seconds": 0.6080295300052967,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.fastlane_1776_fastlane-19304:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.656921391026117,
+        "exec_seconds": 0.4510582889779471,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-11999:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.798293341009412,
+        "exec_seconds": 0.34298074498656206,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.fastlane_1776_fastlane-20642:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 3.101069191005081,
+        "exec_seconds": 0.344642048003152,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/qemu-alpine-ssh:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 3.2038848960073665,
+        "exec_seconds": 0.3408998749800958,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-12039:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 3.240733545011608,
+        "exec_seconds": 0.35064941601012833,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.fastlane_1776_fastlane-20958:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.2452360749884974,
+        "exec_seconds": 0.4378831910144072,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/qemu-startup:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 4.480720746010775,
+        "exec_seconds": 0.44724864300224,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-12050:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.371748778008623,
+        "exec_seconds": 0.23114676898694597,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/query-optimize:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.3243673070101067,
+        "exec_seconds": 0.2624191759969108,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/raman-fitting:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.2108407149789855,
+        "exec_seconds": 0.2602204130089376,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.fastlane_1776_fastlane-20975:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.3835362450045068,
+        "exec_seconds": 0.3440915090031922,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.fastlane_1776_fastlane-21857:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.508460572018521,
+        "exec_seconds": 0.3212797949963715,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/regex-chess:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.3906438920239452,
+        "exec_seconds": 0.3405719120055437,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-12125:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 3.2305088180000894,
+        "exec_seconds": 0.3598898150085006,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-12143:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.4016217130119912,
+        "exec_seconds": 0.2640262939967215,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.fluent_1776_fluentd-3328:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.2726906089810655,
+        "exec_seconds": 0.3564734619867522,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/regex-log:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.6854782110021915,
+        "exec_seconds": 0.33695112602435984,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-12155:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.9127580460044555,
+        "exec_seconds": 0.3524571099842433,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.fluent_1776_fluentd-3466:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.6727438409870956,
+        "exec_seconds": 0.2538253800012171,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-12193:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.4452895960130263,
+        "exec_seconds": 0.3326345619861968,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/rstan-to-pystan:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.2376659699948505,
+        "exec_seconds": 0.43513121400610544,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.fluent_1776_fluentd-3608:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.6653986669844016,
+        "exec_seconds": 0.2731956750212703,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-12209:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.3838388040021528,
+        "exec_seconds": 0.3432047149981372,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.fluent_1776_fluentd-3616:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.3700009820167907,
+        "exec_seconds": 0.3423137450008653,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-12262:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.832708347006701,
+        "exec_seconds": 0.2652184079925064,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/reshard-c4-data:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.572891982999863,
+        "exec_seconds": 0.42691763301263563,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.fluent_1776_fluentd-3631:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.607802178012207,
+        "exec_seconds": 0.3501945690077264,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/sam-cell-seg:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.2431053209875245,
+        "exec_seconds": 0.4553955230221618,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-12273:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.555578139028512,
+        "exec_seconds": 0.27649678898160346,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/sanitize-git-repo:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.8713095400016755,
+        "exec_seconds": 0.24347345699789003,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/schemelike-metacircular-eval:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.5610294899961445,
+        "exec_seconds": 0.2215777979872655,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.fluent_1776_fluentd-3640:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.5317040600057226,
+        "exec_seconds": 0.3444264709833078,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.fluent_1776_fluentd-3641:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.6043799960170873,
+        "exec_seconds": 0.3792450600012671,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/sparql-university:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.4513996460009366,
+        "exec_seconds": 0.35404914600076154,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-12276:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.698633146996144,
+        "exec_seconds": 0.44335359800606966,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-12304:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.534248997020768,
+        "exec_seconds": 0.331619830976706,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/sqlite-db-truncate:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.8140839359839447,
+        "exec_seconds": 0.21156962000532076,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.fluent_1776_fluentd-3917:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.481663246988319,
+        "exec_seconds": 0.2676142929994967,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-12308:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.8729814960097428,
+        "exec_seconds": 0.3471917860151734,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.fluent_1776_fluentd-4030:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.8100087030034047,
+        "exec_seconds": 0.3670816280064173,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/sqlite-with-gcov:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.6441027560213115,
+        "exec_seconds": 0.43635482201352715,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.django_1776_django-12325:latest",
+        "families": [
+          "SWE-bench Verified"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.2664965580042917,
+        "exec_seconds": 0.26382766000460833,
+        "new_import_build": false
+      },
+      {
+        "source": "swebench/sweb.eval.x86_64.fluent_1776_fluentd-4311:latest",
+        "families": [
+          "SWE-bench Multilingual"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.0755756069847848,
+        "exec_seconds": 0.4593855579732917,
+        "new_import_build": false
+      },
+      {
+        "source": "alexgshaw/torch-pipeline-parallelism:20251031",
+        "families": [
+          "Terminal-Bench 2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.0751966229872778,
+        "exec_seconds": 0.34614247898571193,
+        "new_import_build": false
+      },
+      {
+        "source": "docker.io/swerebenchv2/lingui-js-lingui:1060-26e9df5",
+        "families": [
+          "SWE-rebench v2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 6.787725448986748,
+        "exec_seconds": 0.8151054699847009,
+        "new_import_build": false
+      },
+      {
+        "source": "docker.io/swerebenchv2/qiskit-qiskit:11041-87fcd71",
+        "families": [
+          "SWE-rebench v2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 6.291202004009392,
+        "exec_seconds": 0.5130762750050053,
+        "new_import_build": false
+      },
+      {
+        "source": "docker.io/swerebenchv2/sveltejs-prettier-plugin-svelte:119-e7d6360",
+        "families": [
+          "SWE-rebench v2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 15.649669948994415,
+        "exec_seconds": 0.3113699530076701,
+        "new_import_build": false
+      },
+      {
+        "source": "docker.io/swerebenchv2/alteryx-evalml:1249-6fba86a",
+        "families": [
+          "SWE-rebench v2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 5.840312145999633,
+        "exec_seconds": 0.4191990830004215,
+        "new_import_build": false
+      },
+      {
+        "source": "docker.io/swerebenchv2/apigee-registry:1087-8c73f01",
+        "families": [
+          "SWE-rebench v2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 14.652081862004707,
+        "exec_seconds": 0.20280359499156475,
+        "new_import_build": false
+      },
+      {
+        "source": "docker.io/swerebenchv2/benhoyt-goawk:132-932202d",
+        "families": [
+          "SWE-rebench v2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 5.529139505990315,
+        "exec_seconds": 0.3662462150095962,
+        "new_import_build": false
+      },
+      {
+        "source": "docker.io/swerebenchv2/eclipse-ee4j-yasson:236-03c60c1",
+        "families": [
+          "SWE-rebench v2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 5.353055244981078,
+        "exec_seconds": 0.7017695319955237,
+        "new_import_build": false
+      },
+      {
+        "source": "jierun/sweb.eval.x86_64.mirumee_1776_ariadne-1071:latest",
+        "families": [
+          "SWE-Lego"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 5.584645716007799,
+        "exec_seconds": 0.38723331000073813,
+        "new_import_build": false
+      },
+      {
+        "source": "docker.io/swerebenchv2/dprint-dprint-plugin-typescript:374-eaf131b",
+        "families": [
+          "SWE-rebench v2"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 6.898733997019008,
+        "exec_seconds": 0.5143236150033772,
+        "new_import_build": false
+      },
+      {
+        "source": "jierun/sweb.eval.x86_64.lincc-frameworks_1776_nested-pandas-102:latest",
+        "families": [
+          "SWE-Lego"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 6.610726517013973,
+        "exec_seconds": 0.3670046810002532,
+        "new_import_build": false
+      },
+      {
+        "source": "jierun/sweb.eval.x86_64.spdx_1776_tools-python-168:latest",
+        "families": [
+          "SWE-Lego"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 4.997591065999586,
+        "exec_seconds": 0.2439359540003352,
+        "new_import_build": false
+      },
+      {
+        "source": "jierun/sweb.eval.x86_64.pydata_1776_sparse-200:latest",
+        "families": [
+          "SWE-Lego"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 4.979677201015875,
+        "exec_seconds": 0.25428162899333984,
+        "new_import_build": false
+      },
+      {
+        "source": "jierun/sweb.eval.x86_64.ipython_1776_ipython-10263:latest",
+        "families": [
+          "SWE-Lego"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 4.856225274997996,
+        "exec_seconds": 0.3241500750009436,
+        "new_import_build": false
+      },
+      {
+        "source": "jierun/sweb.eval.x86_64.bids-standard_1776_pybids-1018:latest",
+        "families": [
+          "SWE-Lego"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 4.516333703009877,
+        "exec_seconds": 0.22006601199973375,
+        "new_import_build": false
+      },
+      {
+        "source": "jierun/sweb.eval.x86_64.facelessuser_1776_soupsieve-119:latest",
+        "families": [
+          "SWE-Lego"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 5.54953973199008,
+        "exec_seconds": 0.4067573469947092,
+        "new_import_build": false
+      },
+      {
+        "source": "mswebench/anuraghazra_m_github-readme-stats:pr-643",
+        "families": [
+          "MultiSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.8050387270050123,
+        "exec_seconds": 0.48291471000993624,
+        "new_import_build": false
+      },
+      {
+        "source": "mswebench/anuraghazra_m_github-readme-stats:pr-697",
+        "families": [
+          "MultiSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.3839135559974238,
+        "exec_seconds": 0.5426318910031114,
+        "new_import_build": false
+      },
+      {
+        "source": "jierun/sweb.eval.x86_64.deepset-ai_1776_haystack-6261:latest",
+        "families": [
+          "SWE-Lego"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 4.290896899998188,
+        "exec_seconds": 0.3391889040067326,
+        "new_import_build": false
+      },
+      {
+        "source": "mswebench/axios_m_axios:pr-5324",
+        "families": [
+          "MultiSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.7520945460128132,
+        "exec_seconds": 0.37651820699102245,
+        "new_import_build": false
+      },
+      {
+        "source": "mswebench/axios_m_axios:pr-5247",
+        "families": [
+          "MultiSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 2.5031099450134207,
+        "exec_seconds": 0.4333625139843207,
+        "new_import_build": false
+      },
+      {
+        "source": "mswebench/axios_m_axios:pr-5831",
+        "families": [
+          "MultiSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 3.3960506040020846,
+        "exec_seconds": 0.27506338100647554,
+        "new_import_build": false
+      },
+      {
+        "source": "mswebench/beego_m_beego:pr-3586",
+        "families": [
+          "MultiSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 3.9268969249969814,
+        "exec_seconds": 0.20709961198735982,
+        "new_import_build": false
+      },
+      {
+        "source": "mswebench/beego_m_beego:pr-4027",
+        "families": [
+          "MultiSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.7268447040114552,
+        "exec_seconds": 0.27364068798488006,
+        "new_import_build": false
+      },
+      {
+        "source": "mswebench/beego_m_beego:pr-4024",
+        "families": [
+          "MultiSWE"
+        ],
+        "status": "passed",
+        "lookup": "original_source",
+        "create_seconds": 1.5201760549971368,
+        "exec_seconds": 0.34971756002050824,
+        "new_import_build": false
+      }
+    ]
+  },
+  "expanded_layered": [
+    {
+      "components": [
+        {
+          "bytes": 107528192,
+          "digest": "sha256:d35a19885dc7f7865451f0fffc8ea451665372a21ff0d38947a7c46aca610161"
+        },
+        {
+          "bytes": 659456,
+          "digest": "sha256:cd3ad99c48045faa7f68b5f9b8f331d7a0a2621d0b8fea3d97c9b03b80360f48"
+        },
+        {
+          "bytes": 343654400,
+          "digest": "sha256:f96b67b2d673df8f85aeadbca96e4946d225b0036e0f185df367149636871c7d"
+        },
+        {
+          "bytes": 1286144,
+          "digest": "sha256:0b8371c51d3db089fc4a1983dcf257cc0c0bc6f0fd8871e9a24dc3f1515443dd"
+        },
+        {
+          "bytes": 113672192,
+          "digest": "sha256:6d563f44f95e9cf8f94035c37c9469061b5a927aa5f6adca49799bf71c29c213"
+        },
+        {
+          "bytes": 126308352,
+          "digest": "sha256:9c9262dcea4a9ff9ba77191b889ec5d22c570dcbee2936af9fed39b5bd0d29d6"
+        },
+        {
+          "bytes": 17276928,
+          "digest": "sha256:4dfad12766a088f7177be0000a6f76c6b0ddb00d2c28d8b2326682d1b8d2eb20"
+        },
+        {
+          "bytes": 262520832,
+          "digest": "sha256:9af8958b6dc4b5c38d1134cfde8254126f3aa6b874202f28a46883634af04052"
+        }
+      ],
+      "delta_compressed_bytes": 167850932,
+      "original_compressed_bytes_not_retained": 507123651,
+      "qualification": {
+        "actual_entries": 45472,
+        "certificate_key": "2341d94c2630cf9b824ada423d1c576a13370cdc8407032ad0d1b934a416179c",
+        "created_runtime_workspace": true,
+        "difference_count": 0,
+        "difference_sample": [],
+        "equivalent": true,
+        "excluded_runtime_files": [
+          "/.ucloud-init",
+          "/etc/hostname",
+          "/etc/hosts",
+          "/etc/resolv.conf"
+        ],
+        "excluded_runtime_trees": [
+          "/dev",
+          "/proc",
+          "/run",
+          "/sys",
+          "/tmp"
+        ],
+        "expected_entries": 45472,
+        "mode": "full_source_scan",
+        "runtime_contract_version": 3,
+        "scanner_output": "/tmp/ucloud-filesystem-proof.json.gz",
+        "timestamp_contract": "layout-1 mkfs -T 0; startup modifies root, etc and a newly created workspace"
+      },
+      "seconds": 223.39277326400043,
+      "source": "namanjain12/aiohttp_final:30850babb43a8e28dd2df036776c62fd613d3d89",
+      "source_reference": "docker.io/namanjain12/aiohttp_final@sha256:1dc023bd8740f90df84a5cb24017ef10aa73ab535accd3135b2c549c5bf12408",
+      "status": "ready",
+      "timings": {
+        "end_to_end_ms": 72599,
+        "environment": {
+          "component_lookup_ms": 700.229,
+          "docker_pull_ms": 59391.485,
+          "erofs_bytes_built": 262520832,
+          "groups_built": 1,
+          "groups_reused": 7,
+          "layer_lock_wait_ms": 0.09399999999999999,
+          "mkfs_ms": 1026.958,
+          "oci_decompress_ms": 1194.0713080000478,
+          "oci_download_bytes_actual": 167850932.0,
+          "oci_extract_ms": 0.1561789999868779,
+          "oci_transfer_ms": 58.05328600058601,
+          "preflight_misses": 1,
+          "preflight_ms": 2103.157,
+          "publish_component_ms": 1515.817,
+          "selective_fallback_whiteout": 1,
+          "selective_fallbacks": 1,
+          "selective_materialization_ms": 1644.498,
+          "selective_subprocess_ms": 1970.528,
+          "sign_ms": 328.615,
+          "squash_ms": 0.0,
+          "total_ms": 65700.739
+        },
+        "phases": {
+          "cache_prepare_ms": 22,
+          "cleanup_ms": 0,
+          "docker_build_and_push_ms": 4257,
+          "finishing_wait_ms": 3,
+          "immutable_environment_ms": 68263
+        },
+        "preparation_ms": 14,
+        "queue_wait_ms": 10,
+        "total_ms": 72575
+      }
+    },
+    {
+      "components": [
+        {
+          "bytes": 107528192,
+          "digest": "sha256:d35a19885dc7f7865451f0fffc8ea451665372a21ff0d38947a7c46aca610161"
+        },
+        {
+          "bytes": 659456,
+          "digest": "sha256:cd3ad99c48045faa7f68b5f9b8f331d7a0a2621d0b8fea3d97c9b03b80360f48"
+        },
+        {
+          "bytes": 343654400,
+          "digest": "sha256:f96b67b2d673df8f85aeadbca96e4946d225b0036e0f185df367149636871c7d"
+        },
+        {
+          "bytes": 1286144,
+          "digest": "sha256:0b8371c51d3db089fc4a1983dcf257cc0c0bc6f0fd8871e9a24dc3f1515443dd"
+        },
+        {
+          "bytes": 113672192,
+          "digest": "sha256:6d563f44f95e9cf8f94035c37c9469061b5a927aa5f6adca49799bf71c29c213"
+        },
+        {
+          "bytes": 126308352,
+          "digest": "sha256:9c9262dcea4a9ff9ba77191b889ec5d22c570dcbee2936af9fed39b5bd0d29d6"
+        },
+        {
+          "bytes": 17276928,
+          "digest": "sha256:4dfad12766a088f7177be0000a6f76c6b0ddb00d2c28d8b2326682d1b8d2eb20"
+        },
+        {
+          "bytes": 193830912,
+          "digest": "sha256:07c80d1cc6ac903ae21f313f60d3cf4e15a70dde66288428034ea4d5d7bc4a08"
+        }
+      ],
+      "delta_compressed_bytes": 106556151,
+      "original_compressed_bytes_not_retained": 510479537,
+      "qualification": {
+        "actual_entries": 47238,
+        "certificate_key": "fb7b41ade318c7c17ddea3009ad87c76a31ed03e836bfd1117edea268f3c967d",
+        "created_runtime_workspace": true,
+        "difference_count": 0,
+        "difference_sample": [],
+        "equivalent": true,
+        "excluded_runtime_files": [
+          "/.ucloud-init",
+          "/etc/hostname",
+          "/etc/hosts",
+          "/etc/resolv.conf"
+        ],
+        "excluded_runtime_trees": [
+          "/dev",
+          "/proc",
+          "/run",
+          "/sys",
+          "/tmp"
+        ],
+        "expected_entries": 47238,
+        "mode": "full_source_scan",
+        "runtime_contract_version": 3,
+        "scanner_output": "/tmp/ucloud-filesystem-proof.json.gz",
+        "timestamp_contract": "layout-1 mkfs -T 0; startup modifies root, etc and a newly created workspace"
+      },
+      "seconds": 220.10894726001425,
+      "source": "namanjain12/aiohttp_final:37e3aa4639193c6423562a4a4dfbf3310772b7a6",
+      "source_reference": "docker.io/namanjain12/aiohttp_final@sha256:41613641f7e91ccd2e3f0ce65a487f617960bb0697f6d5cb164761b131badae2",
+      "status": "ready",
+      "timings": {
+        "end_to_end_ms": 66834,
+        "environment": {
+          "component_lookup_ms": 566.257,
+          "docker_pull_ms": 57059.503,
+          "erofs_bytes_built": 193830912,
+          "groups_built": 1,
+          "groups_reused": 7,
+          "layer_lock_wait_ms": 0.073,
+          "mkfs_ms": 665.994,
+          "oci_decompress_ms": 1025.3157039992402,
+          "oci_download_bytes_actual": 106556151.0,
+          "oci_extract_ms": 0.1495800001976022,
+          "oci_transfer_ms": 45.85322799812275,
+          "preflight_misses": 1,
+          "preflight_ms": 1974.404,
+          "publish_component_ms": 1718.441,
+          "selective_fallback_whiteout": 1,
+          "selective_fallbacks": 1,
+          "selective_materialization_ms": 1397.259,
+          "selective_subprocess_ms": 1718.307,
+          "sign_ms": 247.337,
+          "squash_ms": 0.0,
+          "total_ms": 63182.988
+        },
+        "phases": {
+          "cache_prepare_ms": 11,
+          "cleanup_ms": 0,
+          "docker_build_and_push_ms": 1263,
+          "finishing_wait_ms": 4,
+          "immutable_environment_ms": 65477
+        },
+        "preparation_ms": 11,
+        "queue_wait_ms": 4,
+        "total_ms": 66819
+      }
+    },
+    {
+      "components": [
+        {
+          "bytes": 107528192,
+          "digest": "sha256:d35a19885dc7f7865451f0fffc8ea451665372a21ff0d38947a7c46aca610161"
+        },
+        {
+          "bytes": 659456,
+          "digest": "sha256:cd3ad99c48045faa7f68b5f9b8f331d7a0a2621d0b8fea3d97c9b03b80360f48"
+        },
+        {
+          "bytes": 343654400,
+          "digest": "sha256:f96b67b2d673df8f85aeadbca96e4946d225b0036e0f185df367149636871c7d"
+        },
+        {
+          "bytes": 1286144,
+          "digest": "sha256:0b8371c51d3db089fc4a1983dcf257cc0c0bc6f0fd8871e9a24dc3f1515443dd"
+        },
+        {
+          "bytes": 113672192,
+          "digest": "sha256:6d563f44f95e9cf8f94035c37c9469061b5a927aa5f6adca49799bf71c29c213"
+        },
+        {
+          "bytes": 126308352,
+          "digest": "sha256:9c9262dcea4a9ff9ba77191b889ec5d22c570dcbee2936af9fed39b5bd0d29d6"
+        },
+        {
+          "bytes": 17276928,
+          "digest": "sha256:4dfad12766a088f7177be0000a6f76c6b0ddb00d2c28d8b2326682d1b8d2eb20"
+        },
+        {
+          "bytes": 182095872,
+          "digest": "sha256:5db8eea3b83ff2d36d183184b2761f50ed385f445e933db8cc2252e567dc507e"
+        }
+      ],
+      "delta_compressed_bytes": 99133092,
+      "original_compressed_bytes_not_retained": 510111655,
+      "qualification": {
+        "actual_entries": 47216,
+        "certificate_key": "64f772303ada794bc44248072cb07a8110a38fa368aa13ddd13e2540e4d28ba7",
+        "created_runtime_workspace": true,
+        "difference_count": 0,
+        "difference_sample": [],
+        "equivalent": true,
+        "excluded_runtime_files": [
+          "/.ucloud-init",
+          "/etc/hostname",
+          "/etc/hosts",
+          "/etc/resolv.conf"
+        ],
+        "excluded_runtime_trees": [
+          "/dev",
+          "/proc",
+          "/run",
+          "/sys",
+          "/tmp"
+        ],
+        "expected_entries": 47216,
+        "mode": "full_source_scan",
+        "runtime_contract_version": 3,
+        "scanner_output": "/tmp/ucloud-filesystem-proof.json.gz",
+        "timestamp_contract": "layout-1 mkfs -T 0; startup modifies root, etc and a newly created workspace"
+      },
+      "seconds": 204.42451439599972,
+      "source": "namanjain12/aiohttp_final:37b2604d10e78b96b1fed51bab7f22221c868fc9",
+      "source_reference": "docker.io/namanjain12/aiohttp_final@sha256:24481eebe53e27d9c1b8dd2cc369900fbe9e0e41c7e92d0c94cf34cd4246a311",
+      "status": "ready",
+      "timings": {
+        "end_to_end_ms": 64359,
+        "environment": {
+          "component_lookup_ms": 288.27299999999997,
+          "docker_pull_ms": 55372.938,
+          "erofs_bytes_built": 182095872,
+          "groups_built": 1,
+          "groups_reused": 7,
+          "layer_lock_wait_ms": 0.08299999999999999,
+          "mkfs_ms": 615.713,
+          "oci_decompress_ms": 952.7206009995552,
+          "oci_download_bytes_actual": 99133092.0,
+          "oci_extract_ms": 0.18247100001644867,
+          "oci_transfer_ms": 34.774300000890435,
+          "preflight_misses": 1,
+          "preflight_ms": 1750.193,
+          "publish_component_ms": 1541.117,
+          "selective_fallback_whiteout": 1,
+          "selective_fallbacks": 1,
+          "selective_materialization_ms": 1310.397,
+          "selective_subprocess_ms": 1618.608,
+          "sign_ms": 249.16,
+          "squash_ms": 0.0,
+          "total_ms": 61539.152
+        },
+        "phases": {
+          "cache_prepare_ms": 10,
+          "cleanup_ms": 0,
+          "docker_build_and_push_ms": 802,
+          "finishing_wait_ms": 3,
+          "immutable_environment_ms": 63481
+        },
+        "preparation_ms": 14,
+        "queue_wait_ms": 8,
+        "total_ms": 64337
+      }
+    },
+    {
+      "components": [
+        {
+          "bytes": 107528192,
+          "digest": "sha256:d35a19885dc7f7865451f0fffc8ea451665372a21ff0d38947a7c46aca610161"
+        },
+        {
+          "bytes": 659456,
+          "digest": "sha256:cd3ad99c48045faa7f68b5f9b8f331d7a0a2621d0b8fea3d97c9b03b80360f48"
+        },
+        {
+          "bytes": 343654400,
+          "digest": "sha256:f96b67b2d673df8f85aeadbca96e4946d225b0036e0f185df367149636871c7d"
+        },
+        {
+          "bytes": 1286144,
+          "digest": "sha256:0b8371c51d3db089fc4a1983dcf257cc0c0bc6f0fd8871e9a24dc3f1515443dd"
+        },
+        {
+          "bytes": 113672192,
+          "digest": "sha256:6d563f44f95e9cf8f94035c37c9469061b5a927aa5f6adca49799bf71c29c213"
+        },
+        {
+          "bytes": 126308352,
+          "digest": "sha256:9c9262dcea4a9ff9ba77191b889ec5d22c570dcbee2936af9fed39b5bd0d29d6"
+        },
+        {
+          "bytes": 17276928,
+          "digest": "sha256:4dfad12766a088f7177be0000a6f76c6b0ddb00d2c28d8b2326682d1b8d2eb20"
+        },
+        {
+          "bytes": 145408000,
+          "digest": "sha256:3657693d6b7a0d8996b4a896b3eaa02af49ca8e27354a7918d290ce6438b259b"
+        }
+      ],
+      "delta_compressed_bytes": 77386282,
+      "original_compressed_bytes_not_retained": 500283446,
+      "qualification": {
+        "actual_entries": 46188,
+        "certificate_key": "b262836cdbb901eaa3133d411b9f196049a66fb295a566255fa9bfc5fa6431cb",
+        "created_runtime_workspace": true,
+        "difference_count": 0,
+        "difference_sample": [],
+        "equivalent": true,
+        "excluded_runtime_files": [
+          "/.ucloud-init",
+          "/etc/hostname",
+          "/etc/hosts",
+          "/etc/resolv.conf"
+        ],
+        "excluded_runtime_trees": [
+          "/dev",
+          "/proc",
+          "/run",
+          "/sys",
+          "/tmp"
+        ],
+        "expected_entries": 46188,
+        "mode": "full_source_scan",
+        "runtime_contract_version": 3,
+        "scanner_output": "/tmp/ucloud-filesystem-proof.json.gz",
+        "timestamp_contract": "layout-1 mkfs -T 0; startup modifies root, etc and a newly created workspace"
+      },
+      "seconds": 161.11024594301125,
+      "source": "namanjain12/aiohttp_final:3cc00d3cdbab8ec6cf511700b15e33858a608d40",
+      "source_reference": "docker.io/namanjain12/aiohttp_final@sha256:752d989069237b8ac22c50b98ebac2c3e0233ec97563950100456d882f811ad0",
+      "status": "ready",
+      "timings": {
+        "end_to_end_ms": 38471,
+        "environment": {
+          "component_lookup_ms": 315.642,
+          "docker_pull_ms": 31661.243,
+          "erofs_bytes_built": 145408000,
+          "groups_built": 1,
+          "groups_reused": 7,
+          "layer_lock_wait_ms": 0.08200000000000002,
+          "mkfs_ms": 552.859,
+          "oci_decompress_ms": 953.9630730068893,
+          "oci_download_bytes_actual": 77386282.0,
+          "oci_extract_ms": 0.26305099981982494,
+          "oci_transfer_ms": 45.010445999196236,
+          "preflight_misses": 1,
+          "preflight_ms": 1973.431,
+          "publish_component_ms": 809.383,
+          "selective_fallback_whiteout": 1,
+          "selective_fallbacks": 1,
+          "selective_materialization_ms": 1360.163,
+          "selective_subprocess_ms": 1819.077,
+          "sign_ms": 195.551,
+          "squash_ms": 0.0,
+          "total_ms": 35994.591
+        },
+        "phases": {
+          "cache_prepare_ms": 12,
+          "cleanup_ms": 0,
+          "docker_build_and_push_ms": 503,
+          "finishing_wait_ms": 2,
+          "immutable_environment_ms": 37849
+        },
+        "preparation_ms": 18,
+        "queue_wait_ms": 11,
+        "total_ms": 38442
+      }
+    },
+    {
+      "components": [
+        {
+          "bytes": 107528192,
+          "digest": "sha256:d35a19885dc7f7865451f0fffc8ea451665372a21ff0d38947a7c46aca610161"
+        },
+        {
+          "bytes": 659456,
+          "digest": "sha256:cd3ad99c48045faa7f68b5f9b8f331d7a0a2621d0b8fea3d97c9b03b80360f48"
+        },
+        {
+          "bytes": 343654400,
+          "digest": "sha256:f96b67b2d673df8f85aeadbca96e4946d225b0036e0f185df367149636871c7d"
+        },
+        {
+          "bytes": 1286144,
+          "digest": "sha256:0b8371c51d3db089fc4a1983dcf257cc0c0bc6f0fd8871e9a24dc3f1515443dd"
+        },
+        {
+          "bytes": 113672192,
+          "digest": "sha256:6d563f44f95e9cf8f94035c37c9469061b5a927aa5f6adca49799bf71c29c213"
+        },
+        {
+          "bytes": 126308352,
+          "digest": "sha256:9c9262dcea4a9ff9ba77191b889ec5d22c570dcbee2936af9fed39b5bd0d29d6"
+        },
+        {
+          "bytes": 17276928,
+          "digest": "sha256:4dfad12766a088f7177be0000a6f76c6b0ddb00d2c28d8b2326682d1b8d2eb20"
+        },
+        {
+          "bytes": 262696960,
+          "digest": "sha256:26d1343064a9a29cf9877cc81de9d02db0a84308a344adf302996d6555e9882f"
+        }
+      ],
+      "delta_compressed_bytes": 167970241,
+      "original_compressed_bytes_not_retained": 507239933,
+      "qualification": {
+        "actual_entries": 45442,
+        "certificate_key": "6d3df559d413f2efdcaa379e6a1d6a85d2fee4da723f174ce075acf21912c0fb",
+        "created_runtime_workspace": true,
+        "difference_count": 0,
+        "difference_sample": [],
+        "equivalent": true,
+        "excluded_runtime_files": [
+          "/.ucloud-init",
+          "/etc/hostname",
+          "/etc/hosts",
+          "/etc/resolv.conf"
+        ],
+        "excluded_runtime_trees": [
+          "/dev",
+          "/proc",
+          "/run",
+          "/sys",
+          "/tmp"
+        ],
+        "expected_entries": 45442,
+        "mode": "full_source_scan",
+        "runtime_contract_version": 3,
+        "scanner_output": "/tmp/ucloud-filesystem-proof.json.gz",
+        "timestamp_contract": "layout-1 mkfs -T 0; startup modifies root, etc and a newly created workspace"
+      },
+      "seconds": 194.9365501590073,
+      "source": "namanjain12/aiohttp_final:312f747de91f20fa33af03fd368f857fbd32f36a",
+      "source_reference": "docker.io/namanjain12/aiohttp_final@sha256:3380d38d251e7158f11fcfe6698c032ee69f78d59639fb0a8ccd3fbec15b8638",
+      "status": "ready",
+      "timings": {
+        "end_to_end_ms": 46663,
+        "environment": {
+          "component_lookup_ms": 361.342,
+          "docker_pull_ms": 37239.712,
+          "erofs_bytes_built": 262696960,
+          "groups_built": 1,
+          "groups_reused": 7,
+          "layer_lock_wait_ms": 0.091,
+          "mkfs_ms": 1126.055,
+          "oci_decompress_ms": 1407.376067003952,
+          "oci_download_bytes_actual": 167970241.0,
+          "oci_extract_ms": 0.27304500008540344,
+          "oci_transfer_ms": 68.65772199716957,
+          "preflight_misses": 1,
+          "preflight_ms": 2556.987,
+          "publish_component_ms": 1946.422,
+          "selective_fallback_whiteout": 1,
+          "selective_fallbacks": 1,
+          "selective_materialization_ms": 1991.704,
+          "selective_subprocess_ms": 2471.914,
+          "sign_ms": 358.991,
+          "squash_ms": 0.0,
+          "total_ms": 44254.498
+        },
+        "phases": {
+          "cache_prepare_ms": 7,
+          "cleanup_ms": 0,
+          "docker_build_and_push_ms": 436,
+          "finishing_wait_ms": 1,
+          "immutable_environment_ms": 46147
+        },
+        "preparation_ms": 15,
+        "queue_wait_ms": 8,
+        "total_ms": 46640
+      }
+    }
+  ],
+  "large_evaluation": [
+    {
+      "source": "alexgshaw/pytorch-model-recovery:20251031",
+      "status": "ready",
+      "source_reference": "docker.io/alexgshaw/pytorch-model-recovery@sha256:83efba8d1a163dfe62694789e271ed55010509b6deabbf2d7d6472b40ca8d69a",
+      "components": [
+        {
+          "digest": "sha256:c535a42a8428f9c5f7831da34e3734dfa4fb4c8ee1758568b0f37609d4a2ef13",
+          "bytes": 73662464
+        },
+        {
+          "digest": "sha256:18b2a3fb57055ae161a4f51c13ba0a77144158d25d9532cf6108e95c1ec6fa15",
+          "bytes": 25640960
+        },
+        {
+          "digest": "sha256:44b8ed06aa0a15e1cccf6aa1710a33284010ff5e4fff3e4656cf16939472a390",
+          "bytes": 7219703808
+        }
+      ]
+    },
+    {
+      "source": "alexgshaw/mteb-leaderboard:20251031",
+      "status": "ready",
+      "source_reference": "docker.io/alexgshaw/mteb-leaderboard@sha256:968de9456bfc53728f7df0cb6c9ce33e17bd0e5563ddfe031e6ed2964965aecf",
+      "components": [
+        {
+          "digest": "sha256:afcb722f1dd3ef50e32d0c1b88787cb5019474e2ce6617b76a253cf3e4fd49ba",
+          "bytes": 78540800
+        },
+        {
+          "digest": "sha256:705b2c474a423f29ae8d2286db4265b3a61bcd3495caed2e662984be7a18ac5a",
+          "bytes": 238628864
+        },
+        {
+          "digest": "sha256:a4034a82b8f6e70138ec4567e3078fb5cadd3beeaf08c965f8f238b6c81de143",
+          "bytes": 4096
+        },
+        {
+          "digest": "sha256:f8f725cde9eea090656de2768ab520c82744d4ce13da171c0a9ed1c7dcbbb730",
+          "bytes": 10298114048
+        }
+      ]
+    },
+    {
+      "source": "alexgshaw/mteb-retrieve:20251031",
+      "status": "ready",
+      "source_reference": "docker.io/alexgshaw/mteb-retrieve@sha256:99dd676a21fd3124b7b8164cd93e8f0c51f1fdab2f84a831c61049eff78d063d",
+      "components": [
+        {
+          "digest": "sha256:afcb722f1dd3ef50e32d0c1b88787cb5019474e2ce6617b76a253cf3e4fd49ba",
+          "bytes": 78540800
+        },
+        {
+          "digest": "sha256:625e8857f0a37662abdb29ab813c25aef270a56e0cbabef249f6145a5086f7d0",
+          "bytes": 184578048
+        },
+        {
+          "digest": "sha256:dc44dcc8059ee6ee0567198b87e5246b6990a5123f295713b4589b6eef2ef6d1",
+          "bytes": 20926464
+        },
+        {
+          "digest": "sha256:e717516150ca815a169ff1c4891d66a94afe1b91886ef1c75fa18a6f76d6c055",
+          "bytes": 10307190784
+        },
+        {
+          "digest": "sha256:1d72484a0b6cbe952ddc949e1443016f83aef17ea8790c4872b9a87445e3a098",
+          "bytes": 4096
+        }
+      ]
+    }
+  ],
+  "cross_project_proof": [
+    {
+      "components": [
+        {
+          "bytes": 772345856,
+          "digest": "sha256:ce1e20298e0506591a7059cde00391cd4ed0e67624b5bee4d13417a7bd6117e5"
+        },
+        {
+          "bytes": 15765504,
+          "digest": "sha256:faf3fc76904ac2dcf00e64973dffc7850ca00578b0f3c0328ae06801fb3cb95d"
+        }
+      ],
+      "delta_compressed_bytes": 10558282,
+      "original_compressed_bytes_not_retained": 444432253,
+      "qualification": {
+        "actual_entries": 41669,
+        "certificate_key": "4ce9414c23041e06243fbca21d8cd77042c67d9f857f6b7379b9a592cfdea33d",
+        "created_runtime_workspace": false,
+        "difference_count": 0,
+        "difference_sample": [],
+        "equivalent": true,
+        "excluded_runtime_files": [
+          "/.ucloud-init",
+          "/etc/hostname",
+          "/etc/hosts",
+          "/etc/resolv.conf"
+        ],
+        "excluded_runtime_trees": [
+          "/dev",
+          "/proc",
+          "/run",
+          "/sys",
+          "/tmp"
+        ],
+        "expected_entries": 41669,
+        "mode": "full_source_scan",
+        "runtime_contract_version": 3,
+        "scanner_output": "/tmp/ucloud-filesystem-proof.json.gz",
+        "timestamp_contract": "layout-1 mkfs -T 0; startup modifies root, etc and a newly created workspace"
+      },
+      "seconds": 177.8424100020202,
+      "source": "aweaiteam/scaleswe:optimizely_python-sdk_pr102",
+      "source_reference": "docker.io/aweaiteam/scaleswe@sha256:f28a1df902dee5a44eac63c087802bfca19b0946d9857bb6a05936353d50859f",
+      "status": "ready",
+      "timings": {
+        "end_to_end_ms": 53943,
+        "environment": {
+          "component_lookup_ms": 471.69100000000003,
+          "docker_pull_ms": 46455.509,
+          "erofs_bytes_built": 15765504,
+          "groups_built": 1,
+          "groups_reused": 1,
+          "layer_lock_wait_ms": 0.044,
+          "mkfs_ms": 97.372,
+          "oci_decompress_ms": 68.06121799877474,
+          "oci_download_bytes_actual": 10558282.0,
+          "oci_extract_ms": 0.15979899990270496,
+          "oci_transfer_ms": 10.187695000695385,
+          "preflight_misses": 1,
+          "preflight_ms": 459.456,
+          "publish_component_ms": 1206.506,
+          "selective_fallback_whiteout": 1,
+          "selective_fallbacks": 1,
+          "selective_materialization_ms": 96.964,
+          "selective_subprocess_ms": 415.321,
+          "sign_ms": 20.785,
+          "squash_ms": 0.0,
+          "total_ms": 50939.357
+        },
+        "phases": {
+          "cache_prepare_ms": 10,
+          "cleanup_ms": 0,
+          "docker_build_and_push_ms": 1281,
+          "finishing_wait_ms": 4,
+          "immutable_environment_ms": 52573
+        },
+        "preparation_ms": 16,
+        "queue_wait_ms": 9,
+        "total_ms": 53918
+      }
+    }
+  ],
+  "registry_maintenance_incident": {
+    "registry_stopped_at_utc": "2026-10-01T00:08:23Z",
+    "registry_started_at_utc": "2026-10-01T00:09:43Z",
+    "collection_seconds": 79.863,
+    "deleted_bytes": 534693,
+    "cause": "Scheduled quiescent collector stops the serving registry; not storage exhaustion.",
+    "fix": "CLI maintenance requires explicit --allow-service-interruption or --offline; timer invocations defer without stopping registry.",
+    "deployed_at_utc": "2026-10-01T00:12:52Z"
   }
 }

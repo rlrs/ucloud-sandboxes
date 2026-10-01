@@ -34,6 +34,9 @@ class SharedTaskPoolTests(unittest.TestCase):
             invoked.assert_not_called()
             self.assertEqual(catalog['images']['task']['status'], 'deferred')
             self.assertIn('storage budget', catalog['images']['task']['error'])
+            progress = json.loads((root / 'progress.json').read_text())
+            self.assertEqual(progress['admission_block'], 'batch storage budget')
+            self.assertEqual(progress['queued'], 0)
 
     def test_child_success_requires_an_explicit_equivalence_receipt(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -59,6 +62,10 @@ class SharedTaskPoolTests(unittest.TestCase):
             self.run_pool(root, 1, lambda *a, **kw: self.fail('unexpected child'))
             original_budget = (root / 'budget.json').read_bytes()
             def run(command, **kwargs):
+                progress = json.loads((root / 'progress.json').read_text())
+                self.assertEqual(progress['counts']['deferred'], 1)
+                self.assertEqual(progress['queued'], 1)
+                self.assertIsNone(progress['admission_block'])
                 work = Path(command[command.index('--root') + 1])
                 work.mkdir(parents=True)
                 (work / 'catalog.json').write_text(json.dumps({'images': {'task': {
@@ -69,6 +76,10 @@ class SharedTaskPoolTests(unittest.TestCase):
             self.assertEqual(catalog['images']['task']['status'], 'ready')
             self.assertEqual((root / 'budget.json').read_bytes(), original_budget)
             self.assertEqual(len(list((root / 'attempts').glob('*.json'))), 1)
+            progress = json.loads((root / 'progress.json').read_text())
+            self.assertEqual(progress['queued'], 0)
+            self.assertEqual(progress['active'], 0)
+            self.assertEqual(progress['completed_current_run'], 1)
 
     def test_public_cooldown_pauses_admission_without_starting_waiting_children(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -167,6 +178,28 @@ class SharedTaskScratchTests(unittest.TestCase):
 
 
 class SharedTaskPlanTests(unittest.TestCase):
+    def test_explicit_cross_project_fallback_preserves_provenance_and_excludes_assigned_work(self):
+        from plan_shared_task_pool import plan_shared
+        anchor = 'aweaiteam/scaleswe:owner_repo_pr1'
+        own = 'aweaiteam/scaleswe:owner_repo_pr2'
+        other = 'aweaiteam/scaleswe:other_repo_pr2'
+        excluded = 'aweaiteam/scaleswe:third_repo_pr1'
+        ready = {'status': 'ready', 'reference': 'private@sha256:' + 'a' * 64,
+                 'source_reference': 'docker.io/source@sha256:' + 'b' * 64, 'components': [{'bytes': 10}]}
+        inventory = {'images': [{'source': source} for source in [anchor, own, other, excluded, 'ubuntu:22.04']]}
+        catalog = {'schema': 1, 'images': {anchor: ready}}
+        result = plan_shared(inventory, [catalog], fallback_anchor_source=anchor, exclude_sources=[excluded])
+        rows = {row['source']: row for row in result['images']}
+        self.assertEqual(set(rows), {own, other})
+        self.assertEqual(rows[own]['anchor_strategy'], 'same_project')
+        self.assertEqual(rows[other]['anchor_strategy'], 'shared_fallback')
+        self.assertEqual(rows[other]['anchor_source_reference'], ready['source_reference'])
+        self.assertEqual(result['anchor_projects'], 1)
+        self.assertEqual(result['source_projects'], 2)
+        ready['method'] = 'verified-flat-delta-v1'
+        with self.assertRaisesRegex(ValueError, 'eligible retained original'):
+            plan_shared(inventory, [catalog], fallback_anchor_source=anchor)
+
     def test_only_unprepared_same_project_sources_use_eligible_original_anchors(self):
         from plan_shared_task_pool import plan_shared
         anchor = 'aweaiteam/scaleswe:owner_repo_pr1'

@@ -162,6 +162,29 @@ def remove_abandoned_inputs(root, key):
         shutil.rmtree(path)
 
 
+def complete_build(client, image, receipt_path, *, retry_failed=False):
+    """Resume accepted work; explicitly retry a recorded terminal failure once."""
+    build = json.loads(receipt_path.read_text()) if receipt_path.exists() else None
+    for attempt in range(2):
+        if build is None:
+            build = client.submit_image_build(image, timeout_seconds=600)
+            save(receipt_path, build)
+        reused = build.get('status') == 'succeeded' and bool(build.get('image', {}).get('manifest_digest'))
+        if not reused:
+            build = client.wait_for_image_build(build['build_id'], timeout_seconds=1200, poll_interval_seconds=5)
+            save(receipt_path, build)
+        if build.get('status') == 'succeeded':
+            return build, reused
+        if retry_failed and attempt == 0 and build.get('status') in {'failed', 'cancelled'}:
+            history = receipt_path.parent / 'attempts'
+            history.mkdir(exist_ok=True)
+            save(history / (hashlib.sha256(build['build_id'].encode()).hexdigest() + '.json'), build)
+            build = None
+            continue
+        raise RuntimeError('shared image build failed: ' + str(build.get('error'))[-1000:])
+    raise AssertionError('unreachable build retry state')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', required=True)
@@ -177,6 +200,7 @@ def main():
     parser.add_argument('--free-floor-gib', type=int, default=500)
     parser.add_argument('--max-layer-gib', type=int, default=2)
     parser.add_argument('--max-delta-mib', type=int, default=256)
+    parser.add_argument('--retry-recorded-failures', action='store_true')
     args = parser.parse_args()
     args.export_inputs = read_filesystem_exports(args.filesystem_exports)
     if min(args.free_floor_gib, args.max_layer_gib, args.max_delta_mib) < 1:
@@ -364,19 +388,9 @@ def prepare(args):
         context.mkdir(exist_ok=True)
         (context / 'Dockerfile').write_text('FROM ' + reference + '\n')
         receipt_path = args.root / 'build.json'
-        if receipt_path.exists():
-            build = json.loads(receipt_path.read_text())
-        else:
-            build = client.submit_image_build(sdk.Image.from_dockerfile(name=image_id, context_path=context), timeout_seconds=600)
-            save(receipt_path, build)
-        artifact_reused = build.get('status') == 'succeeded' and bool(build.get('image', {}).get('manifest_digest'))
-        print(json.dumps({'source': args.source, 'status': 'rechecking_artifact' if artifact_reused else 'building',
-                          'build_id': build['build_id']}), flush=True)
-        if not artifact_reused:
-            build = client.wait_for_image_build(build['build_id'], timeout_seconds=1200, poll_interval_seconds=5)
-            save(receipt_path, build)
-        if build['status'] != 'succeeded':
-            raise RuntimeError('shared image build failed: ' + str(build.get('error'))[-1000:])
+        build, artifact_reused = complete_build(
+            client, sdk.Image.from_dockerfile(name=image_id, context_path=context), receipt_path,
+            retry_failed=args.retry_recorded_failures)
         published = build['image']
         prepared = published['tag'].split('@')[0] + '@' + published['manifest_digest']
         prepared_repo, _ = registry_repository_tag_from_image_ref(prepared)

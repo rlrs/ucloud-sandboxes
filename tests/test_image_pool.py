@@ -22,6 +22,92 @@ qualification_spec.loader.exec_module(qualification)
 
 
 class ImagePoolTests(unittest.TestCase):
+    def test_campaign_retries_only_temporary_quota_deferrals_without_repeating_ready_images(self):
+        calls = []
+        def prepare(item):
+            source = item['source']
+            calls.append(source)
+            if source == 'quota' and calls.count(source) == 1:
+                return {**item, 'status': 'deferred', 'error': 'deferred: public registry cooldown for docker.io'}
+            if source == 'large':
+                return {**item, 'status': 'deferred', 'error': 'deferred: source exceeds per-image compressed size limit'}
+            if source == 'failed':
+                return {**item, 'status': 'failed', 'error': 'source validation failed'}
+            return {**item, 'status': 'ready'}
+        items = [{'source': source} for source in ['ready', 'quota', 'large', 'failed']]
+        sleep = Mock()
+        with patch('builtins.print'):
+            results = pool.prepare_with_quota_retries(items, prepare, 1, sleep=sleep)
+        self.assertEqual(calls, ['ready', 'quota', 'large', 'failed', 'quota'])
+        self.assertEqual([r['status'] for r in results], ['ready', 'ready', 'deferred', 'failed'])
+        sleep.assert_called_once_with(30)
+
+    def test_exempt_repository_continues_without_clearing_another_repositorys_quota(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            state = {'next_request_at': 1060, 'failures': 1, 'status_code': 429,
+                     'limits': {'ratelimit-remaining': '0;w=3600'}}
+            pool.save(root / 'source-docker.io.json', state)
+            now = [1000.0]
+            probe = Mock(side_effect=lambda source: source.startswith('example/exempt:'))
+            resolve = Mock(side_effect=lambda source: {'source': source})
+            resolver = pool.SourceResolver(root, resolve=resolve, quota_probe=probe, clock=lambda: now[0],
+                                           sleep=lambda seconds: now.__setitem__(0, now[0] + seconds))
+            with patch('builtins.print'):
+                self.assertEqual(resolver.cooldown_seconds('example/exempt:one'), 0)
+                resolver('example/exempt:one')
+                resolver('example/exempt:two')
+                self.assertEqual(now[0], 1001)
+                preserved = json.loads((root / 'source-docker.io.json').read_text())
+                self.assertEqual(preserved['next_request_at'], 1060)
+                self.assertEqual(preserved['failures'], 1)
+                self.assertEqual(probe.call_count, 1)
+                self.assertEqual(resolver.cooldown_seconds('example/limited:one'), 59)
+                resolver('example/limited:one')
+            self.assertEqual(now[0], 1060)
+            self.assertEqual(json.loads((root / 'source-docker.io.json').read_text())['failures'], 0)
+
+    def test_unspecified_throttling_cannot_be_bypassed_by_a_quota_exemption(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            pool.save(root / 'source-docker.io.json', {'next_request_at': 1060, 'failures': 1,
+                                                      'status_code': 429, 'reason': 'rate_limited_unspecified'})
+            now = [1000.0]
+            probe = Mock(return_value=True)
+            resolver = pool.SourceResolver(root, resolve=Mock(return_value={}), quota_probe=probe,
+                                           clock=lambda: now[0], sleep=lambda seconds: now.__setitem__(0, now[0] + seconds))
+            resolver('example/exempt:one')
+            self.assertEqual(now[0], 1060)
+            probe.assert_not_called()
+
+    def test_failed_exempt_request_revokes_the_proof_and_obeys_shared_backoff(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            pool.save(root / 'source-docker.io.json', {'next_request_at': 1060, 'failures': 1,
+                                                      'status_code': 429, 'reason': 'pull_rate_limit'})
+            now = [1000.0]
+            probe = Mock(return_value=True)
+            failure = HTTPError('url', 429, 'limited', {'ratelimit-remaining': '0;w=3600'}, io.BytesIO())
+            resolver = pool.SourceResolver(root, resolve=Mock(side_effect=[failure, {}]), quota_probe=probe,
+                                           clock=lambda: now[0], sleep=lambda seconds: now.__setitem__(0, now[0] + seconds))
+            with patch('builtins.print'):
+                resolver('example/exempt:one')
+            self.assertEqual(now[0], 1120)
+            self.assertEqual(probe.call_count, 1)
+            proof = json.loads(resolver._scope_path('example/exempt:two').read_text())
+            self.assertFalse(proof['exempt'])
+
+    def test_backoff_distinguishes_pull_quota_without_exposing_response_body(self):
+        for status, body, reason in [
+            (429, b'{"message":"You have reached your unauthenticated pull rate limit"}', 'pull_rate_limit'),
+            (429, b'Too Many Requests', 'rate_limited_unspecified'),
+            (503, b'upstream error', 'upstream_unavailable'),
+        ]:
+            with self.subTest(status=status, body=body):
+                error = HTTPError('https://registry.invalid', status, 'error', {}, io.BytesIO(body))
+                self.assertEqual(pool.registry_error_reason(error), reason)
+                error.close()
+
     def test_source_resolution_shares_cooldown_without_hammering_registry(self):
         now = [1000.0]
         calls = []

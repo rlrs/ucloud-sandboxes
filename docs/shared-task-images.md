@@ -95,3 +95,57 @@ Confirmed Docker Hub HTTP 429 responses now pause unresolved work through the sh
 The new metadata inventory reports the distinct missing OCI union as a lower bound and writes source receipts before continuing. It is not an EROFS capacity estimate or a readiness catalog. Metadata-only probing was stopped once its saved receipts were handed to preparation; this avoids competing discovery and preparation requests for the same sources.
 
 The two pinned source batches were resumed at four workers each using their original journals, accepted build IDs and storage baselines. Each coordinator retains a 100% gateway CPU cap and 2 GiB memory limit. The provider builder ceiling stays at eight; autoscaling determines actual node count. Five additional pinned R2E sources use the bounded compact path serially under a separate 100% CPU / 3 GiB cap. These queued sources remain outside ready coverage until qualification succeeds.
+
+The initial 64 GiB compact budget eventually paused the ScaleSWE queue at 116 ready, because it conservatively counts all registry growth, including the simultaneous evaluation imports. A supervised continuation now waits for the two pinned batches to drain, then resumes the same 8,565-source plan with a 384 GiB allowance from the **unchanged** original 2,407,102,504,960-byte baseline. Its CPU cap is 150% and the free floor remains 500 GiB. This uses the measured 3.5 TB capacity while avoiding another CPU-heavy queue during the pinned batches. Storage-deferred rows are retried; the one changed-file-bound deferral remains explicit.
+
+
+## Cross-project sharing and recovery (October 1)
+
+An existing Click anchor also qualified an Optimizely task from a previously
+unrepresented project: 444.4 MB of original compressed image became a 10.6 MB
+OCI delta plus 15.8 MB of new EROFS data. The existing 772.3 MB anchor is shared;
+it is not charged anew to every task. All 41,669 source filesystem entries passed
+comparison. This is a measured canary, not a whole-corpus compression estimate.
+
+`plan_shared_task_pool.py --fallback-anchor-source <original-public-source>`
+explicitly enables cross-project candidates when no same-project anchor exists.
+The fallback must be a retained original image within the anchor bound; derived
+images are not silently substituted. Repeatable `--exclude-plan` avoids overlapping
+queues. Each candidate still requires full filesystem qualification before alias
+publication. The current additional plan has 8,494 candidates across 1,007 source
+projects, separate from the existing 8,565-source queue. Its first 48 candidates
+are a bounded pilot; candidates are not ready coverage.
+
+Docker Hub throttling is scoped carefully. A confirmed pull-quota error can
+leave a repository with observed unlimited pull capacity usable. An authenticated
+anonymous HEAD must return 200, an image digest, and no rate-limit headers before
+that exact repository may proceed. The shared quota state remains in force for
+other repositories, and all requests retain pacing. Generic 429 and 5xx responses
+never bypass backoff. Proofs expire after an hour and are revoked on a failed
+request. Temporary quota deferrals are retried; storage/size deferrals and hard
+failures remain explicit. `progress.json` distinguishes queued, active and completed
+work from historic result journals.
+
+All 90 pinned evaluation candidates and all 24 additional pinned training inputs
+are prepared, including the three 6.1–8.8 GB compressed Terminal-Bench sources.
+The original 111 smaller preparations passed public-name create/exec checks with
+eight concurrent checks, zero new import builds, create p50 2.23 s / p95 6.29 s.
+Five more fresh layered R2E images passed full source comparisons. These are cache
+qualification results, not a guarantee for a 500-sandbox training workload.
+
+At 00:08:23 UTC, scheduled garbage collection stopped the registry for 80 seconds
+and reclaimed only 534,693 bytes. Preparation and alias checks during that window
+failed. The deployed fix requires an explicit maintenance-window flag before
+physical collection or pressure eviction can interrupt serving. Automatic timers
+now report deferred maintenance; online reference pruning and disk admission
+remain. See [registry maintenance](managed-registry.md#blob-sweep). Interrupted
+campaigns retain their source pins, storage baselines and accepted-build journals.
+`--retry-failed` on the shared coordinator permits one new build after a confirmed
+terminal failure, preserving the old receipt; a wait timeout never duplicates a
+potentially running build.
+
+The 00:10 UTC catalog snapshot had 1,164 of 35,984 source references ready,
+including all 94 generic bases and all 89 Terminal-Bench 2 sources. Overall task
+coverage is still incomplete. The portable inputs now preserve 1,204 immutable
+source pins; the separate metadata snapshot has 922 authenticated manifest/config
+receipts. Neither archive claims blob backup or completed coverage.

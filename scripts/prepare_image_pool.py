@@ -45,17 +45,88 @@ def retry_delay(headers, attempt, now):
     return max(fallback, delay)
 
 
+def registry_error_reason(error):
+    """Distinguish pull quota from other throttling without logging response data."""
+    if error.code != 429:
+        return "upstream_unavailable"
+    if re.match(r'^0(?:;|$)', error.headers.get('ratelimit-remaining', '')):
+        return "pull_rate_limit"
+    try:
+        body = error.read(4096).decode('utf-8', errors='replace').lower()
+    except OSError:
+        body = ''
+    return "pull_rate_limit" if "pull rate limit" in body else "rate_limited_unspecified"
+
+
+def pull_quota_block(state):
+    return state.get('status_code') == 429 and (
+        state.get('reason') == 'pull_rate_limit'
+        or bool(re.match(r'^0(?:;|$)', state.get('limits', {}).get('ratelimit-remaining', ''))))
+
+
+def probe_pull_quota_exemption(source):
+    """HEAD is quota-free; accept only an observed unlimited Docker Hub repo."""
+    host, repository, selector = registry_parts(source)
+    if host != 'docker.io':
+        return False
+    headers = public_registry_headers(host, repository)
+    url = f'https://registry-1.docker.io/v2/{repository}/manifests/{selector}'
+    with request.urlopen(request.Request(url, headers=headers, method='HEAD'), timeout=30) as response:
+        return (response.status == 200
+                and response.headers.get('ratelimit-limit') is None
+                and response.headers.get('ratelimit-remaining') is None
+                and bool(re.fullmatch(r'sha256:[a-f0-9]{64}', response.headers.get('Docker-Content-Digest', ''))))
+
+
 class SourceResolver:
     """Serialize each public host and persist cooldowns across coordinators."""
 
-    def __init__(self, root, *, resolve=None, clock=time.time, sleep=time.sleep, max_wait_seconds=3600):
+    def __init__(self, root, *, resolve=None, clock=time.time, sleep=time.sleep, max_wait_seconds=3600, quota_probe=None):
         if not math.isfinite(max_wait_seconds) or max_wait_seconds <= 0:
             raise ValueError("source resolver wait must be finite and positive")
         self.max_wait_seconds = max_wait_seconds
         self.root = root
+        self.root.mkdir(parents=True, exist_ok=True)
         self.resolve = resolve or resolve_source
         self.clock = clock
         self.sleep = sleep
+        self.quota_probe = quota_probe or probe_pull_quota_exemption
+
+    def _scope_path(self, source):
+        scope = '/'.join(registry_parts(source)[:2])
+        return self.root / ('source-policy-' + hashlib.sha256(scope.encode()).hexdigest() + '.json')
+
+    def _quota_exempt(self, source, state):
+        # Unspecified 429s and 5xx responses remain a shared host backoff.
+        if not pull_quota_block(state):
+            return False
+        path = self._scope_path(source)
+        proof = json.loads(path.read_text()) if path.exists() else {}
+        if proof.get('valid_until', 0) <= self.clock():
+            try:
+                exempt = self.quota_probe(source)
+            except urlerror.HTTPError as error:
+                error.close()
+                exempt = False
+            except (OSError, ValueError):
+                exempt = False
+            proof = {'repository': '/'.join(registry_parts(source)[:2]), 'exempt': exempt is True,
+                     'valid_until': self.clock() + 3600}
+            save(path, proof)
+            print(json.dumps({'registry': registry_parts(source)[0], 'status': 'quota_scope_checked',
+                              'repository': proof['repository'], 'exempt': proof['exempt']}), flush=True)
+        return proof.get('exempt') is True
+
+    def cooldown_seconds(self, source):
+        """Admission uses the same scope rule as resolution, before taking a slot."""
+        path = self.root / ('source-' + registry_parts(source)[0] + '.json')
+        with path.with_suffix('.lock').open('a') as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            state = json.loads(path.read_text()) if path.exists() else {}
+            delay = max(0, state.get('next_request_at', 0) - self.clock())
+            if not state.get('failures') or not delay or self._quota_exempt(source, state):
+                return 0
+            return delay
 
     def __call__(self, source):
         host = registry_parts(source)[0]
@@ -67,7 +138,9 @@ class SourceResolver:
                 fcntl.flock(handle, fcntl.LOCK_EX)
                 now = self.clock()
                 state = json.loads(path.read_text()) if path.exists() else {}
-                delay = max(0, state.get("next_request_at", 0) - now)
+                exempt = bool(state.get('failures')) and self._quota_exempt(source, state)
+                delay = max(0, state.get('pace_after', 0) - now,
+                            0 if exempt else state.get("next_request_at", 0) - now)
                 if delay <= 0:
                     try:
                         result = self.resolve(source)
@@ -80,16 +153,24 @@ class SourceResolver:
                         delay = retry_delay(error.headers, failures, self.clock())
                         limits = {key: error.headers.get(key) for key in ("ratelimit-limit", "ratelimit-remaining")
                                   if error.headers.get(key) is not None}
+                        reason = registry_error_reason(error)
                         error.close()
+                        if exempt:
+                            save(self._scope_path(source), {'exempt': False, 'valid_until': self.clock() + 3600})
                         attempt += 1
                         save(path, {"next_request_at": self.clock() + delay, "failures": failures + 1,
-                                    "limits": limits, "status_code": error.code})
+                                    "limits": limits, "status_code": error.code, "reason": reason})
                         print(json.dumps({"registry": host, "status": "backoff", "seconds": delay,
-                                          "status_code": error.code}), flush=True)
+                                          "status_code": error.code, "reason": reason}), flush=True)
                     else:
                         # Avoid a burst of token/manifest requests after each
                         # completion; builds proceed independently of this lock.
-                        save(path, {"next_request_at": self.clock() + 1, "failures": 0})
+                        # An exempt repository's success says nothing about the
+                        # remaining quota for other repositories. Preserve it.
+                        if exempt:
+                            save(path, {**state, 'pace_after': self.clock() + 1})
+                        else:
+                            save(path, {"next_request_at": self.clock() + 1, "failures": 0})
                         return result
             if self.clock() + delay >= deadline or attempt >= 6:
                 raise RuntimeError("deferred: public registry cooldown for " + host)
@@ -118,6 +199,25 @@ def recover_catalog(root):
 def journal_result(root, result):
     key = hashlib.sha256(result["source"].encode()).hexdigest()
     save(root / "results" / (key + ".json"), result)
+
+
+def prepare_with_quota_retries(items, prepare, workers, *, sleep=time.sleep):
+    """Keep temporary source cooldowns pending; don't retry hard failures/bounds."""
+    pending, results = list(items), {}
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        while pending:
+            rows = list(executor.map(prepare, pending))
+            retry = []
+            for item, row in zip(pending, rows, strict=True):
+                results[item['source']] = row
+                if (row.get('status') == 'deferred'
+                        and row.get('error', '').startswith('deferred: public registry cooldown for ')):
+                    retry.append(item)
+            pending = retry
+            if pending:
+                print(json.dumps({'status': 'waiting_for_source_quota', 'pending': len(pending)}), flush=True)
+                sleep(30)
+    return [results[item['source']] for item in items]
 
 
 def source_parts(source):
@@ -566,8 +666,7 @@ def main():
         if item["source"] in unique:
             raise ValueError("duplicate source in pool plan")
         unique[item["source"]] = item
-    with ThreadPoolExecutor(max_workers=args.workers) as workers:
-        results = list(workers.map(prepare, list(unique.values())[:args.limit]))
+    results = prepare_with_quota_retries(list(unique.values())[:args.limit], prepare, args.workers)
     save(catalog_path, catalog)
     counts = {status: sum(r["status"] == status for r in results) for status in ("ready", "failed", "deferred")}
     print(json.dumps(counts), flush=True)

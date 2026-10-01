@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plan source-qualified ScaleSWE sharing from retained, same-project anchors.
+"""Plan source-qualified ScaleSWE sharing from retained anchors.
 
 Private references are derived from the supplied current catalogs. Public
 anchor/source identities remain in the plan for recovery and review. Planning
@@ -14,7 +14,8 @@ from pathlib import Path
 import re
 
 
-def plan_shared(inventory, catalogs, *, max_anchor_bytes=1024**3, preferred=(), seed_projects=12, seed_per_project=4):
+def plan_shared(inventory, catalogs, *, max_anchor_bytes=1024**3, preferred=(), seed_projects=12, seed_per_project=4,
+                fallback_anchor_source=None, exclude_sources=()):
     ready = {}
     for catalog in catalogs:
         if catalog.get('schema') != 1:
@@ -28,7 +29,7 @@ def plan_shared(inventory, catalogs, *, max_anchor_bytes=1024**3, preferred=(), 
         if not source.startswith('aweaiteam/scaleswe:') or not re.search(r'_pr\d+$', source):
             return None
         return re.sub(r'_pr\d+$', '', source)
-    anchors = {}
+    anchors, eligible = {}, {}
     for source in sorted(ready):
         row = ready[source]
         name = group(source)
@@ -36,13 +37,20 @@ def plan_shared(inventory, catalogs, *, max_anchor_bytes=1024**3, preferred=(), 
                 and row.get('components') and sum(c['bytes'] for c in row['components']) <= max_anchor_bytes
                 and '@sha256:' in row['reference'] and '@sha256:' in row.get('source_reference', '')):
             anchors.setdefault(name, (source, row))
+            eligible[source] = (source, row)
+    fallback = eligible.get(fallback_anchor_source)
+    if fallback_anchor_source is not None and fallback is None:
+        raise ValueError('fallback must be an eligible retained original anchor')
+    excluded = set(exclude_sources)
     groups = defaultdict(list)
     for item in inventory['images']:
         name = group(item['source'])
-        if name in anchors and item['source'] not in ready:
-            source, anchor = anchors[name]
+        choice = anchors.get(name) or fallback
+        if name and choice and item['source'] not in ready and item['source'] not in excluded:
+            source, anchor = choice
             groups[name].append({**item, 'anchor': anchor['reference'], 'anchor_source': source,
-                                 'anchor_source_reference': anchor['source_reference']})
+                                 'anchor_source_reference': anchor['source_reference'],
+                                 'anchor_strategy': 'same_project' if name in anchors else 'shared_fallback'})
     for rows in groups.values():
         rows.sort(key=lambda row: row['source'])
     keys = sorted(groups, key=lambda key: (key not in preferred, -len(groups[key]), key))
@@ -60,7 +68,8 @@ def plan_shared(inventory, catalogs, *, max_anchor_bytes=1024**3, preferred=(), 
             if index < len(groups[key]):
                 add(groups[key][index])
     return {'schema': 1, 'scope': 'Candidates requiring full source qualification; not prepared coverage.',
-            'anchor_projects': len(groups), 'images': selected}
+            'anchor_projects': len({r['anchor_source'] for r in selected}),
+            'source_projects': len(groups), 'images': selected}
 
 
 def main():
@@ -69,9 +78,18 @@ def main():
     parser.add_argument('--catalog', required=True, action='append', type=Path)
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--preferred-project', action='append', default=[])
+    parser.add_argument('--fallback-anchor-source', help='explicit original anchor for projects without a retained base')
+    parser.add_argument('--exclude-plan', type=Path, action='append', default=[], help='avoid sources already assigned to another queue')
     args = parser.parse_args()
+    excluded = set()
+    for path in args.exclude_plan:
+        plan = json.loads(path.read_text())
+        if plan.get('schema') != 1:
+            raise ValueError('unsupported exclusion plan')
+        excluded.update(row['source'] for row in plan['images'])
     result = plan_shared(json.loads(args.inventory.read_text()), [json.loads(p.read_text()) for p in args.catalog],
-                         preferred=args.preferred_project)
+                         preferred=args.preferred_project, fallback_anchor_source=args.fallback_anchor_source,
+                         exclude_sources=excluded)
     with args.output.open('x') as output:
         output.write(json.dumps(result, indent=2) + '\n')
     print(json.dumps({'candidates': len(result['images']), 'anchor_projects': result['anchor_projects']}))

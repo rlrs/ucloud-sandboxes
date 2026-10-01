@@ -310,6 +310,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="prune, evict, and garbage collect above the registry disk cleanup threshold",
     )
     registry_pressure.add_argument("--config", type=Path, required=True)
+    for maintenance in (registry_gc, registry_pressure):
+        maintenance.add_argument(
+            "--allow-service-interruption", action="store_true",
+            help="explicit maintenance window: allow collection to stop the live registry",
+        )
     registry = subparsers.add_parser(
         "registry",
         help="run the deployment Docker Distribution service",
@@ -515,6 +520,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             subprocess.run(["systemctl", "start", "--no-block", REGISTRY_SERVICE], check=True, text=True)
         return 0
     config = DeploymentConfig.from_file(args.config)
+    if args.command in {"registry-gc", "registry-pressure"}:
+        require_registry_mount(config)
+        # A timer is not a maintenance window. Even a read-only mark phase
+        # fences Distribution and interrupts reads/uploads for the full scan.
+        # Keep online age/reference pruning in its separate prune unit; don't
+        # evict live artifacts when physical reclamation cannot follow safely.
+        allowed = args.allow_service_interruption or getattr(args, "offline", False)
+        if not allowed:
+            disk = registry_disk_usage(config)
+            print(json.dumps({
+                "action": "deferred" if args.command == "registry-gc" or (disk and disk.cleanup_needed) else "none",
+                "reason": "physical collection requires an explicit maintenance window",
+                "registry_disk": disk.to_dict() if disk else None,
+            }, sort_keys=True))
+            return 0
     if args.command == "registry-gc":
         require_registry_mount(config)
         if args.offline or config.registry_store.kind != "filesystem":

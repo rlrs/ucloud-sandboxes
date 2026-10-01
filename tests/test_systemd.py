@@ -14,10 +14,38 @@ from ucloud_sandboxes.systemd import (
     reconcile_gateway_services,
     require_registry_mount,
     run_registry_gc,
+    main,
 )
 
 
 class SystemdHelperTests(unittest.TestCase):
+    def test_automatic_maintenance_never_stops_registry_or_evicts(self):
+        for command in ('registry-gc', 'registry-pressure'):
+            with self.subTest(command=command), TemporaryDirectory() as raw:
+                config = self._filesystem_config(Path(raw))
+                with patch('ucloud_sandboxes.systemd.DeploymentConfig.from_file', return_value=config), \
+                     patch('ucloud_sandboxes.systemd.require_registry_mount'), \
+                     patch('ucloud_sandboxes.systemd.registry_disk_usage', return_value=None), \
+                     patch('ucloud_sandboxes.systemd.run_registry_sweep') as sweep, \
+                     patch('ucloud_sandboxes.systemd.run_registry_pressure_cleanup') as pressure, \
+                     patch('ucloud_sandboxes.systemd.subprocess.run') as run, patch('builtins.print'):
+                    self.assertEqual(main([command, '--config', '/config']), 0)
+                    sweep.assert_not_called()
+                    pressure.assert_not_called()
+                    run.assert_not_called()
+
+    def test_explicit_window_preserves_fenced_collection(self):
+        for command in ('registry-gc', 'registry-pressure'):
+            with self.subTest(command=command), TemporaryDirectory() as raw:
+                config = self._filesystem_config(Path(raw))
+                with patch('ucloud_sandboxes.systemd.DeploymentConfig.from_file', return_value=config), \
+                     patch('ucloud_sandboxes.systemd.require_registry_mount'), \
+                     patch('ucloud_sandboxes.systemd.run_registry_sweep', return_value=None) as sweep, \
+                     patch('ucloud_sandboxes.systemd.run_registry_pressure_cleanup', return_value={}) as pressure, \
+                     patch('builtins.print'):
+                    self.assertEqual(main([command, '--config', '/config', '--allow-service-interruption']), 0)
+                    (sweep if command == 'registry-gc' else pressure).assert_called_once()
+
     @staticmethod
     def _filesystem_config(root: Path) -> DeploymentConfig:
         raw = DeploymentConfig.default("project").to_dict()

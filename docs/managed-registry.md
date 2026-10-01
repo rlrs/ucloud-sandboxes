@@ -253,8 +253,10 @@ it would delete and why the rest stayed (`live`, `grace`, `leased`,
 ### Blob sweep
 
 Deleting a manifest frees no space until its blobs go. For the filesystem store,
-`ucloud-sandbox-registry-gc.service` (every six hours, and from pressure cleanup)
-runs the grace-aware collector in `ucloud_sandboxes/registry_sweep.py`.
+the grace-aware collector is in `ucloud_sandboxes/registry_sweep.py`. Scheduled
+GC and pressure invocations report deferred maintenance without stopping the
+registry. Physical collection requires `--allow-service-interruption` in an
+explicit maintenance window; `--offline` also explicitly permits interruption.
 **Physical collection stops the registry for the entire scan and deletion.**
 Cold image reads, uploads and checkpoint publication are unavailable during this
 window and may need retrying. Existing sandboxes are not stopped by collection.
@@ -303,8 +305,11 @@ For the filesystem store, the gateway, autoscaler, and maintenance units
 measure the registry volume with `statvfs` (`ucloud_sandboxes/registry_disk.py`):
 
 - at `registry_disk_cleanup_percent` (70 %), `ucloud-sandbox-registry-pressure.timer`
-  (every minute) prunes by age and reference and sweeps blobs, at most once per
-  `registry_disk_gc_interval_seconds` (30 minutes) unless eviction follows. If
+  (every minute) reports that maintenance is needed. The separate hourly prune
+  unit still prunes by age and reference online. During an explicit maintenance
+  window, `registry-pressure --allow-service-interruption` prunes and sweeps
+  blobs, at most once per `registry_disk_gc_interval_seconds` (30 minutes) unless
+  eviction follows. If
   usage stays above the threshold, it evicts managed images (`ucloud-managed/*`)
   least recently used first until the projected usage reaches
   `registry_disk_target_percent` (60 %), deletes the environments only they
@@ -352,10 +357,17 @@ Add `--evict-lru` to also plan (or, with `--execute`, perform) the
 least-recently-used eviction that pressure cleanup runs above the cleanup
 threshold.
 
-Sweep blobs on demand, for example after an out-of-band manifest deletion, or
-run pressure cleanup at once:
+During a maintenance window, sweep blobs on demand or run pressure cleanup.
+The operator must first stop admitting work and drain registry users. These
+commands interrupt registry reads and writes; there is no automatic drain:
 
 ```bash
-sudo systemctl start ucloud-sandbox-registry-gc.service
-sudo systemctl start ucloud-sandbox-registry-pressure.service
+sudo /work/ucloud-sandboxes/gateway-venv/bin/python -m ucloud_sandboxes.systemd \
+  registry-gc --allow-service-interruption --config /etc/ucloud-sandboxes/deployment.json
+sudo /work/ucloud-sandboxes/gateway-venv/bin/python -m ucloud_sandboxes.systemd \
+  registry-pressure --allow-service-interruption --config /etc/ucloud-sandboxes/deployment.json
 ```
+
+Without a maintenance window, unreachable blobs accumulate. The 90% build/import
+admission refusal remains active; capacity and maintenance must be planned before
+that point. Raising capacity does not make disruptive scheduled collection safe.

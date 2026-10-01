@@ -122,6 +122,43 @@ class PreparedImagesTests(unittest.TestCase):
             self.assertEqual(self.resolve(raw, spec), (raw, None))
         raw, spec = self.request('# syntax=docker/dockerfile:1\nFROM ubuntu:22.04\n')
         self.assertEqual(self.resolve(raw, spec), (raw, None))
+
+    def test_terminal_verifier_wrapper_preserves_tail_and_uses_longest_cached_prefix(self):
+        prefix = 'FROM ubuntu:22.04\nRUN apt-get update\n'
+        extended = prefix+'RUN apt-get install -y git\n'
+        suffix = ('\nUSER root\n'
+                  'RUN if ! command -v git >/dev/null || ! command -v patch >/dev/null || ! command -v bash >/dev/null; then apt-get update && apt-get install -y --no-install-recommends git patch bash ca-certificates; fi\n'
+                  '\nCOPY --from=ghcr.io/astral-sh/uv:0.9.5 /uv /uvx /usr/local/bin/\n'
+                  'ENV UV_PYTHON_INSTALL_DIR=/opt/terminal-lego-python UV_CACHE_DIR=/opt/terminal-lego-cache\n'
+                  'COPY verifier-bootstrap.sh /opt/verifier-bootstrap.sh\n'
+                  'RUN bash -e /opt/verifier-bootstrap.sh\n'
+                  'RUN uvx --with pytest pytest --version\n'
+                  'RUN echo fingerprint > /opt/terminal-lego-verifier.sha256\n')
+        for text in (prefix, extended):
+            foundation = terminal_foundation(text, source_base='ubuntu:22.04', resolved_base={'reference': PIN, 'onbuild': []})
+            self.foundation(foundation, resolved_base={'reference': PIN, 'onbuild': []})
+        for task_tail in ('', 'COPY task_file /app\n'):
+            raw, spec = self.request(extended+task_tail+suffix, {'task_file': b'challenge', 'verifier-bootstrap.sh': b'echo setup'})
+            result, match = self.resolve(raw, spec)
+            files = read_context(self.store, result['context_archive_digest'])[1]
+            self.assertEqual(match['key'], foundation.key)
+            self.assertEqual(files['Dockerfile'], ('FROM '+PREPARED+'\n'+task_tail+suffix).encode())
+            self.assertEqual(files['task_file'], b'challenge')
+            self.assertEqual(files['verifier-bootstrap.sh'], b'echo setup')
+            self.assertEqual(self.resolve(raw, spec), (result, match))
+
+    def test_external_copy_does_not_bypass_context_or_stage_guards(self):
+        self.source()
+        valid = 'COPY --from=ghcr.io/astral-sh/uv:0.9.5 /uv /usr/bin/uv\n'
+        raw, spec = self.request('FROM ubuntu:22.04\n'+valid)
+        self.assertEqual(self.resolve(raw, spec)[1]['kind'], 'source')
+        for suffix in (valid+'COPY . /app\n', valid+'COPY Dockerfile /app\n',
+                       'COPY --from=0 /uv /usr/bin/uv\n',
+                       'COPY --from=$IMAGE /uv /usr/bin/uv\n',
+                       'COPY --from=uv /uv /usr/bin/uv\n',
+                       'COPY --from=ghcr.io/uv:1 --chown=0 /uv /usr/bin/uv\n'):
+            raw, spec = self.request('FROM ubuntu:22.04\n'+suffix)
+            self.assertEqual(self.resolve(raw, spec), (raw, None))
         raw, spec = self.request('FROM ubuntu:22.04\n', {'.dockerignore': b'base_install.sh\n'})
         self.assertEqual(self.resolve(raw, spec), (raw, None))
 

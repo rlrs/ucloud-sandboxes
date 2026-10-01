@@ -96,6 +96,10 @@ def openswe_foundation(python_version: str, *, miniconda_base: str) -> ImageFoun
 
 
 def terminal_foundation(dockerfile: str, *, source_base: str, resolved_base: dict) -> ImageFoundation:
+    return terminal_foundation_candidates(dockerfile, source_base=source_base, resolved_base=resolved_base)[-1]
+
+
+def terminal_foundation_candidates(dockerfile: str, *, source_base: str, resolved_base: dict) -> list[ImageFoundation]:
     """Freeze a context-free initial stage, without moving task instructions.
 
     Base ONBUILD triggers must have been inspected from the pinned config: an
@@ -127,6 +131,7 @@ def terminal_foundation(dockerfile: str, *, source_base: str, resolved_base: dic
     start = None
     end = 0
     runs = 0
+    candidates = []
     for line in dockerfile.splitlines(keepends=True):
         before = cursor
         cursor += len(line)
@@ -154,9 +159,13 @@ def terminal_foundation(dockerfile: str, *, source_base: str, resolved_base: dic
             runs += kind == "RUN"
         end = cursor
         pending = ""
+        if len(instructions) > 256:
+            raise ValueError("dependency prefix exceeds matching bounds")
+        if runs:
+            candidates.append(ImageFoundation("".join(instructions), b"", dockerfile[start:end], "terminal-prefix"))
     if not runs or start is None:
         raise ValueError("no supported dependency RUN prefix")
-    return ImageFoundation("".join(instructions), b"", dockerfile[start:end], "terminal-prefix")
+    return candidates
 
 
 def tmax_inline_foundation(dockerfile: str, script: bytes, *, ubuntu_base: str) -> tuple[ImageFoundation, bytes]:

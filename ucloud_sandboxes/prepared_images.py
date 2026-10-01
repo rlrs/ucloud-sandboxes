@@ -20,7 +20,7 @@ import shlex
 import sqlite3
 import tarfile
 
-from .image_foundations import (openswe_foundation, terminal_foundation,
+from .image_foundations import (openswe_foundation, terminal_foundation_candidates,
                                tmax_foundation, tmax_inline_foundation, require_pinned_reference)
 from .images import _ByteLimitedReader, _validate_context_member, image_build_fingerprint
 
@@ -55,7 +55,19 @@ def safe_rewrite(text, dockerfile='Dockerfile'):
             fields = shlex.split(match[2])
         except ValueError:
             return False
-        if match[1].upper() == 'ADD' or len(fields) < 2 or any(x.startswith('--') for x in fields):
+        if match[1].upper() == 'ADD' or len(fields) < 2:
+            return False
+        # In our single unnamed stage, a literal external image cannot observe
+        # the context Dockerfile. Keep the entire COPY unchanged. Numeric stage
+        # indexes, substitutions, JSON syntax and additional flags stay excluded.
+        if fields[0].startswith('--from='):
+            reference = fields[0][len('--from='):]
+            if (len(fields) < 3 or not re.fullmatch(r'[a-z0-9][a-z0-9._:/@-]*', reference)
+                    or not any(c in reference for c in '/:@')
+                    or any(x.startswith('--') or any(c in x for c in '[]$\\') for x in fields[1:])):
+                return False
+            continue
+        if any(x.startswith('--') for x in fields):
             return False
         for source in fields[:-1]:
             if (source in {'.', './', '/'} or any(c in source for c in '*?[]$\\')
@@ -158,7 +170,15 @@ class PreparedImageCatalog:
                             continue
                         foundation, remainder = tmax_inline_foundation(text, files.get('post_install.sh', b''), ubuntu_base=base)
                     elif family == 'terminal-prefix':
-                        foundation = terminal_foundation(text, source_base=source, resolved_base={'reference': base, 'onbuild': []})
+                        candidates = terminal_foundation_candidates(text, source_base=source, resolved_base={'reference': base, 'onbuild': []})
+                        # Appended verifier setup can extend the maximal prefix.
+                        # Probe existing keys longest-first at instruction boundaries.
+                        for foundation in reversed(candidates):
+                            found = db.execute('SELECT payload FROM prepared_foundations WHERE key=?', (foundation.key,)).fetchone()
+                            if found and json.loads(found[0]).get('resolved_base', {}).get('onbuild') == []:
+                                break
+                        else:
+                            continue
                     else:
                         version = re.search(r'python=((?:2|3)\.[0-9]{1,2})(?:\s|$)', text)
                         if version is None:

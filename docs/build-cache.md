@@ -184,7 +184,13 @@ components remain the shared sandbox filesystem representation.
 
 Automatic matching currently covers source imports, TMax explicit/inline
 installers, OpenSWE Python foundations, and Terminal dependency prefixes. It
-conservatively skips build arguments, alternate Dockerfiles, nonempty ignore
+accepts literal external-image `COPY --from=image:tag` instructions in a single
+unnamed stage, including Terminal-Lego's UV verifier wrapper. The copy and all
+remaining verifier/task instructions retain their original bytes. Terminal
+matching selects the longest already-prepared prefix at complete instruction
+boundaries, so appended verifier setup does not hide a shorter cached prefix.
+Prefix matching is bounded to 256 instructions.
+Matching conservatively skips build arguments, alternate Dockerfiles, nonempty ignore
 files, custom frontends, multiple stages, broad context copies, bind mounts,
 and contexts over the matching bounds (8 MiB file data, 1,024 entries). Unsupported
 recipes use ordinary building. The raw build API accepts `prepared_cache: "off"`
